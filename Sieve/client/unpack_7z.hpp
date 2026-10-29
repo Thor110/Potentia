@@ -17,6 +17,7 @@
 // written.
 #pragma once
 
+#include <set>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -60,8 +61,9 @@ std::vector<InMemory> read_7z(const std::vector<uint8_t>& archive);
 // `progress(done, total, path)` is told of each file as it is written. If `cancel` becomes true, or
 // anything fails, what was written so far is removed again, the folders made included; a cancel
 // returns false, a failure throws.
+// `keep`: files already there that stay as they are, by their paths as list_7z gives them.
 bool unpack_7z(const std::vector<uint8_t>& archive, const std::filesystem::path& dest, bool force,
                const std::function<void(size_t done, size_t total, const std::string& path)>& progress,
-               const std::atomic<bool>* cancel = nullptr);
+               const std::atomic<bool>* cancel = nullptr, const std::set<std::string>* keep = nullptr);
 
 } // namespace sieve::install

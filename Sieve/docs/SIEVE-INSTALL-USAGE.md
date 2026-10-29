@@ -160,11 +160,21 @@ instructions and is for the tools. The command line still writes it (`sieve loca
   Sieve reads (below), each opening `sieve-install` on it (`--extract-here`, `--extract-folder`);
   `context\README.md`.
 - **Unattended:** `sieve-install NAME.sieve --to FOLDER --yes` installs and exits, returning 0 on
-  success.
+  success. Files already there are refused, unless `--replace` is added.
 
 Every file is checked against its size and SHA-256 before anything is written, so a damaged
-installer leaves the destination as it was. Files already there are refused unless you choose to
-replace them. Cancel part way removes whatever was written, including the folders it made.
+installer leaves the destination as it was. Cancel part way removes whatever was written, including
+the folders it made; a file it wrote over is not put back.
+
+**Files already there (29 October 2026).** With Replace not ticked, the installer asks about each
+file already in the destination before writing anything, as other extractors do: which file, its
+size there now and the size the installer gives, then **Yes**, **No**, **Yes to all**, **No to all**
+or **Cancel** (keys Y, N, A, Shift+N and Escape; Enter answers nothing). A file answered No is
+left as it was and the rest are written; Cancel writes nothing (from the right-click menu, the
+window then closes; otherwise it is back to choose again). Ticking Replace is Yes to all before
+it is asked. A RAR made again is asked about by its own name, not its pieces. For testing without
+a person, `--answers LETTERS` answers in turn (y, n, a for Yes to all, x for No to all, c for
+Cancel) and exits as `--yes` does; each file left as it was is printed.
 
 **Other archives are extracted, as an archiver extracts them (25 October 2026).** Open a `.zip`,
 `.rar`, `.tar.gz` or any kind below with `sieve-install` (or right-click it: Sieve > Extract) and it
@@ -173,7 +183,7 @@ files. A `.sieve` is never changed by this: it gives back exactly what it holds,
 included. **Extract here** keeps the archive's folders as they are; **Extract to a folder of its
 name** (and opening it in the window) puts its contents into a folder named after it, the one top
 folder it may have left out (`photos.zip` holding `photos\...` gives `photos\...`, not
-`photos\photos\...`). A file already there is refused unless Replace is ticked, a damaged or
+`photos\photos\...`). A file already there is asked about (above) unless Replace is ticked, a damaged or
 encrypted archive is refused before anything is written, and a link in a tar is left out (said so).
 Each file is checked by the vault, as everything an installer writes is. The whole archive is read
 into memory first.
@@ -211,7 +221,7 @@ sits in one top folder (a release's `Sieve-0.13.1\`), that folder is left out, s
 `C:\TEST\sieve\hallway.exe` rather than `C:\TEST\sieve\Sieve-0.13.1\hallway.exe`. The window says
 "Unpacks" instead of "Installs" and shows what the archive holds. The archive is checked against its
 SHA-256 before it is opened, and 7z checks each file's CRC as it unpacks; files already there are
-refused unless you tick Replace, and a cancel or a failure removes what was written. It is a 7z by
+asked about (above) unless you tick Replace, and a cancel or a failure removes what was written. It is a 7z by
 its first bytes, not its name. The decoder is the LZMA SDK's (public domain), which reads what
 7-Zip writes by default (LZMA, LZMA2, PPMd, and the BCJ, BCJ2, ARM and Delta filters); an
 encrypted archive is refused. Only the installer does this: `sieve install` and the hallway's

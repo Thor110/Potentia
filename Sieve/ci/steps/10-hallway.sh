@@ -64,6 +64,14 @@ build/sieve-install fx.sieve --to fx_installed --yes --screenshot installer.bmp
 diff -r tests/manifest_fixture fx_installed
 test -s installer.bmp
 if build/sieve-install fx.sieve --to fx_installed --yes; then exit 1; fi
+# Files already there, asked about one at a time (--answers stands in for the person): Zebra.txt
+# replaced (y), a.txt left as it was (n), the rest written; then Replace writes over them all.
+rm -rf fx_ask && mkdir fx_ask && echo OLD > fx_ask/a.txt && echo OLD > fx_ask/Zebra.txt
+build/sieve-install fx.sieve --to fx_ask --answers yn > fx_ask.txt
+grep -q "a.txt was already there and is left as it was" fx_ask.txt
+test "$(cat fx_ask/a.txt)" = OLD
+cmp fx_ask/Zebra.txt tests/manifest_fixture/Zebra.txt && cmp "fx_ask/sub dir/b.bin" "tests/manifest_fixture/sub dir/b.bin"
+build/sieve-install fx.sieve --to fx_ask --yes --replace && diff -r tests/manifest_fixture fx_ask
 head -c 100 fx.sieve > broken.sieve
 if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
 test ! -e fx_broken

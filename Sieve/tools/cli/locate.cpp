@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <span>
 #include <stdexcept>
 
@@ -2318,7 +2319,8 @@ std::string install_times_text(double decode_seconds, double write_seconds)
 // After the files: each archive given as its contents said so, and (v22) each RAR made again by the
 // same rar, checked against its SHA-256 and put in its contents' place; where it cannot be, its
 // contents left as they are and a warning saying why.
-static void finish_archives(const Manifest& m, const fs::path& dest, bool force, std::vector<InstallNote>* notes)
+static void finish_archives(const Manifest& m, const fs::path& dest, bool force, std::vector<InstallNote>* notes,
+                            const std::set<std::string>* keep = nullptr)
 {
     auto note = [&](const std::string& t, bool warning) {
         if (notes) notes->push_back({t, warning});
@@ -2356,6 +2358,11 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
                 continue;
             }
             std::error_code ec;
+            if (keep && keep->count(u.archive))
+            {
+                note(u.archive + " was already there and is kept as it was (not made again); its files are in " + where, false);
+                continue;
+            }
             if (fs::exists(archive, ec) && !force)
             {
                 fail(u.archive + " is already there");
@@ -2407,8 +2414,9 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
 }
 
 bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel,
-                  std::vector<InstallNote>* notes)
+                  std::vector<InstallNote>* notes, const std::set<std::string>* keep)
 {
+    auto kept = [keep](const std::string& p) { return keep && keep->count(p) != 0; };
     auto cancelled = [cancel] { return cancel && cancel->load(); };
     auto path_of = [&](const std::string& p) { return dest / fs::path(std::u8string(p.begin(), p.end())); };
     // Phase 0: every file cut from the contents (v3) or read back from its address (v2) and
@@ -2444,7 +2452,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
             throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
         vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever written
-        if (fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
+        if (!kept(e.path) && fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
         view[i] = bytes;
         if (progress) progress(0, i + 1, files.size(), e.path);
     }
@@ -2479,6 +2487,11 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
                 undo();
                 return false;
             }
+            if (kept(files[i].first->path)) // (already there, and to stay as it is)
+            {
+                if (progress) progress(1, i + 1, files.size(), files[i].first->path);
+                continue;
+            }
             const fs::path p = path_of(files[i].first->path);
             make_dirs(p.parent_path());
             const bool existed = fs::exists(p);
@@ -2495,7 +2508,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         undo();
         throw;
     }
-    finish_archives(m, dest, force, notes);
+    finish_archives(m, dest, force, notes, keep);
     return true;
 }
 

@@ -71,6 +71,7 @@
 #include "sieve/mix.hpp" // MixDictionary (v27)
 #include "sieve/biguint.hpp"
 
+#include <set>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -494,8 +495,11 @@ struct InstallNote
     std::string text;
     bool warning = false;
 };
+// `keep`: files already there that stay as they are, by their paths in the listing (the installer's
+// "No" for a file already there): not written, and not refused as already there.
 bool install_tree(const Manifest& m, const std::filesystem::path& dest, bool force, const InstallProgress& progress,
-                  const std::atomic<bool>* cancel = nullptr, std::vector<InstallNote>* notes = nullptr);
+                  const std::atomic<bool>* cancel = nullptr, std::vector<InstallNote>* notes = nullptr,
+                  const std::set<std::string>* keep = nullptr);
 
 // How long an install took, as `sieve install` and the hallway say it: "decoded in 0.042 s, checked
 // and written in 0.003 s" (decoding: reading the instructions and making every file's bytes from

@@ -14,6 +14,7 @@
 #include "7z.h"
 #include "7zCrc.h"
 
+#include <set>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -271,14 +272,16 @@ std::vector<InMemory> read_7z(const std::vector<uint8_t>& archive)
 }
 
 bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool force,
-               const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel)
+               const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel,
+               const std::set<std::string>* keep)
 {
+    auto kept = [keep](const std::string& p) { return keep && keep->count(p) != 0; };
     Open7z a(archive);
     std::vector<UInt32> index;
     const SevenZip z = listing(a, &index);
     if (!force)
         for (const Unpacked& u : z.entries)
-            if (!u.dir && fs::exists(dest / from_u8(u.path)))
+            if (!u.dir && !kept(u.path) && fs::exists(dest / from_u8(u.path)))
                 throw std::runtime_error("already there (tick Replace to write over it): " + u.path);
 
     std::vector<fs::path> made_dirs, written;
@@ -323,15 +326,24 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
                 make_dirs(to);
                 continue;
             }
+            if (kept(u.path)) // (already there, and to stay as it is)
+            {
+                ++done;
+                if (progress) progress(done, size_t(z.files), u.path);
+                continue;
+            }
             make_dirs(to.parent_path());
             size_t offset = 0, got = 0;
             const SRes r = SzArEx_Extract(&a.db, &a.look.vt, index[k], &block, &out, &out_size, &offset, &got, &kAlloc, &kAlloc);
             if (r != SZ_OK) throw std::runtime_error("cannot unpack " + u.path + ": " + sz_error(r));
             // The vault: nothing it withholds is written, whatever archive it arrives in.
             sieve::cli::vault::check_bytes(std::vector<uint8_t>(out + offset, out + offset + got), u.path);
+            // (A file written over, Replace ticked, is not removed by a cancel or a failure: only
+            // what this made, as installing does. Removing it would lose the file outright.)
+            const bool existed = fs::exists(to);
             std::ofstream f(to, std::ios::binary | std::ios::trunc);
             if (!f) throw std::runtime_error("cannot write " + u.path);
-            written.push_back(to);
+            if (!existed) written.push_back(to);
             if (got) f.write(reinterpret_cast<const char*>(out + offset), std::streamsize(got));
             f.close();
             if (!f) throw std::runtime_error("cannot write " + u.path);

@@ -4048,7 +4048,13 @@ back to a virtual environment of the step's own where the machine's Python refus
 which is there; "Replace files that are already there" then replaces them all. A prompt as other
 extractors have would be one question for all of them, since every clash is known before anything
 is written: the files already there, listed, and Replace them, Keep mine and write the rest, or
-Cancel. Not built yet.
+Cancel. Edward preferred a question per file, as the tools he has used ask ("showing an
+individual prompt per file unless all are accepted is tradition"), and that is built:
+`sieve-install` asks Yes, No, Yes to all, No to all or Cancel for each file already there, before
+anything is written (SIEVE-INSTALL-USAGE). The three writers (`install_tree` with
+`finish_archives`, `unpack_archive`, `install::unpack_7z`) take a set of paths to leave as they
+are. The 7z writer no longer removes a file it wrote over when a cancel or a failure undoes
+it, only what it made, as the other two already did (removing it would lose the file outright). `--answers` drives it in CI step 10.
 
 *Waiting on Edward:* the measuring with Keep a log (enwik8 and enwik9, WoWRevived, Silesia, the
 ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;

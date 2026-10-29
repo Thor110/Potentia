@@ -27,6 +27,8 @@
 //
 // For testing without a person: --to FOLDER sets where, --yes installs at once and exits (0 on
 // success), and --screenshot FILE.bmp writes the window as it stands just before exiting.
+// --answers LETTERS installs at once, as --yes does, but asks about files already there, each
+// letter answering one question in turn: y Yes, n No, a Yes to all, x No to all, c Cancel.
 
 #include "dialogs.hpp"
 #include "cli/locate.hpp"
@@ -51,6 +53,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -146,7 +149,7 @@ void draw_button(SDL_Renderer* r, const Button& b, bool hot)
 }
 
 // ---- the installer's state
-enum class Screen { NoInstaller, Reading, Ready, Installing, Done, Cancelled, Failed };
+enum class Screen { NoInstaller, Reading, Ready, Asking, Installing, Done, Cancelled, Failed };
 
 struct Installer
 {
@@ -171,6 +174,13 @@ struct Installer
         cur = anchor = dest.size();
     }
     bool replace = false;       // replace files that are already there
+    // Files already there, Replace not ticked: asked about one at a time, as other archivers do
+    // (Edward, 29 October 2026: "an individual prompt per file unless all are accepted"). Each
+    // one answered No stays as it is; unattended (--yes), they are refused as before.
+    bool ask = true;
+    std::vector<std::string> clashes; // their paths, as the installer names them
+    size_t asking = 0;                // the one being asked about
+    std::set<std::string> keep;       // those answered No
     bool editing = false;       // typing into the destination
     Screen screen = Screen::NoInstaller;
     // The install runs on a worker; these are what the window shows of it.
@@ -326,9 +336,90 @@ struct Installer
         return u8(base / from_u8(manifest->root));
     }
 
+    // What would be written over: the files (and RARs made again) already in the destination.
+    std::vector<std::string> already_there() const
+    {
+        std::vector<std::string> out;
+        const fs::path to = from_u8(dest);
+        auto there = [&](const std::string& p) {
+            std::error_code ec;
+            return fs::exists(to / from_u8(p), ec);
+        };
+        if (any)
+        {
+            for (const AnyArchive::Entry& e : any->entries)
+                if (!e.dir && there(e.path)) out.push_back(e.path);
+        }
+        else if (archive)
+        {
+            for (const install::Unpacked& u : archive->entries)
+                if (!u.dir && there(u.path)) out.push_back(u.path);
+        }
+        else
+        {
+            // (A RAR's pieces are written inside its folder and gone again once it is made: it is
+            // the RAR itself that would be written over.)
+            for (const ManifestEntry& e : manifest->entries)
+                if (!e.dir && !e.member && there(e.path)) out.push_back(e.path);
+            for (const Manifest::UnpackedArchive& u : manifest->unpacked)
+                if (!u.program.empty() && there(u.archive)) out.push_back(u.archive);
+        }
+        return out;
+    }
+
+    // The size of what the installer gives at a path (for the question), where it is known.
+    std::optional<uint64_t> given_size(const std::string& p) const
+    {
+        if (any)
+        {
+            for (const AnyArchive::Entry& e : any->entries)
+                if (e.path == p) return e.bytes.size();
+        }
+        else if (archive)
+        {
+            for (const install::Unpacked& u : archive->entries)
+                if (u.path == p) return u.size;
+        }
+        else
+            for (const ManifestEntry& e : manifest->entries)
+                if (e.path == p) return e.size;
+        return std::nullopt;
+    }
+
+    // Install: first asking about each file already there, unless Replace is ticked.
     void start()
     {
         if ((!manifest && !any) || dest.empty()) return;
+        // (Into a folder of its own: its one top folder left out, so NAME\NAME\ is not made.)
+        if (any && !keep_top && !top_left_out)
+        {
+            leave_out_top_folder(*any);
+            top_left_out = true; // once: Back, then Install again, must not take a second folder off
+        }
+        keep.clear();
+        clashes.clear();
+        if (!replace && ask) clashes = already_there();
+        if (!clashes.empty())
+        {
+            asking = 0;
+            screen = Screen::Asking;
+            return;
+        }
+        launch(replace);
+    }
+
+    // An answer to the file being asked about; the install starts once there are no more.
+    void answer(bool write_over, bool to_all)
+    {
+        if (screen != Screen::Asking) return;
+        for (size_t k = asking; k < (to_all ? clashes.size() : asking + 1); ++k)
+            if (!write_over) keep.insert(clashes[k]);
+        asking = to_all ? clashes.size() : asking + 1;
+        if (asking >= clashes.size()) launch(true); // (each one answered: none is refused now)
+    }
+
+    void launch(bool force)
+    {
         screen = Screen::Installing;
         cancel = false;
         finished = false;
@@ -340,45 +431,40 @@ struct Installer
         }
         notes.clear();
         warned = false;
-        // (Into a folder of its own: its one top folder left out, so NAME\NAME\ is not made.)
-        if (any && !keep_top && !top_left_out)
-        {
-            leave_out_top_folder(*any);
-            top_left_out = true; // once: Back, then Install again, must not take a second folder off
-        }
+        const std::set<std::string>* kept = keep.empty() ? nullptr : &keep;
         total = any ? size_t(any->files) : archive ? size_t(archive->files) : size_t(manifest->files);
-        worker = std::thread([this] {
+        worker = std::thread([this, force, kept] {
             try
             {
                 if (any)
                 {
                     phase = 1;
-                    ok = unpack_archive(*any, from_u8(dest), replace,
+                    ok = unpack_archive(*any, from_u8(dest), force,
                                         [this](size_t d, size_t t, const std::string& path) {
                                             done = d;
                                             total = t;
                                             std::lock_guard<std::mutex> lock(mx);
                                             current = path;
                                         },
-                                        &cancel);
+                                        &cancel, kept);
                     finished = true;
                     return;
                 }
                 if (archive)
                 {
                     phase = 1; // checked already: the archive's SHA-256 when it was opened
-                    ok = install::unpack_7z(manifest->contents, from_u8(dest), replace,
+                    ok = install::unpack_7z(manifest->contents, from_u8(dest), force,
                                             [this](size_t d, size_t t, const std::string& path) {
                                                 done = d;
                                                 total = t;
                                                 std::lock_guard<std::mutex> lock(mx);
                                                 current = path;
                                             },
-                                            &cancel);
+                                            &cancel, kept);
                     finished = true;
                     return;
                 }
-                const bool whole = install_tree(*manifest, from_u8(dest), replace,
+                const bool whole = install_tree(*manifest, from_u8(dest), force,
                                                 [this](int ph, size_t d, size_t t, const std::string& path) {
                                                     phase = ph;
                                                     done = d;
@@ -386,7 +472,7 @@ struct Installer
                                                     std::lock_guard<std::mutex> lock(mx);
                                                     current = path;
                                                 },
-                                                &cancel, &notes);
+                                                &cancel, &notes, kept);
                 ok = whole;
             }
             catch (const std::exception& e)
@@ -473,7 +559,11 @@ const char* kInstallerUsage =
     "  --extract-here       install beside the .sieve at once, and close when done (the right-click\n"
     "                       menu's Extract here); a failure stays open, to say why\n"
     "  --extract-folder     the same, into a folder named after the .sieve (Extract to NAME\\)\n"
-    "  --yes                install at once and exit: 0 on success\n"
+    "  --yes                install at once and exit: 0 on success (files already there are\n"
+    "                       refused, unless --replace is given)\n"
+    "  --replace            replace files that are already there (the Replace box ticked)\n"
+    "  --answers LETTERS    as --yes, but each file already there is asked about, the letters\n"
+    "                       answering in turn: y Yes, n No, a Yes to all, x No to all, c Cancel\n"
     "  --archive-extensions the names of the other archives it extracts (a .zip, .rar, .tar.gz ...),\n"
     "                       one a line: what context\\install_context.bat adds the menu to\n"
     "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
@@ -485,7 +575,8 @@ int main(int argc, char** argv)
 {
     // Options for testing (see the top); anything else is the installer to open.
     std::string file_arg, to_arg, shot;
-    bool yes = false;
+    std::string answers;
+    bool yes = false, replace = false;
     int extract = 0; // 1: beside the file; 2: in a folder named after it
     for (int i = 1; i < argc; ++i)
     {
@@ -508,6 +599,8 @@ int main(int argc, char** argv)
         if (a == "--to" && i + 1 < argc) to_arg = argv[++i];
         else if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
         else if (a == "--yes") yes = true;
+        else if (a == "--replace") replace = true;
+        else if (a == "--answers" && i + 1 < argc) answers = argv[++i], yes = true;
         else if (a == "--extract-here") extract = 1;
         else if (a == "--extract-folder") extract = 2;
         else file_arg = a;
@@ -566,6 +659,9 @@ int main(int argc, char** argv)
         in.keep_dest = true;
     }
     in.keep_top = extract == 1; // Extract here: as an archiver's, the top folder kept
+    in.replace = replace;
+    in.ask = !yes || !answers.empty(); // (unattended, files already there are refused, as before)
+    size_t answered = 0;
     // The right-click menu's extract options work as an archiver's do: at once, and the window
     // closes when it is done; only a failure stays open, to say why (Back, then Replace).
     const bool quick = extract != 0;
@@ -583,7 +679,16 @@ int main(int argc, char** argv)
             start_when_read = false;
             if (in.screen == Screen::Ready) in.start();
         }
-        if (yes && in.screen != Screen::Installing && in.screen != Screen::Reading) quit = true; // unattended: the result is the exit code
+        // The questions answered from --answers, while there are letters left (then, unattended,
+        // the rest are left unanswered and the run ends: refused).
+        if (in.screen == Screen::Asking && answered < answers.size())
+        {
+            const char c = answers[answered++];
+            if (c == 'c') in.screen = Screen::Cancelled;
+            else in.answer(c == 'y' || c == 'a', c == 'a' || c == 'x');
+        }
+        if (yes && in.screen != Screen::Installing && in.screen != Screen::Reading && !(in.screen == Screen::Asking && answered < answers.size()))
+            quit = true; // unattended: the result is the exit code
         // A warning (a RAR its contents only, its rar not found) pops up once the install is done,
         // before the window closes; unattended, it goes to the error output instead.
         if (in.screen == Screen::Done && !in.warned)
@@ -593,6 +698,7 @@ int main(int argc, char** argv)
             for (const InstallNote& n : in.notes)
                 if (n.warning) w += (w.empty() ? "" : "\n\n") + n.text;
             for (const InstallNote& n : in.notes) std::fprintf(n.warning ? stderr : stdout, "%s%s\n", n.warning ? "warning: " : "note: ", n.text.c_str());
+            for (const std::string& p : in.keep) std::printf("note: %s was already there and is left as it was\n", p.c_str());
             if (!w.empty() && !yes) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Sieve Installer", w.c_str(), window);
         }
         if (quick && (in.screen == Screen::Done || in.screen == Screen::Cancelled)) quit = true;
@@ -723,6 +829,15 @@ int main(int argc, char** argv)
                     move_to(!shift && in.cur != in.anchor ? sel_hi() : utf8_next(in.dest, in.cur));
                 else if (in.editing && k == SDLK_HOME) move_to(0);
                 else if (in.editing && k == SDLK_END) move_to(in.dest.size());
+                else if (in.screen == Screen::Asking)
+                {
+                    // Y, N, A (yes to all), Shift+N (no to all); Escape cancels. Enter answers
+                    // nothing: a file is not written over by a key pressed for something else.
+                    if (k == SDLK_Y) pressed = "Yes";
+                    else if (k == SDLK_N) pressed = shift ? "No to all" : "No";
+                    else if (k == SDLK_A) pressed = "Yes to all";
+                    else if (k == SDLK_ESCAPE) pressed = "Cancel";
+                }
                 else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)
                     pressed = in.screen == Screen::Ready ? "Install" : in.screen == Screen::Installing || in.screen == Screen::Reading ? "" : "Close";
                 else if (e.key.key == SDLK_ESCAPE && in.editing)
@@ -739,6 +854,16 @@ int main(int argc, char** argv)
                 hallway::open_folder_dialog(folder_chosen, &in, window, start.empty() ? nullptr : start.c_str(), false);
             }
             else if (pressed == "Cancel" && in.screen == Screen::Installing) in.cancel = true;
+            else if (in.screen == Screen::Asking && !pressed.empty())
+            {
+                if (pressed == "Yes") in.answer(true, false);
+                else if (pressed == "No") in.answer(false, false);
+                else if (pressed == "Yes to all") in.answer(true, true);
+                else if (pressed == "No to all") in.answer(false, true);
+                // Cancel: nothing written. From the right-click menu the window closes, as when
+                // a cancel comes while unpacking; otherwise it is back to choose again.
+                else if (pressed == "Cancel") in.screen = quick ? Screen::Cancelled : Screen::Ready;
+            }
             else if (pressed == "Back" && in.screen == Screen::Failed)
             {
                 in.screen = Screen::Ready; // to tick Replace, or choose another folder, and Install again
@@ -859,9 +984,29 @@ int main(int argc, char** argv)
             }
             else
             {
-                row(152, "To", tail(in.dest, 60));
+                row(152, "To", tail(in.dest, 48)); // (48 at this size reach the window's edge)
                 const size_t d = in.done, t = std::max<size_t>(1, in.total);
-                if (in.screen == Screen::Installing)
+                if (in.screen == Screen::Asking)
+                {
+                    const std::string& p = in.clashes[in.asking];
+                    text(r, 24, 196, "Already there (" + std::to_string(in.asking + 1) + " of " + std::to_string(in.clashes.size()) + "):", 2, kInk);
+                    text(r, 24, 228, tail(p, 60), 1.5f, kAccent);
+                    std::error_code ec;
+                    const fs::path here = from_u8(in.dest) / from_u8(p);
+                    const uint64_t now = fs::is_regular_file(here, ec) ? uint64_t(fs::file_size(here, ec)) : 0;
+                    const auto given = in.given_size(p);
+                    text(r, 24, 256, "There now: " + (fs::is_regular_file(here, ec) ? human_bytes(now) : std::string("a folder")) +
+                                         (given ? ".   From the installer: " + human_bytes(*given) + "." : "."),
+                         1.5f, kDim);
+                    text(r, 24, 290, "Replace it? No leaves it as it is and writes the rest; Cancel writes nothing.", 1, kDim);
+                    text(r, 24, 306, "Keys: Y yes, N no, A yes to all, Shift+N no to all, Escape cancel.", 1, kDim);
+                    buttons.push_back({{24, H - 60, 96, 40}, "Yes"});
+                    buttons.push_back({{132, H - 60, 96, 40}, "No"});
+                    buttons.push_back({{240, H - 60, 176, 40}, "Yes to all"});
+                    buttons.push_back({{428, H - 60, 160, 40}, "No to all"});
+                    buttons.push_back({{W - 160, H - 60, 136, 40}, "Cancel"});
+                }
+                else if (in.screen == Screen::Installing)
                 {
                     const bool writing = in.phase == 1;
                     text(r, 24, 196, in.archive || in.any ? "Unpacking" : writing ? "Writing" : "Checking", 2, kInk);
@@ -889,6 +1034,8 @@ int main(int argc, char** argv)
                         text(r, 24, 228, files_n(in.archive->files) + " unpacked from " + in.manifest->root + ", every one checked.", 1.5f, kInk);
                     else
                         text(r, 24, 228, files_n(in.manifest->files) + (in.manifest->files == 1 ? ", checked against its SHA-256." : ", every one checked against its SHA-256."), 1.5f, kInk);
+                    if (!in.keep.empty())
+                        text(r, 24, 246, files_n(in.keep.size()) + " already there left as " + (in.keep.size() == 1 ? "it was." : "they were."), 1, kDim);
                     float y = 262;
                     for (const InstallNote& n : in.notes)
                         for (size_t at = 0; at < n.text.size() && y < H - 80; at += 88, y += 14)

@@ -4216,8 +4216,10 @@ void leave_out_top_folder(AnyArchive& a, std::string* top_out)
 }
 
 bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool force,
-                    const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel)
+                    const std::function<void(size_t, size_t, const std::string&)>& progress, const std::atomic<bool>* cancel,
+                    const std::set<std::string>* keep)
 {
+    auto kept = [keep](const std::string& p) { return keep && keep->count(p) != 0; };
     namespace fs = std::filesystem;
     auto path_of = [&](const std::string& p) {
         // (Every reader has refused a name that could leave its folder; checked again here.)
@@ -4234,7 +4236,7 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
     };
     if (!force)
         for (const auto& e : a.entries)
-            if (!e.dir && fs::exists(path_of(e.path))) throw std::runtime_error("already there (tick Replace to write over it): " + e.path);
+            if (!e.dir && !kept(e.path) && fs::exists(path_of(e.path))) throw std::runtime_error("already there (tick Replace to write over it): " + e.path);
     std::vector<fs::path> made_dirs, written;
     auto make_dirs = [&](const fs::path& d) {
         std::vector<fs::path> missing;
@@ -4269,6 +4271,12 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
             if (e.dir)
             {
                 make_dirs(to);
+                continue;
+            }
+            if (kept(e.path)) // (already there, and to stay as it is)
+            {
+                ++done;
+                if (progress) progress(done, size_t(a.files), e.path);
                 continue;
             }
             make_dirs(to.parent_path());

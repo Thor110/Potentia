@@ -20,6 +20,7 @@
 #include "cli/locate.hpp"
 #include "sieve/rope_wave.hpp"
 
+#include <set>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -216,8 +217,9 @@ std::optional<AnyArchive> read_any_archive(const std::vector<uint8_t>& bytes, co
 void leave_out_top_folder(AnyArchive& a, std::string* top = nullptr);
 // Writes it into `dest` (made if need be): files already there refused unless `force`, each file
 // checked by the vault, and on a cancel (false) or a failure (throws) what was written removed again.
+// `keep`: files already there that stay as they are (install_tree's).
 bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool force,
                     const std::function<void(size_t done, size_t total, const std::string& path)>& progress,
-                    const std::atomic<bool>* cancel = nullptr);
+                    const std::atomic<bool>* cancel = nullptr, const std::set<std::string>* keep = nullptr);
 
 } // namespace sieve::cli
