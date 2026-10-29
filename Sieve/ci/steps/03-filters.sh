@@ -137,8 +137,8 @@ echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 53
 # The search's time: a generous one finds the same; a tiny one stops, and says so (each
 # gives the other, the files counted: 0.001 s a file is 0.004 s for the four).
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-total 600 2>&1 | tr -d '\r')
-echo "$out" | q "^  search: 150.0 s a file, 600.0 s for the run; took "
+echo "$out" | q "^  search: 150.0 s a file, 600.0 s for the run; the weighing's search took "
 echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 258 = 530 bits"
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
-echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; took "
+echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; the weighing's search took "
 echo "$out" | q "^  tailored audio: none, "

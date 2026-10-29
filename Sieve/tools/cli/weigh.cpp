@@ -442,7 +442,7 @@ std::string weighing_table(const Weighing& w, size_t max_rows)
             return t.str() + " s";
         };
         auto limit = [&](double v) { return v > 0 ? secs(v) : std::string("no limit"); };
-        o << "  search: " << limit(w.budget.per_file) << " a file, " << limit(w.budget.total) << " for the run; took " << secs(w.searched) << "\n";
+        o << "  search: " << limit(w.budget.per_file) << " a file, " << limit(w.budget.total) << " for the run; the weighing's search took " << secs(w.searched) << "\n";
     }
     o << "  total: own addresses " << bits(w.base_bits) << " bits; best ways " << bits(w.best_bits) << " + shared " << bits(w.shared_bits) << " = "
       << bits(w.total_bits()) << " bits (" << pct(w.total_bits(), w.base_bits) << " of the own addresses)\n";

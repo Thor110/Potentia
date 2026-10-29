@@ -28,6 +28,13 @@ void add(const std::string& phase, double ms);
 // The table as text, slowest total first.
 std::string report();
 
+// Timing on, with no table written at exit (the File Locator's log takes its own, a run at a time).
+void collect();
+
+// The table as text, then emptied and its clock started again: one run's table at a time (the File
+// Locator's log). With --timings as well, the table written at exit is then the last run's on.
+std::string report_and_clear();
+
 // Times the enclosing block as one run of `phase` (a string literal, or any string that outlives
 // the scope).
 class Scope

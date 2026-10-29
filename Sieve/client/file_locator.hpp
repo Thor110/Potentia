@@ -23,6 +23,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -107,6 +109,8 @@ public:
     // by mixing (0.3 to 1 MB/s to decode, 15 to 60 times slower than the other ways), so the
     // instructions install quickly; larger. Its state is the packer's own (sieve::prioritise_decoding).
     static void remember_decoding(std::function<void(bool)> changed);
+    // Keep a log: whether it is ticked, the folder the logs go in, and who keeps the box's setting.
+    static void remember_log(bool on, std::filesystem::path folder, std::function<void(bool)> changed);
     // The share of the search's time a run has really used, packing and weighing, learned on this
     // machine ([locator] search_share_packing, search_share_weighing; 1 until a run has measured
     // it): what the first estimate counts of the search, rather than all of it. Set once, at start.
@@ -187,6 +191,14 @@ private:
     double est_pack_share_seen_ = -1; // this run's packing: the share of its search's limit it used
     double last_took_ = -1;           // the last job's time, shown under the graph once it is done
     double read_took_ = -1;           // the last reading's whole time (its search with it), for a save that packs nothing again
+    // Keep a log: the run's file, open while it works (under mx_), what it last said, and its last
+    // best by step, to mark a new one.
+    std::ofstream log_;
+    std::filesystem::path log_path_;
+    std::string log_last_, log_step_;
+    double log_best_ = -1, log_best_at_ = -1;
+    void open_log(const std::string& what, const std::string& path); // under mx_
+    void close_log(const std::string& result); // under mx_: the end, written, and the status says where
     void refine_estimate(size_t steps_done); // after step steps_done - 1 is done; under no lock
     void tick_estimate();                    // while packing: the search's part again, as its files are done; under no lock
     void estimate_now(double remaining);     // under mx_

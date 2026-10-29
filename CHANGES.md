@@ -1,53 +1,75 @@
-# enwik9's results, and the File Locator's times made whole (29 October 2026)
+# Keep a log, and the 734 s explained (29 October 2026)
 
-Unzip over the repository root. Committed locally (not pushed). Code changed: rebuild the hallway,
-then run CI step 10 (run here: see the end).
+Unzip over the repository root. This goes on top of the last zip ("enwik9 and times"); apply that
+one first if you haven't. Committed locally (not pushed). Code changed: rebuild the hallway and
+`sieve`, then run CI steps 03 and 10 (run here: see the end).
 
-## enwik9 (`Proof/STATISTICS.md`)
+## Keep a log (the File Locator)
 
-Both of your runs are in, along with ratios and a comparison with PPMd:
+There is a new tick box beside Prioritise decoding speed: **Keep a log**.
 
-- Optimised for size, 186,081,966 bytes: 5.37:1, 1.15% larger than PPMd. It unpacks in 1,137.9 s.
-- Prioritised for decoding, 211,195,701 bytes: 13.50% larger than that. It decodes in 11.3 s, about
-  89 MB a second.
+- Its key is L. It is kept in `sieve-hallway.ini` as `[locator] keep_log`, and `--locate-log`
+  turns it on for one run.
+- When it's ticked, each reading and each saving writes a text file in a `logs` folder beside
+  `sieve-hallway.ini`, named `locate-<date>-<time>-<name>.txt`. The status says where it was written.
 
-enwik9 is also a row in "At a glance". The zip and 7z rows are still to be measured.
+Each log holds:
 
-Of the two making times, 734 s and 790.5 s, neither is known to be the whole run, and the table
-says so. You are right that something was off: the code shows how.
+- the settings the run used: the search limits, Try every way, Prioritise decoding speed and the
+  compressed formats;
+- every report the run made, each with its seconds in and a step's new best marked. This is
+  everything the window shows only until the next report: each rope-search best with its
+  parameters, each LZMA2 pass, mixing, and the weighing;
+- the status, how long it took to the thousandth of a second, and when the last new best came;
+- the result's tables: the comparison with zip and 7z, and the weighing;
+- the phases' times (the `--timings` table, for this run alone).
 
-- **"took"** under the graph is the last job's time. A Save is a job of its own. A Save that
-  packs nothing again ("writing the instructions made when it was read") took seconds and replaced
-  the reading's time. A Save that packed again (a setting changed after reading) showed its own
-  time, with its own search.
-- **"across"** is only the graph's width. It starts at 1.1 × the first estimate and doubles when a
-  point passes it, so it says nothing about the run.
+For example, a 1.4 MB text here shows each of the rope's three bests with its time and parameters
+(the third at 8.98 s), then "took 16.940 s in all", then the tables.
 
-## The File Locator (`client/file_locator.cpp`, `.hpp`, `data/lang/en.txt`)
+## The 734 s
 
-The time a job took is now written exactly as well, past a minute: "took 3 h 05 min (11130.4 s)".
-Under the graph, "last new best: X" says when the last improvement came; the search runs on to its
-limit after that. A Save that packs nothing again adds the reading's time: "reading it (the search
-with it) took ...". Together these give the three numbers a table wants: the whole time, the time
-to the result kept, and the save.
+You remembered right that it was the time for one part, not the whole run. The 734 s and 790.5 s
+were in the line under the result, `search: ...; took 734 s`. That is the weighing's own search:
+the time it spent finding the file's best way to be named.
 
-## A layout fix (mine, from the review)
+Reading the file also packs its instructions (the rope's search and mixing, which for a gigabyte
+take far longer) and runs zip and 7z, so the whole was longer. It wasn't kept anywhere.
 
-The top row's wrapping I added in the review moved every later button down 40 pixels. At
-1280×720, Go and Save covered the search row, and the tick boxes covered the status line. Now:
+- That line now reads `the weighing's search took ...`.
+- STATISTICS now says the making times are longer than those figures, and why.
+- MANUAL describes the box and each of the times.
 
-- A top button that doesn't fit goes up beside the title, at the right, so nothing below moves.
-- Only when there is no room there does it start a row below.
+## enwik9's zip and 7z (`Proof/STATISTICS.md`)
 
-Checked by screenshots at 1280×720 and 1024×768. At 1024×768 the lower rows were crowded before
-this (the review noted it), and they still are.
+Your figures are in the table:
+
+- zip: 312,712,170 bytes, 3.20:1.
+- 7z: 230,120,517 bytes, 4.35:1.
+- Sieve against 7z: optimised for size, 19.14% smaller (on enwik8, 16.89%); prioritised for
+  decoding, 8.22% smaller.
+- PPMd's published figure is 20.06% under 7z.
+
+"At a glance" has enwik9's 7z column filled. The table notes that zip and 7z came from 7-Zip's
+right-click "Add to" at its default settings (Normal), not at their strongest.
 
 ## Checked here
 
-The hallway built (Linux, GCC, Release); CI step 10 (the hallway, the File Locator and installers) passed.
+Linux, GCC, Release: `sieve` and the hallway built with no warnings. The box and the logs were tried
+headless: reading a file, then saving it, with the log on, wrote two logs. CI steps 03 (the filters
+and the weighing's line, 12 s) and 10 (the hallway and the File Locator, 661 s) passed.
 
 ## Files
 - `Proof/STATISTICS.md`
+- `Sieve/ci/steps/03-filters.sh`
+- `Sieve/client/app_main.cpp`
+- `Sieve/client/app_settings.cpp`
+- `Sieve/client/app_settings.hpp`
 - `Sieve/client/file_locator.cpp`
 - `Sieve/client/file_locator.hpp`
 - `Sieve/data/lang/en.txt`
+- `Sieve/docs/MANUAL.md`
+- `Sieve/tools/cli/args.hpp`
+- `Sieve/tools/cli/timings.cpp`
+- `Sieve/tools/cli/timings.hpp`
+- `Sieve/tools/cli/weigh.cpp`

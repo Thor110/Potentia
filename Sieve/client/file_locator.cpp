@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <random>
 #include <stdexcept>
@@ -273,6 +274,105 @@ std::function<void(bool)>& kept_every()
 } // namespace
 
 void FileLocator::remember_every(std::function<void(bool)> changed) { kept_every() = std::move(changed); }
+
+namespace {
+struct KeptLog
+{
+    bool on = false;
+    fs::path folder;
+    std::function<void(bool)> changed;
+};
+KeptLog& kept_log()
+{
+    static KeptLog k;
+    return k;
+}
+
+// The time now, as the local clock has it (localtime_s and localtime_r: std::localtime is not
+// thread-safe).
+std::string local_time(const char* format)
+{
+    const std::time_t t = std::time(nullptr);
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &t);
+#else
+    localtime_r(&t, &tm);
+#endif
+    char out[64] = "";
+    std::strftime(out, sizeof out, format, &tm);
+    return out;
+}
+} // namespace
+
+void FileLocator::remember_log(bool on, fs::path folder, std::function<void(bool)> changed)
+{
+    kept_log() = {on, std::move(folder), std::move(changed)};
+}
+
+// Keep a log: a text file a run (a reading or a saving), in the logs folder, with what it is and
+// the settings it ran with; every report it makes as it goes (each with its seconds, a new best so
+// far marked), which the window shows only until the next; then how long it took, when its last
+// new best came, what it found, and its phases' times. Nothing a run measures is thrown away.
+void FileLocator::open_log(const std::string& what, const std::string& path)
+{
+    if (log_.is_open()) log_.close();
+    log_path_.clear();
+    log_last_.clear();
+    log_step_.clear();
+    log_best_ = log_best_at_ = -1;
+    const KeptLog& k = kept_log();
+    if (!k.on || k.folder.empty()) return;
+    std::error_code ec;
+    fs::create_directories(k.folder, ec);
+    std::string stem = u8(from_u8(path).filename());
+    for (char& c : stem)
+        if (c == ' ' || c == '/' || c == '\\' || c == ':') c = '_';
+    log_path_ = k.folder / from_u8("locate-" + local_time("%Y%m%d-%H%M%S") + "-" + stem + ".txt");
+    log_.open(log_path_, std::ios::binary);
+    if (!log_)
+    {
+        log_path_.clear();
+        return;
+    }
+    auto limit = [](double v) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%.2f s", v);
+        return v > 0 ? std::string(b) : std::string("no limit");
+    };
+    const std::string limits = "search " + limit(search_per_file_) + " a file, " + limit(search_total_) + " for the run";
+    log_ << "Sieve " SIEVE_VERSION " File Locator log, " << local_time("%Y-%m-%d %H:%M:%S") << "\n"
+         << what << " " << path << "\n"
+         << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
+         << (sieve::prioritise_decoding() ? "on" : "off") << "; compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
+         << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "") << "\n"
+         << "\nseconds in, then what it reported (\"new best\": smaller than the step's last, or a step's first)\n";
+    log_.flush();
+    cli::timings::collect();
+    (void)cli::timings::report_and_clear(); // (its phases from here on: this run's)
+}
+
+void FileLocator::close_log(const std::string& result)
+{
+    if (!log_.is_open()) return;
+    log_ << "\nstatus: " << status_ << "\n";
+    if (last_took_ >= 0)
+    {
+        char b[64];
+        std::snprintf(b, sizeof b, "%.3f s", last_took_);
+        log_ << "took " << b << " in all\n";
+    }
+    if (log_best_at_ >= 0)
+    {
+        char b[64];
+        std::snprintf(b, sizeof b, "%.1f s", log_best_at_);
+        log_ << "last new best at " << b << " in\n";
+    }
+    if (!result.empty()) log_ << "\n" << result << (result.back() == '\n' ? "" : "\n");
+    log_ << "\n" << cli::timings::report_and_clear();
+    log_.close();
+    status_ += "; " + trf("loc.log.written", {u8(log_path_)});
+}
 
 namespace {
 std::function<void(bool)>& kept_decoding()
@@ -573,6 +673,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     const bool archives = boxes != 0;
     use_compressed(boxes);
     start_job();
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        open_log(tailor ? "tailoring the filters to" : "reading", path);
+    }
     auto job = [this, path, tailor, per_file, total, by_total, archives, boxes] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
@@ -841,6 +945,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         relink_search(); // the files counted may have changed
         status_ = finish_job();
         read_took_ = last_took_; // (the reading's whole time, the search with it: a save after it says it too)
+        close_log(result_.error.empty() ? result_.table + "\n" + result_.weighing : "could not locate it: " + result_.error);
         busy_ = false;
     };
     if (sync) job();
@@ -865,6 +970,10 @@ void FileLocator::save(const std::string& to)
     const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == boxes &&
                       r.made_every == sieve::rope_search_every_wave() && r.made_decoding == sieve::prioritise_decoding();
     start_job(!made);
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        open_log(made ? "saving (the instructions made when it was read, nothing packed again) to" : "saving (packed again) to", to);
+    }
     if (made)
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -927,6 +1036,7 @@ void FileLocator::save(const std::string& to)
         // A save that packed nothing again took seconds: the time that made the instructions, the
         // search with it, was the reading's, said beside it (else only the save's was shown).
         if (made && read_took_ >= 0) status_ += "; " + trf("loc.took.reading", {duration_exact(read_took_)});
+        close_log("");
         busy_ = false;
     });
 }
@@ -985,6 +1095,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_U: pressed = "permanent"; break; // Compressed formats: permanent, on or off
         case SDLK_E: pressed = "every"; break;    // Try every way, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
+        case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
         case SDLK_KP_ENTER: pressed = result_.kind == Result::File && in_world() ? "go" : ""; break;
@@ -1017,6 +1128,12 @@ void FileLocator::event(const SDL_Event& e)
         const bool on = !sieve::rope_search_every_wave();
         sieve::set_rope_search_every_wave(on);
         if (kept_every()) kept_every()(on);
+    }
+    else if (pressed == "log")
+    {
+        KeptLog& k = kept_log();
+        k.on = !k.on;
+        if (k.changed) k.changed(k.on);
     }
     else if (pressed == "decoding")
     {
@@ -1241,6 +1358,7 @@ void FileLocator::draw(float W, float H)
         box("permanent", permanent_, tr("loc.permanent"));
         box("every", sieve::rope_search_every_wave(), tr("loc.every"));
         box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
+        box("log", kept_log().on, tr("loc.log"));
         return box_y;
     };
     if (!busy && r.kind == Result::None && r.error.empty())
@@ -1358,6 +1476,30 @@ void FileLocator::report(const std::string& what, double best, double of)
 {
     std::lock_guard<std::mutex> lock(mx_);
     progress_ = what;
+    if (log_.is_open() && what != log_last_ && job_started_ != Clock::time_point{})
+    {
+        // Every report, each once; a step's new best marked (a smaller share than its last, or its first).
+        const double t = since(job_started_);
+        const size_t cut = std::min(what.find(" ("), what.find(':'));
+        const std::string step = what.substr(0, cut);
+        bool new_best = false;
+        if (best >= 0 && of > 0)
+        {
+            const double share = best / of;
+            new_best = step != log_step_ || share < log_best_;
+            if (new_best)
+            {
+                log_step_ = step;
+                log_best_ = share;
+                log_best_at_ = t;
+            }
+        }
+        char b[32];
+        std::snprintf(b, sizeof b, "%10.2f  ", t);
+        log_ << b << (new_best ? "new best  " : "          ") << what << "\n";
+        log_.flush();
+        log_last_ = what;
+    }
     if (best < 0 || of <= 0 || job_started_ == Clock::time_point{}) return;
     // The step's kind: its words before any count in brackets or the colon ("the lzma2 stream").
     const size_t cut = std::min(what.find(" ("), what.find(':'));

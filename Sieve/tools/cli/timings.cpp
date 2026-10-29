@@ -84,6 +84,18 @@ void enable(const std::filesystem::path& file)
 
 bool enabled() { return g_on.load(std::memory_order_relaxed); }
 
+void collect() { g_on.store(true, std::memory_order_relaxed); }
+
+std::string report_and_clear()
+{
+    const std::string text = report();
+    Table& t = table();
+    std::lock_guard<std::mutex> lock(t.mx);
+    t.phases.clear();
+    t.started = std::chrono::steady_clock::now();
+    return text;
+}
+
 void add(const std::string& phase, double ms)
 {
     if (!enabled()) return;

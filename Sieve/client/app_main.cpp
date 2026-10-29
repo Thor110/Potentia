@@ -122,6 +122,8 @@ const char* kUsage =
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
     "  --prioritise-decoding  the File Locator's Prioritise Decoding Speed ticked, for this run:\n"
     "                      no file mixed, so its instructions install quickly ([locator] prioritise_decoding)\n"
+    "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
+    "                      writes its reports and times to logs/ beside the settings ([locator] keep_log)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
@@ -779,6 +781,13 @@ int run(const Args& a)
     FileLocator::remember_decoding(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
         app.locator_decoding = on;
         app.save(app_path);
+    });
+    // Keep a log ([locator] keep_log; --locate-log for this run): each run's reports, in the logs
+    // folder beside the settings.
+    if (a.has("locate-log")) app.locator_log = true;
+    FileLocator::remember_log(app.locator_log, app_path.parent_path() / "logs", shot && !a.has("locate-log") ? std::function<void(bool)>() : [&app, app_path, shot](bool on) {
+        app.locator_log = on;
+        if (!shot) app.save(app_path);
     });
     FileLocator::remember_shares(app.locator_share_packing, app.locator_share_weighing, shot ? std::function<void(double, double)>() : [&app, app_path](double p, double w) {
         app.locator_share_packing = p;

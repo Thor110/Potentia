@@ -28,7 +28,7 @@ from the sizes given.
 | [Sieve's own release](#the-application-itself) | 44,647,549 | | 6,319,561 | 7.06:1 | |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,675,870 | 4.61:1 | −16.89% |
-| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | | 186,081,966 | 5.37:1 | |
+| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 186,081,966 | 5.37:1 | −19.14% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,075,924,966 | 1.33:1 | +0.20% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
@@ -132,28 +132,33 @@ program that unpacks is `sieve-install`.
 
 `enwik9`, the benchmark's larger file: 1,000,000,000 bytes, of which enwik8 is the first tenth.
 Measured on Edward's machine as enwik8 was, both ways, with **Try every way** ticked (29 October
-2026, `sieve-manifest-v31`, the build with the third review's changes); zip and 7z are still to be
-measured.
+2026, `sieve-manifest-v31`, the build with the third review's changes), and zip and 7z beside them,
+made by 7-Zip's right-click "Add to" at its default settings (Normal: LZMA2 for the `.7z`, Deflate
+for the `.zip`), not at their strongest.
 
-| Method | Bytes | Ratio | Of the file | Against PPMd | Make | Unpack |
+| Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| zip | | | | | | |
-| 7z | | | | | | |
-| Sieve, prioritised for decoding | 211,195,701 | 4.74:1 | 21.12% | +14.80% | 790.5 s shown (see below) | 11.261 s, then checked and written in 5.065 s |
-| **Sieve** (`.sieve`), optimised for size | **186,081,966** | **5.37:1** | **18.61%** | **+1.15%** | 734 s shown (see below) | 1,137.862 s, then checked and written in 5.194 s |
-| PPMd var. J (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | | | |
+| zip | 312,712,170 | 3.20:1 | 31.27% | +35.89% | 1 min 30 s | about 4 s |
+| 7z | 230,120,517 | 4.35:1 | 23.01% | | 1 min 37 s | about 1 s |
+| Sieve, prioritised for decoding | 211,195,701 | 4.73:1 | 21.12% | −8.22% | longer than 790.5 s (see below) | 11.261 s, then checked and written in 5.065 s |
+| **Sieve** (`.sieve`), optimised for size | **186,081,966** | **5.37:1** | **18.61%** | **−19.14%** | longer than 734 s (see below) | 1,137.862 s, then checked and written in 5.194 s |
+| PPMd var. J (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | −20.06% | | |
 
-Optimised for size, Sieve is 2,117,051 bytes (1.15%) larger than PPMd at its strongest and unpacks
-at about 0.88 MB a second (mixing decodes as slowly as it codes). Prioritised for decoding, it is
-13.50% larger than that and decodes at about 89 MB a second: 16.3 s in all, checked and written.
+Optimised for size, Sieve is 19.14% under 7z (on enwik8, 16.89%) and 2,117,051 bytes (1.15%) larger
+than PPMd at its strongest; it unpacks at about 0.88 MB a second (mixing decodes as slowly as it codes). Prioritised for decoding, it is
+13.50% larger than that, still 8.22% under 7z, and decodes at about 89 MB a second: 16.3 s in all,
+checked and written.
 
-**The making times are not yet the whole time.** The File Locator's readout under its graph then
-showed only the last job's time, and a save that packs nothing again is a job of its own: the
-times written above may be that, or the reading's, and the graph's width at the time (3 h 12 min
-and 1 h 09 min) was set from the first estimate, not from the run. Edward's sense is that the
-search took longer than 734 s. The readout now says, at the end of the reading, how long it took to
-the tenth of a second, and when its last new best came; a save that packs nothing again says the
-reading's time beside its own. To be measured again with that.
+**The making times are not yet the whole time.** The 734 s and 790.5 s are the weighing's search
+(the line under the result, `search: ...; took`, now `the weighing's search took`): the time the
+weighing spent finding the file's best way to be named, one pass of several. Reading the file also
+packs its instructions (the rope's search and mixing, which for a gigabyte take far longer), and
+sets zip and 7z beside them, so the whole was longer; how much was not kept. The graph's width at
+the end (3 h 12 min and 1 h 09 min) was set from the first estimate, not measured. The File Locator
+now says the whole time to the tenth of a second when it is done, and when its last new best came;
+with **Keep a log** ticked, each run also writes every report it made as it went (each best so far
+with its time, which the window shows only until the next), the result, and its phases' times to a
+text file in the logs folder beside its settings. To be measured again with that.
 
 PPMd's figure is from the same page as enwik8's, not measured here; the benchmark's other published
 enwik9 sizes are in the enwik8 section's second table.
