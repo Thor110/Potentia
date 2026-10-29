@@ -4013,6 +4013,57 @@ new versions, and wait. Step 4 (mixing faster when packing, "Create .sieve") nee
 bytes made are the same, and suits the pause, as do the benchmark on public data (SHOWCASE-PLAN)
 and a short `.sieve` v31 specification for independent decoders.
 
+### The plan from here (29 October 2026), while the format rests at v31
+
+Edward: "Make a plan moving forward for anything else we can do without moving to a new manifest
+version." The plan of 28 October below is done but for its measuring (2), the release (5), the posts
+(6) and the game (7), which carry on here. Nothing below changes a `.sieve` a build makes from the
+same files with the same settings, nor what any `.sieve` installs to. In order:
+
+1. **Making large files faster, the same bytes out.**
+   - *The weighing does the packer's work again.* Reading a file packs it (`file_ways`: LZMA2's
+     estimate of the whole, the rope's search and code, the pieces), then weighs it, and the
+     weighing calls `file_ways` on the same bytes. Only the rope's search is cached (by the file's
+     SHA-256 and its settings); LZMA2's estimate of the whole and the rope's code of it are made
+     twice. On enwik9 the weighing's own search took 734 s. A cache of `file_ways` by the same key,
+     held within a memory budget, should take most of that off. To measure on a 100 MB cut of
+     enwik9 before and after, with the log.
+   - *Mixing's speed.* Unpacking enwik9 optimised for size took 1,137.9 s (0.88 MB a second), and
+     mixing codes as slowly. The SSE2 sums took 13.9% of the instructions off; next, a profile of
+     mix-v4 on enwik8 for its memory (each context's table row as it is fetched) and its counters,
+     each change held to the same codes by the pinned SHA-256s.
+   - *The rope's decoding:* the per-segment slot table is 65,536 entries whatever the symbols; for
+     the byte values, 256 starts would do (the third review's measure: 0.06 s left on a text of
+     1,024 columns, from 0.17).
+2. **Measuring, on Edward's machine, with Keep a log ticked.** enwik8 and enwik9 again (each way's
+   whole time, its last new best, the weighing's search, and the save); Silesia both ways, file by
+   file (SHOWCASE-PLAN); the ladder of cuts (`tools/bench/ladder.py`, with 7-Zip itself). For each,
+   zip and 7z as the same right-click makes them, as for enwik9, and at their strongest beside.
+3. **Where Sieve loses to 7z (WoWRevived, +0.20%).** First, the log gains a table of each file: its
+   size, the way chosen, what that way costs, and LZMA2's estimate. Then Edward's run says which
+   files the 0.20% is in (likely the films and music, already packed), and whether the packer's
+   choice there (carried as it is, or in the lzma2 stream beside others) can be made better within
+   v31.
+4. **The estimate (IDEAS §19.97),** measured again against the logs' whole times now that both are
+   kept: on enwik8, enwik9 and the varied set; its shares learned per kind of file if they differ.
+5. **Files that hold much the same (IDEAS §19.106),** the part that needs no version: whether two
+   such files placed one after the other in the lzma2 stream, with a dictionary that holds the first,
+   come out smaller than each carried on its own. Measured on a pair made here first (a folder of
+   pictures and the same with a few changed), then on MAPS.WoW and MAPS-Larger.WoW on Edward's
+   machine. Where mixing carries the files, it does not help; the delta way waits for the version.
+6. **Left from the third review** (REVIEW, "Found and left"): a mixed file's claimed size checked
+   against the memory before it is decoded (`sieve install` has no limit); dialog callbacks that can
+   come after their screen has closed (Linux); the viewer's pictures decoded in one request (the web
+   host's own protocol, not the format); the oracle refusing entries out of order.
+7. **The File Locator at 1024×768:** its lower rows run into the status line (as before the third
+   review); they want to scroll, or the boxes to sit beside the search row.
+8. **Then, as before:** the release (0.13.77) with the measured tables and the three uses, the
+   posts one audience at a time (SHOWCASE-PLAN §5), "Create .sieve" in the right-click menu once
+   making is faster and its estimate holds (§19.100), and the game as a test bed when its engine runs
+   (§19.104).
+
+What waits for the next version is IDEAS's list "Waiting for the next format version".
+
 ### The plan from here (28 October 2026), while the format rests at v31
 
 Edward: "we should take a look through everything again and plan for what is next." Read from
