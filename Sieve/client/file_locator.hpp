@@ -13,6 +13,7 @@
 #pragma once
 
 #include "cli/args.hpp"
+#include "dialogs.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
 #include "cli/weigh.hpp"
@@ -252,6 +253,8 @@ private:
     size_t files_counted() const;
     void step_search(bool total, int dir);
     void relink_search();
+    // Last, so it is the first let go: its dialogs' answers after it has gone are dropped (dialogs.hpp).
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

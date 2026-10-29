@@ -167,6 +167,9 @@ struct FileWays
     bool forced = false;            // a force stop came first: only `lzma2` and `tried` are set
 };
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 6, bool pieces = true);
+// The ways file_ways keeps for the run (the File Locator's weighing asks for them again) let go:
+// when a reading is done, so a large file's are not held after it.
+void forget_file_ways();
 
 // Threads for work made of separate parts (SIEVE_PACK_THREADS, else every core), and the memory free
 // now in bytes (0 where it cannot be known): the packer's, and installing's (files decoded at once).

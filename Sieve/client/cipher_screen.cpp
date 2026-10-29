@@ -213,7 +213,7 @@ void CipherScreen::button(int b)
         if (item_) set_input_file(*item_, item_name_);
         else status_ = tr("cipher.no_item");
     }
-    else if (b == kFileButton) open_file_dialog(input_chosen, this, window_, nullptr, 0, nullptr, false);
+    else if (b == kFileButton) open_file_dialog(input_chosen, this, window_, nullptr, 0, nullptr, false, false, this);
     else if (b == kSaveButton)
     {
         if (!have_out_) status_ = tr("cipher.no_output");
@@ -221,7 +221,7 @@ void CipherScreen::button(int b)
         {
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
             const std::string start = docs ? std::string(docs) + go_name() : go_name();
-            save_file_dialog(output_chosen, this, window_, nullptr, 0, start.c_str());
+            save_file_dialog(output_chosen, this, window_, nullptr, 0, start.c_str(), this);
         }
     }
     else if (b == kGoButton)

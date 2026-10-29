@@ -16,6 +16,7 @@
 #pragma once
 
 #include "cli/diffusion_run.hpp"
+#include "dialogs.hpp"
 #include "cli/train.hpp"
 #include "sieve/aispace.hpp"
 
@@ -166,7 +167,8 @@ private:
     uint32_t pic_count_ = 4000;
     std::string pic_stack_id_, pic_stack_note_;
     std::shared_ptr<const sieve::FilterStack> pic_stack_;
-    int pic_row_ = 0;
+    int pic_row_ = 0;    // Last, so it is the first let go: its dialogs' answers after it has gone are dropped (dialogs.hpp).
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

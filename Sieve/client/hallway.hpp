@@ -25,6 +25,7 @@
 #include <SDL3/SDL.h>
 
 #include "display.hpp"
+#include "dialogs.hpp"
 #include "app_settings.hpp"
 #include "camera.hpp"
 #include "file_locator.hpp"
@@ -1831,7 +1832,8 @@ private:
     std::array<std::unique_ptr<TitledSpace>, kLines> full_;
     bool full_here(int i) const { return full_[size_t(i)] && effective_mode(i) == FilterMode::Compact; }
     int book_page_ = 0;                // the page open in a book in hand
-    Synth synth_;
+    Synth synth_;    // Last, so it is the first let go: its dialogs' answers after it has gone are dropped (dialogs.hpp).
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway::hall

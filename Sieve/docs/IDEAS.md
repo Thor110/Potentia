@@ -5287,6 +5287,28 @@ any other file, so the shared content is paid for twice.
   dictionary large enough to hold the first; whether that helps, against mixing each, is to be
   measured on the pair before anything is built. Finding the pairs: files of similar size whose
   sampled blocks' hashes mostly agree.
+- *Measured, 29 October 2026 (pairs made here: B is A with a few regions replaced by random bytes).*
+  Each finding is a packer's choice that v31 already reads.
+  - *Carried as they are, side by side in the lzma2 stream:* a pair of 20 MB came out at
+    9,637,859 bytes, under solid xz's 9,649,776, and one file alone is 8.14 MB with xz: the second
+    already costs only its changes, since the stream's dictionary (48 MiB) reaches back over the
+    first. That holds while the pair is under the packer's 64 MiB dictionary. Past it, on a pair
+    with no repetition at long range within A (random words and random bytes): a 30 MB pair in one
+    raw LZMA2 stream (preset 6) is 30,914,001 bytes with a 16 MiB dictionary, shorter than
+    the distance, and 16,605,654 with 64 MiB, longer (one file alone: 15,094,454). For MAPS.WoW
+    and MAPS-Larger.WoW (160 MB each), that wants a dictionary of 192 MiB or more where they are
+    carried so (the format allows to 4 GiB; the packer stops at 64 MiB; encoding takes about twelve
+    times the dictionary in memory, decoding the dictionary).
+  - *Mixed:* each file mixed alone, 1,376,163 + 1,441,719 = 2,817,882 bytes; the two mixed as one
+    group (v30's `mixt`), 1,571,543, 44% smaller (3 MB each): mix-v4's match model finds the second
+    in the first. The packer groups only files of 8 MiB or less, and the group decodes on one
+    thread, so a pair of 160 MB as one group would take about twice as long to install as the two
+    decoded side by side.
+  - *To decide (Edward):* both change what the packer makes for such folders (smaller, and still
+    v31), so neither is built: a larger dictionary where the stream is longer than 64 MiB and memory
+    allows; and a group of two large files found alike (their sampled blocks' hashes) where mixing
+    carries them, perhaps only with Try every way. First, which way MAPS.WoW is carried: Keep a log
+    says so for each file now.
 
 **19.107 Edward's notes of 29 October 2026 (built).**
 - *The window's title* is "The Sieve of Potentia".

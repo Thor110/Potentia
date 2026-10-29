@@ -17,6 +17,7 @@
 // row of buttons under the rows does the same four things with the mouse.
 #pragma once
 
+#include "dialogs.hpp"
 #include <SDL3/SDL.h>
 
 #include <cstdint>
@@ -91,6 +92,8 @@ private:
     std::vector<SDL_FRect> button_rects_;
     std::mutex chosen_mx_;
     std::optional<std::pair<std::string, bool>> chosen_; // a path, and whether it is the input (else the output's file)
+    // Last, so it is the first let go: its dialogs' answers after it has gone are dropped (dialogs.hpp).
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

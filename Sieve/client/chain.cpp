@@ -337,14 +337,14 @@ bool Hallway::chain_key(const SDL_KeyboardEvent& k)
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
             const std::string start = std::string(docs ? docs : "") + "models.chain";
             static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
-            save_file_dialog(chain_saved, this, window_, kChain, 1, start.c_str());
+            save_file_dialog(chain_saved, this, window_, kChain, 1, start.c_str(), this);
         }
         return true;
     case SDLK_O:
         if (!ctrl) return false;
         {
             static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
-            open_file_dialog(chain_opened, this, window_, kChain, 1, nullptr, false);
+            open_file_dialog(chain_opened, this, window_, kChain, 1, nullptr, false, false, this);
         }
         return true;
     default: return false;

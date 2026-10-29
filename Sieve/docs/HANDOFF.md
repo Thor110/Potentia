@@ -4062,6 +4062,25 @@ same files with the same settings, nor what any `.sieve` installs to. In order:
    making is faster and its estimate holds (§19.100), and the game as a test bed when its engine runs
    (§19.104).
 
+*Done the same day, by item:*
+- 1. The weighing's repeat: `file_ways` keeps what it found for the run by the file's SHA-256 and
+  settings (a quarter of the memory free, at most 2 GiB; let go when a reading ends). A 12 MB file
+  in the File Locator: the weighing 6.76 s to 0.07, the whole 140.3 s to about 129.6, the same
+  `.sieve`; its own address's length is counted from the bytes, not made as a number and its hex.
+  Mixing: profiled (callgrind, a 128 KB text coded and decoded): per bit, 14 counters updated, 14
+  stretches, two dot products and two trainings over 24 inputs, all in SSE2 already; nothing found
+  that would not change a code, and on large files the bound is memory, which is prefetched a nibble
+  ahead already. Left as it is. The rope's decoding: a segment of fewer than 16,384 values finds
+  each symbol by halving instead of building a table of 65,536 (0.08 to 0.11 s down to 0.06 on the
+  text of 1,024 columns; the rope's 100 cases the same).
+- 3. Keep a log now says, for each file of a folder, what LZMA2, the rope, the pieces and mixing each
+  came to and which was taken, then each group's mixed and apart sizes, and the lzma2 stream's.
+- 5. Measured (IDEAS §19.106): both ways work within v31; the choice is Edward's.
+- 6. All but the gzip past 4 GiB (REVIEW, the third pass, "Found and left").
+- 7. The File Locator's tables stop above its buttons in a short window (1024x768: nothing
+  overlaps now; the tables lose their last lines instead).
+Left for Edward's machine: 2 and 4, and 3's run on WoWRevived.
+
 What waits for the next version is IDEAS's list "Waiting for the next format version".
 
 ### The plan from here (28 October 2026), while the format rests at v31

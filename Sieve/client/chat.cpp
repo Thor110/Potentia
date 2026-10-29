@@ -975,7 +975,7 @@ void Hallway::chat_act(size_t i, ChatAct act)
                                             : std::string(e.melody() ? "melody.mid" : "picture.png");
         const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
         const std::string start = docs ? std::string(docs) + name : name;
-        save_file_dialog(chat_save_chosen, this, window_, nullptr, 0, start.c_str());
+        save_file_dialog(chat_save_chosen, this, window_, nullptr, 0, start.c_str(), this);
         return;
     }
     if (file && act == ChatAct::Go)
@@ -1107,7 +1107,7 @@ void Hallway::chat_event(const SDL_Event& e)
         for (const auto& [r, which] : chat_bar_)
             if (SDL_PointInRectFloat(&at, &r))
             {
-                if (which == 0) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true);
+                if (which == 0) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true, false, this);
                 else if (which == 1) chat_draw();
                 else if (which == 2) chat_send();
                 else chat_pick_model(1);
@@ -1150,7 +1150,7 @@ void Hallway::chat_event(const SDL_Event& e)
                 SDL_free(clip);
             }
         }
-        else if (e.key.key == SDLK_O) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true);
+        else if (e.key.key == SDLK_O) open_file_dialog(chat_files_chosen, this, window_, nullptr, 0, nullptr, true, false, this);
         else if (e.key.key == SDLK_D) chat_draw();
         else if (e.key.key == SDLK_L) chat_save_log("");
         else if (e.key.key == SDLK_E) chat_edit_context();

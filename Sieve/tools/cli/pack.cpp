@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <deque>
 #include <exception>
 #include <functional>
 #include <fstream>
@@ -2155,8 +2156,71 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
 }
 
 static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
+static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
+
+namespace {
+// The ways found for a file, kept for the run by its SHA-256 and the settings that made them: the
+// File Locator packs a file, then weighs it, and the weighing asks for the same ways of the same
+// bytes (on enwik9, 734 s of LZMA2's estimate and the rope's code again). The rope's search was
+// kept already (rope_search); everything else in them follows from it and the bytes, so what is
+// kept is what would be made again. Held to a quarter of the memory free, at most 2 GiB, the oldest
+// let go first; a result a force stop cut short is never kept.
+struct WaysCache
+{
+    std::mutex mx;
+    std::deque<std::pair<std::string, std::shared_ptr<const FileWays>>> kept;
+    uint64_t bytes = 0;
+};
+WaysCache& ways_cache()
+{
+    static WaysCache c;
+    return c;
+}
+uint64_t held(const FileWays& w) { return w.rope_code.size() + w.pieces_z.size() + w.pieces_code.size() + w.pieces_way.size() + 256; }
+} // namespace
 
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
+{
+    char t[64];
+    std::snprintf(t, sizeof t, "|%.6f|%u|%d|%d", rope_seconds, rope_newest, int(pieces), int(rope_search_every_wave()));
+    Sha256 h;
+    h.update(std::span<const uint8_t>(bytes.data(), bytes.size()));
+    const std::string key = Sha256::hex(h.finish()) + t;
+    WaysCache& c = ways_cache();
+    {
+        std::lock_guard<std::mutex> lock(c.mx);
+        for (const auto& [k, w] : c.kept)
+            if (k == key)
+            {
+                progress("its ways as found a moment ago (the same bytes, the same settings)");
+                return *w;
+            }
+    }
+    FileWays w = file_ways_uncached(bytes, rope_seconds, rope_newest, pieces);
+    if (w.forced || force_requested()) return w;
+    const uint64_t need = held(w), free_now = memory_free();
+    const uint64_t budget = std::min<uint64_t>(uint64_t(2) << 30, free_now ? free_now / 4 : uint64_t(256) << 20);
+    if (need > budget) return w;
+    std::lock_guard<std::mutex> lock(c.mx);
+    while (!c.kept.empty() && c.bytes + need > budget)
+    {
+        c.bytes -= held(*c.kept.front().second);
+        c.kept.pop_front();
+    }
+    c.kept.emplace_back(key, std::make_shared<const FileWays>(w));
+    c.bytes += need;
+    return w;
+}
+
+void forget_file_ways()
+{
+    WaysCache& c = ways_cache();
+    std::lock_guard<std::mutex> lock(c.mx);
+    c.kept.clear();
+    c.bytes = 0;
+}
+
+static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     FileWays w;
     // LZMA2's estimate of the whole file beside the rope's search and the pieces, on a thread of its
@@ -3168,6 +3232,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // Prioritise Decoding Speed (prioritise_decoding): no file mixed (r.mix_skipped counts them).
             const bool decoding_first = prioritise_decoding();
             if (mix_on && decoding_first) got.decoding_first = true;
+            std::string mixed_said = !mix_on ? "" : decoding_first ? "mixing not tried (decoding first)" : "mixing not tried";
             if (mix_on && !decoding_first && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
@@ -3238,12 +3303,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
                     return ms * 100 < ls * 97;
                 }();
+                if (!tried) mixed_said = "mixing's test on its start " + std::to_string(ms) + " (not 3% under LZMA2's, so not tried whole)";
                 if (tried)
                 {
                     std::string mix_way;
                     std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words);
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
+                    mixed_said = mix_way + " " + std::to_string(mc.size() + vl);
                     if (mc.size() + vl < best)
                     {
                         best = mc.size() + vl;
@@ -3253,6 +3320,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         piece_z[i].clear();
                     }
                 }
+            }
+            // What each way came to, and the one taken, said once for the file (Keep a log keeps it: the
+            // window shows it only until the next; it is where a folder's bytes went, file by file).
+            {
+                std::string said = "file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " +
+                                   std::to_string(bytes[i].size()) + " bytes: LZMA2 about " + std::to_string(fw.lzma2) + ", rope " +
+                                   std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ")";
+                if (fw.has_pieces) said += ", pieces " + std::to_string(fw.pieces_bytes);
+                if (!mixed_said.empty()) said += ", " + mixed_said;
+                said += "; taken: " + (way.empty() ? std::string("LZMA2, in the lzma2 stream with the others") : way.substr(0, way.find(' '))) + ", " +
+                        std::to_string(best) + " bytes";
+                progress(said);
             }
             got.way = std::move(way);
             got.code = std::move(code);
@@ -3402,6 +3481,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         });
         for (size_t g = 0; g < groups.size(); ++g)
         {
+            if (groups[g].size() >= 2 && made[g].total) // (said once a group: Keep a log keeps it)
+            {
+                uint64_t len = made[g].code.size(), vl = 1;
+                while (len >>= 7) ++vl;
+                progress("group " + std::to_string(g + 1) + ": " + std::to_string(groups[g].size()) + " files from " + files[groups[g].front()]->path + " to " +
+                         files[groups[g].back()]->path + ", " + std::to_string(made[g].total) + " bytes: mixed together " +
+                         std::to_string(made[g].code.size() + vl) + ", apart " + std::to_string(made[g].apart) + (made[g].kept ? "; taken" : "; apart taken"));
+            }
             if (!made[g].kept) continue;
             for (size_t k = 0; k < groups[g].size(); ++k)
             {
@@ -3662,6 +3749,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
             }
         }
+        if (!plain.empty())
+            progress("the lzma2 stream: " + std::to_string(plain.size()) + " bytes (the files carried as they are, the pieces, the masks): LZMA2 " +
+                     std::to_string(pp.size()) + (mixed.empty() ? std::string(", taken") : ", mixed " + std::to_string(mixed.size()) + ", mixed taken"));
         if (!mixed.empty())
         {
             r.stream_mixed = mixed.size();

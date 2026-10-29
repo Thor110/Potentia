@@ -159,8 +159,9 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         {
             const std::vector<uint8_t> bytes = read_file_bytes(root.empty() ? from_u8(f) : root / from_u8(f));
             fw.bytes = bytes.size();
-            const BigUint own = binary_address(bytes);
-            fw.base_bits = own.is_zero() ? 0.0 : 4.0 * double(own.to_hex().size());
+            // (Its own address's length, counted from the bytes in one pass: no number made, nor its
+            // hex, which for a gigabyte is two billion digits made only to be counted.)
+            fw.base_bits = bytes.empty() ? 0.0 : 4.0 * double(raw_summary(bytes, 1).hex_digits);
             cand.push_back({-1, fw.base_bits, ""});
             if (bsieve && bytes.size() <= binary_bytes && bsieve->first_failure_of(bytes).empty())
             {

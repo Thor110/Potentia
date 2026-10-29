@@ -247,7 +247,7 @@ void Harness::act(Action a)
         prompting_ = true;
         prompt_.clear();
         SDL_StartTextInput(window_);
-        if (!scripted_) open_folder_dialog(on_folder, this, window_, nullptr, false);
+        if (!scripted_) open_folder_dialog(on_folder, this, window_, nullptr, false, this);
         break;
     case Action::MoveUp:
     case Action::MoveDown:

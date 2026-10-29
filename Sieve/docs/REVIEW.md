@@ -93,19 +93,30 @@ ways, coded and read back) come out as before.
 
 ### Found and left
 
-1. **The oracle still accepts entries out of order** (SPECIFICATIONS: sorted by their paths' bytes,
-   but for v31's members, which follow their archive), text manifests of v20 and after (which exist
-   in bytes only), and a `.sieve` with leading zero bytes (as `sieve install` does). None makes it
-   accept a wrong file as right, since the tree is checked.
-2. **A mixed file's size is taken from the instructions before its code is read** (`mix4_file`
-   allocates the file's size first), so a tiny code claiming 4 GB asks for that much before it is
-   refused. The web host's limit covers it there; `sieve install` has none.
-3. **Dialog callbacks** (the harness, the File Locator, the node graph) can arrive after their
-   screen has closed where the system's dialog is not modal (Linux's portal); on Windows the
-   window is disabled meanwhile.
+1. *Done, but for two, 29 October 2026.* **The oracle still accepts entries out of order**
+   (SPECIFICATIONS: sorted by their paths' bytes, but for v31's members, which follow their
+   archive); it refuses them now (the reviewer's unsorted file: "entries out of order"). *Found by
+   that:* where an archive is carried as its contents (v14's `u`), Sieve lists the contents in the
+   archive's own order (CI step 11's LHA archive: `empty` before `dir1/`), which SPECIFICATIONS'
+   "sorted by their paths' bytes" does not allow; such files exist, so the oracle checks no order
+   there, and which of the two is to change is Edward's call (sorting them would change those
+   `.sieve` files, not their format). Left: text
+   manifests of v20 and after (which exist in bytes only), and a `.sieve` with leading zero bytes
+   (as `sieve install` takes it). Neither makes it accept a wrong file as right.
+2. *Done, 29 October 2026.* **A mixed file's size is taken from the instructions before its code is
+   read** (`mix4_file` allocates the file's size first), so a tiny code claiming 4 GB asked for that
+   much before it was refused. Installing now refuses, before decoding anything, a file whose
+   decoding needs more memory than is free, saying how much.
+3. *Done, 29 October 2026.* **Dialog callbacks** (the harness, the File Locator, the node graph, and
+   the chain, chat, cipher and save screens) could arrive after their screen had closed where the
+   system's dialog is not modal (Linux's portal). Each screen now holds a `DialogOwner`
+   (`dialogs.hpp`), and its dialogs name it: an answer for one that has gone is dropped, and an
+   answer is given under a lock its going waits on.
 4. **A gzip member past 4 GiB** is not read as one (zlib's sizes are 32-bit); it is carried as it is.
-5. **The viewer** still has Sieve decode the whole `.sieve` for each picture of a page in it (the
-   bytes are fetched once now): a request naming several paths would do it once.
+5. *Done another way, 29 October 2026.* **The viewer** had Sieve decode the whole `.sieve` for each
+   picture of a page in it. The host keeps the `.sieve` it last read (up to 128 MiB of contents) by
+   its SHA-256: three pictures from one of 30 MB, 1.211 s for the first, 0.059 and 0.056 s for the
+   next. The extension and its messages are as they were.
 
 ## The second pass (27 October 2026)
 

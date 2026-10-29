@@ -167,6 +167,14 @@ void decode_deferred(const std::vector<Deferred>& jobs, std::vector<std::vector<
 {
     if (jobs.empty()) return;
     const uint64_t free = memory_free(), budget = free ? free / 2 : (uint64_t(2) << 30);
+    // A file whose decoding needs more memory than is free is refused before any is decoded: its
+    // size is the instructions' word, and a few bytes of code can claim gigabytes (made at that
+    // size first, refused only when the code runs out); a real one that large would not fit either.
+    if (free)
+        for (const Deferred& d : jobs)
+            if (d.memory > free)
+                throw std::runtime_error(d.path + " needs " + std::to_string(d.memory >> 20) + " MiB of memory to be decoded, more than the " +
+                                         std::to_string(free >> 20) + " MiB free");
     const unsigned threads = unsigned(std::min<size_t>(std::max(1u, pack_threads()), jobs.size()));
     std::vector<std::exception_ptr> failed(jobs.size());
     std::mutex mx;

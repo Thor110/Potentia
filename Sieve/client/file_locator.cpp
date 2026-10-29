@@ -939,6 +939,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             r.error = e.what();
         }
         r.stopped = stop_ != 0;
+        cli::forget_file_ways(); // (kept only for this reading's weighing)
         std::lock_guard<std::mutex> lock(mx_);
         learn_shares(r.stopped || r.kind == Result::None);
         result_ = std::move(r);
@@ -1115,8 +1116,8 @@ void FileLocator::event(const SDL_Event& e)
         }
     }
     else if (pressed == "close") close();
-    else if (pressed == "file") open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false);
-    else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false);
+    else if (pressed == "file") open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false, false, this);
+    else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false, this);
     else if (pressed == "go") go();
     else if (pressed == "tailor") analyse(result_.path, false, true);
     else if (pressed == "search_file_less") step_search(false, -1);
@@ -1158,13 +1159,13 @@ void FileLocator::event(const SDL_Event& e)
     {
         // First the .sieve, then (below in draw) the installer program's name.
         static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
-        open_file_dialog(on_program_from, this, window_, kSieve, 1, nullptr, false, true); // the name's dialog follows
+        open_file_dialog(on_program_from, this, window_, kSieve, 1, nullptr, false, true, this); // the name's dialog follows
     }
     else if (pressed == "install")
     {
         // First the installer, then (on_install_from, below in draw) the folder to put it in.
         static const SDL_DialogFileFilter kFrom[] = {{"Sieve instructions", "sieve"}, {"Installer program", "exe"}};
-        open_file_dialog(on_install_from, this, window_, kFrom, 2, nullptr, false, true); // the folder's dialog follows
+        open_file_dialog(on_install_from, this, window_, kFrom, 2, nullptr, false, true, this); // the folder's dialog follows
     }
     else
     {
@@ -1183,7 +1184,7 @@ void FileLocator::event(const SDL_Event& e)
         static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
         static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
         const SDL_DialogFileFilter* filter = save_what_ == 3 ? kProgram : save_what_ == 4 ? kSieve : nullptr;
-        save_file_dialog(on_save_to, this, window_, filter, filter ? 1 : 0, start.c_str());
+        save_file_dialog(on_save_to, this, window_, filter, filter ? 1 : 0, start.c_str(), this);
     }
 }
 
@@ -1219,7 +1220,7 @@ void FileLocator::draw(float W, float H)
         {
             install_src_ = inst->second;
             say(trf("loc.install.where", {inst->second}));
-            open_folder_dialog(on_install_to, this, window_, nullptr, false);
+            open_folder_dialog(on_install_to, this, window_, nullptr, false, this);
         }
         else if (inst && inst->first == 1 && !install_src_.empty()) install(install_src_, inst->second);
         else if (inst && inst->first == 2)
@@ -1234,7 +1235,7 @@ void FileLocator::draw(float W, float H)
 #endif
             const std::string start = u8(from.parent_path() / from_u8(u8(from.stem()) + program));
             static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
-            save_file_dialog(on_program_to, this, window_, kProgram, 1, start.c_str());
+            save_file_dialog(on_program_to, this, window_, kProgram, 1, start.c_str(), this);
         }
         else if (inst && inst->first == 3 && !program_src_.empty()) program_from(program_src_, inst->second);
     }
@@ -1405,7 +1406,23 @@ void FileLocator::draw(float W, float H)
         }
         y += 10;
         size_t at = 0;
-        while (at < r.table.size())
+        // What goes under the tables (the saves, the search row, the boxes and Tailor) takes its height
+        // from the bottom up, and the tables stop above it: a short window cuts the tables, never the
+        // buttons (at 1024x768 the boxes ran into the status line).
+        const float under = [&] {
+            if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
+            int rows = 1;
+            float x = 20;
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.every", "loc.decoding", "loc.log"})
+            {
+                const float w = text_width("[ ] " + tr(id), 2) + 24;
+                if (x > 20 && x + w > W - 20) ++rows, x = 20;
+                x += w + 12;
+            }
+            return 124.0f + 40.0f * float(rows);
+        }();
+        const float table_end = H - 62 - under;
+        while (at < r.table.size() && y + 13 <= table_end)
         {
             const size_t nl = r.table.find('\n', at);
             const std::string row = r.table.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
@@ -1417,7 +1434,7 @@ void FileLocator::draw(float W, float H)
         // The weighing: each file's best way to be named against its own address, and the totals.
         y += 6;
         at = 0;
-        while (at < r.weighing.size() && y < H - 150)
+        while (at < r.weighing.size() && y < H - 150 && y + 13 <= table_end)
         {
             const size_t nl = r.weighing.find('\n', at);
             const std::string row = r.weighing.substr(at, nl == std::string::npos ? std::string::npos : nl - at);

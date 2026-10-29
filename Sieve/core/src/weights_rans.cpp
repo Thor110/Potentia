@@ -90,8 +90,11 @@ std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vect
             syms.push_back(uint16_t(s));
         }
     // Where to start looking for a slot's symbol: the symbol holding the first slot of each block
-    // of 256 slots (the symbols in a block are few, so a short walk finds the one).
-    std::vector<uint32_t> first(size_t(kM >> 8));
+    // of 256 slots (the symbols in a block are few, so a short walk finds the one). Made only for a
+    // stream of many values: its 65,536 entries cost more than they save for a few (a rope of many
+    // columns decodes a short segment each), which find theirs among the starts by halving instead.
+    const bool table = n >= 16384;
+    std::vector<uint32_t> first(table ? size_t(kM >> 8) : 0);
     for (size_t b = 0, j = 0; b < first.size(); ++b)
     {
         const uint32_t slot = uint32_t(b << 8);
@@ -106,8 +109,13 @@ std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vect
     for (uint64_t i = 0; i < n; ++i)
     {
         const uint32_t slot = uint32_t(x & (kM - 1));
-        size_t j = first[slot >> 8];
-        while (j + 1 < starts.size() && starts[j + 1] <= slot) ++j;
+        size_t j;
+        if (table)
+        {
+            j = first[slot >> 8];
+            while (j + 1 < starts.size() && starts[j + 1] <= slot) ++j;
+        }
+        else j = size_t(std::upper_bound(starts.begin(), starts.end(), slot) - starts.begin()) - 1; // (starts[0] is 0)
         const uint16_t s = syms[j];
         x = uint64_t(freq[s]) * (x >> kScaleBits) + slot - cum[s];
         while (x < kL)

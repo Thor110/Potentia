@@ -967,12 +967,12 @@ void Hallway::graph_event(const SDL_Event& e)
         graph_select(std::stoi(pressed.substr(5)));
         graph_drop_ = false;
     }
-    else if (pressed == "make") open_folder_dialog(graph_dialog, &make_ctx, window_, nullptr, false);
+    else if (pressed == "make") open_folder_dialog(graph_dialog, &make_ctx, window_, nullptr, false, this);
     else if (pressed == "open")
     {
         static const SDL_DialogFileFilter kMaps[] = {{"Sieve instructions and maps", "sieve;map"}};
         const std::string start = u8(program_dir() / "maps");
-        open_file_dialog(graph_dialog, &open_ctx, window_, kMaps, 1, start.c_str(), false);
+        open_file_dialog(graph_dialog, &open_ctx, window_, kMaps, 1, start.c_str(), false, false, this);
     }
     else if (pressed == "export")
     {
@@ -980,7 +980,7 @@ void Hallway::graph_event(const SDL_Event& e)
         if (!g || !g->ready) return;
         static const SDL_DialogFileFilter kOut[] = {{"GraphML (Gephi, yEd, Cytoscape)", "graphml"}, {"Graphviz DOT", "dot"}, {"Sieve map (Sieve instructions)", "sieve"}};
         const std::string start = u8(fs::current_path() / from_u8(g->title + ".graphml"));
-        save_file_dialog(graph_dialog, &export_ctx, window_, kOut, 3, start.c_str());
+        save_file_dialog(graph_dialog, &export_ctx, window_, kOut, 3, start.c_str(), this);
     }
     else if (pressed == "go") graph_go(graph_pick_ >= 0 ? graph_pick_ : graph_hot_);
     else if (pressed == "remove") graph_remove(graph_pick_);
@@ -990,7 +990,7 @@ void Hallway::graph_event(const SDL_Event& e)
         std::error_code ec;
         fs::create_directories(program_dir() / "maps", ec);
         const std::string start = u8(program_dir() / "maps" / "new map.sieve");
-        save_file_dialog(graph_dialog, &create_ctx, window_, kMap, 1, start.c_str());
+        save_file_dialog(graph_dialog, &create_ctx, window_, kMap, 1, start.c_str(), this);
     }
 }
 

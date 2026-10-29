@@ -16,7 +16,9 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_video.h>
 
+#include <mutex>
 #include <optional>
+#include <set>
 
 namespace hallway {
 
@@ -40,7 +42,23 @@ struct DialogCall
     void* userdata;
     SDL_Window* window;
     bool then_another;
+    const void* owner = nullptr; // (see DialogOwner: null, an answer always given)
 };
+
+// The owners of dialogs still open, registered while they live (DialogOwner). Where the system's
+// dialog does not hold the window (Linux's portal), it can answer after the screen that opened it
+// has closed: an answer for an owner that has gone is dropped, and an answer is given under this
+// lock, so an owner cannot be destroyed while its answer is being given.
+inline std::mutex& owners_mx()
+{
+    static std::mutex m;
+    return m;
+}
+inline std::set<const void*>& owners()
+{
+    static std::set<const void*> s;
+    return s;
+}
 
 // The exclusive fullscreen mode a window had before a dialog opened (one window has dialogs).
 inline std::optional<SDL_DisplayMode>& exclusive_mode()
@@ -76,7 +94,13 @@ inline void SDLCALL dialog_closed(void* call, const char* const* files, int filt
 {
     const DialogCall c = *static_cast<DialogCall*>(call);
     delete static_cast<DialogCall*>(call);
-    c.callback(c.userdata, files, filter);
+    if (!c.owner) c.callback(c.userdata, files, filter);
+    else
+    {
+        std::lock_guard<std::mutex> lock(owners_mx());
+        if (!owners().count(c.owner)) return; // (its screen has gone: nothing to answer, nor a window to raise)
+        c.callback(c.userdata, files, filter);
+    }
     // A dialog that leads into another leaves the window as it is, unless nothing was chosen (no
     // second dialog then follows).
     const bool chosen = files && files[0];
@@ -89,27 +113,51 @@ inline void SDLCALL dialog_closed(void* call, const char* const* files, int filt
 
 } // namespace detail
 
+// A screen that opens dialogs holds one of these, made with itself, as its last member (so it is
+// the first let go): while it lives, its dialogs' answers reach it; after, they are dropped. Each
+// dialog it opens names it as `owner`. Its callbacks are given under a lock: they only take what was
+// chosen (under the screen's own lock at most), and open nothing.
+class DialogOwner
+{
+public:
+    explicit DialogOwner(const void* owner) : owner_(owner)
+    {
+        std::lock_guard<std::mutex> lock(detail::owners_mx());
+        detail::owners().insert(owner_);
+    }
+    ~DialogOwner()
+    {
+        std::lock_guard<std::mutex> lock(detail::owners_mx());
+        detail::owners().erase(owner_);
+    }
+    DialogOwner(const DialogOwner&) = delete;
+    DialogOwner& operator=(const DialogOwner&) = delete;
+
+private:
+    const void* owner_;
+};
+
 inline void open_file_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const SDL_DialogFileFilter* filters,
-                             int nfilters, const char* default_location, bool allow_many, bool then_another = false)
+                             int nfilters, const char* default_location, bool allow_many, bool then_another = false, const void* owner = nullptr)
 {
     detail::before_dialog(window);
-    SDL_ShowOpenFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, then_another}, window, filters, nfilters,
+    SDL_ShowOpenFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, then_another, owner}, window, filters, nfilters,
                            default_location, allow_many);
 }
 
 inline void save_file_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const SDL_DialogFileFilter* filters,
-                             int nfilters, const char* default_location)
+                             int nfilters, const char* default_location, const void* owner = nullptr)
 {
     detail::before_dialog(window);
-    SDL_ShowSaveFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, false}, window, filters, nfilters,
+    SDL_ShowSaveFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, false, owner}, window, filters, nfilters,
                            default_location);
 }
 
 inline void open_folder_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const char* default_location,
-                               bool allow_many)
+                               bool allow_many, const void* owner = nullptr)
 {
     detail::before_dialog(window);
-    auto* call = new detail::DialogCall{callback, userdata, window, false};
+    auto* call = new detail::DialogCall{callback, userdata, window, false, owner};
     if (!allow_many && detail::native_folder_dialog(detail::dialog_closed, call, window, default_location)) return;
     SDL_ShowOpenFolderDialog(detail::dialog_closed, call, window, default_location, allow_many);
 }

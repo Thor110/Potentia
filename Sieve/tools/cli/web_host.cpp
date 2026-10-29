@@ -6,6 +6,8 @@
 #include "cli/vault.hpp"
 #include "sieve/json.hpp"
 
+#include <mutex>
+#include <memory>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -131,8 +133,27 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     // 2. Read as instructions, and only what the plugin shows. The hash says only that the file is
     // the one the page chose, not that its sizes are honest, so nothing larger than the plugin
     // unpacks is made while it is read (a page could otherwise ask for gigabytes in a few bytes).
-    const DecodeLimit limit(max_bytes);
-    const Manifest m = manifest_of_installer_raw(sieve);
+    // The .sieve last read, kept by its SHA-256 (checked above): a page in a .sieve of many files
+    // asks for each of its pictures from it, one after another, and it is read once, not for each.
+    // Kept where its contents are 128 MiB or less; a read that fails is not kept.
+    static std::mutex kept_mx;
+    static std::string kept_sha;
+    static uint64_t kept_max = 0;
+    static std::shared_ptr<const Manifest> kept;
+    std::shared_ptr<const Manifest> read;
+    {
+        std::lock_guard<std::mutex> lock(kept_mx);
+        if (kept && kept_sha == got && kept_max == max_bytes) read = kept;
+    }
+    if (!read)
+    {
+        const DecodeLimit limit(max_bytes);
+        read = std::make_shared<const Manifest>(manifest_of_installer_raw(sieve));
+        std::lock_guard<std::mutex> lock(kept_mx);
+        if (read->contents.size() <= (uint64_t(128) << 20)) kept = read, kept_sha = got, kept_max = max_bytes;
+        else kept.reset();
+    }
+    const Manifest& m = *read;
     if (!m.graph.empty()) throw std::runtime_error("it is a map (a graph part): open it in the hallway's node graph, not the browser");
     if (!m.lines.empty()) throw std::runtime_error("it carries items of Sieve's lines: install it with Sieve");
     if (!m.unpacked.empty()) throw std::runtime_error("it carries an archive as what it holds, not as the archive: install it with Sieve");
