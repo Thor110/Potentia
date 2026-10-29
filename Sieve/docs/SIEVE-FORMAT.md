@@ -81,8 +81,11 @@ of the older text form:
 A **path** is a varint of how many of its first bytes it shares with the last path written (a
 folder's or a file's), then the rest as a varint length and text. Paths are relative to the root,
 `/` between parts, a folder's ending in `/`; entries come **sorted by their paths' bytes**, but for
-an archive's members (v31, below), which follow their archive at once (`a.zip`, `a.zip/1`, `a.zip/2`,
-then `a.zip-x`).
+two, each keeping an archive's own order: an archive's members (v31, below), which follow their
+archive at once (`a.zip`, `a.zip/1`, `a.zip/2`, then `a.zip-x`), and the contents of an archive
+carried as its contents (a record 4), which come together where the archive was, in the archive's
+order (a zip holding `y.txt` then `b.txt`: `m/y.txt`, `m/b.txt`). A reader should not refuse those
+for their order.
 
 A **way** is a byte, then: **1** `raw`; **3** `rope` and the rest of the way as text; **4** `pieces`
 and the rest as text; **2** an archive made again on installing: its format number, the rest of its

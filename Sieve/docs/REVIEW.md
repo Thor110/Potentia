@@ -98,9 +98,11 @@ ways, coded and read back) come out as before.
    archive); it refuses them now (the reviewer's unsorted file: "entries out of order"). *Found by
    that:* where an archive is carried as its contents (v14's `u`), Sieve lists the contents in the
    archive's own order (CI step 11's LHA archive: `empty` before `dir1/`), which SPECIFICATIONS'
-   "sorted by their paths' bytes" does not allow; such files exist, so the oracle checks no order
-   there, and which of the two is to change is Edward's call (sorting them would change those
-   `.sieve` files, not their format). Left: text
+   "sorted by their paths' bytes" did not allow. Decided with Edward the same day: the
+   specification says so (the contents come together where the archive was, in its order), and the
+   oracle checks the order of everything else; and every format made again keeps its own order in
+   its recipe, never the listing's (SPECIFICATIONS, "An archive's order"), so a format added later
+   whose program needs its files in order is covered without a setting. Left: text
    manifests of v20 and after (which exist in bytes only), and a `.sieve` with leading zero bytes
    (as `sieve install` takes it). Neither makes it accept a wrong file as right.
 2. *Done, 29 October 2026.* **A mixed file's size is taken from the instructions before its code is

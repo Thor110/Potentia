@@ -7042,12 +7042,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path} does not list the members its recipe counts")
             for k in mine:
                 members[k] = i
-    # SPECIFICATIONS §12.2: entries sorted by their paths' bytes; v31's members follow their archive
-    # instead, and are left out of the order. Where an archive is carried as its contents (a `u`
-    # line), Sieve lists them in the archive's own order, so nothing is checked (REVIEW, the third
-    # pass: the specification and Sieve differ there, and such files exist).
+    # SPECIFICATIONS §12.1 and §12.2: entries sorted by their paths' bytes, but for two that keep an
+    # archive's own order and are left out of it: v31's members, and the contents of an archive
+    # carried as its contents (a `u` line: the entries under its folder; where the archive was the
+    # whole of what was read, its contents are the whole listing, and nothing is left to check).
     member_paths = {files[k][0] for k in members}
-    order = [] if unpacked else [e[0].encode("utf-8", "surrogateescape") for e in entries if e[0] not in member_paths]
+    held = [u[3] + "/" for u in unpacked]
+    whole = any(not any(e[0].startswith(h) for e in entries) for h in held)
+    order = [] if whole else [e[0].encode("utf-8", "surrogateescape") for e in entries
+                              if e[0] not in member_paths and not any(e[0].startswith(h) for h in held)]
     for x, y in zip(order, order[1:]):
         if x > y:
             sys.exit(f"entries out of order: {y.decode('utf-8', 'replace')!r} after {x.decode('utf-8', 'replace')!r}")

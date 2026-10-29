@@ -1004,6 +1004,11 @@ as written down:
 - **`engine/` (Edward, 25 October 2026):** what is learned about games' own formats is kept in
   `engine/`, out of the main architecture, for this; the first is the `.WoW` archives of *The War of
   the Worlds* (1998), measured (`engine/wow.md`).
+  *For a reader of such a format, if one is ever built into the packer (Edward, 29 October 2026):*
+  its files' order goes in its recipe, as `skm` numbers a zip's members, never in the listing's
+  order (SPECIFICATIONS, "An archive's order"); a game may need its archive's files where they
+  were, and the archive made again is checked against its SHA-256, so a reader that loses the order
+  is refused rather than installing a wrong archive.
 
 *Evaluation:*
 - **Ghost mode** is near: a world's mesh is built already (`WorldSpace::mesh_of`). Entering it
