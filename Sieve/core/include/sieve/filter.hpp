@@ -208,6 +208,8 @@ struct FilterSpec
     std::function<bool(const FilterLine&)> applies;
     std::function<std::unique_ptr<Filter>(const FilterLine&, const FilterValues&, const FilterResources&)> make;
 
+    // (A spec's `make` finds its own settings by this name, captured as `own = spec.name()` where
+    // `make` is set, never spelled by hand: a version raised changes both.)
     std::string name() const { return id + "-v" + std::to_string(version); }
 };
 

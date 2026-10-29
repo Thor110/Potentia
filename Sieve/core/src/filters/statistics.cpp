@@ -409,9 +409,9 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     run.params = {{"max_run", "longest run of one letter allowed", FilterParam::Kind::Integer, "3", 1, 1000000, 1, {}}};
     run.applies = is_text;
     run.counts_as = "automaton";
-    run.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+    run.make = [own = run.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const auto space = l.alphabet->digit_of(U' ');
-        const int64_t max_run = param_int(*find_filter("max-run-v1"), v, "max_run"), sp = space ? int64_t(*space) : -1;
+        const int64_t max_run = param_int(*find_filter(own), v, "max_run"), sp = space ? int64_t(*space) : -1;
         if (auto dfa = max_run_dfa(l.base, max_run, sp)) return make_dfa_filter(std::move(*dfa), l.length, "max_run=" + std::to_string(max_run));
         return std::make_unique<MaxRun>(max_run, sp);
     };
@@ -428,8 +428,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
                   {"max_millibits", "highest entropy allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "4400", 0, 32000, 50, {}}};
     // Every line of fixed-length units (the binary line's files have lengths of their own).
     ent.applies = [](const FilterLine& l) { return l.kind != "binary" && l.kind != "models" && l.kind != "ai"; }; // not a mixed-radix model, nor weights
-    ent.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
-        const FilterSpec& s = *find_filter("symbol-entropy-v1");
+    ent.make = [own = ent.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+        const FilterSpec& s = *find_filter(own);
         return std::make_unique<SymbolEntropy>(param_int(s, v, "min_millibits"), param_int(s, v, "max_millibits"), l.base, l.length);
     };
     ent.replaced_by = "symbol-entropy-v2";
@@ -447,8 +447,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
                        "In black and white, can rank (compact).";
     ent2.params = {{"min_permille", "lowest entropy allowed, in thousandths of the line's most", FilterParam::Kind::Integer, "0", 0, 1000, 10, {}},
                    {"max_permille", "highest entropy allowed, in thousandths of the line's most", FilterParam::Kind::Integer, "925", 0, 1000, 10, {}}};
-    ent2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
-        const FilterSpec& s = *find_filter("symbol-entropy-v2");
+    ent2.make = [own = ent2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+        const FilterSpec& s = *find_filter(own);
         std::optional<uint32_t> space;
         if (l.alphabet) space = l.alphabet->digit_of(U' ');
         return std::make_unique<SymbolEntropy>(param_int(s, v, "min_permille"), param_int(s, v, "max_permille"), l.base, l.length, true,
@@ -465,8 +465,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     info.params = {{"model", "registered model id (empty: the alphabet's default)", FilterParam::Kind::Text, "", 0, 0, 1, {}},
                    {"max_millibits", "most information allowed, in 1/1000 bits per symbol", FilterParam::Kind::Integer, "5000", 1, 16000, 100, {}}};
     info.applies = is_text;
-    info.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        const FilterSpec& s = *find_filter("model-information-v1");
+    info.make = [own = info.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        const FilterSpec& s = *find_filter(own);
         const std::string id = param_value(s, v, "model");
         auto m = r.model(id, l.symbols_id);
         if (m->base() != l.base) throw std::invalid_argument("model-information: the model has " + std::to_string(m->base()) +
@@ -482,8 +482,8 @@ void add_statistics_filters(std::vector<FilterSpec>& out)
     info2.replaced_by.clear();
     info2.description = "Information content under the pinned frequency model, at most max bits per symbol; trailing "
                         "SPACE padding (two or more) is not counted. English ~1.9-4.1, random letters 9 or more.";
-    info2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        const FilterSpec& s = *find_filter("model-information-v2");
+    info2.make = [own = info2.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        const FilterSpec& s = *find_filter(own);
         const std::string id = param_value(s, v, "model");
         auto m = r.model(id, l.symbols_id);
         if (m->base() != l.base) throw std::invalid_argument("model-information: the model has " + std::to_string(m->base()) +

@@ -603,6 +603,7 @@ void write_bytes(const std::filesystem::path& p, const void* data, size_t n)
 {
     std::ofstream out(p, std::ios::binary);
     out.write(static_cast<const char*>(data), std::streamsize(n));
+    out.close(); // (checked once closed: a small file is written as it closes)
     if (!out) throw std::runtime_error("cannot write a temporary file for ffmpeg");
 }
 
@@ -703,6 +704,7 @@ void save_unit(const Line& line, const std::vector<uint32_t>& digits, const std:
     std::ofstream out(std::filesystem::path(path), std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    out.close(); // (checked once closed: a small file is written as it closes)
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
 }
 

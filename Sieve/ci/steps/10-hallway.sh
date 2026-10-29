@@ -345,7 +345,8 @@ cmp ub_one/model.safetensors ub_oracle/model.safetensors
 # readers (sieve install, the oracle's own decoding) give the model back.
 rm -rf ub_inst7 ub_oracle7
 build/sieve locate ub_one --installer ub-v7.sieve --items --v15 --manifest ub-v7.manifest | tr -d '\r' | q "^items     1 file(s) carried as items of Sieve's lines (34072 bytes, as 4022 bytes of places (4096 raw; digit-histogram-v1 on 1 line(s))"
-[ "$(wc -c < ub-v7.sieve)" -eq 4253 ] && [ "$(wc -c < ub-v6.sieve)" -eq 4443 ]
+[ "$(wc -c < ub-v7.sieve)" -eq 4253 ]
+[ "$(wc -c < ub-v6.sieve)" -eq 4443 ]
 q "^line 0 digit-histogram-v1 ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1 line=ai$" ub-v7.manifest
 build/sieve install ub-v7.sieve --to ub_inst7 > /dev/null
 cmp ub_one/model.safetensors ub_inst7/model.safetensors
@@ -855,7 +856,8 @@ $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.
 $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
 # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
-test "$($H --designer --timings --screenshot designer-idle.png 2>&1 | grep -c '^designer.test ')" = 0
+idle=$($H --designer --timings --screenshot designer-idle.png 2>&1) # (its own line: a crash fails the step)
+test "$(printf '%s\n' "$idle" | grep -c '^designer.test ')" = 0
 $H --designer --design tests/plugins/toy-grammar-v1.sfilter --design-out tests/plugins/roundtrip-v1.sfilter --screenshot designer2.png | q "designer: toy-grammar-v1"
 build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | grep -v "^sha256" > rt.a
 build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b

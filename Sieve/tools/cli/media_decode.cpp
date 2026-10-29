@@ -166,6 +166,10 @@ public:
 #else
         int fds[2];
         if (pipe(fds) != 0) throw std::runtime_error("cannot run ffmpeg");
+        // Neither end handed to any other ffmpeg started meanwhile (one would hold this pipe open, and
+        // its reader would wait for an end that never comes); the child's own stdout is a copy, open.
+        fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+        fcntl(fds[1], F_SETFD, FD_CLOEXEC);
         posix_spawn_file_actions_t fa;
         posix_spawn_file_actions_init(&fa);
         posix_spawn_file_actions_adddup2(&fa, fds[1], STDOUT_FILENO);
@@ -679,6 +683,7 @@ MediaRead read_media_frames(const uint8_t* data, size_t size, const std::string&
     {
         std::ofstream out(tmp.path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(data), std::streamsize(size));
+        out.close(); // (checked once closed: a small file is written as it closes)
         if (!out) throw std::runtime_error("cannot write a temporary copy of " + what + " for ffmpeg");
     }
     return ffmpeg_frames(tmp.path, what, max_frames, each);
@@ -734,6 +739,7 @@ AudioRead read_media_audio(const uint8_t* data, size_t size, const std::string& 
     {
         std::ofstream out(tmp.path, std::ios::binary);
         out.write(reinterpret_cast<const char*>(data), std::streamsize(size));
+        out.close(); // (checked once closed: a small file is written as it closes)
         if (!out) throw std::runtime_error("cannot write a temporary copy of " + what + " for ffmpeg");
     }
     return ffmpeg_audio(tmp.path, what, start, block);

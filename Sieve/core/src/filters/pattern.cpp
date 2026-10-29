@@ -396,8 +396,8 @@ void add_pattern_filters(std::vector<FilterSpec>& out)
                 {"order", "byte order of a value wider than one digit", FilterParam::Kind::Text, "big", 0, 0, 1, {"big", "little"}}};
     p.applies = [](const FilterLine& l) { return l.kind != "binary" && l.kind != "models" && l.kind != "ai" && l.base >= 2 && l.length >= 2; };
     p.counts_as = "arithmetic";
-    p.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& spec = *find_filter("not-a-pattern-v1");
+    p.make = [own = p.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
         const std::string period = param_value(spec, v, "period"), ramps = param_value(spec, v, "ramps"),
                           width = param_value(spec, v, "width"), order = param_value(spec, v, "order");
         const std::string prov = "period=" + period + " ramps=" + ramps + " width=" + width + " order=" + order;

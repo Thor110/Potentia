@@ -726,8 +726,8 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                    {"ramps", "fail rows that step by a fixed amount end to end", FilterParam::Kind::Text, "on", 0, 0, 1, {"on", "off"}}};
     rows.applies = is_ai;
     rows.counts_as = "own";
-    rows.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& s = *find_filter("weight-rows-v1");
+    rows.make = [own = rows.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter(own);
         const int64_t run = param_int(s, v, "max_run"), period = param_int(s, v, "period");
         const std::string ramps = param_value(s, v, "ramps");
         return std::make_unique<WeightRows>(*l.ai, uint32_t(run), uint32_t(period), ramps == "on",
@@ -764,8 +764,8 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                     "20", 0, 1000, 1, {}}};
     lang.applies = is_ai;
     lang.judge_only = true;
-    lang.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& s = *find_filter("language-v1");
+    lang.make = [own = lang.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter(own);
         return std::make_unique<Language>(*l.ai, model_run(param_value(s, v, "run")), uint32_t(param_int(s, v, "bytes")),
                                           param_int(s, v, "min_permille"));
     };
@@ -782,8 +782,8 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                    {"changes", "how many digits may differ from the anchor's", FilterParam::Kind::Integer, "2", 0, 1000000, 1, {}}};
     near.applies = is_ai;
     near.counts_as = "own";
-    near.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& s = *find_filter("near-model-v1");
+    near.make = [own = near.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter(own);
         const auto run = model_run(param_value(s, v, "run"));
         const int64_t k = param_int(s, v, "changes");
         std::vector<uint32_t> anchor = anchor_of(*l.ai, *run, "near-model-v1");

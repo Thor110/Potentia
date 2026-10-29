@@ -37,7 +37,9 @@ and so wait; most are small, and are best gathered into one version when the pau
   packer-only first step was measured and gains nothing, as mixing the whole file beats every cut);
 - the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` is 10
   bytes over its 7z, and more than that can be taken off; the listing in bytes, §19.90, is where);
-- the other lines' places coded by the rope (§19.87, *Not yet*).
+- the other lines' places coded by the rope (§19.87, *Not yet*);
+- a file carried as its differences from another file in the folder (§19.106: MAPS.WoW and
+  MAPS-Larger.WoW).
 
 **Work that needs no new version,** suited to the pause: measuring (the benchmark on public
 corpora, SHOWCASE-PLAN), speed (threads, §19.99; making faster before a right-click "Create .sieve",
@@ -5267,7 +5269,34 @@ a folder made like it (377 MB: three 125 MB files of noise and this repository's
   search unlimited, this repository's docs come out byte for byte as before (and in 19.7 s against
   23.0); with a time limit the search gets further in its time now, so a `.sieve` may come out a
   few bytes smaller (the 377 MB folder: 11).
-- *Left:* `sieve-install` still reads a file on its window's thread (now seconds, not a minute, but
-  the window does not answer meanwhile); a file's LZMA2 estimate takes most of making a large
+- *Left:* `sieve-install` read a file on its window's thread (now on a thread of its own, §19.107); a file's LZMA2 estimate takes most of making a large
   incompressible one (112 s of 139 on a 125 MB file, at about 1.1 MB/s); and where WoWRevived's
   0.20% against 7z is, file by file.
+
+**19.106 Files that hold much of the same (Edward, 29 October 2026; waits for the next version).**
+In WoWRevived's release, `MAPS.WoW` and `MAPS-Larger.WoW` hold mostly the same content and differ in
+a small number of files (the larger minimaps). Sieve carries each file on its own: LZMA2's
+dictionary can find the second's matches in the first only where both go into the lzma2 stream
+together and within the dictionary's reach, and a file mixed (mix4, mixt) is coded with no sight of
+any other file, so the shared content is paid for twice.
+- *The way:* a file carried as its differences from an earlier file of the folder (a `delta` way
+  naming that file: copies from it and new bytes, the new bytes then carried by any way). The
+  installer makes the earlier file first, as it already does in the listing's order. A new way is
+  a new manifest version, so it waits (the list at the top).
+- *Without a new version:* the packer could put such pairs side by side in the lzma2 stream with a
+  dictionary large enough to hold the first; whether that helps, against mixing each, is to be
+  measured on the pair before anything is built. Finding the pairs: files of similar size whose
+  sampled blocks' hashes mostly agree.
+
+**19.107 Edward's notes of 29 October 2026 (built).**
+- *The window's title* is "The Sieve of Potentia".
+- *Choosing a folder* on Windows opens Explorer's own picker (`IFileOpenDialog`, folders only),
+  with an address bar and the places pane, instead of SDL's tree of folders (`SHBrowseForFolder`);
+  where it cannot be had, SDL's as before. Elsewhere SDL's, which is the system's own.
+- *An installer program from a `.sieve`:* the File Locator's "Installer program from a .sieve" (M)
+  asks for a `.sieve`, then where to save, and writes `sieve-install` with it attached, without
+  installing it first.
+- *The installer's address bar* is a text field: a cursor, selection by mouse (a double click takes
+  it all) and Shift with the arrows, Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Home and End.
+- *The installer reads its file on a thread of its own,* so its window answers while a large one is
+  read ("Reading ...").

@@ -228,9 +228,9 @@ void add_sound_filters(std::vector<FilterSpec>& out)
     p.params = {{"percent", "the loudest a sample may be, as a percentage of full scale", FilterParam::Kind::Integer, "90", 1, 100, 1, {}}};
     p.applies = sound_line;
     p.counts_as = "automaton";
-    p.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+    p.make = [own = p.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const PcmFormat f = pcm_format_of(l.symbols_id);
-        const int64_t pct = param_int(*find_filter("sound-peak-v1"), v, "percent");
+        const int64_t pct = param_int(*find_filter(own), v, "percent");
         const PeakSet s = peak_set(f.bits, pct);
         const std::string prov = "percent=" + std::to_string(pct) + " limit=" + std::to_string(peak_limit(f.bits, pct));
         if (cells_fit(1, f.base())) return make_dfa_filter(peak_dfa(s), l.length, prov);
@@ -249,9 +249,9 @@ void add_sound_filters(std::vector<FilterSpec>& out)
                  1, 100, 1, {}}};
     s.applies = sound_line;
     s.counts_as = "automaton";
-    s.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+    s.make = [own = s.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const PcmFormat f = pcm_format_of(l.symbols_id);
-        const int64_t pct = param_int(*find_filter("sound-step-v1"), v, "percent");
+        const int64_t pct = param_int(*find_filter(own), v, "percent");
         const int64_t limit = step_limit(f.bits, pct);
         const std::string prov = "percent=" + std::to_string(pct) + " step=" + std::to_string(limit);
         if (auto dfa = step_dfa(f, limit)) return make_dfa_filter(std::move(*dfa), l.length, prov);
@@ -269,18 +269,18 @@ void add_sound_filters(std::vector<FilterSpec>& out)
     r.params = {{"samples", "the longest run of silent samples allowed", FilterParam::Kind::Integer, "4000", 0, 4294967295LL, 1, {}}};
     r.applies = sound_line;
     r.counts_as = "automaton";
-    r.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const int64_t n = param_int(*find_filter("silence-run-v1"), v, "samples");
+    r.make = [own = r.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const int64_t n = param_int(*find_filter(own), v, "samples");
         const std::string prov = "samples=" + std::to_string(n);
         if (auto dfa = silence_dfa(l.base, l.length, uint64_t(n))) return make_dfa_filter(std::move(*dfa), l.length, prov);
         return std::make_unique<SilenceFilter>(uint64_t(n), prov);
     };
     // An automaton while the run's states (the run allowed, and no more than the line) times the
     // symbols fit; without its settings, at the longest run the line allows.
-    r.counts_as_on = [](const FilterLine& l, const FilterValues* v) -> std::string {
+    r.counts_as_on = [own = r.name()](const FilterLine& l, const FilterValues* v) -> std::string {
         uint64_t run = l.length;
         if (v)
-            try { run = std::min<uint64_t>(run, uint64_t(param_int(*find_filter("silence-run-v1"), *v, "samples"))); }
+            try { run = std::min<uint64_t>(run, uint64_t(param_int(*find_filter(own), *v, "samples"))); }
             catch (const std::exception&) {} // a malformed setting: as without one
         return cells_fit(run + 1, l.base) ? "automaton" : "";
     };

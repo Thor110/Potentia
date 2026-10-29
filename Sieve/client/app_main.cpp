@@ -801,7 +801,7 @@ int run(const Args& a)
     // A fullscreen window is not minimised when it loses the focus: a system dialog (a file or a
     // folder to choose) takes it every time, and minimising at each one hid the hallway behind it.
     SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
-    SDL_Window* window = SDL_CreateWindow("Sieve - hallway", w, h, SDL_WINDOW_RESIZABLE | (shot ? SDL_WINDOW_HIDDEN : 0));
+    SDL_Window* window = SDL_CreateWindow("The Sieve of Potentia", w, h, SDL_WINDOW_RESIZABLE | (shot ? SDL_WINDOW_HIDDEN : 0));
     set_window_icon(window);
     if (!window) throw std::runtime_error(std::string("cannot open a window: ") + SDL_GetError());
     SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);

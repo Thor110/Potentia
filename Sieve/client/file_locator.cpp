@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <random>
 #include <stdexcept>
@@ -197,6 +198,18 @@ void SDLCALL on_install_to(void* user, const char* const* files, int)
 {
     if (!files || !files[0]) return;
     static_cast<FileLocator*>(user)->install_picked(1, files[0]);
+}
+
+void SDLCALL on_program_from(void* user, const char* const* files, int)
+{
+    if (!files || !files[0]) return;
+    static_cast<FileLocator*>(user)->install_picked(2, files[0]);
+}
+
+void SDLCALL on_program_to(void* user, const char* const* files, int)
+{
+    if (!files || !files[0]) return;
+    static_cast<FileLocator*>(user)->install_picked(3, files[0]);
 }
 
 } // namespace
@@ -496,6 +509,37 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
     };
     if (sync) job();
     else worker_ = std::thread(job);
+}
+
+void FileLocator::program_from(const std::string& sieve_file, const std::string& out)
+{
+    if (busy_) return;
+    if (worker_.joinable()) worker_.join();
+    busy_ = true;
+    status_ = trf("loc.program_from.making", {out});
+    worker_ = std::thread([this, sieve_file, out] {
+        std::string done;
+        try
+        {
+            const char* base = SDL_GetBasePath();
+            const auto stub = cli::installer_program_beside(base ? from_u8(base) : fs::current_path());
+            if (!stub) throw std::runtime_error(tr("loc.no_installer_program"));
+            std::vector<uint8_t> raw;
+            if (auto attached = cli::attached_raw(from_u8(sieve_file))) raw = std::move(*attached); // (an installer program: what it carries)
+            else raw = cli::read_file_bytes(from_u8(sieve_file));
+            // Sieve instructions' raw bytes begin as "sieve" does with every byte one higher (SIEVE-FORMAT §1).
+            if (raw.size() < 5 || std::memcmp(raw.data(), "tjfwf", 5) != 0) throw std::runtime_error(tr("loc.program_from.not_sieve"));
+            cli::write_installer_program(*stub, raw, from_u8(out));
+            done = trf("loc.program_from.done", {out});
+        }
+        catch (const std::exception& e)
+        {
+            done = trf("loc.save_failed", {e.what()});
+        }
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = done;
+        busy_ = false;
+    });
 }
 
 // Reads and measures a file or folder on the worker. `sync`: here and now (scripted runs).
@@ -917,6 +961,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_F: pressed = "file"; break;
         case SDLK_D: pressed = "folder"; break;
         case SDLK_I: pressed = "install"; break;
+        case SDLK_M: pressed = "program_from"; break; // an installer program from a .sieve already made
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
@@ -976,6 +1021,12 @@ void FileLocator::event(const SDL_Event& e)
         // or kept for the next one built (from the main menu).
         if (host_.use_filters) host_.use_filters(*result_.tailored_filters);
     }
+    else if (pressed == "program_from")
+    {
+        // First the .sieve, then (below in draw) the installer program's name.
+        static const SDL_DialogFileFilter kSieve[] = {{"Sieve instructions", "sieve"}};
+        open_file_dialog(on_program_from, this, window_, kSieve, 1, nullptr, false, true); // the name's dialog follows
+    }
     else if (pressed == "install")
     {
         // First the installer, then (on_install_from, below in draw) the folder to put it in.
@@ -1027,15 +1078,32 @@ void FileLocator::draw(float W, float H)
         std::optional<std::pair<int, std::string>> inst;
         {
             std::lock_guard<std::mutex> lock(mx_);
-            inst.swap(pending_install_);
+            // (A folder or a name chosen while the locator is busy, as a dialog the system leaves open
+            // allows: kept until it is free, rather than dropped.)
+            if (!busy_ || (pending_install_ && pending_install_->first != 1 && pending_install_->first != 3)) inst.swap(pending_install_);
         }
         if (inst && inst->first == 0)
         {
             install_src_ = inst->second;
-            status_ = trf("loc.install.where", {inst->second});
+            say(trf("loc.install.where", {inst->second}));
             open_folder_dialog(on_install_to, this, window_, nullptr, false);
         }
         else if (inst && inst->first == 1 && !install_src_.empty()) install(install_src_, inst->second);
+        else if (inst && inst->first == 2)
+        {
+            program_src_ = inst->second;
+            say(trf("loc.program_from.where", {inst->second}));
+            const fs::path from = from_u8(inst->second);
+#ifdef _WIN32
+            const char* program = " installer.exe";
+#else
+            const char* program = "-installer";
+#endif
+            const std::string start = u8(from.parent_path() / from_u8(u8(from.stem()) + program));
+            static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
+            save_file_dialog(on_program_to, this, window_, kProgram, 1, start.c_str());
+        }
+        else if (inst && inst->first == 3 && !program_src_.empty()) program_from(program_src_, inst->second);
     }
     const SDL_Color ink = host_.ink ? host_.ink() : SDL_Color{0, 255, 255, 255}, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
@@ -1044,10 +1112,15 @@ void FileLocator::draw(float W, float H)
     draw_text(r_, 20, 16, tr("loc.title"), 3, ink);
     draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
     buttons_.clear();
-    float bx = 20;
+    float bx = 20, row = 0; // (the buttons wrap onto a row below where the window is too narrow)
     auto button = [&](const std::string& id, const std::string& label, float y, bool enabled = true) {
         const float w = text_width(label, 2) + 24;
-        const SDL_FRect r{bx, y, w, 30};
+        if (bx > 20 && bx + w > W - 20)
+        {
+            bx = 20;
+            row += 40;
+        }
+        const SDL_FRect r{bx, y + row, w, 30};
         const bool hot = mouse_x_ >= r.x && mouse_x_ < r.x + r.w && mouse_y_ >= r.y && mouse_y_ < r.y + r.h;
         SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, hot && enabled ? 60 : 20);
         SDL_RenderFillRect(r_, &r);
@@ -1061,13 +1134,16 @@ void FileLocator::draw(float W, float H)
     button("file", tr("loc.choose_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
     button("install", tr("loc.install"), 76, !busy);
+    button("program_from", tr("loc.program_from"), 76, !busy);
     if (busy)
     {
         // Stop, on a row of its own under the others (greyed while it works), so it always fits.
         bx = 20;
-        button("stop", tr(stop_ == 0 ? "loc.stop" : stop_ == kStop ? "loc.force" : "loc.stop.pressed"), 116, stop_ < kForce); // the best so far kept
+        row += 40; // (its own row)
+        button("stop", tr(stop_ == 0 ? "loc.stop" : stop_ == kStop ? "loc.force" : "loc.stop.pressed"), 76, stop_ < kForce); // the best so far kept
+        row -= 40; // (as before: the text starts below it, at 126)
     }
-    float y = 126;
+    float y = 126 + row;
     std::string status;
     {
         std::lock_guard<std::mutex> lock(mx_);

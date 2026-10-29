@@ -106,6 +106,7 @@ int cmd_chat(const Args& a)
                 const char bytes[4] = {char(u & 0xFF), char((u >> 8) & 0xFF), char((u >> 16) & 0xFF), char(u >> 24)};
                 out.write(bytes, 4);
             }
+            out.close(); // (checked once closed: a small file is written as it closes)
             if (!out) throw std::invalid_argument("cannot write " + a.get("logits-out"));
         }
         return 0;

@@ -6723,7 +6723,7 @@ def listing_from_bytes(b):
             return b"pieces " + text()
         sys.exit("v20: a way this reader does not know")
 
-    out = b""
+    out = bytearray()  # (bytes appended to would be copied whole each time: quadratic)
     while at[0] < len(b):
         r = byte()
         if r == 1:
@@ -6738,6 +6738,8 @@ def listing_from_bytes(b):
             nl = b.find(b"\n", at[0])
             if nl < 0:
                 sys.exit("v20: its listing ends early")
+            if b"\t" in b[at[0]:nl]:
+                sys.exit("v20: a tab in a line")
             out += b"line " + b[at[0]:nl] + b"\n"
             at[0] = nl + 1
         elif r == 4:
@@ -6748,6 +6750,21 @@ def listing_from_bytes(b):
             out += b"u\t" + name + b"\t%d\t" % size + archive + b"\t" + folder + b"\n"
         else:
             sys.exit("v20: a record this reader does not know")
+    return bytes(out)
+
+
+def raw_lzma2(blob, filters, what):
+    """Raw LZMA2 (after the filters given) decoded to its end, and no further: SPECIFICATIONS §12.2
+    refuses a stream that holds more than its files, and Python's lzma.decompress would read bytes
+    after the end as another stream."""
+    import lzma
+    d = lzma.LZMADecompressor(format=lzma.FORMAT_RAW, filters=filters)
+    try:
+        out = d.decompress(blob)
+    except lzma.LZMAError as e:
+        sys.exit(f"{what} is not raw LZMA2 ({e})")
+    if not d.eof or d.unused_data:
+        sys.exit(f"{what} does not end where its size says")
     return out
 
 
@@ -6799,11 +6816,15 @@ def v16_text(data):
             sys.exit("v16: a dictionary byte out of range")
         return 0xFFFFFFFF if p == 40 else (2 | (p & 1)) << (p // 2 + 11)
 
-    def stream():
+    def stream(name):
         packed, size = varint(), varint()
         b = take(1)[0]
-        if b == 0xFE and v29:  # v29: mixed by mix-v4, its parameters after
+        if b == 0xFE and v29 and name == "lzma2":  # v29: mixed by mix-v4, its parameters after
             return packed, size, 0, take(varint()).decode("ascii")
+        # (Carried as it is, 255: the lzma2 and items streams only; the x86 stream and the body are
+        # raw LZMA2 always.)
+        if b > 40 and not (b == 0xFF and name in ("lzma2", "items")):
+            sys.exit(f"v16: a dictionary byte its {name} cannot have")
         return packed, size, dictionary(b)
 
     flags = take(1)[0]
@@ -6816,15 +6837,15 @@ def v16_text(data):
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
         if flags & bit:
-            s4 = stream()
+            s4 = stream(name.decode())
             head += b"stream %s %d %d %d" % ((name,) + s4[:3]) + (b" mix4 " + s4[3].encode("ascii") if len(s4) == 4 else b"") + b"\n"
     if flags & 16:
         n = varint()
         head += b"stream rope %d %d 0\n" % (n, n)
     tree = take(32).hex().encode()
     if flags & 32:
-        packed, size, d = stream()[:3]
-        body = lzma.decompress(take(packed), format=lzma.FORMAT_RAW, filters=[{"id": lzma.FILTER_LZMA2, "dict_size": d}])
+        packed, size, d = stream("body")
+        body = raw_lzma2(take(packed), [{"id": lzma.FILTER_LZMA2, "dict_size": d}], "v16: its body")
         if len(body) != size:
             sys.exit("v16: its body unpacks to the wrong size")
     else:
@@ -6850,8 +6871,7 @@ def v7_listing(data):
     head = version + b"listing "
     nl = data.index(b"\n", len(head))
     packed, size, dictionary = (int(x) for x in data[len(head):nl].decode().split(" "))
-    listing = lzma.decompress(data[nl + 1:nl + 1 + packed], format=lzma.FORMAT_RAW,
-                              filters=[{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}])
+    listing = raw_lzma2(data[nl + 1:nl + 1 + packed], [{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}], "the listing")
     if len(listing) != size:
         sys.exit("the listing unpacks to the wrong size")
     return version + listing + data[nl + 1 + packed:]
@@ -6933,9 +6953,11 @@ def cmd_unpack_v7(args, data):
 
     def decode(blob, size, dictionary, x86):
         if size == 0:
+            if blob:
+                sys.exit("a stream of no bytes that carries some")
             return b""
         filters = ([{"id": lzma.FILTER_X86}] if x86 else []) + [{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}]
-        out = lzma.decompress(blob, format=lzma.FORMAT_RAW, filters=filters)
+        out = raw_lzma2(blob, filters, "a stream")
         if len(out) != size:
             sys.exit("a stream unpacks to the wrong size")
         return out
@@ -6980,14 +7002,25 @@ def cmd_unpack_v7(args, data):
                 if t != "-" and not t.lstrip("-").isdigit():
                     sys.exit("a RAR's member with a number that is not one")
             continue
-        if f[0] == "d":
+        # (Each line as SPECIFICATIONS writes it: its first field, its count of fields, and a size in
+        # decimal digits with no sign and no leading zero.)
+        if f[0] == "d" and len(f) == 2:
             entries.append((f[1],))
-        elif f[0] == "i":
+        elif f[0] == "i" and len(f) == 3:
             entries.append((f[2], None, "-", "item " + f[1]))
-        elif len(f) == 4:  # a file without its own SHA-256 (the tree's covers it)
-            entries.append((f[3], int(f[1]), "-", f[2]))
+        elif f[0] == "f" and len(f) in (4, 5) and re.fullmatch(r"0|[1-9][0-9]*", f[1]):
+            if len(f) == 4:  # a file without its own SHA-256 (the tree's covers it)
+                entries.append((f[3], int(f[1]), "-", f[2]))
+            else:
+                entries.append((f[4], int(f[1]), f[2], f[3]))
         else:
-            entries.append((f[4], int(f[1]), f[2], f[3]))
+            sys.exit(f"a line this reader does not know: {line[:80]!r}")
+    seen = set()
+    for e in entries:  # (one entry a path: a second, or a file and a folder of one name, is refused)
+        key = e[0].rstrip("/")
+        if key in seen:
+            sys.exit(f"{e[0]!r} is listed twice")
+        seen.add(key)
     if v18 and not graph:
         sys.exit("v18 without its graph part")  # (v19's is allowed, not needed)
     files = [e for e in entries if len(e) == 4]
@@ -7097,6 +7130,9 @@ def cmd_unpack_v7(args, data):
                           {"none": lzma.CHECK_NONE, "crc32": lzma.CHECK_CRC32, "crc64": lzma.CHECK_CRC64, "sha256": lzma.CHECK_SHA256}[check],
                           size)
             size = int(n)
+        if v30 and group is not None and group[1] != len(group[0]) and way != "mixn":
+            # (SPECIFICATIONS v30: a group that holds a file of another way in the middle is refused.)
+            sys.exit(f"{group[2]}'s group ends before its files have its bytes ({path} is in its middle)")
         if way == "x86":
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
@@ -7219,10 +7255,16 @@ def cmd_unpack_v7(args, data):
                 got[i] = v7_item(item_lines[k], place, None, path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
         if way.startswith("lines "):
+            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw; the
+            # mask is one bit a line, and holds none past K's last line.)
+            if not re.fullmatch(r"0|[1-9][0-9]*", way[6:]) or int(way[6:]) >= len(files) or files[int(way[6:])][3] not in ("x86", "raw"):
+                sys.exit(f"{path}: its lines name no file carried x86 or raw")
             k = int(way[6:])
             base = got[k].split(b"\n")
             n = (len(base) + 7) // 8
             mask, pa = plain[pa:pa + n], pa + n
+            if len(mask) != n or (len(base) % 8 and mask[-1] >> (len(base) % 8)):
+                sys.exit(f"{path}: its mask is not the size of its file's lines")
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
@@ -7294,6 +7336,11 @@ def cmd_unpack_v7(args, data):
                 h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
         if h.hexdigest() != tree:
             sys.exit("the tree's SHA-256 differs")
+    for e in entries:
+        if refused_path(e[0]):
+            sys.exit(f"refused path {e[0]!r}: it could point outside the folder")
+    if unchecked:
+        print("warning: the tree's SHA-256 not checked, so the files written were checked by their sizes only")
     if args.to:
         for e in entries:
             if len(e) == 1:
@@ -7311,6 +7358,17 @@ def cmd_unpack_v7(args, data):
         print(f"unpacked\t{fmt}\t{size}\t{archive}\t{folder}")
         if k in rar_recipes:  # v22
             print(f"rar\t{archive}: made again by {rar_recipes[k][1]} where it is found; here, its contents")
+
+
+def refused_path(p):
+    """SPECIFICATIONS §12.2: installing refuses a path that is absolute, names a drive, uses a
+    backslash, or has a part that is "." or ".." (or empty, but for a folder's "/" at its end)."""
+    if not p or p.startswith("/") or ":" in p or "\\" in p:
+        return True
+    parts = p.split("/")
+    if parts[-1] == "":
+        parts = parts[:-1]
+    return any(part in ("", ".", "..") for part in parts)
 
 
 def skeleton_remake(inner, skel, path):
@@ -7342,7 +7400,7 @@ def skeleton_remake(inner, skel, path):
 
     def segments(count, depth):
         nonlocal whole
-        out = b""
+        out = bytearray()  # (appended to in place: bytes would be copied whole each time)
         for _ in range(count):
             if at[0] >= len(sk):
                 sys.exit(f"{path}: its skeleton ends early")
@@ -7359,8 +7417,9 @@ def skeleton_remake(inner, skel, path):
                 if whole:
                     if len(joined) != sum(lengths):
                         sys.exit(f"{path}: a run of chunks whose data is not their lengths")
+                    at_piece = 0
                     for l in lengths:
-                        piece, joined = joined[:l], joined[l:]
+                        piece, at_piece = joined[at_piece:at_piece + l], at_piece + l
                         out += struct.pack(">I", l) + b"IDAT" + piece + struct.pack(">I", zlib.crc32(b"IDAT" + piece) & 0xFFFFFFFF)
                 continue
             if kind == 0:
@@ -7389,7 +7448,7 @@ def skeleton_remake(inner, skel, path):
                 whole = False
             else:
                 sys.exit(f"{path}: a skeleton's segment Sieve does not write")
-        return out
+        return bytes(out)
 
     out = segments(varint(), 0)
     if at[0] != len(sk) or data[0] != len(inner):
@@ -7472,9 +7531,11 @@ def cmd_unpack(args):
 
     def decode(blob, size, dictionary, x86):
         if size == 0:
+            if blob:
+                sys.exit("a stream of no bytes that carries some")
             return b""
         filters = ([{"id": lzma.FILTER_X86}] if x86 else []) + [{"id": lzma.FILTER_LZMA2, "dict_size": dictionary}]
-        out = lzma.decompress(blob, format=lzma.FORMAT_RAW, filters=filters)
+        out = raw_lzma2(blob, filters, "a stream")
         if len(out) != size:
             sys.exit("a stream unpacks to the wrong size")
         return out
@@ -7508,10 +7569,16 @@ def cmd_unpack(args):
             got[i] = v5_item(item_lines[int(way.split(" ")[1])], way.split(" ")[2], path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
         if way.startswith("lines "):
+            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw; the
+            # mask is one bit a line, and holds none past K's last line.)
+            if not re.fullmatch(r"0|[1-9][0-9]*", way[6:]) or int(way[6:]) >= len(files) or files[int(way[6:])][3] not in ("x86", "raw"):
+                sys.exit(f"{path}: its lines name no file carried x86 or raw")
             k = int(way[6:])
             base = got[k].split(b"\n")
             n = (len(base) + 7) // 8
             mask, pa = plain[pa:pa + n], pa + n
+            if len(mask) != n or (len(base) % 8 and mask[-1] >> (len(base) % 8)):
+                sys.exit(f"{path}: its mask is not the size of its file's lines")
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
     if xa != len(x86) or pa != len(plain) or ia != len(places):
         sys.exit("the streams hold more than the files")
@@ -7524,6 +7591,9 @@ def cmd_unpack(args):
             h.update((path + "\n" + hashlib.sha256(b).hexdigest() + "\n").encode("utf-8"))
         if h.hexdigest() != tree:
             sys.exit("the tree's SHA-256 differs")
+    for e in entries:
+        if refused_path(e[0]):
+            sys.exit(f"refused path {e[0]!r}: it could point outside the folder")
     if args.to:
         for e in entries:
             target = os.path.join(args.to, e[0])
@@ -10056,7 +10126,12 @@ def main():
     elif args.cmd == "manifest":
         cmd_manifest(args)
     elif args.cmd == "unpack":
-        cmd_unpack(args)
+        # (A file that is not as SPECIFICATIONS says ends with a message, not Python's own traceback:
+        # what is caught here is a reader running off what it was given.)
+        try:
+            cmd_unpack(args)
+        except (ValueError, IndexError, KeyError, TypeError, AttributeError, UnicodeDecodeError) as e:
+            sys.exit(f"not a .sieve this reads: {type(e).__name__}: {e}")
     elif args.cmd == "map":
         cmd_map(args)
     elif args.cmd == "graph":

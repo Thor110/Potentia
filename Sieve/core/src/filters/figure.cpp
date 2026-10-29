@@ -454,8 +454,8 @@ void add_figure_filters(std::vector<FilterSpec>& out)
                  "lightest", 0, 0, 1, {"lightest", "darkest"}}};
     f.applies = figure_line;
     f.counts_as = "automaton";
-    auto rule_of = [](const FilterLine& l, const FilterValues& v, std::string& prov) {
-        const FilterSpec& spec = *find_filter("figure-v1");
+    auto rule_of = [own = f.name()](const FilterLine& l, const FilterValues& v, std::string& prov) {
+        const FilterSpec& spec = *find_filter(own);
         FigureRule r;
         r.width = l.width;
         r.shapes = uint32_t(param_int(spec, v, "shapes"));
@@ -465,10 +465,10 @@ void add_figure_filters(std::vector<FilterSpec>& out)
                " border=" + param_value(spec, v, "border") + " background=" + param_value(spec, v, "background");
         return r;
     };
-    f.make = [rule_of](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+    f.make = [rule_of, own = f.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         std::string prov;
         const FigureRule r = rule_of(l, v, prov);
-        const uint32_t bg = background_of(l, param_value(*find_filter("figure-v1"), v, "background"));
+        const uint32_t bg = background_of(l, param_value(*find_filter(own), v, "background"));
         std::shared_ptr<const Dfa> two = figure_dfa2_cached(r);
         if (two && two->states() <= kMaxDfaCells / l.base) return make_dfa_filter(widen(*two, l.base, bg), l.length, prov);
         return std::make_unique<Figure>(r, l.height, l.base, bg, std::move(two), prov);

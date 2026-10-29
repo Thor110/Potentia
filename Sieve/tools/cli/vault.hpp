@@ -40,6 +40,7 @@
 // (test_picture below) by PDQ, and a test file (test_file_bytes) by its chunks.
 #pragma once
 
+#include <span>
 #include <cstdint>
 #include <filesystem>
 #include <set>
@@ -103,7 +104,7 @@ std::string chunks_entry(const std::vector<uint8_t>& bytes, const std::set<std::
 void check_sha256(const std::string& sha256_hex, const std::string& what);
 void check_bytes(const std::vector<uint8_t>& bytes, const std::string& what);
 // Where the SHA-256 is already known: checks it, then the bytes as a picture (when they are one).
-void check_known(const std::vector<uint8_t>& bytes, const std::string& sha256_hex, const std::string& what);
+void check_known(std::span<const uint8_t> bytes, const std::string& sha256_hex, const std::string& what);
 // A file on disk, read once: its SHA-256 (returned) and its chunks worked out from the same blocks
 // and checked; then, if the file is a picture (by its first bytes, or a .tga name), its frames by
 // PDQ. Throws VaultWithheld when withheld.

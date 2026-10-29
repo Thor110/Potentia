@@ -191,6 +191,8 @@ Map Map::parse(std::string_view whole, bool held_bytes_follow)
     Map m;
     m.name = field("name");
     m.root = field("root");
+    // The folder a map is made in (map_sieve): a name, never a path that could leave it.
+    if (!is_held_name(m.root)) throw std::runtime_error("map: refused root " + m.root);
     if (v2)
     {
         const std::string s = field("sealed");
@@ -225,11 +227,17 @@ Map Map::parse(std::string_view whole, bool held_bytes_follow)
         m.nodes.push_back(std::move(node));
     }
     li += n;
+    // A node's number as written: digits only, and below the count (4294967296 read as 0 before).
+    const auto node_of = [&](const std::string& t) -> uint32_t {
+        if (t.empty() || t.size() > 10 || t.find_first_not_of("0123456789") != std::string::npos || std::stoull(t) >= n)
+            throw std::runtime_error("map: a line names a node that is not there (" + t + ")");
+        return uint32_t(std::stoull(t));
+    };
     for (size_t i = 0; i < e; ++i)
     {
         const auto f = split_tabs(lines[li + i]);
         if (f.size() != 4 || f[0] != "e" || !is_word(f[3])) throw std::runtime_error("map: line " + std::to_string(li + i + 1) + " is not an edge");
-        MapEdge edge{uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), f[3]};
+        MapEdge edge{node_of(f[1]), node_of(f[2]), f[3]};
         if (edge.from >= n || edge.to >= n) throw std::runtime_error("map: an edge names a node that is not there");
         m.edges.push_back(std::move(edge));
     }
@@ -238,7 +246,7 @@ Map Map::parse(std::string_view whole, bool held_bytes_follow)
     {
         const auto f = split_tabs(lines[li + i]);
         if (f.size() != 4 || f[0] != "m" || !is_word(f[2])) throw std::runtime_error("map: line " + std::to_string(li + i + 1) + " is not metadata");
-        MapMeta md{uint32_t(std::stoul(f[1])), f[2], f[3]};
+        MapMeta md{node_of(f[1]), f[2], f[3]};
         if (md.node >= n) throw std::runtime_error("map: metadata names a node that is not there");
         m.meta.push_back(std::move(md));
     }
@@ -265,6 +273,7 @@ Map Map::parse(std::string_view whole, bool held_bytes_follow)
 
 Map Map::empty(const std::string& name)
 {
+    if (!is_held_name(name)) throw std::runtime_error("map: refused name " + name);
     Map m;
     m.name = name;
     m.root = name;

@@ -235,10 +235,10 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         }
         within_decode_limit(declared, "files");
     }
-    if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
+    if (m.x86.packed > m.streams.size() || m.streams.size() - m.x86.packed != m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
     const std::span<const uint8_t> all(m.streams);
-    const std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
-    const std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
+    std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+    std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
     std::vector<ManifestEntry*> files;
     for (ManifestEntry& e : m.entries)
         if (!e.dir) files.push_back(&e);
@@ -319,6 +319,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                     t.size() > 17 || (!list.empty() && list.back().first == t[0]))
                     throw std::runtime_error("manifest: " + e.path + "'s pieces are not written as Sieve writes them");
                 const uint64_t n = std::stoull(t.substr(1));
+                // (Never more than the file has left: the sum checked below could otherwise wrap round.)
+                if (n > e.size - std::min(e.size, zsum + rsum)) throw std::runtime_error("manifest: " + e.path + "'s pieces are not its size");
                 list.emplace_back(t[0], n);
                 (t[0] == 'z' ? zsum : rsum) += n;
                 a = sp + 1;
@@ -563,6 +565,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};
     }
     if (xa != x86.size() || pa != plain.size()) throw std::runtime_error("manifest: its streams hold more than its files");
+    std::vector<uint8_t>().swap(x86); // (done with: every file's bytes are taken from them)
+    std::vector<uint8_t>().swap(plain);
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (files[i]->way.rfind("lines ", 0) != 0) continue;
@@ -596,6 +600,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d].size()) + " bytes, not " + std::to_string(e.size) +
                                      "): this Sieve's compressor writes differently from the one that made the instructions");
     }
+    // (Each file let go once it is in the contents: the streams, its files and the contents were all
+    // held to the end, about three times the files' size at once.)
     std::vector<uint8_t> contents;
     contents.reserve(size_t(m.bytes));
     for (size_t i = 0; i < files.size(); ++i)
@@ -603,6 +609,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         if (files[i]->size == kSizeAsMade) files[i]->size = bytes[i].size(); // v7: an item is the size it is made
         if (bytes[i].size() != files[i]->size) throw std::runtime_error("the installer does not give " + files[i]->path + " (its size is wrong)");
         contents.insert(contents.end(), bytes[i].begin(), bytes[i].end());
+        std::vector<uint8_t>().swap(bytes[i]);
     }
     return contents;
 }
@@ -1566,7 +1573,7 @@ Manifest Manifest::parse(std::string_view whole)
             // v8: the rope stream, carried as it is (its codes are coded already).
             m.rope_stream = stream_of(field(lines.at(first++), "stream rope"), "rope");
             if (m.rope_stream.dictionary != 0 || m.rope_stream.packed != m.rope_stream.bytes ||
-                m.rope_stream.packed + m.item_stream.packed > m.streams.size())
+                m.rope_stream.packed > m.streams.size() - m.item_stream.packed) // (items' fit already checked: no wrap)
                 throw std::runtime_error("manifest: its rope stream's line does not fit what it carries");
         }
         while (next_is("line "))
@@ -1840,6 +1847,9 @@ Manifest Manifest::parse(std::string_view whole)
             m.root = m.entries[0].path;
         }
     }
+    // The root names the folder made where the installer is pointed (sieve-install, the File
+    // Locator): an absolute one, or one climbing out (".."), would put it somewhere else.
+    if (!m.root.empty() && leaves_folder(m.root)) throw std::runtime_error("manifest: refused root " + m.root);
     // v31: each archive made again from its skeleton and its members: those listed under its own
     // path ("<archive>/<n>"), as many as its recipe says, files and nothing more.
     if (m.v31)
@@ -1891,10 +1901,12 @@ std::string tree_sha256(const Manifest& m)
     {
         if (e.dir) continue;
         if (m.contents.size() - at < e.size) throw std::runtime_error("manifest: its files' bytes end before " + e.path);
-        const std::vector<uint8_t> bytes(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + e.size));
+        const std::span<const uint8_t> bytes(m.contents.data() + at, size_t(e.size)); // (where it lies: not copied)
         at += size_t(e.size);
         if (e.member) continue; // v31: a piece of an archive, not a file of the tree
-        h.update(e.path + "\n" + sha256_hex(bytes) + "\n");
+        Sha256 own;
+        own.update(bytes);
+        h.update(e.path + "\n" + Sha256::hex(own.finish()) + "\n");
     }
     return Sha256::hex(h.finish());
 }
@@ -2034,6 +2046,18 @@ RawSummary raw_summary(const std::vector<uint8_t>& file, size_t each)
     return out;
 }
 
+// A file written: closed, and only then checked, since a small file's bytes reach the disk only as
+// it closes (a disk full was otherwise "written", empty or cut short, and the command said so);
+// where it failed, what was written is taken away again.
+static void finish_writing(std::ofstream& out, const fs::path& file)
+{
+    out.close();
+    if (out) return;
+    std::error_code ec;
+    fs::remove(file, ec);
+    throw std::runtime_error("cannot write " + file.generic_string());
+}
+
 void write_raw_address_file(const fs::path& file, const std::vector<uint8_t>& raw, bool hex)
 {
     size_t lead = 0;
@@ -2052,7 +2076,7 @@ void write_raw_address_file(const fs::path& file, const std::vector<uint8_t>& ra
         out << (h.empty() ? std::string("0") : h) << "\n";
     }
     else out.write(reinterpret_cast<const char*>(raw.data() + lead), std::streamsize(raw.size() - lead));
-    if (!out) throw std::runtime_error("cannot write " + file.generic_string());
+    finish_writing(out, file);
 }
 
 fs::path own_executable(const char* argv0)
@@ -2129,7 +2153,7 @@ void write_installer_program(const fs::path& program, const BigUint& address, co
         uint64_t n = raw.size();
         for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
         o.write(kAttachedMagic, std::streamsize(kMagic));
-        if (!o) throw std::runtime_error("cannot write " + out.generic_string());
+        finish_writing(o, out);
     }
     // Runnable where that is a permission (it is not on Windows, where .exe says so).
     std::error_code ec;
@@ -2149,7 +2173,7 @@ void write_installer_program(const fs::path& program, const std::vector<uint8_t>
         uint64_t n = raw_in.size() - lead;
         for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
         o.write(kAttachedMagic, std::streamsize(kMagic));
-        if (!o) throw std::runtime_error("cannot write " + out.generic_string());
+        finish_writing(o, out);
     }
     std::error_code ec;
     fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
@@ -2204,7 +2228,7 @@ void write_address_file(const fs::path& file, const BigUint& address, bool hex)
         for (size_t i = 0; i < raw.size(); ++i) raw[i] = char(nib(h[2 * i]) << 4 | nib(h[2 * i + 1]));
         out.write(raw.data(), std::streamsize(raw.size()));
     }
-    if (!out) throw std::runtime_error("cannot write " + file.generic_string());
+    finish_writing(out, file);
 }
 
 // v31: an archive's members left out (made again into it when it was read): what installs is the tree.
@@ -2381,29 +2405,39 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
     auto path_of = [&](const std::string& p) { return dest / fs::path(std::u8string(p.begin(), p.end())); };
     // Phase 0: every file cut from the contents (v3) or read back from its address (v2) and
     // checked, before anything is written.
+    // (Each file's bytes seen where they lie in the contents, not copied out: an install held them
+    // twice. Only a file read back from its address (v2) is held on its own.)
     std::vector<std::pair<const ManifestEntry*, std::vector<uint8_t>>> files;
+    std::vector<std::span<const uint8_t>> view;
     for (const ManifestEntry& e : m.entries)
         if (!e.dir) files.emplace_back(&e, std::vector<uint8_t>{});
+    view.resize(files.size());
     size_t at = 0;
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (cancelled()) return false;
         const ManifestEntry& e = *files[i].first;
-        std::vector<uint8_t> bytes;
+        std::span<const uint8_t> bytes;
         if (m.with_contents)
         {
             if (m.contents.size() - at < e.size) throw std::runtime_error("the installer ends before " + e.path);
-            bytes.assign(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + e.size));
+            bytes = std::span<const uint8_t>(m.contents.data() + at, size_t(e.size));
             at += size_t(e.size);
         }
-        else bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
+        else
+        {
+            files[i].second = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
+            bytes = files[i].second;
+        }
         // (An item's own SHA-256 is "-": the tree's, checked when the manifest was read, covers it.)
-        const std::string sha = sha256_hex(bytes);
+        Sha256 hasher;
+        hasher.update(bytes);
+        const std::string sha = Sha256::hex(hasher.finish());
         if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
             throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
         vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever written
         if (fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
-        files[i].second = std::move(bytes);
+        view[i] = bytes;
         if (progress) progress(0, i + 1, files.size(), e.path);
     }
     // Phase 1: the folders, then the files, remembering what was made so a cancel can undo it.
@@ -2441,9 +2475,10 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
             make_dirs(p.parent_path());
             const bool existed = fs::exists(p);
             std::ofstream out(p, std::ios::binary);
-            out.write(reinterpret_cast<const char*>(files[i].second.data()), std::streamsize(files[i].second.size()));
+            if (!existed) made_files.push_back(p); // (undone with the rest if this one fails)
+            out.write(reinterpret_cast<const char*>(view[i].data()), std::streamsize(view[i].size()));
+            out.close(); // (and only then checked: a small file reaches the disk as it closes)
             if (!out) throw std::runtime_error("cannot write " + p.generic_string());
-            if (!existed) made_files.push_back(p);
             if (progress) progress(1, i + 1, files.size(), files[i].first->path);
         }
     }

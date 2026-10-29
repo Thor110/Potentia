@@ -48,6 +48,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -96,6 +97,35 @@ float text_w(const std::string& s, float scale) { return float(s.size()) * 8.0f 
 // The end of a long string, so a path shows where it goes rather than where it starts.
 std::string tail(const std::string& s, size_t chars) { return s.size() <= chars ? s : "..." + s.substr(s.size() - (chars - 3)); }
 
+// The address bar's editing, on UTF-8 text: the character boundary before and after a byte offset,
+// how many characters lie between two offsets, and the offset of the k-th character.
+size_t utf8_prev(const std::string& s, size_t i)
+{
+    if (i == 0) return 0;
+    do --i;
+    while (i > 0 && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80);
+    return i;
+}
+size_t utf8_next(const std::string& s, size_t i)
+{
+    if (i >= s.size()) return s.size();
+    do ++i;
+    while (i < s.size() && (static_cast<unsigned char>(s[i]) & 0xC0) == 0x80);
+    return i;
+}
+size_t utf8_chars(const std::string& s, size_t from, size_t to)
+{
+    size_t n = 0;
+    for (size_t i = from; i < to && i < s.size(); ++i) n += (static_cast<unsigned char>(s[i]) & 0xC0) != 0x80;
+    return n;
+}
+size_t utf8_at(const std::string& s, size_t k)
+{
+    size_t i = 0;
+    while (k-- > 0 && i < s.size()) i = utf8_next(s, i);
+    return i;
+}
+
 struct Button
 {
     SDL_FRect r;
@@ -116,7 +146,7 @@ void draw_button(SDL_Renderer* r, const Button& b, bool hot)
 }
 
 // ---- the installer's state
-enum class Screen { NoInstaller, Ready, Installing, Done, Cancelled, Failed };
+enum class Screen { NoInstaller, Reading, Ready, Installing, Done, Cancelled, Failed };
 
 struct Installer
 {
@@ -130,6 +160,16 @@ struct Installer
     bool top_left_out = false;  // its top folder already left out
     std::string error;          // why the installer could not be read, or the install failed
     std::string dest;           // where, as UTF-8, editable
+    // The destination as a text field (Edward, 29 October 2026: "select it all, paste over it"):
+    // the cursor and the selection's other end, byte offsets on UTF-8 boundaries (the selection is
+    // between them), the first character shown, and whether the mouse is dragging a selection.
+    size_t cur = 0, anchor = 0, view = 0;
+    bool dragging = false;
+    void set_dest(std::string to)
+    {
+        dest = std::move(to);
+        cur = anchor = dest.size();
+    }
     bool replace = false;       // replace files that are already there
     bool editing = false;       // typing into the destination
     Screen screen = Screen::NoInstaller;
@@ -149,58 +189,107 @@ struct Installer
     std::optional<std::string> chosen;
 
     // An installer file, or a program with one attached (an installer program, or this one).
-    void open(const fs::path& file)
+    // What reading an installer found: done on a thread of its own (a gigabyte's takes seconds, and
+    // the window answers meanwhile), handed to the window by poll_open.
+    struct Opened
     {
-        source = file;
-        manifest.reset();
-        archive.reset();
-        any.reset();
-        top_left_out = false;
-        error.clear();
+        std::optional<Manifest> manifest;
+        std::optional<install::SevenZip> archive;
+        std::optional<AnyArchive> any;
+        std::string error;
+    };
+    struct Reading
+    {
+        std::mutex mx;
+        std::optional<Opened> done;
+    };
+    std::shared_ptr<Reading> reading; // (shared with the reader, which may outlive a window closed meanwhile)
+    bool keep_dest = false;           // the destination given (--to): reading leaves it as it is
+
+    static Opened read_installer(const fs::path& file)
+    {
+        Opened o;
         // An archive of another kind, by its name (a .sieve, or a program with one attached, is
         // Sieve's own, below).
         if (is_other_archive(file))
         {
             try
             {
-                std::ifstream f(file, std::ios::binary);
-                if (!f) throw std::runtime_error("cannot read " + u8(file));
-                const std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                any = read_any_archive(bytes, u8(file.filename()));
-                if (!any) throw std::runtime_error(u8(file.filename()) + " is not an archive this can extract");
-                screen = Screen::Ready;
-                const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-                dest = where_in(docs ? from_u8(docs) : fs::current_path());
+                const std::vector<uint8_t> bytes = read_file_bytes(file); // (at once: by the byte, 400 MB took 4.6 s)
+                o.any = read_any_archive(bytes, u8(file.filename()));
+                if (!o.any) throw std::runtime_error(u8(file.filename()) + " is not an archive this can extract");
             }
             catch (const std::exception& e)
             {
-                any.reset();
-                error = u8(file.filename()) + ": " + e.what();
-                screen = Screen::NoInstaller;
+                o.any.reset();
+                o.error = u8(file.filename()) + ": " + e.what();
             }
-            return;
+            return o;
         }
         try
         {
-            manifest = installable_manifest(file, false); // an installer, a program, or a v3 or v4 manifest
-            screen = Screen::Ready;
+            o.manifest = installable_manifest(file, false); // an installer, a program, or a v3 or v4 manifest
             // A 7z archive on its own is unpacked; checked against its SHA-256 first, so a damaged
             // one is refused here, before its listing is trusted.
-            if (one_file() && install::is_7z(manifest->contents))
+            const Manifest& m = *o.manifest;
+            const bool one = m.with_contents && m.entries.size() == 1 && !m.entries[0].dir && m.entries[0].path == m.root;
+            if (one && install::is_7z(m.contents))
             {
-                if (sha256_hex(manifest->contents) != manifest->entries[0].sha256)
-                    throw std::runtime_error(manifest->root + " does not match its SHA-256: the installer is damaged");
-                archive = install::list_7z(manifest->contents);
+                if (sha256_hex(m.contents) != m.entries[0].sha256)
+                    throw std::runtime_error(m.root + " does not match its SHA-256: the installer is damaged");
+                o.archive = install::list_7z(m.contents);
             }
-            // Where it goes unless you say otherwise: into your documents (see where_in).
-            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-            dest = where_in(docs ? from_u8(docs) : fs::current_path());
         }
         catch (const std::exception& e)
         {
-            error = e.what();
-            screen = Screen::NoInstaller;
+            o.manifest.reset();
+            o.archive.reset();
+            o.error = e.what();
         }
+        return o;
+    }
+
+    void open(const fs::path& file)
+    {
+        if (reading) return; // (one at a time: a file dropped meanwhile is left)
+        source = file;
+        manifest.reset();
+        archive.reset();
+        any.reset();
+        top_left_out = false;
+        error.clear();
+        screen = Screen::Reading;
+        reading = std::make_shared<Reading>();
+        std::thread([r = reading, file] {
+            Opened o = read_installer(file);
+            std::lock_guard<std::mutex> lock(r->mx);
+            r->done = std::move(o);
+        }).detach();
+    }
+
+    // What the reader found, taken in once it is done; true then.
+    bool poll_open()
+    {
+        if (!reading) return false;
+        std::optional<Opened> o;
+        {
+            std::lock_guard<std::mutex> lock(reading->mx);
+            o.swap(reading->done);
+        }
+        if (!o) return false;
+        reading.reset();
+        manifest = std::move(o->manifest);
+        archive = std::move(o->archive);
+        any = std::move(o->any);
+        error = std::move(o->error);
+        screen = (manifest || any) ? Screen::Ready : Screen::NoInstaller;
+        if (screen == Screen::Ready && !keep_dest)
+        {
+            // Where it goes unless you say otherwise: into your documents (see where_in).
+            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+            set_dest(where_in(docs ? from_u8(docs) : fs::current_path()));
+        }
+        return true;
     }
 
     // A file whose name is one of archive_kinds()'s (case aside), and not a .sieve.
@@ -244,6 +333,11 @@ struct Installer
         cancel = false;
         finished = false;
         done = 0;
+        phase = 0; // (a second try starts from nothing: not the first one's last file and phase)
+        {
+            std::lock_guard<std::mutex> lock(mx);
+            current.clear();
+        }
         notes.clear();
         warned = false;
         // (Into a folder of its own: its one top folder left out, so NAME\NAME\ is not made.)
@@ -466,12 +560,16 @@ int main(int argc, char** argv)
     else if (!in.error.empty()) {}
     else if (auto beside = installer_beside_me()) in.open(*beside);
     else in.error = "no installer: drop a .sieve file on this window, or open one with this program";
-    if (!to_arg.empty()) in.dest = to_arg;
+    if (!to_arg.empty())
+    {
+        in.set_dest(to_arg);
+        in.keep_dest = true;
+    }
     in.keep_top = extract == 1; // Extract here: as an archiver's, the top folder kept
     // The right-click menu's extract options work as an archiver's do: at once, and the window
     // closes when it is done; only a failure stays open, to say why (Back, then Replace).
     const bool quick = extract != 0;
-    if ((yes || quick) && in.screen == Screen::Ready) in.start();
+    bool start_when_read = yes || quick; // (once the installer is read, on its own thread)
 
     bool quit = false;
     float mx = -1, my = -1;
@@ -480,7 +578,12 @@ int main(int argc, char** argv)
     while (!quit)
     {
         in.poll();
-        if (yes && in.screen != Screen::Installing) quit = true; // unattended: the result is the exit code
+        if (in.poll_open() && start_when_read)
+        {
+            start_when_read = false;
+            if (in.screen == Screen::Ready) in.start();
+        }
+        if (yes && in.screen != Screen::Installing && in.screen != Screen::Reading) quit = true; // unattended: the result is the exit code
         // A warning (a RAR its contents only, its rar not found) pops up once the install is done,
         // before the window closes; unattended, it goes to the error output instead.
         if (in.screen == Screen::Done && !in.warned)
@@ -495,9 +598,9 @@ int main(int argc, char** argv)
         if (quick && (in.screen == Screen::Done || in.screen == Screen::Cancelled)) quit = true;
         {
             std::lock_guard<std::mutex> lock(in.dialog_mx);
-            if (in.chosen && (in.manifest || in.any))
-            {
-                in.dest = in.where_in(from_u8(*in.chosen));
+            if (in.chosen && (in.manifest || in.any) && in.screen == Screen::Ready) // (a dialog the system leaves open
+            {                                                                    // while installing: its answer kept for Ready)
+                in.set_dest(in.where_in(from_u8(*in.chosen)));
                 in.chosen.reset();
             }
         }
@@ -506,12 +609,37 @@ int main(int argc, char** argv)
         {
             if (e.type == SDL_EVENT_QUIT && in.screen != Screen::Installing) quit = true;
             if (e.type == SDL_EVENT_DROP_FILE && in.screen != Screen::Installing && e.drop.data) in.open(from_u8(e.drop.data));
+            // The address bar's editing: the selection taken out, and what is typed or pasted put in its
+            // place at the cursor (line ends and tabs left out: a path has none).
+            const auto sel_lo = [&] { return std::min(in.cur, in.anchor); };
+            const auto sel_hi = [&] { return std::max(in.cur, in.anchor); };
+            const auto erase_selection = [&] {
+                if (in.cur == in.anchor) return false;
+                in.dest.erase(sel_lo(), sel_hi() - sel_lo());
+                in.cur = in.anchor = sel_lo();
+                return true;
+            };
+            const auto put = [&](std::string t) {
+                t.erase(std::remove_if(t.begin(), t.end(), [](char c) { return c == '\n' || c == '\r' || c == '\t'; }), t.end());
+                // A path pasted in quotes (Explorer's "Copy as path") is the path without them.
+                if (t.size() >= 2 && t.front() == '"' && t.back() == '"') t = t.substr(1, t.size() - 2);
+                erase_selection();
+                in.dest.insert(in.cur, t);
+                in.cur = in.anchor = in.cur + t.size();
+            };
+            // The character a point of the field is at (each 12 pixels wide, from the first shown).
+            const auto char_at = [&](float x) {
+                const float k = (x - field.x - 8 + 6) / 12;
+                return utf8_at(in.dest, in.view + size_t(k < 0 ? 0 : k));
+            };
             if (e.type == SDL_EVENT_MOUSE_MOTION)
             {
                 mx = e.motion.x;
                 my = e.motion.y;
+                if (in.dragging && in.editing) in.cur = char_at(e.motion.x);
             }
-            if (e.type == SDL_EVENT_TEXT_INPUT && in.editing) in.dest += e.text.text;
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) in.dragging = false;
+            if (e.type == SDL_EVENT_TEXT_INPUT && in.editing) put(e.text.text);
             std::string pressed;
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
             {
@@ -526,22 +654,82 @@ int main(int argc, char** argv)
                         if (on_field) SDL_StartTextInput(window);
                         else SDL_StopTextInput(window);
                     }
+                    if (on_field)
+                    {
+                        // A click puts the cursor there (Shift: the selection to there); a double
+                        // click selects it all; dragging selects.
+                        if (e.button.clicks >= 2)
+                        {
+                            in.anchor = 0;
+                            in.cur = in.dest.size();
+                        }
+                        else
+                        {
+                            in.cur = char_at(e.button.x);
+                            if (!(SDL_GetModState() & SDL_KMOD_SHIFT)) in.anchor = in.cur;
+                            in.dragging = true;
+                        }
+                    }
                     if (inside(tick, e.button.x, e.button.y)) in.replace = !in.replace;
                 }
             }
             if (e.type == SDL_EVENT_KEY_DOWN)
             {
-                if (in.editing && e.key.key == SDLK_BACKSPACE && !in.dest.empty())
+                // (Ctrl without Alt: AltGr arrives as Ctrl+Alt on Windows, and AltGr+A types a letter.)
+                const bool ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0 && (e.key.mod & SDL_KMOD_ALT) == 0, shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
+                const SDL_Keycode k = e.key.key;
+                // Moves the cursor; Shift keeps the selection's other end where it is.
+                const auto move_to = [&](size_t at) {
+                    in.cur = at;
+                    if (!shift) in.anchor = at;
+                };
+                if (in.editing && k == SDLK_BACKSPACE)
                 {
-                    do in.dest.pop_back();
-                    while (!in.dest.empty() && (static_cast<unsigned char>(in.dest.back()) & 0xC0) == 0x80);
+                    if (!erase_selection() && in.cur > 0)
+                    {
+                        const size_t at = utf8_prev(in.dest, in.cur);
+                        in.dest.erase(at, in.cur - at);
+                        in.cur = in.anchor = at;
+                    }
                 }
-                else if (in.editing && e.key.key == SDLK_V && (e.key.mod & SDL_KMOD_CTRL))
+                else if (in.editing && k == SDLK_DELETE)
                 {
-                    if (char* clip = SDL_GetClipboardText()) { in.dest += clip; SDL_free(clip); }
+                    if (!erase_selection() && in.cur < in.dest.size()) in.dest.erase(in.cur, utf8_next(in.dest, in.cur) - in.cur);
                 }
+                else if (in.editing && ctrl && k == SDLK_A)
+                {
+                    in.anchor = 0;
+                    in.cur = in.dest.size();
+                }
+                else if (in.editing && ctrl && (k == SDLK_C || k == SDLK_X))
+                {
+                    if (in.cur != in.anchor)
+                    {
+                        SDL_SetClipboardText(in.dest.substr(sel_lo(), sel_hi() - sel_lo()).c_str());
+                        if (k == SDLK_X) erase_selection();
+                    }
+                }
+                else if (in.editing && ctrl && k == SDLK_V)
+                {
+                    if (char* clip = SDL_GetClipboardText())
+                    {
+                        put(clip);
+                        SDL_free(clip);
+                    }
+                }
+                else if (in.editing && k == SDLK_LEFT)
+                    move_to(!shift && in.cur != in.anchor ? sel_lo() : utf8_prev(in.dest, in.cur));
+                else if (in.editing && k == SDLK_RIGHT)
+                    move_to(!shift && in.cur != in.anchor ? sel_hi() : utf8_next(in.dest, in.cur));
+                else if (in.editing && k == SDLK_HOME) move_to(0);
+                else if (in.editing && k == SDLK_END) move_to(in.dest.size());
                 else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)
-                    pressed = in.screen == Screen::Ready ? "Install" : in.screen == Screen::Installing ? "" : "Close";
+                    pressed = in.screen == Screen::Ready ? "Install" : in.screen == Screen::Installing || in.screen == Screen::Reading ? "" : "Close";
+                else if (e.key.key == SDLK_ESCAPE && in.editing)
+                {
+                    in.editing = false; // (Escape while typing leaves the field, not the installer)
+                    SDL_StopTextInput(window);
+                }
                 else if (e.key.key == SDLK_ESCAPE) pressed = in.screen == Screen::Installing ? "Cancel" : in.screen == Screen::Ready ? "Cancel" : "Close";
             }
             if (pressed == "Install") { in.editing = false; SDL_StopTextInput(window); in.start(); }
@@ -569,7 +757,13 @@ int main(int argc, char** argv)
             text(r, 24, y, label, 1.5f, kDim);
             text(r, 170, y, value, 1.5f, kInk);
         };
-        if (in.screen == Screen::NoInstaller)
+        if (in.screen == Screen::Reading)
+        {
+            text(r, 24, 90, "Reading " + tail(u8(in.source.filename()), 40) + "...", 2, kInk);
+            text(r, 24, 130, "Every file is checked before anything is written.", 1.5f, kDim);
+            buttons.push_back({{W - 164, H - 60, 140, 40}, "Close"});
+        }
+        else if (in.screen == Screen::NoInstaller)
         {
             text(r, 24, 90, "Nothing to install yet.", 2, kInk);
             text(r, 24, 130, tail(in.error, 80), 1, kRed);
@@ -605,8 +799,35 @@ int main(int argc, char** argv)
                 SDL_RenderFillRect(r, &field);
                 SDL_SetRenderDrawColor(r, in.editing ? 255 : 110, in.editing ? 255 : 110, in.editing ? 255 : 110, 255);
                 SDL_RenderRect(r, &field);
-                const std::string shown = tail(in.dest, size_t((field.w - 16) / 12)) + (in.editing && (SDL_GetTicks() / 400) % 2 ? "_" : "");
-                text(r, field.x + 8, field.y + 9, shown, 1.5f, kInk);
+                // What fits of the address, scrolled so the cursor is in sight; the selection behind
+                // it, and the cursor, while it is being edited.
+                in.cur = std::min(in.cur, in.dest.size());
+                in.anchor = std::min(in.anchor, in.dest.size());
+                const size_t fits = size_t(std::max(1.0f, (field.w - 16) / 12)), n = utf8_chars(in.dest, 0, in.dest.size());
+                const size_t at = utf8_chars(in.dest, 0, in.cur);
+                if (!in.editing) in.view = n > fits ? n - fits : 0; // (not being edited: its end shown, as before)
+                if (at < in.view) in.view = at;
+                if (at > in.view + fits) in.view = at - fits;
+                if (in.view + fits > n) in.view = n > fits ? n - fits : 0;
+                const size_t from = utf8_at(in.dest, in.view), to = utf8_at(in.dest, in.view + fits);
+                if (in.editing && in.cur != in.anchor)
+                {
+                    const size_t lo = std::max(utf8_chars(in.dest, 0, std::min(in.cur, in.anchor)), in.view);
+                    const size_t hi = std::min(utf8_chars(in.dest, 0, std::max(in.cur, in.anchor)), in.view + fits);
+                    if (hi > lo)
+                    {
+                        SDL_SetRenderDrawColor(r, 40, 80, 150, 255);
+                        const SDL_FRect band{field.x + 8 + float(lo - in.view) * 12, field.y + 6, float(hi - lo) * 12, field.h - 12};
+                        SDL_RenderFillRect(r, &band);
+                    }
+                }
+                text(r, field.x + 8, field.y + 9, in.dest.substr(from, to - from), 1.5f, kInk);
+                if (in.editing && (SDL_GetTicks() / 500) % 2 == 0)
+                {
+                    SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+                    const SDL_FRect caret{field.x + 8 + float(at - in.view) * 12 - 1, field.y + 6, 2, field.h - 12};
+                    SDL_RenderFillRect(r, &caret);
+                }
                 buttons.push_back({{W - 172, 192, 148, 34}, "Browse..."});
                 tick = {24, 244, 18, 18};
                 SDL_SetRenderDrawColor(r, 160, 160, 160, 255);

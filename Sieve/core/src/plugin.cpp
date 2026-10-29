@@ -147,6 +147,7 @@ class Expr
 public:
     // v2: comparisons, && || !, min max abs (sieve-filter-v2); v1 reads exactly as it always has.
     Expr(const std::string& s, const Env& env, int line, bool v2 = false) : s_(s), env_(env), line_(line), v2_(v2) {}
+    int depth_ = 0;
     int64_t value()
     {
         const int64_t v = v2_ ? disjunction() : sum();
@@ -250,6 +251,14 @@ private:
     }
     int64_t unary()
     {
+        // (Every nesting, brackets, - and !, passes through here: 256 deep at most, where a file of
+        // 100,000 brackets would otherwise run the stack out and end the program.)
+        if (++depth_ > 256) fail(line_, "an expression nested more than 256 deep");
+        struct Out
+        {
+            int& d;
+            ~Out() { --d; }
+        } out{depth_};
         skip();
         if (i_ < s_.size() && s_[i_] == '-')
         {
@@ -329,8 +338,9 @@ private:
             int64_t v = 0;
             while (i_ < s_.size() && std::isdigit(static_cast<unsigned char>(s_[i_])))
             {
-                v = v * 10 + (s_[i_++] - '0');
-                if (v > kLimit) fail(line_, "a number is too large");
+                const int d = s_[i_++] - '0';
+                if (v > (kLimit - d) / 10) fail(line_, "a number is too large"); // (checked before it could overflow)
+                v = v * 10 + d;
             }
             return v;
         }

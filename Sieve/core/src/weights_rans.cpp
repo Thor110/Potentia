@@ -3,6 +3,7 @@
 // links without the packer's safetensors and JSON.
 #include "sieve/weights.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace sieve::weights {
@@ -26,7 +27,7 @@ std::vector<uint32_t> cumulative(const std::vector<uint32_t>& freq)
 
 std::vector<uint32_t> quantise(const std::vector<uint64_t>& counts)
 {
-    if (counts.size() != 65536) bad("a table is of 65,536 values");
+    if (counts.size() != 65536 && counts.size() != 256) bad("a table is of 65,536 values (or 256, of bytes)");
     uint64_t n = 0, k = 0;
     size_t top = 0;
     for (size_t s = 0; s < counts.size(); ++s)
@@ -101,7 +102,7 @@ std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vect
     uint64_t x = uint64_t(words[0]) | (uint64_t(words[1]) << 32);
     size_t next = 2;
     std::vector<uint16_t> out;
-    out.reserve(size_t(n));
+    out.reserve(size_t(std::min<uint64_t>(n, uint64_t(1) << 24))); // (n is from the file: grown past this as values come)
     for (uint64_t i = 0; i < n; ++i)
     {
         const uint32_t slot = uint32_t(x & (kM - 1));

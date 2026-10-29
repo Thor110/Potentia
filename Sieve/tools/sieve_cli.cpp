@@ -2485,6 +2485,7 @@ int cmd_locate(const Args& a)
             const std::string o = a.get("out");
             std::ofstream out(fs::path(std::u8string(o.begin(), o.end())), std::ios::binary);
             out << hex << "\n";
+            out.close(); // (checked once closed: a small file is written as it closes)
             if (!out) throw std::runtime_error("cannot write " + o);
             std::cout << "wrote     " << o << "\n";
         }
@@ -2571,6 +2572,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("manifest");
         std::ofstream out(fs::path(std::u8string(o.begin(), o.end())), std::ios::binary);
         out.write(reinterpret_cast<const char*>(mbytes.data()), std::streamsize(mbytes.size()));
+        out.close(); // (checked once closed: a small file is written as it closes)
         if (!out) throw std::runtime_error("cannot write " + o);
     }
     else
@@ -2606,6 +2608,7 @@ int cmd_locate(const Args& a)
                 fs::create_directories(out_path.parent_path());
                 std::ofstream out(out_path, std::ios::binary);
                 out << hex << "\n";
+                out.close(); // (checked once closed: a small file is written as it closes)
                 if (!out) throw std::runtime_error("cannot write " + u8(out_path));
             }
             if (compare)
@@ -3023,6 +3026,8 @@ int cmd_vault(const Args& a)
         std::ofstream f(fs::path(std::u8string(out.begin(), out.end())), std::ios::binary);
         if (!f) throw std::runtime_error("cannot write '" + out + "'");
         f.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+        f.close(); // (checked once closed: a small file is written as it closes)
+        if (!f) throw std::runtime_error("cannot write '" + out + "'");
         std::cout << "wrote     " << out << "\n";
         return 0;
     }

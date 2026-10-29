@@ -254,9 +254,9 @@ void add_media_filters(std::vector<FilterSpec>& out)
     n.params = {{"min_permille", "agreeing neighbours required, per thousand", FilterParam::Kind::Integer, "600", 0, 1000, 10, {}}};
     n.applies = [](const FilterLine& l) { return (l.kind == "image" || l.kind == "video") && l.width && l.height; };
     n.counts_as = "own";
-    n.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+    n.make = [own = n.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) {
         return std::make_unique<NeighbourAgreement>(l.width, l.height, l.frames ? l.frames : 1,
-                                                    param_int(*find_filter("neighbour-agreement-v1"), v, "min_permille"), l.base);
+                                                    param_int(*find_filter(own), v, "min_permille"), l.base);
     };
     out.push_back(n);
 }

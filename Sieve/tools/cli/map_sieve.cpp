@@ -99,6 +99,7 @@ void write_map_instructions(const Map& map, const fs::path& out, double search_p
         if (n.kind != MapNode::Held) continue;
         std::ofstream f(dir / fs::path(std::u8string(n.path.begin(), n.path.end())), std::ios::binary);
         f.write(reinterpret_cast<const char*>(n.bytes.data()), std::streamsize(n.bytes.size()));
+        f.close(); // (checked once closed: a small file is written as it closes)
         if (!f) throw std::runtime_error("cannot stage " + n.path + " for the map");
     }
     Manifest m = walk_folder(dir);

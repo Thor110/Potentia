@@ -30,10 +30,16 @@ import urllib.parse
 import urllib.request
 
 
+MAX_FETCH = 1 << 30  # a file of a site is not more than this: past it, a server sending without end
+
+
 def fetch(url):
     request = urllib.request.Request(url, headers={"User-Agent": "sieve-crawl-site", "Cache-Control": "no-cache"})
     with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
+        body = response.read(MAX_FETCH + 1)
+        if len(body) > MAX_FETCH:
+            raise RuntimeError(f"{url} sends more than {MAX_FETCH} bytes")
+        return body
 
 
 def table_files(sieve, table_path):
@@ -99,7 +105,11 @@ def main():
     if not a.every:
         return check_once(a)
     while True:
-        check_once(a)
+        # (Watching: a pass that fails is said, and the next one tried at its time, not the watch ended.)
+        try:
+            check_once(a)
+        except Exception as e:  # noqa: BLE001
+            print(f"FAILED    this pass: {e}", flush=True)
         time.sleep(a.every * 60)
 
 

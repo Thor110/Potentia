@@ -45,7 +45,7 @@ for s in "${steps[@]}"; do
         continue
     fi
     for w in "${asked[@]}"; do
-        if [ "${n%%-*}" = "$w" ] || [ "${n%%-*}" = "0$w" ] || [[ "$n" == *"$w"* ]]; then chosen+=("$n"); break; fi
+        if [ "${n%%-*}" = "$w" ] || [ "${n%%-*}" = "0$w" ] || { [[ ! "$w" =~ ^[0-9]+$ ]] && [[ "$n" == *"$w"* ]]; }; then chosen+=("$n"); break; fi
     done
 done
 [ ${#chosen[@]} -gt 0 ] || { echo "no step matches: ${asked[*]} (ci/run.sh --list)"; exit 2; }

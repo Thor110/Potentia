@@ -4036,6 +4036,13 @@ order:
      `read --around --zoom 0` refused as `--at` refuses it (REVIEW, both passes). Left: REVIEW's
      first pass items 3 (measure first), 5 (filter versions written by hand, about twenty filters)
      and 6's last two (tests for the tile size and `read --around`).
+   - *29 October 2026: a third review,* five reviewers at once, each finding checked before it was
+     fixed (REVIEW, "The third pass"): a manifest's or a map's root could put files outside the
+     folder chosen; a disk full was reported as a success; sizes in a `.sieve` could wrap round; the
+     web host could be ended by one page; thirteen CI checks could never fail. Item 5 done (each
+     filter finds its settings by its own name) and `read --around` tested in step 02. Edward's
+     notes of the same day built (IDEAS §19.107), and his note on files that hold much the same
+     (`MAPS.WoW` and `MAPS-Larger.WoW`) written up for the next version (IDEAS §19.106).
 2. **The evidence, on Edward's machine** (STATISTICS has the tables ready):
    - enwik9, optimised for size and prioritised for decoding, beside zip and 7z (PPMd's published
      183,964,915 already there);

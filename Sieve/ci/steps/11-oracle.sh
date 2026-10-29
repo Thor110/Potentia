@@ -322,12 +322,15 @@ python ../web/host/check_host.py $S web-site/directory.sieve --path hallway/menu
 table=$(python -c "import hashlib; print(hashlib.sha256(open('web-site/index.sieve', 'rb').read()).hexdigest())")
 python -m http.server 8799 --bind 127.0.0.1 --directory web-site > /dev/null 2>&1 &
 server=$!
+trap 'kill $server 2>/dev/null || true' EXIT # (stopped however the step ends: a server left behind serves the next run its old site)
 python -c "import time, urllib.request
 for _ in range(50):
     try:
         urllib.request.urlopen('http://127.0.0.1:8799/index.sieve'); break
     except Exception:
-        time.sleep(0.2)"
+        time.sleep(0.2)
+else:
+    raise SystemExit('the test server did not answer (port 8799 taken?)')"
 python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S | grep -c "table as kept, 14 files fetched; 30 checked, 0 not as stated" > /dev/null
 printf x >> web-site/style.css
 if python ../web/crawl_site.py http://127.0.0.1:8799/ --table $table --sieve $S > crawl.txt; then exit 1; fi
@@ -355,7 +358,8 @@ printf '<a href="p/book.jpg">book</a>\n' > mix/b.html
 printf '<?php $x = "<img src=\x27p/book.jpg\x27>"; ?>\n<img src="p/book.jpg">\n' > mix/shop.php
 $S site build mix --out mix-site --sieve-pages --search-per-file 0.2 2> mix.txt > /dev/null
 ls mix-site/p/door.jpg mix-site/p/door.sieve mix-site/p/audio.jpg mix-site/run.html mix-site/b.sieve > /dev/null
-[ ! -e mix-site/p/audio.sieve ] && [ ! -e mix-site/run.sieve ]
+[ ! -e mix-site/p/audio.sieve ]
+[ ! -e mix-site/run.sieve ]
 grep -c "kept plain: run.html (it has a script" mix.txt > /dev/null
 grep -c "1 picture no page names" mix.txt > /dev/null
 grep -c "<?php \$x = \"<img src='p/book.jpg'>\"; ?>" mix-site/shop.php > /dev/null
@@ -556,7 +560,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   # Alone: made again from its contents, then given back as the archive itself.
   SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22.sieve --items --optimise-archives | tr -d '\r' > r22.txt
   grep -c "^rar       made.rar: made again by RAR 0.01 sieve-stand-in (top, -m0 -qo-)" r22.txt > /dev/null
-  python -c "assert open('r22.sieve', 'rb').read()[:0] == b''"
+  test -s r22.sieve
   rm -rf r22_inst r22_none r22_oracle r22_si
   SIEVE_RAR="$RAR" $S install r22.sieve --to r22_inst | tr -d '\r' | grep -c "^note      made.rar made again by RAR 0.01 sieve-stand-in, checked against its SHA-256" > /dev/null
   cmp r22/made.rar r22_inst/made.rar
@@ -586,7 +590,7 @@ fi
 cp ../tests/rope/vitruvian-centre-256.gray tri.raw
 $S rope tri.raw | tr -d '\r' | grep -c "^wave      L8 W256 S1 P4 K[01]\( T1\)\? (rope-wave-v6)" > /dev/null
 $S locate tri.raw --installer tri.sieve --items --v25 | tr -d '\r' | grep -c "^rope .*rope-wave-v1 to v6.*sieve-manifest-v23" > /dev/null
-python -c "assert open('tri.sieve', 'rb').read()[:0] == b''"
+test -s tri.sieve
 rm -rf tri_inst tri_oracle
 $S install tri.sieve --to tri_inst > /dev/null
 cmp tri.raw tri_inst/tri.raw
@@ -594,7 +598,7 @@ python sieve_ref.py unpack tri.sieve --to tri_oracle > /dev/null
 cmp tri.raw tri_oracle/tri.raw
 $S locate tri.raw --installer tri22.sieve --items --v22 | tr -d '\r' > tri22.txt
 grep -c "^rope .*rope-wave-v1\( to v[2-5]\)\? (" tri22.txt > /dev/null
-! grep -q "sieve-manifest-v23\|not an option" tri22.txt
+if grep -q "sieve-manifest-v23\|not an option" tri22.txt; then exit 1; fi
 # The oracle's own rope-wave-v6 against Sieve's codes: every value length, steps, keep or not.
 for pr in "L8 W256 S1 P4 K0" "L8 W256 S1 P4 K1 T1" "L8 W256 S2 P3 K0 T1" "L16 W128 S1 P4 K0 T1" "L32 W64 S1 P4 K1 T1"; do
   $S rope tri.raw --params "$pr" --out tri.rope > /dev/null
@@ -614,7 +618,7 @@ python sieve_ref.py mix-unpack dq.mix --params B17 --size 40000 --out dq.back > 
 cmp dq.txt dq.back
 $S locate dq.txt --installer dq.sieve --items --v25 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v1 (40000 bytes, carried in [0-9]*; sieve-manifest-v24)" > /dev/null
 $S locate dq.txt --installer dq23.sieve --items --v23 | tr -d '\r' > dq23.txt
-! grep -q "^mix \|sieve-manifest-v24\|not an option" dq23.txt
+if grep -q "^mix \|sieve-manifest-v24\|not an option" dq23.txt; then exit 1; fi
 [ "$(wc -c < dq.sieve)" -lt "$(wc -c < dq23.sieve)" ]
 rm -rf dq_inst dq_oracle
 $S install dq.sieve --to dq_inst > /dev/null
@@ -634,7 +638,7 @@ $S install png25.sieve --to png25_inst > /dev/null
 diff -r png25 png25_inst
 python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " | grep -q "^2$"
 $S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 | tr -d '\r' > png24.txt
-! grep -q "sieve-manifest-v25\|not an option" png24.txt
+if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 # v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
 # contexts; for a picture, Edward's triangle and its neighbours; two mixers and two SSE stages).
 # The same 40,000 bytes of Don Quixote: smaller than mix-v1's code, and the instructions smaller than
@@ -661,7 +665,7 @@ cmp top.raw top.back
 $S locate top.raw --installer top26.sieve --items --v26 | tr -d '\r' > top26.txt
 grep -c "^mix       1 file(s) carried by mixing, mix-v2, 1 as picture(s) (16384 bytes, carried in [0-9]*; sieve-manifest-v26)" top26.txt > /dev/null
 $S locate top.raw --installer top25.sieve --items --v25 | tr -d '\r' > top25.txt
-! grep -q "mix-v2\|sieve-manifest-v26\|not an option" top25.txt
+if grep -q "mix-v2\|sieve-manifest-v26\|not an option" top25.txt; then exit 1; fi
 [ "$(wc -c < top26.sieve)" -lt "$(wc -c < top25.sieve)" ]
 rm -rf top26_inst top26_oracle
 $S install top26.sieve --to top26_inst > /dev/null
@@ -680,7 +684,7 @@ cmp dq.txt dq3.back
 $S locate dq.txt --installer dq27.sieve --items --v27 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v3 (with a word list) (40000 bytes, carried in [0-9]*; sieve-manifest-v27)" > /dev/null
 [ "$(wc -c < dq27.sieve)" -lt "$(wc -c < dq26.sieve)" ]
 $S locate dq.txt --installer dq26b.sieve --items --v26 | tr -d '\r' > dq26b.txt
-! grep -q "mix-v3\|sieve-manifest-v27\|not an option" dq26b.txt
+if grep -q "mix-v3\|sieve-manifest-v27\|not an option" dq26b.txt; then exit 1; fi
 rm -rf dq27_inst dq27_oracle dq27_si
 $S install dq27.sieve --to dq27_inst > /dev/null
 cmp dq.txt dq27_inst/dq.txt
@@ -704,7 +708,7 @@ rm -rf m28 && mkdir m28 && cp dq.txt top.raw m28/
 $S locate m28 --installer m28.sieve --items --v28 2>&1 | tr -d '\r' > m28.txt
 grep -c "^mix       2 file(s) carried by mixing, mix-v4, 1 as picture(s), 1 with a word list ([0-9]* bytes, carried in [0-9]*; sieve-manifest-v28)" m28.txt > /dev/null
 $S locate m28 --installer m27.sieve --items --v27 2>&1 | tr -d '\r' > m27.txt
-! grep -q "mix-v4\|sieve-manifest-v28\|not an option" m27.txt
+if grep -q "mix-v4\|sieve-manifest-v28\|not an option" m27.txt; then exit 1; fi
 rm -rf m28_inst m28_oracle m28_si
 $S install m28.sieve --to m28_inst > /dev/null
 diff -r m28 m28_inst
@@ -722,10 +726,10 @@ head -c 3000 ../README.md > t29/small.md
 $S locate t29 --installer t29.sieve --items --v29 2>&1 | tr -d '\r' > t29.txt
 grep -c "^stream    the files carried together mixed by mix-v4 (B[0-9]* D60): [0-9]* bytes, LZMA2's [0-9]*; [0-9]* of them mixed together rather than one by one ([0-9]* bytes apart) (sieve-manifest-v29)$" t29.txt > /dev/null
 $S locate t29 --installer t28.sieve --items --v28 2>&1 | tr -d '\r' > t28.txt
-! grep -q "sieve-manifest-v29\|not an option" t28.txt
+if grep -q "sieve-manifest-v29\|not an option" t28.txt; then exit 1; fi
 [ "$(wc -c < t29.sieve)" -lt "$(wc -c < t28.sieve)" ]
 $S locate t29 --installer t29fast.sieve --items --prioritise-decoding 2>&1 | tr -d '\r' > t29fast.txt
-! grep -q "sieve-manifest-v29\|^stream    " t29fast.txt
+if grep -q "sieve-manifest-v29\|^stream    " t29fast.txt; then exit 1; fi
 rm -rf t29_inst t29_oracle t29_si
 $S install t29.sieve --to t29_inst > /dev/null
 diff -r t29 t29_inst
@@ -740,10 +744,10 @@ diff -r t29 t29_si
 # oracle and sieve-install. --v29 and Prioritise Decoding Speed make no v30.
 $S locate t29 --installer t30.sieve --items 2>&1 | tr -d '\r' > t30.txt
 grep -c "^groups    [0-9]* file(s) mixed together in 1 group(s) by mix-v4 ([0-9]* bytes, carried in [0-9]*; apart [0-9]*; sieve-manifest-v30)$" t30.txt > /dev/null
-! grep -q "sieve-manifest-v30" t29.txt
+if grep -q "sieve-manifest-v30" t29.txt; then exit 1; fi
 [ "$(wc -c < t30.sieve)" -lt "$(wc -c < t28.sieve)" ]
 $S locate t29 --installer t30fast.sieve --items --prioritise-decoding 2>&1 | tr -d '\r' > t30fast.txt
-! grep -q "sieve-manifest-v30\|^groups    " t30fast.txt
+if grep -q "sieve-manifest-v30\|^groups    " t30fast.txt; then exit 1; fi
 rm -rf t30_inst t30_oracle t30_si
 $S install t30.sieve --to t30_inst > /dev/null
 diff -r t29 t30_inst
@@ -772,9 +776,9 @@ cmp z31/three.zip z31_oracle/three.zip
 $SI z31.sieve --to z31_si --yes > /dev/null
 cmp z31/three.zip z31_si/three.zip
 SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31v30.sieve --items --compressed-temporary --v30 2>&1 | tr -d '\r' > z31v30.txt
-! grep -q "sieve-manifest-v31\|^members " z31v30.txt
+if grep -q "sieve-manifest-v31\|^members " z31v30.txt; then exit 1; fi
 SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31p.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > z31p.txt
-! grep -q "^members \|^remade " z31p.txt
+if grep -q "^members \|^remade " z31p.txt; then exit 1; fi
 $S install z31p.sieve --to z31p_inst > /dev/null
 cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
@@ -782,7 +786,7 @@ cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.
 $S locate dq.txt --installer dqfast.sieve --items --prioritise-decoding | tr -d '\r' > dqfast.txt
 grep -c "^decoding  prioritised: mixing not tried on 1 file(s) (Prioritise Decoding Speed)$" dqfast.txt > /dev/null
-! grep -q "^mix " dqfast.txt
+if grep -q "^mix " dqfast.txt; then exit 1; fi
 [ "$(wc -c < dqfast.sieve)" -gt "$(wc -c < dq26.sieve)" ]
 rm -rf dqfast_inst dqfast_oracle
 $S install dqfast.sieve --to dqfast_inst > /dev/null

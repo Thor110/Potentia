@@ -174,7 +174,7 @@ std::optional<Archive> read_headers(const std::vector<uint8_t>& b)
                                 if (tf & (2u << k))
                                 {
                                     if (unix_format) t[k] = int64_t(x.le(4)) * 1000000000LL;
-                                    else t[k] = (int64_t(x.le(8)) - kFiletimeAt1970) * 100;
+                                    else t[k] = int64_t((uint64_t(x.le(8)) - uint64_t(kFiletimeAt1970)) * 100u); // (unsigned: a crafted time wraps, never overflows)
                                 }
                             if (unix_format && (tf & 16))
                                 for (int k = 0; k < 3; ++k)

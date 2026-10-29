@@ -26,12 +26,21 @@ function viewerFor(u, i, p) {
   return next.toString();
 }
 
+// A URL's part as text: decoded where it is well formed ("%" alone is not), else as it stands.
+function decodedOr(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch (e) {
+    return text;
+  }
+}
+
 // A link in a file of a .sieve of many, to another of its files: that file's path, or null (a link
 // with a scheme, from the server's root, an anchor alone, or out of the .sieve).
 function pathIn(from, href) {
   if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href) || href[0] === "/" || href[0] === "#" || href[0] === "?") return null;
   const parts = from.split("/").slice(0, -1);
-  for (const part of decodeURIComponent(href.split(/[?#]/)[0]).split("/")) {
+  for (const part of decodedOr(href.split(/[?#]/)[0]).split("/")) {
     if (part === "..") {
       if (!parts.length) return null;
       parts.pop();
@@ -162,7 +171,7 @@ async function preparePage(html) {
       } else {
         const box = doc.createElement("span");
         box.className = "sieve-refused";
-        const of = decodeURIComponent(new URL(url).pathname.split("/").pop());
+        const of = decodedOr(new URL(url).pathname.split("/").pop());
         box.textContent = "Refused by Sieve: " + (r.ok ? "not a picture" : r.error.replace(/^it holds/, of + " holds"));
         img.replaceWith(box);
       }
@@ -182,13 +191,13 @@ async function preparePage(html) {
 
 async function show() {
   if (!url) return refuse("no .sieve was named");
-  document.title = "Sieve - " + decodeURIComponent(new URL(url).pathname.split("/").pop());
+  document.title = "Sieve - " + decodedOr(new URL(url).pathname.split("/").pop());
   const r = await decode(url, integrity, path);
   if (!r.ok) return refuse(r.error);
   if (r.listing) return showListing(r);
   const t = r.times || {};
   const s = (v) => (v || 0).toFixed(3) + " s";
-  const from = path ? " (" + path + ", one of the files of " + decodeURIComponent(new URL(url).pathname.split("/").pop()) + ")" : "";
+  const from = path ? " (" + path + ", one of the files of " + decodedOr(new URL(url).pathname.split("/").pop()) + ")" : "";
   what.textContent = r.name + from + " (" + r.type + ", " + r.size + " bytes, from a .sieve of " + r.sieveBytes + "): checked against the hash its link states" +
     "; fetched and checked in " + s(t.fetched) + ", decoded by Sieve in " + s(t.decoded) + " (" + s(t.sieve) + " with the hand-over), " + s(t.total) + " in all" +
     "; SHA-256 " + r.sha256;

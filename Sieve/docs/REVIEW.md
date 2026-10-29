@@ -4,6 +4,109 @@ A sweep over `core/`, `client/`, `tools/`, `tests/` and `reference/` looking for
 optimisations with evidence behind them, and for places where the code does not explain itself.
 What was fixed is listed first; what was found and left is listed after, so nothing is lost.
 
+## The third pass (29 October 2026)
+
+Five reviewers at once, each on one part (the core; packing and installing; the web host, site and
+command line; the hallway and the installer; the oracle and CI), told to report and not to change
+anything; each finding then checked here before it was fixed. Nothing below changes a `.sieve`, an
+address or a coded stream: the unit suite's pinned codes and the rope's 100 cases (every version's
+ways, coded and read back) come out as before.
+
+### Fixed
+
+- **A `.sieve` or a map could name where it is put.** A manifest's root was never checked, and
+  `sieve-install` puts a `.sieve` in a folder of its root's name: a root of `/somewhere` or `..` put
+  it there whatever folder was chosen (tried: an absolute root installed into that path). A map's
+  `root` line did the same for `sieve map` (tried: a map wrote a file of its choosing outside the
+  folder). Both are refused now, as any path in the listing already was.
+- **A disk full was a success.** A file is written as it closes, and a small one's bytes go to the
+  disk only then, after the check: installing onto an 8 KB disk said "installed 4 files ... every
+  one checked" and left two of them empty, and `sieve locate --installer` left a `.sieve` cut short,
+  exit 0. Every file Sieve writes is now closed before it is checked, and a `.sieve` or installer
+  program that fails is taken away again; an install that fails is undone. Tried again on the
+  same disk: both refused, nothing left behind.
+- **Sizes that wrap round.** A `pieces` way's pieces were summed without a bound, so 1,850 of them
+  could wrap the sum to the file's size and ask the rope for gigabytes, or read past the lzma2
+  stream; the streams' sizes in the head were added the same way. Each is checked against what is
+  left now (the reviewer's crafted files are refused with the head's own message).
+- **The web host.** A page could make a reply larger than the 1 MB Chrome allows (a name or a path
+  echoed back), or send a message over 64 MiB, either of which ended the host for every tab; echoed
+  text is cut to 4 KB, and a message too large is read past and refused (tried: 70 MiB, then a
+  request after it, answered). Listing a `.sieve` of many files summed every file's offset again
+  for each (100,000 files: 19.9 s); once now.
+- **The extension.** A failed fetch named its status to the page, which could so learn what is on
+  servers it cannot reach itself (an intranet's addresses); one answer for every failure now. A
+  `.sieve` too large for the host is refused before it is sent. A `%` in an address no longer stops
+  the viewer or the guard. The remembered sites and the guard's registration change one at a time
+  (two tabs at once could lose a site, or register the guard twice, which Chrome refuses). The
+  viewer's pictures from one `.sieve` take its bytes as fetched for the first, for a minute.
+- **`site build` and `site check`** copied the rest of a page for each script or style in it: a
+  4 MB page of 4,000 scripts took 35.5 s. Linear now.
+- **Memory.** Extract read an archive's contents whole with no limit, so a few kilobytes could
+  claim gigabytes (a decompression bomb); each reader now stops where what it holds outgrows the
+  memory free. Installing held each file twice (copied out of the contents) and, before that, the
+  streams and the files and the contents at once; each is let go when done with. The packer's files
+  at once are given memory for the largest file's LZMA2 estimate, not only for a mixer. Model
+  files (`sieve tensors --unpack`) are read in pieces, not given the memory their header claims
+  first (110 bytes asked for 2.3 GB).
+- **The installer.** Its address bar: Escape while typing leaves the field, not the installer;
+  AltGr (Ctrl+Alt on Windows) types its letter rather than selecting everything; a path pasted in
+  quotes ("Copy as path") is the path. A folder chosen in a dialog left open is used only on the
+  Ready screen. A second try starts its progress from nothing. An archive of another kind is read
+  at once (400 MB: 4.6 s by the byte before).
+- **The File Locator's buttons** wrap onto a second row in a narrow window (at 1280 wide the new
+  "Installer program from a .sieve" was cut short; at 1024 it was off the screen). A folder chosen
+  while it is busy is kept until it is free, not dropped, and its status is set under its lock.
+- **The training harness:** "Go to" on a run whose result has no final address said so rather than
+  ending the program; a palette of 256 colours no longer gives the levels a range of nothing.
+- **The core's input checks:** a learning rate of `0.` and 64 zeros divided by zero; a window of
+  more than 513 bytes read past the rotation tables; a base above 2^31 wrapped in the scramble
+  (no line has one: every address is as it was); a number in a filter plugin overflowed before its
+  check, and a plugin's expression could nest deep enough to end the program (256 now).
+- **Smaller:** ffmpeg's pipes are not handed to another ffmpeg started meanwhile (one would wait
+  for the other); a RAR's temporary copy is removed when a try fails; a RAR header's times cannot
+  overflow; a map's node numbers are read whole (4294967296 was 0); the crawler caps what it reads
+  and keeps watching after a pass that fails.
+- **Filter versions spelled by hand** (the first pass's item 5): each filter's `make` finds its
+  settings by its own name, captured where it is set, so a version raised changes both.
+- **The oracle** refuses a path that leaves the folder (it wrote `../../escaped.txt` two folders up),
+  a v30 group with a file of another way in its middle, a `lines K` naming a file that is not there
+  or not carried raw or x86, a mask with lines past its file's, a tab in a `line` record, a line
+  of the listing it does not know (a first field, a count of fields, a size such as `+6`), a path
+  listed twice (or a file and a folder of one name), a stream with bytes after its end, and a
+  dictionary byte a stream cannot have (254 only for the lzma2 stream, 255 not for the x86 stream
+  or the body). A file not as written ends with a message, not a Python traceback (none of the
+  reviewer's 35 crafted files now does). It says where files are written checked by their sizes
+  only (where it cannot make one, it cannot check the tree). Its listing and skeletons are built in
+  place (80,000 records took 25.8 s).
+- **CI.** Thirteen checks written `! grep -q` could never fail (bash's `set -e` passes over a `!`),
+  nor could the first test of a `test a && test b` line (eleven of them); two were `assert` lines
+  that were always true, and one counted a hallway's output without noticing it had crashed. All
+  fail as they should now. Step 11's web server is stopped however the step ends, and a port
+  already taken is said rather than crawled. `ci/run.sh 1` ran steps 01, 10, 11 and 12 (by "1" in
+  their names); a number now picks one step. The build has a time limit (180 minutes; a run takes
+  about 70).
+- **Speed:** the rope's segments have tables of the 256 byte values, not 65,536 (a 1.4 MB text in
+  1,024 columns: coded in 0.02 s, not 0.14; decoded in 0.06, not 0.17; the same codes). LZMA2's
+  estimate of a file runs beside its rope search (32 MB of random bytes: 22.9 s to 21.7; the
+  estimate itself is most of it, and no faster without another number).
+
+### Found and left
+
+1. **The oracle still accepts entries out of order** (SPECIFICATIONS: sorted by their paths' bytes,
+   but for v31's members, which follow their archive), text manifests of v20 and after (which exist
+   in bytes only), and a `.sieve` with leading zero bytes (as `sieve install` does). None makes it
+   accept a wrong file as right, since the tree is checked.
+2. **A mixed file's size is taken from the instructions before its code is read** (`mix4_file`
+   allocates the file's size first), so a tiny code claiming 4 GB asks for that much before it is
+   refused. The web host's limit covers it there; `sieve install` has none.
+3. **Dialog callbacks** (the harness, the File Locator, the node graph) can arrive after their
+   screen has closed where the system's dialog is not modal (Linux's portal); on Windows the
+   window is disabled meanwhile.
+4. **A gzip member past 4 GiB** is not read as one (zlib's sizes are 32-bit); it is carried as it is.
+5. **The viewer** still has Sieve decode the whole `.sieve` for each picture of a page in it (the
+   bytes are fetched once now): a request naming several paths would do it once.
+
 ## The second pass (27 October 2026)
 
 A fresh session, reading from the handoff down, with most of its time on what reads files from
@@ -217,7 +320,7 @@ In rough order of value. These are the work of a session each, not of a paragrap
    `rem` and `order` into scratch buffers sized once and cleared per call. Worth measuring first:
    the allocator may already be making this cheap.
 4. *Fixed; see above.* Three identical helpers in two files.
-5. **Filter versions are spelled out by hand** (`core/src/filters/text_m1.cpp:657-712`). Each
+5. *Done, 29 October 2026 (the third pass).* **Filter versions are spelled out by hand** (`core/src/filters/text_m1.cpp:657-712`). Each
    `FilterSpec::make` calls `find_filter("clean-v1")` with the version as a literal, while the
    version also lives in the spec's own field. They agree today, and nothing checks that they
    still agree after someone bumps one of them — which is precisely the versioning workflow the
@@ -239,8 +342,12 @@ In rough order of value. These are the work of a session each, not of a paragrap
    - The corridor's tile size is never exercised at anything but its default of 128. Because of the
      latch added above, a test of 2 or 4096 must set it before any line is built, so it wants a
      test binary of its own or a check placed at the very top of the run.
-   - `read --around` has no test and no CI step anywhere, and it holds the fiddliest arithmetic in
-     the tool: compact wraparound, guided zoom snapping, positional stepping.
+   - *Done, 29 October 2026, but for compact:* `read --around` has no test and no CI step anywhere,
+     and it holds the fiddliest arithmetic in the tool: compact wraparound, guided zoom snapping,
+     positional stepping. CI step 02 now checks positional neighbours (and their wrapping round the
+     line's ends), a guided shelf zoomed out, and a zoom of 0 refused. Compact wants ticked filters
+     (a filter file of its own), and is left. (The help's own example of it, `--compact --around 3
+     --zoom 30 8`, is refused without one: "--compact needs ticked filters".)
 7. *Done, 28 October 2026.* **`--zoom 0`** is rejected by `read --at` (`get_positive`) and accepted by `read --around`
    (`get_u32`), for the same option with the same meaning. Pick one. Both refuse it now (a zoom of 0
    puts the whole line in one book).

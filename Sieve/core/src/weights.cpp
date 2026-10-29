@@ -245,12 +245,20 @@ UnpackReport unpack(std::istream& in, std::ostream& out)
         {
             const uint64_t w = get_varint(in);
             if (w > t->elements() + 2) bad("tensor " + t->name + ": a stream longer than its values could need");
-            std::vector<uint32_t> words(static_cast<size_t>(w));
-            std::vector<char> raw(size_t(w) * 4);
-            read_exact(in, raw.data(), raw.size(), "a tensor's stream");
-            for (size_t i = 0; i < words.size(); ++i)
-                words[i] = uint32_t(uint8_t(raw[4 * i])) | uint32_t(uint8_t(raw[4 * i + 1])) << 8 | uint32_t(uint8_t(raw[4 * i + 2])) << 16 |
-                           uint32_t(uint8_t(raw[4 * i + 3])) << 24;
+            // (Read in pieces, held as they arrive: the sizes come from the file, and a stream claiming
+            // gigabytes in a file of a few bytes is refused when it ends, not first given the memory.)
+            std::vector<uint32_t> words;
+            std::vector<char> raw;
+            for (uint64_t left = w; left;)
+            {
+                const size_t n = size_t(std::min<uint64_t>(left, 1u << 16));
+                raw.resize(n * 4);
+                read_exact(in, raw.data(), raw.size(), "a tensor's stream");
+                for (size_t i = 0; i < n; ++i)
+                    words.push_back(uint32_t(uint8_t(raw[4 * i])) | uint32_t(uint8_t(raw[4 * i + 1])) << 8 |
+                                    uint32_t(uint8_t(raw[4 * i + 2])) << 16 | uint32_t(uint8_t(raw[4 * i + 3])) << 24);
+                left -= n;
+            }
             const std::vector<uint16_t> values = decode(words, tables.at(group_of(*t)), t->elements());
             std::vector<char> bytes(values.size() * 2);
             for (size_t i = 0; i < values.size(); ++i)
@@ -262,9 +270,14 @@ UnpackReport unpack(std::istream& in, std::ostream& out)
         }
         else
         {
-            std::vector<char> bytes(size_t(t->bytes()));
-            read_exact(in, bytes.data(), bytes.size(), "a tensor");
-            emit(bytes.data(), bytes.size());
+            std::vector<char> bytes; // (in pieces, as the stream above)
+            for (uint64_t left = t->bytes(); left;)
+            {
+                bytes.resize(size_t(std::min<uint64_t>(left, 1u << 20)));
+                read_exact(in, bytes.data(), bytes.size(), "a tensor");
+                emit(bytes.data(), bytes.size());
+                left -= bytes.size();
+            }
         }
     }
     r.sha256 = sha.finish();

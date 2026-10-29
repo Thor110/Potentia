@@ -131,7 +131,7 @@ Space::Digits Space::scramble(Digits d) const
         const size_t src_off = even ? 0 : h, src_len = even ? h : length_ - h;
         const size_t dst_off = even ? h : 0, dst_len = even ? length_ - h : h;
         const Digits f = round_function(r, d.data() + src_off, src_len, dst_len);
-        for (size_t j = 0; j < dst_len; ++j) d[dst_off + j] = (d[dst_off + j] + f[j]) % n;
+        for (size_t j = 0; j < dst_len; ++j) d[dst_off + j] = uint32_t((uint64_t(d[dst_off + j]) + f[j]) % n); // (in 64 bits: a base above 2^31 wrapped)
     }
     return d;
 }
@@ -147,7 +147,7 @@ Space::Digits Space::unscramble(Digits d) const
         const size_t src_off = even ? 0 : h, src_len = even ? h : length_ - h;
         const size_t dst_off = even ? h : 0, dst_len = even ? length_ - h : h;
         const Digits f = round_function(r, d.data() + src_off, src_len, dst_len);
-        for (size_t j = 0; j < dst_len; ++j) d[dst_off + j] = (d[dst_off + j] + n - f[j]) % n;
+        for (size_t j = 0; j < dst_len; ++j) d[dst_off + j] = uint32_t((uint64_t(d[dst_off + j]) + n - f[j]) % n);
     }
     return d;
 }

@@ -57,6 +57,18 @@ function statedSha256(integrity) {
   return null;
 }
 
+// The largest .sieve sent to Sieve: its base64, with the request around it, within 64 MiB.
+const MAX_SIEVE_BYTES = 48 * 1024 * 1024;
+
+// A URL's part as text: decoded where it is well formed ("%" alone is not), else as it stands.
+function decodedOr(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch (e) {
+    return text;
+  }
+}
+
 function base64Of(bytes) {
   let s = "";
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -78,14 +90,35 @@ async function decode(url, integrity, path) {
   const stated = statedSha256(integrity);
   if (!stated) throw new Error("its link states no hash (an integrity=\"sha256-...\" attribute), so it is refused");
   const started = performance.now();
-  const response = await fetch(url, { credentials: "omit", cache: "no-cache" });
-  if (!response.ok) throw new Error("it could not be fetched (" + response.status + ")");
+  // The .sieve last fetched and checked, kept a minute: a page in a .sieve of many files asks for
+  // each of its pictures from the same .sieve, one after another, and its bytes are not fetched and
+  // hashed again for each. (Kept only under its own hash, checked when it was fetched.)
+  if (lastFetched && lastFetched.url === url && lastFetched.sha === stated && performance.now() - lastFetched.at < 60000)
+    return finish(url, stated, lastFetched.bytes, path, started, performance.now());
+  // One answer for every way a fetch fails: the extension may fetch from any server, and the page
+  // reads what is said here, so naming the status would tell it what is on servers it cannot reach.
+  let response;
+  try {
+    response = await fetch(url, { credentials: "omit", cache: "no-cache" });
+  } catch (e) {
+    response = null;
+  }
+  if (!response || !response.ok) throw new Error("it could not be fetched");
   const bytes = new Uint8Array(await response.arrayBuffer());
+  // Sieve takes a message of at most 64 MiB, and base64 makes four bytes of three.
+  if (bytes.length > MAX_SIEVE_BYTES) throw new Error("it is more than " + MAX_SIEVE_BYTES + " bytes, more than the plugin takes");
   // The link's hash first: a file that is not the one the page meant never reaches the decoder.
   const own = base64Of(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
   if (own !== stated) throw new Error("its SHA-256 is not the one its link states: refused");
-  const checked = performance.now();
-  const name = decodeURIComponent(new URL(url).pathname.split("/").pop());
+  lastFetched = { url, sha: stated, bytes, at: performance.now() };
+  return finish(url, stated, bytes, path, started, performance.now());
+}
+
+let lastFetched = null;
+
+// The checked bytes handed to Sieve, and its answer given back with the times taken.
+async function finish(url, stated, bytes, path, started, checked) {
+  const name = decodedOr(new URL(url).pathname.split("/").pop());
   const request = { op: "decode", name, sha256: "sha256-" + stated, data: base64Of(bytes) };
   if (path) request.path = path;
   const { head, data } = await ask(request);
@@ -117,8 +150,32 @@ async function rememberedSites() {
   return (await chrome.storage.local.get("sites")).sites || {};
 }
 
+// The remembered sites and the guard's registration are changed one change at a time: two at once
+// (a first visit in two tabs, or one beside the browser starting) would each read the sites before
+// the other wrote them, losing one, or register the guard twice, which Chrome refuses.
+let siteChanges = Promise.resolve();
+function oneAtATime(job) {
+  const next = siteChanges.then(job, job);
+  siteChanges = next.catch(() => {});
+  return next;
+}
+
+function changeSites(change) {
+  return oneAtATime(async () => {
+    const sites = await rememberedSites();
+    change(sites);
+    await chrome.storage.local.set({ sites });
+    await registerGuardNow();
+    return sites;
+  });
+}
+
+function registerGuard() {
+  return oneAtATime(registerGuardNow);
+}
+
 // The guard (guard.js, at document_start) runs only on the sites remembered: a match pattern each.
-async function registerGuard() {
+async function registerGuardNow() {
   const sites = await rememberedSites();
   const matches = [...new Set(Object.keys(sites).map((prefix) => {
     const u = new URL(prefix);
@@ -199,16 +256,15 @@ async function guard(pageUrl, tableUrl, tabId) {
     const prefix = new URL(".", tableUrl).href;
     if (!page.href.startsWith(prefix)) return { ok: false, error: "the page names a table (" + tableUrl + ") above its own site's folder" };
     const t = await tableOf(prefix + "index.sieve");
-    const sites = await rememberedSites();
-    sites[prefix] = { sha256: t.sha, since: new Date().toISOString().slice(0, 10), how: "first visit" };
-    await chrome.storage.local.set({ sites });
-    await registerGuard();
+    const sites = await changeSites((all) => {
+      all[prefix] = { sha256: t.sha, since: new Date().toISOString().slice(0, 10), how: "first visit" };
+    });
     site = { prefix, ...sites[prefix] };
     first = true;
   }
   const t = await tableOf(site.prefix + "index.sieve");
   if (t.sha !== site.sha256) return { ok: false, changed: true, prefix: site.prefix, was: site.sha256, now: t.sha };
-  let path = decodeURIComponent(page.href.slice(site.prefix.length));
+  let path = decodedOr(page.href.slice(site.prefix.length));
   if (path === "" || path.endsWith("/")) path += "index.html";
   const want = t.files.get(path);
   if (!want) {
@@ -227,17 +283,15 @@ async function guard(pageUrl, tableUrl, tabId) {
 }
 
 async function trust(prefix, sha256, how) {
-  const sites = await rememberedSites();
-  sites[prefix] = { sha256, since: new Date().toISOString().slice(0, 10), how };
-  await chrome.storage.local.set({ sites });
-  await registerGuard();
+  await changeSites((sites) => {
+    sites[prefix] = { sha256, since: new Date().toISOString().slice(0, 10), how };
+  });
 }
 
 async function forget(prefix) {
-  const sites = await rememberedSites();
-  delete sites[prefix];
-  await chrome.storage.local.set({ sites });
-  await registerGuard();
+  await changeSites((sites) => {
+    delete sites[prefix];
+  });
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

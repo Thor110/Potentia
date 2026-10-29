@@ -115,7 +115,7 @@ public:
     // From the system dialogs' callbacks (any thread): what was chosen, handed to the next frame.
     void picked(const std::string& path);
     void save_to(const std::string& path);
-    void install_picked(int step, const std::string& path); // 0 the installer, 1 where
+    void install_picked(int step, const std::string& path); // 0 the installer, 1 where; 2 a .sieve, 3 its program's name
 
 private:
     struct Result
@@ -218,6 +218,10 @@ private:
     std::optional<std::string> pending_pick_, pending_save_;
     std::optional<std::pair<int, std::string>> pending_install_;
     std::string install_src_; // the installer chosen, while its folder is being chosen
+    std::string program_src_; // the .sieve chosen, while its installer program's name is being chosen
+    // An installer program from Sieve instructions already made (Edward, 29 October 2026): the
+    // .sieve's bytes attached to sieve-install as they are, nothing read or packed again.
+    void program_from(const std::string& sieve_file, const std::string& out);
     int save_what_ = 0;
     bool go_armed_ = false; // Go to it pressed once for a file past the BINARY length
     float mouse_x_ = -1, mouse_y_ = -1;

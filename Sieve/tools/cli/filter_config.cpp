@@ -341,6 +341,7 @@ void FilterConfig::save(const fs::path& path) const
     }
     std::ofstream out(path, std::ios::binary);
     out << o.str();
+    out.close(); // (checked once closed: a small file is written as it closes)
     if (!out) throw std::runtime_error("cannot write " + path.string());
 }
 

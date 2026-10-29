@@ -27,6 +27,7 @@ void write_bytes(const std::string& to, const std::vector<uint8_t>& b)
 {
     std::ofstream out(path_of(to), std::ios::binary);
     out.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+    out.close(); // (checked once closed: a small file is written as it closes)
     if (!out) throw std::runtime_error("could not write " + to);
 }
 

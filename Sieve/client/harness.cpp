@@ -315,27 +315,41 @@ void Harness::act(Action a)
     }
     case Action::GoTo:
     {
-        if (drun_)
+        // (A run's result read from its folder: one cut short or edited may have no final address,
+        // or one that does not parse; said on the status line, not left to end the program.)
+        try
         {
-            // A picture model is a model of the AI line too, of its own shape.
-            const sieve::AiSpace space(drun_->recipe.train.shape, "sieve");
-            go_shape = drun_->recipe.train.shape;
-            if (doutcome_) go_digits = doutcome_->digits;
-            else go_digits = space.digits_at(space.parse(*sieve::cli::final_address_of(*drun_->result)), sieve::AddressMode::Positional);
+            if (drun_)
+            {
+                // A picture model is a model of the AI line too, of its own shape.
+                const sieve::AiSpace space(drun_->recipe.train.shape, "sieve");
+                if (doutcome_) go_digits = doutcome_->digits;
+                else
+                {
+                    const auto hex = sieve::cli::final_address_of(*drun_->result);
+                    if (!hex) throw std::runtime_error("its result names no final address");
+                    go_digits = space.digits_at(space.parse(*hex), sieve::AddressMode::Positional);
+                }
+                go_shape = drun_->recipe.train.shape;
+                result_ = Result::GoTo;
+                done_ = true;
+                break;
+            }
+            const sieve::AiSpace space(run_->recipe.shape, run_->recipe.key);
+            if (outcome_) go_digits = outcome_->digits;
+            else
+            {
+                const sieve::training::Result res = sieve::training::Result::parse(*run_->result);
+                go_digits = space.digits_at(space.parse(res.final_address), sieve::AddressMode::Positional);
+            }
+            go_shape = run_->recipe.shape;
             result_ = Result::GoTo;
             done_ = true;
-            break;
         }
-        const sieve::AiSpace space(run_->recipe.shape, run_->recipe.key);
-        go_shape = run_->recipe.shape;
-        if (outcome_) go_digits = outcome_->digits;
-        else
+        catch (const std::exception& ex)
         {
-            const sieve::training::Result res = sieve::training::Result::parse(*run_->result);
-            go_digits = space.digits_at(space.parse(res.final_address), sieve::AddressMode::Positional);
+            say(trf("harness.failed", {ex.what()}), true);
         }
-        result_ = Result::GoTo;
-        done_ = true;
         break;
     }
     case Action::Pack:
@@ -910,7 +924,7 @@ void Harness::change_picture_setting(int row, int dir, bool big)
             }
         break;
     case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
-    case 4: r.setup.levels = uint32_t(std::clamp(int(r.setup.levels) + dir * (big ? 8 : 1), 1, int(256 - r.setup.colours))); break;
+    case 4: r.setup.levels = uint32_t(std::clamp(int(r.setup.levels) + dir * (big ? 8 : 1), 1, std::max(1, 256 - int(r.setup.colours)))); break; // (at least 1: a palette of 256 or more leaves none)
     case 5:
         r.steps = big ? (dir > 0 ? r.steps * 2 : std::max(100u, r.steps / 2)) : uint32_t(std::max(100, int(r.steps) + dir * 500));
         r.checkpoint_every = std::max<uint32_t>(1, r.steps / 10);

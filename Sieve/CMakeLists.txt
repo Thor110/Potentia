@@ -540,6 +540,9 @@ if(SIEVE_BUILD_CLIENT)
         client/window_front.cpp
         client/world.cpp)
     target_link_libraries(hallway PRIVATE sieve_lines sieve_locate sieve_compare SDL3::SDL3)
+    if(WIN32) # (Explorer's folder picker, window_front.cpp: COM; MSVC also asks by #pragma)
+        target_link_libraries(hallway PRIVATE ole32 shell32 uuid)
+    endif()
     if(WIN32)
         target_sources(hallway PRIVATE tools/utf8.manifest)
     endif()
@@ -577,6 +580,9 @@ if(SIEVE_BUILD_CLIENT)
     # archives exactly, as sieve install does (cli/items.cpp, use_item_maker), so an installer
     # program, or a .sieve opened from the right-click menu, installs anything Sieve makes.
     target_link_libraries(sieve-install PRIVATE sieve_lzma sieve_lines sieve_compare)
+    if(WIN32) # (Explorer's folder picker, as the hallway's)
+        target_link_libraries(sieve-install PRIVATE ole32 shell32 uuid)
+    endif()
     if(SIEVE_SMALL_INSTALLER)
         # Its own SDL, built once from the same source (or fetched, when SDL came from vcpkg or
         # the system), static, optimised for size, and without what the installer never uses:

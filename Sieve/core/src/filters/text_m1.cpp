@@ -746,8 +746,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     clean.counts_as = "own";
     clean.retired = true; // the same rule as an automaton, which counts at any length and merges
     clean.replaced_by = "clean-data-v1";
-    clean.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Clean, l, v, r, *find_filter("clean-v1"));
+    clean.make = [own = clean.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Clean, l, v, r, *find_filter(own));
     };
     out.push_back(clean);
 
@@ -764,8 +764,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     // long pages as this does, by its words' lengths (plugin.hpp word_counting).
     window.retired = true;
     window.replaced_by = "window-data-v1";
-    window.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Window, l, v, r, *find_filter("window-v1"));
+    window.make = [own = window.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Window, l, v, r, *find_filter(own));
     };
     out.push_back(window);
 
@@ -779,8 +779,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     words.counts_as = "own";
     words.retired = true; // as window-v1
     words.replaced_by = "words-data-v1";
-    words.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Words, l, v, r, *find_filter("words-v1"));
+    words.make = [own = words.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Words, l, v, r, *find_filter(own));
     };
     out.push_back(words);
 
@@ -790,8 +790,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     clean2.description = "As clean-v1, but a unit may end in SPACE padding (the last unit of warped text). Can rank (compact).";
     clean2.retired = true;
     clean2.replaced_by = "clean-data-v2";
-    clean2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Clean, l, v, r, *find_filter("clean-v2"));
+    clean2.make = [own = clean2.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Clean, l, v, r, *find_filter(own));
     };
     out.push_back(clean2);
     FilterSpec words2 = words;
@@ -799,8 +799,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     words2.description = "As words-v1, but a unit may end in SPACE padding (the last unit of warped text). Can rank (compact).";
     words2.implies = {"clean-v2", "window-v2"};
     words2.replaced_by = "words-data-v2"; // (retired, as words-v1)
-    words2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Words, l, v, r, *find_filter("words-v2"));
+    words2.make = [own = words2.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Words, l, v, r, *find_filter(own));
     };
     out.push_back(words2);
     // Window with padding: real pages are cut from running text, so a page may begin and end in
@@ -811,8 +811,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
                           "real books pass: words cut by the page edges are allowed. Can rank (compact).";
     window2.implies = {"clean-v2"};
     window2.replaced_by = "window-data-v2"; // (retired, as window-v1)
-    window2.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
-        return make_m1(SieveFilter::Window, l, v, r, *find_filter("window-v2"));
+    window2.make = [own = window2.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) {
+        return make_m1(SieveFilter::Window, l, v, r, *find_filter(own));
     };
     out.push_back(window2);
 
@@ -827,8 +827,8 @@ void add_text_m1_filters(std::vector<FilterSpec>& out)
     title.counts_as = "own";
     title.retired = true; // the same rule in the token form, with padding and within
     title.replaced_by = "title-data-v1";
-    title.make = [](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
-        const FilterSpec& spec = *find_filter("title-v1");
+    title.make = [own = title.name()](const FilterLine& l, const FilterValues& v, const FilterResources& r) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
         const std::string id = param_value(spec, v, "dictionary");
         auto dictionary = r.dictionary(id);
         const uint32_t max_length = uint32_t(param_int(spec, v, "max_length"));

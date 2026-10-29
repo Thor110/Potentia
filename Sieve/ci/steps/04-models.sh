@@ -322,7 +322,9 @@ $H --no-menu --items-per-wall 256 --take --screenshot take256.png | q "saved tak
 # The pictures on the crate faces have a size of their own, and it is thrown away and
 # redrawn when it changes rather than being stretched.
 $H --no-menu --line models --model-tile 128 --walk "0,0" --bench 8 --screenshot tile128.png 2>&1 | q "^bench: 8 frames"
-test -s t128.png && test -s t256.png && test -s tile128.png
+test -s t128.png
+test -s t256.png
+test -s tile128.png
 # The item page has two tabs: the thing itself, and what it costs to name it. On a text
 # line the guided row is shorter than the other two exactly when the unit reads as text.
 $H --no-menu --warp "it was the best of times" --press "E,C" --screenshot cost.png > /dev/null

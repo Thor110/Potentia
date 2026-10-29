@@ -115,6 +115,8 @@ void write_png(const std::string& path, uint32_t width, uint32_t height, const s
     std::ofstream out(std::filesystem::path(path), std::ios::binary);
     if (!out) throw std::runtime_error("cannot write '" + path + "'");
     out.write(png.data(), static_cast<std::streamsize>(png.size()));
+    out.close(); // (checked once closed: a small file is written as it closes)
+    if (!out) throw std::runtime_error("cannot write '" + path + "'");
 }
 
 bool png_pixels(const uint8_t* data, size_t size, std::vector<uint8_t>& pixels, int& width, int& height, int& components)

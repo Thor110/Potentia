@@ -22,7 +22,8 @@ ffmpeg -v error -y -f lavfi -i testsrc=size=16x12:rate=10 -frames:v 1 -pix_fmt r
 ffmpeg -v error -y -i f.png -c:v ffv1 -pix_fmt bgr0 f.mkv
 a=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.png | tr -d '\r' | awk '$1 == "positional" {print $2}')
 b=$($exe warp --line image --width 16 --height 12 --palette rgb24 --mode positional --file f.mkv | tr -d '\r' | awk '$1 == "positional" {print $2}')
-test -n "$a" && test "$a" = "$b"
+test -n "$a"
+test "$a" = "$b"
 # A video in a folder whose name needs quoting: every stored frame, in order, up to --frames.
 mkdir -p "it's a folder"
 ffmpeg -v error -y -f lavfi -i testsrc=size=64x48:rate=10 -frames:v 12 -c:v ffv1 "it's a folder/clip.mkv"

@@ -512,8 +512,8 @@ void add_picture_filters(std::vector<FilterSpec>& out)
                  "film", 0, 0, 1, {"film", "frame"}}};
     p.applies = picture;
     p.counts_as = "own";
-    p.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& spec = *find_filter("palette-size-v1");
+    p.make = [own = p.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
         const int64_t k = param_int(spec, v, "colours");
         const std::string scope = param_value(spec, v, "scope");
         const std::string prov = "colours=" + std::to_string(k) + (l.kind == "video" ? " scope=" + scope : "");
@@ -539,8 +539,8 @@ void add_picture_filters(std::vector<FilterSpec>& out)
     r.params = {{"changes", "the most colour changes allowed along one row", FilterParam::Kind::Integer, "3", 0, 4096, 1, {}}};
     r.applies = picture;
     r.counts_as = "own";
-    r.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const int64_t c = param_int(*find_filter("row-runs-v1"), v, "changes");
+    r.make = [own = r.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const int64_t c = param_int(*find_filter(own), v, "changes");
         if (auto dfa = row_runs_dfa(l.base, l.width, uint32_t(c))) return make_dfa_filter(std::move(*dfa), l.length, "changes=" + std::to_string(c));
         return std::make_unique<RowRuns>(l, uint32_t(c), "changes=" + std::to_string(c));
     };

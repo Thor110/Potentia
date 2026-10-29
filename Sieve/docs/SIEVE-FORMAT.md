@@ -29,7 +29,8 @@ the binary line, §12.2 "Installer files".)
 
 An **installer program** is `sieve-install` with a `.sieve` attached: the program's bytes, the
 `.sieve`'s bytes, their count as 8 bytes (least significant first), then the 16 bytes
-`sieve-attached-1` (§12.2, "Installer programs").
+`sieve-attached-1` (§12.2, "Installer programs"). (The oracle reads `.sieve` files, not installer
+programs: take the `.sieve` off the end first.)
 
 ## 2. The head
 
@@ -79,7 +80,9 @@ of the older text form:
 
 A **path** is a varint of how many of its first bytes it shares with the last path written (a
 folder's or a file's), then the rest as a varint length and text. Paths are relative to the root,
-`/` between parts, a folder's ending in `/`; entries come **sorted by their paths' bytes**.
+`/` between parts, a folder's ending in `/`; entries come **sorted by their paths' bytes**, but for
+an archive's members (v31, below), which follow their archive at once (`a.zip`, `a.zip/1`, `a.zip/2`,
+then `a.zip-x`).
 
 A **way** is a byte, then: **1** `raw`; **3** `rope` and the rest of the way as text; **4** `pieces`
 and the rest as text; **2** an archive made again on installing: its format number, the rest of its
@@ -103,14 +106,14 @@ stream its way names:
 | :--- | :--- | :--- |
 | `raw` | its size, next in the lzma2 stream | §12.2 v4 |
 | `x86` | its size, next in the x86 stream (raw LZMA2 after the x86 BCJ filter) | §12.2 v4 |
-| `lines K` | a mask of file K's lines, one bit a line, lowest bit first, next in the lzma2 stream *after every other file's bytes there* | §12.2 v4 |
+| `lines K` | a mask of file K's lines, one bit a line, lowest bit first, next in the lzma2 stream *after every other file's bytes there*; K counts the listing's files from 0, and file K is carried `raw` or `x86` | §12.2 v4 |
 | `item K` (an `i` line) | its place, next in the items stream: `width` bytes big-endian, or with `digit-histogram-v1` a varint length and a code; made again as an item of line K | §12.2 v5 to v7 |
 | `rope <parameters>` | a varint length and a code, next in the rope stream; `rope-wave-v1` to `v6` by its parameters | §12.2 `rope-wave-v1` to `v6` |
 | `pieces z<n> r<n> ... rope <parameters>` | its z pieces next in the lzma2 stream; its r pieces joined, coded as one rope code, next in the rope stream; laid out in order | §12.2 v13 |
 | `mix4 <parameters>` | a varint length and a code, next in the rope stream, decoded by mix-v4 (`B<bits>`, a picture's ` I<w>x<c>`, a text's ` D<n>` word list) | §12.2 `mix-v4`, v28 |
-| `mixt <parameters> T<total>` and `mixn` | a group of files mixed together: the first file's way holds the group's code (next in the rope stream) and total size; each `mixn` file after it takes its size from the group | §12.2 v30 |
+| `mixt <parameters> T<total>` and `mixn` | a group of files mixed together: the first file's way holds the group's code (next in the rope stream) and its total size, and the file is the group's first bytes; each `mixn` file after it (its own size in its record) is the group's next bytes. The group is used up exactly, and no file of another way stands in its middle | §12.2 v30 |
 | `mix`, `mix2`, `mix3` | as `mix4`, by mix-v1, v2 and v3 (read; no longer written) | §12.2 v24, v26, v27 |
-| an archive made again: `xz`, `gz`, `bz2`, `zst`, `lz4`, `br`, `lzma`, `sk`, `stb`, `skm`, each `<recipe> <inner size> <inner way>` | the inner bytes by the inner way, then the archive made from them by the named compressor and recipe | §12.2 v14, v17, v19 to v21, v25, v31 |
+| an archive made again: `xz`, `gz`, `bz2`, `zst`, `lz4`, `br`, `lzma`, `sk`, `stb`, each `<recipe> <inner size> <inner way>` (for `stb`, the inner bytes are the pixels); `skm <members> <skeleton size> <inner way>` | the inner bytes by the inner way (`raw`, `rope`, `pieces`, a mix way, `mixt` or `mixn`: never `x86`, nor another recipe), then the archive made from them by the named compressor and recipe; for `skm`, the inner bytes are its skeleton, and its data the members below | §12.2 v14, v17, v19 to v21, v25, v31 |
 
 A stream left over, or one that runs out, is refused. The x86 and lzma2 streams are raw LZMA2 at the
 dictionary their byte names (the lzma2 stream may instead be carried as it is, byte 255, or mixed,
@@ -131,9 +134,14 @@ gives the contents and says so (§12.2 v22).
 
 Every file is checked against its size, and against its own SHA-256 where the listing gives one
 (`-` where the tree's covers it). Then **the tree**: the SHA-256 of, for every file in the listing's
-order (not an archive's members), its path, a line feed, its bytes' SHA-256 in lower-case hex and a
+order (not an archive's members), its path as listed (without the root's name), a line feed, its bytes' SHA-256 in lower-case hex and a
 line feed. It must equal the 32 bytes in the head. Sieve writes nothing to the disk until every file
 and the tree are checked (§12.2 v5, and `docs/VAULT.md` for the vault's checks on top).
+
+From v20 the records carry no file's own SHA-256, so the tree is the only check of the bytes. A
+decoder that cannot make every file (below) cannot check the tree, and so checks the others by
+their sizes only: the oracle says so (`the tree's SHA-256 not checked`) and writes them on that
+understanding.
 
 ## 6. What a decoder needs
 

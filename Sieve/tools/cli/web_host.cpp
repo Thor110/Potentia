@@ -158,9 +158,10 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
     if (m.items && tree_sha256(m) != m.tree) throw std::runtime_error("its files are not the ones its listing names: refused");
     // 3. Each file is its stretch of the contents, in the listing's order, named by its SHA-256 and
     // checked against it here (where the listing gives "-", an items listing's, the tree's above).
+    std::vector<uint64_t> starts(files.size(), 0); // (each file's start, once: not summed again for each)
+    for (size_t i = 1; i < files.size(); ++i) starts[i] = starts[i - 1] + files[i - 1]->size;
     auto bytes_of = [&](size_t k) {
-        uint64_t at = 0;
-        for (size_t i = 0; i < k; ++i) at += files[i]->size;
+        const uint64_t at = starts[k];
         std::vector<uint8_t> b(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + files[k]->size));
         const std::string sha = sha256_hex(b);
         const std::string& named = files[k]->sha256;
@@ -225,13 +226,23 @@ WebDecoded web_decode(const std::vector<uint8_t>& sieve, const std::string& expe
 
 namespace {
 
-bool read_message(std::istream& in, std::string& text)
+// A message larger than this is read past and refused (`too_big`), the host carrying on: a page can
+// link a .sieve of any size, and ending here would fail every other request waiting.
+constexpr uint32_t kMaxMessage = uint32_t(64) << 20;
+
+bool read_message(std::istream& in, std::string& text, bool& too_big)
 {
     uint8_t len[4];
+    too_big = false;
     if (!in.read(reinterpret_cast<char*>(len), 4)) return false;
     uint32_t n = 0;
     std::memcpy(&n, len, 4); // this machine's byte order, as native messaging sends it
-    if (n > (uint32_t(64) << 20)) throw std::runtime_error("a message of more than 64 MiB");
+    if (n > kMaxMessage)
+    {
+        too_big = true;
+        text.clear();
+        return bool(in.ignore(std::streamsize(n)));
+    }
     text.assign(n, '\0');
     return bool(in.read(text.data(), std::streamsize(n)));
 }
@@ -287,6 +298,15 @@ json::Value utf8_text(const std::string& s)
 // may be. Being a whole number of 3-byte groups, the parts' base64 joins as one.
 constexpr size_t kPart = 699999;
 
+// Text a request or a .sieve gave, sent back in a reply's head or an error (a name, a path in a
+// message): at most 4 KB of it, so no reply is past the 1 MB a message may be (the browser closes
+// the connection at that, failing every request waiting).
+json::Value short_text(const std::string& s)
+{
+    constexpr size_t kMax = 4096;
+    return utf8_text(s.size() <= kMax ? s : s.substr(0, kMax) + "...");
+}
+
 // A reply's head, saying how many parts follow, then `bytes` in those parts (none for none).
 void write_in_parts(std::ostream& out, const json::Value& id, std::vector<std::pair<std::string, json::Value>> head, std::string_view bytes)
 {
@@ -306,13 +326,16 @@ void write_in_parts(std::ostream& out, const json::Value& id, std::vector<std::p
 int run_web_host(std::istream& in, std::ostream& out, const std::string& version, uint64_t max_bytes)
 {
     std::string text;
-    while (read_message(in, text))
+    bool too_big = false;
+    while (read_message(in, text, too_big))
     {
         json::Value id = num(0);
         try
         {
+            if (too_big) throw std::runtime_error("a message of more than 64 MiB: refused");
             const json::Value req = json::parse(text);
-            if (const json::Value* i = req.find("id")) id = *i;
+            // (Its id is sent back with every reply: a long one, which no extension sends, is not.)
+            if (const json::Value* i = req.find("id"); i && json::write(*i).size() <= 64) id = *i;
             const std::string op = req.at("op").string();
             if (op == "hello")
             {
@@ -355,7 +378,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
                                {{"id", id},
                                 {"ok", json::Value::make_bool(true)},
                                 {"listing", json::Value::make_bool(true)},
-                                {"name", utf8_text(n ? n->string() : std::string())},
+                                {"name", short_text(n ? n->string() : std::string())},
                                 {"size", num(o.total)},
                                 {"seconds", json::Value::make_number(seconds)}},
                                body);
@@ -365,7 +388,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
             write_in_parts(out, id,
                            {{"id", id},
                             {"ok", json::Value::make_bool(true)},
-                            {"name", utf8_text(d.name)},
+                            {"name", short_text(d.name)},
                             {"type", utf8_text(d.type)},
                             {"size", num(d.bytes.size())},
                             {"sha256", utf8_text(d.sha256)},
@@ -374,7 +397,7 @@ int run_web_host(std::istream& in, std::ostream& out, const std::string& version
         }
         catch (const std::exception& e)
         {
-            write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(false)}, {"error", utf8_text(e.what())}}));
+            write_message(out, json::Value::make_object({{"id", id}, {"ok", json::Value::make_bool(false)}, {"error", short_text(e.what())}}));
         }
     }
     return 0;

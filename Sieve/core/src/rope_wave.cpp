@@ -212,7 +212,10 @@ void put_segment(std::vector<uint8_t>& out, const std::vector<uint16_t>& sym, bo
         put_varint(out, 0);
         return;
     }
-    std::vector<uint64_t> counts(65536, 0);
+    // A table of the byte values only where every value is a byte, as a rope's are: the same table and
+    // stream (only the values present count), without filling 65,536 entries for each segment.
+    const bool bytes = *std::max_element(sym.begin(), sym.end()) < 256;
+    std::vector<uint64_t> counts(bytes ? 256 : 65536, 0);
     for (const uint16_t b : sym) ++counts[b];
     const std::vector<uint32_t> freq = weights::quantise(counts);
     uint64_t k = 0;
@@ -244,7 +247,7 @@ std::vector<uint16_t> get_segment(std::span<const uint8_t> code, size_t& at, uin
         return {};
     }
     if (k > 256 || !count) bad("a segment's table out of range");
-    std::vector<uint32_t> freq(65536, 0);
+    std::vector<uint32_t> freq(256, 0); // (its values are bytes: below)
     uint64_t s = 0, sum = 0;
     for (uint64_t j = 0; j < k; ++j)
     {

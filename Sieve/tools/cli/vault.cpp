@@ -267,7 +267,7 @@ bool withheld_picture(const uint8_t* rgba, uint32_t width, uint32_t height)
 namespace {
 
 // The picture half of the check: the bytes' frames by PDQ, if the bytes are a picture.
-bool withheld_as_picture(const std::vector<uint8_t>& bytes)
+bool withheld_as_picture(std::span<const uint8_t> bytes)
 {
     const Vault& v = the_vault();
     if (v.st.failed_closed) return true;
@@ -315,7 +315,7 @@ private:
     std::map<uint32_t, std::set<Sha256::Digest>> seen_;
 };
 
-bool withheld_by_chunks(const std::vector<uint8_t>& bytes)
+bool withheld_by_chunks(std::span<const uint8_t> bytes)
 {
     const Vault& v = the_vault();
     if (v.chunk_of.empty() || bytes.size() < cdc::kMin) return false;
@@ -351,7 +351,7 @@ bool withheld_bytes(const std::vector<uint8_t>& bytes)
     return withheld_as_picture(bytes); // a file that is a picture is also checked as one
 }
 
-void check_known(const std::vector<uint8_t>& bytes, const std::string& sha, const std::string& what)
+void check_known(std::span<const uint8_t> bytes, const std::string& sha, const std::string& what)
 {
     check_sha256(sha, what);
     if (withheld_by_chunks(bytes) || withheld_as_picture(bytes)) throw VaultWithheld("withheld by the vault: " + what);

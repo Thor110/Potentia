@@ -50,3 +50,14 @@ for m in positional scrambled; do
   $exe read --line tracks --length 4 --mode $m "$a" | tr -d '\r' | tail -1 | q "C4q E4q G4h C5w E5q D5q C5h G4w Re Re"
 done
 $exe info --line movies --title-length 0 | tr -d '\r' | q "^line         movies  (movies/image/mono/10x10/L100+-+video/mono/5x5x8/L200x4/key=sieve/composition-v1)"
+# read --around (REVIEW, the first pass's item 6): a shelf's neighbours, positional ones wrapping
+# round the line's ends (the line's last two before its first), and a guided shelf zoomed out.
+around=$($exe read --length 32 --mode positional --around 2 0 | tr -d '\r')
+printf '%s\n' "$around" | sed -n 1p | q '^      -2  "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzy"  11d500bfaf40ac5044981798db5fb39f2c17b7f$'
+printf '%s\n' "$around" | sed -n 3p | q '^>     +0  "                                "  000000000000000000000000000000000000000$'
+printf '%s\n' "$around" | sed -n 5p | q '^      +2  "                               b"  000000000000000000000000000000000000002$'
+$exe read --length 32 --mode positional --around 2 12345 | tr -d '\r' | sed -n 5p | q '^      +2  "                            cugt"  000000000000000000000000000000000012347$'
+around=$($exe read --length 32 --mode guided --around 2 --zoom 20 90922 | tr -d '\r')
+printf '%s\n' "$around" | q '^>     +0  "it was that they are and god tha"  90922  (52 bits)$'
+printf '%s\n' "$around" | q '^      +1  "it was the brave uttered through"  90923  (56 bits)$'
+if $exe read --length 32 --mode guided --around 2 --zoom 0 90922 > /dev/null 2>&1; then exit 1; fi # (a zoom of 0: refused)

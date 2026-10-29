@@ -72,6 +72,7 @@ void write_text(const fs::path& file, const std::string& text)
     fs::create_directories(file.parent_path());
     std::ofstream out(file, std::ios::binary);
     out.write(text.data(), std::streamsize(text.size()));
+    out.close(); // (checked once closed: a small file is written as it closes)
     if (!out) throw std::runtime_error("cannot write " + rel_of(file));
 }
 
@@ -184,8 +185,13 @@ std::vector<Tag> tags_of(const std::string& h, std::vector<std::string_view>* ra
         const std::string& n = tags.back().name;
         if (n == "script" || n == "style")
         {
-            const size_t at = lower(h.substr(i)).find("</" + n);
-            const size_t end = at == std::string::npos ? h.size() : i + at;
+            // ("</script" in any case, found where it stands: copying the rest of the page for each
+            // was quadratic, 35 s for a 4 MB page of 4,000 scripts.)
+            const std::string want = "</" + n;
+            const auto it = std::search(h.begin() + std::ptrdiff_t(i), h.end(), want.begin(), want.end(), [](char a, char b) {
+                return std::tolower(static_cast<unsigned char>(a)) == static_cast<unsigned char>(b);
+            });
+            const size_t end = size_t(it - h.begin());
             if (raw) raw->push_back(std::string_view(h).substr(i, end - i));
             i = end;
         }

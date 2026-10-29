@@ -26,6 +26,14 @@ namespace detail {
 // still counts as the user's doing (window_front.cpp); elsewhere it does nothing.
 void bring_to_front(SDL_Window* window);
 
+// On Windows, the system's own folder picker, Explorer's (IFileOpenDialog choosing folders, with
+// its address bar, favourites and search), in place of SDL 3.2's, which is the old folder tree
+// that has to be opened level by level (Edward, 29 October 2026: "the directory tree option isn't
+// fun to have to navigate to deep directories with"). It answers on a thread of its own, as SDL's
+// dialogs do, through `done` (files: the folder and then null; cancelled: null first). False where
+// it cannot be had (elsewhere, or COM refused): SDL's is used then.
+bool native_folder_dialog(SDL_DialogFileCallback done, void* call, SDL_Window* window, const char* default_location);
+
 struct DialogCall
 {
     SDL_DialogFileCallback callback;
@@ -101,8 +109,9 @@ inline void open_folder_dialog(SDL_DialogFileCallback callback, void* userdata, 
                                bool allow_many)
 {
     detail::before_dialog(window);
-    SDL_ShowOpenFolderDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, false}, window, default_location,
-                             allow_many);
+    auto* call = new detail::DialogCall{callback, userdata, window, false};
+    if (!allow_many && detail::native_folder_dialog(detail::dialog_closed, call, window, default_location)) return;
+    SDL_ShowOpenFolderDialog(detail::dialog_closed, call, window, default_location, allow_many);
 }
 
 } // namespace hallway

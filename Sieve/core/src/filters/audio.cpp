@@ -137,8 +137,8 @@ void add_audio_filters(std::vector<FilterSpec>& out)
     key.counts_as = "own";
     key.retired = true; // the same rule as an automaton, on every note set
     key.replaced_by = "key-data-v2";
-    key.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) {
-        const FilterSpec& s = *find_filter("key-v1");
+    key.make = [own = key.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) {
+        const FilterSpec& s = *find_filter(own);
         return std::make_unique<Key>(param_value(s, v, "tonic"), param_value(s, v, "scale"), l.length);
     };
     out.push_back(key);

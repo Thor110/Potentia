@@ -160,6 +160,7 @@ int64_t decimal_q(const std::string& s, const char* what, unsigned bits)
         if (ch < '0' || ch > '9') bad(std::string(what) + " is a decimal, not \"" + s + "\"");
         if (num > 100000000000ull) bad(std::string(what) + " has too many digits");
         num = num * 10 + uint64_t(ch - '0');
+        if (point && den > 100000000000000000ull) bad(std::string(what) + " has too many digits"); // (leading zeros grow only den)
         if (point) den *= 10;
         any = true;
     }
@@ -1167,7 +1168,7 @@ Score run_batch(const Trainer::Net& net, const int32_t* w, uint64_t weights, con
                 std::vector<int64_t>* grad, Pool& pool)
 {
     for (const auto& win : batch)
-        if (win.size() < 2) bad("a window of at least two bytes");
+        if (win.size() < 2 || win.size() > 513) bad("a window of two to 513 bytes"); // (rope_for's 512 positions)
     std::vector<std::vector<int16_t>> targets(batch.size());
     std::vector<Example> ex(batch.size());
     for (size_t i = 0; i < batch.size(); ++i)

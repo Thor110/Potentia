@@ -585,6 +585,17 @@ bool is_xz(const std::vector<uint8_t>& b)
 }
 
 // What an xz file holds, or nothing if liblzma cannot read it (or it is not one stream).
+// Whether what an archive holds, read so far (n bytes), has outgrown the memory: more than is still
+// free beside it, about half what was free. A file of a few kilobytes can hold gigabytes of zeros (a
+// decompression bomb); read past this it is refused as not an archive this reads (the File Locator
+// then carries it as it is, and Extract says so). Where the memory free cannot be known, no limit.
+static bool past_inner_limit(size_t n)
+{
+    if (n < (size_t(256) << 20)) return false; // (asked only once it is large: memory_free asks the system)
+    const uint64_t free_now = memory_free();
+    return free_now && n > free_now;
+}
+
 std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
 {
     lzma_stream z = LZMA_STREAM_INIT;
@@ -602,6 +613,7 @@ std::optional<std::vector<uint8_t>> xz_inner(const std::vector<uint8_t>& b)
         z.avail_out = buf.size();
         r = lzma_code(&z, LZMA_FINISH);
         out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+        if (past_inner_limit(out.size())) r = LZMA_MEMLIMIT_ERROR;
     }
     const bool whole = r == LZMA_STREAM_END && z.avail_in == 0;
     lzma_end(&z);
@@ -651,7 +663,7 @@ std::optional<std::vector<uint8_t>> inflate_raw(const uint8_t* in, size_t n, siz
         z.avail_out = uInt(buf.size());
         r = inflate(&z, Z_NO_FLUSH);
         out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
-        if (out.size() > expect) break;
+        if (out.size() > expect || past_inner_limit(out.size())) break;
         if (r == Z_BUF_ERROR && z.avail_in == 0) break;
     }
     const bool whole = r == Z_STREAM_END;
@@ -739,9 +751,12 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
     if (count == 0xFFFF || cd_at == 0xFFFFFFFFu || size_t(cd_at) + cd_size > eocd) return std::nullopt;
     std::vector<sieve::install::InMemory> out;
     size_t at = cd_at;
+    uint64_t held = 0; // (what its entries say they hold, as they are read: past the memory, refused)
     for (uint32_t k = 0; k < count; ++k)
     {
         if (at + 46 > b.size() || u32(at) != 0x02014b50) return std::nullopt;
+        held += u32(at + 24);
+        if (past_inner_limit(size_t(std::min<uint64_t>(held, SIZE_MAX)))) return std::nullopt;
         const uint32_t flags = u16(at + 8), method = u16(at + 10), crc = u32(at + 16), csize = u32(at + 20), usize = u32(at + 24);
         const uint32_t nlen = u16(at + 28), xlen = u16(at + 30), clen = u16(at + 32), local = u32(at + 42);
         if (at + 46 + nlen > b.size()) return std::nullopt;
@@ -1471,6 +1486,7 @@ std::optional<std::vector<uint8_t>> bz2_inner(const std::vector<uint8_t>& b, siz
             z.avail_out = unsigned(buf.size());
             r = BZ2_bzDecompress(&z);
             out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+            if (past_inner_limit(out.size())) r = BZ_MEM_ERROR;
             if (r == BZ_OK && z.avail_in == 0 && fed >= b.size() && z.avail_out == buf.size()) r = BZ_UNEXPECTED_EOF;
         }
         at = fed - z.avail_in;
@@ -1538,6 +1554,11 @@ std::optional<std::vector<uint8_t>> zstd_inner(const std::vector<uint8_t>& b, si
         r = ZSTD_decompressStream(d, &o, &in);
         if (ZSTD_isError(r)) break;
         out.insert(out.end(), buf.data(), buf.data() + o.pos);
+        if (past_inner_limit(out.size()))
+        {
+            r = size_t(-1); // (an error, as ZSTD_isError reads it)
+            break;
+        }
         if (o.pos == 0 && in.pos == in.size) break;
     }
     // (Its last output, if the output buffer was full when the input ran out.)
@@ -1547,6 +1568,7 @@ std::optional<std::vector<uint8_t>> zstd_inner(const std::vector<uint8_t>& b, si
         r = ZSTD_decompressStream(d, &o, &in);
         if (ZSTD_isError(r) || o.pos == 0) break;
         out.insert(out.end(), buf.data(), buf.data() + o.pos);
+        if (past_inner_limit(out.size())) r = size_t(-1);
     }
     ZSTD_freeDCtx(d);
     if (ZSTD_isError(r) || r != 0) return std::nullopt;
@@ -1601,6 +1623,7 @@ std::optional<std::vector<uint8_t>> lz4_inner(const std::vector<uint8_t>& b, siz
         hint = LZ4F_decompress(d, buf.data(), &dst, b.data() + at, &src, nullptr);
         if (LZ4F_isError(hint)) { ok = false; break; }
         out.insert(out.end(), buf.data(), buf.data() + dst);
+        if (past_inner_limit(out.size())) { ok = false; break; }
         at += src;
         if (hint == 0) ++n; // a frame ended
         if (src == 0 && dst == 0) { ok = false; break; }
@@ -1612,6 +1635,7 @@ std::optional<std::vector<uint8_t>> lz4_inner(const std::vector<uint8_t>& b, siz
         hint = LZ4F_decompress(d, buf.data(), &dst, nullptr, &src, nullptr);
         if (LZ4F_isError(hint) || dst == 0) { ok = false; break; }
         out.insert(out.end(), buf.data(), buf.data() + dst);
+        if (past_inner_limit(out.size())) { ok = false; break; }
         if (hint == 0) ++n;
     }
     LZ4F_freeDecompressionContext(d);
@@ -1655,6 +1679,7 @@ std::optional<std::vector<uint8_t>> brotli_inner(const std::vector<uint8_t>& b)
         size_t avail_out = buf.size();
         r = BrotliDecoderDecompressStream(d, &avail_in, &next_in, &avail_out, &next_out, nullptr);
         out.insert(out.end(), buf.data(), next_out);
+        if (past_inner_limit(out.size())) r = BROTLI_DECODER_RESULT_ERROR;
     }
     BrotliDecoderDestroyInstance(d);
     if (r != BROTLI_DECODER_RESULT_SUCCESS || avail_in != 0) return std::nullopt;
@@ -1722,6 +1747,7 @@ std::optional<std::vector<uint8_t>> liblzma_inner(const std::vector<uint8_t>& b,
         z.avail_out = buf.size();
         r = lzma_code(&z, LZMA_FINISH);
         out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
+        if (past_inner_limit(out.size())) r = LZMA_MEMLIMIT_ERROR;
     }
     const bool whole = r == LZMA_STREAM_END && z.avail_in == 0;
     lzma_end(&z);
@@ -2128,15 +2154,32 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
     return std::pair<uint32_t, uint32_t>{uint32_t(line / step), step};
 }
 
+static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
+
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
+{
+    FileWays w;
+    // LZMA2's estimate of the whole file beside the rope's search and the pieces, on a thread of its
+    // own: the same numbers, sooner (32 MB of random bytes: 22.9 s to 21.7; the estimate alone is
+    // 17.7 s of it, and LZMA2 gives it no faster without a different number). With one thread, one
+    // after the other as before.
+    uint64_t lzma2 = 0;
+    for_each_index(2, std::min(2u, pack_threads()), [&](size_t task) {
+        if (task == 1) lzma2 = estimate(bytes);
+        else ways_but_lzma2(w, bytes, rope_seconds, rope_newest, pieces);
+    }, true);
+    w.lzma2 = lzma2;
+    if (force_requested()) w.forced = true;
+    return w;
+}
+
+static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     auto varint_of = [](uint64_t n) {
         uint64_t v = 1;
         while (n >>= 7) ++v;
         return v;
     };
-    FileWays w;
-    w.lzma2 = estimate(bytes);
     const RopeSearch found = [&] {
         const timings::Scope t("pack.rope.search");
         return rope_search(bytes, rope_seconds, rope_newest);
@@ -2146,7 +2189,7 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
     if (force_requested()) // abandoned: no way but LZMA2's (the caller leaves the file as it is)
     {
         w.forced = true;
-        return w;
+        return;
     }
     {
         const timings::Scope t("pack.rope.code");
@@ -2162,7 +2205,7 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
         if (force_requested()) // its costs may be from passes abandoned part way: not used
         {
             w.forced = true;
-            return w;
+            return;
         }
         if (!p.list.empty())
         {
@@ -2177,7 +2220,6 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
             w.pieces_z = std::move(p.z);
         }
     }
-    return w;
 }
 
 namespace {
@@ -2765,6 +2807,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                             why = ex.what();
                         }
                         fs::remove_all(tmp, ec);
+                        fs::remove(fs::path(tmp.string() + ".rar"), ec); // (left where a try failed part way)
                     }
                 }
                 if (!how.empty())
@@ -3074,8 +3117,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             RopeParams params;
         };
         std::vector<Found> found(files.size());
+        // (Each worker's memory: a mixer, or for the largest file its LZMA2 estimate, about twelve
+        // times its dictionary, beside the file's rope code and pieces, about three times its size;
+        // whichever is more, so a folder of large files is not given a worker per core.)
+        uint64_t largest = 0;
+        for (const size_t i : todo) largest = std::max<uint64_t>(largest, bytes[i].size());
         const uint64_t free_now = memory_free(), mixer = (uint64_t(16) << 22) * 4 + (uint64_t(48) << 20);
-        const unsigned workers = unsigned(std::clamp<uint64_t>(std::min<uint64_t>(todo.size(), free_now ? free_now / 2 / mixer : 2), 1, pack_threads()));
+        const uint64_t each = std::max<uint64_t>(mixer, uint64_t(dictionary_for(largest)) * 12 + (uint64_t(16) << 20) + largest * 3);
+        const unsigned workers = unsigned(std::clamp<uint64_t>(std::min<uint64_t>(todo.size(), free_now ? free_now / 2 / each : 2), 1, pack_threads()));
         const unsigned share = workers > 1 ? std::max(1u, pack_threads() / workers) : 0;
         for_each_index(todo.size(), workers, [&](size_t k) {
             const size_t i = todo[k];

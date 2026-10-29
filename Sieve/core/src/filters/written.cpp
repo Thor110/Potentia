@@ -72,8 +72,8 @@ void add_written_filters(std::vector<FilterSpec>& out)
     w.params = {{"readings", "which readings to check: all, or one", FilterParam::Kind::Text, "all", 0, 0, 1, choices}};
     w.applies = [](const FilterLine& l) { return l.kind == "text" && l.alphabet != nullptr; };
     w.counts_as = "written";
-    w.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const FilterSpec& s = *find_filter("not-written-v1");
+    w.make = [own = w.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& s = *find_filter(own);
         const std::string readings = param_value(s, v, "readings");
         const uint32_t mask = written_mask_of(readings);
         const std::string prov = std::string(kWrittenVersion) + " readings=" + (holds_all_bytes(*l.alphabet) ? std::string("bytes") : readings) +
@@ -139,8 +139,8 @@ void add_other_line_filters(std::vector<FilterSpec>& out)
     o.params = {{"forms", "which forms: all, notes or obj", FilterParam::Kind::Text, "all", 0, 0, 1, {"all", "notes", "obj"}}};
     o.applies = [](const FilterLine& l) { return l.kind == "text" && l.alphabet != nullptr && !holds_all_bytes(*l.alphabet); };
     o.counts_as = "automaton";
-    o.make = [](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        const std::string forms = param_value(*find_filter("not-other-line-v1"), v, "forms");
+    o.make = [own = o.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const std::string forms = param_value(*find_filter(own), v, "forms");
         const uint32_t mask = other_line_mask_of(forms);
         const std::string prov = "not-other-line-v1 forms=" + forms;
         const Alphabet& a = *l.alphabet;
