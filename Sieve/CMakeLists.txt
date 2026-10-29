@@ -481,6 +481,12 @@ if(SIEVE_BUILD_TESTS)
     add_executable(sieve_tests tests/test_core.cpp)
     target_link_libraries(sieve_tests PRIVATE sieve_core)
     add_test(NAME core COMMAND sieve_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    # The corridor at the two ends of its tile size (2 and 4096): a program of its own, since the
+    # size is latched by the first line built and sieve_tests builds them at 128.
+    add_executable(sieve_tile_tests tests/test_tiles.cpp)
+    target_link_libraries(sieve_tile_tests PRIVATE sieve_core)
+    add_test(NAME tiles_2 COMMAND sieve_tile_tests 2)
+    add_test(NAME tiles_4096 COMMAND sieve_tile_tests 4096)
 endif()
 
 # ---------------------------------------------------------------- hallway client (SDL3)

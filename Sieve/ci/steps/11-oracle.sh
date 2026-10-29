@@ -467,7 +467,7 @@ test ! -e broken4
 # v20 (25 October 2026): lz4, brotli and lzma remade exactly (by the modules the oracle remakes them
 # with: liblz4, brotli 1.2.1, liblzma), two gzip members carried as what they hold, and the listing's
 # body in bytes; installed, by the oracle and by sieve-install alike.
-python -m pip install --quiet "lz4==4.4.5" "brotli==1.2.1"
+pip_add "lz4==4.4.5" "brotli==1.2.1"
 rm -rf a20 a20_inst a20_oracle a20_si && mkdir -p a20
 python -c "
 import lz4.frame, brotli, lzma, gzip

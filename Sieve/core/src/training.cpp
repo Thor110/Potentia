@@ -1,6 +1,8 @@
 // Sieve — training a model of the AI line in pinned integer arithmetic (see training.hpp).
 #include "sieve/training.hpp"
 
+#include <utility>
+#include <exception>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -671,9 +673,20 @@ public:
             ++generation_;
         }
         cv_.notify_all();
-        f(0, n / parts);
+        // (An exception from any part, this thread's or a worker's, is passed on once every part is
+        // done: the job lives on this thread's stack, and a worker's throwing ended the program.)
+        try
+        {
+            f(0, n / parts);
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> l(m_);
+            if (!failed_) failed_ = std::current_exception();
+        }
         std::unique_lock<std::mutex> l(m_);
         done_.wait(l, [this] { return pending_ == 0; });
+        if (failed_) std::rethrow_exception(std::exchange(failed_, nullptr));
     }
 
 private:
@@ -692,10 +705,20 @@ private:
                 seen = generation_;
                 job = job_, total = total_, parts = parts_;
             }
-            if (i < parts) (*job)(total * i / parts, total * (i + 1) / parts);
+            std::exception_ptr e;
+            if (i < parts)
+                try
+                {
+                    (*job)(total * i / parts, total * (i + 1) / parts);
+                }
+                catch (...)
+                {
+                    e = std::current_exception();
+                }
             if (i < parts)
             {
                 std::lock_guard<std::mutex> l(m_);
+                if (e && !failed_) failed_ = e;
                 if (--pending_ == 0) done_.notify_one();
             }
         }
@@ -709,6 +732,7 @@ private:
     unsigned parts_ = 0, pending_ = 0;
     uint64_t generation_ = 0;
     bool quit_ = false;
+    std::exception_ptr failed_; // (under m_) the first part's exception, passed on by each()
 };
 
 namespace {

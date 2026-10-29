@@ -60,7 +60,11 @@ const uint32_t* GuidedLine::table(std::span<const uint32_t> history, uint64_t st
     if (!sieve_) return cum;
     const uint32_t N = model_->base();
     const uint32_t remaining = length_ - uint32_t(history.size()) - 1;
-    std::vector<uint32_t> live;
+    // (Its working lists made once a thread and cleared each time: they were four allocations a
+    // symbol, each position of a unit read. Per thread, since the hallway paints on several.)
+    thread_local std::vector<uint32_t> live, f, order;
+    thread_local std::vector<uint64_t> rem;
+    live.clear();
     for (uint32_t s = 0; s < N; ++s)
     {
         const Ranker::State t = sieve_->next(state, s);
@@ -71,8 +75,8 @@ const uint32_t* GuidedLine::table(std::span<const uint32_t> history, uint64_t st
     uint64_t D = 0;
     for (uint32_t s : live) D += cum[s + 1] - cum[s];
     const uint64_t spread = kModelTotal - live.size();
-    std::vector<uint32_t> f(N, 0);
-    std::vector<uint64_t> rem(N, 0);
+    f.assign(N, 0);
+    rem.assign(N, 0);
     uint64_t used = 0;
     for (uint32_t s : live)
     {
@@ -81,7 +85,7 @@ const uint32_t* GuidedLine::table(std::span<const uint32_t> history, uint64_t st
         rem[s] = x % D;
         used += f[s];
     }
-    std::vector<uint32_t> order = live;
+    order.assign(live.begin(), live.end());
     std::stable_sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return rem[a] > rem[b]; });
     for (uint64_t k = 0; used < kModelTotal; ++k, ++used) ++f[order[size_t(k)]];
     buf.assign(N + 1, 0);

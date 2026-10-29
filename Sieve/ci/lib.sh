@@ -41,3 +41,19 @@ sieve_ci_tool_from_cache() { # $1 the command, $2 its CMakeCache.txt entry
 }
 sieve_ci_tool_from_cache ctest CMAKE_CTEST_COMMAND
 sieve_ci_tool_from_cache cmake CMAKE_COMMAND
+
+# pip_add PACKAGE...: Python packages a step needs. Installed for the machine's Python where it
+# allows that; where it does not (an "externally managed" Python, as Debian's, Ubuntu's and
+# Homebrew's are), into a virtual environment of the step's own, which sees the machine's packages
+# too, and `python` is that environment's from then on in the step.
+pip_add() {
+    python -m pip install --quiet "$@" > /dev/null 2>&1 && return 0
+    python -m venv --system-site-packages .ci-venv
+    local py=.ci-venv/bin/python
+    [ -x .ci-venv/Scripts/python.exe ] && py=.ci-venv/Scripts/python.exe
+    CI_VENV_PYTHON="$PWD/$py"
+    export CI_VENV_PYTHON
+    python() { "$CI_VENV_PYTHON" "$@"; }
+    export -f python
+    python -m pip install --quiet "$@"
+}

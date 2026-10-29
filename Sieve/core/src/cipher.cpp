@@ -204,8 +204,9 @@ std::vector<Guess> break_weak(const std::vector<uint8_t>& cipher, size_t max_key
         Guess g;
         const int64_t extra = int64_t(l.key.size()) - 1;
         g.recipe.layers.push_back(std::move(l));
-        g.plain = decrypt(g.recipe, cipher);
-        g.score = english_score(g.plain);
+        // (Scored, and its decryption let go: at least 512 guesses are tried, each the whole file,
+        // and only the best few are shown. Those are decrypted again below, the same.)
+        g.score = english_score(decrypt(g.recipe, cipher));
         g.rank = g.score - kKeyByteCost * extra;
         all.push_back(std::move(g));
     };
@@ -244,6 +245,7 @@ std::vector<Guess> break_weak(const std::vector<uint8_t>& cipher, size_t max_key
         }
     std::stable_sort(all.begin(), all.end(), [](const Guess& a, const Guess& b) { return a.rank > b.rank; });
     if (all.size() > top) all.resize(top);
+    for (Guess& g : all) g.plain = decrypt(g.recipe, cipher);
     return all;
 }
 

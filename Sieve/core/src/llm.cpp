@@ -4,6 +4,8 @@
 #include "sieve/safetensors.hpp"
 #include "sieve/utf8.hpp"
 
+#include <utility>
+#include <exception>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -141,9 +143,19 @@ public:
             ++generation_;
         }
         cv_.notify_all();
-        part(0, f);
+        // (An exception from any part is passed on once every part is done, as training's pool does.)
+        try
+        {
+            part(0, f);
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> l(m_);
+            if (!failed_) failed_ = std::current_exception();
+        }
         std::unique_lock<std::mutex> l(m_);
         done_.wait(l, [this] { return pending_ == 0; });
+        if (failed_) std::rethrow_exception(std::exchange(failed_, nullptr));
     }
 
 private:
@@ -156,6 +168,7 @@ private:
     unsigned pending_ = 0;
     uint64_t generation_ = 0;
     bool quit_ = false;
+    std::exception_ptr failed_; // (under m_) the first part's exception, passed on by each()
 
     void part(unsigned i, const std::function<void(size_t, size_t)>& f)
     {
@@ -175,9 +188,18 @@ private:
                 seen = generation_;
                 f = job_;
             }
-            part(i, *f);
+            std::exception_ptr e;
+            try
+            {
+                part(i, *f);
+            }
+            catch (...)
+            {
+                e = std::current_exception();
+            }
             {
                 std::lock_guard<std::mutex> l(m_);
+                if (e && !failed_) failed_ = e;
                 if (--pending_ == 0) done_.notify_one();
             }
         }

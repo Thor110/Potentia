@@ -703,7 +703,7 @@ test ! -e arch_bad16
 # written by libzstd 1.5.7 (the zstandard module's, the version Sieve is built with) are remade
 # exactly; a zstd file of two frames is carried as its contents. Sieve, the oracle and
 # sieve-install give the same; called v18, refused.
-python -m pip install --quiet "zstandard==0.25.0"
+pip_add "zstandard==0.25.0"
 rm -rf arch19 arch19_inst arch19_oracle arch19_si arch19_bad && mkdir -p arch19
 python -c "
 import bz2, zstandard

@@ -15,7 +15,7 @@ printf '\x1aE\xdf\xa3 not really a video' > fake.webm
 if out=$($exe warp --ffmpeg no-such-ffmpeg --line video --file fake.webm 2>&1); then exit 1; fi
 echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
 if [ "$RUNNER_OS" = "Linux" ] && ! command -v ffmpeg > /dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg || true; fi
-if ! command -v ffmpeg > /dev/null; then echo "no ffmpeg on this runner: the rest is checked where there is one"; exit 0; fi
+if ! command -v ffmpeg > /dev/null; then echo "::warning::step 08: no ffmpeg on this runner, so its videos and other formats were not checked here (only where there is one)"; exit 0; fi
 ffmpeg -hide_banner -version | head -1
 # A lossless video's frame lands exactly where the same frame as a PNG (read by stb_image) does.
 ffmpeg -v error -y -f lavfi -i testsrc=size=16x12:rate=10 -frames:v 1 -pix_fmt rgb24 f.png

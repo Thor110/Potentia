@@ -329,9 +329,12 @@ the fast conversions for free. `BigUint::pow` takes a 64-bit exponent for the pu
 In rough order of value. These are the work of a session each, not of a paragraph.
 
 1. *Fixed; see above.* `BigUint::to_digits` and `to_decimal` were O(n²).
-2. **Alphabet-relative entropy baselines** — §2.1 of `IDEAS.md`. A correctness bug, not a
-   performance one.
-3. **`GuidedLine::table` allocates four vectors per symbol** (`core/src/guided.cpp:57-90`). It is
+2. *Done, 24 October 2026 (`symbol-entropy-v2`, IDEAS §2.1).* **Alphabet-relative entropy
+   baselines** — §2.1 of `IDEAS.md`. A correctness bug, not a performance one.
+3. *Done, 29 October 2026: measured, then made.* With words-v2 ticked, a guided compact shelf of 41
+   (`read --mode guided --compact --around 20 --zoom 30`) spent about a fifth of its time in
+   allocating and freeing; the four lists are now made once a thread and cleared each time: 0.67
+   to 0.74 s before, 0.59 to 0.60 after, the same shelf. **`GuidedLine::table` allocates four vectors per symbol** (`core/src/guided.cpp:57-90`). It is
    called once per position from both `interval()` and `unit_at()`, so a unit of length L costs 4L
    allocations, while the caller already reuses its `buf` across the same loop. Hoist `live`, `f`,
    `rem` and `order` into scratch buffers sized once and cleared per call. Worth measuring first:
@@ -356,7 +359,9 @@ In rough order of value. These are the work of a session each, not of a paragrap
      since it only admits alphabets that are refused today. Decided: the specification stays as
      written, because the direction is for everything to consolidate on the binary line, and the
      engine widens when anchors start to need it. The vectors leave the case out until then.
-   - The corridor's tile size is never exercised at anything but its default of 128. Because of the
+   - *Done, 29 October 2026:* `tests/test_tiles.cpp`, a program of its own run by ctest at 2 and at
+     4096 (160 and 12,858 checks): tiles, padding, each unit's tile and slot and back, the loop,
+     sizes refused, and the latch. The corridor's tile size is never exercised at anything but its default of 128. Because of the
      latch added above, a test of 2 or 4096 must set it before any line is built, so it wants a
      test binary of its own or a check placed at the very top of the run.
    - *Done, 29 October 2026, but for compact:* `read --around` has no test and no CI step anywhere,
@@ -370,7 +375,7 @@ In rough order of value. These are the work of a session each, not of a paragrap
    puts the whole line in one book).
 8. *Done.* `hallway.cpp` was 3,532 lines and five unrelated subsystems; it is now split by
    subsystem, as `docs/HANDOFF.md` describes.
-9. **Three clang warnings**, in code this pass did not touch: unused private fields `f_` and
+9. *Gone, as of 29 October 2026 (clang 18, `-Wall -Wextra`: none in either file).* **Three clang warnings**, in code this pass did not touch: unused private fields `f_` and
    `pairs_` at `core/src/filters/media.cpp:198-199`, and a variable `chars` set but never used at
    `tools/sieve_cli.cpp:1234`. GCC does not report them, which is why the tree is warning-free
    there. Each wants a look at whether the value was meant to be used rather than simply deleting.

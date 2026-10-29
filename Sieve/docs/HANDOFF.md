@@ -4013,6 +4013,51 @@ new versions, and wait. Step 4 (mixing faster when packing, "Create .sieve") nee
 bytes made are the same, and suits the pause, as do the benchmark on public data (SHOWCASE-PLAN)
 and a short `.sieve` v31 specification for independent decoders.
 
+### What is left that needs no new version (29 October 2026, the last look round)
+
+Edward: "do one last whip around and make a plan to see if there is anything else we can implement,
+then we might look at new manifest versions or I will rerun the enwik tests." Read from REVIEW (all
+three passes), IDEAS (§19.90 on, and its list of work needing no version) and the plans below.
+REVIEW's third pass is done; its first pass's items 2 and 9 were done already (marked so now).
+
+*To build, none of it changing a `.sieve`:*
+1. **Threads for the weighing and the tailoring** (IDEAS §19.99, "Still single"): each file's
+   weighing, and each filter and setting the tailoring search tries, is a trial of its own; at
+   once, each scored as one thread scores it and the best taken in the same order, so the result
+   is the same at any count. Measure the tailoring's time on the File Locator's Tailor first.
+2. **Links from a server's root** (`/a.jpg`), which `sieve site build` and the extension's viewer
+   do not read yet (§19.92).
+3. **Smaller robustness,** from the third pass's reviewers' notes: the cipher's `break_weak` keeps a
+   decrypted copy of every guess (at least 512, the whole file each), where the best few would do;
+   an exception in a worker of the training's or the language model's thread pools ends the
+   program; CI step 08 passes, saying nothing, where ffmpeg is missing (it should say it was
+   skipped); step 11's `pip install` fails under a Python that is externally managed (Debian,
+   Homebrew), where a virtual environment would not.
+4. **Tests:** the corridor's tile size at 2 and 4,096 (REVIEW's first pass, 6: a test binary of its
+   own); `GuidedLine::table`'s four vectors a symbol (item 3), measured before anything is changed.
+
+*Done the same day:* 1, measured first and left: on this repository's docs folder the weighing and
+the tailoring together took 0.18 s of a 28.5 s reading (the packer, threaded already, is the rest),
+so threads there would not be seen. 2 was done already (`--served-at`, 24 October 2026); the
+viewer leaves a root link inside a `.sieve` alone, since it cannot know which server it means. 3:
+the cipher keeps only the guesses it shows; a worker's exception in either thread pool is passed
+on, not the end of the program; step 08 warns where ffmpeg is missing; `pip_add` (ci/lib.sh) falls
+back to a virtual environment of the step's own where the machine's Python refuses (tried with
+`PIP_REQUIRE_VIRTUALENV=1`). 4: both (REVIEW's first pass, items 3 and 6).
+*Asked the same day (Edward):* extracting where files are already there writes nothing and says
+which is there; "Replace files that are already there" then replaces them all. A prompt as other
+extractors have would be one question for all of them, since every clash is known before anything
+is written: the files already there, listed, and Replace them, Keep mine and write the rest, or
+Cancel. Not built yet.
+
+*Waiting on Edward:* the measuring with Keep a log (enwik8 and enwik9, WoWRevived, Silesia, the
+ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;
+the release; then "Create .sieve" in the right-click menu (§19.100).
+
+*Then the next format version,* from IDEAS's list "Waiting for the next format version" (a file as
+its differences from another, the archive's format as a number, headers modelled, the small file's
+overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.
+
 ### The plan from here (29 October 2026), while the format rests at v31
 
 Edward: "Make a plan moving forward for anything else we can do without moving to a new manifest
