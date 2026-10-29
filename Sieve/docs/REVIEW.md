@@ -102,9 +102,10 @@ ways, coded and read back) come out as before.
    specification says so (the contents come together where the archive was, in its order), and the
    oracle checks the order of everything else; and every format made again keeps its own order in
    its recipe, never the listing's (SPECIFICATIONS, "An archive's order"), so a format added later
-   whose program needs its files in order is covered without a setting. Left: text
-   manifests of v20 and after (which exist in bytes only), and a `.sieve` with leading zero bytes
-   (as `sieve install` takes it). Neither makes it accept a wrong file as right.
+   whose program needs its files in order is covered without a setting. *And the last two, the
+   same day:* a text manifest of v22 or after (which exist in bytes only) is refused, and so is a
+   `.sieve` beginning with a zero byte (a number's bytes have none; `sieve install` still takes one,
+   as it always has).
 2. *Done, 29 October 2026.* **A mixed file's size is taken from the instructions before its code is
    read** (`mix4_file` allocates the file's size first), so a tiny code claiming 4 GB asked for that
    much before it was refused. Installing now refuses, before decoding anything, a file whose
@@ -114,7 +115,10 @@ ways, coded and read back) come out as before.
    system's dialog is not modal (Linux's portal). Each screen now holds a `DialogOwner`
    (`dialogs.hpp`), and its dialogs name it: an answer for one that has gone is dropped, and an
    answer is given under a lock its going waits on.
-4. **A gzip member past 4 GiB** is not read as one (zlib's sizes are 32-bit); it is carried as it is.
+4. *Done, 29 October 2026.* **A gzip member past 4 GiB** was not read as one (zlib's counts are 32
+   bits: its input was cut at 4 GiB and its CRC-32 taken of the length cut to 32 bits). The input is
+   now given a gigabyte at a time, and the CRC-32 taken so too (a gzip of 6 MB made again exactly,
+   as before; one past 4 GiB was not tried here, for the memory).
 5. *Done another way, 29 October 2026.* **The viewer** had Sieve decode the whole `.sieve` for each
    picture of a page in it. The host keeps the `.sieve` it last read (up to 128 MiB of contents) by
    its SHA-256: three pictures from one of 30 MB, 1.211 s for the first, 0.059 and 0.056 s for the

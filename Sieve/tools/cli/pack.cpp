@@ -649,26 +649,47 @@ size_t gzip_header_size(const std::vector<uint8_t>& b, size_t start = 0)
 }
 
 // Raw deflate undone (zlib), all of it, with how much input it took; nothing if it is not whole.
+// A CRC-32 of any length: zlib's counts are 32 bits, so a gigabyte at a time.
+uint32_t crc32_of(const uint8_t* p, size_t n)
+{
+    uLong c = crc32(0, nullptr, 0);
+    for (size_t at = 0; at < n;)
+    {
+        const size_t k = std::min<size_t>(n - at, size_t(1) << 30);
+        c = crc32(c, p + at, uInt(k));
+        at += k;
+    }
+    return uint32_t(c);
+}
+
 std::optional<std::vector<uint8_t>> inflate_raw(const uint8_t* in, size_t n, size_t* used, uint64_t expect = UINT64_MAX)
 {
     z_stream z{};
     if (inflateInit2(&z, -15) != Z_OK) return std::nullopt;
     std::vector<uint8_t> out;
     std::vector<uint8_t> buf(1 << 20);
-    z.next_in = const_cast<Bytef*>(in);
-    z.avail_in = uInt(std::min<size_t>(n, 0xFFFFFFFFu));
+    // (Its input given a gigabyte at a time: zlib's counts are 32 bits, and a member past 4 GiB was
+    // read as its first 4 GiB.)
+    size_t fed = 0;
     int r = Z_OK;
-    while (r == Z_OK)
+    while (r == Z_OK || (r == Z_BUF_ERROR && z.avail_in == 0 && fed < n)) // (out of input: the next gigabyte)
     {
+        if (z.avail_in == 0 && fed < n)
+        {
+            const size_t k = std::min<size_t>(n - fed, size_t(1) << 30);
+            z.next_in = const_cast<Bytef*>(in + fed);
+            z.avail_in = uInt(k);
+            fed += k;
+        }
         z.next_out = buf.data();
         z.avail_out = uInt(buf.size());
         r = inflate(&z, Z_NO_FLUSH);
         out.insert(out.end(), buf.data(), buf.data() + (buf.size() - z.avail_out));
         if (out.size() > expect || past_inner_limit(out.size())) break;
-        if (r == Z_BUF_ERROR && z.avail_in == 0) break;
+        if (r == Z_BUF_ERROR && z.avail_in == 0 && fed >= n) break;
     }
     const bool whole = r == Z_STREAM_END;
-    if (used) *used = n - z.avail_in;
+    if (used) *used = fed - z.avail_in;
     inflateEnd(&z);
     if (!whole) return std::nullopt;
     return out;
@@ -690,7 +711,7 @@ std::optional<std::vector<uint8_t>> gzip_inner(const std::vector<uint8_t>& b, si
         const uint8_t* t = b.data() + at + h + used;
         const uint32_t crc = uint32_t(t[0]) | uint32_t(t[1]) << 8 | uint32_t(t[2]) << 16 | uint32_t(t[3]) << 24;
         const uint32_t len = uint32_t(t[4]) | uint32_t(t[5]) << 8 | uint32_t(t[6]) << 16 | uint32_t(t[7]) << 24;
-        if (crc32(0, out->data(), uInt(out->size())) != crc || uint32_t(out->size()) != len) return std::nullopt;
+        if (crc32_of(out->data(), out->size()) != crc || uint32_t(out->size()) != len) return std::nullopt;
         if (all.empty()) all = std::move(*out);
         else
         {
@@ -794,7 +815,7 @@ std::optional<std::vector<sieve::install::InMemory>> zip_entries(const std::vect
                 if (!got || got->size() != usize) return std::nullopt;
                 m.bytes = std::move(*got);
             }
-            if (crc32(0, m.bytes.data(), uInt(m.bytes.size())) != crc) return std::nullopt;
+            if (crc32_of(m.bytes.data(), m.bytes.size()) != crc) return std::nullopt;
             m.entry.size = m.bytes.size();
         }
         out.push_back(std::move(m));
@@ -1896,7 +1917,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
         for (size_t i = 0; i < hx.size(); i += 2) out.push_back(uint8_t(std::stoul(hx.substr(i, 2), nullptr, 16)));
         const std::vector<uint8_t> d = deflate_raw(inner, level, mem);
         out.insert(out.end(), d.begin(), d.end());
-        const uint32_t crc = uint32_t(crc32(0, inner.data(), uInt(inner.size()))), len = uint32_t(inner.size());
+        const uint32_t crc = crc32_of(inner.data(), inner.size()), len = uint32_t(inner.size());
         for (int k = 0; k < 4; ++k) out.push_back(uint8_t(crc >> (8 * k)));
         for (int k = 0; k < 4; ++k) out.push_back(uint8_t(len >> (8 * k)));
         return out;

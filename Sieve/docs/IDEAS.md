@@ -5038,6 +5038,23 @@ faster:
 - *Then the entry itself:* likely a small window of the File Locator's (progress, estimate, best
   so far, Stop) rather than the command line, with a time budget chosen beforehand, as the
   locator's search time is; one file or a selection, made beside them as `NAME.sieve`.
+- *Decided (Edward, 29 October 2026):* the entry opens the File Locator itself, as the hallway
+  starts by default (its usual window and settings; to be tuned later): `hallway --create PATH
+  [--out PATH.sieve]` opens the locator alone, with no hallway behind it, reads what was chosen
+  (several files chosen: one window, one `.sieve` of them), and saves `NAME.sieve` beside it.
+  Done, it says so for a moment and closes, with an exit code a script can read; stopped or failed,
+  it stays open, saying why. Everything the locator shows comes with it: the estimate, the graph
+  of each best so far, Stop and Force stop, Keep a log.
+- *The menu (Edward):* the same `Sieve` submenu as Extract's (`context/install_context.bat`), with
+  **Create .sieve**, and **Other compressed formats** listing the formats Sieve can write, to
+  mirror the ones it extracts: gz, xz, lzma, bz2, zst, lz4 and br by Sieve's own compressors (the
+  ones it remakes archives with), and 7z, zip, tar, cpio, iso, ar and warc by libarchive (linked
+  already, its writers built with it: checked 29 October 2026, unused so far). Not rar (no free compressor
+  exists, and unRAR's licence forbids writing one), nor lz, cab or lha (no writer at hand). Those
+  are made at once, at each one's strongest preset, with no search, so they need no window beyond a
+  line of progress.
+- *When:* after making is faster and the estimate is checked against Edward's logs (HANDOFF's plan
+  of 29 October 2026, items 1 and 4).
 
 
 **19.101 The crawler as a card: a hardware layer for a site's table (Edward, 25 October 2026;

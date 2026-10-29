@@ -7475,6 +7475,10 @@ def instructions_bytes(data):
     # (A head in bytes: "sieve" and its version's byte, 16 to 31.)
     if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 31):
         return data
+    # (A number's bytes, most significant first: none of them a leading zero. SPECIFICATIONS: "exactly
+    # as long as the manifest, or one byte longer".)
+    if not data or data[0] == 0:
+        sys.exit("not Sieve instructions: an installer's bytes are a number's, with no leading zero")
     v = int.from_bytes(data, "big")
     length = max(0, len(data) - 1)
     while (256 ** (length + 1) - 1) // 255 <= v:
@@ -7495,7 +7499,12 @@ def cmd_unpack(args):
     lzma2 stream after every file carried as it is), and each file checked against its size and
     SHA-256. With --to DIR, the folders and files are written there. Prints the listing it unpacked."""
     import lzma
-    data = v16_text(instructions_bytes(open(args.manifest, "rb").read()))  # v16: its head in bytes, read as v15's text
+    raw = instructions_bytes(open(args.manifest, "rb").read())
+    # (SPECIFICATIONS §12.2: v22 and after exist in bytes only, so one in text is not one Sieve wrote.)
+    m_text = re.match(rb"sieve-manifest-v([0-9]+)\n", raw)
+    if m_text and int(m_text.group(1)) >= 22:
+        sys.exit(f"sieve-manifest-v{int(m_text.group(1))} exists in bytes only, not as text")
+    data = v16_text(raw)  # v16: its head in bytes, read as v15's text
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",

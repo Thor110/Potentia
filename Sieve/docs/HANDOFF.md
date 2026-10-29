@@ -4080,6 +4080,9 @@ same files with the same settings, nor what any `.sieve` installs to. In order:
 - 7. The File Locator's tables stop above its buttons in a short window (1024x768: nothing
   overlaps now; the tables lose their last lines instead).
 Left for Edward's machine: 2 and 4, and 3's run on WoWRevived.
+*Later the same day:* the saves' row of the File Locator wraps at 1024 wide (its last button ran off
+the edge); the oracle refuses a text manifest of v22 or after and a `.sieve` beginning with a zero
+byte; a gzip member past 4 GiB is read whole. Every item of REVIEW's third pass is done.
 
 What waits for the next version is IDEAS's list "Waiting for the next format version".
 

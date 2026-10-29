@@ -1409,7 +1409,16 @@ void FileLocator::draw(float W, float H)
         // What goes under the tables (the saves, the search row, the boxes and Tailor) takes its height
         // from the bottom up, and the tables stop above it: a short window cuts the tables, never the
         // buttons (at 1024x768 the boxes ran into the status line).
-        const float under = [&] {
+        // The saves' row: on two where the window is too narrow for it (at 1024 wide "Make an
+        // installer program..." ran off its right edge).
+        std::vector<std::pair<std::string, std::string>> saves;
+        if (r.kind == Result::File && in_world()) saves.emplace_back("go", tr("loc.go"));
+        saves.emplace_back("save_sieve", tr("loc.save_sieve"));
+        saves.emplace_back("save_program", tr("loc.save_program"));
+        float saves_w = 20;
+        for (const auto& b : saves) saves_w += text_width(b.second, 2) + 24 + 12;
+        const float saves_extra = saves_w - 12 > W - 20 ? 40.0f : 0.0f;
+        const float under = saves_extra + [&] {
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
@@ -1450,9 +1459,15 @@ void FileLocator::draw(float W, float H)
         // installer program for anyone; a file exactly as a folder holding just it. The listing on
         // its own (the manifest) is for the tools and the command line (sieve locate --manifest),
         // and a file's bare address for the command line (sieve locate FILE --out).
-        if (r.kind == Result::File && in_world()) button("go", tr("loc.go"), y);
-        button("save_sieve", tr("loc.save_sieve"), y);
-        button("save_program", tr("loc.save_program"), y);
+        for (const auto& [id, label] : saves)
+        {
+            if (bx > 20 && bx + text_width(label, 2) + 24 > W - 20)
+            {
+                bx = 20;
+                y += 40; // (what follows starts that much lower: counted in `under` above)
+            }
+            button(id, label, y);
+        }
         // The filters tailored to these files, and then used: the hallway built again with them,
         // or kept for the next one from the main menu (on a row of their own, under the saves).
         bx = 20;
