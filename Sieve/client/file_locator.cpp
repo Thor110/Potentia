@@ -310,17 +310,17 @@ void FileLocator::remember_log(bool on, fs::path folder, std::function<void(bool
     kept_log() = {on, std::move(folder), std::move(changed)};
 }
 
-// Keep a log: a text file a run (a reading or a saving), in the logs folder, with what it is and
+// Keep a log: a text file a run (a reading, a saving or an install), in the logs folder, with what it is and
 // the settings it ran with; every report it makes as it goes (each with its seconds, a new best so
 // far marked), which the window shows only until the next; then how long it took, when its last
 // new best came, what it found, and its phases' times. Nothing a run measures is thrown away.
-void FileLocator::open_log(const std::string& what, const std::string& path)
+void FileLocator::open_log(const std::string& what, const std::string& path, bool search)
 {
     if (log_.is_open()) log_.close();
     log_path_.clear();
     log_last_.clear();
     log_step_.clear();
-    log_best_ = log_best_at_ = -1;
+    log_best_ = log_best_at_ = log_of_ = -1;
     const KeptLog& k = kept_log();
     if (!k.on || k.folder.empty()) return;
     std::error_code ec;
@@ -342,11 +342,13 @@ void FileLocator::open_log(const std::string& what, const std::string& path)
     };
     const std::string limits = "search " + limit(search_per_file_) + " a file, " + limit(search_total_) + " for the run";
     log_ << "Sieve " SIEVE_VERSION " File Locator log, " << local_time("%Y-%m-%d %H:%M:%S") << "\n"
-         << what << " " << path << "\n"
-         << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
+         << what << " " << path << "\n";
+    if (search)
+        log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
          << (sieve::prioritise_decoding() ? "on" : "off") << "; compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
          << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "") << "\n"
-         << "\nseconds in, then what it reported (\"new best\": smaller than the step's last, or a step's first)\n";
+         << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
+         << "a step on less than 64 KiB does not count for \"last new best\")\n";
     log_.flush();
     cli::timings::collect();
     (void)cli::timings::report_and_clear(); // (its phases from here on: this run's)
@@ -368,6 +370,8 @@ void FileLocator::close_log(const std::string& result)
         std::snprintf(b, sizeof b, "%.1f s", log_best_at_);
         log_ << "last new best at " << b << " in\n";
     }
+    else if (log_step_.size())
+        log_ << "no new best: each step's first result was its best\n";
     if (!result.empty()) log_ << "\n" << result << (result.back() == '\n' ? "" : "\n");
     log_ << "\n" << cli::timings::report_and_clear();
     log_.close();
@@ -464,6 +468,7 @@ void FileLocator::start_job(bool new_graph)
     job_started_ = Clock::now();
     job_estimate_ = -1;
     job_estimate_text_.clear();
+    est_live_ = est_unlimited_ = false;
     last_took_ = -1;
     est_done_ = 0;
     progress_.clear();
@@ -510,7 +515,18 @@ void FileLocator::tick_estimate()
 void FileLocator::estimate_now(double remaining)
 {
     job_estimate_ = since(job_started_) + remaining;
-    job_estimate_text_ = trf("loc.estimate.refined", {duration_text(job_estimate_), duration_text(remaining)});
+    est_live_ = true; // (its words made as it is drawn: estimate_text)
+}
+
+// Under mx_: the estimate's words now, "left" counted down from the time so far, and past it once
+// the job has run longer than estimated.
+std::string FileLocator::estimate_text() const
+{
+    if (!est_live_) return job_estimate_text_;
+    const double left = job_estimate_ - since(job_started_);
+    const char* key = left >= 1 ? (est_unlimited_ ? "loc.estimate.refined.unlimited" : "loc.estimate.refined")
+                                : (est_unlimited_ ? "loc.estimate.past.unlimited" : "loc.estimate.past");
+    return trf(key, {duration_text(job_estimate_), duration_text(std::abs(left))});
 }
 
 // A run that was not stopped: the share of each search's limit it used, kept for the next estimate
@@ -541,7 +557,7 @@ std::string FileLocator::finish_job()
                         : trf("loc.took.estimated", {duration_exact(took), duration_text(job_estimate_)});
     job_estimate_ = -1;
     last_took_ = took;
-    est_on_ = false;
+    est_on_ = est_live_ = est_unlimited_ = false;
     est_first_ = -1;
     job_estimate_text_.clear();
     job_started_ = {};
@@ -579,8 +595,15 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
     if (worker_.joinable()) worker_.join();
     busy_ = true;
     status_ = trf("loc.installing", {to});
+    start_job(true); // (the graph cleared: what it showed was the last reading's)
     auto job = [this, from, to] {
         std::string done;
+        {
+            // Keep a log: an install's too (Edward, 30 October 2026), its decoding and its writing timed.
+            std::lock_guard<std::mutex> lock(mx_);
+            open_log("installing", from, false);
+            if (log_.is_open()) log_ << "to " << to << "\n";
+        }
         try
         {
             using clock = std::chrono::steady_clock;
@@ -616,7 +639,9 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
             done = trf("loc.install_failed", {e.what()});
         }
         std::lock_guard<std::mutex> lock(mx_);
+        (void)finish_job(); // (its time, under the graph and in the log)
         status_ = done;
+        close_log("");
         busy_ = false;
     };
     if (sync) job();
@@ -672,6 +697,10 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     const int boxes = compressed();
     const bool archives = boxes != 0;
     use_compressed(boxes);
+    // A reading starts afresh: no search an earlier reading made is taken as found, so its time is
+    // its own (a saving after it still takes this reading's, as before).
+    sieve::forget_rope_searches();
+    cli::forget_file_ways();
     start_job();
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -740,6 +769,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 est_pack_share_seen_ = -1;
                 est_work_start_ = Clock::now();
                 sieve::reset_rope_search_spent(); // (the samples' own searches not counted)
+                est_unlimited_ = r.pack_search_unlimited;
                 if (r.pack_search_unlimited)
                 {
                     job_estimate_ = reading;
@@ -1487,8 +1517,10 @@ void FileLocator::draw(float W, float H)
         {
             std::lock_guard<std::mutex> lock(mx_);
             if (job_started_ != Clock::time_point{})
-                est = job_estimate_text_.empty() ? trf("loc.elapsed", {duration_text(since(job_started_))})
-                                                 : trf("loc.estimate.so_far", {job_estimate_text_, duration_text(since(job_started_))});
+            {
+                const std::string e = estimate_text();
+                est = e.empty() ? trf("loc.elapsed", {duration_text(since(job_started_))}) : trf("loc.estimate.so_far", {e, duration_text(since(job_started_))});
+            }
         }
         if (!est.empty()) draw_text(r_, 20, H - 42, fit_text(est, W - 40, 1), 1, grey);
         // What it is doing now, and the best found so far.
@@ -1504,31 +1536,45 @@ void FileLocator::draw(float W, float H)
 
 // What the work says of itself (sieve/stop.hpp), on the worker: the line of what it is doing, and
 // a new best of a step for the graph.
+// A step on fewer bytes than this is marked "new best" but moves no "last new best": it takes a
+// moment and says nothing of the search's time (a 33-byte stream, 39 bytes then 37).
+constexpr double kCountsFrom = 64 * 1024;
+
 void FileLocator::report(const std::string& what, double best, double of)
 {
     std::lock_guard<std::mutex> lock(mx_);
     progress_ = what;
     if (log_.is_open() && what != log_last_ && job_started_ != Clock::time_point{})
     {
-        // Every report, each once; a step's new best marked (a smaller share than its last, or its first).
+        // Every report, each once: a step's first result marked, and each new best after it (smaller
+        // than its last, on the same bytes). Only a new best moves "last new best": a first result
+        // is not found by searching (a 32-byte stream's first was enwik8's "last new best").
         const double t = since(job_started_);
         const size_t cut = std::min(what.find(" ("), what.find(':'));
         const std::string step = what.substr(0, cut);
-        bool new_best = false;
+        const char* mark = "          ";
         if (best >= 0 && of > 0)
         {
             const double share = best / of;
-            new_best = step != log_step_ || share < log_best_;
-            if (new_best)
+            if (step != log_step_ || of != log_of_)
             {
+                mark = "first     ";
                 log_step_ = step;
+                log_of_ = of;
                 log_best_ = share;
-                log_best_at_ = t;
+            }
+            else if (share < log_best_)
+            {
+                mark = "new best  ";
+                log_best_ = share;
+                // (A step on less than 64 KiB is marked, but does not count: enwik9's 33-byte
+                // stream, 39 bytes then 37, was its "last new best", an hour after the search's.)
+                if (of >= kCountsFrom) log_best_at_ = t;
             }
         }
         char b[32];
         std::snprintf(b, sizeof b, "%10.2f  ", t);
-        log_ << b << (new_best ? "new best  " : "          ") << what << "\n";
+        log_ << b << mark << what << "\n";
         log_.flush();
         log_last_ = what;
     }
@@ -1545,8 +1591,10 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     std::vector<GraphPoint> points;
     bool reset = false;
     double estimate = -1, took = -1;
+    bool unlimited = false;
     {
         std::lock_guard<std::mutex> lock(mx_);
+        unlimited = est_unlimited_;
         points.swap(graph_pending_);
         reset = std::exchange(graph_reset_, false);
         estimate = job_estimate_;
@@ -1586,7 +1634,6 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     }
     for (const GraphPoint& p : points)
     {
-        graph_best_at_ = std::max(graph_best_at_, p.seconds);
         if (!graph_drawn_ && estimate > 0) graph_span_ = std::max(graph_span_, estimate * 1.1);
         while (p.seconds > graph_span_)
         {
@@ -1631,6 +1678,7 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
         constexpr float kMargin = 4;
         const float px = float(p.seconds / graph_span_) * float(graph_w_ - 1);
         const float py = kMargin + (float(graph_h_ - 1) - 2 * kMargin) * float(smaller / graph_depth_);
+        if (goes_on && py > graph_y_ && p.of >= kCountsFrom) graph_best_at_ = std::max(graph_best_at_, p.seconds); // (a new best: a first try is not one)
         SDL_SetRenderTarget(r_, graph_);
         SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
         if (goes_on)
@@ -1664,7 +1712,7 @@ void FileLocator::draw_graph(float x, float y, float w, float h, SDL_Color ink, 
     draw_text(r_, x, y + h + 4, bottom, 1, grey);
     // The time across, and beside it the job's estimate while it works, then the time it took.
     std::string across = trf("loc.graph.across", {duration_text(graph_span_)});
-    if (estimate > 0) across = trf("loc.graph.estimate", {duration_text(estimate)}) + "   " + across;
+    if (estimate > 0) across = trf(unlimited ? "loc.graph.estimate.unlimited" : "loc.graph.estimate", {duration_text(estimate)}) + "   " + across;
     else if (took >= 0) across = trf("loc.graph.took", {duration_text(took)}) + "   " + across;
     // When the last best so far came: the time to the result kept, beside the time the job took
     // (the search goes on, to its limit, after its last improvement).

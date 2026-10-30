@@ -4056,6 +4056,38 @@ anything is written (SIEVE-INSTALL-USAGE). The three writers (`install_tree` wit
 are. The 7z writer no longer removes a file it wrote over when a cancel or a failure undoes
 it, only what it made, as the other two already did (removing it would lose the file outright). `--answers` drives it in CI step 10.
 
+*30 October 2026 (Edward: "does it also log install / decode times if I install through
+hallway?"):* it does now. With Keep a log ticked, the File Locator's install writes a log of its own
+in `logs/`: from where to where, the status (decoded in, checked and written in), the whole time
+and the phases' times; no settings or reports, which an install has none of. CI step 10 checks it.
+
+*The same day, from Edward's enwik8 and enwik9 logs and a screenshot of a run 1 h 28 min in:*
+- **The estimate stood still.** With no search limit nothing refines it while packing, and its
+  words were made once: "about 36 min 59 s left; 1 h 28 min so far" of an estimate of 50 min
+  52 s. Now "left" counts down as it is drawn, a run past its estimate says by how much, and with
+  no limit it says the search is not counted (under the graph too: "estimate without the search").
+- **About two minutes of enwik8 were in no report:** packing reads its result back, decoding every
+  file as installing does (`add_packed`), and mixing decodes as slowly as it codes (123.4 s; the
+  install's decoding, 117.899 s). Reported now ("reading them back, as installing will") and timed
+  (`pack.read-back`). Found by stopping a 6 MB reading in that gap under gdb.
+- **The rope's searches were kept between readings** (rope_search's cache, meant for one reading's
+  packing and weighing): enwik8 for size, read after enwik8 for decoding in the same window, took
+  that one's 308.7 s search as found, and its 414.9 s is short by it (made again on its own, Edward: 691.4 s, the search 304.0 s; unpacked in 119.643 s). A reading now starts afresh
+  (`forget_rope_searches`); a saving after it still takes its searches.
+- **"new best"** marked a step's first result too, so a 32-byte stream's first was enwik8's "last
+  new best". The log now marks a first "first", and only an improvement on the same bytes moves
+  "last new best" (in the log and under the graph). Edward's enwik9 for size (30 October) then had a
+  33-byte stream's improvement, 39 bytes to 37, as its "last new best" at 5,400.9 s, an hour after
+  the search's at 4,179.5 s: a step on less than 64 KiB is still marked but no longer counts. The graph's bottom says it is a scale ("the
+  bottom: 8.0% under the first try"), not a result.
+- **The graph is cleared when installing** (Edward), and the install's time is shown under it.
+- **For Edward to decide: the weighing against the instructions.** The weighing's "best way" counts
+  LZMA2's quick estimate, the rope and the pieces, not mixing, and not the tuned lzma2 stream: on
+  enwik8 for size it says 24.9% (lzma2, 198,921,504 bits) beside instructions of 21.68% (mix4). The
+  packer's own result could be a way of the weighing (taken as found, as the rest are), but that
+  changes what the weighing reports (and the weighing is what Tailor the filters reads), so it is
+  not done.
+
 *Waiting on Edward:* the measuring with Keep a log (enwik8 and enwik9, WoWRevived, Silesia, the
 ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;
 the release; then "Create .sieve" in the right-click menu (§19.100).

@@ -3982,7 +3982,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         const size_t carried = m.streams.size() + m.items_carried.size() + (m.roped ? m.rope_carried.size() : 0);
         r.head_bytes = whole.size() - carried;
     }
-    const Manifest back = Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()));
+    // (Said, and timed: it decodes everything, as installing does, so a file carried by mixing
+    // takes here what it takes to install; enwik8's, about two minutes, was unaccounted for.)
+    progress("reading them back, as installing will: every file decoded and compared");
+    const Manifest back = [&] {
+        const timings::Scope t("pack.read-back");
+        return Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()));
+    }();
     if (back.contents != m.contents) throw std::runtime_error("packing the installer did not give its files back (a fault in the packer)");
     if (report) *report = std::move(r);
 }

@@ -116,6 +116,9 @@ struct RopeSearchSpent
 };
 RopeSearchSpent rope_search_spent();
 void reset_rope_search_spent();
+// The searches kept by rope_search let go: a reading of its own starts afresh, so its time is its
+// own (the File Locator: enwik8 read a second time took its first reading's search as found).
+void forget_rope_searches();
 // Whether parameters need rope-wave-v6 (P4, or T1).
 inline bool rope_v6(const RopeParams& p) { return p.phases == 4 || p.triangle; }
 // The search stops early on bytes that its first waves make no smaller (already packed: a JPEG, a

@@ -183,6 +183,11 @@ private:
     // ones took against their prediction; the first estimate kept, to say beside the time taken.
     std::array<double, 6> est_steps_{}; // address and SHA-256, zip, 7z, the instructions, compared, the weighing
     bool est_on_ = false;
+    // The estimate refined: its words made as it is drawn, so "left" counts down with the time so far
+    // (made once, they stood still: 37 min left at 1 h 28 min in, of an estimate of 51 min), and
+    // whether the search has no limit, so the estimate leaves it out and says so.
+    bool est_live_ = false, est_unlimited_ = false;
+    std::string estimate_text() const; // under mx_
     // The search's limits for packing and for weighing (seconds, all of it), and the share of them a
     // run uses as learned (est_share_*); est_ratio_: this run's speed against the samples, from the
     // steps with no search in them (1 to 3); est_done_: the steps done.
@@ -197,8 +202,9 @@ private:
     std::ofstream log_;
     std::filesystem::path log_path_;
     std::string log_last_, log_step_;
-    double log_best_ = -1, log_best_at_ = -1;
-    void open_log(const std::string& what, const std::string& path); // under mx_
+    double log_best_ = -1, log_best_at_ = -1, log_of_ = -1;
+    // (`search`: a reading or a saving, with the search's settings and its reports; an install has neither.)
+    void open_log(const std::string& what, const std::string& path, bool search = true); // under mx_
     void close_log(const std::string& result); // under mx_: the end, written, and the status says where
     void refine_estimate(size_t steps_done); // after step steps_done - 1 is done; under no lock
     void tick_estimate();                    // while packing: the search's part again, as its files are done; under no lock

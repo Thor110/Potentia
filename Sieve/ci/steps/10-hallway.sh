@@ -114,6 +114,11 @@ diff -r tests/manifest_fixture fx_prog2
 rm -rf fx_gui
 $H --no-menu --install fx.sieve --install-to fx_gui --screenshot locinstall.png | q "saved locinstall.png"
 diff -r tests/manifest_fixture fx_gui
+# Keep a log: an install writes one too, in logs/ beside the settings, with its times.
+rm -rf fx_gui_log ilog && mkdir ilog
+$H --no-menu --settings ilog/s.ini --locate-log --install fx.sieve --install-to fx_gui_log --screenshot ilog.png | q "saved ilog.png"
+grep -q "decoded in .*, checked and written in" ilog/logs/locate-*-fx.sieve.txt
+grep -q "^took .* s in all" ilog/logs/locate-*-fx.sieve.txt
 test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
 rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
 again/sieve locate tests/manifest_fixture --program fx-again --v4 > /dev/null

@@ -1,69 +1,46 @@
-# A question for each file already there (29 October 2026)
+# enwik9 optimised for size, and "last new best" (30 October 2026)
 
-Unzip over the repository root. This goes on top of the earlier zips of today. Committed locally (not
-pushed). Code changed: rebuild everything, then run the unit suite and CI steps 10 and 11 (all run
-here: see the end).
+Unzip over the repository root. This goes on top of the last two zips ("Your enwik logs", then
+"enwik8 optimised for size"). Committed locally (not pushed). One small code change: rebuild the
+hallway.
 
-Nothing here changes what a `.sieve` holds or how one is made: only how `sieve-install` writes.
+## Your enwik9 size run, in `Proof/STATISTICS.md`
 
-## What you asked
+- **Made in 6,631.6 s** (1 h 50 min), 186,081,966 bytes as before.
+- **Unpacked in 1,153.583 s**, then checked and written in 5.332 s: about 0.87 MB a second.
+- **Where the time went**, a new column in the table:
+  - 902.9 s for the samples, reading it, and zip and 7z beside it (7z alone 834.0 s);
+  - 4,496.8 s packing: the rope's search was 3,264.2 s of it, and mixing 1,115.5 s;
+  - 1.1 s for the lzma2 streams (33 bytes);
+  - 1,139.8 s reading it back, against your install's 1,153.583 s;
+  - 90.9 s for the rest;
+  - 6,631.6 s in all.
+- The estimate did well this time: 1 h 20 min at first, 1 h 50 min as it went, and it took 1 h 50 min.
+- Every enwik figure is now measured, the making times whole.
+- I corrected a sentence of mine: LZMA2's passes did change the decoding-prioritised enwik9. They
+  took the stream from 7-Zip's encoder's 211,776,158 bytes to 211,195,636. Only the rope's search
+  left the result as it was.
 
-Before, extracting where files were already there wrote nothing and said which file was there; you
-then went Back, ticked Replace, and everything was written over.
+## "last new best" (the hallway)
 
-Now, with Replace not ticked, `sieve-install` asks about each file already there, one at a time,
-before anything is written:
+Your log put "last new best" at 5,400.9 s, an hour after the search's last improvement (4,179.5 s).
+It came from a 33-byte stream that went from 39 bytes to 37. That is a real improvement, but it took
+a moment and says nothing about the search.
 
-- It shows "Already there (2 of 3):", the file's path, its size there now and the size the
-  installer gives.
-- **Yes** replaces it; **No** leaves it as it is; **Yes to all** and **No to all** answer it and the
-  rest; **Cancel** writes nothing.
-- Keys: Y, N, A (yes to all), Shift+N (no to all), Escape (cancel). Enter answers nothing, so a key
-  pressed for something else doesn't write over a file.
-- From the right-click menu, Cancel closes the window, as a cancel does while unpacking. Opened
-  normally, Cancel goes back to choose again.
-- Ticking Replace is Yes to all before anything is asked.
-- When it's done, the window says how many files were left as they were.
+A step on less than 64 KiB is still marked "new best" in the log, but no longer moves "last new
+best", in the log or under the graph. The log's header says so.
 
-This works the same for a Sieve installer, a 7z carried in one, and every other archive it extracts
-(zip, RAR, tar and the rest). For a RAR that is made again, it asks about the RAR by its own name,
-not its pieces.
-
-Unattended, `--yes` still refuses files already there, as before. `--replace` (new) is the box
-ticked. `--answers LETTERS` answers the questions in turn, for testing: y, n, a (yes to all),
-x (no to all), c (cancel).
-
-## One change in behaviour, in the 7z writer
-
-A cancel or a failure while unpacking a 7z no longer deletes a file that it wrote over (Replace
-ticked); it removes only what it made. The Sieve installer and the other archives already worked
-that way. Deleting it would have lost the file outright, the old and the new.
+Tried on a 6 MB text: "last new best" is the rope's last improvement (13.7 s), with the small
+streams' firsts still listed.
 
 ## Checked here
 
-Linux, GCC, a Release build of everything, with no warnings.
-
-- A script installed into a folder that already held three of the fixture's files, once with each
-  of seven answers, for a Sieve installer, a 7z one and a zip (21 runs):
-  - `nyn`, `x` and `ya`: the files answered No were left as they were, the rest written.
-  - Unanswered, `c` and `--yes`: refused, with nothing written.
-  - `--replace`: everything written over.
-  - All 21 came out as expected.
-- A screenshot of the question at 760×440: nothing overlaps.
-- Fixed while there: the "To" line ran off the right edge with a long path; it now shows the
-  path's last 48 characters.
-- CI step 10 has a new check: one file replaced, one left as it was, then Replace over the lot.
-- The unit suite (step 01, 296 s) and CI steps 10 (607 s) and 11 (1,702 s) passed.
-- Every changed client and tool file compiles for Windows with MinGW (`-fsyntax-only`).
+- The hallway builds with no warnings.
+- CI step 10 (626 s) passed.
+- `client/file_locator.cpp` compiles for Windows with MinGW (`-fsyntax-only`).
 
 ## Files
-- `Sieve/ci/steps/10-hallway.sh`
-- `Sieve/client/installer_main.cpp`
-- `Sieve/client/unpack_7z.cpp`
-- `Sieve/client/unpack_7z.hpp`
+- `Proof/STATISTICS.md`
+- `Sieve/client/file_locator.cpp`
 - `Sieve/docs/HANDOFF.md`
-- `Sieve/docs/SIEVE-INSTALL-USAGE.md`
-- `Sieve/tools/cli/locate.cpp`
-- `Sieve/tools/cli/locate.hpp`
-- `Sieve/tools/cli/pack.cpp`
-- `Sieve/tools/cli/pack.hpp`
+- `Sieve/docs/MANUAL.md`

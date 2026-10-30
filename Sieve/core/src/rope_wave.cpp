@@ -987,6 +987,12 @@ void reset_rope_search_spent()
     g_spent = {};
 }
 
+void forget_rope_searches()
+{
+    std::lock_guard<std::mutex> lock(g_cache_mx);
+    g_cache.clear();
+}
+
 void set_rope_search_every_wave(bool every) { g_every_wave = every; }
 bool rope_search_every_wave() { return g_every_wave.load(std::memory_order_relaxed); }
 

@@ -92,13 +92,20 @@ mixing).
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | zip | 35,194,836 | 2.84:1 | 35.19% | +34.95% | about 9 s | under 1 s |
 | 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
-| Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 102.4 s | 1.792 s, then checked and written in 0.538 s |
-| **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 109.3 s | 148.7 s, then checked and written in 0.537 s |
+| Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 630.0 s | 1.241 s, then checked and written in 0.495 s |
+| **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 691.4 s | 119.643 s, then checked and written in 0.518 s |
 | PPMd var. J (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
 
-Optimised for size, Sieve makes it at about 0.91 MB a second and unpacks it at about 0.67: mixing
-decodes as slowly as it codes. Prioritised for decoding, it is 14.27% larger than that but still
-5.03% under 7z, and unpacks in under two and a half seconds in all.
+Optimised for size, Sieve unpacks it at about 0.84 MB a second: mixing decodes as slowly as it
+codes. Prioritised for decoding, it is 14.27% larger than that but still 5.03% under 7z, and
+unpacks in under two seconds in all (1.736 s).
+
+The times were measured again on 29 October 2026 with **Keep a log** ticked, which records each
+step (the making times are the whole reading: the sizes beside zip and 7z included; the unpacking
+times are installing from the hallway). Where the time went is under enwik9. The size-optimised
+reading was first made straight after the decoding one, in the same window, and took that one's
+rope search as found (the File Locator kept searches between readings then; it no longer does):
+414.9 s. Made again on its own, with its own search, it took 691.4 s, the figure above.
 
 PPMd's figure is not measured here: it is `enwik8.pmd`, which the benchmark offers as a download
 on its page about the test data (<https://mattmahoney.net/dc/textdata.html>, last updated 1
@@ -140,25 +147,40 @@ for the `.zip`), not at their strongest.
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | zip | 312,712,170 | 3.20:1 | 31.27% | +35.89% | 1 min 30 s | about 4 s |
 | 7z | 230,120,517 | 4.35:1 | 23.01% | | 1 min 37 s | about 1 s |
-| Sieve, prioritised for decoding | 211,195,701 | 4.73:1 | 21.12% | −8.22% | longer than 790.5 s (see below) | 11.261 s, then checked and written in 5.065 s |
-| **Sieve** (`.sieve`), optimised for size | **186,081,966** | **5.37:1** | **18.61%** | **−19.14%** | longer than 734 s (see below) | 1,137.862 s, then checked and written in 5.194 s |
+| Sieve, prioritised for decoding | 211,195,701 | 4.73:1 | 21.12% | −8.22% | 5,999.7 s (1 h 40 min) | 10.892 s, then checked and written in 4.962 s |
+| **Sieve** (`.sieve`), optimised for size | **186,081,966** | **5.37:1** | **18.61%** | **−19.14%** | 6,631.6 s (1 h 50 min) | 1,153.583 s, then checked and written in 5.332 s |
 | PPMd var. J (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | −20.06% | | |
 
 Optimised for size, Sieve is 19.14% under 7z (on enwik8, 16.89%) and 2,117,051 bytes (1.15%) larger
-than PPMd at its strongest; it unpacks at about 0.88 MB a second (mixing decodes as slowly as it codes). Prioritised for decoding, it is
-13.50% larger than that, still 8.22% under 7z, and decodes at about 89 MB a second: 16.3 s in all,
-checked and written.
+than PPMd at its strongest; it unpacks at about 0.87 MB a second (mixing decodes as slowly as it codes). Prioritised for decoding, it is
+13.50% larger than that, still 8.22% under 7z, and decodes at about 92 MB a second: 15.9 s in all,
+checked and written (29 October 2026, measured again).
 
-**The making times are not yet the whole time.** The 734 s and 790.5 s are the weighing's search
-(the line under the result, `search: ...; took`, now `the weighing's search took`): the time the
-weighing spent finding the file's best way to be named, one pass of several. Reading the file also
-packs its instructions (the rope's search and mixing, which for a gigabyte take far longer), and
-sets zip and 7z beside them, so the whole was longer; how much was not kept. The graph's width at
-the end (3 h 12 min and 1 h 09 min) was set from the first estimate, not measured. The File Locator
-now says the whole time to the tenth of a second when it is done, and when its last new best came;
-with **Keep a log** ticked, each run also writes every report it made as it went (each best so far
-with its time, which the window shows only until the next), the result, and its phases' times to a
-text file in the logs folder beside its settings. To be measured again with that.
+**Where the making time goes** (29 October 2026, from **Keep a log**: the seconds between the
+reports, so the steps add up to the whole, give or take the rounding). Each with **Try every way**
+ticked and no search limit; enwik9 for size was measured on 30 October.
+
+| Step | enwik8, for decoding | enwik8, for size | enwik9, for decoding | enwik9, for size |
+| :--- | ---: | ---: | ---: | ---: |
+| timing samples for the estimate, reading it, and zip and 7z beside it | 99.9 s | 100.2 s | 837.8 s | 902.9 s |
+| … of which 7z (LZMA2, preset 9 extreme) | 87.3 s | 81.7 s | 777.1 s | 834.0 s |
+| packing: the rope's search, the pieces, and (for size) mixing | 345.2 s | 462.4 s | 3,420.2 s | 4,496.8 s |
+| … of which the rope's search | 308.7 s | 304.0 s | 3,302.7 s | 3,264.2 s |
+| packing: the lzma2 stream, LZMA2's settings tried | 175.4 s | 0.1 s (32 bytes) | 1,628.7 s | 1.1 s (33 bytes) |
+| reading it back, as installing will (every file decoded and compared) | 1.3 s | 121.9 s | 10.4 s | 1,139.8 s |
+| the instructions set beside zip and 7z, their address, and the weighing | 8.2 s | 6.8 s | 102.6 s | 90.9 s |
+| **in all** | **630.0 s** | **691.4 s** | **5,999.7 s** | **6,631.6 s** |
+
+On enwik9 for decoding the rope's search is 55% of the whole and LZMA2's passes 27%. The search
+did not change what was made: the rope's best, 598,993,276 bytes, was larger than LZMA2's
+211,195,636 and mixing's 186,081,894, so it was not taken either way. LZMA2's passes did: they
+took the stream from 7-Zip's encoder's 211,776,158 bytes to 211,195,636. For size, the packing
+row holds mixing too (1,115.5 s of it). Reading it back costs what installing costs, since it is
+the same decoding: on enwik8 optimised for size, 121.9 s against an install's 119.643 s; on enwik9,
+1,139.8 s against 1,153.583 s. The log did not yet say so when these
+were made (it was missing from the reports: now "reading them back, as installing will"). The
+weighing's own search, the 734 s and 790.5 s of the first runs, took 1.0 s on enwik9 here: it now
+takes the file's ways as packing found them.
 
 PPMd's figure is from the same page as enwik8's, not measured here; the benchmark's other published
 enwik9 sizes are in the enwik8 section's second table.
