@@ -82,6 +82,8 @@ struct PackReport
     bool v32 = false;                    // v32 (draft): some file carried as its differences from another
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
+    size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'
+    uint64_t jpeg_bytes = 0, jpeg_forms = 0;
     size_t member_archives = 0, members = 0; // v31: those archives, and their files
     size_t mix_groups = 0, mix_group_files = 0; // v30: the groups, and the files in them
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart

@@ -1,53 +1,64 @@
-# Your photos: brunsli wins there too (30 October 2026)
+# PNG and JPEG under all three methods: measured (30 October 2026)
 
-Unzip over the repository root, on top of the last zip ("JPEG: brunsli and JPEG XL measured").
-Committed locally (not pushed). Documents only.
+Unzip over the repository root, on top of the last zip ("v32's second way: JPEGs"). Committed
+locally (not pushed). Documents only.
 
-## The originals
+## A flaw in permanent, for PNGs
 
-The zip kept your originals intact; the pictures posted in the chat had been resized and re-encoded
-on the way. All three match STATISTICS to the byte, including 4,139,682 for `20230830_163945.jpg`,
-so you did pick the right version of that one.
+With **permanent alone**, a PNG is carried as "what it holds" and installed as that. For a PNG,
+that's its pixel rows. `tests/example_book_cover.png` (859 bytes) installs as a file named `cover`:
+76,800 bytes of headerless pixels that no viewer opens. With temporary, or both boxes, it comes back
+as `cover.png`, identical.
 
-I measured them in a scratch folder and deleted them afterwards. Nothing from them is in the
-repository but the figures.
+## Twelve of the repository's PNGs
 
-| | Original | `.sieve` now | brunsli | `cjxl --lossless_jpeg=1` |
-| :--- | ---: | ---: | ---: | ---: |
-| A picture at 3653×5480 | 3,844,213 | 3,716,747 | **3,085,201 (−19.74%)** | 3,109,231 (−19.12%) |
-| 20230830_163945.jpg | 4,139,682 | 4,111,478 | **3,284,887 (−20.65%)** | 3,312,460 (−19.98%) |
-| 20240407_153939.jpg | 4,587,473 | 4,557,978 | **3,660,016 (−20.22%)** | 3,703,771 (−19.26%) |
+`.sieve` sizes under each method. The last column is the PNG re-saved at its smallest, as permanent
+would install it: every one came out pixel for pixel the original.
 
-- **Exact:** every file came back byte for byte from both.
-- **brunsli:** makes each in 0.6–0.9 s and gives it back in about 0.5 s.
-- **`cjxl`:** takes about 6.3 s to make and 0.2 s to give back.
+| PNG | original | normal | temporary | permanent | re-saved |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| example_book_cover | 859 | 342 | 150 | 155 | 212 |
+| icon16 | 1,258 | 1,321 | 1,321 | 1,321 | 1,200 |
+| icon128 | 27,749 | 27,595 | 19,775 | 19,787 | 27,649 |
+| beautiful-screens | 16,289 | 11,418 | 7,217 | 7,232 | 15,705 |
+| viewer-picture | 29,899 | 3,391 | 1,732 | 1,734 | 5,512 |
+| font-test-french | 31,413 | 6,593 | 3,788 | 3,791 | 6,554 |
+| gallery-tiles | 38,986 | 37,438 | 26,384 | 26,406 | 34,666 |
+| hallway-door | 46,647 | 33,863 | 7,882 | 7,892 | 20,053 |
+| hallway-compact | 53,569 | 42,171 | 16,058 | 16,060 | 24,869 |
+| m1_sieve_scowl60 | 146,344 | 128,597 | 84,640 | 84,654 | 142,677 |
+| long-pages-64MB-cache | 128,597 | 121,905 | 45,666 | 45,670 | 75,225 |
+| long-pages-1024MB-cache | 129,272 | 122,481 | 45,971 | 45,975 | 75,327 |
 
-So brunsli is the smaller on all ten original JPEGs measured (the repository's seven and your
-three), about ten times quicker to make, and about a tenth of libjxl's size in `sieve-install`.
-`cjxl` led only on two quality-90 re-saves. The recommendation is **brunsli**.
+- **Permanent saves nothing in the `.sieve`.** Temporary is 2 to 22 bytes smaller.
+- **Re-saving at its smallest pays in the installed file:** smaller every time, the same picture.
+- **The box matters a great deal for PNGs:** hallway-door's `.sieve` is 33,863 without it and 7,882
+  with it.
 
-## Old figures corrected in STATISTICS
+## JPEG, the same idea
 
-The `.jpg.sieve` sizes were measured again with this build:
+Permanent would install the same coefficients with optimised Huffman tables, which is what
+`jpegtran -optimize` does. The pixels were identical every time.
 
-| | was | now | against 7z |
-| :--- | ---: | ---: | ---: |
-| The 3653×5480 picture | 3,826,046 | **3,716,747** | −3.31% |
-| 20230830_163945.jpg | 4,111,592 | 4,111,478 | −0.39% |
-| 20240407_153939.jpg | 4,558,132 | 4,557,978 | −0.38% |
+- **The repository's seven:** −1.93% on Vitruvian, within ±0.2% on the rest (already optimised).
+- **Your three originals:** −0.01%, −2.20% and −2.10% (measured in a scratch folder and deleted
+  again).
 
-The `.7z.sieve` column and the sizes on disk are from the first measurement; I didn't have the
-`.7z` files to measure again.
+The safety check refused building `jpegtran` itself, as code from outside, so I measured with Sieve's
+own probe, using the JPEG standard's table method (Annex K).
 
-## Next
+## The design, for you to confirm
 
-If you agree to brunsli, I'll build the `jpg` way into v32's draft:
+| | normal | temporary | permanent |
+| :--- | :--- | :--- | :--- |
+| **PNG** | as it is | its pixels, made again exactly (built) | its pixels (the same `.sieve`), installed as the same picture re-saved by Sieve at its smallest |
+| **JPEG** | as it is | brunsli, made again exactly (moved under the box) | brunsli, installed with optimised tables (about 2% smaller on phone photos) |
 
-- brunsli fetched at a pinned commit, as preflate is;
-- the packer keeps it only where the JPEG comes back exact and smaller;
-- `sieve-install` gets the decoder;
-- the specification, the oracle (which reads the recipe), and CI.
+For these two formats, permanent would then mean "the same picture, its smallest usable file", not
+"what the file holds". The installed file differs from the original, as permanent's always do. Both
+permanent ways are new kinds, so they'd be v32's.
+
+Recorded in NEXT-VERSION §4a (4).
 
 ## Files
-- `Proof/STATISTICS.md`
 - `Sieve/docs/NEXT-VERSION.md`

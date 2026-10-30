@@ -324,6 +324,37 @@ if(MSVC)
 else()
     target_compile_options(sieve_preflate PRIVATE -w "SHELL:-include cstdint" "SHELL:-include cstring" "SHELL:-include cstdio")
 endif()
+# brunsli (MIT, third_party_licenses/brunsli), Google's: a JPEG's own coded values recoded by a model
+# made for them and given back byte for byte (v32 in the making, `jbr`; docs/NEXT-VERSION.md). Pinned
+# to the commit measured (30 October 2026: 15.25% to 21.91% off ten original JPEGs, each exact); its
+# library's files built here, against Sieve's own brotli, not by its own CMake (which fetches
+# brotli again). Seen by the rest of Sieve only through tools/cli/jpeg_glue.hpp.
+FetchContent_Declare(brunsli
+    GIT_REPOSITORY https://github.com/google/brunsli.git
+    GIT_TAG c18b9625ef045b0b89ebb4439ae2339e2160df71
+    SOURCE_SUBDIR c/include) # (no CMakeLists.txt there: fetched, not built by its own CMake)
+FetchContent_MakeAvailable(brunsli)
+set(SIEVE_BRUNSLI_SOURCES)
+foreach(f ans_params constants context lehmer_code platform predict quant_matrix)
+    list(APPEND SIEVE_BRUNSLI_SOURCES ${brunsli_SOURCE_DIR}/c/common/${f}.cc)
+endforeach()
+foreach(f ans_decode bit_reader brunsli_decode context_map_decode histogram_decode huffman_decode huffman_table jpeg_data_writer state)
+    list(APPEND SIEVE_BRUNSLI_SOURCES ${brunsli_SOURCE_DIR}/c/dec/${f}.cc)
+endforeach()
+foreach(f ans_encode brunsli_encode context_map_encode histogram_encode huffman_encode huffman_tree jpeg_data_reader jpeg_huffman_decode write_bits)
+    list(APPEND SIEVE_BRUNSLI_SOURCES ${brunsli_SOURCE_DIR}/c/enc/${f}.cc)
+endforeach()
+# (Its export header, which its own CMake would generate: a static library exports nothing.)
+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/brunsli_export/brunsli/brunsli_export.h "#pragma once\n#define BRUNSLI_EXPORT\n")
+add_library(sieve_brunsli STATIC ${SIEVE_BRUNSLI_SOURCES} tools/cli/jpeg_glue.cpp)
+target_include_directories(sieve_brunsli SYSTEM PRIVATE ${brunsli_SOURCE_DIR}/c/include ${brunsli_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/brunsli_export)
+target_include_directories(sieve_brunsli PRIVATE tools)
+target_link_libraries(sieve_brunsli PRIVATE sieve_brotli)
+if(MSVC)
+    target_compile_options(sieve_brunsli PRIVATE /w)
+else()
+    target_compile_options(sieve_brunsli PRIVATE -w)
+endif()
 foreach(t sieve_lz4 sieve_brotli)
     if(MSVC)
         target_compile_options(${t} PRIVATE /w)
@@ -401,7 +432,7 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/pack.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli)
 target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
 target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)

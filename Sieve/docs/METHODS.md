@@ -63,6 +63,16 @@ Log: `file N of M: NAME, S bytes: as its differences from OTHER: C copies coveri
 bytes, a script of L bytes in the lzma2 stream`, then `not searched (carried as its differences from
 OTHER (above))`.
 
+With the draft too, a **JPEG** of 1 KiB or more is carried as its **brunsli form** (the `jbr` way):
+- **What it is:** Google's brunsli recodes the JPEG's own coded values by a model made for them.
+- **When it's kept:** where brunsli gives the file back byte for byte (checked before it is kept)
+  and the form is smaller; any other JPEG is carried as it is.
+- **Not searched:** the form is coded already.
+- **Measured:** 15.25% to 21.91% off ten original JPEGs.
+
+Log: `file N of M: NAME, a JPEG of S bytes, as its brunsli form of F (made again byte for byte)`,
+then `not searched (a JPEG carried as its brunsli form (above), coded already)`.
+
 ## 3. The search, for every other file (`file N of M: NAME, the rope and pieces`)
 
 Each file left is tried every one of these ways on its own. Several files are searched at once, as

@@ -543,7 +543,7 @@ for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-
 # or the LZMA SDK (which it has not), it names as not made again, and so leaves the tree unchecked.
 python sieve_ref.py unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
 cmp a21/stored.zip a21_oracle/stored.zip
-[ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " a21_oracle.txt)" -eq 5 ]
+[ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): " a21_oracle.txt)" -eq 5 ]
 $SI a21.sieve --to a21_si --yes > /dev/null
 diff -r a21_inst a21_si
 # v22 (25 October 2026): a RAR made again by the machine's own rar, where it gives the archive back
@@ -636,7 +636,7 @@ $S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
 diff -r png25 png25_inst
-python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK or stb_image_write): " | grep -q "^2$"
+python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): " | grep -q "^2$"
 $S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 | tr -d '\r' > png24.txt
 if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 # v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
@@ -810,6 +810,25 @@ $SI d32.sieve --to d32_si --yes > /dev/null
 diff -r d32 d32_si
 $S locate d32 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
 if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
+# v32 in the making, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
+# for byte. The repository's seven JPEGs (all public domain or Sieve's own) and a text: with the
+# draft, each JPEG carried so and the folder given back by Sieve and by sieve-install; the oracle
+# reads the recipes, names the JPEGs as files it has not made (it has no brunsli) and makes the text;
+# without the draft, nothing is v32.
+rm -rf j32 && mkdir j32
+cp ../data/anchors/public-domain/Vitruvian.jpg ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
+$S locate j32 --installer j32.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32.txt
+grep -c "^jpegs     7 JPEG(s) carried as their brunsli form, made again byte for byte" j32.txt > /dev/null
+rm -rf j32_inst j32_oracle j32_si
+$S install j32.sieve --to j32_inst > /dev/null
+diff -r j32 j32_inst
+$SI j32.sieve --to j32_si --yes > /dev/null
+diff -r j32 j32_si
+python sieve_ref.py unpack j32.sieve --to j32_oracle > j32o.txt
+[ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32o.txt)" -eq 7 ]
+cmp j32/VAULT.md j32_oracle/VAULT.md
+$S locate j32 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
+if grep -q "sieve-manifest-v32\|^jpegs " j32v31.txt; then exit 1; fi
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

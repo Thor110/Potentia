@@ -6654,8 +6654,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3}
+                   "warc", "sk", "stb", "skm", "jbr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2}
 
 
 def listing_from_bytes(b):
@@ -7106,6 +7106,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a PNG recipe Sieve does not write")
             remakes[i] = ("stb", size)
             size = int(n)
+        if v32 and way.startswith("jbr "):
+            # "jbr <form size> <way>" (SPECIFICATIONS v32, a draft): a JPEG made again from its brunsli
+            # form, by brunsli (which the oracle has not): the recipe read and checked, the file not made.
+            _, n, way = way.split(" ", 2)
+            if not re.fullmatch(r"[1-9][0-9]*", n) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                sys.exit(f"{path}: a JPEG recipe Sieve does not write")
+            remakes[i] = ("jbr", size)
+            size = int(n)
         if v31 and way.startswith("skm "):
             # "skm <members> <skeleton size> <way>": a gzip, zip or 7z as a skeleton, what it holds its members.
             _, n, skel, way = way.split(" ", 3)
@@ -7332,7 +7341,7 @@ def cmd_unpack_v7(args, data):
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
-        if r[0] == "stb":  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here)
+        if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
@@ -7398,7 +7407,7 @@ def cmd_unpack_v7(args, data):
         # oracle has: their skeletons (or recipes) and data were read and checked, but not the files
         # themselves, nor the tree.
         for k in sorted(unchecked):
-            print(f"not made again by the oracle (preflate, the LZMA SDK or stb_image_write): {files[k][0]}; the tree's SHA-256 not checked")
+            print(f"not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): {files[k][0]}; the tree's SHA-256 not checked")
     else:
         h = hashlib.sha256()
         for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):

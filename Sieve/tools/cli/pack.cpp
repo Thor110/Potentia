@@ -2,6 +2,7 @@
 
 #include "cli/pack.hpp"
 #include "cli/delta.hpp"
+#include "cli/jpeg_glue.hpp"
 #include "cli/timings.hpp"
 
 #include "sieve/filekind.hpp"
@@ -1830,6 +1831,15 @@ std::vector<uint8_t> lzma_alone_pack(const std::vector<uint8_t>& in, uint32_t pr
 
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    if (recipe.rfind("jbr ", 0) == 0)
+    {
+        // "jbr <form size>" (v32, in the making): a JPEG made again from its brunsli form.
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "jbr %llu%c", &size, &extra) != 1 || size != inner.size())
+            throw std::runtime_error("a JPEG's recipe this Sieve does not know: " + recipe);
+        return brunsli_to_jpeg(inner);
+    }
     if (recipe.rfind("stb ", 0) == 0)
     {
         // "stb <level> <filter> <width> <height> <components> <inner size>" (v25): a PNG stb_image_write
@@ -2489,6 +2499,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool members_on = rope_newest >= 14 && v21;
     // v32 (in the making): a file carried as its differences from another, only with the draft switch.
     const bool delta_on = rope_newest >= 14 && v21 && v32_draft();
+    // v32 (in the making): a JPEG carried as its brunsli form and made again exactly, only with the draft switch.
+    const bool jpeg_on = rope_newest >= 14 && v21 && v32_draft();
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -3041,6 +3053,32 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
+    // v32 (in the making, behind the draft switch): a JPEG carried as its brunsli form ("jbr <form
+    // size>"), made again exactly on installing: brunsli recodes the JPEG's own coded values by a
+    // model made for them. Taken where brunsli gives the file back byte for byte (checked here,
+    // before it is kept) and the form is smaller; any other JPEG is carried as it is. Not tied to
+    // Optimise Compressed Formats: nothing is guessed (no encoder's settings to find), brunsli makes
+    // the same bytes from the same form. Measured on ten original JPEGs, 15.25% to 21.91% smaller.
+    size_t jpegs_made = 0;
+    uint64_t jpeg_bytes = 0, jpeg_forms = 0;
+    if (jpeg_on && !stop_requested())
+        for (size_t i = 0; i < files.size(); ++i)
+        {
+            if (!files[i]->remake.empty() || files[i]->member || bytes[i].size() < 1024 || !is_jpeg(bytes[i])) continue;
+            const timings::Scope t("pack.jpeg");
+            auto form = jpeg_to_brunsli(bytes[i]);
+            if (!form || form->size() >= bytes[i].size()) continue;
+            progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
+                     std::to_string(bytes[i].size()) + " bytes, as its brunsli form of " + std::to_string(form->size()) + " (made again byte for byte)");
+            ++jpegs_made;
+            jpeg_bytes += bytes[i].size();
+            jpeg_forms += form->size();
+            files[i]->remake = "jbr " + std::to_string(form->size());
+            if (original.size() != bytes.size()) original.resize(bytes.size());
+            original[i] = std::move(bytes[i]);
+            bytes[i] = std::move(*form);
+        }
+
     // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
     // stream; a text made from another's lines, a mask; the rest as it is.
     std::vector<bool> item(files.size(), false);
@@ -3308,6 +3346,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
     r.deltas = delta_count;
+    r.jpegs = jpegs_made;
+    r.jpeg_bytes = jpeg_bytes;
+    r.jpeg_forms = jpeg_forms;
     r.delta_bytes = delta_bytes;
     r.delta_scripts = delta_script_bytes;
     m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
@@ -3322,7 +3363,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t i = 0; i < files.size(); ++i) ++copies[sha256_hex(bytes[i])];
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
-            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha256_hex(bytes[i])] == 1) todo.push_back(i);
+            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha256_hex(bytes[i])] == 1 && files[i]->remake.rfind("jbr ", 0) != 0)
+                todo.push_back(i); // (a JPEG's brunsli form is coded already: nothing to search for)
         // Every file not searched, and why, said once for it as the searched ones are below (Keep a
         // log keeps it): nothing a file was or was not tried for goes unsaid.
         {
@@ -3336,7 +3378,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 const std::string& w = files[i]->way;
                 std::string why;
-                if (w == "raw" || w == "x86")
+                if ((w == "raw" || w == "x86") && files[i]->remake.rfind("jbr ", 0) == 0) why = "a JPEG carried as its brunsli form (above), coded already";
+                else if (w == "raw" || w == "x86")
                     why = bytes[i].size() < 512 ? "under 512 bytes"
                           : copies[sha256_hex(bytes[i])] > 1 ? "a copy of another file here, which the lzma2 stream carries for almost nothing"
                                                              : "carried as it is";
@@ -4085,7 +4128,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
     // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
-    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0; });
+    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0; });
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
@@ -4218,6 +4261,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
             o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
+        if (r.jpegs)
+            o << "jpegs     " << r.jpegs << " JPEG(s) carried as their brunsli form, made again byte for byte (" << r.jpeg_bytes << " bytes as "
+              << r.jpeg_forms << "; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
               << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ", a draft: not to be published)\n";

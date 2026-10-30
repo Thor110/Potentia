@@ -5389,3 +5389,80 @@ any other file, so the shared content is paid for twice.
   it all) and Shift with the arrows, Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Home and End.
 - *The installer reads its file on a thread of its own,* so its window answers while a large one is
   read ("Reading ...").
+
+**19.108 More waves through the rope (Edward, 30 October 2026; measured, nothing built).** His
+thought: as the rope keeps bytes and propagates noise (its first name, "The Keep Bytes or
+PropagateNoise filter", from his paper *Rope Around The Clock*: §19.87), run it in two or three
+phases: a wave from the top down through the chosen width, then one from the bottom up, and so on,
+waves times width in byte rows; record the seed of each wave, reduce the data to clumps of similar
+values, and knock as much of the file out as possible ("the right file and the right noise could
+cancel out a file to 0"), recording whatever remains.
+- *The noise from a seed:* §19.91's answer holds. A seed short enough to save anything names only a
+  few of the possible noises, so for almost every file the seed and what remains cost what the file
+  does. The noise that pays is the noise the reader makes from what it has already unpacked, which
+  costs nothing to name, and that is the rope's wave: its prediction of each byte.
+- *More waves over what the first leaves (measured, 30 October 2026):* grey pictures, the remainder
+  of each scheme by its order-0 entropy and by LZMA2. Vitruvian (949 by 1300): as it is 6.443
+  bits a pixel; one wave, the triangle (P4), top down, 5.219 (LZMA2 789,160 bytes); then a wave from
+  the bottom up over its remainder 5.468 (827,592); then a third, down again, 6.274 (919,452), near
+  the picture untouched. The test site's door (800 by 450): 3.623 as it is, 2.666 after one wave,
+  3.279 after two, 3.974 after three, worse than the picture itself; its book likewise (4.784,
+  4.021, 4.668, 5.460). A wave across by columns after the one down did as badly as one back up.
+  After a good first wave what is left is close to noise, and a wave over noise adds to it.
+- *Two waves that meet:* the even rows by one wave down, then each odd row from the rows above and
+  below it, both known by then (the way interlaced and hierarchical picture coders use two
+  directions). Vitruvian 5.481 bits a pixel by their mean, 5.287 with the row's left neighbour in a
+  median (LZMA2 785,152 and 791,916, against one wave's 789,160); the door 2.967 and 2.725 (one wave
+  2.666); the book 4.315 and 4.104 (4.021). About even, no gain.
+- *Where it points:* choosing each prediction by what is round it ("clumps of similar values") is
+  what mixing's picture models do, and they beat the rope on pictures already (Vitruvian as a BMP:
+  the rope 597,269 bytes, mixing 558,858; §19.103). Nothing is built; the measurements are kept so
+  the idea and its answer are not lost.
+- *A designed file to show it (Edward, the same day):* noise propagated to make the test file in
+  the first place, "diagonal lines of the same values" for the perfect designed case (`00 FF 00 FF`
+  / `FF 00 FF 00`), then pushed further before the real world. Measured at once, two files of 1 MiB
+  (256 bytes a row, 4,096 rows), each beside `xz -9e` and the rope's search of 5 s:
+  - *00 and FF along the diagonals:* xz 292 bytes; the rope **24** (`L8 W512 S2 P3`, the diagonal
+    phase): the whole file cancelled to a code of 24 bytes; its `.sieve` 101.
+  - *a random first row carried down the diagonals* (each row the one above moved one along): xz
+    848; the rope 14,173 (`L8 W257 S2 P4 T1`), since no phase copies one chosen neighbour (the
+    phases mix or take the median of several), so it cannot see "the byte above and to the left"
+    alone; the `.sieve` 1,556, by LZMA2.
+  - *What that points to:* a wave direction, a phase that copies one chosen neighbour (above-left,
+    above-right), which would cancel the second file after its first row. A new rope-wave version,
+    so v32's if it is built, and only once it is measured on real files; the designed files are the
+    demonstration and the first test, then variations (noise added, widths that do not fit, several
+    directions in one file), then the real world. To be planned with Edward.
+- *Repropagating until the file cancels (Edward, the same day):* "In theory they could even
+  repropagate until cancelling the whole file out", stored as: the file's length; the width; the
+  seeds; n passes of repropagation through the file; seeds times n; the remainder as offsets and
+  bytes. The shape is close to a rope code's already (its size, the wave's parameters, what is left
+  coded by how often each value comes); what is new is seeds and passes. What decides it is whether
+  each pass saves more than it costs to write down: a pass whose wave comes from the bytes already
+  unpacked (as the rope's does) costs only its few bytes of parameters; one whose wave comes from a
+  seed of k bits can choose among 2^k waves, so it saves at most about k bits more than a fixed wave
+  would (§19.91), and n passes cost n seeds. Measured above, passes over what the first left made
+  the pictures worse. So the question to take up (Edward: "Once the tests are done and out of the
+  way, we will clear up anything that is in progress and look at this idea seriously"): are there
+  real files where a second or third wave, chosen per file, removes more than its parameters cost?
+  The designed files first, then varied ones, then real ones.
+- *Waves that cancel each other, and seeds of zero (Edward, the same day):* on real files alternating
+  waves could cancel each other out, but some seeds could be zero, so that a wave is left out where
+  it would; "very much a brute force approach". A zero seed is a wave switched off, and which waves
+  are on costs about a bit each; the seeds of the waves that are on are the cost that stays.
+  *What it compares to:*
+  - **matching pursuit** (sparse approximation): from a dictionary of waves take the one that fits
+    best, write which it is and how strong, take it away, and go again on what is left. This is
+    nearly his scheme. It is studied for sound and video; in lossless coding it usually does less
+    well than prediction, since what is left must be kept exactly and each choice costs its index.
+  - **fractal compression** (Jacquin, the 1990s): brute force for parts of a picture that are
+    transformed copies of other parts; slow to search, quick to decode, and lossy.
+  - **searching for the shortest seed or program that makes the file** (Levin's search, Kolmogorov
+    complexity): the limit of "find the noise that cancels the file"; it finds only files that were
+    made from short seeds, as the designed test file is and real files almost never are.
+  - **searching parameters**, which Sieve does already: the rope tries hundreds of waves a file, and
+    LZMA2 several settings.
+  So it sits between matching pursuit and the rope's search: the waves its dictionary, the zero
+  seeds its waves left out, the repropagations its passes. Whether it pays on real files is the
+  question of a dictionary of waves that real files are made of.
+

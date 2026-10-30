@@ -4106,7 +4106,11 @@ without it every build writes v31 as before. The first of its ways, `delta` (a f
 its differences from another), is built through the specification, the packer, the reader, the
 oracle and CI step 11. A 160 MB pair: 22,537,063 → 17,947,687 bytes. Progress and what is next:
 NEXT-VERSION.md §4a, which also holds a question found on the way (a v30 group with another file in
-its middle: the reader takes it, the specification and the oracle refuse it).
+its middle: the reader takes it, the specification and the oracle refuse it). The second way, `jbr` (a JPEG as its brunsli form, Google's brunsli
+pinned and built against Sieve's brotli), is built the same way: on the repository's seven JPEGs and
+a text, 659,333 → 555,677 bytes, every file back byte for byte. Measured first against JPEG XL's
+`cjxl` on ten original JPEGs (Edward's three among them, deleted after): brunsli the smaller on all
+ten, quicker, and a tenth the size.
 
 *Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's

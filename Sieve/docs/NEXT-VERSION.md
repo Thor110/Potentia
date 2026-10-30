@@ -291,6 +291,73 @@ is the smaller on all three, and about ten times quicker to make them.
 The recommendation is (a), brunsli: the smaller on the originals measured (ten of them), the
 quicker, and about a tenth of libjxl's size in `sieve-install`.
 
+*Built, behind the draft switch (30 October 2026; Edward: "I agree make a start on that"):*
+- **brunsli** is fetched at commit c18b962 (MIT, `third_party_licenses/brunsli`). Its library's files
+  are built against Sieve's own brotli, and seen only through `tools/cli/jpeg_glue.cpp`.
+- **`jbr <form size>`** is archive format 21. The packer tries every JPEG of 1 KiB or more, keeps the
+  form where it comes back byte for byte and is smaller, and doesn't search it.
+- **Readers:** `sieve install` and `sieve-install` make the JPEG again. The oracle reads the recipe
+  and names the file as not made.
+- **Documented and tested:** SPECIFICATIONS v32, METHODS §2a, CI step 11.
+- **Not tied to Optimise Compressed Formats** (for Edward to confirm): brunsli guesses no encoder's
+  settings and makes the same bytes from the same form.
+- **Measured:** the repository's seven JPEGs and a text, 691,007 bytes, came to 659,333 as before
+  (v28) and **555,677 with the draft** (15.72% smaller), made in 1 s against 3 s, and given back
+  identical by `sieve install` and `sieve-install`. The seven JPEGs: 675,293 bytes as 550,050.
+  `sieve-install` is 8,829,600 bytes with it (Linux); brunsli's decoder library alone, as its own
+  build makes it, is 435,904.
+
+**4. PNG and JPEG under all three methods (30 October 2026).** Edward: JPEG and PNG are both
+compressed formats, so both should work with the box: "packed under all three methods, normal,
+repack temporary, repack permanent".
+
+*A flaw found first:* with **permanent alone**, a PNG is carried as what it holds and installed as
+that, which for a PNG is its pixel rows. `tests/example_book_cover.png` (859 bytes) installs as a
+file named `cover`, 76,800 bytes of headerless pixels that no viewer opens. Temporary, or both
+boxes, give back `cover.png` exactly. Archives are what permanent was made for: a `.tar.gz` gives
+its `.tar`, which is usable; a PNG is the one format whose contents are not.
+
+*Measured on twelve of the repository's PNGs* (`.sieve` sizes; the last column a PNG re-saved by
+Pillow at zlib 9 with optimisation, standing in for an encoder of Sieve's own; every re-saved PNG
+pixel for pixel the original):
+
+| PNG | original | normal | temporary | permanent | re-saved |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| example_book_cover | 859 | 342 | 150 | 155 | 212 |
+| icon16 | 1,258 | 1,321 | 1,321 | 1,321 | 1,200 |
+| icon128 | 27,749 | 27,595 | 19,775 | 19,787 | 27,649 |
+| beautiful-screens | 16,289 | 11,418 | 7,217 | 7,232 | 15,705 |
+| viewer-picture | 29,899 | 3,391 | 1,732 | 1,734 | 5,512 |
+| font-test-french | 31,413 | 6,593 | 3,788 | 3,791 | 6,554 |
+| gallery-tiles | 38,986 | 37,438 | 26,384 | 26,406 | 34,666 |
+| hallway-door | 46,647 | 33,863 | 7,882 | 7,892 | 20,053 |
+| hallway-compact | 53,569 | 42,171 | 16,058 | 16,060 | 24,869 |
+| m1_sieve_scowl60 | 146,344 | 128,597 | 84,640 | 84,654 | 142,677 |
+| long-pages-64MB-cache | 128,597 | 121,905 | 45,666 | 45,670 | 75,225 |
+| long-pages-1024MB-cache | 129,272 | 122,481 | 45,971 | 45,975 | 75,327 |
+
+- Permanent saves nothing in the `.sieve` over temporary (temporary is 2 to 22 bytes smaller: the
+  same pixels, a recipe instead of an archive's record).
+- Re-saved at its smallest, every PNG came out smaller than its original, the same pixels.
+- The box matters: without it hallway-door's `.sieve` is 33,863, with it 7,882.
+
+*JPEG, the same idea:* the same coefficients written with optimised Huffman tables (Annex K, as
+`jpegtran -optimize` does; Sieve's probe, `tools/jpeg_probe.py`, with Annex K added in the
+scratchpad), every file's pixels identical:
+- the repository's seven: −1.93% (Vitruvian) and within ±0.2% for the rest (already optimised);
+- Edward's three originals (measured in a scratch folder, deleted after): −0.01%, −2.20%, −2.10%.
+
+*The design, for Edward to confirm:*
+
+| | normal | temporary | permanent |
+| :--- | :--- | :--- | :--- |
+| PNG | as it is | its pixels carried, made again exactly (built, v25) | its pixels carried (the same `.sieve` as temporary), installed as the same picture re-saved by Sieve at its smallest |
+| JPEG | as it is | its brunsli form, made again exactly (v32's draft; moved under the box) | its brunsli form, installed with the same coefficients and optimised tables (about 2% smaller on phone photos) |
+
+Permanent then means "the same picture, its smallest usable file", not "what the file holds", for
+these two. The installed file differs from the original, as permanent's always do, and the tree's
+SHA-256 is of what is installed. Both permanent ways are new remade kinds, so v32's.
+
 **Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
 v30 says a reader refuses a group of files mixed together that holds a file of another way in its
 middle, and the oracle does. But v30's and v31's packer never cuts a group there, and Sieve's reader
