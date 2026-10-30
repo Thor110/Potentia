@@ -283,9 +283,13 @@ byte**:
 - **(c) Sieve's own model:** the oracle could make the file itself, but it is the most work, and the
   general-model test above shows nothing comes cheap.
 
-The recommendation is (a), with (b) weighed again on Edward's own photos (a camera's JPEGs are
-high-quality, where `cjxl` led): `cjxl photo.jpg photo.jxl --lossless_jpeg=1` on his machine gives
-that.
+*On Edward's three originals* (he sent them in a zip, 30 October 2026; measured in a scratch folder
+and deleted, nothing of them kept): brunsli 19.74%, 20.65% and 20.22% smaller; `cjxl` 19.12%, 19.98%
+and 19.26%; every file given back byte for byte by both (Proof/STATISTICS.md, Photographs). brunsli
+is the smaller on all three, and about ten times quicker to make them.
+
+The recommendation is (a), brunsli: the smaller on the originals measured (ten of them), the
+quicker, and about a tenth of libjxl's size in `sieve-install`.
 
 **Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
 v30 says a reader refuses a group of files mixed together that holds a file of another way in its

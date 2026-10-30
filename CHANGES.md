@@ -1,52 +1,53 @@
-# JPEG: brunsli and JPEG XL measured (30 October 2026)
+# Your photos: brunsli wins there too (30 October 2026)
 
-Unzip over the repository root, on top of the last zip ("JPEG: the plan begun"). Committed locally
-(not pushed). Documents only.
+Unzip over the repository root, on top of the last zip ("JPEG: brunsli and JPEG XL measured").
+Committed locally (not pushed). Documents only.
 
-With GitHub open, I built Google's **brunsli** (MIT) and JPEG XL's **`cjxl`/`djxl`** (libjxl,
-BSD-3) here from source. I ran each on the repository's seven JPEGs, and on two quality-90 re-saves
-of Vitruvian (one progressive, one with optimised tables). **Every file came back from both byte
-for byte.**
+## The originals
 
-| | JPEG | `.sieve` now | brunsli | `cjxl --lossless_jpeg=1` |
+The zip kept your originals intact; the pictures posted in the chat had been resized and re-encoded
+on the way. All three match STATISTICS to the byte, including 4,139,682 for `20230830_163945.jpg`,
+so you did pick the right version of that one.
+
+I measured them in a scratch folder and deleted them afterwards. Nothing from them is in the
+repository but the figures.
+
+| | Original | `.sieve` now | brunsli | `cjxl --lossless_jpeg=1` |
 | :--- | ---: | ---: | ---: | ---: |
-| Vitruvian | 207,500 | 206,956 | 170,260 (−17.95%) | 173,542 (−16.37%) |
-| audio | 70,028 | 66,894 | 57,310 (−18.16%) | 57,812 (−17.44%) |
-| book | 82,905 | 80,569 | 67,684 (−18.36%) | 67,978 (−18.00%) |
-| door | 69,298 | 63,860 | 54,117 (−21.91%) | 55,341 (−20.14%) |
-| filters | 70,029 | 65,997 | 55,468 (−20.79%) | 56,318 (−19.58%) |
-| picture-in-hand | 59,365 | 55,013 | 46,757 (−21.24%) | 47,910 (−19.30%) |
-| vitruvian (site) | 116,168 | 116,235 | 98,454 (−15.25%) | 99,986 (−13.93%) |
-| Vitruvian, progressive q90 | 282,087 | | 212,680 (−24.60%) | 196,754 (−30.25%) |
-| Vitruvian, optimised q90 | 284,505 | | 212,027 (−25.48%) | 195,676 (−31.22%) |
+| A picture at 3653×5480 | 3,844,213 | 3,716,747 | **3,085,201 (−19.74%)** | 3,109,231 (−19.12%) |
+| 20230830_163945.jpg | 4,139,682 | 4,111,478 | **3,284,887 (−20.65%)** | 3,312,460 (−19.98%) |
+| 20240407_153939.jpg | 4,587,473 | 4,557,978 | **3,660,016 (−20.22%)** | 3,703,771 (−19.26%) |
 
-- **brunsli** is a little smaller on the originals (by 0.4 to 1.7 points).
-- **`cjxl`** is about 6 points smaller on the high-quality re-saves.
-- **Speed:** both decode in hundredths of a second. To encode, brunsli takes 0.02–0.05 s and `cjxl`
-  0.15–0.69 s.
-- **Size of the decoder in `sieve-install`:** brunsli's library is 435,904 bytes; libjxl's is
-  4,772,216, plus highway, skcms and brotli.
+- **Exact:** every file came back byte for byte from both.
+- **brunsli:** makes each in 0.6–0.9 s and gives it back in about 0.5 s.
+- **`cjxl`:** takes about 6.3 s to make and 0.2 s to give back.
 
-## Your decision: which way
+So brunsli is the smaller on all ten original JPEGs measured (the repository's seven and your
+three), about ten times quicker to make, and about a tenth of libjxl's size in `sieve-install`.
+`cjxl` led only on two quality-90 re-saves. The recommendation is **brunsli**.
 
-- **(a) brunsli in Sieve. Recommended.** Fetched at a pinned commit, as preflate is. Small, fast,
-  and the better on these originals. The oracle can read its recipe but not make the file, as with
-  preflate.
-- **(b) libjxl.** Better on high-quality JPEGs, but about eleven times the size in `sieve-install`.
-- **(c) Sieve's own model.** The oracle could check it fully, but it's the most work, and the
-  general-model test showed nothing comes cheap.
+## Old figures corrected in STATISTICS
 
-Your camera photos are high quality, which is where `cjxl` led. So one more measurement would settle
-(a) against (b):
+The `.jpg.sieve` sizes were measured again with this build:
 
-```
-cjxl photo.jpg photo.jxl --lossless_jpeg=1
-```
+| | was | now | against 7z |
+| :--- | ---: | ---: | ---: |
+| The 3653×5480 picture | 3,826,046 | **3,716,747** | −3.31% |
+| 20230830_163945.jpg | 4,111,592 | 4,111,478 | −0.39% |
+| 20240407_153939.jpg | 4,558,132 | 4,557,978 | −0.38% |
 
-on your two photos, with JPEG XL's Windows release.
+The `.7z.sieve` column and the sizes on disk are from the first measurement; I didn't have the
+`.7z` files to measure again.
 
-Recorded in NEXT-VERSION §4a (3) and IDEAS §19.88.
+## Next
+
+If you agree to brunsli, I'll build the `jpg` way into v32's draft:
+
+- brunsli fetched at a pinned commit, as preflate is;
+- the packer keeps it only where the JPEG comes back exact and smaller;
+- `sieve-install` gets the decoder;
+- the specification, the oracle (which reads the recipe), and CI.
 
 ## Files
-- `Sieve/docs/IDEAS.md`
+- `Proof/STATISTICS.md`
 - `Sieve/docs/NEXT-VERSION.md`

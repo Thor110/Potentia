@@ -33,7 +33,7 @@ from the sizes given.
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,075,924,966 | 1.33:1 | +0.20% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
-| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,558,132 | 1.01:1 | −0.37% |
+| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,557,978 | 1.01:1 | −0.38% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 731 | 2.18:1 | −11.07% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,887 | 1,689:1 | −65.65% |
 
@@ -292,9 +292,25 @@ given: of the photograph itself, and of its `.7z`.
 
 | | Original | 7z | `.7z.sieve` | `.jpg.sieve` | Against 7z |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| A picture at 3653×5480 someone sent a link to | 3,844,213 | 3,843,942 | 3,829,453 | 3,826,046 | −0.47% |
-| 20230830_163945.jpg | 4,139,682 | 4,127,434 | 4,112,541 | 4,111,592 | −0.38% |
-| 20240407_153939.jpg | 4,587,473 | 4,575,201 | 4,559,089 | 4,558,132 | −0.37% |
+| A picture at 3653×5480 someone sent a link to | 3,844,213 | 3,843,942 | 3,829,453 | 3,716,747 | −3.31% |
+| 20230830_163945.jpg | 4,139,682 | 4,127,434 | 4,112,541 | 4,111,478 | −0.39% |
+| 20240407_153939.jpg | 4,587,473 | 4,575,201 | 4,559,089 | 4,557,978 | −0.38% |
+
+The `.jpg.sieve` column was measured again on 30 October 2026 (Sieve 0.13.77, `sieve locate` at
+its defaults, from Edward's originals); the `.7z.sieve` column and the sizes on disk are from the
+first measurement.
+
+**What a JPEG recompressor takes off (v32 in the making; NEXT-VERSION §4a).** The same three files,
+the same day, each given back byte for byte:
+
+| | Original | brunsli | `cjxl --lossless_jpeg=1 -e 9` |
+| :--- | ---: | ---: | ---: |
+| A picture at 3653×5480 | 3,844,213 | 3,085,201 (−19.74%) | 3,109,231 (−19.12%) |
+| 20230830_163945.jpg | 4,139,682 | 3,284,887 (−20.65%) | 3,312,460 (−19.98%) |
+| 20240407_153939.jpg | 4,587,473 | 3,660,016 (−20.22%) | 3,703,771 (−19.26%) |
+
+brunsli made each in 0.6 to 0.9 s and gave it back in about 0.5 s; `cjxl` took about 6.3 s and gave
+it back in about 0.2 s. Neither is in Sieve yet.
 
 On disk:
 
