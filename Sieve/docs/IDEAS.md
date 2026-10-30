@@ -41,6 +41,9 @@ and so wait; most are small, and are best gathered into one version when the pau
 - a file carried as its differences from another file in the folder (§19.106: MAPS.WoW and
   MAPS-Larger.WoW).
 
+A plan for gathering these into `sieve-manifest-v32`, with what each has measured and what to
+measure first, is [NEXT-VERSION.md](NEXT-VERSION.md) (30 October 2026).
+
 **Work that needs no new version,** suited to the pause: measuring (the benchmark on public
 corpora, SHOWCASE-PLAN), speed (threads, §19.99; making faster before a right-click "Create .sieve",
 §19.100), the estimate's accuracy (§19.97), the packer's choices (group sizes, search time), the
@@ -4625,7 +4628,8 @@ differences once needed for the 3D node graph perhaps being redundant now.
 - *Why it was set aside before (11 October 2026, §16.3):* every `.sieve` would have had to allow
   for entries only maps need. Since v16 that no longer costs anything: the head's flags byte has
   two bits free (64, 128), so a map's parts would be present only where a flag says so, and
-  ordinary instructions would be the same bytes as now.
+  ordinary instructions would be the same bytes as now. (Both have been used since: 64 for the graph part
+  in v18, 128 for the body as text in v20. The flags byte is now full; see NEXT-VERSION.md.)
 - *Recommended:* one format. A `.sieve` whose head may flag a **graph part** (named-only entries,
   edges, metadata, a seal), its held files carried and packed as any instructions' files are; a
   new manifest version, refused by older readers. The node graph opens `.sieve` files as maps;

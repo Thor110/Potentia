@@ -1,80 +1,84 @@
-# Every way tried, logged and documented (30 October 2026)
+# 0.13.77, and a plan for the next manifest version (30 October 2026)
 
-Unzip over the repository root. This goes on top of your last update. Committed locally (not
-pushed). Code changed: rebuild everything, then run the unit suite and CI steps 03 and 10 (all run
-here: see the end).
+Unzip over the repository root. This goes on top of the last zip ("Every way tried"). Committed
+locally (not pushed). Only the version number changes in code: rebuild if you want the programs to
+say 0.13.77.
 
-Nothing here changes a `.sieve`. A folder of six mixed files and the docs folder pack byte for byte
-the same as with the last commit's build.
+## Version 0.13.77
 
-## The weighing counts mixing (your "oh definitely yes")
+Set in all seven places that carry it, so the next build is kept apart from your 0.13.76 release:
 
-The weighing now counts mixing as the packer found it, so its best way agrees with what the
-instructions do. On a 3 MB text it now reads `mixing mix4 B22 D60` at 4,721,512 bits, where it used
-to say LZMA2 (5,762,104 bits). On enwik8 optimised for size it should now say mixing rather
-than 24.9% by LZMA2; not measured here, as enwik8 isn't here.
+- `CMakeLists.txt`
+- `vcpkg.json`
+- the extension's `manifest.json` and `web/README.md`
+- `make_release.py`'s examples
+- SIEVE-INSTALL-USAGE
+- VISION
 
-## Every way tried, in the log
+Rebuilt here: `sieve --version` says `sieve 0.13.77`. No test or CI step pins the version.
 
-With Keep a log ticked, nothing tried goes unsaid:
+## The plan: `Sieve/docs/NEXT-VERSION.md` (new)
 
-- **Every file not searched gets a line saying why**: under 512 bytes, a copy of another file here,
-  a program (through the x86 filter), an item of Sieve's lines, or a mask of another file's lines.
-- **A searched file's line now also says:**
-  - why it wasn't cut into pieces, for example `pieces not cut (all 24415 blocks of 4 KiB went to
-    LZMA2: nothing to cut)`, which is what happened on enwik8;
-  - what mixing's trials on its start came to: as bytes, as a picture, with the word list;
-  - why mixing wasn't tried, where it wasn't: under 4 KiB, over 16 MiB, decoding first, or stopped.
-- **The weighing in the log has every file's row** (the window shows 12), then **every way weighed
-  for every file**, with its bits and the best marked `*`.
+I went over the documentation (IDEAS, HANDOFF, REVIEW, SHOWCASE-PLAN, SPECIFICATIONS, SIEVE-FORMAT,
+STATISTICS) and the code. The plan has six parts:
 
-For example, from a test folder:
+1. **Where things stand**: the freeze in your words, and where Sieve is weakest now, with the figures.
+2. **The rules for v32**, gathered from the documents:
+   - one version for several ideas;
+   - measure first;
+   - every older version still read;
+   - a file names the oldest version that holds what it uses;
+   - the oracle written from the specification;
+   - decoders pinned;
+   - JPEG and the like last, by your order.
+3. **Every candidate**, with what it has measured, in four groups:
+   - ready to design: the `delta` way, and a small file's overhead;
+   - a lead to measure first: BCJ2, word frequencies for mixing, mixing as a kind of piece, decoding
+     one file alone, the web dictionary;
+   - small, or measured as not worth a version alone: the archive as a number, headers modelled, the
+     rope's next contexts, other lines' places;
+   - large and last: JPEG, a sound model, zlib's PNGs.
+4. **Two shapes for v32:**
+   - small: the overhead, and the archive as a number;
+   - with `delta`: if WoWRevived's log shows that a larger dictionary or grouping isn't enough for
+     MAPS.WoW.
+5. **The order of work:**
+   - measure first, with no version: WoWRevived's log, a byte breakdown of `control.py`, BCJ2 outside
+     Sieve, Silesia;
+   - then you choose;
+   - then the specification;
+   - then the build, with a table of every place to change, taken from the commits that added v30
+     and v31;
+   - then the proof;
+   - then freeze again at v32.
+6. **Five decisions for you.**
 
-```
-file 2 of 6: small.txt, 20000 bytes: LZMA2 about 7991, rope 12538 (L8 W1 S1 P0 K0), pieces not cut
-(all 5 blocks of 4 KiB went to LZMA2: nothing to cut), mix4 B16 D60 6811 [mixing on its first
-20000 bytes: as bytes 7150, with the word list 6809]; taken: mix4, 6811 bytes
-file 3 of 6: tiny.txt, 5 bytes: not searched (under 512 bytes); in the lzma2 stream
-```
+One thing to plan around: **the head's flags byte is full.** All eight bits are in use, so a new
+optional part needs the version byte to say so, or a second flags byte. IDEAS still said two bits
+were free; I've added a note there.
 
-## `Sieve/docs/METHODS.md` (new): every way, for presenting
+The plan is linked from IDEAS's waiting list, HANDOFF and the README.
 
-One page with every way Sieve tries a file, in the order a reading runs:
+## Don Quixote, corrected in `Proof/STATISTICS.md`
 
-- what it is set beside (address, zip, 7z);
-- each file's way (items, programs, masks, copies, compressed formats);
-- the search (LZMA2, the rope, pieces, mixing and its trials);
-- files together (groups, the mixed stream);
-- the streams' LZMA2 tuning;
-- the read-back;
-- the weighing.
+Going over the documents turned up an old figure. STATISTICS gave Don Quixote as 683,205 bytes
+(−0.41% against 7z), which is about v23's size, from before mixing. I measured it again (it's in
+the repository's public-domain anchors): **533,148 bytes**, installed back identical. That is
+exactly HANDOFF's v28 figure, and **22.28% under 7z** (4.49:1).
 
-For each, it says when it is tried and when it isn't, and quotes the log line it writes, so a log
-can be followed from the page. It is linked from README, MANUAL and SHOWCASE-PLAN; the plan's
-answer to "why is it slower?" now points to it and to the enwik9 breakdown.
-
-## Checked here
-
-Linux, GCC, a Release build of everything, with no warnings.
-
-- A folder of six files read with the log on: the lines above, and the weighing with mixing.
-- Byte for byte: the folder and the docs folder packed by this build and by the last commit's,
-  identical (1,032,551 bytes for the docs).
-  - On the first try they differed by 1,993 bytes. The old build I'd made fresh had no
-    `dictionaries` folder beside it, so it mixed without the word list. Given the folder, it made
-    the same file.
-- The unit suite (step 01, 389 s) and CI steps 03 (13 s) and 10 (820 s) passed.
-- Every changed file compiles for Windows with MinGW (`-fsyntax-only`).
+The "at a glance" row and the section now say so. Making it took 13.3 s and installing it 5.3 s, on
+the Linux machine here. Its size on disk wasn't measured, so that cell is empty.
 
 ## Files
+- `Proof/STATISTICS.md`
+- `Sieve/CMakeLists.txt`
 - `Sieve/README.md`
-- `Sieve/client/file_locator.cpp`
-- `Sieve/client/file_locator.hpp`
 - `Sieve/docs/HANDOFF.md`
-- `Sieve/docs/MANUAL.md`
-- `Sieve/docs/METHODS.md` (new)
-- `Sieve/docs/SHOWCASE-PLAN.md`
-- `Sieve/tools/cli/pack.cpp`
-- `Sieve/tools/cli/pack.hpp`
-- `Sieve/tools/cli/weigh.cpp`
-- `Sieve/tools/cli/weigh.hpp`
+- `Sieve/docs/IDEAS.md`
+- `Sieve/docs/NEXT-VERSION.md` (new)
+- `Sieve/docs/SIEVE-INSTALL-USAGE.md`
+- `Sieve/tools/make_release.py`
+- `Sieve/vcpkg.json`
+- `Sieve/web/README.md`
+- `Sieve/web/extension/manifest.json`
+- `VISION.md`

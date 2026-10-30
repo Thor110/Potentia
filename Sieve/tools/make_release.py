@@ -48,9 +48,9 @@ Usage (from the repository root, on the machine the release is for):
 
   tools\make_release.bat                            # Windows: double-click it; everything by default
   python tools/make_release.py                      # the version from CMakeLists.txt, into release/
-  python tools/make_release.py --version 0.13.76 --build-dir out/build/x64-Release --out release
-  python tools/make_release.py --version 0.13.76 --skip-build      # the build is already made
-  python tools/make_release.py --version 0.13.76 --seven-zip       # 7z first, as before v4, to compare
+  python tools/make_release.py --version 0.13.77 --build-dir out/build/x64-Release --out release
+  python tools/make_release.py --version 0.13.77 --skip-build      # the build is already made
+  python tools/make_release.py --version 0.13.77 --seven-zip       # 7z first, as before v4, to compare
 
 The instructions and the program carry the release folder packed at the newest version (sieve
 locate --items; until 22 October 2026 sieve-manifest-v4), so they install straight to a runnable
@@ -239,7 +239,7 @@ def newer_sources(build):
 
 def main():
     ap = argparse.ArgumentParser(description="Make Sieve's release files, in order, and check them.")
-    ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.76)")
+    ap.add_argument("--version", default=None, help="the release's version (default: CMakeLists.txt's, e.g. 0.13.77)")
     ap.add_argument("--build-dir", type=Path, default=None, help="the CMake build folder (default: the Release preset's)")
     ap.add_argument("--out", type=Path, default=ROOT / "release", help="where the release files go (default: release/)")
     ap.add_argument("--name", default="sieve", help="the published files' base name (default: sieve)")

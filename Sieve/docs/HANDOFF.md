@@ -4100,7 +4100,7 @@ and the phases' times; no settings or reports, which an install has none of. CI 
 ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;
 the release; then "Create .sieve" in the right-click menu (§19.100).
 
-*Then the next format version,* from IDEAS's list "Waiting for the next format version" (a file as
+*Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's
 overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.
 
@@ -4239,6 +4239,9 @@ order:
    files mixed together in a group) and two single files at v20.
 5. **A release** (0.13.76, set 28 October 2026 to keep it apart from the last release) once 1 and 2 are done: the notes leading with the benchmark
    tables and the three uses (smaller archives, right-click extract, installers that check).
+   Edward released 0.13.76 on 30 October 2026, and the version is now 0.13.77 (CMakeLists.txt,
+   vcpkg.json, the extension's manifest and web/README, make_release.py's examples,
+   SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it.
 6. **Then the posts,** one audience at a time (SHOWCASE-PLAN §5), Edward's video among them.
 7. **A game as a test bed** (Edward, 28 October 2026; IDEAS §19.104): once his *Alien Trilogy*
    engine (another Claude session's work) runs normally, its small files sieved, and decoded or

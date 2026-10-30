@@ -32,7 +32,7 @@ from the sizes given.
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,075,924,966 | 1.33:1 | +0.20% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
-| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 683,205 | 3.50:1 | −0.41% |
+| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,558,132 | 1.01:1 | −0.37% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 832 | 1.92:1 | +1.22% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,887 | 1,689:1 | −65.65% |
@@ -277,7 +277,13 @@ smaller the `.sieve` is than `pi6.7z` (512,745 bytes).
 | :--- | ---: | ---: | ---: | ---: |
 | pg996.txt | 2,391,678 | 2,392,064 | | |
 | pg996.7z | 686,020 | 688,128 | 3.49:1 | |
-| pg996.txt.sieve | 683,205 | 684,032 | 3.50:1 | −0.41% |
+| pg996.txt.sieve | 533,148 | | 4.49:1 | −22.28% |
+
+The `.sieve` was measured again on 30 October 2026, at `sieve-manifest-v31` (mixed, with the word
+list), with Sieve 0.13.77's `sieve locate pg996.txt --installer` at its defaults: 533,148 bytes,
+installed back identical. That is the size HANDOFF gives for it at v28. The 683,205 shown here
+before was from before mixing (v23 gave 683,195). On the Linux machine here it took 13.3 s to make
+and 5.3 s to install; its size on disk was not measured.
 
 ## Photographs (JPEG)
 

@@ -157,6 +157,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
 | [web/README.md](web/README.md), [context/README.md](context/README.md) | The browser extension and site builder; the right-click menu |
 | [docs/SIEVE-FORMAT.md](docs/SIEVE-FORMAT.md) | The `.sieve` format on one page, for writing a decoder of your own |
 | [docs/METHODS.md](docs/METHODS.md) | Every way Sieve tries a file, in order, and the log line each one writes |
+| [docs/NEXT-VERSION.md](docs/NEXT-VERSION.md) | The plan for the next format version, `sieve-manifest-v32` |
 | [docs/SPECIFICATIONS.md](docs/SPECIFICATIONS.md) | The specification |
 | [docs/IDEAS.md](docs/IDEAS.md) | What is not built yet, and what was set aside and why |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | The briefing for picking the work up cold |

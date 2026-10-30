@@ -102,7 +102,7 @@ Potentia aims to create:
 
 Potentia is part archive, part alignment sandbox, and part digital civilisational backup.
 
-Status: the search-space engine, **Sieve**, is built and released (this repository: version 0.13.76): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
+Status: the search-space engine, **Sieve**, is built and released (this repository: version 0.13.77): exact addressing, versioned filters, maps of verified anchors and a walkable hallway. The preservation environment and the Museum itself remain at the design stage.
 
 <p align="right"><a href="#-index">⬆️ Return to Index</a></p>
 
