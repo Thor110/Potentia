@@ -79,6 +79,9 @@ struct PackReport
     size_t mixed_together = 0;           // v29: files that would be mixed one by one, mixed together in it instead
     bool v30 = false;                    // v30: files mixed together in groups
     bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
+    bool v32 = false;                    // v32 (draft): some file carried as its differences from another
+    size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
+    uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t member_archives = 0, members = 0; // v31: those archives, and their files
     size_t mix_groups = 0, mix_group_files = 0; // v30: the groups, and the files in them
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart
@@ -133,6 +136,12 @@ struct SampleAsWhole
 // sieve-manifest-v31.
 // Everything that makes instructions passes it unless an older version is asked for by name.
 inline constexpr uint32_t kNewestRope = 14;
+
+// v32 in the making (docs/NEXT-VERSION.md): its ways are made only with the draft switch on
+// (`--v32-draft`), so every build writes v31 as before until v32 is frozen. For testing only:
+// nothing made with it is to be published, and the finished v32 need not read it.
+void set_v32_draft(bool on);
+bool v32_draft();
 
 // What Optimise Compressed Formats does with an archive or a compressed file, for the whole run:
 // `temporary`, made again exactly on installing, so the program that wants it still finds it (only

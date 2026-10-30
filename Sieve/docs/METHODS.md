@@ -45,6 +45,24 @@ carried as its contents and installed as them. The kinds:
 Before the costly search for the levels that make an archive's blocks again, its contents are
 weighed cheaply, and the search is not started where they would come out no smaller.
 
+## 2a. Files alike (v32 in the making, only with `--v32-draft`)
+
+With the draft switch (`--v32-draft`, `[locator] v32_draft`), a file over 8 MiB carried as it is
+may be **written as its differences from another file of the folder** (the `delta` way, delta-v1):
+
+- **Finding the pair:** each such file is cut into blocks where its content says (about every 4
+  KiB), one fingerprint a block. A file whose blocks are mostly another's is paired with it.
+- **Writing it:** the file is written as copies of at least 64 bytes from the other, plus new bytes.
+  The new bytes go in the lzma2 stream, so they are packed as any file's are.
+- **Kept** where the copies cover at least half of it. It is decided before the search, so such a
+  file is not searched.
+- **Not used below 8 MiB:** there, the groups mixed together and LZMA2's window find what files
+  share, and better.
+
+Log: `file N of M: NAME, S bytes: as its differences from OTHER: C copies covering B bytes, F new
+bytes, a script of L bytes in the lzma2 stream`, then `not searched (carried as its differences from
+OTHER (above))`.
+
 ## 3. The search, for every other file (`file N of M: NAME, the rope and pieces`)
 
 Each file left is tried every one of these ways on its own. Several files are searched at once, as

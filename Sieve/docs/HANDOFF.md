@@ -4100,6 +4100,14 @@ and the phases' times; no settings or reports, which an install has none of. CI 
 ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;
 the release; then "Create .sieve" in the right-click menu (§19.100).
 
+*v32 begun (30 October 2026).* Edward: "make a start on all of that then once it is done I will test it
+out on WoWRevived again". v32 is built behind a draft switch (`--v32-draft`, `[locator] v32_draft`):
+without it every build writes v31 as before. The first of its ways, `delta` (a file over 8 MiB as
+its differences from another), is built through the specification, the packer, the reader, the
+oracle and CI step 11. A 160 MB pair: 22,537,063 → 17,947,687 bytes. Progress and what is next:
+NEXT-VERSION.md §4a, which also holds a question found on the way (a v30 group with another file in
+its middle: the reader takes it, the specification and the oracle refuse it).
+
 *Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's
 overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.

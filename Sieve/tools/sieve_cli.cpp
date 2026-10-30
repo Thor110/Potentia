@@ -2445,6 +2445,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     // --optimise-compressed, made again where Sieve can, else carried as what it holds.
     const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
     set_compressed_modes(temporary || !permanent, permanent || !temporary);
+    set_v32_draft(a.has("v32-draft")); // (v32 in the making: docs/NEXT-VERSION.md)
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 :
                      a.has("v15") || a.has("v16") || a.has("v19") || a.has("v20") || a.has("v21") || a.has("v22") ? 5 :

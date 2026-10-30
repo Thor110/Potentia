@@ -1,6 +1,7 @@
 // Sieve CLI -- an installer's files packed (pack.hpp).
 
 #include "cli/pack.hpp"
+#include "cli/delta.hpp"
 #include "cli/timings.hpp"
 
 #include "sieve/filekind.hpp"
@@ -2413,6 +2414,12 @@ namespace {
 std::atomic<bool> g_compressed_temporary{true}, g_compressed_permanent{true};
 } // namespace
 
+namespace {
+std::atomic<bool> g_v32_draft{false};
+}
+void set_v32_draft(bool on) { g_v32_draft = on; }
+bool v32_draft() { return g_v32_draft.load(std::memory_order_relaxed); }
+
 void set_compressed_modes(bool temporary, bool permanent)
 {
     g_compressed_temporary = temporary;
@@ -2480,6 +2487,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v31's: an archive made again from its skeleton with what it holds carried as its own files
     // (each its own way, in the groups), and whether unpacking pays judged by mixing too.
     const bool members_on = rope_newest >= 14 && v21;
+    // v32 (in the making): a file carried as its differences from another, only with the draft switch.
+    const bool delta_on = rope_newest >= 14 && v21 && v32_draft();
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -3209,6 +3218,88 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
+    // v32 (in the making, behind the draft switch): a file carried as its differences from another
+    // file of the folder (delta-v1). Every file over 8 MiB carried as it is is cut into blocks
+    // where its content says, one fingerprint a block; a file whose blocks are mostly another's is
+    // written as copies from it and new bytes, where the copies cover at least half of it (the new
+    // bytes then go in the lzma2 stream as any file's do, so the rest of the file is packed as well
+    // as before, and the copies cost a few bytes each). Measured on a 160 MB pair (IDEAS §19.106):
+    // under 1 MB of fingerprints, the base's index about 92 MB, built only for a pair found alike.
+    // Decided before the search, so a file carried so is not searched: on a game's two maps of 160
+    // MB each, hours of it. A file made from another is never a base, so nothing is made from a file
+    // not yet made; its base is any file carried as itself.
+    std::vector<std::vector<uint8_t>> delta_scripts(files.size());
+    std::vector<bool> is_delta(files.size(), false);
+    size_t delta_count = 0;
+    uint64_t delta_bytes = 0, delta_script_bytes = 0;
+    if (delta_on && !stop_requested())
+    {
+        const timings::Scope t("pack.delta");
+        // Only files over 8 MiB: below that, the groups mixed together (v30) and LZMA2's window find
+        // what files share, and better (two 100 KB texts sharing two thirds: as a delta 142,005 bytes,
+        // mixed as a group 136,939). Above it a file is in no group, and two files further apart
+        // than LZMA2's 64 MiB window share nothing in it (a 30 MB pair: 30,914,001 bytes with a
+        // 16 MiB dictionary, 16,605,654 with 64 MiB; IDEAS §19.106). SIEVE_DELTA_FROM=N, for
+        // testing, takes files of N bytes or more instead.
+        uint64_t kSmallest = (uint64_t(8) << 20) + 1;
+        if (const char* from = std::getenv("SIEVE_DELTA_FROM"))
+            if (*from) kSmallest = std::max<uint64_t>(4096, std::strtoull(from, nullptr, 10));
+        auto can_be = [&](size_t i) {
+            const std::string& w = files[i]->way;
+            return (w == "raw" || w == "x86") && files[i]->remake.empty() && !files[i]->member && !derived[i] && bytes[i].size() >= kSmallest &&
+                   bytes[i].size() < (uint64_t(1) << 32);
+        };
+        std::vector<std::vector<delta::Block>> prints(files.size());
+        std::unordered_map<uint64_t, std::vector<uint32_t>> owners; // a fingerprint's files (at most 16: a block every file has tells nothing)
+        size_t candidates = 0;
+        for (size_t i = 0; i < files.size(); ++i)
+            if (can_be(i)) ++candidates;
+        if (candidates >= 2)
+        {
+            progress("files alike: their blocks' fingerprints");
+            for (size_t i = 0; i < files.size(); ++i)
+            {
+                if (!can_be(i)) continue;
+                prints[i] = delta::blocks_of(bytes[i]);
+                for (const delta::Block& b : prints[i])
+                {
+                    std::vector<uint32_t>& o = owners[b.print];
+                    if (o.size() <= 16 && (o.empty() || o.back() != uint32_t(i))) o.push_back(uint32_t(i));
+                }
+            }
+            std::vector<bool> is_base(files.size(), false);
+            for (size_t i = 0; i < files.size() && !stop_requested(); ++i)
+            {
+                // (A program stays in the x86 stream; a file another's lines are drawn from stays itself,
+                // since masks are applied before deltas.)
+                if (prints[i].empty() || is_base[i] || base_of_some[i] || files[i]->way != "raw") continue;
+                // The file whose blocks cover most of this one's bytes.
+                std::unordered_map<uint32_t, uint64_t> shared;
+                for (const delta::Block& b : prints[i])
+                    if (auto it = owners.find(b.print); it != owners.end() && it->second.size() <= 16)
+                        for (const uint32_t k : it->second)
+                            if (k != i && !is_delta[k]) shared[k] += b.length;
+                uint32_t best = 0;
+                uint64_t most = 0;
+                for (const auto& [k, n] : shared)
+                    if (n > most || (n == most && k < best)) best = k, most = n;
+                if (most * 2 < bytes[i].size()) continue;
+                delta::Script sc = delta::make(bytes[best], bytes[i]);
+                if (sc.copied * 2 < bytes[i].size()) continue;
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " + std::to_string(bytes[i].size()) +
+                         " bytes: as its differences from " + files[best]->path + ": " + std::to_string(sc.copies) + " copies covering " + std::to_string(sc.copied) +
+                         " bytes, " + std::to_string(sc.fresh) + " new bytes, a script of " + std::to_string(sc.bytes.size()) + " bytes in the lzma2 stream");
+                files[i]->way = "delta " + std::to_string(best) + " " + std::to_string(sc.bytes.size());
+                delta_scripts[i] = std::move(sc.bytes);
+                is_delta[i] = true;
+                is_base[best] = true;
+                ++delta_count;
+                delta_bytes += bytes[i].size();
+                delta_script_bytes += delta_scripts[i].size();
+            }
+        }
+    }
+
     // v8: a file carried by the tightened rope (rope-wave-v1) where its code, searched for within the
     // time given, is smaller than the file packed alone. Not a file with a copy in the folder: the
     // LZMA2 stream carries a copy for almost nothing, a rope code each time; nor a small one.
@@ -3216,6 +3307,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<RopeParams> rope_params(files.size());
     std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
+    r.deltas = delta_count;
+    r.delta_bytes = delta_bytes;
+    r.delta_scripts = delta_script_bytes;
     m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
     bool rope_triangle = false; // v23: some rope way rope-wave-v6's
     bool mixed = false;         // v24: some file carried by mixing
@@ -3249,6 +3343,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (w == "x86") why += "; a program, through the x86 filter";
                 if (w.rfind("item ", 0) == 0) why = "an item of Sieve's lines, carried as its place on the line";
                 if (w.rfind("lines ", 0) == 0) why = "made from another file's lines (" + files[std::stoul(w.substr(6))]->path + "), carried as a mask of them";
+                if (w.rfind("delta ", 0) == 0) why = "carried as its differences from " + files[std::stoul(w.substr(6))]->path + " (above)";
                 if (why.empty()) why = "carried as " + w;
                 progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " + std::to_string(bytes[i].size()) +
                          " bytes: not searched (" + why + ")" + (w == "raw" || w == "x86" ? "; in the lzma2 stream" : ""));
@@ -3723,6 +3818,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.raw_bytes += bytes[i].size();
         }
         else if (files[i]->way.rfind("pieces ", 0) == 0) plain.insert(plain.end(), piece_z[i].begin(), piece_z[i].end()); // v13: its LZMA2 pieces, at its turn
+        else if (is_delta[i]) plain.insert(plain.end(), delta_scripts[i].begin(), delta_scripts[i].end()); // v32: its script, at its turn
     for (size_t i = 0; i < files.size(); ++i)
         if (derived[i])
         {
@@ -3989,7 +4085,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
     // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
-    m.v31 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; });
+    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0; });
+    m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
     m.v28 = mixed4 || m.v29;                  // (mix-v4 only where the newest instructions are made: above)
@@ -4016,6 +4113,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v29 = m.v29;
     r.v30 = m.v30;
     r.v31 = m.v31;
+    r.v32 = m.v32;
     for (const ManifestEntry& x : m.entries)
     {
         r.member_archives += x.remake.rfind("skm ", 0) == 0;
@@ -4104,7 +4202,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -4117,9 +4215,12 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
+        if (r.deltas)
+            o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
+              << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
         if (r.member_archives)
             o << "members   " << r.member_archives << " of them made again from their skeleton and their " << r.members
               << " file(s), each carried its own way (" << kSkeletonMembersManifestVersion << ")\n";

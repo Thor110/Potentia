@@ -781,6 +781,35 @@ SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31p.sieve --items --compresse
 if grep -q "^members \|^remade " z31p.txt; then exit 1; fi
 $S install z31p.sieve --to z31p_inst > /dev/null
 cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
+# v32 in the making (30 October 2026; only with --v32-draft, for testing: docs/NEXT-VERSION.md): a
+# file carried as its differences from another of the folder ("delta K L", delta-v1). Two files of
+# about 330 KB, the second the first with stretches changed and bytes put in (so all after them is
+# shifted; SIEVE_DELTA_FROM takes files this small, which the packer leaves to its groups): with the
+# draft, one is a delta, given back by Sieve, by the oracle (which reads delta-v1
+# itself, from the specification) and by sieve-install; without it, nothing is v32.
+rm -rf d32 && mkdir d32
+python - <<'PY'
+a = b"".join(open(f, "rb").read() for f in ("../docs/MANUAL.md", "../docs/SPECIFICATIONS.md"))[:330000]
+b = bytearray(a)
+for k in range(8):  # (the same changes every run)
+    at = 20000 + k * 37000
+    b[at:at + 900] = bytes((k * 31 + j * 7) % 256 for j in range(900))
+    b[at + 5000:at + 5000] = b"put in here, %d\n" % k
+open("d32/one.txt", "wb").write(a)
+open("d32/two.txt", "wb").write(bytes(b))
+PY
+SIEVE_DELTA_FROM=65536 $S locate d32 --installer d32.sieve --items --v32-draft 2>&1 | tr -d '\r' > d32.txt
+grep -c "^deltas    1 file(s) carried as their differences from another" d32.txt > /dev/null
+grep -c "^manifest  sieve-manifest-v32" d32.txt > /dev/null
+rm -rf d32_inst d32_oracle d32_si
+$S install d32.sieve --to d32_inst > /dev/null
+diff -r d32 d32_inst
+python sieve_ref.py unpack d32.sieve --to d32_oracle | grep -c "^delta [0-9]* [0-9]*	" > /dev/null
+diff -r d32 d32_oracle
+$SI d32.sieve --to d32_si --yes > /dev/null
+diff -r d32 d32_si
+$S locate d32 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
+if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

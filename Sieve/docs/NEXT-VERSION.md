@@ -166,6 +166,50 @@ and nothing made with it is published. Only then does v32 become the newest, in 
    largest build and the largest gain on JPEGs, last so the rest is not held up by it.
 5. **BCJ2** and **word frequencies for mixing**, only if their measurements (§3b) earn a place.
 
+## 4a. Progress
+
+**1. The `delta` way: built, behind the draft switch (30 October 2026).**
+- **Built:** SPECIFICATIONS §12.2's v32 paragraph; the packer, the reader and the oracle (which reads
+  delta-v1 from the specification, not the C++); `--v32-draft` for `sieve` and the hallway, and
+  `[locator] v32_draft`; CI step 11's v32 block; METHODS §2a.
+- **Measured** (IDEAS §19.106): a 160 MB pair, 22,537,063 → 17,947,687 bytes (20.36% smaller),
+  made in 627 s instead of 1,113.
+- **For Edward to try:** WoWRevived with `--v32-draft` and Keep a log.
+
+**2. A small file's overhead: measured, to build next (30 October 2026).** `control.py` is not in the
+repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve` is 1,153 bytes:
+
+| Bytes | What | v32 |
+| ---: | :--- | :--- |
+| 5 | `sieve` | stays |
+| 1 + 1 | the version and the flags | stay |
+| 2 | the lzma2 stream's packed size | can go: the stream is the file's last part, so it is what is left |
+| 2 | its unpacked size | can go: the listing gives it |
+| 1 | its dictionary's byte | can go where it is the one its size gives |
+| 32 | the tree's SHA-256 | stays (Edward) |
+| 22 | the listing (its name, size and way) | stays |
+| 7 | LZMA2's framing (one chunk's header and the end mark) | can go: a stream under 2 MiB as plain LZMA, one byte of settings |
+| 1,080 | the file, packed | |
+
+About 11 bytes can be taken off: 1,153 to about 1,142. On `control.py` that would be 832 to about
+821, under 7z's 822. That figure is an estimate until it is built and measured.
+
+**Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
+v30 says a reader refuses a group of files mixed together that holds a file of another way in its
+middle, and the oracle does. But v30's and v31's packer never cuts a group there, and Sieve's reader
+accepts it (the `mixt` comment in `locate.hpp` even says "other ways may come between"). So a v30 or
+v31 file can install with Sieve and be refused by the oracle.
+
+Shown here on three files (a text, random bytes, a text), packed by the ordinary build: the oracle
+refuses it, and Sieve gives it back identical. Two ways out:
+
+- **(a) The specification and the oracle allow it,** as the reader and the files already made do. No
+  file changes.
+- **(b) The packer cuts groups there.** It costs: on those three files, 156,411 bytes against
+  136,939, 14% larger.
+
+(a) is the recommendation. The draft packs groups as v31 does until Edward decides.
+
 ## 5. The order of work
 
 **Step 0: measure (no version, no change to any `.sieve`).**

@@ -6773,9 +6773,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 31):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 32):
         return data
-    v31 = data[5] == 31  # v30 whose archives may be made again from a skeleton and their files apart
+    v32 = data[5] == 32  # v31 whose files may be carried as their differences from another (a draft)
+    v31 = data[5] == 31 or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = data[5] == 30 or v31  # v29 whose files may be mixed together in groups
     v29 = data[5] == 29 or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
     v28 = data[5] == 28 or v29  # v27 whose files may be carried by mix-v4
@@ -6832,7 +6833,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
@@ -6877,6 +6878,44 @@ def v7_listing(data):
     return version + listing + data[nl + 1 + packed:]
 
 
+def delta_apply(base, script, size, path):
+    """delta-v1 (SPECIFICATIONS v32): a run of operations, each a varint t; t even, t/2 new bytes
+    follow; t odd, t/2 bytes copied from the base, from where the last copy ended moved by a second
+    varint, zigzag-signed (0, 1, 2, 3 ... as 0, -1, 1, -2 ...). What it makes must be the file's size."""
+    def varint(at):
+        v, shift = 0, 0
+        while True:
+            if at >= len(script):
+                sys.exit(f"{path}: its delta's script ends inside a number")
+            b = script[at]
+            at += 1
+            v |= (b & 0x7F) << shift
+            shift += 7
+            if not b & 0x80:
+                return v, at
+    out, at, last = bytearray(), 0, 0
+    while at < len(script):
+        t, at = varint(at)
+        n = t >> 1
+        if n == 0 or len(out) + n > size:
+            sys.exit(f"{path}: its delta makes an operation of no bytes, or more than the file")
+        if t & 1 == 0:
+            if len(script) - at < n:
+                sys.exit(f"{path}: its delta's script ends inside new bytes")
+            out += script[at:at + n]
+            at += n
+        else:
+            z, at = varint(at)
+            start = last + (-((z + 1) >> 1) if z & 1 else z >> 1)
+            if start < 0 or start + n > len(base):
+                sys.exit(f"{path}: its delta copies from outside its base")
+            out += base[start:start + n]
+            last = start + n
+    if len(out) != size:
+        sys.exit(f"{path}: its delta makes {len(out)} bytes, not {size}")
+    return bytes(out)
+
+
 def cmd_unpack_v7(args, data):
     """sieve-manifest-v7 (SPECIFICATIONS §12.2): v6 with what the rest gives left out (files, bytes,
     an empty stream, a single file's root), items listed "i K path", the listing perhaps LZMA2, and the
@@ -6891,7 +6930,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v31 = lines[0] == "sieve-manifest-v31"  # v30 whose archives may be made again from a skeleton and their files apart
+    v32 = lines[0] == "sieve-manifest-v32"  # v31 whose files may be carried as their differences from another (a draft)
+    v31 = lines[0] == "sieve-manifest-v31" or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = lines[0] == "sieve-manifest-v30" or v31  # v29 whose files may be mixed together in groups (mix-v4)
     v29 = lines[0] == "sieve-manifest-v29" or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
     v28 = lines[0] == "sieve-manifest-v28" or v29  # v27 whose files may be carried by mix-v4
@@ -7029,6 +7069,7 @@ def cmd_unpack_v7(args, data):
     got, xa, pa, ia, ra = [None] * len(files), 0, 0, 0, 0
     group = None  # v30: the open group of files mixed together: its bytes, how many are given out, its first file
     remakes = {}
+    deltas = {}  # v32: a file's base and its delta's script
     # v31: each archive made again from its skeleton and its members, the files listed under its own
     # path ("<archive>/<n>"), as many as its recipe says: not files of the tree.
     members = {}
@@ -7149,6 +7190,16 @@ def cmd_unpack_v7(args, data):
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v32 and way.startswith("delta "):
+            # "delta K L" (SPECIFICATIONS v32): its L-byte script next in the lzma2 stream, applied to
+            # file K once every other file is made.
+            m32 = re.fullmatch(r"(0|[1-9][0-9]*) (0|[1-9][0-9]*)", way[6:])
+            if not m32 or i in remakes:
+                sys.exit(f"{path}: a delta not written as Sieve writes it")
+            n = int(m32.group(2))
+            if len(plain) - pa < n:
+                sys.exit(f"{path}: the lzma2 stream ends before its delta's script")
+            deltas[i], pa = (int(m32.group(1)), plain[pa:pa + n]), pa + n
         elif v13 and way.startswith("pieces "):
             # "pieces z17733 r4121949 rope <parameters>": the z pieces next in the lzma2 stream, the r
             # pieces joined and coded by the rope, next in the rope stream; laid out in order.
@@ -7328,6 +7379,13 @@ def cmd_unpack_v7(args, data):
             sys.exit(f"{files[i][0]}: not remade at its size")
     if group is not None and group[1] != len(group[0]):
         sys.exit(f"{group[2]}'s group ends before its files have its bytes")
+    for i, (k, script) in sorted(deltas.items()):  # v32: each made from its base as installed
+        if k >= len(files) or k == i or k in deltas or k in members:
+            sys.exit(f"{files[i][0]}: made from a file that is not carried as itself")
+        if k in unchecked:
+            unchecked.add(i)  # (its base not made here, so neither is it)
+            continue
+        got[i] = delta_apply(got[k], script, files[i][1], files[i][0])
     if xa != len(x86) or pa != len(plain) or ia != len(places) or ra != len(ropes):
         sys.exit("the streams hold more than the files")
     for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
@@ -7473,7 +7531,7 @@ def instructions_bytes(data):
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
     # (A head in bytes: "sieve" and its version's byte, 16 to 31.)
-    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 31):
+    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 32):
         return data
     # (A number's bytes, most significant first: none of them a leading zero. SPECIFICATIONS: "exactly
     # as long as the manifest, or one byte longer".)
@@ -7508,7 +7566,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -7645,7 +7703,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

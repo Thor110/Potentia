@@ -5351,6 +5351,14 @@ any other file, so the shared content is paid for twice.
       (`add_packed`), the fingerprints are under 1 MB, and the index is built only for a pair found
       alike. A larger LZMA2 dictionary, by contrast, takes about twelve times itself to encode
       (about 2.25 GiB for 192 MiB).
+  - *Built, in v32's draft (30 October 2026; `--v32-draft`; SPECIFICATIONS v32, METHODS §2a).* The
+    `delta` way, for files over 8 MiB. On the same 160 MB pair, made with `sieve locate --search-per-file
+    2`: v31's build made v20 instructions of 22,537,063 bytes in 1,113 s, installed in 6 s; the draft
+    made v32 of 17,947,687 (20.36% smaller) in 627 s, installed in 5 s, the second file written as
+    a script of 7,965,551 bytes (almost all of it the random bytes put in, which nothing packs).
+    Both installed identical. On a 20 MB pair, inside LZMA2's window, the gain is small (4,637,619
+    to 4,635,222) but the second file is not searched (85 s to 52 s). Below 8 MiB it is not used:
+    two 100 KB texts sharing two thirds came to 142,005 bytes as a delta, 136,939 mixed as a group.
 
 **19.107 Edward's notes of 29 October 2026 (built).**
 - *The window's title* is "The Sieve of Potentia".

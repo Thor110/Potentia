@@ -120,6 +120,8 @@ const char* kUsage =
     "  --limits-focus LINE the line the setup menu's FIND MY LIMITS grows (default all: every line)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
+    "  --v32-draft         sieve-manifest-v32 in the making, for testing only: a file carried as its differences\n"
+    "                      from another of the folder too; a draft, not to be published ([locator] v32_draft)\n"
     "  --prioritise-decoding  the File Locator's Prioritise Decoding Speed ticked, for this run:\n"
     "                      no file mixed, so its instructions install quickly ([locator] prioritise_decoding)\n"
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
@@ -699,6 +701,9 @@ int run(const Args& a)
     // No file mixed ([locator] prioritise_decoding; --prioritise-decoding for this run).
     if (a.has("prioritise-decoding")) app.locator_decoding = true;
     sieve::set_prioritise_decoding(app.locator_decoding);
+    // v32 in the making, for testing only ([locator] v32_draft; --v32-draft for this run).
+    if (a.has("v32-draft")) app.locator_v32_draft = true;
+    sieve::cli::set_v32_draft(app.locator_v32_draft);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = true;
     sieve::llm::set_widen_weights(app.widen_weights);

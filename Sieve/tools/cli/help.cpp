@@ -1094,6 +1094,10 @@ const std::vector<Page>& pages()
                                     "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
+          {"--v32-draft", "sieve-manifest-v32 in the making (docs/NEXT-VERSION.md), for testing only: its ways are\n"
+                          "made too (a file carried as its differences from another of the folder, where it is\n"
+                          "mostly that file). Without it, instructions are made as before. What it makes is a\n"
+                          "draft: not to be published, and the finished v32 need not read it."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

@@ -222,6 +222,7 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "compressed_permanent") s.locator_permanent = value == "1";
             else if (key == "search_every_wave") s.locator_every_wave = value == "1";
             else if (key == "prioritise_decoding") s.locator_decoding = value == "1";
+            else if (key == "v32_draft") s.locator_v32_draft = value == "1";
             else if (key == "keep_log") s.locator_log = value == "1";
             else if (key == "search_share_packing" || key == "search_share_weighing")
             {
@@ -301,6 +302,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "compressed_permanent", locator_permanent ? "1" : "0", "1: Compressed formats: permanent ticked (an archive or a compressed file carried as what it holds, installed so); 0: off"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing, nor the files carried together mixed (quicker to install, larger); 0: off"},
+        {"locator", "v32_draft", locator_v32_draft ? "1" : "0", "1: sieve-manifest-v32 in the making, for testing only (docs/NEXT-VERSION.md): a file carried as its differences from another of the folder too; what it makes is a draft, not to be published; 0: off, instructions made as before"},
         {"locator", "keep_log", locator_log ? "1" : "0", "1: Keep a log ticked: each reading and saving writes what it reported as it went (every best so far, with its time), how long it took and its phases' times to a text file in the logs folder beside these settings, and each install its decoding and writing times; 0: off"},
         {"locator", "search_share_packing", share_text(locator_share_packing), "learned: the share of the search's time packing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
         {"locator", "search_share_weighing", share_text(locator_share_weighing), "learned: the share of the search's time weighing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
