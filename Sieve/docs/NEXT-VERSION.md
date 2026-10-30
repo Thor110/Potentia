@@ -210,6 +210,83 @@ and v20 wrote the head and the listing in bytes. Of the 731: 670 the file packed
 17 the listing, 7 the magic, version and flags, 5 the stream's sizes and dictionary. The same 11 or
 so bytes could go (to about 720). Worth taking while v32 is open, but no longer urgent.
 
+**3. JPEG made again from its coefficients: begun (30 October 2026).** Edward: "make a start on the
+jpeg plans". IDEAS §19.88 gives two routes: an outside tool (`cjxl`/`djxl`, or brunsli), or Sieve's
+own reader and writer of JPEG's coding, which "fits the aim of proving it within Sieve". This plan
+takes Sieve's own, with the outside tools as the yardstick.
+
+*First measurements* (a prototype written from ITU-T T.81 in the scratchpad, not Sieve's code; the
+repository's seven JPEGs, all baseline: the public-domain Vitruvian and the test site's six):
+
+- **Exact.** Each JPEG's coefficients were read out of its Huffman coding (no pixels made) and coded
+  again with its own tables. All seven came back **byte for byte**. So a JPEG can be carried as
+  its headers (308 to 892 bytes by xz) and its coefficients, and made again exactly.
+- **A general model is not enough.** Laid out plainly (each component's blocks, coefficient by
+  coefficient, two bytes each):
+
+  | | JPEG | `.sieve` now | coefficients by LZMA2 | by Sieve's mixer |
+  | :--- | ---: | ---: | ---: | ---: |
+  | Vitruvian | 207,500 | 206,956 | 229,291 | 204,008 |
+  | audio | 70,028 | 66,894 | 84,772 | 74,018 |
+  | book | 82,905 | 80,569 | 97,499 | 82,973 |
+  | door | 69,298 | 63,860 | 80,997 | 70,858 |
+  | filters | 70,029 | 65,997 | 84,313 | 73,477 |
+  | picture-in-hand | 59,365 | 55,013 | 70,027 | 60,508 |
+  | vitruvian (site) | 116,168 | 116,235 | 130,724 | 112,509 |
+
+  The JPEG's own coding is about as good as a general model can do on the coefficients. The gain
+  that Lepton and packJPG report, about 20%, comes from a model made for them.
+
+*The way, to build next:*
+1. **A coefficient model of Sieve's own** (`jpeg-v1`). Each block's count of non-zero values is
+   coded first, from its neighbours' counts. Then each value is coded from the same frequency in
+   the blocks above and to the left, its place in the block, and how many non-zero values are left.
+   The DC values are coded from their neighbours. One binary arithmetic coder, as mixing's.
+   Prototyped and measured on the seven JPEGs and Edward's photos before anything goes into Sieve.
+2. **In the format:** a remake kind (`jpg`, the next archive-format number): the JPEG carried as its
+   headers and its coefficients coded by `jpeg-v1`, made again exactly on installing. The packer
+   makes it again before keeping it, and keeps it only where it comes back exact and smaller; any
+   other JPEG is carried as it is. The oracle can make it too (the model is Sieve's own and
+   specified), which an outside tool would not allow.
+3. **Baseline JPEGs first**, then restart markers, then progressive JPEGs (a different scan order;
+   the coefficients are the same).
+
+*The yardsticks, measured here (30 October 2026; Edward allowed GitHub).* Google's brunsli (MIT,
+commit c18b9625) and JPEG XL's `cjxl --lossless_jpeg=1 -e 9` (libjxl, BSD-3, commit 90d03e49), each
+built here from source, on the seven JPEGs and on two Pillow re-saves of Vitruvian at quality 90
+(one progressive, one with optimised Huffman tables). Every file came back from both **byte for
+byte**:
+
+| | JPEG | `.sieve` now | brunsli | `cjxl` |
+| :--- | ---: | ---: | ---: | ---: |
+| Vitruvian | 207,500 | 206,956 | 170,260 (−17.95%) | 173,542 (−16.37%) |
+| audio | 70,028 | 66,894 | 57,310 (−18.16%) | 57,812 (−17.44%) |
+| book | 82,905 | 80,569 | 67,684 (−18.36%) | 67,978 (−18.00%) |
+| door | 69,298 | 63,860 | 54,117 (−21.91%) | 55,341 (−20.14%) |
+| filters | 70,029 | 65,997 | 55,468 (−20.79%) | 56,318 (−19.58%) |
+| picture-in-hand | 59,365 | 55,013 | 46,757 (−21.24%) | 47,910 (−19.30%) |
+| vitruvian (site) | 116,168 | 116,235 | 98,454 (−15.25%) | 99,986 (−13.93%) |
+| Vitruvian, progressive q90 | 282,087 | | 212,680 (−24.60%) | 196,754 (−30.25%) |
+| Vitruvian, optimised q90 | 284,505 | | 212,027 (−25.48%) | 195,676 (−31.22%) |
+
+- On the seven originals brunsli is the smaller by 0.4 to 1.7 points; on the two quality-90 re-saves
+  `cjxl` is, by about 6 points.
+- Both took hundredths of a second to decode; `cjxl -e 9` 0.15 to 0.69 s to encode, brunsli 0.02 to
+  0.05 s.
+- Their decoders: brunsli's library is 435,904 bytes; libjxl's (encoder and decoder) 4,772,216, with
+  highway, skcms and brotli beside it.
+
+*For Edward to decide: which way.*
+- **(a) brunsli in Sieve**, fetched at a pinned commit as preflate is. It is small, fast and the
+  better on these originals. The oracle reads its recipe but cannot make the file (as with preflate).
+- **(b) libjxl**: better on high-quality JPEGs, but about eleven times the size in `sieve-install`.
+- **(c) Sieve's own model:** the oracle could make the file itself, but it is the most work, and the
+  general-model test above shows nothing comes cheap.
+
+The recommendation is (a), with (b) weighed again on Edward's own photos (a camera's JPEGs are
+high-quality, where `cjxl` led): `cjxl photo.jpg photo.jxl --lossless_jpeg=1` on his machine gives
+that.
+
 **Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
 v30 says a reader refuses a group of files mixed together that holds a file of another way in its
 middle, and the oracle does. But v30's and v31's packer never cuts a group there, and Sieve's reader

@@ -4163,6 +4163,11 @@ lost:
     JPEGs more), the values then coded by the rope or a coder of their own, checked by the oracle,
     with nothing from outside. The second fits the aim of proving it within Sieve; `cjxl` is the
     measure to set it against.
+  - *Measured (30 October 2026; NEXT-VERSION §4a, 3):* on the repository's seven JPEGs brunsli came
+    15.25% to 21.91% under the JPEG and `cjxl --lossless_jpeg=1` 13.93% to 20.14%, every file back
+    byte for byte; on quality-90 re-saves `cjxl` led (30.25% and 31.22% against 24.60% and 25.48%).
+    Sieve's own reading of the coefficients came back exact too, but coded by a general model they
+    were no smaller than the JPEG.
 - The same holds for other formats that are compressed already (PNG's deflate, MP3, MP4): each is
   a scheme to undo exactly and redo, and each is for later.
 - **PNGs (Edward, 20 October 2026):** he found a PNG's `.sieve` larger than the PNG. A PNG saved
@@ -4704,6 +4709,8 @@ bytes) and the docs, 12,692,639 bytes: Sieve 4,159,742; a solid 7z by py7zr, LZM
 4,277,050 (Sieve 2.74% smaller); without the filter, 4,532,855. Edward's source tree on the same
 day: `source.sieve` 47,348,954 against `sieve-source.7z` 49,320,989. So 7z no longer leads where
 both use BCJ; BCJ2 itself (7-Zip's, not py7zr's) is still to be measured, on Edward's machine.
+Edward, the same day: 7-Zip's default ("Add to", Normal) on `tools/sieve.exe` and `docs` makes
+3,289,322 bytes; the File Locator's figure for that folder is still to be set beside it.
 `source.sieve` holds the 7z as it is, so it is the 7z and the map's text, a few hundred bytes either
 way (here 47,779,761 against the 7z's 47,780,051; holding the source as a tar instead,
 47,594,737). Making it took 19.5 minutes, nearly all the rope's search with no limit on a file it
