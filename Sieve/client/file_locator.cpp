@@ -945,6 +945,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     return cli::weigh_files(root, files, wl, tailor, nullptr, budget);
                 }();
                 r.weighing = cli::weighing_table(w, 12);
+                r.weighing_whole = cli::weighing_table(w) + "\n" + cli::weighing_ways_text(w);
                 r.tailored = tailor;
                 if (tailor)
                 {
@@ -976,7 +977,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         relink_search(); // the files counted may have changed
         status_ = finish_job();
         read_took_ = last_took_; // (the reading's whole time, the search with it: a save after it says it too)
-        close_log(result_.error.empty() ? result_.table + "\n" + result_.weighing : "could not locate it: " + result_.error);
+        close_log(result_.error.empty() ? result_.table + "\n" + (result_.weighing_whole.empty() ? result_.weighing : result_.weighing_whole)
+                                        : "could not locate it: " + result_.error);
         busy_ = false;
     };
     if (sync) job();

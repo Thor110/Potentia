@@ -133,6 +133,7 @@ private:
         // Its files weighed against their own addresses, under the host's lines and filters
         // (cli/weigh.hpp), as a table; with tailoring, the filters found for the lines with items.
         std::string weighing;
+        std::string weighing_whole; // for Keep a log: every file's row (the window shows 12), then every way weighed
         bool tailored = false;
         std::optional<sieve::cli::FilterConfig> tailored_filters;
         // How long packing it took when it was read (seconds; -1 not measured), and the most the

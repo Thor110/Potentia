@@ -160,6 +160,7 @@ struct FileWays
     uint64_t rope_bytes = 0;        // its code and the code's length (a varint)
     bool has_pieces = false;
     std::string pieces_way;          // "pieces z… r… rope <parameters>"
+    std::string pieces_said;         // where it has none, why: "not tried", "under 16 KiB", "all 24415 blocks ... went to LZMA2" ...
     std::vector<uint8_t> pieces_z;   // the pieces LZMA2 packs, joined
     std::vector<uint8_t> pieces_code; // the rope's code of the rest
     RopeParams pieces_rope;
@@ -171,6 +172,16 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
 // The ways file_ways keeps for the run (the File Locator's weighing asks for them again) let go:
 // when a reading is done, so a large file's are not held after it.
 void forget_file_ways();
+// What mixing came to on a file when the packer weighed it (its way, "mix4 B22 D60", and its code's
+// bytes with the code's length), kept for the run with the ways above, so the weighing counts it too:
+// file_ways does not mix (it takes minutes a megabyte), and without it the weighing's best way was
+// LZMA2's estimate beside instructions a sixth smaller (enwik8: 24.9% against 21.68%).
+struct MixedAs
+{
+    std::string way;
+    uint64_t bytes = 0;
+};
+std::optional<MixedAs> mixed_as_found(const std::vector<uint8_t>& bytes);
 
 // Threads for work made of separate parts (SIEVE_PACK_THREADS, else every core), and the memory free
 // now in bytes (0 where it cannot be known): the packer's, and installing's (files decoded at once).

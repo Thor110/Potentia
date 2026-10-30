@@ -52,6 +52,7 @@
 #include <functional>
 #include <fstream>
 #include <initializer_list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -418,6 +419,7 @@ struct Pieces
 {
     std::vector<std::pair<char, uint64_t>> list;
     std::vector<uint8_t> z, r;
+    std::string why; // where it was not cut, why (said in the file's line of the log)
 };
 
 Pieces pieces_of_uncached(const std::vector<uint8_t>& b);
@@ -456,7 +458,11 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
 {
     constexpr size_t B = 4096;
     Pieces out;
-    if (b.size() < 4 * B) return out;
+    if (b.size() < 4 * B)
+    {
+        out.why = "under 16 KiB";
+        return out;
+    }
     // Each byte's cost under the whole file's counts (what the rope pays at least, near enough), and
     // each block's under LZMA2 alone: a block is the rope's unless LZMA2 codes it smaller.
     std::vector<uint64_t> count(256, 0);
@@ -485,7 +491,11 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
         kind[k] = gain[k] > 0 ? 'z' : 'r';
     });
     t_blocks.reset();
-    if (stop_requested()) return out; // asked to stop: not cut (the file whole is still a way)
+    if (stop_requested()) // asked to stop: not cut (the file whole is still a way)
+    {
+        out.why = "stopped";
+        return out;
+    }
     // Runs: one that saves less than 64 bytes over the other way goes to its neighbours' way.
     for (int pass = 0; pass < 2; ++pass)
         for (size_t a = 0; a < blocks;)
@@ -505,7 +515,12 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
         if (!runs.empty() && runs.back().first == kind[k]) runs.back().second += len;
         else runs.emplace_back(kind[k], len);
     }
-    if (runs.size() < 2) return out;
+    if (runs.size() < 2)
+    {
+        out.why = "all " + std::to_string(blocks) + " blocks of 4 KiB went to " + (runs.empty() || runs[0].first == 'z' ? "LZMA2" : "the rope") +
+                  ": nothing to cut";
+        return out;
+    }
     // Each boundary moved, up to a block either way, to where the two ways cost least: the LZMA2
     // side packed again at each step (where its run is no longer than 1 MiB), over a window of at
     // most 16 KiB beyond the steps, fixed while the boundary moves (so every step is weighed over
@@ -2198,7 +2213,28 @@ WaysCache& ways_cache()
     return c;
 }
 uint64_t held(const FileWays& w) { return w.rope_code.size() + w.pieces_z.size() + w.pieces_code.size() + w.pieces_way.size() + 256; }
+
+// What mixing came to, by the file's SHA-256 (mixed_as_found).
+std::mutex g_mixed_mx;
+std::map<std::string, MixedAs> g_mixed;
+void note_mixed(const std::string& sha, const std::string& way, uint64_t bytes)
+{
+    std::lock_guard<std::mutex> lock(g_mixed_mx);
+    g_mixed[sha] = {way, bytes};
+}
 } // namespace
+
+std::optional<MixedAs> mixed_as_found(const std::vector<uint8_t>& bytes)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_mixed_mx);
+        if (g_mixed.empty()) return std::nullopt; // (nothing mixed: no SHA-256 worked out for nothing)
+    }
+    const std::string sha = sha256_hex(bytes);
+    std::lock_guard<std::mutex> lock(g_mixed_mx);
+    if (auto it = g_mixed.find(sha); it != g_mixed.end()) return it->second;
+    return std::nullopt;
+}
 
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
@@ -2235,10 +2271,14 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
 
 void forget_file_ways()
 {
-    WaysCache& c = ways_cache();
-    std::lock_guard<std::mutex> lock(c.mx);
-    c.kept.clear();
-    c.bytes = 0;
+    {
+        WaysCache& c = ways_cache();
+        std::lock_guard<std::mutex> lock(c.mx);
+        c.kept.clear();
+        c.bytes = 0;
+    }
+    std::lock_guard<std::mutex> lock(g_mixed_mx);
+    g_mixed.clear();
 }
 
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
@@ -2281,6 +2321,8 @@ static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, doubl
         w.rope_code = rope_code(bytes, found.best);
     }
     w.rope_bytes = w.rope_code.size() + varint_of(w.rope_code.size());
+    if (!pieces) w.pieces_said = "not tried";
+    else if (stop_requested()) w.pieces_said = "stopped";
     if (pieces && !stop_requested())
     {
         Pieces p = [&] {
@@ -2304,6 +2346,7 @@ static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, doubl
             w.pieces_bytes = estimate(p.z) + w.pieces_code.size() + varint_of(w.pieces_code.size()) + w.pieces_way.size();
             w.pieces_z = std::move(p.z);
         }
+        else w.pieces_said = p.why;
     }
 }
 
@@ -3186,6 +3229,31 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
             if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha256_hex(bytes[i])] == 1) todo.push_back(i);
+        // Every file not searched, and why, said once for it as the searched ones are below (Keep a
+        // log keeps it): nothing a file was or was not tried for goes unsaid.
+        {
+            size_t at = 0;
+            for (size_t i = 0; i < files.size(); ++i)
+            {
+                if (at < todo.size() && todo[at] == i)
+                {
+                    ++at;
+                    continue;
+                }
+                const std::string& w = files[i]->way;
+                std::string why;
+                if (w == "raw" || w == "x86")
+                    why = bytes[i].size() < 512 ? "under 512 bytes"
+                          : copies[sha256_hex(bytes[i])] > 1 ? "a copy of another file here, which the lzma2 stream carries for almost nothing"
+                                                             : "carried as it is";
+                if (w == "x86") why += "; a program, through the x86 filter";
+                if (w.rfind("item ", 0) == 0) why = "an item of Sieve's lines, carried as its place on the line";
+                if (w.rfind("lines ", 0) == 0) why = "made from another file's lines (" + files[std::stoul(w.substr(6))]->path + "), carried as a mask of them";
+                if (why.empty()) why = "carried as " + w;
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " + std::to_string(bytes[i].size()) +
+                         " bytes: not searched (" + why + ")" + (w == "raw" || w == "x86" ? "; in the lzma2 stream" : ""));
+            }
+        }
         // Each file's way found on its own (IDEAS §19.99), several files at once: as many as the
         // threads, and no more than half the memory free holds a mixer each (its tables, as the
         // groups' below); each file's own work (cutting, LZMA2's passes) takes its share of the
@@ -3254,6 +3322,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const bool decoding_first = prioritise_decoding();
             if (mix_on && decoding_first) got.decoding_first = true;
             std::string mixed_said = !mix_on ? "" : decoding_first ? "mixing not tried (decoding first)" : "mixing not tried";
+            if (mix_on && !decoding_first && !every)
+            {
+                if (bytes[i].size() < 4096) mixed_said = "mixing not tried (under 4 KiB)";
+                else if (bytes[i].size() > (size_t(16) << 20)) mixed_said = "mixing not tried (over 16 MiB: Try every way mixes a file of any size)";
+            }
+            if (mix_on && !decoding_first && stop_requested()) mixed_said = "mixing not tried (stopped)";
             if (mix_on && !decoding_first && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
@@ -3292,14 +3366,26 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 };
                 uint64_t ms = 0;
                 std::string unused;
-                if (!every || guessed) ms = code_of(start, unused, pw, pc).size();
+                // (Each trial on its start said in the file's line: every way tried, and what it came to.)
+                std::string tests;
+                auto test_said = [&](const std::string& what, uint64_t n) { tests += (tests.empty() ? "" : ", ") + what + " " + std::to_string(n); };
+                if (!every || guessed)
+                {
+                    ms = code_of(start, unused, pw, pc).size();
+                    test_said(pw ? "as a picture " + std::to_string(pw) + " wide, " + std::to_string(pc) + " a pixel (the rope's shape)" : std::string("as bytes"), ms);
+                }
                 if (guessed)
-                    if (const uint64_t as_picture = code_of(start, unused, guessed->first, guessed->second).size(); as_picture < ms)
+                {
+                    const uint64_t as_picture = code_of(start, unused, guessed->first, guessed->second).size();
+                    test_said("as a picture " + std::to_string(guessed->first) + " wide, " + std::to_string(guessed->second) + " a pixel (a shape guessed from its bytes)",
+                              as_picture);
+                    if (as_picture < ms)
                     {
                         ms = as_picture;
                         pw = guessed->first;
                         pc = guessed->second;
                     }
+                }
                 // v27: a text not taken as a picture with the word list too (scowl-en-60, where it can be
                 // had), weighed on its start against it without: the smaller kept.
                 const MixDictionary* words = nullptr;
@@ -3308,8 +3394,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     try
                     {
                         const MixDictionary& list = mix_words()(60);
-                        if (ms == 0) ms = code_of(start, unused, 0, 1).size();
-                        if (const uint64_t with = code_of(start, unused, 0, 1, &list).size(); with < ms)
+                        if (ms == 0)
+                        {
+                            ms = code_of(start, unused, 0, 1).size();
+                            test_said("as bytes", ms);
+                        }
+                        const uint64_t with = code_of(start, unused, 0, 1, &list).size();
+                        test_said("with the word list", with);
+                        if (with < ms)
                         {
                             ms = with;
                             words = &list;
@@ -3317,7 +3409,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     }
                     catch (const std::exception&)
                     {
-                        // (no word list here: mix-v2 alone)
+                        tests += std::string(tests.empty() ? "" : ", ") + "the word list not to be had here"; // (mix-v2 alone)
                     }
                 }
                 const bool tried = every || [&] {
@@ -3325,13 +3417,16 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     return ms * 100 < ls * 97;
                 }();
                 if (!tried) mixed_said = "mixing's test on its start " + std::to_string(ms) + " (not 3% under LZMA2's, so not tried whole)";
+                if (!tests.empty())
+                    mixed_said += std::string(mixed_said.empty() ? "" : " ") + "[mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]";
                 if (tried)
                 {
                     std::string mix_way;
                     std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words);
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
-                    mixed_said = mix_way + " " + std::to_string(mc.size() + vl);
+                    mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
+                    note_mixed(sha256_hex(bytes[i]), mix_way, mc.size() + vl); // (for the weighing)
                     if (mc.size() + vl < best)
                     {
                         best = mc.size() + vl;
@@ -3349,6 +3444,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                                    std::to_string(bytes[i].size()) + " bytes: LZMA2 about " + std::to_string(fw.lzma2) + ", rope " +
                                    std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ")";
                 if (fw.has_pieces) said += ", pieces " + std::to_string(fw.pieces_bytes);
+                else if (!fw.pieces_said.empty()) said += ", pieces not cut (" + fw.pieces_said + ")";
                 if (!mixed_said.empty()) said += ", " + mixed_said;
                 said += "; taken: " + (way.empty() ? std::string("LZMA2, in the lzma2 stream with the others") : way.substr(0, way.find(' '))) + ", " +
                         std::to_string(best) + " bytes";

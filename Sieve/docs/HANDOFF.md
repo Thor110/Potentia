@@ -4081,12 +4081,20 @@ and the phases' times; no settings or reports, which an install has none of. CI 
   the search's at 4,179.5 s: a step on less than 64 KiB is still marked but no longer counts. The graph's bottom says it is a scale ("the
   bottom: 8.0% under the first try"), not a result.
 - **The graph is cleared when installing** (Edward), and the install's time is shown under it.
-- **For Edward to decide: the weighing against the instructions.** The weighing's "best way" counts
-  LZMA2's quick estimate, the rope and the pieces, not mixing, and not the tuned lzma2 stream: on
-  enwik8 for size it says 24.9% (lzma2, 198,921,504 bits) beside instructions of 21.68% (mix4). The
-  packer's own result could be a way of the weighing (taken as found, as the rest are), but that
-  changes what the weighing reports (and the weighing is what Tailor the filters reads), so it is
-  not done.
+- **The weighing against the instructions.** The weighing's "best way" counted LZMA2's quick
+  estimate, the rope and the pieces, not mixing: on enwik8 for size it said 24.9% (lzma2, 198,921,504
+  bits) beside instructions of 21.68% (mix4). Edward (30 October): "oh definitely yes", and "make sure
+  that every method / approach tried during the process is well documented ... we will need to try
+  and present this". Done:
+  - mixing as the packer found it is a way of the weighing (`mixed_as_found`, kept for the reading
+    with the file ways);
+  - the log lists every way weighed for every file, the best marked, and every file's row, not the
+    window's 12;
+  - every file not searched gets a line saying why (under 512 bytes, a copy, a program, an item, a
+    mask);
+  - a searched file's line says why it was not cut into pieces, what mixing's trials on its start
+    came to, and why mixing was not tried where it was not;
+  - [METHODS.md](METHODS.md) describes every way in order, with the log line each one writes.
 
 *Waiting on Edward:* the measuring with Keep a log (enwik8 and enwik9, WoWRevived, Silesia, the
 ladder) and the estimate checked against it; the similar files' choice (IDEAS §19.106); Firefox;

@@ -131,6 +131,15 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         w.shape = "pieces of lzma2 and rope-wave";
         lines.push_back(std::move(w));
     }
+    // Mixing, as the packer found it for a file in this reading (mixed_as_found): file_ways does
+    // not mix, and without it the weighing's best way could be far from what the instructions do.
+    const size_t mix_line = lines.size();
+    {
+        Weighed w;
+        w.name = "mixing";
+        w.shape = "mixing";
+        lines.push_back(std::move(w));
+    }
     double rope_spent = 0;
 
     std::vector<Group> groups;
@@ -194,6 +203,10 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                 cand.push_back({group_of(int(lzma2_line), "lzma2", 0), 8.0 * double(ways.lzma2 + size_bytes), ""});
                 if (ways.has_pieces)
                     cand.push_back({group_of(int(pieces_line), "pieces", 0), 8.0 * double(ways.pieces_bytes + size_bytes), ways.pieces_way.substr(7)});
+                // (Its code with the code's length, and its way written beside it, as the rope's.)
+                if (const auto mixed = mixed_as_found(bytes))
+                    cand.push_back({group_of(int(mix_line), "mixing", 0),
+                                    8.0 * double(mixed->bytes + mixed->way.size() + size_bytes), mixed->way});
             }
             for (size_t li = 1; li < lines.size(); ++li)
             {
@@ -382,6 +395,30 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
     for (auto& l : lw)
         if (l.files > 0 || l.tailored) out.lines.push_back(std::move(l));
     return out;
+}
+
+std::string weighing_ways_text(const Weighing& w)
+{
+    std::ostringstream o;
+    o << "every way weighed (bits; the best marked *)\n";
+    for (const FileWeight& f : w.files)
+    {
+        o << "  " << f.path << ", " << f.bytes << " bytes\n";
+        if (!f.error.empty())
+        {
+            o << "    unreadable: " << f.error << "\n";
+            continue;
+        }
+        for (size_t k = 0; k < f.ways.size(); ++k)
+        {
+            const Way& way = f.ways[k];
+            std::ostringstream b;
+            b << std::fixed << std::setprecision(0) << way.bits;
+            o << "    " << (k == f.best ? "* " : "  ") << (k == 0 ? std::string("its own address") : way.how) << ": " << b.str() << " bits"
+              << (k == 0 || way.written.empty() ? "" : " (" + (way.written.size() > 60 ? way.written.substr(0, 57) + "..." : way.written) + ")") << "\n";
+        }
+    }
+    return o.str();
 }
 
 std::string weighing_table(const Weighing& w, size_t max_rows)

@@ -109,7 +109,9 @@ for those who stay.
 - **One paragraph:** the claim, its number, and the commands to reproduce it.
 - **Answers to the first questions:**
   - *Why not zstd or 7-Zip?* Size: the table shows how much smaller, and on what.
-  - *Why is it slower?* It tries several ways per file and mixes models.
+  - *Why is it slower?* It tries several ways per file and mixes models. Every way, in order, is
+    in [METHODS.md](METHODS.md), and a log of a run (Keep a log) shows each one's result and time:
+    on enwik9, where the 1 h 50 min went, step by step, is in Proof/STATISTICS.md.
   - *Is it lossless?* Yes: every file is checked against its SHA-256 before anything is written.
   - *Which systems?* A Windows release; Linux and macOS from source.
   - *What licence?* AGPL v3.

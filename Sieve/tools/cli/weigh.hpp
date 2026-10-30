@@ -119,5 +119,8 @@ Weighing weigh_files(const std::filesystem::path& root, const std::vector<std::s
 
 // The weighing as a table, one row a file and the totals.
 std::string weighing_table(const Weighing& w, size_t max_rows = 0);
+// Every way weighed for each file, not only its best (Keep a log writes it under the table): its own
+// address, then each way with its bits and what it writes, the best marked.
+std::string weighing_ways_text(const Weighing& w);
 
 } // namespace sieve::cli
