@@ -181,6 +181,11 @@ and nothing made with it is published. Only then does v32 become the newest, in 
   MAPS-Larger.WoW share less than the half the packer asks. `sieve alike MAPS.WoW MAPS-Larger.WoW`
   (added the same day) says which, in seconds: how much of one the other holds, and whether the
   packer would pair them.
+- **`sieve alike` on Edward's maps (30 October 2026):** MAPS.WoW 160,890,897 bytes, MAPS-Larger.WoW
+  162,426,225. 42,222 of the larger's 42,589 blocks are in the smaller: 160,318,357 bytes (98.7%).
+  As a delta: 104 copies covering 160,338,860 bytes (98.7%), 2,087,365 new bytes, a script of
+  2,087,830 bytes before LZMA2. The packer would pair them ("taken yes"), in 1.99 s. So the draft
+  was not on in the first run; the next, with `--v32-draft` and Keep a log, measures it.
 
 **2. A small file's overhead: measured, to build next (30 October 2026).** `control.py` is not in the
 repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve` is 1,153 bytes:

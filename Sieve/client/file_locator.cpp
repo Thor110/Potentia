@@ -346,7 +346,8 @@ void FileLocator::open_log(const std::string& what, const std::string& path, boo
     if (search)
         log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
          << (sieve::prioritise_decoding() ? "on" : "off") << "; compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
-         << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "") << "\n"
+         << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "")
+         << "; v32 draft " << (cli::v32_draft() ? "on (files alike carried as their differences; not to be published)" : "off") << "\n"
          << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
          << "a step on less than 64 KiB does not count for \"last new best\")\n";
     log_.flush();
@@ -1276,7 +1277,10 @@ void FileLocator::draw(float W, float H)
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
     draw_text(r_, 20, 16, tr("loc.title"), 3, ink);
-    draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
+    // (v32's draft on: said in place of the subtitle, so a run made with it is never mistaken for one
+    // without, nor one without for one with: Edward's first WoWRevived run, 30 October 2026.)
+    if (cli::v32_draft()) draw_text(r_, 20, 48, fit_text(tr("loc.v32_draft"), W - 40, 1), 1, SDL_Color{255, 170, 60, 255});
+    else draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
     buttons_.clear();
     // (A top button the window is too narrow for goes up beside the title, at its right, where there
     // is room; else onto a row below, and what is under them starts that much lower. Every later

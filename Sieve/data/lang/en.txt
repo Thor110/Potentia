@@ -508,6 +508,7 @@ pause.confirm.keys = "Y: the main menu    N: exit Sieve    Esc: back"
 # The File Locator (pause menu).
 loc.title = FILE LOCATOR
 loc.subtitle = a file's place on the binary line, or a folder as Sieve instructions or an installer, set beside what zip and 7z make of it (or drop one on the window)
+loc.v32_draft = v32 DRAFT ON (testing only): files over 8 MiB that are mostly another are carried as their differences; what it makes is not to be published
 loc.choose_file = Choose a file...
 loc.choose_folder = Choose a folder...
 loc.empty = Choose a file or a folder, or drop one here.

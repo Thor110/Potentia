@@ -5359,6 +5359,10 @@ any other file, so the shared content is paid for twice.
     Both installed identical. On a 20 MB pair, inside LZMA2's window, the gain is small (4,637,619
     to 4,635,222) but the second file is not searched (85 s to 52 s). Below 8 MiB it is not used:
     two 100 KB texts sharing two thirds came to 142,005 bytes as a delta, 136,939 mixed as a group.
+  - *Edward's maps, by `sieve alike` (30 October 2026):* MAPS-Larger.WoW (162,426,225 bytes) holds
+    98.7% of MAPS.WoW (160,890,897): 104 copies, 2,087,365 new bytes, a script of 2,087,830 bytes
+    before LZMA2, found in 1.99 s. Carried so, the larger map would cost about its new bytes packed,
+    instead of a second map's worth: to be measured on WoWRevived with the draft on.
 
 **19.107 Edward's notes of 29 October 2026 (built).**
 - *The window's title* is "The Sieve of Potentia".

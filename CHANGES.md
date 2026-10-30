@@ -1,56 +1,45 @@
-# `sieve alike`: does MAPS-Larger.WoW contain MAPS.WoW? (30 October 2026)
+# The maps are 98.7% alike; the draft now shows when it's on (30 October 2026)
 
-Unzip over the repository root, on top of the last zip ("delta.cpp builds with MSVC"). Committed
-locally (not pushed). Code changed: rebuild `sieve`.
+Unzip over the repository root, on top of the last zip ("sieve alike"). Committed locally (not
+pushed). Code changed: rebuild the hallway.
 
-## Your WoWRevived run
+## Your `sieve alike` result
 
-Thank you for the figures. The `.sieve` came to **1,075,924,966 bytes**, exactly the size
-STATISTICS already gives for WoWRevived, to the byte. So no file was carried as a delta on that run.
-There are two possible reasons:
+MAPS-Larger.WoW holds **98.7%** of MAPS.WoW:
 
-1. **The draft switch wasn't on.** It has no box: it needs `--v32-draft` on the hallway's command
-   line, or `v32_draft = 1` under `[locator]` in `sieve-hallway.ini`. When it's on, the comparison
-   table's "listing and files" line says `sieve-manifest-v32`.
-2. **It was on, but the two maps share less than half.** The packer pairs files only where at
-   least half of one is found in the other. If MAPS.WoW compresses each map inside it separately, a
-   small change makes the rest of that map's bytes different too.
+- 104 copies cover 160,338,860 of its 162,426,225 bytes;
+- 2,087,365 bytes are new;
+- the script would be 2,087,830 bytes before LZMA2;
+- the packer would pair them ("taken yes"), and found that in 1.99 s on your machine.
 
-## A quick way to tell: `sieve alike`
+So the delta way applies, and the draft can't have been on during your WoWRevived run, which came out
+the same size to the byte as before.
 
-```
-sieve alike MAPS.WoW MAPS-Larger.WoW
-```
+**What it should save:** today the larger map costs about a second map's worth. As a delta it would
+cost about its 2 MB of new bytes once packed. That's an estimate; the next run measures it.
 
-It reads the two files and says, in seconds:
+Recorded in NEXT-VERSION §4a and IDEAS §19.106.
 
-- how much of the second is found in the first;
-- what the delta would come to;
-- whether the packer, with `--v32-draft`, would carry it so.
+## The draft now shows when it's on
 
-Nothing is written. On my 160 MB test pair:
+So that can't happen unnoticed again:
 
-```
-blocks    28057 of the file's 30009 found in the base, 151167110 bytes (94.4%): the packer pairs them where this is at least half
-delta     316 copies covering 152104783 bytes (95.0%), 7963294 new bytes; a script of 7965551 bytes before LZMA2
-taken     yes (over 8 MiB, at least half found, at least half copied)
-took      21.15 s
-```
+- **The File Locator** says `v32 DRAFT ON (testing only): ...` in orange, in place of its subtitle,
+  while the switch is on. A window without that line is making v31.
+- **Keep a log**'s settings line ends with `v32 draft on (...)` or `v32 draft off`, so every log
+  says which it was.
 
-If you send me what it says for the two maps, I'll know whether the delta way can help them. If it
-says "no", I'll look at how much they do share and why it's less.
-
-For the size-prioritised run, please tick Keep a log and check the draft is on. The log then names
-each pair, or shows that none was found.
+For the next run, set `v32_draft = 1` under `[locator]` in `sieve-hallway.ini`, or start the hallway
+with `--v32-draft`. Then check for the orange line, and tick Keep a log.
 
 ## Checked here
 
-- `sieve` builds with no warnings.
-- `sieve alike` says yes on the 160 MB test pair and no on an unrelated pair, with the reason.
-- The help check CI runs: 0 options missing.
-- `sieve_cli.cpp` compiles for Windows with MinGW (`-fsyntax-only`).
+The hallway builds with no warnings. A draft reading showed the orange line and wrote `v32 draft on`
+in its log. No CI step pins either line. `file_locator.cpp` compiles for Windows with MinGW
+(`-fsyntax-only`).
 
 ## Files
+- `Sieve/client/file_locator.cpp`
+- `Sieve/data/lang/en.txt`
+- `Sieve/docs/IDEAS.md`
 - `Sieve/docs/NEXT-VERSION.md`
-- `Sieve/tools/cli/help.cpp`
-- `Sieve/tools/sieve_cli.cpp`
