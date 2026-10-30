@@ -175,6 +175,12 @@ and nothing made with it is published. Only then does v32 become the newest, in 
 - **Measured** (IDEAS §19.106): a 160 MB pair, 22,537,063 → 17,947,687 bytes (20.36% smaller),
   made in 627 s instead of 1,113.
 - **For Edward to try:** WoWRevived with `--v32-draft` and Keep a log.
+- **Edward's first run (30 October 2026):** WoWRevived-English-v1.1.2, Try every way and Prioritise
+  decoding speed ticked, Keep a log not ticked. 1,075,924,966 bytes, exactly the size STATISTICS
+  already gave, so no file was carried as a delta. Either the draft was not on, or MAPS.WoW and
+  MAPS-Larger.WoW share less than the half the packer asks. `sieve alike MAPS.WoW MAPS-Larger.WoW`
+  (added the same day) says which, in seconds: how much of one the other holds, and whether the
+  packer would pair them.
 
 **2. A small file's overhead: measured, to build next (30 October 2026).** `control.py` is not in the
 repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve` is 1,153 bytes:

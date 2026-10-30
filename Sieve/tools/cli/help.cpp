@@ -1274,6 +1274,15 @@ const std::vector<Page>& pages()
           {"sieve unbind tune.track --units tune.mid", "a track's units as one MIDI file"},
           {"sieve unbind tale.book --pages tale.txt --cover cover.png", "save them"}}},
 
+        {"alike", "How much of one file another holds, as v32's delta way would find it.",
+         "sieve alike BASE FILE",
+         "v32 in the making (docs/NEXT-VERSION.md): cuts both files into blocks where their content\n"
+         "says, counts how much of FILE's bytes are in blocks BASE has too, and writes FILE as copies\n"
+         "from BASE and new bytes, as the delta way does (delta-v1), saying what that comes to and\n"
+         "whether the packer, with --v32-draft, would carry FILE so. Nothing is written. For a pair\n"
+         "such as a game's two maps, in seconds instead of packing the whole folder.",
+         {},
+         {{"sieve alike MAPS.WoW MAPS-Larger.WoW", "how much of the larger map the smaller holds"}}},
         {"version", "Show the tool version and every pinned rule version.",
          "sieve version   (or: sieve --version)",
          "Prints the version of the tool, the scramble construction, the canonicalisation rules,\n"
@@ -1401,7 +1410,7 @@ void print_usage()
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
         {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
-        {"Tools", {"rope", "mix", "tensors", "chat", "cipher", "version"}},
+        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "version"}},
     };
     std::vector<std::string> shown;
     auto show = [&](const Page& p) {

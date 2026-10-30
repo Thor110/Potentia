@@ -19,6 +19,7 @@
 //
 // Run "sieve help", "sieve help <command>" or "sieve help lines" for explanations and examples.
 
+#include "cli/delta.hpp"
 #include "cli/args.hpp"
 #include "cli/book.hpp"
 #include "cli/compare.hpp"
@@ -78,6 +79,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -3088,9 +3090,44 @@ int cmd_vault(const Args& a)
     return withheld ? 3 : 0;
 }
 
+// v32 in the making: how much of one file another holds, as the delta way would find it and what
+// its script would come to (IDEAS §19.106), so a pair can be weighed without packing the folder.
+int cmd_alike(const Args& a)
+{
+    if (a.positional.size() != 2) throw std::invalid_argument("alike: two files, BASE and FILE");
+    const auto t0 = std::chrono::steady_clock::now();
+    auto path_of = [](const std::string& p) { return std::filesystem::path(std::u8string(p.begin(), p.end())); };
+    const std::vector<uint8_t> base = read_file_bytes(path_of(a.positional[0])), other = read_file_bytes(path_of(a.positional[1]));
+    std::unordered_map<uint64_t, uint32_t> in_base;
+    for (const delta::Block& b : delta::blocks_of(base)) in_base[b.print] = b.length;
+    uint64_t found = 0, blocks = 0, found_blocks = 0;
+    for (const delta::Block& b : delta::blocks_of(other))
+    {
+        ++blocks;
+        if (in_base.count(b.print)) found += b.length, ++found_blocks;
+    }
+    const delta::Script s = delta::make(base, other);
+    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    auto pct = [](uint64_t part, uint64_t whole) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%.1f%%", whole ? 100.0 * double(part) / double(whole) : 0.0);
+        return std::string(b);
+    };
+    std::cout << "base      " << a.positional[0] << ": " << base.size() << " bytes\n"
+              << "file      " << a.positional[1] << ": " << other.size() << " bytes\n"
+              << "blocks    " << found_blocks << " of the file's " << blocks << " found in the base, " << found << " bytes (" << pct(found, other.size())
+              << "): the packer pairs them where this is at least half\n"
+              << "delta     " << s.copies << " copies covering " << s.copied << " bytes (" << pct(s.copied, other.size()) << "), " << s.fresh
+              << " new bytes; a script of " << s.bytes.size() << " bytes before LZMA2\n"
+              << "taken     " << (other.size() > (uint64_t(8) << 20) && found * 2 >= other.size() && s.copied * 2 >= other.size() ? "yes" : "no")
+              << " (over 8 MiB, at least half found, at least half copied)\n";
+    std::printf("took      %.2f s\n", secs);
+    return 0;
+}
+
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site";
 }
@@ -3186,6 +3223,7 @@ int main(int argc, char** argv)
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "rope") return cmd_rope(a);
+        if (a.command == "alike") return cmd_alike(a);
         if (a.command == "mix") return cmd_mix(a);
         if (a.command == "chat") return cmd_chat(a);
         if (a.command == "ai") return cmd_ai(a);
