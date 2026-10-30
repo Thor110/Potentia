@@ -4241,7 +4241,10 @@ order:
    tables and the three uses (smaller archives, right-click extract, installers that check).
    Edward released 0.13.76 on 30 October 2026, and the version is now 0.13.77 (CMakeLists.txt,
    vcpkg.json, the extension's manifest and web/README, make_release.py's examples,
-   SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it.
+   SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it. Its release notes needed hand-fixing
+   (Edward: "mostly just new lines and spaces"): `make_release.py` wrapped paragraphs and list
+   items, which GitHub shows as line breaks. Each is now one line; rendered with 0.13.76's values,
+   the notes match Edward's fixed copy exactly.
 6. **Then the posts,** one audience at a time (SHOWCASE-PLAN §5), Edward's video among them.
 7. **A game as a test bed** (Edward, 28 October 2026; IDEAS §19.104): once his *Alien Trilogy*
    engine (another Claude session's work) runs normally, its small files sieved, and decoded or

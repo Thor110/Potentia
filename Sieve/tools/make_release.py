@@ -422,10 +422,10 @@ def main():
         where_note = (f"The installer (`{program.name}`, or `sieve-install` with `{instructions.name}`) unpacks the release "
                       f"into a folder of its own: choose `C:\\Games` and you get `C:\\Games\\{name}\\`. (`sieve install` "
                       f"and the File Locator give back `{archive.name}` itself, byte for byte; unpack it with 7-Zip.)")
+    # (Each paragraph and list item on one line: GitHub shows a line break inside one as a break.)
     notes = f"""# Sieve {a.version}
 
-The Gallery of Babel's engine and its hallway: every page, picture, sound, film, book, model and
-file there can be, each with an address, walked through as a library.
+The Gallery of Babel's engine and its hallway: every page, picture, sound, film, book, model and file there can be, each with an address, walked through as a library.
 
 ## Downloads
 
@@ -434,21 +434,15 @@ file there can be, each with an address, walked through as a library.
 {sizes}
 
 - **`{program.name}`**: run it to install. Nothing else is needed.
-- **`{instructions.name}`**: the same, as Sieve instructions, for anyone who already has Sieve
-  (`sieve-install`, `sieve install {instructions.name} --to FOLDER`, or the hallway's File
-  Locator).
-- **`{source_sieve.name}`**: this release's source (the Sieve folder as committed) as Sieve
-  instructions: `sieve install {source_sieve.name} --to FOLDER` (or `sieve-install`, or the File
-  Locator) puts the Sieve folder there.
-- **`{source.name}`**: the same source as a 7z, to compare with. The whole Potentia repository,
-  Sieve included, is the release's "Source code" download.
+- **`{instructions.name}`**: the same, as Sieve instructions, for anyone who already has Sieve (`sieve-install`, `sieve install {instructions.name} --to FOLDER`, or the hallway's File Locator).
+- **`{source_sieve.name}`**: this release's source (the Sieve folder as committed) as Sieve instructions: `sieve install {source_sieve.name} --to FOLDER` (or `sieve-install`, or the File Locator) puts the Sieve folder there.
+- **`{source.name}`**: the same source as a 7z, to compare with. The whole Potentia repository, Sieve included, is the release's "Source code" download.
 
 {where_note}
 
 ## How much each line's filters remove
 
-`{metrics.name}`: every line under Sieve's reference filters (`data/metrics/reference-filters.ini`,
-the hard filters that count together), counted as the setup menu counts them.
+`{metrics.name}`: every line under Sieve's reference filters (`data/metrics/reference-filters.ini`, the hard filters that count together), counted as the setup menu counts them.
 
 ```
 {metrics_text}```
