@@ -143,20 +143,28 @@ brotli (smaller on 66 of 102). On Edward's own 7 pages it was 6.6% over brotli, 
   outside `cjxl`/`djxl`, or Sieve's own baseline-JPEG reader and writer.
 - **A sound model, and PNGs remade by zlib itself** (HANDOFF's 27 October plan, steps 3 and 5).
 
-## 4. A proposed v32
+## 4. What v32 holds (Edward, 30 October 2026)
 
-Two shapes, for Edward to choose between once the first steps in §3 are measured.
+**One version, gathered.** Edward: "Lets work on things we add as just v32 for now so that we don't
+add multiple manifest versions again". So everything below goes into v32 and nothing ships on its
+own.
 
-**v32 small: the overhead, and the archive as a number.** Small savings on every file, especially
-small ones (Edward's `control.py`), plus `skm` written as a number. Quick to build and test, and it
-moves the pins on small files (CI step 10's 4,182-byte and 339-byte files would shrink, as they
-should).
+**How that is kept:** v32 is built behind a **draft switch** (`--v32-draft`, for testing only).
+Without it, every build keeps writing v31, as now, until v32 is complete, specified, read by the
+oracle, and frozen. Files made with the switch are test files: the finished v32 need not read them,
+and nothing made with it is published. Only then does v32 become the newest, in one step.
 
-**v32 with `delta`**, if WoWRevived's log shows a larger dictionary or grouping is not enough. The
-biggest measured lever on Edward's own data, and new ground: a way that names another file.
-
-BCJ2 and word frequencies join whichever shape they are ready for, if their measurements earn it.
-JPEG waits for its own version, by Edward's order.
+**In v32, in the order to build them:**
+1. **The `delta` way** (§3a): a file as copies from another file of the folder plus new bytes, the
+   new bytes carried as any file's are. Found automatically, with no box: finding alike files costs
+   under 1 MB and under a second for a 160 MB pair, and the index about 92 MB, built only for a pair
+   found alike (IDEAS §19.106, measured 30 October). It goes in where it comes out smaller than the
+   file's best other way.
+2. **A small file's overhead** (§3a), once `control.py`'s bytes are broken down.
+3. **The archive's format as a number** (§3c), small, while the listing is being changed anyway.
+4. **JPEG made again from its coefficients** (§3d; Edward: "JPEG recoding is a good idea"), the
+   largest build and the largest gain on JPEGs, last so the rest is not held up by it.
+5. **BCJ2** and **word frequencies for mixing**, only if their measurements (§3b) earn a place.
 
 ## 5. The order of work
 
@@ -201,10 +209,14 @@ Maps, sites, training runs, the hallway's saves, music and the File Locator foll
 
 **Step 5: freeze again**, at v32, the same way.
 
-## 6. Decisions for Edward
+## 6. Decisions
 
-1. When to end the pause (after the measurements in step 0, or before).
-2. MAPS.WoW: a larger dictionary or grouping within v31, or the `delta` way in v32.
-3. Which shape of v32 (§4): small, or with `delta`.
-4. Whether BCJ2 and word frequencies are worth measuring now.
-5. Whether a new optional part takes a second flags byte (the first is full).
+Made by Edward, 30 October 2026:
+- The pause ends with work on v32, as one version (§4).
+- MAPS.WoW and the like: the `delta` way, found automatically. Edward asked whether finding alike
+  files would need a "contains similar files" box for its memory; measured, it does not (§4).
+- JPEG recoding is in.
+
+Still open:
+1. Whether BCJ2 and word frequencies are worth measuring now.
+2. Whether a new optional part takes a second flags byte (the first is full).

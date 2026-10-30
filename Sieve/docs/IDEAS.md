@@ -5335,6 +5335,22 @@ any other file, so the shared content is paid for twice.
     allows; and a group of two large files found alike (their sampled blocks' hashes) where mixing
     carries them, perhaps only with Try every way. First, which way MAPS.WoW is carried: Keep a log
     says so for each file now.
+  - *What finding and writing a delta costs (30 October 2026; Edward asked whether it would need a
+    "contains similar files" box for its memory).* Measured with a prototype (not Sieve's code) on a
+    pair made here of 160,000,000 and 160,068,077 bytes: A from the repository's own files, B as A
+    with 40 regions of 200 KB replaced by random bytes and 30 insertions of up to 5,000 bytes (so
+    everything after an insertion is shifted).
+    - *Telling that they are alike:* blocks cut where the content says (a rolling hash over 48 bytes,
+      about every 4 KiB), one 8-byte fingerprint each: 96.6% of B's blocks found in A, 117,234
+      fingerprints for both files (under 1 MB), 0.71 s. Blocks cut at fixed places found 4.4%: one
+      insertion shifts every block after it, so fixed blocks will not do.
+    - *Writing B as copies from A:* A indexed every 64 bytes (2,323,501 entries), B scanned with a
+      rolling hash: 332 copies covering 152,101,975 bytes and 7,966,102 new bytes (the random bytes
+      put in), in 2.69 s, the index about 92 MB beside the two files' 308 MB.
+    - So no box is needed for its memory: the packer holds every file of a folder in memory already
+      (`add_packed`), the fingerprints are under 1 MB, and the index is built only for a pair found
+      alike. A larger LZMA2 dictionary, by contrast, takes about twelve times itself to encode
+      (about 2.25 GiB for 192 MiB).
 
 **19.107 Edward's notes of 29 October 2026 (built).**
 - *The window's title* is "The Sieve of Potentia".
