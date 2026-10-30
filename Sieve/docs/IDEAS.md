@@ -5465,4 +5465,34 @@ cancel out a file to 0"), recording whatever remains.
   So it sits between matching pursuit and the rope's search: the waves its dictionary, the zero
   seeds its waves left out, the repropagations its passes. Whether it pays on real files is the
   question of a dictionary of waves that real files are made of.
+- *The designed files, built (Edward: "Starting on that is a good idea yes"; the first piece of the
+  benchmark script and test files, FORMATS.md).* `tools/rope_designs.py` makes eight files of 1 MiB
+  from fixed seeds and measures each against xz -9e, the rope's search (5 s) and the whole
+  `.sieve`; the table is `results/rope-designs-2026-10-30.md`. The rope cancels only the checker
+  (24 bytes, the diagonal phase P3 predicting it exactly). Every other file is a pure copy of one
+  neighbour (straight down: 1,350 bytes where about 256, its first row, would do; the diagonal carry
+  14,173; a slope 1,347; the diagonal in rows of 250, 14,522), which the rope cannot see, since its
+  phases always blend or take a median; xz did better on all of those (552 to 876). With one byte in
+  ten moved, mixing's `.sieve` (85,276) beat both xz (133,552) and the rope (165,847). Two
+  directions in one file defeat a single wave (the rope 175,074, xz 1,148). Random bytes, the
+  control: nothing taken off.
+  *So the measured target for a wave direction:* a phase that copies one chosen neighbour exactly
+  (left, above, above-left, above-right), choosable for a stretch of rows so that two directions
+  in one file work; on these files it should cancel all but the first row. Next, whether it pays on
+  real files (sprite sheets, tables, game data); a new rope-wave version, so v32's if built.
+- *The wave direction, measured (Edward: "yes make a start on that next please").*
+  `tools/rope_direction_probe.py` copies one chosen neighbour (left, above, above-left,
+  above-right), for the whole file or chosen afresh every 16 rows. A fifth choice, the triangle,
+  can be offered beside the four. Each remainder is measured by its order-0 entropy (the rope's own
+  coder) and by LZMA2. The tables are in `results/rope-direction-2026-10-30.md`.
+  - *Designed files:* the direction cancels what the triangle could not. The diagonal goes from
+    926,317 bytes to 8,964. Two directions in one file go from 597,283 with one direction to 9,633
+    with a direction a stretch. Diagonal+noise goes from 976,609 to 127,507, under xz's 133,552.
+  - *Real files:* the triangle stays best, or about even, on the pictures. The door is 38,167 bytes
+    by the triangle, against 76,325 for a direction a stretch. A direction a stretch helps the icon
+    by 8.5% (29,660 against 32,406). On the tables and the program, it takes off 3% to 7%.
+  - *Against xz:* no remainder came under xz -9e of the file itself on any real file.
+  - *So:* not built. A direction is cheap to add (a phase and two bits a stretch), but on these
+    files it would not change which way Sieve takes. What would decide it is Edward's game data
+    (sprite sheets, textures), which the probe can be run on as it is.
 
