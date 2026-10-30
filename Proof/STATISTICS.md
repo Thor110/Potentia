@@ -34,7 +34,7 @@ from the sizes given.
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,558,132 | 1.01:1 | −0.37% |
-| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 832 | 1.92:1 | +1.22% |
+| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 731 | 2.18:1 | −11.07% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,887 | 1,689:1 | −65.65% |
 
 "Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
@@ -306,16 +306,21 @@ On disk:
 
 ## A small script
 
-`control.py`, a Python script of 1,597 bytes. Here the `.sieve` is 10 bytes larger than the 7z: what
-every `.sieve` carries besides the file (its listing, and the file's hash for checking it) costs more
-than Sieve saves on a file this small. Without that overhead and the hash it would be smaller.
+`control.py`, a Python script of 1,597 bytes. It was first measured at 832 bytes, 10 more than the
+7z: then, what every `.sieve` carries besides the file (its listing, and the file's hash for
+checking it) cost more than Sieve saved on a file this small. Measured again on 30 October 2026
+(Sieve 0.13.77, `sieve-manifest-v20`, by `sieve locate` and by the File Locator alike), it is
+**731 bytes, 11.07% under the 7z**: since v16 and v20 the head and the listing are written in bytes.
+Of the 731, 670 are the file packed; the rest is 5 bytes of `sieve`, the version and flags, 5 for
+the stream's sizes and dictionary, the 32-byte SHA-256, and 17 for the listing (its name, size and
+way). The `.7z.sieve` row is from the first measurement and was not measured again.
 
 | | Bytes | Against 7z |
 | :--- | ---: | ---: |
 | control.py | 1,597 | |
 | control.7z | 822 | |
 | control.7z.sieve | 959 | +16.67% |
-| control.py.sieve | 832 | +1.22% |
+| control.py.sieve | 731 | −11.07% |
 
 All four take one cluster on disk, 4,096 bytes.
 

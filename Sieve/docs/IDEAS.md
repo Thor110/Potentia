@@ -35,8 +35,9 @@ and so wait; most are small, and are best gathered into one version when the pau
 - BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
 - each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103: the
   packer-only first step was measured and gains nothing, as mixing the whole file beats every cut);
-- the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` is 10
-  bytes over its 7z, and more than that can be taken off; the listing in bytes, §19.90, is where);
+- the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` was 10
+  bytes over its 7z; measured again on 30 October it is 731 bytes, 91 under the 7z's 822, since v16
+  and v20 wrote the head and listing in bytes; about 11 bytes more could go: NEXT-VERSION §4a);
 - the other lines' places coded by the rope (§19.87, *Not yet*);
 - a file carried as its differences from another file in the folder (§19.106: MAPS.WoW and
   MAPS-Larger.WoW).
@@ -4698,6 +4699,11 @@ installer program installs it byte for byte, and no file of the release is an it
 `sieve-install` needs nothing it lacks. On a smaller folder (the `sieve` program and the docs, 8.4
 MB) 7z still wins (2,836,214 against 2,949,958), its x86 filter being BCJ2 (calls and jumps in
 streams of their own) against Sieve's BCJ: a lead to measure next.
+*Measured again (30 October 2026, Sieve 0.13.77, v30):* the `sieve` program (Linux, 10,236,056
+bytes) and the docs, 12,692,639 bytes: Sieve 4,159,742; a solid 7z by py7zr, LZMA2 9e with BCJ,
+4,277,050 (Sieve 2.74% smaller); without the filter, 4,532,855. Edward's source tree on the same
+day: `source.sieve` 47,348,954 against `sieve-source.7z` 49,320,989. So 7z no longer leads where
+both use BCJ; BCJ2 itself (7-Zip's, not py7zr's) is still to be measured, on Edward's machine.
 `source.sieve` holds the 7z as it is, so it is the 7z and the map's text, a few hundred bytes either
 way (here 47,779,761 against the 7z's 47,780,051; holding the source as a tar instead,
 47,594,737). Making it took 19.5 minutes, nearly all the rope's search with no limit on a file it

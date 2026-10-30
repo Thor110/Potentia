@@ -1,45 +1,31 @@
-# The maps are 98.7% alike; the draft now shows when it's on (30 October 2026)
+# 7z's lead on programs, measured again (30 October 2026)
 
-Unzip over the repository root, on top of the last zip ("sieve alike"). Committed locally (not
-pushed). Code changed: rebuild the hallway.
+Unzip over the repository root, on top of the last zip ("control.py measured again"). Committed
+locally (not pushed). Documents only.
 
-## Your `sieve alike` result
+You were right that "7z beats Sieve on programs" is out of date. I measured the same kind of folder
+again: Sieve's own program (Linux, 10,236,056 bytes) and the docs, 12,692,639 bytes in all.
 
-MAPS-Larger.WoW holds **98.7%** of MAPS.WoW:
+| | Bytes |
+| :--- | ---: |
+| **Sieve** (0.13.77, made v30) | **4,159,742** |
+| 7z, LZMA2 9e with BCJ (py7zr, solid) | 4,277,050 (Sieve 2.74% smaller) |
+| 7z, LZMA2 9e, no filter | 4,532,855 |
 
-- 104 copies cover 160,338,860 of its 162,426,225 bytes;
-- 2,087,365 bytes are new;
-- the script would be 2,087,830 bytes before LZMA2;
-- the packer would pair them ("taken yes"), and found that in 1.99 s on your machine.
+In October 7z won this (2,836,214 against 2,949,958). Your source tree agrees: `source.sieve`
+47,348,954 against `sieve-source.7z` 49,320,989.
 
-So the delta way applies, and the draft can't have been on during your WoWRevived run, which came out
-the same size to the byte as before.
+**What's left is BCJ2 itself.** It's 7-Zip's own x86 filter, which py7zr doesn't have, and it can't
+be fetched here. If you'd like it settled, put `tools\sieve.exe` and the `docs` folder in a folder
+and make:
 
-**What it should save:** today the larger map costs about a second map's worth. As a delta it would
-cost about its 2 MB of new bytes once packed. That's an estimate; the next run measures it.
+- a 7z of it with 7-Zip (right-click, Add to, Normal; Ultra too if you like);
+- its `.sieve` in the File Locator.
 
-Recorded in NEXT-VERSION §4a and IDEAS §19.106.
+If Sieve is smaller there too, BCJ2 drops off the v32 list and JPEG is next.
 
-## The draft now shows when it's on
-
-So that can't happen unnoticed again:
-
-- **The File Locator** says `v32 DRAFT ON (testing only): ...` in orange, in place of its subtitle,
-  while the switch is on. A window without that line is making v31.
-- **Keep a log**'s settings line ends with `v32 draft on (...)` or `v32 draft off`, so every log
-  says which it was.
-
-For the next run, set `v32_draft = 1` under `[locator]` in `sieve-hallway.ini`, or start the hallway
-with `--v32-draft`. Then check for the orange line, and tick Keep a log.
-
-## Checked here
-
-The hallway builds with no warnings. A draft reading showed the orange line and wrote `v32 draft on`
-in its log. No CI step pins either line. `file_locator.cpp` compiles for Windows with MinGW
-(`-fsyntax-only`).
+Recorded in IDEAS §19.95 and NEXT-VERSION §1.
 
 ## Files
-- `Sieve/client/file_locator.cpp`
-- `Sieve/data/lang/en.txt`
 - `Sieve/docs/IDEAS.md`
 - `Sieve/docs/NEXT-VERSION.md`

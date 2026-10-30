@@ -23,11 +23,11 @@ checked to be the same, byte for byte, before and after.
 | Where | Sieve | Against | Gap |
 | :--- | ---: | ---: | ---: |
 | WoWRevived (a game, mostly compressed already) | 1,075,924,966 | 7z 1,073,748,445 | +0.20% |
-| A 1,597-byte script (`control.py`) | 832 | 7z 822 | +1.22% |
+| A 1,597-byte script (`control.py`), first measured | 832 | 7z 822 | +1.22% (now 731, −11.07%: §4a) |
 | enwik8, optimised for size | 21,675,870 | PPMd var. J 21,388,296 | +1.34% |
 | enwik9, optimised for size | 186,081,966 | PPMd var. J 183,964,915 | +1.15% |
 | enwik8 against the context-mixing programs | 21,675,870 | cmix v21 14,623,723 | "about a third smaller" |
-| The `sieve` program and the docs (8.4 MB, IDEAS §19.95) | 2,949,958 | 7z 2,836,214 | 7z ahead, its x86 filter being BCJ2 |
+| The `sieve` program and the docs (8.4 MB, IDEAS §19.95), 22 October | 2,949,958 | 7z 2,836,214 | 7z ahead then, its x86 filter BCJ2 (30 October, 12.7 MB: Sieve 4,159,742 against a BCJ 7z's 4,277,050, 2.74% smaller) |
 
 And the cost of the size: enwik9 optimised for size installs in 1,153.583 s, against 15.9 s
 prioritised for decoding (21.12% larger). Where Sieve leads, it leads well: the source tree is
@@ -85,7 +85,7 @@ how ready it is.
   dictionary or grouping gets most of the way, `delta` may not be worth a version.
 
 **A small file's overhead (IDEAS §19.90; Edward, 28 October: `control.py` "10 bytes over its 7z").**
-- Measured: `control.py` 832 against 7z's 822. A small entry costs about 12 bytes in bytes
+- Measured (first, before v16 and v20): `control.py` 832 against 7z's 822; now 731 (§4a). A small entry costs about 12 bytes in bytes
   (`mark.js`: 7 bytes of its 474, 1.5%). The starting page: 32 bytes as 159.
 - What cannot go: the head's 32-byte SHA-256, which every install checks.
 - What could: the root's name, varint sizes, the version and flags bytes, the listing's own
@@ -202,8 +202,13 @@ repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve
 | 7 | LZMA2's framing (one chunk's header and the end mark) | can go: a stream under 2 MiB as plain LZMA, one byte of settings |
 | 1,080 | the file, packed | |
 
-About 11 bytes can be taken off: 1,153 to about 1,142. On `control.py` that would be 832 to about
-821, under 7z's 822. That figure is an estimate until it is built and measured.
+About 11 bytes can be taken off: 1,153 to about 1,142.
+
+**`control.py` itself (Edward sent it, 30 October 2026):** its `.sieve` is now **731 bytes**, not the
+832 STATISTICS gave, so it is already 91 bytes (11.07%) under 7z's 822. The 832 was from before v16
+and v20 wrote the head and the listing in bytes. Of the 731: 670 the file packed, 32 the SHA-256,
+17 the listing, 7 the magic, version and flags, 5 the stream's sizes and dictionary. The same 11 or
+so bytes could go (to about 720). Worth taking while v32 is open, but no longer urgent.
 
 **Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
 v30 says a reader refuses a group of files mixed together that holds a file of another way in its
