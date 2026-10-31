@@ -40,7 +40,7 @@ If only seven things were done next, in this order:
 | :--- | :--- | :--- | :--- |
 | A.1 | **CI step 11 on Windows** | It failed at line 820: `Vitruvian.jpg` and the test site's `vitruvian.jpg` are one name where case is ignored. Fixed (the anchor copied as `vitruvian-man.jpg`); the JPEG block passed here alone | Edward's run. The checks after the JPEG block have run only on Linux so far |
 | A.2 | **v32's draft ways** | `delta`, `jbr`, `pngr`, JPEG tables under permanent, and `F80`, all behind `--v32-draft`, all read by the oracle | Part B |
-| A.3 | **WoWRevived with the draft** | *Run 31 October (size, Try every way):* 1,001,994,144 bytes, 6.68% under Edward's 7z (was +0.20%). MAPS-Larger as its differences; the WAVs 71.8% (433 MB), the MP4s 99.9% (406 MB) | Edward: the decoding-speed run. Then the WAVs are the largest gain left (a sound model, H) |
+| A.3 | **WoWRevived with the draft** | *Run 31 October (size, Try every way):* 1,001,994,144 bytes, 6.68% under Edward's 7z (was +0.20%). MAPS-Larger as its differences; the WAVs 71.8% (433 MB), the MP4s 99.9% (406 MB) Decoding speed: 1,016,369,457 bytes (5.34% under 7z), installed in 30.1 s against 210.3 s | Done. The WAVs are the largest gain left (a sound model, H) |
 | A.4 | **The File Locator beside 7z's BCJ2** | 7z makes 3,289,322 bytes for tools/sieve.exe and the docs; Sieve is 2.74% under a 7z with BCJ | Edward: the File Locator's figure for the same folder |
 
 ## B. Finishing v32

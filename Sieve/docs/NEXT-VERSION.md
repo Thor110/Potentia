@@ -201,6 +201,17 @@ and nothing made with it is published. Only then does v32 become the newest, in 
     - the two MP4s, 405.7 MB, carried as pieces at 99.9%;
     - the 8 WAVs, 433.2 MB, 311.3 MB packed (71.8%);
     - 197 sprites, mixed.
+- **Edward's third run (31 October 2026), the same with Prioritise decoding speed on** (no file
+  mixed):
+  - **The result:** 1,016,369,457 bytes (71.26%), 5.34% under Edward's 7z. That's 14,375,313 bytes
+    (1.43%) more than the run for size.
+  - **Timing:** it installed in 30.1 s (decoded in 22.9 s, checked and written in 6.9 s), 7.0
+    times quicker than the run for size's 210.3 s. It took 4,966.7 s to make.
+  - **The maps:** MAPS-Larger.WoW was carried as its differences again; MAPS.WoW by LZMA2, 60,136,858
+    bytes.
+  - **The other files:** the 8 WAVs by the rope, 318,253,720 bytes (73.5%); the sprites by LZMA2.
+  - So mixing's 1.43% costs seven times the install time on this folder, and both runs are well
+    under 7z.
 
 **2. A small file's overhead: measured, to build next (30 October 2026).** `control.py` is not in the
 repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve` is 1,153 bytes:
