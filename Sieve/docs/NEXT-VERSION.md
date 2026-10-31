@@ -186,6 +186,21 @@ and nothing made with it is published. Only then does v32 become the newest, in 
   As a delta: 104 copies covering 160,338,860 bytes (98.7%), 2,087,365 new bytes, a script of
   2,087,830 bytes before LZMA2. The packer would pair them ("taken yes"), in 1.99 s. So the draft
   was not on in the first run; the next, with `--v32-draft` and Keep a log, measures it.
+- **Edward's second run (31 October 2026):** the draft on, Try every way on, Prioritise decoding
+  speed off, compressed formats as they are, Keep a log.
+  - **The result:** 1,001,994,144 bytes (70.25% of 1,426,355,971), 73,930,822 smaller than the
+    first run's 1,075,924,966 (−6.87%).
+  - **Against 7z:** Edward's 7z made 1,073,748,445, so Sieve is now 6.68% under it, where it was
+    0.20% over. The log's own 7z (LZMA2, preset 9e, one stream) made 1,142,491,285.
+  - **The maps:** MAPS-Larger.WoW was carried as its differences from MAPS.WoW (104 copies covering
+    160,338,860 bytes, a script of 2,087,830 before LZMA2). MAPS.WoW itself was mixed: 52,996,076
+    bytes, against LZMA2's 60.1 million.
+  - **Timing:** it took 4,997.6 s to make. It installed in 210.3 s (decoded in 203.3 s, checked and
+    written in 6.7 s).
+  - **Where the rest is:**
+    - the two MP4s, 405.7 MB, carried as pieces at 99.9%;
+    - the 8 WAVs, 433.2 MB, 311.3 MB packed (71.8%);
+    - 197 sprites, mixed.
 
 **2. A small file's overhead: measured, to build next (30 October 2026).** `control.py` is not in the
 repository; the stand-in is `tools/fetch_corpus.py` (2,191 bytes), whose `.sieve` is 1,153 bytes:
