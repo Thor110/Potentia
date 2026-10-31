@@ -9,6 +9,7 @@
 
 #include "unpack_7z.hpp"
 
+#include "cli/case_names.hpp"
 #include "cli/vault.hpp"
 
 #include "7z.h"
@@ -279,6 +280,12 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
     Open7z a(archive);
     std::vector<UInt32> index;
     const SevenZip z = listing(a, &index);
+    {
+        std::vector<std::string> names;
+        for (const Unpacked& u : z.entries)
+            if (!u.dir) names.push_back(u.path);
+        sieve::cli::refuse_names_one_ignoring_case(names, dest); // (they would be written one over the other)
+    }
     if (!force)
         for (const Unpacked& u : z.entries)
             if (!u.dir && !kept(u.path) && fs::exists(dest / from_u8(u.path)))

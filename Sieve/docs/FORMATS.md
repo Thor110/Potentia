@@ -106,6 +106,35 @@ Edward confirmed the design ("go ahead with the png/jpeg design yes"); built beh
 
     Every one has the same pixels. A progressive JPEG is left exact: its scans code their values
     otherwise, and the optimiser does not yet handle them.
+    - *A progressive JPEG's tables, measured 31 October:* libjpeg makes a progressive JPEG's tables
+      for its values every time, so optimising them again gains nothing. Pillow's progressive JPEGs
+      of four pictures at quality 75, 85 and 92 were the same size with `optimize` on and off.
+    - What would pay is installing a baseline JPEG as progressive. At quality 85, the hallway door
+      goes from 156,746 bytes (baseline, optimised) to 147,587, the hallway compact from 163,440 to
+      153,821, and the scowl from 102,366 to 95,883, about 6% off each. icon128 went from 7,898 to
+      7,913, so it would have to be weighed. It needs a progressive JPEG writer of Sieve's own;
+      not built.
+
+**A PNG's rows carried unfiltered, for temporary** (`skr`, 31 October 2026, the draft). Under
+temporary, a PNG that preflate makes again (`sk`) carried its rows as PNG filtered them. Its rows
+are now carried unfiltered, with their filter bytes, and filtered again on installing. Each PNG
+filter is a sum or difference modulo 256, so the original comes back byte for byte, and preflate's
+corrections are the same. The five PNGs here that other programs wrote (the `.sieve`, bytes; each
+back byte for byte):
+
+| PNG | `sk` (v25) | `skr` | |
+| :--- | ---: | ---: | ---: |
+| icon16 | 1,321 (as it is) | 1,014 | −23.2% |
+| icon32 | 2,757 | 1,911 | −30.7% |
+| icon48 | 4,446 | 3,215 | −27.7% |
+| icon128 | 19,775 | 11,863 | −40.0% |
+| m1_sieve_scowl60 | 84,640 | 59,895 | −29.2% |
+
+PNGs that Sieve wrote (stb) are carried as their pixels already. With the draft, mixing now weighs
+those pixels as the picture the recipe says they are, beside the shapes it guessed before.
+hallway-compact, whose pixels the rope had read as three bytes wide, went from 16,058 bytes to
+12,772 (−20.5%). The repository's 18 hallway screenshots (docs/images) as one `.sieve`: 245,100
+bytes to 211,937 (−13.5%), 18 of them mixed as pictures where 11 were, and given back the same.
 
 ## The long run: an optimisation and benchmark engine
 

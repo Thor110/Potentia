@@ -71,10 +71,19 @@ compressed formats are ([FORMATS.md](FORMATS.md)):
 | | no box | temporary | permanent |
 | :--- | :--- | :--- | :--- |
 | **JPEG** | as it is | its brunsli form, made again byte for byte (`jbr`) | the same coefficients with tables made for them, smaller, as its brunsli form; else as temporary |
-| **PNG** | as it is | made again exactly (v25, v21) | re-saved at its smallest (`pngr`), the same picture; else made again exactly; else as it is |
+| **PNG** | as it is | made again exactly (v25, v21), its rows carried unfiltered where it is v21's (`skr`) | re-saved at its smallest (`pngr`), the same picture; else made again exactly; else as it is |
 
 With both boxes, made again exactly first.
 
+- **A PNG's rows carried unfiltered** (`skr`): PNG's row filters are sums and differences modulo
+  256, so with each row's filter byte kept they are undone for carrying and done again on
+  installing, exactly; preflate's corrections are the same. The rows unfiltered come first, so they
+  are mixed as the picture they are, then the filter bytes and the skeleton. Measured on the five
+  PNGs here that other programs wrote, all 23% to 40% smaller as a `.sieve` (FORMATS.md).
+- **A PNG's pixels mixed as their own shape:** mixing weighs the width and bytes a pixel a PNG's
+  recipe gives (`stb` or `skr`) beside the shapes it weighed before. A screenshot whose pixels the
+  rope read as three bytes wide: 16,058 bytes to 12,772; the 18 hallway screenshots together
+  245,100 to 211,937.
 - **A JPEG's brunsli form:** Google's brunsli recodes the JPEG's own coded values by a model made
   for them. It's kept where brunsli gives the file back byte for byte (checked before it is kept)
   and the form is smaller. Measured: 15.25% to 21.91% off ten original JPEGs.

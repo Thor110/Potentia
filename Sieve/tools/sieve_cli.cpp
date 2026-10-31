@@ -28,6 +28,7 @@
 #include "cli/image_io.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
+#include "cli/case_names.hpp"
 #include "cli/locate.hpp"
 #include "cli/map_sieve.hpp"
 #include "cli/site.hpp"
@@ -2544,6 +2545,16 @@ int cmd_locate(const Args& a)
     }
     if (!fs::is_directory(target)) throw std::invalid_argument(arg + " is neither a file nor a folder");
     Manifest m = walk_folder(target);
+    {
+        // Two names that are one where case is ignored: this folder's instructions will not install
+        // on Windows or macOS, which refuse them rather than write one file over the other.
+        std::vector<std::string> names;
+        for (const ManifestEntry& e : m.entries)
+            if (!e.dir) names.push_back(e.path);
+        if (auto pair = names_one_ignoring_case(names))
+            std::cerr << "warning: " << pair->first << " and " << pair->second
+                      << " are one name where case is ignored: Windows and macOS will refuse to install them\n";
+    }
     // Which manifest: v2 lists every file's address (--with-addresses); an installer's has every
     // file's bytes after its text, packed (v4; --v3: as they are), and the installer is its
     // address; otherwise v1.

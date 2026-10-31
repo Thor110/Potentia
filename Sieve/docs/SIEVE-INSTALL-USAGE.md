@@ -176,6 +176,14 @@ it is asked. A RAR made again is asked about by its own name, not its pieces. Fo
 a person, `--answers LETTERS` answers in turn (y, n, a for Yes to all, x for No to all, c for
 Cancel) and exits as `--yes` does; each file left as it was is printed.
 
+**Two names that are one where case is ignored (31 October 2026).** A `.sieve` or an archive made
+on Linux can hold `A.txt` and `a.txt`. On Windows, and on macOS by default, those are one name, so
+installing both would write the second over the first. Where the destination ignores case, the
+installer refuses before writing anything, naming the pair. Packing such a folder (`sieve locate`)
+warns that it will not install there. Whether the destination ignores case is looked at, not
+assumed: so a Windows drive seen from Linux (WSL's `/mnt/c`) counts, and a Mac folder made to heed
+case does not.
+
 **Other archives are extracted, as an archiver extracts them (25 October 2026).** Open a `.zip`,
 `.rar`, `.tar.gz` or any kind below with `sieve-install` (or right-click it: Sieve > Extract) and it
 is unpacked, **one layer at a time**, as 7-Zip does: a `.tar.gz` gives its `.tar`, a `.zip` its

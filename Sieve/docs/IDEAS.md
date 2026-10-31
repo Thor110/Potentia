@@ -5517,4 +5517,13 @@ ideas and current work a look over ... Even come up with your own ideas if you w
   no file is already there before writing. Two names in one `.sieve` that differ only in case both
   pass, and on Windows or macOS the second is written over the first. Read from the code, not tried
   on Windows.
+- *Worked through the same day* (Edward: "Work through all of that"): all three were built, the
+  first two behind the draft.
+  - The PNG rows unfiltered (`skr`) came to 23% to 40% smaller on the five PNGs other programs
+    wrote, each back byte for byte.
+  - Mixing with the recipe's shape took hallway-compact from 16,058 bytes to 12,772, and the 18
+    hallway screenshots together from 245,100 to 211,937.
+  - The installers now refuse a pair of names that are one where case is ignored.
+  - The book cover, first counted among other programs' PNGs, was Sieve's own (stb): corrected in
+    the results.
 

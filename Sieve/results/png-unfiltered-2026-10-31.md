@@ -15,7 +15,7 @@ The probe's PNG has the same pixels as the original (checked by Pillow on icon12
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: |
 | icon128 | 128×128 RGBA | another program | 19,775 | 10,468 | 100 | 1,657 / 534 |
 | m1_sieve_scowl60 | 1500×900 RGBA | another program | 84,640 | 58,438 | 252 | 7,537 / 213 |
-| example_book_cover | 160×160 RGB | another program | 150 | 215 | 80 | |
+| example_book_cover | 160×160 RGB | Sieve (stb) | 150 | 215 | 80 | |
 | hallway-door | 1280×720 RGB | Sieve (stb) | 7,882 | 18,296 | 120 | |
 | hallway-compact | 1280×720 RGB | Sieve (stb) | 16,058 | 14,161 | 156 | |
 
@@ -24,9 +24,28 @@ The probe's PNG has the same pixels as the original (checked by Pillow on icon12
 - At worst (the skeletons' difference and the filter bytes not packed at all):
   - icon128: 10,468 + 1,123 + 100 = 11,691, 40.9% under 19,775;
   - the scowl: 58,438 + 7,324 + 252 = 66,014, 22.0% under 84,640.
-- **Larger on small and flat pictures:** the book cover and hallway-door. So it is weighed, file by
-  file.
-- **The two hallway screenshots are carried by `stb` as their pixels already.**
-  - hallway-compact's difference is the way those pixels were packed: LZMA2, 15,957 bytes, against
-    mixing as a picture (`mix4 B22 I3841x1`), 14,059 (ROADMAP D.2).
-  - hallway-door's goes the other way: LZMA2 is the better there.
+- **The book cover and the two hallway screenshots were written by Sieve (`stb`)** and are carried
+  as their pixels already, so their rows say how those pixels were packed, not what this way gives.
+  (The book cover was first set down here as another program's: corrected.)
+  - hallway-compact: LZMA2, 15,957 bytes, against mixing as a picture (`mix4 B22 I3841x1`) 14,059
+    (ROADMAP D.2).
+  - hallway-door was mixed as a picture 1280 by 3 already (7,882); the probe's PNG was read as rows
+    of 3,841 bytes instead.
+
+## Built (31 October 2026, the draft: `skr`)
+
+The way itself, through the packer, under temporary (the `.sieve`, bytes; each PNG back byte for
+byte from Sieve):
+
+| PNG | `sk` (v25), or as it is | `skr` | |
+| :--- | ---: | ---: | ---: |
+| icon16 | 1,321 (as it is) | 1,014 | −23.2% |
+| icon32 | 2,757 | 1,911 | −30.7% |
+| icon48 | 4,446 | 3,215 | −27.7% |
+| icon128 | 19,775 | 11,863 | −40.0% |
+| m1_sieve_scowl60 | 84,640 | 59,895 | −29.2% |
+
+Against the estimate above:
+- icon128 came to 11,863, 172 bytes over its 11,691. The estimate counted the probe's `.sieve`
+  plus the extra bytes, so it left out how they pack beside the rows.
+- The scowl came to 59,895, well under its 66,014.

@@ -4,8 +4,10 @@
 # function (q, as the steps define it) says which line it was, rather than stopping silently.
 set -E
 
-# Under ci/run.sh, each traced command names its file and line (bash takes no PS4 from outside).
-[ -n "$SIEVE_CI_TRACE" ] && PS4='+ ${BASH_SOURCE##*/}:$LINENO: '
+# Under ci/run.sh, each traced command names its file and line (bash takes no PS4 from outside),
+# after the time it started (bash 5's EPOCHREALTIME; empty in an older bash), which
+# ci/trace_times.py adds up by block.
+[ -n "$SIEVE_CI_TRACE" ] && PS4='+ ${EPOCHREALTIME:-} ${BASH_SOURCE##*/}:$LINENO: '
 
 # python: the oracle and the checks call `python`. Where that is not Python 3 (Windows' Store
 # alias, or none), the py launcher stands in for it, as make_release.bat finds Python.

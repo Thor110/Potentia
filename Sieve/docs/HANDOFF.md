@@ -4129,6 +4129,19 @@ tools/cli/png_resave.cpp; format 22), and the oracle makes it by zlib. Measured:
 FORMATS.md has the tables; CI step 11 checks both. Without the draft, every output is unchanged
 (measured against the build before).
 
+*The plan worked through (31 October 2026; ROADMAP.md).* Edward: "Work through all of that".
+- **Names one where case is ignored** (no version): every installer refuses `A.txt` beside
+  `a.txt` before writing anything, where the destination ignores case, which it looks at. `sieve
+  locate` warns of such a pair. Found by step 11's failure on Windows.
+- **`skr`** (v32, the draft): a PNG made again by preflate carries its rows unfiltered, filtered
+  again on installing. It's 23% to 40% smaller on the five PNGs here that other programs wrote.
+- **Pixels mixed as their own shape** (the draft): the 18 hallway screenshots 245,100 → 211,937
+  bytes (−13.5%).
+- **Measured:** a progressive JPEG's tables gain nothing; a baseline installed as progressive about
+  6% (C.2).
+- **Built:** step 11's time added up by block (`ci/trace_times.py`).
+- **Left for Edward:** B.3 and B.4 (they change v32's head, B.5's question).
+
 *Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's
 overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.

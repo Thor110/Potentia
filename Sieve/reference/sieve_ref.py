@@ -6675,8 +6675,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6}
 
 
 def listing_from_bytes(b):
@@ -7147,6 +7147,18 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a re-saved PNG's recipe Sieve does not write")
             remakes[i] = ("pngr", int(filt), int(strat), int(split), int(head), size)
             size = int(n)
+        if v32 and way.startswith("skr "):
+            # "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>" (SPECIFICATIONS
+            # v32, a draft): a PNG made again exactly from its skeleton (as "sk"), its rows carried
+            # unfiltered, then their filter bytes, then the skeleton: filtered again here, the skeleton's
+            # inner bytes made as "sk" carries them.
+            _, skel, rb, pb, rows, n, way = way.split(" ", 6)
+            if not (all(x.isdigit() for x in (skel, n, rb, pb, rows)) and int(rb) >= 1 and 1 <= int(pb) <= 8 and int(rows) >= 1 and
+                    (int(rb) + 1) * int(rows) + int(skel) == int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                sys.exit(f"{path}: an unfiltered PNG's recipe Sieve does not write")
+            remakes[i] = ("skr", int(skel), int(rb), int(pb), int(rows), size)
+            size = int(n)
         if v31 and way.startswith("skm "):
             # "skm <members> <skeleton size> <way>": a gzip, zip or 7z as a skeleton, what it holds its members.
             _, n, skel, way = way.split(" ", 3)
@@ -7379,6 +7391,14 @@ def cmd_unpack_v7(args, data):
         if r[0] == "pngr":  # v32 (a draft): the PNG re-saved, by zlib
             got[i] = pngr_make(got[i], r[1], r[2], r[3], r[4], files[i][0])
             continue
+        if r[0] == "skr":  # v32 (a draft): the rows filtered again, then as "sk"
+            _, skel, rb, pb, rows, size = r
+            made = skeleton_remake(skr_sk_inner(got[i], skel, rb, pb, rows, files[i][0]), skel, files[i][0])
+            if made is None:
+                unchecked.add(i)
+                continue
+            got[i] = made
+            continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
             inner = got[i] + b"".join(got[k] for k in sorted(members) if members[k] == i) if r[0] == "skm" else got[i]  # v31: its members after it
@@ -7483,6 +7503,40 @@ def refused_path(p):
     if parts[-1] == "":
         parts = parts[:-1]
     return any(part in ("", ".", "..") for part in parts)
+
+
+def png_filtered(t, row, prior, bpp):
+    """PNG's filter t (0 to 4) on one row, `prior` the row above unfiltered (zeros above the first)."""
+    out = bytearray(len(row))
+    for x in range(len(row)):
+        a = row[x - bpp] if x >= bpp else 0
+        b = prior[x]
+        c = prior[x - bpp] if x >= bpp else 0
+        if t == 4:
+            p = a + b - c
+            pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+            pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+        else:
+            pred = 0 if t == 0 else a if t == 1 else b if t == 2 else (a + b) // 2
+        out[x] = (row[x] - pred) & 255
+    return out
+
+
+def skr_sk_inner(inner, skel, rb, pb, rows, path):
+    """SPECIFICATIONS v32 (a draft), "skr": what "sk" would carry for the PNG (its skeleton, then each
+    row with its filter byte, filtered), from the rows unfiltered, their filter bytes and the skeleton."""
+    if len(inner) != (rb + 1) * rows + skel:
+        sys.exit(f"{path}: an unfiltered PNG whose recipe and bytes do not agree")
+    filters = inner[rb * rows:rb * rows + rows]
+    out = bytearray(inner[rb * rows + rows:])
+    prior = bytes(rb)
+    for y in range(rows):
+        if filters[y] > 4:
+            sys.exit(f"{path}: an unfiltered PNG's filter byte that is not PNG's")
+        row = inner[y * rb:(y + 1) * rb]
+        out += bytes([filters[y]]) + png_filtered(filters[y], row, prior, pb)
+        prior = row
+    return bytes(out)
 
 
 def pngr_make(inner, filt, strat, split, head, path):

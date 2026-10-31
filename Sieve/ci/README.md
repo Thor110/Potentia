@@ -42,5 +42,10 @@ the steps asked for there, one after another. Each step's output goes to a log; 
 shows its last lines and where its log is, and the copy is kept to look at (`--keep` keeps it
 anyway). Python is `python` where that is Python 3, else the `py` launcher (`ci/lib.sh`).
 
+Each step's commands also go to a `.trace` beside its log, each as it starts and after the time it
+started (in bash 5). `python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh` adds a
+step's time up by block (a block runs from one comment after a command to the next), the slowest
+first.
+
 Each step can run on its own: none needs a file an earlier one made. GitHub runs them in order
 in one checkout, as before; the workflow only calls the scripts.

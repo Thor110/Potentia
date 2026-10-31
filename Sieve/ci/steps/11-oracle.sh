@@ -534,7 +534,9 @@ with zipfile.ZipFile('a21/py.zip', 'w', zipfile.ZIP_DEFLATED) as z:
 with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
     z.writestr(zipfile.ZipInfo('sieve_ref.py', (2026, 10, 25, 12, 0, 0)), t)"
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
-SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --manifest a21.manifest | tr -d '\r' > a21.txt
+# (Prioritise Decoding Speed: what the archives hold, 1.4 MB, is otherwise mixed as one group, which
+# the oracle took 726 s to decode in Python; groups are checked on their own below, v29 and v30.)
+SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --prioritise-decoding --manifest a21.manifest | tr -d '\r' > a21.txt
 grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[01]\))$" a21.txt > /dev/null
 python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 31, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
@@ -810,6 +812,27 @@ $SI d32.sieve --to d32_si --yes > /dev/null
 diff -r d32 d32_si
 $S locate d32 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
 if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
+# Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
+# tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
+# macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds
+# case, both are written. Packing such a folder warns.
+rm -rf cs cp_s cp_si cp_z && mkdir cs && echo x > cs/Probe
+python -c "import zipfile; z = zipfile.ZipFile('case_pair.zip', 'w'); z.writestr('A.txt', 'upper\n'); z.writestr('a.txt', 'lower\n'); z.close()"
+if [ -e cs/probe ]; then
+    if $S install ../tests/case_pair.sieve --to cp_s > cp_s.txt 2>&1; then exit 1; fi
+    grep -q "A.txt and a.txt are one name here, where case is ignored" cp_s.txt
+    if $SI ../tests/case_pair.sieve --to cp_si --yes > cp_si.txt 2>&1; then exit 1; fi
+    grep -q "are one name here, where case is ignored" cp_si.txt
+    if $SI case_pair.zip --to cp_z --yes > cp_z.txt 2>&1; then exit 1; fi
+    grep -q "are one name here, where case is ignored" cp_z.txt
+    [ ! -e cp_s/A.txt ] && [ ! -e cp_si/A.txt ] && [ ! -e cp_z/A.txt ]
+else
+    $S install ../tests/case_pair.sieve --to cp_s > /dev/null
+    $SI ../tests/case_pair.sieve --to cp_si --yes > /dev/null
+    $SI case_pair.zip --to cp_z --yes > /dev/null
+    for d in cp_s cp_si cp_z; do [ "$(cat $d/A.txt)" = upper ] && [ "$(cat $d/a.txt)" = lower ]; done
+    $S locate cp_s --installer cp_again.sieve 2>&1 | tr -d '\r' | grep -q "^warning: A.txt and a.txt are one name where case is ignored"
+fi
 # v32 in the making, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
 # for byte, under Compressed Formats' boxes. The repository's seven JPEGs (all public domain or
 # Sieve's own) and a text: with the draft and temporary, each JPEG carried so and the folder given
@@ -897,6 +920,32 @@ for name in sorted(os.listdir(sys.argv[1])):
 PY
 $S locate p32 --installer p32v31.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32v31.txt
 if grep -q "sieve-manifest-v32\|^pngs " p32v31.txt; then exit 1; fi
+# v32 in the making, too: with temporary, a PNG made again exactly with its rows carried unfiltered
+# ("skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>"; the rows filtered again by
+# their filter bytes on installing, then made as "sk" makes them). The extension's four icons (no
+# stb PNGs: those are carried as their pixels already): each carried so, given back byte for byte by
+# Sieve and by sieve-install; the oracle reads each recipe, filters the rows again and names each as
+# a file it has not made (its deflate is preflate's); without the draft, each is "sk" or as it is.
+rm -rf r32 && mkdir r32 && cp ../web/extension/icon16.png ../web/extension/icon32.png ../web/extension/icon48.png ../web/extension/icon128.png r32/
+$S locate r32 --installer r32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > r32.txt
+[ "$(grep -c "	skr [0-9]* [0-9]* 4 [0-9]* [0-9]* " r32.txt)" -eq 4 ]
+rm -rf r32_inst r32_si r32_oracle
+$S install r32.sieve --to r32_inst > /dev/null
+diff -r r32 r32_inst
+$SI r32.sieve --to r32_si --yes > /dev/null
+diff -r r32 r32_si
+python sieve_ref.py unpack r32.sieve --to r32_oracle > r32o.txt
+[ "$(grep -c "^not made again by the oracle (.*): icon[0-9]*.png; " r32o.txt)" -eq 4 ]
+$S locate r32 --installer r32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > r32v31.txt
+if grep -q "sieve-manifest-v32\|	skr " r32v31.txt; then exit 1; fi
+# And with the draft, mixing weighs a PNG's pixels as a picture of the shape its recipe gives: a
+# hallway screenshot (stb's, 1280 by 720, three bytes a pixel), whose pixels the rope reads as three
+# bytes wide, mixed as 1280 by 3 (v26's picture parameters, read by every reader since); without
+# the draft, carried as it was. (Not given to the oracle: its mixing would take hours on 2.7 MB.)
+rm -rf s32 && mkdir s32 && cp ../docs/images/hallway-compact.png s32/
+$S locate s32 --installer s32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
+rm -rf s32_inst && $S install s32.sieve --to s32_inst > /dev/null && diff -r s32 s32_inst
+$S locate s32 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 raw	hallway-compact.png"
 # v32 in the making, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
 # scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place with the draft. The
 # code alone, smaller than D60's and read back by the oracle (its own trie and weights); a text, and

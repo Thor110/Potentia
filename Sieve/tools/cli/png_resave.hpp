@@ -32,4 +32,25 @@ std::optional<PngResaved> png_resave(const std::vector<uint8_t>& png);
 // bits. The IDAT goes at `split` bytes into the head. Refused where the head does not read.
 std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filter, int strategy, uint64_t split, uint64_t head);
 
+// v32 in the making (`skr`), for temporary: a PNG made again exactly from its skeleton (v21's `sk`,
+// its IDATs' deflate by preflate) whose rows are carried unfiltered. PNG's filters are sums and
+// differences modulo 256, so each row's can be undone and done again exactly given its filter byte;
+// preflate sees the same filtered stream either way, so its corrections are the same. What is
+// carried: every row unfiltered, one after another (a picture, from the first byte), then the rows'
+// filter bytes, then the skeleton.
+struct PngUnfiltered
+{
+    std::vector<uint8_t> inner; // the rows unfiltered, their filter bytes, the skeleton
+    std::string recipe;         // "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>"
+};
+
+// From `sk`'s inner bytes (its skeleton of `skeleton` bytes, then the PNG's rows as filtered, each
+// with its filter byte) and the PNG itself, for its IHDR: nothing where the PNG is interlaced, a
+// filter byte is not 0 to 4, or the rows are not exactly what the IHDR gives.
+std::optional<PngUnfiltered> png_unfiltered(const std::vector<uint8_t>& sk_inner, uint64_t skeleton, const std::vector<uint8_t>& png);
+
+// `sk`'s inner bytes again, from what `skr` carries: the skeleton, then each row filtered by its
+// filter byte. Refused where the recipe's words and the bytes do not agree.
+std::vector<uint8_t> png_unfiltered_sk_inner(const std::vector<uint8_t>& inner, uint64_t skeleton, uint64_t row_bytes, uint64_t pixel_bytes, uint64_t rows);
+
 } // namespace sieve::cli

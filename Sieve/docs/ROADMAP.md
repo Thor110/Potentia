@@ -8,21 +8,27 @@ measured, and where it came from is named; "not measured" means no figure exists
 ideas from the same look round, three of them measured that day. Nothing here is decided: the order
 is a recommendation.*
 
+*Worked through the same day (Edward: "Work through all of that"):*
+- **Built:** D.1 (`skr`), D.2 (pixels mixed as their own shape) and D.3 (names one where case is
+  ignored). D.5's tool is built.
+- **Measured:** C.2.
+- **Left for Edward's decision:** B.3 and B.4, since they take bytes out of v32's head, which is
+  B.5's question.
+- Each item below says where it stands.
+
 ## The short list
 
 If only seven things were done next, in this order:
 
 1. **Step 11 green on Windows** (A.1): the case clash fixed, Edward's run under way.
-2. **A PNG's rows carried unfiltered under temporary** (D.1). *Measured 31 October:* exact by
-   construction. On the two PNGs it applies to, about 22% to 41% smaller at worst (the rows alone
-   31% and 47%). It's the largest open gain on
-   pictures, and it belongs in v32.
+2. **A PNG's rows carried unfiltered under temporary** (D.1). *Built 31 October, behind the draft:*
+   the five PNGs it applies to are 23% to 40% smaller, each back byte for byte.
 3. **Finish and freeze v32** (part B): two decisions, Edward's WoWRevived run, and three small
    format items.
-4. **Mixing tried on a hallway screenshot's pixels** (D.2). No version is needed: one screenshot's
-   `.sieve` would be 11.8% smaller.
-5. **Names equal but for case, refused before installing** (D.3). On Windows and macOS, a `.sieve`
-   made on Linux could otherwise lose a file without a word.
+4. **Mixing tried on a hallway screenshot's pixels** (D.2). *Built 31 October, behind the draft*
+   (packer rule: no change without it): the 18 hallway screenshots 245,100 → 211,937 bytes.
+5. **Names equal but for case, refused before installing** (D.3). *Built 31 October.* Edward's
+   Windows run of step 11 checks the refusal.
 6. **The Silesia benchmark** (C.4): the one public corpus not yet measured. Nothing is posted
    without it.
 7. **Word frequencies on enwik8 and enwik9** (C.1): built; only the large measurement is left.
@@ -49,10 +55,10 @@ What is left, in order:
 
 | | What | Measured | Cost |
 | :--- | :--- | :--- | :--- |
-| B.1 | **PNG rows unfiltered under temporary** (D.1) | About 22% to 41% at worst, on PNGs other programs wrote | A new way; the packer, the reader, the oracle, CI |
+| B.1 | **PNG rows unfiltered under temporary** (D.1) | *Built:* 23% to 40% on the five PNGs other programs wrote | Done, behind the draft |
 | B.2 | **The group question**: a v30 group with another file in its middle, which the reader takes and the specification and oracle refuse | Making the packer cut such groups cost 14% | Recommended: change the specification and oracle to allow it (a); no bytes change |
-| B.3 | **A small file's overhead** | About 11 bytes a small `.sieve`: two stream sizes, a dictionary byte, LZMA2's framing. `control.py` 731 to about 720 | Small; the listing changes anyway |
-| B.4 | **The archive's format as a number** (v31's `skm` text and the recipes' settings) | A few bytes a temporary archive; not measured | Small; take it while B.3 is open |
+| B.3 | **A small file's overhead** | About 11 bytes a small `.sieve`: two stream sizes, a dictionary byte, LZMA2's framing. `control.py` 731 to about 720 | Small, but it changes what v32's head holds: decided with B.5 |
+| B.4 | **The archive's format as a number** (v31's `skm` text and the recipes' settings) | A few bytes a temporary archive; not measured | With B.3 |
 | B.5 | **A second flags byte** | The first is full (all eight bits used) | A decision, before any new optional part |
 | B.6 | **Freeze**: SIEVE-FORMAT's v32 edition, the Proof samples made again, the same codes on Windows, Linux and macOS | | NEXT-VERSION §5, steps 4 and 5 |
 
@@ -70,9 +76,14 @@ holds it, 64 if only scowl-en-60 does, else 1 (mix-v4's `F80`).
   21,388,296) and 1.15%.
 - A finer ranking (SCOWL's sizes 10 to 95, or real counts) would need new pinned files.
 
-**C.2 A progressive JPEG under permanent.** The table optimiser leaves a progressive JPEG exact,
-since its scans code values otherwise. Two ways are open: optimise its tables scan by scan, or under
-permanent install a baseline JPEG as progressive, which is often smaller. Neither is measured here.
+**C.2 A progressive JPEG under permanent** (*measured 31 October*, FORMATS.md). Two ways were open:
+- **Optimise a progressive JPEG's tables:** nothing to gain from libjpeg's. It makes a progressive
+  JPEG's tables for its values every time; Pillow's were the same size with `optimize` on and off,
+  on four pictures at three qualities.
+- **Install a baseline JPEG as progressive:** about 6% smaller on the three large pictures at
+  quality 85 (the hallway door 156,746 → 147,587), and 0.2% larger on icon128. So it would be
+  weighed per JPEG. It needs a progressive JPEG writer of Sieve's own; the brunsli form already
+  carries either. Not built: the next large JPEG step, if wanted.
 
 **C.3 BCJ2 for programs** (IDEAS §19.95). Waits on A.4: if 7z still leads there, BCJ2's streams are
 the reason to look at; if not, BCJ2 can be dropped.
@@ -101,7 +112,7 @@ temporary, and the filter bytes were carried alone:
 | :--- | :--- | ---: | ---: | ---: | ---: |
 | icon128 | another program | 19,775 | 10,468 (−47.1%) | 100 | 1,657 / 534 bytes |
 | m1_sieve_scowl60 | another program | 84,640 | 58,438 (−31.0%) | 252 | 7,537 / 213 bytes |
-| example_book_cover | another program | 150 | 215 | 80 | |
+| example_book_cover | Sieve (stb) | 150 | 215 | 80 | |
 | hallway-door | Sieve (stb) | 7,882 | 18,296 | 120 | |
 | hallway-compact | Sieve (stb) | 16,058 | 14,161 | 156 | |
 
@@ -110,34 +121,44 @@ temporary, and the filter bytes were carried alone:
   of skeleton and 100 of filter bytes, about 11,700 in all even if the skeleton packed not at all:
   still about 40% under today. For the scowl: 7,324 and 252, about 66,000 at most, 22% under
   84,640. Building it will give the exact figure.
-- **It's a choice per PNG, weighed, never always:** the book cover (160 by 160) comes out larger.
+- *Built 31 October* (`skr`): every PNG it applies to came out smaller, so it is taken wherever it
+  applies. icon16 1,321 → 1,014, icon32 2,757 → 1,911, icon48 4,446 → 3,215, icon128 19,775 →
+  11,863, the scowl 84,640 → 59,895, each back byte for byte.
+- The book cover was written by stb, so it's carried as its pixels and `skr` doesn't apply. Its row
+  above was the probe's, not the way's.
 - Sieve's own screenshots (stb) are carried as their pixels already, so they gain nothing from this.
   Their two rows show how those pixels are packed instead (D.2): hallway-compact's smaller by
   mixing, hallway-door's larger (large flat areas, which LZMA2 takes better).
 - Under permanent, `pngr` is smaller still (48,135 for the scowl), since it needs no skeleton.
   D.1 is for temporary, where the file must come back exactly.
 
-**D.2 Mixing tried on a hallway screenshot's pixels** (no version: v28's mixing of pictures).
-- hallway-compact under temporary: its pixels (2,764,800 bytes, from `stb`) carried raw by LZMA2,
-  15,957 bytes. The same pixels with a zero byte a row, as rows of 3,841: mixed as a picture
-  (`mix4 B22 I3841x1`), 14,059 bytes, 11.9% smaller.
-- So the packer didn't try mixing on the `stb` way's pixels, where it did on the skeleton way's
-  rows. Why it didn't is still to find (the log says why for each file).
-- The fix is to weigh mixing as a picture of width w·c on an `stb` PNG's pixels, as on any picture.
-  Every `.sieve` this changes stays v28 to v31, read by every reader since.
-- hallway-door shows the weighing must stay: there LZMA2 (7,882) beat mixing (18,296).
+**D.2 Mixing tried on a hallway screenshot's pixels** (*built 31 October, behind the draft*).
+- **Found:** hallway-compact's pixels (2,764,800 bytes, from `stb`) were carried raw by LZMA2,
+  15,957 bytes. The packer's log said why: mixing was tested on its first 256 KiB as a picture
+  "3 wide, 1 a pixel", the rope's reading. That came to 2,214 bytes, not 3% under LZMA2's, so
+  mixing was not tried on the whole.
+- **Built:** with the draft, mixing also weighs the shape the recipe gives (`stb`'s width and
+  components, or `skr`'s), beside the shapes it weighed before, and keeps the smallest on the start.
+- **Measured:** hallway-compact 16,058 → 12,772 bytes (`mix4 B22 I1280x3`). hallway-door was read
+  right already (7,882 either way). All 18 hallway screenshots (docs/images) as one `.sieve`:
+  245,100 → 211,937 bytes (−13.5%), 18 mixed as pictures where 11 were, given back the same. The book cover keeps the guessed 480×1, which beats its own
+  160×3 (39 bytes against 44): that's why the shapes are weighed side by side, not replaced.
+- It writes only v26's picture parameters, read by every reader since. It's behind the draft only
+  because the packer must make the same bytes without it.
 
-**D.3 Names equal but for case** (found by step 11's failure).
-- A `.sieve` made on Linux can hold `A.txt` and `a.txt`.
-- Installing checks before writing that no file is already there (locate.cpp's first phase). Both
-  pass, since neither exists yet, so on Windows or macOS the second is written over the first. One
-  file is lost without a word.
-- This was read from the code, not tried on Windows.
-- **The fix**, no version:
-  - the installer refuses or asks before writing anything, naming the pair;
-  - the packer warns when it reads such a folder;
-  - a CI check that no tracked path and no step's copy has such a pair.
-- Today's scan found none in the repository. The step 11 copy was the only clash.
+**D.3 Names equal but for case** (*built 31 October*; found by step 11's failure).
+- A `.sieve` made on Linux can hold `A.txt` and `a.txt`. Installing checked before writing that no
+  file was already there, and both passed, since neither existed yet. So on Windows or macOS the
+  second would be written over the first without a word.
+- **Built** (no version):
+  - `install_tree`, `unpack_archive` and `unpack_7z` refuse such a pair before writing anything,
+    naming it, where the destination ignores case;
+  - `sieve locate` warns when it reads such a folder.
+  - Whether the destination ignores case is looked at, not assumed: so WSL's `/mnt/c` counts, and a
+    Mac folder made to heed case does not.
+- **Checked:** here (Linux), both files are written; with the check forced on, all three installers
+  refused and wrote nothing. CI step 11 installs `tests/case_pair.sieve` and a zip of the pair, and
+  on Edward's Windows run checks the refusal for real.
 
 **D.4 Undo any filter that can be undone, before modelling.** D.1 is one case of a rule: where a
 format filters reversibly (PNG's row filters, TIFF's horizontal predictor, a WAV's delta coding), the
@@ -145,9 +166,15 @@ models do better on the values before filtering, as pngr already showed under pe
 measured; the others are for the per-format corpus (C.7).
 
 **D.5 CI step 11's own time.** It took 2,479 s here and 1,781 s on Edward's machine (to its failure)
-of the full CI. The p32 block filters every PNG row in Python. Each block's time from the `.trace`
-would show where the time goes. A slow block could then use a smaller fixture, leaving the oracle
-as plain as it is. Not measured.
+of the full CI. *Built 31 October:* each traced command now carries the time it started (bash 5's
+`EPOCHREALTIME`), and `ci/trace_times.py` adds a step's time up by block:
+`python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh`. Its first run (step 11 here, 2,646 s, every block passing) found:
+- **27.6% in one command:** the oracle reading v21's archives, whose contents (1.4 MB) the packer
+  mixed as one group, decoded in Python in 726 s. That block checks skeletons, and groups are
+  checked on their own, so it now packs with Prioritise Decoding Speed: 3 s, the same checks.
+- **Next:** two vector blocks of about 200 s each (lines filtered by others, figure-v1), and the
+  v32 blocks, 199 s.
+- Step 11 should now take about 1,920 s here.
 
 **D.6 Word lists beyond English.** F80 is English-only, since SCOWL is. A text in another language
 gets nothing from it. Another language's ranked list, pinned as SCOWL is, could be a fourth list

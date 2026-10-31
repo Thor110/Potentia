@@ -1,6 +1,7 @@
 // Sieve CLI -- an installer's files packed (pack.hpp).
 
 #include "cli/pack.hpp"
+#include "cli/case_names.hpp"
 #include "cli/delta.hpp"
 #include "cli/jpeg_glue.hpp"
 #include "cli/png_resave.hpp"
@@ -1865,6 +1866,17 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
         const std::string png = stb_png(inner, w, h, c, level, filter);
         return std::vector<uint8_t>(png.begin(), png.end());
     }
+    if (recipe.rfind("skr ", 0) == 0)
+    {
+        // "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>" (v32, in the making): a PNG
+        // made again exactly from its skeleton, its rows carried unfiltered: filtered again by their
+        // filter bytes, then made as "sk" makes it (png_resave.hpp).
+        unsigned long long skeleton = 0, size = 0, n = 0, bpp = 0, h = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "skr %llu %llu %llu %llu %llu%c", &skeleton, &n, &bpp, &h, &size, &extra) != 5 || size != inner.size())
+            throw std::runtime_error("an unfiltered PNG's recipe this Sieve does not know: " + recipe);
+        return deflate_skeleton_remake(png_unfiltered_sk_inner(inner, skeleton, n, bpp, h), size_t(skeleton));
+    }
     if (recipe.rfind("sk ", 0) == 0)
     {
         // "sk <skeleton size> <inner size>" (v21): a gzip, zip or 7z made again from its skeleton and the
@@ -2214,6 +2226,31 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
     return std::pair<uint32_t, uint32_t>{uint32_t(line / step), step};
 }
 
+// A PNG's pixels' shape, from its recipe: its width and bytes a pixel, where they and the size agree
+// with the bytes carried; else nothing. Pixels as stb makes them again ("stb <level> <filter> <w>
+// <h> <c> <size>"), or a PNG's rows unfiltered ("skr <skeleton> <row bytes> <pixel bytes> <rows>
+// <inner size>", the rows first, then their filter bytes and the skeleton).
+static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::string& recipe, size_t size)
+{
+    int level = 0, filter = 0;
+    unsigned long long w = 0, h = 0, c = 0, n = 0, skeleton = 0;
+    char extra = 0;
+    if (recipe.rfind("stb ", 0) == 0 && std::sscanf(recipe.c_str(), "stb %d %d %llu %llu %llu %llu%c", &level, &filter, &w, &h, &c, &n, &extra) == 6)
+    {
+        if (w < 2 || h < 2 || c < 1 || c > 4 || w > (1u << 24) || n != size || w * h * c != n) return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{uint32_t(w), uint32_t(c)};
+    }
+    unsigned long long row = 0;
+    if (recipe.rfind("skr ", 0) == 0 && std::sscanf(recipe.c_str(), "skr %llu %llu %llu %llu %llu%c", &skeleton, &row, &c, &h, &n, &extra) == 5)
+    {
+        if (c < 1 || c > 8 || row % c != 0 || row / c < 2 || row / c > (1u << 24) || h < 2 || n != size || skeleton > n ||
+            h > (n - skeleton) / (row + 1) || (row + 1) * h + skeleton != n)
+            return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{uint32_t(row / c), uint32_t(c)};
+    }
+    return std::nullopt;
+}
+
 static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
 
@@ -2482,6 +2519,23 @@ std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton(cons
     return std::make_pair(std::move(whole), std::move(r));
 }
 
+// v32 (in the making): as png_by_skeleton, its rows carried unfiltered ("skr", png_resave.hpp)
+// where they can be; else as png_by_skeleton made it. Checked before it is kept: the rows filtered
+// again give exactly what png_by_skeleton carries, which it checked gives the PNG back.
+std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton_unfiltered(const std::vector<uint8_t>& b)
+{
+    auto sk = png_by_skeleton(b);
+    if (!sk) return std::nullopt;
+    unsigned long long skeleton = 0, size = 0;
+    if (std::sscanf(sk->second.c_str(), "sk %llu %llu", &skeleton, &size) != 2) return sk;
+    auto u = png_unfiltered(sk->first, skeleton, b);
+    unsigned long long s1 = 0, s2 = 0, n = 0, bpp = 0, h = 0;
+    if (!u || std::sscanf(u->recipe.c_str(), "skr %llu %llu %llu %llu %llu", &s1, &n, &bpp, &h, &s2) != 5 ||
+        png_unfiltered_sk_inner(u->inner, skeleton, n, bpp, h) != sk->first)
+        return sk;
+    return std::make_pair(std::move(u->inner), std::move(u->recipe));
+}
+
 } // namespace
 
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
@@ -2544,6 +2598,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // ("F80"), in scowl-en-60's place, only with the draft switch. Measured on five English texts
     // against scowl-en-60: 1.8% to 8.8% smaller (Don Quixote's first 800 KB 193,808 bytes to 188,719).
     const bool by_use_on = mix4_on && rope_newest >= 14 && v32_draft();
+    // v32 (in the making): mixing weighs a PNG's pixels as a picture of the shape its recipe gives
+    // (recipe_shape), a way every reader since v26 reads (ROADMAP D.2).
+    const bool pixels_shape_on = mix2_on && rope_newest >= 14 && v32_draft();
     const uint32_t word_size = by_use_on ? 80 : 60, word_key = by_use_on ? (80 | kMixWordsByUse) : 60;
     // v31's: an archive made again from its skeleton with what it holds carried as its own files
     // (each its own way, in the groups), and whether unpacking pays judged by mixing too.
@@ -2555,6 +2612,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v32 (in the making): with permanent, a PNG installed as the same picture re-saved at its
     // smallest, only with the draft switch.
     const bool pngr_on = png_on && rope_newest >= 14 && v32_draft();
+    // v32 (in the making): a PNG made again exactly with its rows carried unfiltered ("skr").
+    const bool skr_on = png_on && rope_newest >= 14 && v32_draft();
+    using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
+    const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
     size_t pngs_resaved = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
@@ -2740,7 +2801,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (pngr_on && permanent_ok && is_png(b))
             {
                 auto exact = [&]() {
-                    for (auto made : {png_by_stb, png_by_skeleton})
+                    for (const PngMaker made : png_makers)
                         if (auto x = made(b); x && worth(x->first, 40))
                         {
                             ManifestEntry r = e;
@@ -2775,7 +2836,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (png_on && is_png(b))
             {
                 bool done = false;
-                for (auto made : {png_by_stb, png_by_skeleton})
+                for (const PngMaker made : png_makers)
                     if (auto x = made(b); x && single("png", std::move(x->first), x->second, contents_name(e.path, ".png"), 40))
                     {
                         done = true;
@@ -3607,8 +3668,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                                      uint64_t(rp.width) * 2 <= bytes[i].size(); // (two whole lines at least)
                 uint32_t pw = picture ? rp.width / rp.step : 0, pc = picture ? rp.step : 1;
                 // (Else a shape guessed from the bytes alone, weighed on the start against them as bytes.)
+                // v32 (in the making): a PNG's pixels carried for stb ("stb") or unfiltered ("skr") have
+                // their shape in the recipe, which is weighed in its place: the rope's reading of a
+                // screenshot can be a few bytes wide (ROADMAP D.2).
                 std::optional<std::pair<uint32_t, uint32_t>> guessed;
                 if (mix2_on && !picture) guessed = picture_shape(bytes[i]);
+                const auto known = pixels_shape_on ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
                     if (mix4_on)
                     {
@@ -3637,7 +3702,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // (Each trial on its start said in the file's line: every way tried, and what it came to.)
                 std::string tests;
                 auto test_said = [&](const std::string& what, uint64_t n) { tests += (tests.empty() ? "" : ", ") + what + " " + std::to_string(n); };
-                if (!every || guessed)
+                if (!every || guessed || known)
                 {
                     ms = code_of(start, unused, pw, pc).size();
                     test_said(pw ? "as a picture " + std::to_string(pw) + " wide, " + std::to_string(pc) + " a pixel (the rope's shape)" : std::string("as bytes"), ms);
@@ -3652,6 +3717,21 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         ms = as_picture;
                         pw = guessed->first;
                         pc = guessed->second;
+                    }
+                }
+                if (known)
+                {
+                    const auto [kw, kc] = *known;
+                    if (kw != pw || kc != pc)
+                    {
+                        const uint64_t as_known = code_of(start, unused, kw, kc).size();
+                        test_said("as a picture " + std::to_string(kw) + " wide, " + std::to_string(kc) + " a pixel (the PNG's own shape)", as_known);
+                        if (as_known < ms)
+                        {
+                            ms = as_known;
+                            pw = kw;
+                            pc = kc;
+                        }
                     }
                 }
                 // v27: a text not taken as a picture with the word list too (scowl-en-60, where it can be
@@ -4265,7 +4345,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     auto by_use = [](const std::string& w) { return (w.rfind("mix4 ", 0) == 0 || w.rfind("mixt ", 0) == 0) && w.find(" F80") != std::string::npos; };
     m.v32 = m.binary && (m.lzma2.mixed.find(" F80") != std::string::npos ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
-                             return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || by_use(x.way);
+                             return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || x.remake.rfind("skr ", 0) == 0 || by_use(x.way);
                          }));
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
@@ -4628,6 +4708,12 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
         }
         return dest / fs::path(std::u8string(p.begin(), p.end()));
     };
+    {
+        std::vector<std::string> names;
+        for (const auto& e : a.entries)
+            if (!e.dir) names.push_back(e.path);
+        refuse_names_one_ignoring_case(names, dest); // (they would be written one over the other)
+    }
     if (!force)
         for (const auto& e : a.entries)
             if (!e.dir && !kept(e.path) && fs::exists(path_of(e.path))) throw std::runtime_error("already there (tick Replace to write over it): " + e.path);

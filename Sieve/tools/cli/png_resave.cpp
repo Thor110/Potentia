@@ -79,6 +79,17 @@ void filter_row(int f, const uint8_t* row, const uint8_t* prior, size_t n, size_
     }
 }
 
+// One row's filter undone: `row` as filtered by f (0 to 4) into out, `prior` the row above unfiltered.
+void unfilter_row(int f, const uint8_t* row, const uint8_t* prior, size_t n, size_t bpp, uint8_t* out)
+{
+    for (size_t i = 0; i < n; ++i)
+    {
+        const int a = i >= bpp ? out[i - bpp] : 0, b = prior[i], c = i >= bpp ? prior[i - bpp] : 0;
+        const int pred = f == 0 ? 0 : f == 1 ? a : f == 2 ? b : f == 3 ? (a + b) / 2 : paeth(a, b, c);
+        out[i] = uint8_t(row[i] + pred);
+    }
+}
+
 // The rows filtered by `filter` (0 to 4, or 5 each row its own), each with its filter byte before it.
 std::vector<uint8_t> filtered_rows(const std::vector<uint8_t>& inner, uint64_t head, const Rows& rows, int filter)
 {
@@ -146,6 +157,53 @@ std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filt
     if (!rows || rows->interlaced || inner.size() - head != rows->row_bytes * rows->height)
         throw std::runtime_error("a re-saved PNG whose head and rows do not agree");
     return assembled(inner, filtered_rows(inner, head, *rows, filter), strategy, split, head);
+}
+
+std::optional<PngUnfiltered> png_unfiltered(const std::vector<uint8_t>& sk_inner, uint64_t skeleton, const std::vector<uint8_t>& png)
+{
+    const auto rows = read_ihdr(png.data(), png.size());
+    if (!rows || rows->interlaced || skeleton > sk_inner.size()) return std::nullopt;
+    const size_t n = size_t(rows->row_bytes), bpp = size_t(rows->pixel_bytes), h = size_t(rows->height);
+    if (sk_inner.size() - skeleton != uint64_t(h) * (n + 1)) return std::nullopt;
+    const uint8_t* data = sk_inner.data() + skeleton;
+    PngUnfiltered u;
+    u.inner.resize(sk_inner.size());
+    uint8_t* px = u.inner.data();
+    uint8_t* filters = px + h * n;
+    const std::vector<uint8_t> zero(n, 0);
+    for (size_t y = 0; y < h; ++y)
+    {
+        const uint8_t f = data[y * (n + 1)];
+        if (f > 4) return std::nullopt;
+        filters[y] = f;
+        unfilter_row(f, data + y * (n + 1) + 1, y ? px + (y - 1) * n : zero.data(), n, bpp, px + y * n);
+    }
+    std::memcpy(filters + h, sk_inner.data(), size_t(skeleton));
+    u.recipe = "skr " + std::to_string(skeleton) + " " + std::to_string(n) + " " + std::to_string(bpp) + " " + std::to_string(h) + " " +
+               std::to_string(u.inner.size());
+    return u;
+}
+
+std::vector<uint8_t> png_unfiltered_sk_inner(const std::vector<uint8_t>& inner, uint64_t skeleton, uint64_t row_bytes, uint64_t pixel_bytes, uint64_t rows)
+{
+    // (Divided before anything is multiplied: the words are the listing's, and checked against the bytes.)
+    if (row_bytes == 0 || pixel_bytes == 0 || pixel_bytes > 8 || rows == 0 || skeleton > inner.size() || row_bytes >= inner.size() ||
+        rows > (inner.size() - skeleton) / (row_bytes + 1) || (row_bytes + 1) * rows + skeleton != inner.size())
+        throw std::runtime_error("an unfiltered PNG's recipe whose words and bytes do not agree");
+    const size_t n = size_t(row_bytes), bpp = size_t(pixel_bytes), h = size_t(rows);
+    const uint8_t* px = inner.data();
+    const uint8_t* filters = px + h * n;
+    std::vector<uint8_t> out(inner.size());
+    std::memcpy(out.data(), filters + h, size_t(skeleton));
+    uint8_t* data = out.data() + skeleton;
+    const std::vector<uint8_t> zero(n, 0);
+    for (size_t y = 0; y < h; ++y)
+    {
+        if (filters[y] > 4) throw std::runtime_error("an unfiltered PNG's filter byte that is not PNG's");
+        data[y * (n + 1)] = filters[y];
+        filter_row(filters[y], px + y * n, y ? px + (y - 1) * n : zero.data(), n, bpp, data + y * (n + 1) + 1);
+    }
+    return out;
 }
 
 static std::optional<PngResaved> png_resave_unguarded(const std::vector<uint8_t>& b);

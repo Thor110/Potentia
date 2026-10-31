@@ -426,6 +426,21 @@ texts). The memory at its peak, mixing a small text:
 - scowl-en-80: 279 MB to 120 MB;
 - F80: 126 MB.
 
+**6. A PNG's rows carried unfiltered, and pixels mixed as their own shape: built, behind the draft
+switch (31 October 2026).** Edward: "Work through all of that" (ROADMAP D.1 and D.2).
+- **`skr`** (SPECIFICATIONS v32, archive format 23): under temporary, a PNG preflate makes again
+  carries its rows unfiltered, then their filter bytes, then the skeleton. Installing filters them
+  again and makes the PNG as `sk` does. Checked to give the PNG back before it is kept.
+  - The five PNGs here that other programs wrote: 23.2% to 40.0% smaller (icon128 19,775 →
+    11,863; the scowl 84,640 → 59,895). Each back byte for byte from Sieve and sieve-install.
+  - The oracle filters the rows again and reads the skeleton, as for `sk`.
+- **Pixels mixed as their own shape:** mixing weighs the shape an `stb` or `skr` recipe gives,
+  beside the shapes it weighed before. hallway-compact went from 16,058 bytes to 12,772, and the
+  18 hallway screenshots together from 245,100 to 211,937 (−13.5%). That writes only v26's picture
+  parameters.
+- **Without the draft,** the `.sieve`s of five PNGs are byte for byte as before.
+- **CI step 11:** blocks for both (the extension's four icons; hallway-compact).
+
 ## 5. The order of work
 
 **Step 0: measure (no version, no change to any `.sieve`).**
