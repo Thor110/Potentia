@@ -817,7 +817,9 @@ if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
 # not made (it has no brunsli) and makes the text; with the draft and no box, no JPEG recoded (the
 # text is v32's still, by its word list: below); without the draft, nothing is v32.
 rm -rf j32 && mkdir j32
-cp ../data/anchors/public-domain/Vitruvian.jpg ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
+# The anchor is copied under its own name: the test site has a different vitruvian.jpg, and on a
+# folder that ignores case (Windows, macOS) the two names are one.
+cp ../data/anchors/public-domain/Vitruvian.jpg j32/vitruvian-man.jpg && cp ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
 $S locate j32 --installer j32none.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32none.txt
 if grep -q "^jpegs \|	jbr " j32none.txt; then exit 1; fi
 $S locate j32 --installer j32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > j32.txt
@@ -833,7 +835,7 @@ cmp j32/VAULT.md j32_oracle/VAULT.md
 $S locate j32 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
 if grep -q "sieve-manifest-v32\|^jpegs " j32v31.txt; then exit 1; fi
 # Permanent alone: the same coefficients with tables made for them where that is smaller (of the
-# seven, Vitruvian.jpg: its pixels the same, its file smaller); the rest made again byte for byte.
+# seven, vitruvian-man.jpg: its pixels the same, its file smaller); the rest made again byte for byte.
 # Given back the same by Sieve and by sieve-install; the oracle reads the recipes as above.
 $S locate j32 --installer j32p.sieve --items --v32-draft --compressed-permanent 2>&1 | tr -d '\r' > j32p.txt
 grep -c "^optimised 1 of those JPEG(s) installed with tables made for their values, the same pictures" j32p.txt > /dev/null
@@ -841,7 +843,7 @@ rm -rf j32p_inst j32p_si j32p_oracle
 $S install j32p.sieve --to j32p_inst > /dev/null
 $SI j32p.sieve --to j32p_si --yes > /dev/null
 diff -r j32p_inst j32p_si
-[ "$(wc -c < j32p_inst/Vitruvian.jpg)" -lt "$(wc -c < j32/Vitruvian.jpg)" ]
+[ "$(wc -c < j32p_inst/vitruvian-man.jpg)" -lt "$(wc -c < j32/vitruvian-man.jpg)" ]
 for f in audio book door filters picture-in-hand vitruvian; do cmp j32/$f.jpg j32p_inst/$f.jpg; done
 python sieve_ref.py unpack j32p.sieve --to j32p_oracle > j32po.txt
 [ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32po.txt)" -eq 7 ]
