@@ -118,7 +118,8 @@ many as the threads and memory allow, and the result is the same at any thread c
      - as bytes;
      - as a picture: the rope's shape where its best wave reads the file as one, or a shape guessed
        from its bytes;
-     - for a text, with an English word list.
+     - for a text, with an English word list (SCOWL's size 60; with the draft, size 80 with each
+       word counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start).
    - It is then mixed whole only where that start came out at least 3% under LZMA2's.
    - Not tried for a file under 4 KiB or over 16 MiB, nor with **Prioritise decoding speed** ticked.
    - With **Try every way**, every file is mixed whole, of any size, with no test first.

@@ -749,6 +749,10 @@ std::vector<uint8_t> rope_file(std::span<const uint8_t> code, const RopeParams& 
 {
     p.check();
     if (size >= (uint64_t(1) << 30)) bad("a file of a gigabyte or more");
+    // A way by columns writes at least a byte for every column (a segment, a count or a group, an
+    // empty one included), so a width past the code's length cannot be one Sieve made: refused before
+    // anything that wide is made (a damaged or hostile file must not claim gigabytes in a few bytes).
+    if (p.columns && !p.above && p.width > code.size()) bad("more columns than its code has bytes");
     if (p.columns == 2 && p.above)
     {
         // v5: the pairs' groups, each group's bytes; then the file made again byte by byte, each

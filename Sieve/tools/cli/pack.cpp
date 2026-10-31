@@ -2450,6 +2450,40 @@ void set_compressed_modes(bool temporary, bool permanent)
 bool compressed_temporary() { return g_compressed_temporary.load(std::memory_order_relaxed); }
 bool compressed_permanent() { return g_compressed_permanent.load(std::memory_order_relaxed); }
 
+namespace {
+
+// v25's two ways to make a PNG again exactly, each giving what is carried and its recipe, or nothing:
+// stb_image_write's own PNG (the hallway's screenshots), its pixels and the level and filter that
+// give it back, its default (8, each row's own filter) first; else its skeleton, its IDATs' deflate
+// by preflate, where that gives the PNG back.
+std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_stb(const std::vector<uint8_t>& b)
+{
+    std::vector<uint8_t> px;
+    int w = 0, h = 0, c = 0;
+    if (!png_pixels(b.data(), b.size(), px, w, h, c)) return std::nullopt;
+    for (const int level : {8, 9, 7, 6, 5, 4, 3, 2, 1, 0})
+    {
+        const std::string again = stb_png(px, w, h, c, level, -1);
+        if (again.size() != b.size() || !std::equal(again.begin(), again.end(), reinterpret_cast<const char*>(b.data()))) continue;
+        std::string r = "stb " + std::to_string(level) + " -1 " + std::to_string(w) + " " + std::to_string(h) + " " + std::to_string(c) + " " + std::to_string(px.size());
+        return std::make_pair(std::move(px), std::move(r));
+    }
+    return std::nullopt;
+}
+
+std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton(const std::vector<uint8_t>& b)
+{
+    auto sk = png_skeleton(b);
+    if (!sk) return std::nullopt;
+    size_t skeleton = 0;
+    std::vector<uint8_t> whole = sk->inner(skeleton);
+    if (deflate_skeleton_remake(whole, skeleton) != b) return std::nullopt;
+    std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+    return std::make_pair(std::move(whole), std::move(r));
+}
+
+} // namespace
+
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
                 bool v20_on, bool v21_on, bool v22_on)
@@ -2506,6 +2540,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix_stream_on = rope_newest >= 12;
     // v30's (files mixed together in groups, decoded at once): rope_newest 13, in v29's together's place.
     const bool mix_groups_on = rope_newest >= 13;
+    // v32 (in the making): mixing's word list scowl-en-80 with each word counted by how common it is
+    // ("F80"), in scowl-en-60's place, only with the draft switch. Measured on five English texts
+    // against scowl-en-60: 1.8% to 8.8% smaller (Don Quixote's first 800 KB 193,808 bytes to 188,719).
+    const bool by_use_on = mix4_on && rope_newest >= 14 && v32_draft();
+    const uint32_t word_size = by_use_on ? 80 : 60, word_key = by_use_on ? (80 | kMixWordsByUse) : 60;
     // v31's: an archive made again from its skeleton with what it holds carried as its own files
     // (each its own way, in the groups), and whether unpacking pays judged by mixing too.
     const bool members_on = rope_newest >= 14 && v21;
@@ -2701,32 +2740,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (pngr_on && permanent_ok && is_png(b))
             {
                 auto exact = [&]() {
-                    std::vector<uint8_t> px;
-                    int w = 0, h = 0, c = 0;
-                    if (png_pixels(b.data(), b.size(), px, w, h, c))
-                        for (const int level : {8, 9, 7, 6, 5, 4, 3, 2, 1, 0})
-                        {
-                            const std::string again = stb_png(px, w, h, c, level, -1);
-                            if (again.size() != b.size() || !std::equal(again.begin(), again.end(), reinterpret_cast<const char*>(b.data()))) continue;
-                            if (!worth(px, 40)) break;
-                            ManifestEntry r = e;
-                            r.remake = "stb " + std::to_string(level) + " -1 " + std::to_string(w) + " " + std::to_string(h) + " " + std::to_string(c) + " " +
-                                       std::to_string(px.size());
-                            add_file(r, std::move(px), std::move(b));
-                            return true;
-                        }
-                    if (auto sk = png_skeleton(b))
-                    {
-                        size_t skeleton = 0;
-                        std::vector<uint8_t> whole = sk->inner(skeleton);
-                        if (deflate_skeleton_remake(whole, skeleton) == b && worth(whole, 40))
+                    for (auto made : {png_by_stb, png_by_skeleton})
+                        if (auto x = made(b); x && worth(x->first, 40))
                         {
                             ManifestEntry r = e;
-                            r.remake = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
-                            add_file(r, std::move(whole), std::move(b));
+                            r.remake = std::move(x->second);
+                            add_file(r, std::move(x->first), std::move(b));
                             return true;
                         }
-                    }
                     return false;
                 };
                 auto resaved = [&]() {
@@ -2753,19 +2774,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // worked out again; what it holds (its rows, as PNG filters them) carried as any file is.
             if (png_on && is_png(b))
             {
-                // stb_image_write's own (the hallway's screenshots): its pixels, and the level and filter
-                // that give it back, its default (8, each row's own filter) first.
-                std::vector<uint8_t> px;
-                int w = 0, h = 0, c = 0;
                 bool done = false;
-                if (png_pixels(b.data(), b.size(), px, w, h, c))
-                    for (const int level : {8, 9, 7, 6, 5, 4, 3, 2, 1, 0})
+                for (auto made : {png_by_stb, png_by_skeleton})
+                    if (auto x = made(b); x && single("png", std::move(x->first), x->second, contents_name(e.path, ".png"), 40))
                     {
-                        const std::string again = stb_png(px, w, h, c, level, -1);
-                        if (again.size() != b.size() || !std::equal(again.begin(), again.end(), reinterpret_cast<const char*>(b.data()))) continue;
-                        const std::string r = "stb " + std::to_string(level) + " -1 " + std::to_string(w) + " " + std::to_string(h) + " " + std::to_string(c) + " " +
-                                              std::to_string(px.size());
-                        done = single("png", std::move(px), r, contents_name(e.path, ".png"), 40);
+                        done = true;
                         break;
                     }
                 if (done)
@@ -2774,18 +2787,6 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     continue;
                 }
             }
-            if (png_on && is_png(b))
-                if (auto sk = png_skeleton(b))
-                {
-                    size_t skeleton = 0;
-                    std::vector<uint8_t> whole = sk->inner(skeleton);
-                    const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
-                            if (deflate_skeleton_remake(whole, skeleton) == b && single("png", std::move(whole), r, contents_name(e.path, ".png"), 40))
-                    {
-                        png_made = true;
-                        continue;
-                    }
-                }
             if (is_xz(b))
             {
                 auto inner = xz_inner(b);
@@ -3140,44 +3141,64 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     size_t jpegs_made = 0, jpegs_optimised = 0;
     uint64_t jpeg_bytes = 0, jpeg_forms = 0, jpeg_was = 0, jpeg_now = 0;
     if (jpeg_on && optimise_archives && m.compact && !stop_requested())
+    {
+        // Each JPEG on its own, on every core (the same result at any thread count), a stop heard at
+        // each; then taken in the listing's order.
+        std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
+            if (files[i]->remake.empty() && !files[i]->member && bytes[i].size() >= 1024 && is_jpeg(bytes[i])) todo.push_back(i);
+        struct Recoded
         {
-            if (!files[i]->remake.empty() || files[i]->member || bytes[i].size() < 1024 || !is_jpeg(bytes[i])) continue;
+            std::vector<uint8_t> form, better; // its brunsli form, and (permanent) the JPEG it installs as, where that is not the file
+        };
+        std::vector<std::optional<Recoded>> recoded(todo.size());
+        const bool permanent_alone = !compressed_temporary();
+        for_each_index(todo.size(), pack_threads(), [&](size_t k) {
+            if (stop_requested()) return;
             const timings::Scope t("pack.jpeg");
-            if (!compressed_temporary())
-                if (auto better = jpeg_optimised(bytes[i]))
+            const std::vector<uint8_t>& b = bytes[todo[k]];
+            if (permanent_alone)
+                if (auto better = jpeg_optimised(b))
                     if (auto form = jpeg_to_brunsli(*better); form && form->size() < better->size())
                     {
-                        progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
-                                 std::to_string(bytes[i].size()) + " bytes, installed with tables made for its values, " + std::to_string(better->size()) +
-                                 " bytes, the same picture, as its brunsli form of " + std::to_string(form->size()));
-                        ++jpegs_made;
-                        ++jpegs_optimised;
-                        jpeg_was += bytes[i].size();
-                        jpeg_now += better->size();
-                        jpeg_bytes += better->size();
-                        jpeg_forms += form->size();
-                        m.bytes = m.bytes - files[i]->size + better->size();
-                        files[i]->size = better->size();
-                        files[i]->sha256 = sha256_hex(*better);
-                        files[i]->remake = "jbr " + std::to_string(form->size());
-                        if (original.size() != bytes.size()) original.resize(bytes.size());
-                        original[i] = std::move(*better);
-                        bytes[i] = std::move(*form);
-                        continue;
+                        recoded[k] = Recoded{std::move(*form), std::move(*better)};
+                        return;
                     }
-            auto form = jpeg_to_brunsli(bytes[i]);
-            if (!form || form->size() >= bytes[i].size()) continue;
-            progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
-                     std::to_string(bytes[i].size()) + " bytes, as its brunsli form of " + std::to_string(form->size()) + " (made again byte for byte)");
-            ++jpegs_made;
-            jpeg_bytes += bytes[i].size();
-            jpeg_forms += form->size();
-            files[i]->remake = "jbr " + std::to_string(form->size());
+            if (auto form = jpeg_to_brunsli(b); form && form->size() < b.size()) recoded[k] = Recoded{std::move(*form), {}};
+        });
+        for (size_t k = 0; k < todo.size(); ++k)
+        {
+            if (!recoded[k]) continue;
+            const size_t i = todo[k];
+            Recoded& r = *recoded[k];
             if (original.size() != bytes.size()) original.resize(bytes.size());
-            original[i] = std::move(bytes[i]);
-            bytes[i] = std::move(*form);
+            ++jpegs_made;
+            jpeg_forms += r.form.size();
+            files[i]->remake = "jbr " + std::to_string(r.form.size());
+            if (!r.better.empty())
+            {
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
+                         std::to_string(bytes[i].size()) + " bytes, installed with tables made for its values, " + std::to_string(r.better.size()) +
+                         " bytes, the same picture, as its brunsli form of " + std::to_string(r.form.size()));
+                ++jpegs_optimised;
+                jpeg_was += bytes[i].size();
+                jpeg_now += r.better.size();
+                jpeg_bytes += r.better.size();
+                m.bytes = m.bytes - files[i]->size + r.better.size();
+                files[i]->size = r.better.size();
+                files[i]->sha256 = sha256_hex(r.better);
+                original[i] = std::move(r.better);
+            }
+            else
+            {
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
+                         std::to_string(bytes[i].size()) + " bytes, as its brunsli form of " + std::to_string(r.form.size()) + " (made again byte for byte)");
+                jpeg_bytes += bytes[i].size();
+                original[i] = std::move(bytes[i]);
+            }
+            bytes[i] = std::move(r.form);
         }
+    }
 
     // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
     // stream; a text made from another's lines, a mask; the rest as it is.
@@ -3465,11 +3486,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     bool mixed4 = false;        // v28: some file carried by mix-v4
     if (m.compact && rope_seconds >= 0)
     {
+        // Each file's SHA-256, worked out once (on every core) for the copies here and mixing's note below.
+        std::vector<std::string> sha(files.size());
+        for_each_index(files.size(), pack_threads(), [&](size_t i) { sha[i] = sha256_hex(bytes[i]); });
         std::unordered_map<std::string, size_t> copies;
-        for (size_t i = 0; i < files.size(); ++i) ++copies[sha256_hex(bytes[i])];
+        for (size_t i = 0; i < files.size(); ++i) ++copies[sha[i]];
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
-            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha256_hex(bytes[i])] == 1 && files[i]->remake.rfind("jbr ", 0) != 0)
+            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha[i]] == 1 && files[i]->remake.rfind("jbr ", 0) != 0)
                 todo.push_back(i); // (a JPEG's brunsli form is coded already: nothing to search for)
         // Every file not searched, and why, said once for it as the searched ones are below (Keep a
         // log keeps it): nothing a file was or was not tried for goes unsaid.
@@ -3487,7 +3511,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if ((w == "raw" || w == "x86") && files[i]->remake.rfind("jbr ", 0) == 0) why = "a JPEG carried as its brunsli form (above), coded already";
                 else if (w == "raw" || w == "x86")
                     why = bytes[i].size() < 512 ? "under 512 bytes"
-                          : copies[sha256_hex(bytes[i])] > 1 ? "a copy of another file here, which the lzma2 stream carries for almost nothing"
+                          : copies[sha[i]] > 1 ? "a copy of another file here, which the lzma2 stream carries for almost nothing"
                                                              : "carried as it is";
                 if (w == "x86") why += "; a program, through the x86 filter";
                 if (w.rfind("item ", 0) == 0) why = "an item of Sieve's lines, carried as its place on the line";
@@ -3588,7 +3612,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
                     if (mix4_on)
                     {
-                        const Mix4Params mp = Mix4Params::for_size(f.size(), w, c, words ? 60 : 0);
+                        const Mix4Params mp = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         way_text = "mix4 " + mp.text();
                         return mix4_code(f, mp, words);
                     }
@@ -3637,7 +3661,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     try
                     {
-                        const MixDictionary& list = mix_words()(60);
+                        const MixDictionary& list = mix_words()(word_key);
                         if (ms == 0)
                         {
                             ms = code_of(start, unused, 0, 1).size();
@@ -3670,7 +3694,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
-                    note_mixed(sha256_hex(bytes[i]), mix_way, mc.size() + vl); // (for the weighing)
+                    note_mixed(sha[i], mix_way, mc.size() + vl); // (for the weighing)
                     if (mc.size() + vl < best)
                     {
                         best = mc.size() + vl;
@@ -3822,14 +3846,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (text_like(start) && mix_words())
                 try
                 {
-                    const MixDictionary& list = mix_words()(60);
-                    if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, 60), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size()) words = &list;
+                    const MixDictionary& list = mix_words()(word_key);
+                    if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size()) words = &list;
                 }
                 catch (const std::exception&)
                 {
                     // (no word list here: without it)
                 }
-            const Mix4Params mp = Mix4Params::for_size(joined.size(), 0, 1, words ? 60 : 0);
+            const Mix4Params mp = Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
             Made& d = made[g];
             d.code = mix4_code(joined, mp, words);
             d.params = mp.text();
@@ -3912,15 +3936,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (text_like(start) && mix_words())
                     try
                     {
-                        const MixDictionary& list = mix_words()(60);
-                        if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, 60), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size())
+                        const MixDictionary& list = mix_words()(word_key);
+                        if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size())
                             words = &list;
                     }
                     catch (const std::exception&)
                     {
                         // (no word list here: without it)
                     }
-                const Mix4Params mp = Mix4Params::for_size(together.size(), 0, 1, words ? 60 : 0);
+                const Mix4Params mp = Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on);
                 std::vector<uint8_t> code = mix4_code(together, mp, words);
                 if (code.size() + mp.text().size() + 1 < apart + without_cost)
                 {
@@ -4010,7 +4034,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     ++r.mixed4; // v28
                     r.mixed4_pictures += files[i]->way.find(" I") != std::string::npos;
-                    r.mixed4_words += files[i]->way.find(" D") != std::string::npos;
+                    r.mixed4_words += files[i]->way.find(" D") != std::string::npos || files[i]->way.find(" F80") != std::string::npos;
+                    r.mixed4_by_use += files[i]->way.find(" F80") != std::string::npos; // (v32 in the making)
                 }
                 r.mix_bytes += bytes[i].size();
                 r.mix_carried += rope_codes[i].size();
@@ -4086,8 +4111,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (text_like(start) && mix_words())
                 try
                 {
-                    const MixDictionary& list = mix_words()(60);
-                    if (const uint64_t with = mix4_code(start, Mix4Params::for_size(sn, 0, 1, 60), &list).size(); with < ms)
+                    const MixDictionary& list = mix_words()(word_key);
+                    if (const uint64_t with = mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size(); with < ms)
                     {
                         ms = with;
                         words = &list;
@@ -4100,7 +4125,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const uint64_t ls = sn == plain.size() ? pp.size() : estimate(std::vector<uint8_t>(start.begin(), start.end()));
             if (every || ms * 100 < ls * 97)
             {
-                const Mix4Params mp = Mix4Params::for_size(plain.size(), 0, 1, words ? 60 : 0);
+                const Mix4Params mp = Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on);
                 std::vector<uint8_t> code = mix4_code(plain, mp, words);
                 const std::string params = mp.text();
                 // (the parameters cost their length and a byte in the head, the dictionary byte 0xFE's place)
@@ -4234,7 +4259,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
     // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
-    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0; });
+    // v32 (in the making): some file as its differences from another, a JPEG as its brunsli form, a
+    // PNG re-saved, or mixing with the word list counted by use ("F80": a file's, a group's or the
+    // lzma2 stream's parameters).
+    auto by_use = [](const std::string& w) { return (w.rfind("mix4 ", 0) == 0 || w.rfind("mixt ", 0) == 0) && w.find(" F80") != std::string::npos; };
+    m.v32 = m.binary && (m.lzma2.mixed.find(" F80") != std::string::npos ||
+                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
+                             return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || by_use(x.way);
+                         }));
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
@@ -4408,7 +4440,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
                 return t;
             }()
               << (r.mixed2_pictures + r.mixed4_pictures ? ", " + std::to_string(r.mixed2_pictures + r.mixed4_pictures) + " as picture(s)" : std::string())
-              << (r.mixed4_words ? ", " + std::to_string(r.mixed4_words) + " with a word list" : std::string()) << " (" << r.mix_bytes
+              << (r.mixed4_words ? ", " + std::to_string(r.mixed4_words) + " with a word list" : std::string())
+              << (r.mixed4_by_use ? " (" + std::to_string(r.mixed4_by_use) + " counted by use)" : std::string()) << " (" << r.mix_bytes
               << " bytes, carried in " << r.mix_carried << "; " << version << ")\n";
     }
     else if (r.items && r.item_places)

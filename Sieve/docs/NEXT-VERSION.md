@@ -393,6 +393,39 @@ refuses it, and Sieve gives it back identical. Two ways out:
 
 (a) is the recommendation. The draft packs groups as v31 does until Edward decides.
 
+**5. Word frequencies for mixing: built, behind the draft switch (31 October 2026).** Edward: "See
+what you can implement with regards to ... word frequencies". SCOWL has no frequencies, but its
+sizes are a measure of how common a word is (its size 35 holds the commonest), and the three Sieve
+ships nest (35 within 60 within 80). So no new file is needed: each word of scowl-en-80 counts 64
+to the power of how many of the smaller two hold it. The weights were chosen by measuring, against
+today's scowl-en-60 (mix-v4, bytes):
+
+| Text | no list | D60 | 4/1 on D60 | 64/8/1 on D80 | 1024/32/1 | **4096/64/1** | 4096/128/1 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Don Quixote, first 800 KB | 197,241 | 193,808 | 192,061 | 189,660 | 188,785 | **188,719** | 188,693 |
+| HANDOFF, first 200 KB | 57,919 | 57,042 | 56,652 | 56,205 | 56,027 | **56,021** | 56,030 |
+| SHOWCASE-PLAN (8,744 bytes) | 3,449 | 3,247 | 3,172 | 3,085 | 3,050 | **3,047** | 3,048 |
+| README, first 3,000 bytes | 1,414 | 1,340 | 1,314 | 1,282 | 1,267 | **1,265** | 1,266 |
+| GAME, first 3,000 bytes | 1,348 | 1,242 | 1,203 | 1,156 | 1,135 | **1,133** | 1,134 |
+
+- The gains level off from about 1,024 to 1 for the commonest. 4096/64/1 is the simplest rule there
+  (64 a list).
+- Through the packer, with the draft: Don Quixote's first 800 KB as a `.sieve` 193,887 bytes to
+  188,798 (−2.6%); four texts mixed as a group 61,374 to 60,262 (−1.8%).
+- Without the draft, both are byte for byte as before.
+- **Not measured:** enwik8 and enwik9 (not reachable from here), where the gap to PPMd is 1.34%
+  and 1.15%. That is Edward's run to make.
+- **Built:** mix-v4's parameters `F80` (SPECIFICATIONS v32), `sieve mix --words 80 --by-use`, the
+  reader, the oracle (its own trie and weights) and CI step 11.
+
+**The trie made smaller (no format change, every build).** A node held 26 child slots, mostly
+empty. It now keeps which letters it has (a bit each) and where its children start, which are made
+next to one another. The codes are the same, byte for byte (every list, mix-v3 and mix-v4, on two
+texts). The memory at its peak, mixing a small text:
+- scowl-en-60: 91 MB to 59 MB;
+- scowl-en-80: 279 MB to 120 MB;
+- F80: 126 MB.
+
 ## 5. The order of work
 
 **Step 0: measure (no version, no change to any `.sieve`).**

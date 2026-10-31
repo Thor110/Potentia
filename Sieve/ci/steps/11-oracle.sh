@@ -814,12 +814,12 @@ if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
 # for byte, under Compressed Formats' boxes. The repository's seven JPEGs (all public domain or
 # Sieve's own) and a text: with the draft and temporary, each JPEG carried so and the folder given
 # back by Sieve and by sieve-install; the oracle reads the recipes, names the JPEGs as files it has
-# not made (it has no brunsli) and makes the text; with the draft and no box, nothing is v32;
-# without the draft, nothing is v32.
+# not made (it has no brunsli) and makes the text; with the draft and no box, no JPEG recoded (the
+# text is v32's still, by its word list: below); without the draft, nothing is v32.
 rm -rf j32 && mkdir j32
 cp ../data/anchors/public-domain/Vitruvian.jpg ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
 $S locate j32 --installer j32none.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32none.txt
-if grep -q "sieve-manifest-v32\|^jpegs " j32none.txt; then exit 1; fi
+if grep -q "^jpegs \|	jbr " j32none.txt; then exit 1; fi
 $S locate j32 --installer j32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > j32.txt
 grep -c "^jpegs     7 JPEG(s) carried as their brunsli form, made again byte for byte" j32.txt > /dev/null
 rm -rf j32_inst j32_oracle j32_si
@@ -895,6 +895,33 @@ for name in sorted(os.listdir(sys.argv[1])):
 PY
 $S locate p32 --installer p32v31.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32v31.txt
 if grep -q "sieve-manifest-v32\|^pngs " p32v31.txt; then exit 1; fi
+# v32 in the making, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
+# scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place with the draft. The
+# code alone, smaller than D60's and read back by the oracle (its own trie and weights); a text, and
+# two texts mixed together as a group, with the draft: v32, given back by Sieve, sieve-install and
+# the oracle; without the draft, scowl-en-60 as before.
+$S mix dq.txt --words 80 --by-use --out dqf.mix | tr -d '\r' | grep -c "^mix       B17 F80 (mix-v4)" > /dev/null
+python sieve_ref.py mix-unpack dqf.mix --v4 --params "B17 F80" --size 40000 --out dqf.back > /dev/null
+cmp dq.txt dqf.back
+[ "$(wc -c < dqf.mix)" -lt "$(wc -c < dq4.mix)" ]
+rm -rf f32 f32g && mkdir f32 f32g
+head -c 9000 ../docs/METHODS.md > f32/methods.md
+head -c 9000 ../docs/METHODS.md > f32g/methods.md && head -c 7000 ../docs/FORMATS.md > f32g/formats.md
+$S locate f32 --installer f32.sieve --items --v32-draft 2>&1 | tr -d '\r' > f32.txt
+grep -c "^mix       1 file(s) carried by mixing, mix-v4, 1 with a word list (1 counted by use) ([0-9]* bytes, carried in [0-9]*; sieve-manifest-v32)" f32.txt > /dev/null
+$S locate f32g --installer f32g.sieve --items --v32-draft 2>&1 | tr -d '\r' > f32g.txt
+grep -c "	mixt B[0-9]* F80 T" f32g.txt > /dev/null
+for d in f32 f32g; do
+    rm -rf ${d}_inst ${d}_si ${d}_oracle
+    $S install $d.sieve --to ${d}_inst > /dev/null
+    diff -r $d ${d}_inst
+    $SI $d.sieve --to ${d}_si --yes > /dev/null
+    diff -r $d ${d}_si
+    python sieve_ref.py unpack $d.sieve --to ${d}_oracle > /dev/null
+    diff -r $d ${d}_oracle
+done
+$S locate f32 --installer f32v31.sieve --items 2>&1 | tr -d '\r' > f32v31.txt
+if grep -q "sieve-manifest-v32\|F80" f32v31.txt; then exit 1; fi
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

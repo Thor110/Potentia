@@ -113,17 +113,35 @@ int cmd_mix(const Args& a)
     if (a.has("v1") && a.has("v2")) throw std::invalid_argument("mix: --v1 or --v2, not both");
     if (a.has("picture") && a.has("words")) throw std::invalid_argument("mix: --picture or --words, not both (a word list is for text)");
     if (a.has("v1") && (a.has("picture") || a.has("words"))) throw std::invalid_argument("mix --v1 takes neither --picture nor --words");
-    uint32_t list = 0;
+    // The list asked for (--words, counted by use with --by-use), and the one the parameters given
+    // name (decoding, or --params): where both are given they must agree, else the code would be made
+    // or read with a list its parameters do not name.
+    uint32_t asked = 0;
     if (a.has("words"))
     {
         const std::string w = a.get("words");
         if (w != "35" && w != "60" && w != "80") throw std::invalid_argument("mix --words is 35, 60 or 80 (scowl-en-35, 60 or 80): " + w);
-        list = uint32_t(std::stoul(w));
+        asked = uint32_t(std::stoul(w));
     }
-    // The parameters given (decoding, or --params) may name the list themselves.
+    // v32 (in the making): --by-use, scowl-en-80 with each word counted by how common it is ("F80").
+    if (a.has("by-use"))
+    {
+        if ((asked != 80 && a.has("words")) || a.has("v1") || a.has("v2")) throw std::invalid_argument("mix --by-use is for --words 80 with mix-v4 (\"B22 F80\")");
+        asked = 80 | kMixWordsByUse;
+    }
+    uint32_t named = 0;
     if (a.has("params"))
-        if (const size_t d = a.get("params").find(" D"); d != std::string::npos && !list) list = uint32_t(std::stoul(a.get("params").substr(d + 2)));
+    {
+        const std::string& t = a.get("params");
+        if (const size_t d = t.find(" D"); d != std::string::npos) named = uint32_t(std::stoul(t.substr(d + 2)));
+        else if (const size_t f = t.find(" F"); f != std::string::npos) named = uint32_t(std::stoul(t.substr(f + 2))) | kMixWordsByUse;
+        if (asked && named != asked)
+            throw std::invalid_argument("mix: --params names " + (named ? std::string(named & kMixWordsByUse ? "F" : "D") + std::to_string(named & 0xFF) : std::string("no word list")) +
+                                        ", not the list --words and --by-use ask for");
+    }
+    const uint32_t list = a.has("params") ? named : asked;
     const int version = a.has("v1") ? 1 : a.has("v2") ? (list ? 3 : 2) : 4;
+    if (version == 3 && (list & kMixWordsByUse)) throw std::invalid_argument("mix-v3 has no word list counted by use (F80 is mix-v4's)");
     const char* name_of_version = version == 1 ? kMixVersion : version == 2 ? kMix2Version : version == 3 ? kMix3Version : kMix4Version;
     const MixDictionary* words = nullptr;
     if (list)
@@ -175,7 +193,7 @@ int cmd_mix(const Args& a)
         case 1: params = MixParams::for_size(file.size()).text(); break;
         case 2: params = Mix2Params::for_size(file.size(), w, c).text(); break;
         case 3: params = Mix3Params::for_size(file.size(), list).text(); break;
-        default: params = Mix4Params::for_size(file.size(), w, c, list).text(); break;
+        default: params = Mix4Params::for_size(file.size(), w, c, list & ~kMixWordsByUse, (list & kMixWordsByUse) != 0).text(); break;
         }
     }
     using clk = std::chrono::steady_clock;

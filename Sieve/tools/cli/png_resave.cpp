@@ -57,7 +57,8 @@ std::optional<Rows> read_ihdr(const uint8_t* b, size_t n)
     r.row_bytes = (uint64_t(w) * bits + 7) / 8;
     r.pixel_bytes = bits >= 8 ? bits / 8 : 1;
     r.interlaced = b[28] == 1;
-    if (r.row_bytes * r.height > (uint64_t(1) << 40)) return std::nullopt; // (past any picture Sieve is given)
+    // The rows with their filter bytes must fit one zlib call (its sizes are 32 bits).
+    if (r.row_bytes * r.height + r.height > 0xFFFFFFFFu) return std::nullopt;
     return r;
 }
 
@@ -78,19 +79,13 @@ void filter_row(int f, const uint8_t* row, const uint8_t* prior, size_t n, size_
     }
 }
 
-} // namespace
-
-std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filter, int strategy, uint64_t split, uint64_t head)
+// The rows filtered by `filter` (0 to 4, or 5 each row its own), each with its filter byte before it.
+std::vector<uint8_t> filtered_rows(const std::vector<uint8_t>& inner, uint64_t head, const Rows& rows, int filter)
 {
-    if (filter < 0 || filter > 5 || strategy < 0 || strategy > 1 || head > inner.size() || split > head || split < 8 + 25)
-        throw std::runtime_error("a re-saved PNG's recipe this Sieve does not know");
-    const auto rows = read_ihdr(inner.data(), size_t(head));
-    if (!rows || rows->interlaced || inner.size() - head != rows->row_bytes * rows->height)
-        throw std::runtime_error("a re-saved PNG whose head and rows do not agree");
-    const size_t n = size_t(rows->row_bytes), bpp = size_t(rows->pixel_bytes);
-    std::vector<uint8_t> filtered(size_t(rows->height) * (n + 1)), zero(n, 0), best(n), trial(n);
+    const size_t n = size_t(rows.row_bytes), bpp = size_t(rows.pixel_bytes);
+    std::vector<uint8_t> filtered(size_t(rows.height) * (n + 1)), zero(n, 0), best(n), trial(n);
     const uint8_t* px = inner.data() + head;
-    for (size_t y = 0; y < size_t(rows->height); ++y)
+    for (size_t y = 0; y < size_t(rows.height); ++y)
     {
         const uint8_t* row = px + y * n;
         const uint8_t* prior = y ? row - n : zero.data();
@@ -114,10 +109,16 @@ std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filt
         out[0] = uint8_t(f);
         filter_row(f, row, prior, n, bpp, out + 1);
     }
+    return filtered;
+}
+
+// The PNG: the filtered rows deflated by `strategy` into one IDAT, put into the head at `split`.
+std::vector<uint8_t> assembled(const std::vector<uint8_t>& inner, const std::vector<uint8_t>& filtered, int strategy, uint64_t split, uint64_t head)
+{
     z_stream z{};
     if (deflateInit2(&z, 9, Z_DEFLATED, 15, 9, strategy ? Z_FILTERED : Z_DEFAULT_STRATEGY) != Z_OK) throw std::runtime_error("zlib could not begin");
     std::vector<uint8_t> data(deflateBound(&z, uLong(filtered.size())));
-    z.next_in = filtered.data();
+    z.next_in = const_cast<uint8_t*>(filtered.data());
     z.avail_in = uInt(filtered.size());
     z.next_out = data.data();
     z.avail_out = uInt(data.size());
@@ -135,7 +136,35 @@ std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filt
     return png;
 }
 
+} // namespace
+
+std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filter, int strategy, uint64_t split, uint64_t head)
+{
+    if (filter < 0 || filter > 5 || strategy < 0 || strategy > 1 || head > inner.size() || split > head || split < 8 + 25)
+        throw std::runtime_error("a re-saved PNG's recipe this Sieve does not know");
+    const auto rows = read_ihdr(inner.data(), size_t(head));
+    if (!rows || rows->interlaced || inner.size() - head != rows->row_bytes * rows->height)
+        throw std::runtime_error("a re-saved PNG whose head and rows do not agree");
+    return assembled(inner, filtered_rows(inner, head, *rows, filter), strategy, split, head);
+}
+
+static std::optional<PngResaved> png_resave_unguarded(const std::vector<uint8_t>& b);
+
 std::optional<PngResaved> png_resave(const std::vector<uint8_t>& b)
+{
+    // Nothing a PNG holds stops the packing: one that cannot be re-saved (zlib refusing it, or the
+    // memory short) is left as it is.
+    try
+    {
+        return png_resave_unguarded(b);
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
+}
+
+static std::optional<PngResaved> png_resave_unguarded(const std::vector<uint8_t>& b)
 {
     const auto rows = read_ihdr(b.data(), b.size());
     if (!rows || rows->interlaced) return std::nullopt;
@@ -163,8 +192,11 @@ std::optional<PngResaved> png_resave(const std::vector<uint8_t>& b)
         if (iend) break; // (whatever follows IEND is kept as it is, in the head)
     }
     if (!first) return std::nullopt;
-    // The rows: exactly one zlib stream of exactly the rows, each with its filter byte.
+    // The rows: exactly one zlib stream of exactly the rows, each with its filter byte. (Deflate makes
+    // at most about 1,032 bytes of each it is given, so an IHDR claiming more rows than its IDATs can
+    // hold is refused before anything that size is made.)
     const size_t n = size_t(rows->row_bytes), bpp = size_t(rows->pixel_bytes), h = size_t(rows->height);
+    if (uint64_t(h) * (n + 1) > uint64_t(joined.size()) * 1032 + 1032) return std::nullopt;
     std::vector<uint8_t> filtered(h * (n + 1) + 1);
     z_stream z{};
     if (inflateInit(&z) != Z_OK) return std::nullopt;
@@ -197,18 +229,26 @@ std::optional<PngResaved> png_resave(const std::vector<uint8_t>& b)
         }
     }
     // Every filter (each alone, or each row its own) at both of zlib's strategies; the smallest kept,
-    // the first of equals.
-    for (const int strategy : {0, 1})
-        for (const int filter : {5, 0, 1, 2, 3, 4})
+    // the first of equals in the order strategy 0's six, then strategy 1's. Each filter's rows made
+    // once, for both strategies.
+    const int filters[6] = {5, 0, 1, 2, 3, 4};
+    size_t best_order = 0;
+    for (size_t fi = 0; fi < 6; ++fi)
+    {
+        const std::vector<uint8_t> f = filtered_rows(out.inner, head, *rows, filters[fi]);
+        for (const int strategy : {0, 1})
         {
-            std::vector<uint8_t> png = png_resave_make(out.inner, filter, strategy, first, head);
-            if (out.png.empty() || png.size() < out.png.size())
+            std::vector<uint8_t> png = assembled(out.inner, f, strategy, first, head);
+            const size_t order = size_t(strategy) * 6 + fi;
+            if (out.png.empty() || png.size() < out.png.size() || (png.size() == out.png.size() && order < best_order))
             {
+                best_order = order;
                 out.png = std::move(png);
-                out.recipe = "pngr " + std::to_string(filter) + " " + std::to_string(strategy) + " " + std::to_string(first) + " " + std::to_string(head) + " " +
-                             std::to_string(out.inner.size());
+                out.recipe = "pngr " + std::to_string(filters[fi]) + " " + std::to_string(strategy) + " " + std::to_string(first) + " " + std::to_string(head) +
+                             " " + std::to_string(out.inner.size());
             }
         }
+    }
     return out;
 }
 

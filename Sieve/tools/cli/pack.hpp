@@ -93,6 +93,7 @@ struct PackReport
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart
     uint64_t mixed_together_apart = 0;   // v29: what they and the stream came to apart (their codes, and LZMA2's estimate)
     size_t mixed4 = 0, mixed4_pictures = 0, mixed4_words = 0; // v28: files carried by mix-v4, as pictures, with a word list
+    size_t mixed4_by_use = 0;            // v32 (draft): of those with a word list, counted by use (F80)
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
     size_t mixed2_pictures = 0;
     size_t decoding_first = 0;           // files mixing was not tried on: Prioritise Decoding Speed

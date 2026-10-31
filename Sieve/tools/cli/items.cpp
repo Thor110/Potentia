@@ -11,9 +11,12 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace sieve::cli {
 
@@ -264,11 +267,22 @@ const MixDictionary& mix_word_list(uint32_t list)
     static std::map<uint32_t, std::unique_ptr<const MixDictionary>> made;
     std::lock_guard<std::mutex> lock(mx);
     if (auto it = made.find(list); it != made.end()) return *it->second;
-    const ResolvedDictionary d = resolve_dictionary(std::to_string(list));
-    const std::vector<uint8_t> bytes = read_file_bytes(d.path);
-    if (!d.expected_sha256.empty() && sha256_hex(bytes) != d.expected_sha256)
-        throw std::runtime_error("the word list " + d.id + " (" + d.path + ") is not the one registered: its SHA-256 differs");
-    return *made.emplace(list, std::make_unique<const MixDictionary>(bytes)).first->second;
+    auto registered = [](uint32_t size) {
+        const ResolvedDictionary d = resolve_dictionary(std::to_string(size));
+        std::vector<uint8_t> bytes = read_file_bytes(d.path);
+        if (!d.expected_sha256.empty() && sha256_hex(bytes) != d.expected_sha256)
+            throw std::runtime_error("the word list " + d.id + " (" + d.path + ") is not the one registered: its SHA-256 differs");
+        return bytes;
+    };
+    // v32 (in the making): scowl-en-80 counted by use, by the commoner lists scowl-en-35 and -60 ("F80").
+    if (list & kMixWordsByUse)
+    {
+        if ((list & ~kMixWordsByUse) != 80) throw std::runtime_error("a word list counted by use is scowl-en-80's only");
+        const std::vector<uint8_t> all = registered(80), b35 = registered(35), b60 = registered(60);
+        const std::vector<std::span<const uint8_t>> commoner = {b35, b60};
+        return *made.emplace(list, std::make_unique<const MixDictionary>(all, commoner, 64)).first->second;
+    }
+    return *made.emplace(list, std::make_unique<const MixDictionary>(registered(list))).first->second;
 }
 
 void use_item_maker()

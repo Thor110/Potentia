@@ -1,74 +1,75 @@
-# PNG and JPEG under all three methods (31 October 2026)
+# Speed, word frequencies, and a review (31 October 2026)
 
-Unzip this over the repository root, on top of the last zip ("rope direction"). It is committed
-locally, not pushed. Everything here is behind `--v32-draft`. Without it, every output is byte for
-byte what the build before made: the twelve PNGs and the seven JPEGs were measured with no box,
-temporary and permanent.
+Unzip this over the repository root, on top of the last zip ("roadmap"). It is committed locally,
+not pushed. Without `--v32-draft`, every `.sieve` checked comes out byte for byte as before, and
+the unit suite passes (77,110 checks, 0 failures).
 
-New files: `tools/cli/png_resave.{hpp,cpp}`, added to `sieve_compare` in CMakeLists.txt.
+## 1. Speed (ROADMAP #4)
 
-## What each method does now (with the draft)
+- **Two of the four items were already built** (ROADMAP was out of date):
+  - the weighing reuses the packer's ways: 1 MB of Don Quixote takes 3.19 s with the weighing,
+    against 3.33 s without;
+  - the rope's decoding table is made only for long streams.
+- **Mixing is about 12% quicker, at the same codes.** Each counter is now moved with its sign known
+  from the bit, which takes 9.3% of the instructions off. All of Don Quixote with the word list,
+  three runs each: coding 6.33 s → 5.60 s, decoding 6.40 s → 5.56 s.
 
-| | no box | temporary | permanent |
-| :--- | :--- | :--- | :--- |
-| **JPEG** | as it is | brunsli form, given back byte for byte (`jbr`) | the same coefficients with optimised Huffman tables, carried as its brunsli form; else as temporary |
-| **PNG** | as it is | made again exactly (as before) | **re-saved at its smallest** (`pngr`), the same picture under its own name; else made again exactly; else as it is |
+## 2. Word frequencies for mixing (v32 draft: `F80`)
 
-With both boxes, a file is made again exactly first.
+SCOWL has no frequencies, but its sizes rank its words, and the three lists Sieve ships nest
+(35 ⊂ 60 ⊂ 80). Each word of scowl-en-80 now counts 4,096 if size 35 holds it, 64 if only size 60
+does, else 1. No new file is needed. Against today's scowl-en-60 (mix-v4, bytes):
 
-- **JPEGs and the boxes:** a JPEG now follows the boxes, as other compressed formats do. Before,
-  the draft used brunsli with no box ticked. So the CI's JPEG check now passes
-  `--compressed-temporary`.
-- **The PNG flaw:** a PNG is never installed as its pixel rows any more (v31 installed
-  `example_book_cover.png` as a 76,800-byte file named `cover`).
+| Text | D60 | F80 | |
+| :--- | ---: | ---: | ---: |
+| Don Quixote, first 800 KB | 193,808 | 188,719 | −2.6% |
+| HANDOFF, first 200 KB | 57,042 | 56,021 | −1.8% |
+| SHOWCASE-PLAN | 3,247 | 3,047 | −6.2% |
+| README, first 3 KB | 1,340 | 1,265 | −5.6% |
+| GAME, first 3 KB | 1,242 | 1,133 | −8.8% |
 
-## Measured
+- **Through the packer, with the draft:** one text 193,887 → 188,798 bytes; four texts mixed as a
+  group 61,374 → 60,262.
+- **Where it's built:** the reader refuses F80 below v32; the oracle builds its own trie and
+  weights; `sieve mix --words 80 --by-use`; CI step 11 checks it. The weights were chosen by
+  measuring (NEXT-VERSION §4a, 5, has the table).
+- **On the way, the trie was made compact, for every build, at the same codes:** peak memory with
+  scowl-en-60 91 MB → 59 MB, with scowl-en-80 279 MB → 120 MB.
+- **Not measured:** enwik8 and enwik9, which aren't reachable from here. That's your run to make.
 
-**PNG under permanent**, each of the twelve on its own:
+## 3. The review (docs/REVIEW.md, the fourth pass)
 
-| PNG | original | installed | `.sieve` temporary | `.sieve` permanent |
-| :--- | ---: | ---: | ---: | ---: |
-| example_book_cover | 859 | 202 | 151 | 183 |
-| icon128 | 27,749 | 17,537 | 19,776 | 11,376 |
-| hallway-door | 46,647 | 20,053 | 7,883 | 7,914 |
-| m1_sieve_scowl60 | 146,344 | 105,324 | 84,641 | 48,136 |
-| long-pages-64MB-cache | 128,597 | 58,841 | 45,667 | 45,704 |
+The work since your last sync was reviewed. Two more reviewers looked at what installing reads
+from a `.sieve`.
 
-The other seven are in FORMATS.md.
+**Main fix: a few bytes could claim gigabytes.** Installing sets no decode limit, so a damaged or
+hostile `.sieve` could make the installer allocate whatever it claimed:
+- 5.9 GB from a 108-byte file;
+- 8.4 GB from an empty mixing code;
+- 2.7 GB from a rope code of no bytes.
 
-- Every PNG was installed smaller, with the same pixels (checked by Pillow).
-- Sieve, sieve-install and the oracle gave back the same bytes.
-- The installed PNGs were smaller than Pillow's re-save on eleven of the twelve, and the same on
-  hallway-door.
-- The `.sieve` under permanent is often smaller than under temporary, since rows carried
-  unfiltered pack better. Where it's larger, it is by 31 to 43 bytes.
+Every stream, mixing code and rope width is now bounded by what its bytes can make, before
+anything is made. The same files are refused now at a 12 MB peak.
 
-**JPEG under permanent:**
-- **The repository's seven:** Vitruvian.jpg went from 207,500 to 203,455 bytes (−1.95%). The other
-  six are optimised already, so they come back exact.
-- **JPEGs Pillow wrote with its standard tables:** 9% to 11% smaller, for example baseline 172,212
-  to 156,746. Restart markers, greyscale and 4:4:4 all work.
-- **Progressive JPEGs** are left exact; the optimiser doesn't handle them yet.
+Also fixed:
+- **`delta`'s pairing:**
+  - blocks are cut on the hash's top bits, and at the ends of long runs of one byte;
+  - a file of zero runs with insertions now finds 97.7% of its blocks in its original, against
+    14.1% before;
+  - the scripts themselves are made as before.
+- **`sieve mix`:** `--words` and `--params` must name the same list.
+- **The PNG re-save:**
+  - an IHDR can't make it allocate past what its IDATs could hold;
+  - each filter is made once, not twice, with the same bytes out.
+- **JPEGs:** now recoded on every core, a stop heard at each one.
+- **Repeated work:** SHA-256 is worked out once a file; the trie builds without allocating; the
+  exact-PNG code is shared.
+- **Listing numbers:** checked before they are read.
 
-Every picture had the same pixels.
+Left, and listed: the reader's audit was cut short, so a few corners (`skm`, `mixt`/`mixn` bounds,
+`jbr`/`pngr` on installing) were read once rather than twice.
 
 ## Checked here
-
 - Unit suite: 77,110 checks, 0 failures.
-- CI step 11: the new lines (JPEG with no box, temporary and permanent; PNG permanent; without the
-  draft), run on their own, pass.
-- The oracle made all twelve re-saved PNGs and agreed with Sieve.
-
-## Changed
-
-- `pack.cpp`: the PNG branch, the JPEG step under the boxes, and two new report lines, `optimised`
-  and `pngs`.
-- `jpeg_glue`: `jpeg_optimised`.
-- `locate.cpp`: the reader takes `pngr`.
-- `sieve_ref.py`: `pngr_make`.
-- `help.cpp`: the help text.
-- CI step 11: the new checks.
-- Docs: SPECIFICATIONS v32, METHODS §2a, FORMATS (now "decided and built"), NEXT-VERSION §4a item
-  4, HANDOFF.
-- IDEAS §19.88: an idea found on the way. Temporary could carry a PNG's rows unfiltered too and
-  still give back the original exactly. Not measured.
+- CI step 11: the v32 stretch (delta, JPEG, PNG, F80, oracle, sieve-install) passes after the review fixes. The whole step, run after the reader's hardening, was still running when this was sent: I'll report it.
+- The 160 MB delta pair: the same `.sieve` as before (17,947,687 bytes) under the new cut.

@@ -66,41 +66,10 @@ void within_decode_limit(uint64_t bytes, const char* what)
                                  std::to_string(g_decode_limit) + " allowed here");
 }
 
-// One stream: raw LZMA2 of `bytes` bytes, then (x86) the x86 branch filter undone, as 7-Zip's BCJ
-// and xz's x86 filter both define it, from position 0.
-std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
+// unpack_stream's streams that are not mixed: carried as they are, or LZMA2 (their size checked).
+static std::vector<uint8_t> unpack_stream_plain(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
 {
-    within_decode_limit(s.bytes, "a stream");
     std::vector<uint8_t> out(size_t(s.bytes));
-    if (s.bytes == 0)
-    {
-        if (!packed.empty() && !(packed.size() == 1 && packed[0] == 0)) throw std::runtime_error("the installer's packed files are damaged");
-        return out;
-    }
-    if (!s.mixed.empty())
-    {
-        // v29: mixed by mix-v4 (only the lzma2 stream; the reader checks that), with the word list
-        // where its parameters name one.
-        try
-        {
-            const Mix4Params p = Mix4Params::parse(s.mixed);
-            if (p.width) throw std::invalid_argument("a picture's parameters for a stream");
-            const MixDictionary* words = nullptr;
-            if (p.dictionary)
-            {
-                if (!mix_words())
-                    throw std::runtime_error("these Sieve instructions carry their files mixed with a word list: open them with Sieve (sieve install, or the hallway's File Locator), which has it");
-                words = &mix_words()(p.dictionary);
-            }
-            std::vector<uint8_t> mixed = mix4_file(packed, p, words, s.bytes);
-            if (x86) throw std::invalid_argument("the x86 stream mixed");
-            return mixed;
-        }
-        catch (const std::invalid_argument& e)
-        {
-            throw std::runtime_error(std::string("the installer's packed files are damaged (") + e.what() + ")");
-        }
-    }
     if (s.dictionary == 0)
     {
         // v12: carried as it is (only the lzma2 stream; the reader checks that).
@@ -118,6 +87,45 @@ std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const Packed
         z7_BranchConvSt_X86_Dec(out.data(), out.size(), 0, &state);
     }
     return out;
+}
+
+// One stream: raw LZMA2 of `bytes` bytes, then (x86) the x86 branch filter undone, as 7-Zip's BCJ
+// and xz's x86 filter both define it, from position 0.
+std::vector<uint8_t> unpack_stream(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
+{
+    within_decode_limit(s.bytes, "a stream");
+    // What the packed bytes can make at most, checked before anything that size is made (a damaged or
+    // hostile file must not claim gigabytes in a few bytes): carried as it is, its own size; LZMA2, 2
+    // MiB for every 6 packed bytes (a chunk of LZMA data is at least 6 bytes, its control byte, its
+    // sizes and one of data, and makes at most 2 MiB); mixing, as mix4_file bounds it.
+    const uint64_t most = !s.mixed.empty() ? ~uint64_t(0) : s.dictionary == 0 ? uint64_t(packed.size()) : (uint64_t(packed.size()) / 6 + 1) * (uint64_t(2) << 20);
+    if (s.bytes > most) throw std::runtime_error("the installer's packed files are damaged (a stream larger than its packed bytes can make)");
+    if (s.bytes == 0)
+    {
+        if (!packed.empty() && !(packed.size() == 1 && packed[0] == 0)) throw std::runtime_error("the installer's packed files are damaged");
+        return {};
+    }
+    if (s.mixed.empty()) return unpack_stream_plain(packed, s, x86);
+    // v29: mixed by mix-v4 (only the lzma2 stream; the reader checks that), with the word list where
+    // its parameters name one. (Nothing is made before mixing makes it.)
+    try
+    {
+        const Mix4Params p = Mix4Params::parse(s.mixed);
+        if (p.width) throw std::invalid_argument("a picture's parameters for a stream");
+        const MixDictionary* words = nullptr;
+        if (p.dictionary)
+        {
+            if (!mix_words())
+                throw std::runtime_error("these Sieve instructions carry their files mixed with a word list: open them with Sieve (sieve install, or the hallway's File Locator), which has it");
+            words = &mix_words()(p.list());
+        }
+        if (x86) throw std::invalid_argument("the x86 stream mixed");
+        return mix4_file(packed, p, words, s.bytes);
+    }
+    catch (const std::invalid_argument& e)
+    {
+        throw std::runtime_error(std::string("the installer's packed files are damaged (") + e.what() + ")");
+    }
 }
 
 // A text's lines: its bytes split at each line feed (n line feeds make n + 1 lines).
@@ -231,6 +239,14 @@ void decode_deferred(const std::vector<Deferred>& jobs, std::vector<std::vector<
 
 static bool decimal(std::string_view t) { return !t.empty() && t.size() <= 19 && t.find_first_not_of("0123456789") == std::string_view::npos && (t.size() == 1 || t[0] != '0'); }
 
+// A listing's number, refused as the manifest's own fault where it is not one Sieve writes (a bare
+// std::stoull would let "-1" through as 2^64 - 1, and fail on 20 digits with only "stoull").
+static uint64_t listed_number(std::string_view t, const char* what)
+{
+    if (!decimal(t)) throw std::runtime_error(std::string("manifest: ") + what + " is not a number as Sieve writes one: " + std::string(t.substr(0, 40)));
+    return std::stoull(std::string(t));
+}
+
 namespace {
 
 std::vector<uint8_t> unpack_v4(Manifest& m)
@@ -253,6 +269,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     }
     if (m.x86.packed > m.streams.size() || m.streams.size() - m.x86.packed != m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
     const std::span<const uint8_t> all(m.streams);
+    if (!m.lzma2.mixed.empty() && !m.v32 && Mix4Params::parse(m.lzma2.mixed).by_use)
+        throw std::runtime_error("manifest: its lzma2 stream mixed with a word list counted by use (F80), which is sieve-manifest-v32's");
     std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
     std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
     std::vector<ManifestEntry*> files;
@@ -443,7 +461,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                     if (!mix_words())
                         throw std::runtime_error("these Sieve instructions carry files mixed with a word list (" + e.path +
                                                  "): open them with Sieve (sieve install, or the hallway's File Locator), which has it");
-                    words = &mix_words()(mp.dictionary);
+                    if (mp.by_use && !m.v32) throw std::invalid_argument("a word list counted by use (F80) is sieve-manifest-v32's");
+                    words = &mix_words()(mp.list());
                 }
                 groups.push_back(std::make_unique<Group>());
                 groups.back()->total = total;
@@ -498,7 +517,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                         if (!mix_words())
                             throw std::runtime_error("these Sieve instructions carry a file mixed with a word list (" + e.path +
                                                      "): open them with Sieve (sieve install, or the hallway's File Locator), which has it");
-                        words = &mix_words()(mp.dictionary);
+                        if (mp.by_use && !m.v32) throw std::invalid_argument("a word list counted by use (F80) is sieve-manifest-v32's");
+                        words = &mix_words()(mp.list());
                     }
                     const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) + size;
                     deferred.push_back({i, e.path, [code, mp, words, size] { return mix4_file(code, mp, words, size); }, memory});
@@ -584,7 +604,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     {
         const ManifestEntry& e = *files[i];
         if (e.way.rfind("lines ", 0) != 0) continue;
-        const size_t k = size_t(std::stoull(e.way.substr(6)));
+        const size_t k = size_t(listed_number(e.way.substr(6), "a mask's file"));
         if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
                                   files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0 && files[k]->way.rfind("mix3 ", 0) != 0 && files[k]->way.rfind("mix4 ", 0) != 0 && files[k]->way.rfind("mixt ", 0) != 0 &&
                                   files[k]->way != "mixn"))
@@ -649,7 +669,9 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     // (Each file let go once it is in the contents: the streams, its files and the contents were all
     // held to the end, about three times the files' size at once.)
     std::vector<uint8_t> contents;
-    contents.reserve(size_t(m.bytes));
+    uint64_t made = 0; // (what was made, not what a listing claims: checked file by file below)
+    for (const auto& b : bytes) made += b.size();
+    contents.reserve(size_t(made));
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (files[i]->size == kSizeAsMade) files[i]->size = bytes[i].size(); // v7: an item is the size it is made
@@ -1648,8 +1670,8 @@ Manifest Manifest::parse(std::string_view whole)
     else
     {
     m.root = field(lines[1], "root");
-    m.files = std::stoull(field(lines[2], "files"));
-    m.bytes = std::stoull(field(lines[3], "bytes"));
+    m.files = listed_number(field(lines[2], "files"), "its files line");
+    m.bytes = listed_number(field(lines[3], "bytes"), "its bytes line");
     }
     if (m.packed && !m.compact)
     {
@@ -1727,7 +1749,7 @@ Manifest Manifest::parse(std::string_view whole)
             u.format = f[1];
             if (f[2].empty() || f[2].size() > 19 || f[2].find_first_not_of("0123456789") != std::string::npos)
                 throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not an archive's line");
-            u.size = std::stoull(f[2]);
+            u.size = listed_number(f[2], "an archive's size");
             u.archive = f[3];
             u.folder = f[4];
             // (A RAR made again is written at its path and its folder emptied: both inside.)
@@ -1796,7 +1818,7 @@ Manifest Manifest::parse(std::string_view whole)
         else if (m.compact && f[0] == "f" && f.size() == 4)
         {
             // v7: a file without its own SHA-256 (the tree's covers it).
-            e.size = std::stoull(f[1]);
+            e.size = listed_number(f[1], "a file's size");
             e.sha256 = "-";
             e.way = f[2];
             e.path = f[3];
@@ -1830,7 +1852,7 @@ Manifest Manifest::parse(std::string_view whole)
         }
         else if (f[0] == "f" && f.size() == (m.with_addresses || m.packed ? 5u : 4u))
         {
-            e.size = std::stoull(f[1]);
+            e.size = listed_number(f[1], "a file's size");
             e.sha256 = f[2];
             if (m.with_addresses) e.address = f[3];
             if (m.packed) e.way = f[3];
@@ -1917,7 +1939,7 @@ Manifest Manifest::parse(std::string_view whole)
                 e.member = true;
                 ++found;
             }
-            if (found != std::stoull(n)) throw std::runtime_error("manifest: " + a.path + " does not list the members its recipe counts");
+            if (found != listed_number(n, "an archive's count of members")) throw std::runtime_error("manifest: " + a.path + " does not list the members its recipe counts");
         }
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
     if (m.compact)

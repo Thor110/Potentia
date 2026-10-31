@@ -117,6 +117,14 @@ std::optional<std::vector<uint8_t>> jpeg_optimised(const std::vector<uint8_t>& j
             if (marker == 0xC4 && scanned) return std::nullopt;
         }
         if (!sequential || jpg.scan_info.empty()) return std::nullopt;
+        // What must come back the same, kept before the tables are changed: the picture's size, each
+        // component's coefficients and table, and the quantisation tables.
+        const int width = jpg.width, height = jpg.height;
+        std::vector<std::vector<brunsli::coeff_t>> coeffs;
+        std::vector<uint8_t> quant_idx;
+        for (const auto& c : jpg.components) coeffs.push_back(c.coeffs), quant_idx.push_back(c.quant_idx);
+        std::vector<std::array<int32_t, brunsli::kDCTBlockSize>> quant;
+        for (const auto& q : jpg.quant) quant.push_back(q.values);
         std::array<bool, 0x20> defined{};
         for (const auto& h : jpg.huffman_code)
         {
@@ -207,18 +215,14 @@ std::optional<std::vector<uint8_t>> jpeg_optimised(const std::vector<uint8_t>& j
         std::vector<uint8_t> out;
         if (!brunsli::WriteJpeg(jpg, brunsli::JPEGOutput(append, &out)) || out.size() >= jpeg.size()) return std::nullopt;
         // The same coefficients and tables, read back from what was written.
-        brunsli::JPEGData again, first;
-        if (!brunsli::ReadJpeg(out.data(), out.size(), brunsli::JPEG_READ_ALL, &again) ||
-            !brunsli::ReadJpeg(jpeg.data(), jpeg.size(), brunsli::JPEG_READ_ALL, &first))
+        brunsli::JPEGData again;
+        if (!brunsli::ReadJpeg(out.data(), out.size(), brunsli::JPEG_READ_ALL, &again)) return std::nullopt;
+        if (again.width != width || again.height != height || again.components.size() != coeffs.size() || again.quant.size() != quant.size())
             return std::nullopt;
-        if (again.width != first.width || again.height != first.height || again.components.size() != first.components.size() ||
-            again.quant.size() != first.quant.size())
-            return std::nullopt;
-        for (size_t k = 0; k < first.components.size(); ++k)
-            if (again.components[k].coeffs != first.components[k].coeffs || again.components[k].quant_idx != first.components[k].quant_idx)
-                return std::nullopt;
-        for (size_t k = 0; k < first.quant.size(); ++k)
-            if (again.quant[k].values != first.quant[k].values) return std::nullopt;
+        for (size_t k = 0; k < coeffs.size(); ++k)
+            if (again.components[k].coeffs != coeffs[k] || again.components[k].quant_idx != quant_idx[k]) return std::nullopt;
+        for (size_t k = 0; k < quant.size(); ++k)
+            if (again.quant[k].values != quant[k]) return std::nullopt;
         return out;
     }
     catch (const std::exception&)

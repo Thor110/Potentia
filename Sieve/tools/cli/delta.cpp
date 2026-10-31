@@ -3,6 +3,7 @@
 #include "delta.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
@@ -82,17 +83,35 @@ constexpr size_t kWindow = 64; // the shortest copy, and the stretch the base is
 std::vector<Block> blocks_of(std::span<const uint8_t> file)
 {
     static const std::array<uint64_t, 256> gear = gear_table();
-    constexpr uint64_t kMask = (uint64_t(1) << 12) - 1; // about every 4 KiB
-    constexpr size_t kMin = 64, kMax = size_t(64) << 10;
+    // A cut where the hash's top 12 bits are 0, about every 4 KiB, and where a run of 64 or more of one
+    // byte ends (the content says where both are, so an insertion moves no cut but its own block's).
+    // The top bits, not the low: the hash moves one bit up a byte, so its low 12 bits are made of the
+    // last 12 bytes alone (as FastCDC has it); the top 12 are made of the last 64. In a long run of one
+    // byte the hash stops changing, and no cut would come until the largest block: hence the runs'
+    // ends. Measured (`sieve alike`, 31 October 2026), the share of a file's blocks found in its
+    // original: a 9 MB file of zero runs and short records with 100 insertions of 30 bytes, 14.1% with
+    // the low bits, 34.7% with the top, 97.7% with the runs' ends too; Don Quixote with 200 small
+    // edits, 52.1% to 55.1%; the 160 MB pair of random regions, 94.4% to 94.7%.
+    constexpr int kTop = 52;
+    constexpr size_t kMin = 64, kMax = size_t(64) << 10, kRun = 64;
     std::vector<Block> out;
     out.reserve(file.size() / 4096 + 1);
     uint64_t h = 0;
-    size_t from = 0;
+    size_t from = 0, run = 0;
     for (size_t i = 0; i < file.size(); ++i)
     {
+        // A run of kRun or more ended at the byte before: cut there.
+        const bool ended = i > from && file[i] != file[i - 1] && run >= kRun;
+        run = i > 0 && file[i] == file[i - 1] ? run + 1 : 1;
+        if (ended && i - from >= kMin)
+        {
+            out.push_back({print_of(file.data() + from, i - from), uint32_t(i - from)});
+            from = i;
+            h = 0;
+        }
         h = (h << 1) + gear[file[i]];
         const size_t len = i + 1 - from;
-        if ((len >= kMin && (h & kMask) == 0) || len >= kMax)
+        if ((len >= kMin && (h >> kTop) == 0) || len >= kMax)
         {
             out.push_back({print_of(file.data() + from, len), uint32_t(len)});
             from = i + 1;
@@ -167,7 +186,10 @@ Script make(std::span<const uint8_t> base, std::span<const uint8_t> target)
 std::vector<uint8_t> apply(std::span<const uint8_t> base, std::span<const uint8_t> script, uint64_t size)
 {
     std::vector<uint8_t> out;
-    out.reserve(size_t(size));
+    // Room for what the script can make at most at once, not the size the listing claims, which is
+    // only checked as the script makes it (a size the memory cannot hold, from a damaged file, would
+    // otherwise fail here, before the script says anything).
+    out.reserve(size_t(std::min<uint64_t>(size, uint64_t(base.size()) + script.size())));
     uint64_t last_end = 0;
     for (size_t at = 0; at < script.size();)
     {

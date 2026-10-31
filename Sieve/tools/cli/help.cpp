@@ -411,6 +411,8 @@ const std::vector<Page>& pages()
           {"--words N", "Text with a word list's model: the registered SCOWL list of size N (35, 60 or 80;\n"
                         "scowl-en-N, its SHA-256 checked): from the word so far, the letters the list has next\n"
                         "give each bit a probability. Its parameters \"B22 D60\" (with --v2: mix-v3)."},
+          {"--by-use", "With --words 80: each word counted by how common it is (sieve-manifest-v32 in the making):\n"
+                       "4,096 a word of scowl-en-35, 64 one of scowl-en-60 only, 1 the rest. \"B22 F80\"."},
           {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size), and a\n"
                          "picture's shape or a word list as above: \"B22\", \"B22 I949x1\", \"B22 D60\"."},
           {"--v2", "mix-v2 (sieve-manifest-v26's), or with --words mix-v3 (v27's): with sse-v1's stages."},

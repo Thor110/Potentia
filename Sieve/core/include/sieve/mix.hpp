@@ -17,10 +17,12 @@
 // 7z stream) 685,794: 17.5% smaller; about 0.4 MB/s, coding and decoding alike.
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace sieve {
@@ -84,18 +86,38 @@ class MixDictionary
 {
 public:
     explicit MixDictionary(std::span<const uint8_t> list);
+    // v32 (in the making): the same, each word counted by how common it is: `base` to the power of how
+    // many of the `commoner` lists hold it (folded as the list is). With scowl-en-80, and scowl-en-35
+    // and scowl-en-60 as the commoner lists at 64: 4,096 a word of en-35, 64 one of en-60 only, 1 the
+    // rest (mix-v4's "F80"). Refused where a node's counts would pass 2^32.
+    MixDictionary(std::span<const uint8_t> list, const std::vector<std::span<const uint8_t>>& commoner, uint32_t base);
+    // A node: its counts summed in byte order (the end, as a space 0x20, then a to z), and its
+    // children, which are next to one another: those a to z it has (a bit each), from `first`.
     struct Node
     {
-        int32_t child[26];
-        uint32_t pre[28]; // the counts summed in byte order: the end (as a space, 0x20), then a to z
+        uint32_t pre[28];
+        uint32_t letters = 0; // bit c: it has a child by 'a' + c
+        int32_t first = -1;   // the child of its lowest letter
     };
     const std::vector<Node>& nodes() const { return nodes_; }
+    // Node n's child by 'a' + c (c 0 to 25), or -1 where it has none.
+    int32_t child(int32_t n, int c) const
+    {
+        const Node& nd = nodes_[size_t(n)];
+        if (!(nd.letters >> c & 1)) return -1;
+        return nd.first + int32_t(std::popcount(nd.letters & ((uint32_t(1) << c) - 1)));
+    }
     uint64_t words() const { return words_; }
 
 private:
+    void build(std::vector<std::pair<std::string, uint32_t>>& words);
     std::vector<Node> nodes_;
     uint64_t words_ = 0;
 };
+
+// v32 (in the making): with a list's size, asks mix_words-style hooks for that list counted by how
+// common each word is (mix-v4's "F80"), not the plain list.
+inline constexpr uint32_t kMixWordsByUse = 0x100;
 
 struct Mix3Params
 {
@@ -122,10 +144,13 @@ struct Mix4Params
     uint32_t table_bits = 22;
     uint32_t width = 0, channels = 1; // a picture's shape, as mix-v2's (0: not a picture)
     uint32_t dictionary = 0;          // a word list, as mix-v3's (0: none; else 35, 60 or 80)
+    bool by_use = false;              // v32 (in the making): that list counted by how common each word is ("F80": 80 only)
+    // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
+    uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;
     std::string text() const;
     static Mix4Params parse(std::string_view text);
-    static Mix4Params for_size(uint64_t bytes, uint32_t width = 0, uint32_t channels = 1, uint32_t dictionary = 0);
+    static Mix4Params for_size(uint64_t bytes, uint32_t width = 0, uint32_t channels = 1, uint32_t dictionary = 0, bool by_use = false);
     bool operator==(const Mix4Params&) const = default;
 };
 

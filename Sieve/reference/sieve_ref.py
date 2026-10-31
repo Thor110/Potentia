@@ -2725,11 +2725,9 @@ def mix_file(code, params, size):
 # match's byte), a match model, two mixers and two SSE stages. Written from SPECIFICATIONS §12.2
 # apart from core/mix.*.
 
-def mix_word_list(n):
-    """mix-v3's word list: the registered SCOWL list of size n (data/dictionaries, its SHA-256 checked
-    against dictionaries.tsv), as a trie: each node's children by letter and its counts of words going
-    on by the end (as a space) and each letter. Lines with a carriage return at the end lose it; A to
-    Z are folded to a to z; lines of anything else are left out."""
+def registered_list(n):
+    """The registered SCOWL list of size n (data/dictionaries), its SHA-256 checked against
+    dictionaries.tsv."""
     folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dictionaries")
     entry = None
     for line in open(os.path.join(folder, "dictionaries.tsv"), encoding="utf-8"):
@@ -2741,33 +2739,56 @@ def mix_word_list(n):
     data = open(os.path.join(folder, entry[1]), "rb").read()
     if hashlib.sha256(data).hexdigest() != entry[4]:
         sys.exit(f"mix-v3: {entry[1]} is not the registered list (its SHA-256 differs)")
-    child, counts = [{}], [[0] * 27]
+    return data
+
+
+def list_words(data):
+    """A list's words as mix-v3 reads them: lines with a carriage return at the end lose it; A to Z
+    are folded to a to z; lines of anything else are left out."""
+    out = []
     for raw in data.split(b"\n"):
         if raw.endswith(b"\r"):
             raw = raw[:-1]
         w = bytes(c | 32 if 65 <= c <= 90 else c for c in raw)
-        if not w or any(not 97 <= c <= 122 for c in w):
-            continue
+        if w and all(97 <= c <= 122 for c in w):
+            out.append(w)
+    return out
+
+
+def mix_word_list(n, by_use=False):
+    """mix-v3's word list: the registered SCOWL list of size n as a trie: each node's children by
+    letter and its counts of words going on by the end (as a space) and each letter. Each word
+    counts 1; with by_use (SPECIFICATIONS v32, a draft: mix-v4's "F80", n 80 only), 64 to the power
+    of how many of scowl-en-35 and scowl-en-60 hold it (4,096, 64 or 1)."""
+    words = list_words(registered_list(n))
+    if by_use:
+        commoner = [set(list_words(registered_list(k))) for k in (35, 60)]
+        weights = [64 ** sum(w in c for c in commoner) for w in words]
+    else:
+        weights = [1] * len(words)
+    child, counts = [{}], [[0] * 27]
+    for w, weight in zip(words, weights):
         node = 0
         for c in w:
-            counts[node][c - 96] += 1
+            counts[node][c - 96] += weight
             if c not in child[node]:
                 child[node][c] = len(child)
                 child.append({})
                 counts.append([0] * 27)
             node = child[node][c]
-        counts[node][0] += 1
+        counts[node][0] += weight
     return child, counts
 
 
-def mix4_file(code, params, size):
+def mix4_file(code, params, size, v32=False):
     """mix-v4: mix-v2 (or, with " D<n>", mix-v3) without the SSE stages (sse-v1, retired): the mixers'
-    average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"."""
-    m = re.fullmatch(r"B(1[6-9]|2[0-2])(?: I[1-9][0-9]*x[1-4]| D(35|60|80))?", params)
-    if not m:
-        sys.exit(f"mix-v4: parameters are written \"B22\", \"B22 I949x1\" or \"B22 D60\": {params}")
-    words = mix_word_list(int(m.group(2))) if m.group(2) else None
-    return mix2_file(code, params, size, words, sse=False)
+    average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"; in v32 (a draft) also
+    "B22 F80", scowl-en-80 counted by use."""
+    m = re.fullmatch(r"B(1[6-9]|2[0-2])(?: I[1-9][0-9]*x[1-4]| D(35|60|80)| (F80))?", params)
+    if not m or (m.group(3) and not v32):
+        sys.exit(f"mix-v4: parameters are written \"B22\", \"B22 I949x1\" or \"B22 D60\" (v32: \"B22 F80\"): {params}")
+    words = mix_word_list(int(m.group(2))) if m.group(2) else mix_word_list(80, by_use=True) if m.group(3) else None
+    return mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False)
 
 
 def mix2_file(code, params, size, words=None, sse=True):
@@ -2987,7 +3008,7 @@ def mix2_file(code, params, size, words=None, sse=True):
 def cmd_mix_unpack(args):
     code = open(args.code, "rb").read()
     if args.v4:
-        out = mix4_file(code, args.params, args.size)
+        out = mix4_file(code, args.params, args.size, v32=True)
     elif args.words:
         out = mix2_file(code, args.params, args.size, mix_word_list(int(args.words)))
     else:
@@ -7007,7 +7028,7 @@ def cmd_unpack_v7(args, data):
     if mixed_stream:  # v29: mixed by mix-v4 (never a picture's parameters)
         if " I" in mixed_stream:
             sys.exit("a mixed stream with a picture's parameters")
-        plain = mix4_file(payload[sx[0]:sx[0] + sl[0]], mixed_stream, sl[1])
+        plain = mix4_file(payload[sx[0]:sx[0] + sl[0]], mixed_stream, sl[1], v32)
     else:
         plain = payload[sx[0]:sx[0] + sl[0]] if sl[0] and sl[2] == 0 else decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
     carried = payload[sx[0] + sl[0]:sx[0] + sl[0] + si[0]]
@@ -7281,7 +7302,7 @@ def cmd_unpack_v7(args, data):
             # stream; decoded whole, this file its first bytes, the "mixn" files after the next.
             if group is not None and group[1] != len(group[0]):
                 sys.exit(f"{group[2]}'s group ends before its files have its bytes")
-            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80))?) T([1-9][0-9]*)", way[5:])
+            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?) T([1-9][0-9]*)", way[5:])
             if not m30:
                 sys.exit(f"{path}: a group not written as Sieve writes it")
             n, shift = 0, 0
@@ -7292,7 +7313,7 @@ def cmd_unpack_v7(args, data):
                 shift += 7
                 if not b & 0x80:
                     break
-            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2))), 0, path]
+            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32), 0, path]
             ra += n
             if size > len(group[0]):
                 sys.exit(f"{path} is larger than its group")
@@ -7313,7 +7334,7 @@ def cmd_unpack_v7(args, data):
                 if not b & 0x80:
                     break
             if way.startswith("mix4 "):  # v28: without the SSE stages
-                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size), ra + n
+                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32), ra + n
             elif way.startswith("mix3 "):  # v27: with its word list
                 m3 = re.fullmatch(r"B[0-9]+ D(35|60|80)", way[5:])
                 lists = mix_word_list(int(m3.group(1))) if m3 else None

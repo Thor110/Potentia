@@ -37,6 +37,8 @@
 | `../.github/workflows/build.yml` | Builds and tests on Windows, Linux and macOS on every push (at the repository's root) |
 | `docs/SPECIFICATIONS.md` | The specification |
 | `docs/METHODS.md` | Every way Sieve tries a file when it reads it, in order, and the log line each one writes |
+| `docs/FORMATS.md` | Every format Sieve recognises, what normal, temporary and permanent do to each, and the aim of an optimisation and benchmark engine |
+| `docs/ROADMAP.md` | The best ideas from here, gathered: what finishes v32, the largest gains still open, speed, evidence, and what was measured and set aside |
 | `core/src/biguint.cpp` | The exact big integer every address rests on: limbs of 2^64, pinned against Python's own integers |
 | `docs/HANDOFF.md` | The briefing for picking the project up cold: the standing rules, the build, and where the work stopped |
 | `docs/VOICES.md` | The voices of the halls: attributed quotes, questions, rules and notes for the game's AIs to say, one a line |

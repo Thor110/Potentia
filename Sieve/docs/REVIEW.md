@@ -4,6 +4,97 @@ A sweep over `core/`, `client/`, `tools/`, `tests/` and `reference/` looking for
 optimisations with evidence behind them, and for places where the code does not explain itself.
 What was fixed is listed first; what was found and left is listed after, so nothing is lost.
 
+## The fourth pass (31 October 2026)
+
+Edward: "run a full code review and optimisation pass". It came in three parts, each finding checked
+here before it was fixed:
+- a review of everything since the last release (the v32 draft's ways, the word list counted by
+  use, and the rest);
+- two reviewers on what installing reads from a `.sieve` that may come from anywhere: the reader in
+  `locate.cpp`, and the core decoders (rope, rANS, mixing);
+- a profile of mixing.
+
+Without the draft, every `.sieve` checked comes out byte for byte as before (folders of texts,
+PNGs and JPEGs, against the build of 30 October), and the unit suite's pinned codes hold.
+
+### Fixed
+
+- **A few bytes could claim gigabytes.** Installing never sets a decode limit (only the web host
+  does), so a stream's size from the file was allocated before anything compared it with the bytes
+  that make it:
+  - a 108-byte `.sieve` claiming a 6 GB lzma2 stream took 5.9 GB of memory, and a 51-byte one with
+    a 4 GiB listing stream took 4.2 GB;
+  - mixing's decoders made the claimed size twice over (the file and the model's copy of it): 8.4
+    GB from an empty code;
+  - the rope's column ways made one entry for each column of a width up to 2^32 before reading
+    anything: 2.7 GB from an empty code.
+
+  Each is now bounded before anything is made, by what the format allows:
+  - LZMA2 makes at most 2 MiB for each 6 packed bytes (a chunk's least);
+  - mixing makes at most about 2,840 bytes a code byte, and 65,536 is allowed (every bit's
+    probability is within 1/4096 of certain);
+  - a column way writes at least a byte a column;
+  - a stream carried as it is is its own size.
+
+  The reviewer's files are refused now at a 12 MB peak.
+- **Numbers in a listing** went through a bare `std::stoull`. `-1` read as 2^64 − 1, and 20 digits
+  failed with only "stoull". Each is checked first now, and refused as the manifest's own fault.
+- **`delta`'s blocks** were cut on the low 12 bits of a hash that moves a bit up each byte, so they
+  were made of the last 12 bytes alone. In a run of one byte they stopped changing, and no cut came
+  until the largest block, so an insertion moved every cut after it. Cut now on the top 12 bits
+  and at the end of any run of 64 or more of one byte. Blocks found in the original:
+  - a 9 MB file of zero runs and records with 100 insertions: 14.1% → 97.7%;
+  - Don Quixote with 200 edits: 52.1% → 55.1%;
+  - the 160 MB pair: 94.4% → 94.7%.
+
+  Only the pairing changes; scripts are made as before.
+- **`delta::apply`** reserved the size the listing claims; it reserves what the script can make now.
+- **`sieve mix`** took the word list from `--words` while `--params` could name another (a code
+  made with the plain list and labelled F80). They must agree now.
+- **The PNG re-save** (permanent):
+  - an IHDR could make it allocate gigabytes before its IDATs were read; it is bounded now by what
+    deflate can make of them (about 1,032 to 1);
+  - rows past zlib's 32-bit sizes are refused;
+  - any failure leaves the PNG as it is;
+  - each filter's rows are made once for both strategies, where they were made again for each,
+    with the same choice and the same bytes (the twelve PNGs' `.sieve` files are unchanged).
+- **The JPEG step** ran one JPEG at a time and heard no stop. Now it runs on every core and hears a
+  stop at each JPEG. The table optimiser no longer parses the JPEG twice.
+- **Repeated work:**
+  - each file's SHA-256 was worked out up to five times while the search was set up; once now;
+  - the trie's build allocated at every node; it allocates nothing now;
+  - the exact-PNG ways (stb, skeleton) were written twice; one pair of helpers now.
+- **Mixing's speed:** each counter is moved with its sign known from the bit. That takes 9.3% of
+  the instructions off at the same codes. All of Don Quixote, coding 6.33 s → 5.60 s and decoding
+  6.40 s → 5.56 s.
+- **The trie's memory** (every build, the same codes): scowl-en-60 91 MB → 59 MB at its peak,
+  scowl-en-80 279 MB → 120 MB.
+
+### Found and left
+
+- **The reader's audit stopped partway** (its run was ended by a safety check), so these were not
+  read by a second reviewer:
+  - `png_resave_make` on installing, and the `jbr` and `pngr` recipes there;
+  - `skm` past how it is parsed;
+  - the `mixt`/`mixn` slices' bounds.
+
+  Read here since:
+  - `png_resave_make`: its sizes come from bytes the file carries, and are checked against the IHDR;
+  - the slices: each is checked against its group's total as it is added, and a group's decode must
+    make exactly that total;
+  - the members' count, now checked as a number.
+
+  The contents were reserved by the listing's claimed total; they are reserved by what was made now.
+- **The memory estimate for decoding a mixed file** counts its size once, where mix-v2, v3 and v4
+  hold it twice (the file and the model's buffer). The estimate only paces how many decode at once,
+  so it was left.
+- **The deferred decodes' memory sums** could wrap for sizes past 2^60. Every decoder refuses sizes
+  long before that (the rope at 1 GiB, mixing at 4 GB), so it can't happen now.
+- **A tiny rope code can make a file up to 1 GiB** (a run of one byte needs no stream). That is the
+  format, bounded by the 1 GiB limit, not a fault.
+- **Tried and not taken:** packing the mixer's inputs to 16 bits once a bit, for its four users,
+  cost more than it saved (2.414 G instructions against 2.376 G).
+
 ## The third pass (29 October 2026)
 
 Five reviewers at once, each on one part (the core; packing and installing; the web host, site and

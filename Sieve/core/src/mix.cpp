@@ -7,6 +7,9 @@
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 #include <xmmintrin.h> // _mm_prefetch
 #endif
@@ -239,6 +242,11 @@ std::vector<uint8_t> mix_file(std::span<const uint8_t> code, const MixParams& p,
     auto next = [&]() -> uint32_t { return at < code.size() ? code[at++] : (++at, 0u); };
     uint32_t x1 = 0, x2 = 0xFFFFFFFFu, x = 0;
     for (int i = 0; i < 4; ++i) x = (x << 8) | next();
+    // What the code can make at most, checked before the file is made: every bit's probability is held
+    // within 1/4096 of certain, so each bit costs at least log2(4096/4095) bits of code, and a byte of
+    // code makes at most about 2,840 bytes; 65,536 a byte is the margin (a damaged or hostile file must
+    // not claim gigabytes in a few bytes).
+    if (size > (uint64_t(code.size()) + 16) << 16) bad("a file larger than its code can make");
     std::vector<uint8_t> out(static_cast<size_t>(size));
     for (size_t i = 0; i < out.size(); ++i)
     {
@@ -424,12 +432,26 @@ public:
         train(&w1_[size_t(c0_) * ninputs_], ((bit << 12) - T.sq(s1_)) * kRate);
         train(&w2_[set2_ * ninputs_], ((bit << 12) - T.sq(s2_)) * kRate);
         const int target = bit ? 65535 : 0;
-        for (size_t i = 0; i < nctx_; ++i)
-        {
-            Counter2& c = t_[at_[i]];
-            c.p = moved(c.p, target, c.n);
-            if (c.n < kLimit2) ++c.n;
-        }
+        // Each context's counter moved as moved() moves it, with the sign known from the bit (toward
+        // 65,535 for a 1, toward 0 for a 0), so no counter asks which way: the same numbers, fewer
+        // steps (measured below, in Mix4's notes).
+        const Reciprocals& R = kReciprocals;
+        if (bit)
+            for (size_t i = 0; i < nctx_; ++i)
+            {
+                Counter2& c = t_[at_[i]];
+                const uint32_t n = c.n;
+                c.p = uint16_t(c.p + uint32_t((uint64_t(65535u - c.p) * R.r[n + 2]) >> 32));
+                c.n = uint8_t(n + (n < uint32_t(kLimit2)));
+            }
+        else
+            for (size_t i = 0; i < nctx_; ++i)
+            {
+                Counter2& c = t_[at_[i]];
+                const uint32_t n = c.n;
+                c.p = uint16_t(c.p - uint32_t((uint64_t(c.p) * R.r[n + 2]) >> 32));
+                c.n = uint8_t(n + (n < uint32_t(kLimit2)));
+            }
         if (mi_ >= 0)
         {
             Counter& c = mm_[mi_];
@@ -553,7 +575,7 @@ private:
             if (words_)
             {
                 // mix-v3: the word so far in the list (none once it leaves it), its letters counted.
-                node_ = !letter ? 0 : node_ < 0 ? -1 : words_->nodes()[size_t(node_)].child[(b | 32) - 'a'];
+                node_ = !letter ? 0 : node_ < 0 ? -1 : words_->child(node_, (b | 32) - 'a');
                 letters_ = letter ? std::min<uint32_t>(letters_ + 1, 40) : 0;
             }
             // The match goes on where the byte was the one it expected.
@@ -736,6 +758,11 @@ std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t
     auto next = [&]() -> uint32_t { return at < code.size() ? code[at++] : (++at, 0u); };
     uint32_t x1 = 0, x2 = 0xFFFFFFFFu, x = 0;
     for (int i = 0; i < 4; ++i) x = (x << 8) | next();
+    // What the code can make at most, checked before the file is made: every bit's probability is held
+    // within 1/4096 of certain, so each bit costs at least log2(4096/4095) bits of code, and a byte of
+    // code makes at most about 2,840 bytes; 65,536 a byte is the margin (a damaged or hostile file must
+    // not claim gigabytes in a few bytes).
+    if (size > (uint64_t(code.size()) + 16) << 16) bad("a file larger than its code can make");
     std::vector<uint8_t> out(static_cast<size_t>(size));
     for (size_t i = 0; i < out.size(); ++i)
     {
@@ -763,10 +790,15 @@ std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t
 
 [[noreturn]] void bad3(const std::string& why) { throw std::invalid_argument("mix-v3: " + why); }
 
+// The file mixing's code can make at most (see file_with): checked before the model, whose buffer is
+// the file's size, is made.
+bool code_can_make(std::span<const uint8_t> code, uint64_t size) { return size <= (uint64_t(code.size()) + 16) << 16; }
+
 } // namespace
 
 std::vector<uint8_t> mix2_file(std::span<const uint8_t> code, const Mix2Params& p, uint64_t size)
 {
+    if (!code_can_make(code, size)) bad2("a file larger than its code can make");
     p.check();
     if (size >= (uint64_t(1) << 32)) bad2("a file of 4 GB or more");
     Model2 m(p, size);
@@ -776,20 +808,21 @@ std::vector<uint8_t> mix2_file(std::span<const uint8_t> code, const Mix2Params& 
 // ---------------------------------------------------------------------------------------------
 // mix-v3 (see mix.hpp, SPECIFICATIONS §12.2): mix-v2's text with a word list's model.
 
-MixDictionary::MixDictionary(std::span<const uint8_t> list)
+namespace {
+
+// A list's words as MixDictionary reads them: each line (a carriage return at its end left out), A to
+// Z folded to a to z, those of letters only, in order.
+std::vector<std::string> list_words(std::span<const uint8_t> list)
 {
-    std::vector<std::array<uint32_t, 27>> counts(1); // by node: the end (0), a to z (1 to 26)
-    nodes_.resize(1);
-    std::fill(std::begin(nodes_[0].child), std::end(nodes_[0].child), -1);
+    std::vector<std::string> out;
     size_t at = 0;
-    std::string w;
     while (at < list.size())
     {
         size_t end = at;
         while (end < list.size() && list[end] != '\n') ++end;
         size_t stop = end;
         if (stop > at && list[stop - 1] == '\r') --stop;
-        w.assign(reinterpret_cast<const char*>(list.data()) + at, stop - at);
+        std::string w(reinterpret_cast<const char*>(list.data()) + at, stop - at);
         at = end + 1;
         bool letters = !w.empty();
         for (char& c : w)
@@ -797,30 +830,84 @@ MixDictionary::MixDictionary(std::span<const uint8_t> list)
             if (c >= 'A' && c <= 'Z') c = char(c | 32);
             else if (c < 'a' || c > 'z') letters = false;
         }
-        if (!letters) continue;
-        ++words_;
-        size_t n = 0;
-        for (const char c : w)
-        {
-            ++counts[n][size_t(c - 'a' + 1)];
-            int32_t& next = nodes_[n].child[c - 'a'];
-            if (next < 0)
-            {
-                next = int32_t(nodes_.size());
-                nodes_.emplace_back();
-                std::fill(std::begin(nodes_.back().child), std::end(nodes_.back().child), -1);
-                counts.emplace_back();
-                counts.back().fill(0);
-            }
-            n = size_t(nodes_[n].child[c - 'a']);
-        }
-        ++counts[n][0];
+        if (letters) out.push_back(std::move(w));
     }
-    for (size_t n = 0; n < nodes_.size(); ++n)
+    return out;
+}
+
+} // namespace
+
+MixDictionary::MixDictionary(std::span<const uint8_t> list)
+{
+    std::vector<std::pair<std::string, uint32_t>> words;
+    for (std::string& w : list_words(list)) words.emplace_back(std::move(w), 1);
+    build(words);
+}
+
+MixDictionary::MixDictionary(std::span<const uint8_t> list, const std::vector<std::span<const uint8_t>>& commoner, uint32_t base)
+{
+    std::vector<std::vector<std::string>> lists;
+    for (const auto& c : commoner)
     {
-        nodes_[n].pre[0] = 0;
-        for (size_t k = 0; k < 27; ++k) nodes_[n].pre[k + 1] = nodes_[n].pre[k] + counts[n][k];
+        lists.push_back(list_words(c));
+        std::sort(lists.back().begin(), lists.back().end());
     }
+    std::vector<std::pair<std::string, uint32_t>> words;
+    for (std::string& w : list_words(list))
+    {
+        uint64_t weight = 1;
+        for (const auto& l : lists)
+            if (std::binary_search(l.begin(), l.end(), w)) weight *= base;
+        if (weight >= (uint64_t(1) << 32)) throw std::invalid_argument("mix-v4: a word counted 2^32 times or more");
+        words.emplace_back(std::move(w), uint32_t(weight));
+    }
+    build(words);
+}
+
+// The trie, from the words and how many each counts: each node's children made next to one another
+// (so a node need keep only which letters it has, and where they start), the counts of the words
+// going on by each letter or ending there summed. The same counts, node for node, as words added one
+// at a time; only where the nodes lie differs, and nothing reads that but the trie.
+void MixDictionary::build(std::vector<std::pair<std::string, uint32_t>>& words)
+{
+    words_ = words.size();
+    std::sort(words.begin(), words.end());
+    nodes_.assign(1, Node{});
+    // fill(lo, hi, depth, n): node n, for the words lo .. hi that share their first `depth` letters.
+    auto fill = [&](auto&& self, size_t lo, size_t hi, size_t depth, size_t n) -> void {
+        uint64_t counts[27] = {};
+        size_t i = lo;
+        for (; i < hi && words[i].first.size() == depth; ++i) counts[0] += words[i].second; // (shorter first, as sorted)
+        // The letters that follow, each a run of words; their nodes made together, then filled.
+        std::pair<size_t, size_t> runs[26]; // (a node has at most 26 children: nothing to allocate)
+        size_t nruns = 0;
+        uint32_t letters = 0;
+        for (size_t j = i; j < hi;)
+        {
+            const char c = words[j].first[depth];
+            size_t k = j;
+            uint64_t sum = 0;
+            for (; k < hi && words[k].first[depth] == c; ++k) sum += words[k].second;
+            counts[size_t(c - 'a' + 1)] = sum;
+            letters |= uint32_t(1) << (c - 'a');
+            runs[nruns++] = {j, k};
+            j = k;
+        }
+        const size_t first = nodes_.size();
+        nodes_.resize(first + nruns);
+        Node& nd = nodes_[n]; // (after the resize: nothing more is added before it is written)
+        nd.letters = letters;
+        nd.first = nruns == 0 ? -1 : int32_t(first);
+        nd.pre[0] = 0;
+        for (size_t k = 0; k < 27; ++k)
+        {
+            const uint64_t v = uint64_t(nd.pre[k]) + counts[k];
+            if (v >= (uint64_t(1) << 32)) throw std::invalid_argument("mix-v4: a word list's counts past 2^32");
+            nd.pre[k + 1] = uint32_t(v);
+        }
+        for (size_t r = 0; r < nruns; ++r) self(self, runs[r].first, runs[r].second, depth + 1, first + r);
+    };
+    fill(fill, 0, words.size(), 0, 0);
 }
 
 void Mix3Params::check() const
@@ -866,6 +953,7 @@ std::vector<uint8_t> mix3_code(std::span<const uint8_t> file, const Mix3Params& 
 
 std::vector<uint8_t> mix3_file(std::span<const uint8_t> code, const Mix3Params& p, const MixDictionary& words, uint64_t size)
 {
+    if (!code_can_make(code, size)) bad3("a file larger than its code can make");
     p.check();
     if (size >= (uint64_t(1) << 32)) bad3("a file of 4 GB or more");
     Mix2Params p2;
@@ -888,13 +976,14 @@ void Mix4Params::check() const
         bad4("a picture 2 to 16,777,216 pixels wide, of 1 to 4 bytes a pixel (I949x1)");
     if (dictionary != 0 && dictionary != 35 && dictionary != 60 && dictionary != 80) bad4("a word list D35, D60 or D80 (scowl-en-35, 60 or 80)");
     if (dictionary && width) bad4("a word list for text, not a picture");
+    if (by_use && dictionary != 80) bad4("a word list counted by use only of scowl-en-80 (F80)");
 }
 
 std::string Mix4Params::text() const
 {
     std::string t = "B" + std::to_string(table_bits);
     if (width) t += " I" + std::to_string(width) + "x" + std::to_string(channels);
-    if (dictionary) t += " D" + std::to_string(dictionary);
+    if (dictionary) t += (by_use ? " F" : " D") + std::to_string(dictionary);
     return t;
 }
 
@@ -906,21 +995,23 @@ Mix4Params Mix4Params::parse(std::string_view t)
     char extra = 0;
     if (std::sscanf(s.c_str(), "B%u I%ux%u%c", &b, &w, &c, &extra) == 3) p.width = w, p.channels = c;
     else if (std::sscanf(s.c_str(), "B%u D%u%c", &b, &d, &extra) == 2) p.dictionary = d;
+    else if (std::sscanf(s.c_str(), "B%u F%u%c", &b, &d, &extra) == 2) p.dictionary = d, p.by_use = true;
     else if (std::sscanf(s.c_str(), "B%u%c", &b, &extra) != 1)
-        bad4("its parameters are written \"B22\", a picture's \"B22 I949x1\", or with a word list \"B22 D60\": " + s);
+        bad4("its parameters are written \"B22\", a picture's \"B22 I949x1\", or with a word list \"B22 D60\" (or by use, \"B22 F80\"): " + s);
     p.table_bits = b;
     p.check();
     if (p.text() != s) bad4("parameters not written as they would be: " + s);
     return p;
 }
 
-Mix4Params Mix4Params::for_size(uint64_t bytes, uint32_t width, uint32_t channels, uint32_t dictionary)
+Mix4Params Mix4Params::for_size(uint64_t bytes, uint32_t width, uint32_t channels, uint32_t dictionary, bool by_use)
 {
     Mix4Params p;
     p.table_bits = MixParams::for_size(bytes).table_bits;
     p.width = width;
     p.channels = width ? channels : 1;
     p.dictionary = dictionary;
+    p.by_use = by_use;
     p.check();
     return p;
 }
@@ -947,6 +1038,7 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
 
 std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size)
 {
+    if (!code_can_make(code, size)) bad4("a file larger than its code can make");
     p.check();
     if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
