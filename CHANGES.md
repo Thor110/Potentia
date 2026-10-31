@@ -1,15 +1,18 @@
-# Proof: the two samples' figures at v32 (commit 7fb58df)
+# STATISTICS: four more at v32 (commit 55e2708)
 
-From your logs of the samples made again:
+| | v31 or v20 | v32 | against 7z |
+| :--- | ---: | ---: | ---: |
+| pi6.txt | 417,052 | **417,049** (1,808 above the floor) | −18.66% |
+| Don Quixote | 533,148 | **524,389** (−1.64%) | −23.56% |
+| 20240407_153939.jpg | 4,557,978 | **4,425,909** | −3.26% |
+| control.py | 731 | **591** | −28.10% |
 
-| Sample | v20 | v32 | |
-| :--- | ---: | ---: | :--- |
-| `degrees.sieve` (3,960 files, 13,321,756 bytes) | 7,887 | **7,865** | 1,694:1, 65.75% under 7z's 22,961 |
-| `welcome to the sieve.sieve` (32 bytes) | 159 | **158** | |
+- **pi:** the rope still wins (416,970, against mixing's 418,822); v32's head took 3 bytes off.
+- **Don Quixote:** mixed with the word list counted by use (F80).
+- **The photographs:** with the boxes off they're carried as their bytes, mixed as pictures: 3.3% to
+  3.6% under 7z. With the temporary box they'd be brunsli, about 20% off (that table is in the
+  section).
+- **control.py:** Try every way lifts mixing's 4 KiB floor, so the script was mixed with F80: 522
+  bytes against LZMA2's 690.
 
-- `degrees.sieve` took 149.3 s to make with Try every way, and installed in 1.787 s.
-- The File Locator's own 7z of the folder (LZMA2 9e, one stream) is 9,226.
-
-**Files:**
-- `Proof/PROOF.md`: both figures.
-- `Proof/STATISTICS.md`: the at-a-glance row and the section on Sieve's own lines.
+Still to come from you: enwik9, Sieve's release, and the source tree.

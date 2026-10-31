@@ -28,15 +28,15 @@ from the sizes given.
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | [Sieve's own release](#the-application-itself) | 44,647,549 | | 6,319,561 | 7.06:1 | |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
-| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,675,870 | 4.61:1 | −16.89% |
+| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,547,893 | 4.64:1 | −17.38% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 186,081,966 | 5.37:1 | −19.14% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
 | [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
-| [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
-| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
-| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,557,978 | 1.01:1 | −0.38% |
-| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 731 | 2.18:1 | −11.07% |
+| [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
+| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 524,389 | 4.56:1 | −23.56% |
+| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,425,909 | 1.04:1 | −3.26% |
+| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,865 | 1,694:1 | −65.75% |
 
 "Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
@@ -88,19 +88,23 @@ Measured on Edward's machine (Windows; an 11th Gen Intel Core i5-11400F, 6 cores
 processors, 32 GB of memory), 28 October 2026, at `sieve-manifest-v31`, made in the File Locator
 with **Try every way** ticked (so the file was mixed whole: without it, mixing is tried only on
 files of 4 KiB to 16 MiB), and made again with **Prioritise Decoding Speed** ticked as well (no
-mixing).
+mixing). Made again at `sieve-manifest-v32` on 31 October 2026, the same way: v32's mixing takes
+the word list counted by use (`F80`).
 
 | Method | Bytes | Ratio | Of the file | Against 7z | Make | Unpack |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | zip | 35,194,836 | 2.84:1 | 35.19% | +34.95% | about 9 s | under 1 s |
 | 7z | 26,080,445 | 3.83:1 | 26.08% | | about 28 s | under 1 s |
-| Sieve, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 630.0 s | 1.241 s, then checked and written in 0.495 s |
-| **Sieve** (`.sieve`), optimised for size | **21,675,870** | **4.61:1** | **21.68%** | **−16.89%** | 691.4 s | 119.643 s, then checked and written in 0.518 s |
+| Sieve v31, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 630.0 s | 1.241 s, then checked and written in 0.495 s |
+| Sieve v32, prioritised for decoding | 24,768,406 | 4.04:1 | 24.77% | −5.03% | 612.3 s | 1.270 s, then checked and written in 0.494 s |
+| Sieve v31, optimised for size | 21,675,870 | 4.61:1 | 21.68% | −16.89% | 691.4 s | 119.643 s, then checked and written in 0.518 s |
+| **Sieve v32** (`.sieve`), optimised for size | **21,547,893** | **4.64:1** | **21.55%** | **−17.38%** | 664.3 s | 112.563 s, then checked and written in 0.527 s |
 | PPMd var. J (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
 
-Optimised for size, Sieve unpacks it at about 0.84 MB a second: mixing decodes as slowly as it
-codes. Prioritised for decoding, it is 14.27% larger than that but still 5.03% under 7z, and
-unpacks in under two seconds in all (1.736 s).
+Optimised for size, Sieve v32 unpacks it at about 0.89 MB a second: mixing decodes as slowly as it
+codes. v32's word list counted by use took 127,977 bytes off v31's (0.59%). Prioritised for
+decoding (no mixing, so no word list), it is 14.95% larger than that but still 5.03% under 7z, and
+unpacks in under two seconds in all (1.774 s).
 
 The times were measured again on 29 October 2026 with **Keep a log** ticked, which records each
 step (the making times are the whole reading: the sizes beside zip and 7z included; the unpacking
@@ -112,7 +116,7 @@ rope search as found (the File Locator kept searches between readings then; it n
 PPMd's figure is not measured here: it is `enwik8.pmd`, which the benchmark offers as a download
 on its page about the test data (<https://mattmahoney.net/dc/textdata.html>, last updated 1
 September 2011), made by PPMd var. J at its strongest (`-m256 -o10 -r1`, 256 MB of memory). Sieve
-optimised for size is 287,574 bytes (1.34%) larger than it.
+optimised for size is 159,597 bytes (0.75%) larger than it at v32 (287,574, 1.34%, at v31).
 
 **Where that sits in the benchmark.** The [Large Text Compression
 Benchmark](https://mattmahoney.net/dc/text.html) (its table as updated 14 October 2026) ranks
@@ -132,7 +136,7 @@ published (sizes in bytes; its times are on other machines, so they are left out
 | bzip2 1.0.2 `-9` | 29,008,736 | 253,977,839 |
 | gzip 1.3.5 `-9` | 36,445,248 | 322,591,995 |
 
-On enwik8, Sieve optimised for size (21,675,870) falls between PPMd and xz at its strongest; the
+On enwik8, Sieve optimised for size (21,547,893 at v32) falls between PPMd and xz at its strongest; the
 context-mixing programs at the top, made for this kind of test and far slower, are about a third
 smaller. The table's leaders now (transformer models, about 92 MB on enwik9) give no enwik8 figure. For Sieve, the
 program that unpacks is `sieve-install`.
@@ -291,10 +295,10 @@ stress test, since digits of pi are as close to random as text gets.
 | :--- | ---: | ---: |
 | pi6.txt, the original | 1,111,103 | 1,114,112 |
 | pi6.7z | 512,745 | 516,096 |
-| pi6.txt.sieve, the latest | **417,052** | 417,792 |
+| pi6.txt.sieve, the latest (v32) | **417,049** | |
 
 **The floor.** A million digits treated as random hold 1,000,000 × log₂10 ÷ 8 = **415,241** bytes of
-information, and no file of them can be smaller on average. The latest `.sieve` is **1,811 bytes**
+information, and no file of them can be smaller on average. The latest `.sieve` is **1,808 bytes**
 above it, within 0.44%. Its progress, from an early v4 to the newest version of the format (its
 overhead and filter settings):
 
@@ -306,7 +310,12 @@ overhead and filter settings):
 | | 419,096 | 421,888 | +0.9284% | −0.9198% | −18.26% |
 | | 417,139 | 417,792 | +0.4571% | −0.4550% | −18.65% |
 | Another step's reductions | 417,061 | 417,792 | +0.4383% | −0.4364% | −18.66% |
-| The rope wave updated | **417,052** | 417,792 | +0.4361% | −0.4342% | −18.66% |
+| The rope wave updated | 417,052 | 417,792 | +0.4361% | −0.4342% | −18.66% |
+| v32's smaller head (31 October 2026) | **417,049** | | +0.4354% | −0.4335% | −18.66% |
+
+The v32 figure was made on Edward's machine with Try every way (in 11.4 s; installed in 0.04 s): the
+rope, 416,970 bytes, came under mixing (418,822) and LZMA2 (507,033), as before, and v32's head took
+3 bytes off.
 
 "Above the floor" is how much larger than 415,241 bytes the file is, as a share of the floor; "the
 floor below it" is how much smaller the floor is, as a share of the file; "against 7z" is how much
@@ -320,13 +329,18 @@ smaller the `.sieve` is than `pi6.7z` (512,745 bytes).
 | :--- | ---: | ---: | ---: | ---: |
 | pg996.txt | 2,391,678 | 2,392,064 | | |
 | pg996.7z | 686,020 | 688,128 | 3.49:1 | |
-| pg996.txt.sieve | 533,148 | | 4.49:1 | −22.28% |
+| pg996.txt.sieve, v31 | 533,148 | | 4.49:1 | −22.28% |
+| **pg996.txt.sieve, v32** | **524,389** | | **4.56:1** | **−23.56%** |
 
 The `.sieve` was measured again on 30 October 2026, at `sieve-manifest-v31` (mixed, with the word
 list), with Sieve 0.13.77's `sieve locate pg996.txt --installer` at its defaults: 533,148 bytes,
 installed back identical. That is the size HANDOFF gives for it at v28. The 683,205 shown here
 before was from before mixing (v23 gave 683,195). On the Linux machine here it took 13.3 s to make
 and 5.3 s to install; its size on disk was not measured.
+
+Made again at `sieve-manifest-v32` on 31 October 2026, on Edward's machine with Try every way: **524,389
+bytes**, 8,759 (1.64%) under v31's, mixed with v32's word list counted by use (`mix4 B22 F80`, 524,319
+of it the file). It took 21.8 s to make and 2.9 s to install.
 
 ## Photographs (JPEG)
 
@@ -343,7 +357,19 @@ The `.jpg.sieve` column was measured again on 30 October 2026 (Sieve 0.13.77, `s
 its defaults, from Edward's originals); the `.7z.sieve` column and the sizes on disk are from the
 first measurement.
 
-**What a JPEG recompressor takes off (v32 in the making; NEXT-VERSION §4a).** The same three files,
+**At `sieve-manifest-v32`, 31 October 2026,** made on Edward's machine with Try every way and the
+Compressed formats boxes off (so each JPEG is carried as its bytes, not as its brunsli form). Each
+was mixed as a picture of the shape its bytes suggest, 3% to 4% under the original:
+
+| | Original | `.jpg.sieve`, v32 | Against 7z | Made in | Installed in |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| A picture at 3653×5480 | 3,844,213 | 3,716,743 | −3.31% | 51 s | 4.4 s |
+| 20230830_163945.jpg | 4,139,682 | 3,980,423 | −3.56% | 52 s | 4.7 s |
+| 20240407_153939.jpg | 4,587,473 | 4,425,909 | −3.26% | 60 s | 5.0 s |
+
+With the temporary box ticked, v32 carries each as its brunsli form (the table below: about 20% off).
+
+**What a JPEG recompressor takes off (now v32's `jbr`; NEXT-VERSION §4a).** The same three files,
 the same day, each given back byte for byte:
 
 | | Original | brunsli | `cjxl --lossless_jpeg=1 -e 9` |
@@ -353,7 +379,7 @@ the same day, each given back byte for byte:
 | 20240407_153939.jpg | 4,587,473 | 3,660,016 (−20.22%) | 3,703,771 (−19.26%) |
 
 brunsli made each in 0.6 to 0.9 s and gave it back in about 0.5 s; `cjxl` took about 6.3 s and gave
-it back in about 0.2 s. Neither is in Sieve yet.
+it back in about 0.2 s. brunsli is in Sieve now, as v32's `jbr`, under the Compressed formats boxes.
 
 On disk:
 
@@ -374,12 +400,18 @@ Of the 731, 670 are the file packed; the rest is 5 bytes of `sieve`, the version
 the stream's sizes and dictionary, the 32-byte SHA-256, and 17 for the listing (its name, size and
 way). The `.7z.sieve` row is from the first measurement and was not measured again.
 
+**At `sieve-manifest-v32`, 31 October 2026** (Edward's machine, Try every way): **591 bytes**, 28.10%
+under the 7z. Try every way lifts mixing's 4 KiB floor, so the script was mixed with the word list
+counted by use (`mix4 B16 F80`): 522 bytes against LZMA2's 690. The other 69 bytes are the head, the
+listing (with mixing's parameters, longer than `raw`) and the code's length.
+
 | | Bytes | Against 7z |
 | :--- | ---: | ---: |
 | control.py | 1,597 | |
 | control.7z | 822 | |
 | control.7z.sieve | 959 | +16.67% |
-| control.py.sieve | 731 | −11.07% |
+| control.py.sieve, v20 | 731 | −11.07% |
+| **control.py.sieve, v32** | **591** | **−28.10%** |
 
 All four take one cluster on disk, 4,096 bytes.
 

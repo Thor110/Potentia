@@ -36,7 +36,7 @@ checked to be the same, byte for byte, before and after.
 | :--- | ---: | ---: | ---: |
 | WoWRevived (a game, mostly compressed already) | 1,075,924,966 | 7z 1,073,748,445 | +0.20% |
 | A 1,597-byte script (`control.py`), first measured | 832 | 7z 822 | +1.22% (now 731, −11.07%: §4a) |
-| enwik8, optimised for size | 21,675,870 | PPMd var. J 21,388,296 | +1.34% |
+| enwik8, optimised for size | 21,675,870 (v32, 31 October: 21,547,893) | PPMd var. J 21,388,296 | +1.34% (v32: +0.75%) |
 | enwik9, optimised for size | 186,081,966 | PPMd var. J 183,964,915 | +1.15% |
 | enwik8 against the context-mixing programs | 21,675,870 | cmix v21 14,623,723 | "about a third smaller" |
 | The `sieve` program and the docs (8.4 MB, IDEAS §19.95), 22 October | 2,949,958 | 7z 2,836,214 | 7z ahead then, its x86 filter BCJ2 (30 October, 12.7 MB: Sieve 4,159,742 against a BCJ 7z's 4,277,050, 2.74% smaller) |

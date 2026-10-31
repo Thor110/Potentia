@@ -73,8 +73,9 @@ Sieve ships nest. So no new file was needed: each word of scowl-en-80 counts 4,0
 holds it, 64 if only scowl-en-60 does, else 1 (mix-v4's `F80`).
 - Against today's scowl-en-60: Don Quixote's first 800 KB 193,808 bytes to 188,719 (−2.6%); 200 KB
   of HANDOFF −1.8%; three small texts −5.6% to −8.8% (NEXT-VERSION §4a, 5).
-- Still to measure: enwik8 and enwik9, where the gap to PPMd var. J is 1.34% (21,675,870 against
-  21,388,296) and 1.15%.
+- *enwik8 at v32 (Edward, 31 October):* 21,675,870 → 21,547,893 bytes (−0.59%). The gap to PPMd
+  var. J (21,388,296) went from 1.34% to 0.75%. Installed in 113.1 s.
+- Still to measure: enwik9, where the gap is 1.15%.
 - A finer ranking (SCOWL's sizes 10 to 95, or real counts) would need new pinned files.
 
 **C.2 A progressive JPEG under permanent** (*measured 31 October*, FORMATS.md). Two ways were open:
