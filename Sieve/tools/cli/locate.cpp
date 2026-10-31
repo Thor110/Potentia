@@ -793,7 +793,7 @@ uint32_t dictionary_of_byte(uint8_t p)
     return p == 40 ? 0xFFFFFFFFu : (2u | (p & 1u)) << (p / 2 + 11);
 }
 
-// v32 (in the making): the LZMA2 dictionary a stream's size gives, the one the packer chooses: the
+// v32: the LZMA2 dictionary a stream's size gives, the one the packer chooses: the
 // smallest 2 or 3 times a power of two that holds it, at least 4 KiB, at most 64 MiB.
 uint32_t lzma2_dictionary_for(uint64_t n)
 {
@@ -1114,9 +1114,9 @@ static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst",
                                               "sk", // (v21: 18, a skeleton and what it holds: a gzip, zip or 7z made again)
                                               "stb", // (v25: 19, a PNG stb_image_write made, made again from its pixels)
                                               "skm", // (v31: 20, a skeleton, what it holds carried as its own files)
-                                              "jbr", // (v32, in the making: 21, a JPEG made again from its brunsli form)
-                                              "pngr", // (v32, in the making: 22, a PNG re-saved at its smallest from its head and rows)
-                                              "skr"}; // (v32, in the making: 23, a PNG made again exactly, its rows carried unfiltered)
+                                              "jbr", // (v32: 21, a JPEG made again from its brunsli form)
+                                              "pngr", // (v32: 22, a PNG re-saved at its smallest from its head and rows)
+                                              "skr"}; // (v32: 23, a PNG made again exactly, its rows carried unfiltered)
 
 int archive_format_number(const std::string& name)
 {
@@ -1144,7 +1144,7 @@ static void put_text(std::vector<uint8_t>& o, std::string_view t)
     o.insert(o.end(), t.begin(), t.end());
 }
 
-// v32 (in the making): a recipe's word in the listing in bytes: a varint of twice the number for a
+// v32: a recipe's word in the listing in bytes: a varint of twice the number for a
 // word that is a number as Sieve writes one (digits only, no leading zero, below 2^62), else of twice
 // its length and one, then the word.
 static bool plain_number(std::string_view w)
@@ -1390,7 +1390,7 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
     };
     if (m.v32)
     {
-        // v32 (in the making): each stream in its v32 form (put_stream_v32), the file's last part's
+        // v32: each stream in its v32 form (put_stream_v32), the file's last part's
         // packed size left out.
         if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::logic_error("streams whose sizes do not add up");
         const std::span<const uint8_t> all(m.streams);
@@ -1636,7 +1636,7 @@ Manifest Manifest::parse(std::string_view whole)
             }
             return PackedStream{packed, bytes, dictionary_of_byte(b)};
         };
-        // v32 (in the making): each stream in its v32 form (put_stream_v32), its line made once the
+        // v32: each stream in its v32 form (put_stream_v32), its line made once the
         // head is read, since the file's last part's size is what is left of the file.
         struct Part32
         {
@@ -2103,9 +2103,9 @@ Manifest Manifest::parse(std::string_view whole)
             const bool sk = m.v21 && e.way.rfind("sk ", 0) == 0;
             const bool stb = m.v25 && e.way.rfind("stb ", 0) == 0;
             const bool skm = m.v31 && e.way.rfind("skm ", 0) == 0;
-            const bool jbr = m.v32 && e.way.rfind("jbr ", 0) == 0; // v32 (in the making): "jbr <form size> <way>"
-            const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32 (in the making): "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
-            const bool skr = m.v32 && e.way.rfind("skr ", 0) == 0; // v32 (in the making): "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>"
+            const bool jbr = m.v32 && e.way.rfind("jbr ", 0) == 0; // v32: "jbr <form size> <way>"
+            const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32: "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
+            const bool skr = m.v32 && e.way.rfind("skr ", 0) == 0; // v32: "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>"
             if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>

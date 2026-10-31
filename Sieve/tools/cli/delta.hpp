@@ -1,4 +1,4 @@
-// Sieve CLI -- a file as its differences from another (delta-v1; sieve-manifest-v32, in the making).
+// Sieve CLI -- a file as its differences from another (delta-v1; sieve-manifest-v32).
 //
 // A delta-v1 script makes a file from a base file: a run of operations, each a varint t:
 //   t even, t/2 >= 1: t/2 new bytes follow, written as they are;

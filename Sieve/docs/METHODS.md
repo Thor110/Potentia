@@ -39,7 +39,7 @@ carried as its contents and installed as them. The kinds:
 - gzip and zip: made again by preflate from their skeleton;
 - 7z and zip: made again from their skeleton and the data they hold;
 - RAR 5: made again by the machine's own `rar`, where that gives it back byte for byte;
-- PNG: made again from its skeleton (with the draft and permanent, re-saved at its smallest: §2a);
+- PNG: made again from its skeleton (with permanent, re-saved at its smallest: §2a);
 - lzip: carried as its contents.
 
 Every format, and what each method does to it, is in [FORMATS.md](FORMATS.md).
@@ -47,10 +47,9 @@ Every format, and what each method does to it, is in [FORMATS.md](FORMATS.md).
 Before the costly search for the levels that make an archive's blocks again, its contents are
 weighed cheaply, and the search is not started where they would come out no smaller.
 
-## 2a. Files alike (v32 in the making, only with `--v32-draft`)
+## 2a. Files alike, and pictures recoded (v32)
 
-With the draft switch (`--v32-draft`, `[locator] v32_draft`), a file over 8 MiB carried as it is
-may be **written as its differences from another file of the folder** (the `delta` way, delta-v1):
+From v32 (`--v31` and older make none of this), a file over 8 MiB carried as it is may be **written as its differences from another file of the folder** (the `delta` way, delta-v1):
 
 - **Finding the pair:** each such file is cut into blocks where its content says (about every 4
   KiB), one fingerprint a block. A file whose blocks are mostly another's is paired with it.
@@ -65,7 +64,7 @@ Log: `file N of M: NAME, S bytes: as its differences from OTHER: C copies coveri
 bytes, a script of L bytes in the lzma2 stream`, then `not searched (carried as its differences from
 OTHER (above))`.
 
-With the draft too, PNGs and JPEGs are packed under the **Compressed formats** boxes, as the other
+PNGs and JPEGs are packed under the **Compressed formats** boxes, as the other
 compressed formats are ([FORMATS.md](FORMATS.md)):
 
 | | no box | temporary | permanent |
@@ -127,8 +126,8 @@ many as the threads and memory allow, and the result is the same at any thread c
      - as bytes;
      - as a picture: the rope's shape where its best wave reads the file as one, or a shape guessed
        from its bytes;
-     - for a text, with an English word list (SCOWL's size 60; with the draft, size 80 with each
-       word counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start).
+     - for a text, with an English word list (from v32, SCOWL's size 80 with each word
+       counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start; v31, size 60).
    - It is then mixed whole only where that start came out at least 3% under LZMA2's.
    - Not tried for a file under 4 KiB or over 16 MiB, nor with **Prioritise decoding speed** ticked.
    - With **Try every way**, every file is mixed whole, of any size, with no test first.

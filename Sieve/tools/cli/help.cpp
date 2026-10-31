@@ -411,7 +411,7 @@ const std::vector<Page>& pages()
           {"--words N", "Text with a word list's model: the registered SCOWL list of size N (35, 60 or 80;\n"
                         "scowl-en-N, its SHA-256 checked): from the word so far, the letters the list has next\n"
                         "give each bit a probability. Its parameters \"B22 D60\" (with --v2: mix-v3)."},
-          {"--by-use", "With --words 80: each word counted by how common it is (sieve-manifest-v32 in the making):\n"
+          {"--by-use", "With --words 80: each word counted by how common it is (sieve-manifest-v32):\n"
                        "4,096 a word of scowl-en-35, 64 one of scowl-en-60 only, 1 the rest. \"B22 F80\"."},
           {"--params B", "The tables' size, 2^B counters each, B16 to B22 (else chosen by the file's size), and a\n"
                          "picture's shape or a word list as above: \"B22\", \"B22 I949x1\", \"B22 D60\"."},
@@ -1043,6 +1043,9 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v31", "As sieve-manifest-v31 at newest: no file carried as its differences from another, no JPEG\n"
+                    "as its brunsli form, no PNG re-saved or its rows carried unfiltered, mixing's word list\n"
+                    "not counted by use, and v31's head (v32)."},
           {"--v30", "As sieve-manifest-v30 at newest: an archive made again from its skeleton carries what it\n"
                     "holds as one (v21's way), not as its own files (v31)."},
           {"--v29", "As sieve-manifest-v29 at newest: no groups of files mixed together (v30)."},
@@ -1057,8 +1060,8 @@ const std::vector<Page>& pages()
                                      "again is left as it is. With --compressed-permanent, or as --optimise-compressed: either."},
           {"--compressed-permanent", "Optimise Compressed Formats, permanent (v31): an archive or compressed file carried as what it\n"
                                      "holds, and installed so (its files, not the archive), even where Sieve could make it again.\n"
-                                     "With --v32-draft, a PNG or JPEG is installed as the same picture, smaller: a PNG re-saved\n"
-                                     "at its smallest, a JPEG with tables made for its values (else made again exactly)."},
+                                     "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
+                                     "smallest, a JPEG with tables made for its values (else made again exactly)."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},
@@ -1098,12 +1101,7 @@ const std::vector<Page>& pages()
                                     "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
-          {"--v32-draft", "sieve-manifest-v32 in the making (docs/NEXT-VERSION.md), for testing only: its ways are\n"
-                          "made too (a file carried as its differences from another of the folder, where it is\n"
-                          "mostly that file; with the Compressed Formats boxes, a JPEG as its brunsli form, and with\n"
-                          "permanent a PNG re-saved and a JPEG's tables optimised, the same pictures, smaller).\n"
-                          "Without it, instructions are made as before. What it makes is a\n"
-                          "draft: not to be published, and the finished v32 need not read it."},
+          {"--v32-draft", "(v32 is the newest now; kept so older command lines work: it changes nothing.)"},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},
@@ -1282,10 +1280,10 @@ const std::vector<Page>& pages()
 
         {"alike", "How much of one file another holds, as v32's delta way would find it.",
          "sieve alike BASE FILE",
-         "v32 in the making (docs/NEXT-VERSION.md): cuts both files into blocks where their content\n"
-         "says, counts how much of FILE's bytes are in blocks BASE has too, and writes FILE as copies\n"
-         "from BASE and new bytes, as the delta way does (delta-v1), saying what that comes to and\n"
-         "whether the packer, with --v32-draft, would carry FILE so. Nothing is written. For a pair\n"
+         "Cuts both files into blocks where their content says (v32's delta way), counts how much\n"
+         "of FILE's bytes are in blocks BASE has too, and writes FILE as copies from BASE and new\n"
+         "bytes, as the delta way does (delta-v1), saying what that comes to and whether the\n"
+         "packer would carry FILE so. Nothing is written. For a pair\n"
          "such as a game's two maps, in seconds instead of packing the whole folder.",
          {},
          {{"sieve alike MAPS.WoW MAPS-Larger.WoW", "how much of the larger map the smaller holds"}}},

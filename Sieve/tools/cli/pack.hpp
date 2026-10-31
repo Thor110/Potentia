@@ -139,16 +139,11 @@ struct SampleAsWhole
     SampleAsWhole& operator=(const SampleAsWhole&) = delete;
 };
 
-// The newest level of the packer's ways (the rope's waves, mixing, groups, archives' members): 14,
-// sieve-manifest-v31.
+// The newest level of the packer's ways (the rope's waves, mixing, groups, archives' members, files
+// alike, JPEGs and PNGs recoded, mixing's word list counted by use, the smaller head): 15,
+// sieve-manifest-v32 (frozen 31 October 2026); 14 is v31's.
 // Everything that makes instructions passes it unless an older version is asked for by name.
-inline constexpr uint32_t kNewestRope = 14;
-
-// v32 in the making (docs/NEXT-VERSION.md): its ways are made only with the draft switch on
-// (`--v32-draft`), so every build writes v31 as before until v32 is frozen. For testing only:
-// nothing made with it is to be published, and the finished v32 need not read it.
-void set_v32_draft(bool on);
-bool v32_draft();
+inline constexpr uint32_t kNewestRope = 15;
 
 // What Optimise Compressed Formats does with an archive or a compressed file, for the whole run:
 // `temporary`, made again exactly on installing, so the program that wants it still finds it (only

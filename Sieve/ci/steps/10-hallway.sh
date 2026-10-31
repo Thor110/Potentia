@@ -320,9 +320,10 @@ build/sieve install degrees-v16.sieve --to deg_inst16 > /dev/null
 diff -r degrees deg_inst16
 python reference/sieve_ref.py unpack degrees-v16.manifest --items-from degrees --to deg_oracle16 > /dev/null
 diff -r degrees deg_oracle16
-# sieve-manifest-v20 (the newest): the body in bytes too, its "line" lines (which hold tabs) kept as
-# they are; no larger than v16, and every file back, by sieve install, the oracle and sieve-install.
-build/sieve locate degrees --installer degrees-v20.sieve --items --manifest degrees-v20.manifest | tr -d '\r' > d20.txt
+# sieve-manifest-v20 (the newest until v32, so --v31): the body in bytes too, its "line" lines (which
+# hold tabs) kept as they are; no larger than v16, and every file back, by sieve install, the oracle
+# and sieve-install.
+build/sieve locate degrees --v31 --installer degrees-v20.sieve --items --manifest degrees-v20.manifest | tr -d '\r' > d20.txt
 q "^head      [0-9]* bytes in bytes, the listing [0-9]* as text (sieve-manifest-v20; its body in bytes too)$" d20.txt
 python -c "d = open('degrees-v20.manifest', 'rb').read(); assert d[:6] == b'sieve\x14', d[:6]"
 [ "$(wc -c < degrees-v20.sieve)" -le "$(wc -c < degrees-v16.sieve)" ]
@@ -375,8 +376,9 @@ cmp ub_one/model.safetensors ub_named_inst/sieve-ai-16432c2a3953.safetensors
 rm -rf ub_named16 ub_inst16 ub_oracle16
 build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file16.sieve --items --v19 > /dev/null
 [ "$(wc -c < ub-file16.sieve)" -eq 4185 ]
-# v20 (the newest): its body in bytes, 4,182 (its "line" lines four bytes shorter each, its entry too).
-build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file20.sieve --items > /dev/null
+# v20 (the newest until v32, so --v31): its body in bytes, 4,182 (its "line" lines four bytes shorter
+# each, its entry too).
+build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --v31 --installer ub-file20.sieve --items > /dev/null
 [ "$(wc -c < ub-file20.sieve)" -eq 4182 ]
 rm -rf ub_named20 && build/sieve install ub-file20.sieve --to ub_named20 > /dev/null
 cmp ub_one/model.safetensors ub_named20/sieve-ai-16432c2a3953.safetensors
@@ -395,7 +397,7 @@ cmp ub_one/model.safetensors ub_oracle16/model.safetensors
 # alphabet is the default and goes; the length is not and stays), read back by both.
 rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
 python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
-build/sieve locate pg64 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
+build/sieve locate pg64 --v31 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
 [ "$(wc -c < pg64.sieve)" -eq 339 ] # LZMA2's settings chosen for its listing (v16 345; v7, its listing as text: 422)
 # (v20, its body as text after all, the head's flag 128: five near-alike lines pack smaller as text.)
 python -c "d = open('pg64.manifest', 'rb').read(); assert d[:6] == b'sieve\x14' and d[6] & 128, d[:7]"

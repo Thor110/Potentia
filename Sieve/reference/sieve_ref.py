@@ -2758,7 +2758,7 @@ def list_words(data):
 def mix_word_list(n, by_use=False):
     """mix-v3's word list: the registered SCOWL list of size n as a trie: each node's children by
     letter and its counts of words going on by the end (as a space) and each letter. Each word
-    counts 1; with by_use (SPECIFICATIONS v32, a draft: mix-v4's "F80", n 80 only), 64 to the power
+    counts 1; with by_use (SPECIFICATIONS v32: mix-v4's "F80", n 80 only), 64 to the power
     of how many of scowl-en-35 and scowl-en-60 hold it (4,096, 64 or 1)."""
     words = list_words(registered_list(n))
     if by_use:
@@ -2782,7 +2782,7 @@ def mix_word_list(n, by_use=False):
 
 def mix4_file(code, params, size, v32=False):
     """mix-v4: mix-v2 (or, with " D<n>", mix-v3) without the SSE stages (sse-v1, retired): the mixers'
-    average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"; in v32 (a draft) also
+    average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"; in v32 also
     "B22 F80", scowl-en-80 counted by use."""
     m = re.fullmatch(r"B(1[6-9]|2[0-2])(?: I[1-9][0-9]*x[1-4]| D(35|60|80)| (F80))?", params)
     if not m or (m.group(3) and not v32):
@@ -6739,7 +6739,7 @@ def listing_from_bytes(b, v32=False):
             if not v32:
                 rest = text()
             else:
-                # v32 (a draft): each word after the kind a varint, twice the number for a number as
+                # v32: each word after the kind a varint, twice the number for a number as
                 # Sieve writes one, else twice its length and one, then the word.
                 words = []
                 for _ in range(RECIPE_WORDS[kind.decode()] - 1):
@@ -6815,7 +6815,7 @@ def v16_text(data):
     import lzma
     if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 32):
         return data
-    v32 = data[5] == 32  # v31 whose files may be carried as their differences from another (a draft)
+    v32 = data[5] == 32  # v31 whose files may be carried as their differences from another
     v31 = data[5] == 31 or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = data[5] == 30 or v31  # v29 whose files may be mixed together in groups
     v29 = data[5] == 29 or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
@@ -6878,7 +6878,7 @@ def v16_text(data):
         return 64 << 20
 
     def stream32(name, last):
-        """v32 (a draft): a stream in the head: its packed size (left out for the file's last part:
+        """v32: a stream in the head: its packed size (left out for the file's last part:
         what is left of the file), then its size times 4 and its form: 0 LZMA2 with the dictionary
         its size gives; 1 as before, a byte after; 2 one LZMA2 chunk's data alone, lc 3 lp 0 pb 2;
         3 the same with its settings' byte after."""
@@ -7046,7 +7046,7 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v32 = lines[0] == "sieve-manifest-v32"  # v31 whose files may be carried as their differences from another (a draft)
+    v32 = lines[0] == "sieve-manifest-v32"  # v31 whose files may be carried as their differences from another
     v31 = lines[0] == "sieve-manifest-v31" or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = lines[0] == "sieve-manifest-v30" or v31  # v29 whose files may be mixed together in groups (mix-v4)
     v29 = lines[0] == "sieve-manifest-v29" or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
@@ -7223,7 +7223,7 @@ def cmd_unpack_v7(args, data):
             remakes[i] = ("stb", size)
             size = int(n)
         if v32 and way.startswith("jbr "):
-            # "jbr <form size> <way>" (SPECIFICATIONS v32, a draft): a JPEG made again from its brunsli
+            # "jbr <form size> <way>" (SPECIFICATIONS v32): a JPEG made again from its brunsli
             # form, by brunsli (which the oracle has not): the recipe read and checked, the file not made.
             _, n, way = way.split(" ", 2)
             if not re.fullmatch(r"[1-9][0-9]*", n) or \
@@ -7244,7 +7244,7 @@ def cmd_unpack_v7(args, data):
             size = int(n)
         if v32 and way.startswith("skr "):
             # "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>" (SPECIFICATIONS
-            # v32, a draft): a PNG made again exactly from its skeleton (as "sk"), its rows carried
+            # v32): a PNG made again exactly from its skeleton (as "sk"), its rows carried
             # unfiltered, then their filter bytes, then the skeleton: filtered again here, the skeleton's
             # inner bytes made as "sk" carries them.
             _, skel, rb, pb, rows, n, way = way.split(" ", 6)
@@ -7485,10 +7485,10 @@ def cmd_unpack_v7(args, data):
         if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
-        if r[0] == "pngr":  # v32 (a draft): the PNG re-saved, by zlib
+        if r[0] == "pngr":  # v32: the PNG re-saved, by zlib
             got[i] = pngr_make(got[i], r[1], r[2], r[3], r[4], files[i][0])
             continue
-        if r[0] == "skr":  # v32 (a draft): the rows filtered again, then as "sk"
+        if r[0] == "skr":  # v32: the rows filtered again, then as "sk"
             _, skel, rb, pb, rows, size = r
             made = skeleton_remake(skr_sk_inner(got[i], skel, rb, pb, rows, files[i][0]), skel, files[i][0])
             if made is None:
@@ -7620,7 +7620,7 @@ def png_filtered(t, row, prior, bpp):
 
 
 def skr_sk_inner(inner, skel, rb, pb, rows, path):
-    """SPECIFICATIONS v32 (a draft), "skr": what "sk" would carry for the PNG (its skeleton, then each
+    """SPECIFICATIONS v32, "skr": what "sk" would carry for the PNG (its skeleton, then each
     row with its filter byte, filtered), from the rows unfiltered, their filter bytes and the skeleton."""
     if len(inner) != (rb + 1) * rows + skel:
         sys.exit(f"{path}: an unfiltered PNG whose recipe and bytes do not agree")
@@ -7637,7 +7637,7 @@ def skr_sk_inner(inner, skel, rb, pb, rows, path):
 
 
 def pngr_make(inner, filt, strat, split, head, path):
-    """SPECIFICATIONS v32 (a draft): a PNG re-saved from its head (the PNG without its IDATs) and its
+    """SPECIFICATIONS v32: a PNG re-saved from its head (the PNG without its IDATs) and its
     rows unfiltered. Filter 0 to 4 for every row, or 5 for each row the filter whose bytes, read as
     signed, sum to the least (the lower of equals); deflated by zlib at level 9, memory level 9, a
     window of 15 bits, strategy 0 its default or 1 its filtered; one IDAT, at `split` bytes into the

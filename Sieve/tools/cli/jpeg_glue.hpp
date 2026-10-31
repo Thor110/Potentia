@@ -1,4 +1,4 @@
-// Sieve CLI -- a JPEG made again exactly from its brunsli form (v32 in the making, `jbr`).
+// Sieve CLI -- a JPEG made again exactly from its brunsli form (v32, `jbr`).
 //
 // brunsli (Google, MIT; third_party_licenses/brunsli), pinned in CMakeLists.txt: a JPEG's own coded
 // values recoded by a model made for them, given back byte for byte. Measured on ten original JPEGs

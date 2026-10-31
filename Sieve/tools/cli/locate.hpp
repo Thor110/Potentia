@@ -207,8 +207,7 @@ inline constexpr const char* kMixGroupsManifestVersion = "sieve-manifest-v30";
 // as the archive's own files, one listing entry each ("skm <members> <skeleton size> <way>"; the
 // members "<archive>/<n>", in the archive's order), so each is carried its own way.
 inline constexpr const char* kSkeletonMembersManifestVersion = "sieve-manifest-v31";
-// v32 (in the making, behind the draft switch: see docs/NEXT-VERSION.md; nothing made with it is to
-// be published until v32 is frozen): a file carried as its differences from another file of the
+// v32 (frozen 31 October 2026; docs/NEXT-VERSION.md): a file carried as its differences from another file of the
 // folder, "delta <K> <L>": file K of the listing (not itself a delta), its L-byte script next in the
 // lzma2 stream at the file's turn, applied once every other file is made (delta-v1: SPECIFICATIONS
 // §12.2, sieve-manifest-v32).
@@ -367,7 +366,7 @@ std::string tree_sha256(const Manifest& m);
 struct Manifest;
 std::string listing_body(const Manifest& m);
 // v20: the body in bytes, and back (locate.cpp says how); and the archives' formats by number.
-// (v32, in the making: each recipe word after its kind a number where it is one; locate.cpp's put_way.)
+// (v32: each recipe word after its kind a number where it is one; locate.cpp's put_way.)
 std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32 = false);
 std::string listing_from_bytes(std::string_view bytes, bool v32 = false);
 int archive_format_number(const std::string& name);

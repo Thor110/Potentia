@@ -1835,7 +1835,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
 {
     if (recipe.rfind("jbr ", 0) == 0)
     {
-        // "jbr <form size>" (v32, in the making): a JPEG made again from its brunsli form.
+        // "jbr <form size>" (v32): a JPEG made again from its brunsli form.
         unsigned long long size = 0;
         char extra = 0;
         if (std::sscanf(recipe.c_str(), "jbr %llu%c", &size, &extra) != 1 || size != inner.size())
@@ -1844,7 +1844,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("pngr ", 0) == 0)
     {
-        // "pngr <filter> <strategy> <split> <head size> <inner size>" (v32, in the making): a PNG
+        // "pngr <filter> <strategy> <split> <head size> <inner size>" (v32): a PNG
         // re-saved at its smallest, from its head and its rows unfiltered (png_resave.hpp).
         int filter = 0, strategy = 0;
         unsigned long long split = 0, head = 0, size = 0;
@@ -1868,7 +1868,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("skr ", 0) == 0)
     {
-        // "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>" (v32, in the making): a PNG
+        // "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>" (v32): a PNG
         // made again exactly from its skeleton, its rows carried unfiltered: filtered again by their
         // filter bytes, then made as "sk" makes it (png_resave.hpp).
         unsigned long long skeleton = 0, size = 0, n = 0, bpp = 0, h = 0;
@@ -2473,12 +2473,6 @@ namespace {
 std::atomic<bool> g_compressed_temporary{true}, g_compressed_permanent{true};
 } // namespace
 
-namespace {
-std::atomic<bool> g_v32_draft{false};
-}
-void set_v32_draft(bool on) { g_v32_draft = on; }
-bool v32_draft() { return g_v32_draft.load(std::memory_order_relaxed); }
-
 void set_compressed_modes(bool temporary, bool permanent)
 {
     g_compressed_temporary = temporary;
@@ -2519,7 +2513,7 @@ std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton(cons
     return std::make_pair(std::move(whole), std::move(r));
 }
 
-// v32 (in the making): as png_by_skeleton, its rows carried unfiltered ("skr", png_resave.hpp)
+// v32: as png_by_skeleton, its rows carried unfiltered ("skr", png_resave.hpp)
 // where they can be; else as png_by_skeleton made it. Checked before it is kept: the rows filtered
 // again give exactly what png_by_skeleton carries, which it checked gives the PNG back.
 std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton_unfiltered(const std::vector<uint8_t>& b)
@@ -2594,29 +2588,29 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool mix_stream_on = rope_newest >= 12;
     // v30's (files mixed together in groups, decoded at once): rope_newest 13, in v29's together's place.
     const bool mix_groups_on = rope_newest >= 13;
-    // v32 (in the making): mixing's word list scowl-en-80 with each word counted by how common it is
-    // ("F80"), in scowl-en-60's place, only with the draft switch. Measured on five English texts
+    // v32: mixing's word list scowl-en-80 with each word counted by how common it is
+    // ("F80"), in scowl-en-60's place. Measured on five English texts
     // against scowl-en-60: 1.8% to 8.8% smaller (Don Quixote's first 800 KB 193,808 bytes to 188,719).
-    const bool by_use_on = mix4_on && rope_newest >= 14 && v32_draft();
-    // v32 (in the making): mixing weighs a PNG's pixels as a picture of the shape its recipe gives
+    const bool by_use_on = mix4_on && rope_newest >= 15;
+    // v32: mixing weighs a PNG's pixels as a picture of the shape its recipe gives
     // (recipe_shape), a way every reader since v26 reads (ROADMAP D.2).
-    const bool pixels_shape_on = mix2_on && rope_newest >= 14 && v32_draft();
+    const bool pixels_shape_on = mix2_on && rope_newest >= 15;
     const uint32_t word_size = by_use_on ? 80 : 60, word_key = by_use_on ? (80 | kMixWordsByUse) : 60;
     // v31's: an archive made again from its skeleton with what it holds carried as its own files
     // (each its own way, in the groups), and whether unpacking pays judged by mixing too.
     const bool members_on = rope_newest >= 14 && v21;
-    // v32 (in the making): a file carried as its differences from another, only with the draft switch.
-    const bool delta_on = rope_newest >= 14 && v21 && v32_draft();
-    // v32 (in the making): a JPEG carried as its brunsli form and made again exactly, only with the draft switch.
-    const bool jpeg_on = rope_newest >= 14 && v21 && v32_draft();
-    // v32 (in the making): with permanent, a PNG installed as the same picture re-saved at its
-    // smallest, only with the draft switch.
-    const bool pngr_on = png_on && rope_newest >= 14 && v32_draft();
-    // v32 (in the making): a PNG made again exactly with its rows carried unfiltered ("skr").
-    const bool skr_on = png_on && rope_newest >= 14 && v32_draft();
-    // v32 (in the making): with the draft, every .sieve in bytes is v32, for its smaller head (taken
-    // here: rope_newest is held to the rope's own versions below).
-    const bool v32_head_on = rope_newest >= 14 && v32_draft();
+    // v32: a file carried as its differences from another.
+    const bool delta_on = rope_newest >= 15 && v21;
+    // v32: a JPEG carried as its brunsli form and made again exactly.
+    const bool jpeg_on = rope_newest >= 15 && v21;
+    // v32: with permanent, a PNG installed as the same picture re-saved at its
+    // smallest.
+    const bool pngr_on = png_on && rope_newest >= 15;
+    // v32: a PNG made again exactly with its rows carried unfiltered ("skr").
+    const bool skr_on = png_on && rope_newest >= 15;
+    // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
+    // rope_newest is held to the rope's own versions below).
+    const bool v32_head_on = rope_newest >= 15;
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
     const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
     size_t pngs_resaved = 0;
@@ -2795,7 +2789,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 return true;
             };
-            // v32 (in the making, behind the draft switch): with permanent, a PNG is never installed as
+            // v32: with permanent, a PNG is never installed as
             // its rows alone, which no viewer opens. Permanent alone: the same picture re-saved at its
             // smallest ("pngr", every chunk but its pixels' as it was), where that is smaller than the
             // PNG; else made again exactly, as temporary would; else left as it is. Both boxes: made
@@ -3192,7 +3186,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
-    // v32 (in the making, behind the draft switch): a JPEG carried as its brunsli form ("jbr <form
+    // v32: a JPEG carried as its brunsli form ("jbr <form
     // size>"), made again on installing: brunsli recodes the JPEG's own coded values by a model made
     // for them. A compressed format, so under Compressed Formats' boxes, as a PNG is (Edward, 30
     // October 2026: "packed under all three methods"): with neither, carried as it is; temporary,
@@ -3441,7 +3435,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
-    // v32 (in the making, behind the draft switch): a file carried as its differences from another
+    // v32: a file carried as its differences from another
     // file of the folder (delta-v1). Every file over 8 MiB carried as it is is cut into blocks
     // where its content says, one fingerprint a block; a file whose blocks are mostly another's is
     // written as copies from it and new bytes, where the copies cover at least half of it (the new
@@ -3671,7 +3665,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                                      uint64_t(rp.width) * 2 <= bytes[i].size(); // (two whole lines at least)
                 uint32_t pw = picture ? rp.width / rp.step : 0, pc = picture ? rp.step : 1;
                 // (Else a shape guessed from the bytes alone, weighed on the start against them as bytes.)
-                // v32 (in the making): a PNG's pixels carried for stb ("stb") or unfiltered ("skr") have
+                // v32: a PNG's pixels carried for stb ("stb") or unfiltered ("skr") have
                 // their shape in the recipe, which is weighed in its place: the rope's reading of a
                 // screenshot can be a few bytes wide (ROADMAP D.2).
                 std::optional<std::pair<uint32_t, uint32_t>> guessed;
@@ -4118,7 +4112,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     ++r.mixed4; // v28
                     r.mixed4_pictures += files[i]->way.find(" I") != std::string::npos;
                     r.mixed4_words += files[i]->way.find(" D") != std::string::npos || files[i]->way.find(" F80") != std::string::npos;
-                    r.mixed4_by_use += files[i]->way.find(" F80") != std::string::npos; // (v32 in the making)
+                    r.mixed4_by_use += files[i]->way.find(" F80") != std::string::npos; // (v32)
                 }
                 r.mix_bytes += bytes[i].size();
                 r.mix_carried += rope_codes[i].size();
@@ -4342,11 +4336,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
     // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
-    // v32 (in the making): some file as its differences from another, a JPEG as its brunsli form, a
+    // v32: some file as its differences from another, a JPEG as its brunsli form, a
     // PNG re-saved, or mixing with the word list counted by use ("F80": a file's, a group's or the
     // lzma2 stream's parameters).
-    // With the draft, too, every binary .sieve is v32, for its smaller head (SPECIFICATIONS v32: the
-    // head read by its version byte; a small file's .sieve about 11 bytes smaller).
+    // And every .sieve in bytes at the newest is v32, for its smaller head (SPECIFICATIONS v32: the
+    // head read by its version byte; a small file's .sieve 9 bytes smaller).
     auto by_use = [](const std::string& w) { return (w.rfind("mix4 ", 0) == 0 || w.rfind("mixt ", 0) == 0) && w.find(" F80") != std::string::npos; };
     m.v32 = m.binary && (v32_head_on || m.lzma2.mixed.find(" F80") != std::string::npos ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
@@ -4486,16 +4480,16 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.jpegs)
             o << "jpegs     " << r.jpegs << " JPEG(s) carried as their brunsli form, made again byte for byte (" << r.jpeg_bytes << " bytes as "
-              << r.jpeg_forms << "; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
+              << r.jpeg_forms << "; " << kDeltaManifestVersion << ")\n";
         if (r.jpegs_optimised)
             o << "optimised " << r.jpegs_optimised << " of those JPEG(s) installed with tables made for their values, the same pictures (" << r.jpeg_was
               << " bytes as " << r.jpeg_now << "; Compressed Formats, permanent)\n";
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
-              << r.png_resaved_bytes << "; Compressed Formats, permanent; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
+              << r.png_resaved_bytes << "; Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
-              << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
+              << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ")\n";
         if (r.member_archives)
             o << "members   " << r.member_archives << " of them made again from their skeleton and their " << r.members
               << " file(s), each carried its own way (" << kSkeletonMembersManifestVersion << ")\n";

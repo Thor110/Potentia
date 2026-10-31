@@ -36,8 +36,8 @@ every installed file is checked against its SHA-256 before anything is written.
 | RAR (`.rar`) | libarchive | by the machine's own `rar`, where it gives the archive back byte for byte (v22) | its folder | RAR 5; RAR 4 only as its contents; the real `rar` not yet measured |
 | cab, ISO, LHA, cpio, ar (`.deb`), WARC | libarchive | not made again | its folder | |
 | tar (`.tar`) | Sieve | (not compressed: carried as it is) | (as it is) | `sieve-install` extracts it |
-| **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32's draft: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
-| **JPEG** | brunsli | v32's draft: from its brunsli form (`jbr`) | v32's draft: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
+| **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
+| **JPEG** | brunsli | v32: from its brunsli form (`jbr`) | v32: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
 
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.
 
@@ -57,7 +57,7 @@ every installed file is checked against its SHA-256 before anything is written.
   - the same coefficients with optimised Huffman tables: −2.10% and −2.20% on Edward's phone photos,
     about nothing on JPEGs already optimised.
 
-## Decided and built (31 October 2026, v32's draft)
+## Decided and built (31 October 2026, v32)
 
 Edward confirmed the design ("go ahead with the png/jpeg design yes"); built behind `--v32-draft`:
 

@@ -86,7 +86,7 @@ class MixDictionary
 {
 public:
     explicit MixDictionary(std::span<const uint8_t> list);
-    // v32 (in the making): the same, each word counted by how common it is: `base` to the power of how
+    // v32: the same, each word counted by how common it is: `base` to the power of how
     // many of the `commoner` lists hold it (folded as the list is). With scowl-en-80, and scowl-en-35
     // and scowl-en-60 as the commoner lists at 64: 4,096 a word of en-35, 64 one of en-60 only, 1 the
     // rest (mix-v4's "F80"). Refused where a node's counts would pass 2^32.
@@ -115,7 +115,7 @@ private:
     uint64_t words_ = 0;
 };
 
-// v32 (in the making): with a list's size, asks mix_words-style hooks for that list counted by how
+// v32: with a list's size, asks mix_words-style hooks for that list counted by how
 // common each word is (mix-v4's "F80"), not the plain list.
 inline constexpr uint32_t kMixWordsByUse = 0x100;
 
@@ -144,7 +144,7 @@ struct Mix4Params
     uint32_t table_bits = 22;
     uint32_t width = 0, channels = 1; // a picture's shape, as mix-v2's (0: not a picture)
     uint32_t dictionary = 0;          // a word list, as mix-v3's (0: none; else 35, 60 or 80)
-    bool by_use = false;              // v32 (in the making): that list counted by how common each word is ("F80": 80 only)
+    bool by_use = false;              // v32: that list counted by how common each word is ("F80": 80 only)
     // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
     uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;

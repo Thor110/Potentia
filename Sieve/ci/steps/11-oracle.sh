@@ -262,7 +262,7 @@ rm -rf old_in
 $S install old.sieve --to old_in > /dev/null
 cmp old_in/a.txt $F/a.txt
 # Maps are made as the newest instructions are (27 October 2026): two held texts of 9,000 bytes
-# are mixed together in one group (sieve-manifest-v30), as the report says, and read back by Sieve
+# are mixed together in one group (sieve-manifest-v30's groups; v32 at the newest), as the report says, and read back by Sieve
 # and the oracle. (The same holds for sites, training runs and the hallway's saves: one helper,
 # add_packed_newest, makes them all; a site's page is checked below.)
 head -c 9000 ../README.md > mt1.md
@@ -270,19 +270,20 @@ head -c 9000 ../docs/GAME.md > mt2.md
 $S map --new t --out mt.sieve 2> /dev/null
 $S map mt.sieve --add mt1.md --out mt.sieve 2> /dev/null
 $S map mt.sieve --add mt2.md --out mt.sieve > mt.txt 2>&1
-grep -c "^wrote     mt.sieve: Sieve instructions (sieve-manifest-v30), " mt.txt > /dev/null
+grep -c "^wrote     mt.sieve: Sieve instructions (sieve-manifest-v32), " mt.txt > /dev/null
 rm -rf mt_in mt_oracle
 $S install mt.sieve --to mt_in > /dev/null
 cmp mt_in/mt1.md mt1.md
 cmp mt_in/mt2.md mt2.md
 python sieve_ref.py unpack mt.sieve --to mt_oracle | grep -c "^mixt " > /dev/null
 cmp mt_oracle/mt2.md mt2.md
-# A site's page of 9,000 bytes made into a .sieve is mixed (mix-v4, with the word list).
+# A site's page of 9,000 bytes made into a .sieve is mixed (mix-v4, with the word list: at the
+# newest, v32's, counted by use).
 rm -rf mts mts_out mts_oracle && mkdir mts
 printf '<html><body><a href="long.html">long</a></body></html>\n' > mts/index.html
 (printf '<html><body><pre>\n'; head -c 9000 ../README.md; printf '</pre></body></html>\n') > mts/long.html
 $S site build mts --out mts_out --sieve-pages > /dev/null 2>&1
-python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c "^mix4 B[0-9]* D60	" > /dev/null
+python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c "^mix4 B[0-9]* F80	" > /dev/null
 cmp mts_oracle/long.html mts/long.html
 # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
 # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
@@ -537,8 +538,8 @@ cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ..
 # (Prioritise Decoding Speed: what the archives hold, 1.4 MB, is otherwise mixed as one group, which
 # the oracle took 726 s to decode in Python; groups are checked on their own below, v29 and v30.)
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --prioritise-decoding --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[01]\))$" a21.txt > /dev/null
-python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 31, d[:6]"
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[0-2]\))$" a21.txt > /dev/null
+python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 32, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
@@ -576,7 +577,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   cmp r22/made.rar r22_si/made.rar
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/ && cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[01]\)" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[0-2]\)" > /dev/null
   rm -rf r22f_inst && SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
@@ -633,7 +634,7 @@ cmp dq.txt dq_oracle/dq.txt
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[01]\))$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-2]\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -792,12 +793,12 @@ grep -q "^groups    2 file(s) mixed together in 1 group(s)" g30.txt
 grep -q "	raw	3000	b.bin$" g30.txt && grep -q "^mixn	6000	c.txt$" g30.txt
 rm -rf g30_inst g30_oracle && $S install g30.sieve --to g30_inst > /dev/null && diff -r g30 g30_inst
 python sieve_ref.py unpack g30.sieve --to g30_oracle > /dev/null && diff -r g30 g30_oracle
-# v32 in the making (30 October 2026; only with --v32-draft, for testing: docs/NEXT-VERSION.md): a
+# v32 (30 October 2026, frozen 31 October; --v31 for the version before: docs/NEXT-VERSION.md): a
 # file carried as its differences from another of the folder ("delta K L", delta-v1). Two files of
 # about 330 KB, the second the first with stretches changed and bytes put in (so all after them is
-# shifted; SIEVE_DELTA_FROM takes files this small, which the packer leaves to its groups): with the
-# draft, one is a delta, given back by Sieve, by the oracle (which reads delta-v1
-# itself, from the specification) and by sieve-install; without it, nothing is v32.
+# shifted; SIEVE_DELTA_FROM takes files this small, which the packer leaves to its groups): at v32,
+# one is a delta, given back by Sieve, by the oracle (which reads delta-v1
+# itself, from the specification) and by sieve-install; with --v31, nothing is v32.
 rm -rf d32 && mkdir d32
 python - <<'PY'
 a = b"".join(open(f, "rb").read() for f in ("../docs/MANUAL.md", "../docs/SPECIFICATIONS.md"))[:330000]
@@ -809,7 +810,7 @@ for k in range(8):  # (the same changes every run)
 open("d32/one.txt", "wb").write(a)
 open("d32/two.txt", "wb").write(bytes(b))
 PY
-SIEVE_DELTA_FROM=65536 $S locate d32 --installer d32.sieve --items --v32-draft 2>&1 | tr -d '\r' > d32.txt
+SIEVE_DELTA_FROM=65536 $S locate d32 --installer d32.sieve --items 2>&1 | tr -d '\r' > d32.txt
 grep -c "^deltas    1 file(s) carried as their differences from another" d32.txt > /dev/null
 grep -c "^manifest  sieve-manifest-v32" d32.txt > /dev/null
 rm -rf d32_inst d32_oracle d32_si
@@ -819,7 +820,7 @@ python sieve_ref.py unpack d32.sieve --to d32_oracle | grep -c "^delta [0-9]* [0
 diff -r d32 d32_oracle
 $SI d32.sieve --to d32_si --yes > /dev/null
 diff -r d32 d32_si
-$S locate d32 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
+$S locate d32 --v31 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
 if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
@@ -842,19 +843,19 @@ else
     for d in cp_s cp_si cp_z; do [ "$(cat $d/A.txt)" = upper ] && [ "$(cat $d/a.txt)" = lower ]; done
     $S locate cp_s --installer cp_again.sieve 2>&1 | tr -d '\r' | grep -q "^warning: A.txt and a.txt are one name where case is ignored"
 fi
-# v32 in the making, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
+# v32, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
 # for byte, under Compressed Formats' boxes. The repository's seven JPEGs (all public domain or
-# Sieve's own) and a text: with the draft and temporary, each JPEG carried so and the folder given
+# Sieve's own) and a text: with temporary, each JPEG carried so and the folder given
 # back by Sieve and by sieve-install; the oracle reads the recipes, names the JPEGs as files it has
-# not made (it has no brunsli) and makes the text; with the draft and no box, no JPEG recoded (the
-# text is v32's still, by its word list: below); without the draft, nothing is v32.
+# not made (it has no brunsli) and makes the text; with no box, no JPEG recoded (the
+# text is v32's still, by its word list: below); with --v31, nothing is v32.
 rm -rf j32 && mkdir j32
 # The anchor is copied under its own name: the test site has a different vitruvian.jpg, and on a
 # folder that ignores case (Windows, macOS) the two names are one.
 cp ../data/anchors/public-domain/Vitruvian.jpg j32/vitruvian-man.jpg && cp ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
-$S locate j32 --installer j32none.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32none.txt
+$S locate j32 --installer j32none.sieve --items 2>&1 | tr -d '\r' > j32none.txt
 if grep -q "^jpegs \|	jbr " j32none.txt; then exit 1; fi
-$S locate j32 --installer j32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > j32.txt
+$S locate j32 --installer j32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > j32.txt
 grep -c "^jpegs     7 JPEG(s) carried as their brunsli form, made again byte for byte" j32.txt > /dev/null
 rm -rf j32_inst j32_oracle j32_si
 $S install j32.sieve --to j32_inst > /dev/null
@@ -864,12 +865,12 @@ diff -r j32 j32_si
 python sieve_ref.py unpack j32.sieve --to j32_oracle > j32o.txt
 [ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32o.txt)" -eq 7 ]
 cmp j32/VAULT.md j32_oracle/VAULT.md
-$S locate j32 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
+$S locate j32 --v31 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
 if grep -q "sieve-manifest-v32\|^jpegs " j32v31.txt; then exit 1; fi
 # Permanent alone: the same coefficients with tables made for them where that is smaller (of the
 # seven, vitruvian-man.jpg: its pixels the same, its file smaller); the rest made again byte for byte.
 # Given back the same by Sieve and by sieve-install; the oracle reads the recipes as above.
-$S locate j32 --installer j32p.sieve --items --v32-draft --compressed-permanent 2>&1 | tr -d '\r' > j32p.txt
+$S locate j32 --installer j32p.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > j32p.txt
 grep -c "^optimised 1 of those JPEG(s) installed with tables made for their values, the same pictures" j32p.txt > /dev/null
 rm -rf j32p_inst j32p_si j32p_oracle
 $S install j32p.sieve --to j32p_inst > /dev/null
@@ -879,15 +880,15 @@ diff -r j32p_inst j32p_si
 for f in audio book door filters picture-in-hand vitruvian; do cmp j32/$f.jpg j32p_inst/$f.jpg; done
 python sieve_ref.py unpack j32p.sieve --to j32p_oracle > j32po.txt
 [ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32po.txt)" -eq 7 ]
-# v32 in the making, too: with permanent, a PNG installed as the same picture re-saved at its
+# v32, too: with permanent, a PNG installed as the same picture re-saved at its
 # smallest ("pngr <filter> <strategy> <split> <head size> <inner size>"), never as its rows alone.
 # Four of the repository's small PNGs (the oracle filters each row in Python, slowly): each
 # re-saved smaller under its own name, given back the same by Sieve, sieve-install and the oracle
 # (which makes them by zlib), each the same pixels as before (its rows read back by zlib alone);
-# without the draft, nothing is v32.
+# with --v31, nothing is v32.
 rm -rf p32 && mkdir p32
 cp ../tests/example_book_cover.png ../web/extension/icon16.png ../web/extension/icon32.png ../web/extension/icon128.png p32/
-$S locate p32 --installer p32.sieve --items --v32-draft --compressed-permanent 2>&1 | tr -d '\r' > p32.txt
+$S locate p32 --installer p32.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32.txt
 grep -c "^pngs      4 PNG(s) installed re-saved at their smallest, the same pictures" p32.txt > /dev/null
 rm -rf p32_inst p32_si p32_oracle
 $S install p32.sieve --to p32_inst > /dev/null
@@ -927,16 +928,16 @@ for name in sorted(os.listdir(sys.argv[1])):
     if rows(a) != rows(b) or os.path.getsize(b) >= os.path.getsize(a):
         sys.exit(f"{name}: not the same picture re-saved smaller")
 PY
-$S locate p32 --installer p32v31.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32v31.txt
+$S locate p32 --v31 --installer p32v31.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32v31.txt
 if grep -q "sieve-manifest-v32\|^pngs " p32v31.txt; then exit 1; fi
-# v32 in the making, too: with temporary, a PNG made again exactly with its rows carried unfiltered
+# v32, too: with temporary, a PNG made again exactly with its rows carried unfiltered
 # ("skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>"; the rows filtered again by
 # their filter bytes on installing, then made as "sk" makes them). The extension's four icons (no
 # stb PNGs: those are carried as their pixels already): each carried so, given back byte for byte by
 # Sieve and by sieve-install; the oracle reads each recipe, filters the rows again and names each as
-# a file it has not made (its deflate is preflate's); without the draft, each is "sk" or as it is.
+# a file it has not made (its deflate is preflate's); with --v31, each is "sk" or as it is.
 rm -rf r32 && mkdir r32 && cp ../web/extension/icon16.png ../web/extension/icon32.png ../web/extension/icon48.png ../web/extension/icon128.png r32/
-$S locate r32 --installer r32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > r32.txt
+$S locate r32 --installer r32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > r32.txt
 [ "$(grep -c "	skr [0-9]* [0-9]* 4 [0-9]* [0-9]* " r32.txt)" -eq 4 ]
 rm -rf r32_inst r32_si r32_oracle
 $S install r32.sieve --to r32_inst > /dev/null
@@ -945,34 +946,34 @@ $SI r32.sieve --to r32_si --yes > /dev/null
 diff -r r32 r32_si
 python sieve_ref.py unpack r32.sieve --to r32_oracle > r32o.txt
 [ "$(grep -c "^not made again by the oracle (.*): icon[0-9]*.png; " r32o.txt)" -eq 4 ]
-$S locate r32 --installer r32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > r32v31.txt
+$S locate r32 --v31 --installer r32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > r32v31.txt
 if grep -q "sieve-manifest-v32\|	skr " r32v31.txt; then exit 1; fi
-# And with the draft, mixing weighs a PNG's pixels as a picture of the shape its recipe gives: a
+# And at v32, mixing weighs a PNG's pixels as a picture of the shape its recipe gives: a
 # hallway screenshot (stb's, 1280 by 720, three bytes a pixel), whose pixels the rope reads as three
 # bytes wide, mixed as 1280 by 3 (v26's picture parameters, read by every reader since); without
-# the draft, carried as it was. (Not given to the oracle: its mixing would take hours on 2.7 MB.)
+# v32, carried as it was. (Not given to the oracle: its mixing would take hours on 2.7 MB.)
 rm -rf s32 && mkdir s32 && cp ../docs/images/hallway-compact.png s32/
-$S locate s32 --installer s32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
+$S locate s32 --installer s32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
 rm -rf s32_inst && $S install s32.sieve --to s32_inst > /dev/null && diff -r s32 s32_inst
-$S locate s32 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 raw	hallway-compact.png"
-# v32 in the making, too: its head read by its version byte (SPECIFICATIONS v32), with the draft
-# made for every .sieve in bytes: each stream's dictionary left out where its size gives it, a stream
+$S locate s32 --v31 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 raw	hallway-compact.png"
+# v32, too: its head read by its version byte (SPECIFICATIONS v32), made for every .sieve in bytes
+# at the newest: each stream's dictionary left out where its size gives it, a stream
 # of one LZMA2 chunk carried as the chunk's data alone, the last part's size left out, a recipe's
 # numbers as numbers. A small file: v32, 9 bytes smaller than v20's, given back the same by Sieve,
 # sieve-install and the oracle.
 rm -rf h32 && mkdir h32 && cp ../tools/fetch_corpus.py h32/
-$S locate h32 --installer h32.sieve --v32-draft 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32, "
-$S locate h32 --installer h32v20.sieve 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v20, "
+$S locate h32 --installer h32.sieve 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32, "
+$S locate h32 --v31 --installer h32v20.sieve 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v20, "
 [ "$(( $(wc -c < h32v20.sieve) - $(wc -c < h32.sieve) ))" -eq 9 ]
 rm -rf h32_inst h32_si h32_oracle
 $S install h32.sieve --to h32_inst > /dev/null && diff -r h32 h32_inst
 $SI h32.sieve --to h32_si --yes > /dev/null && diff -r h32 h32_si
 python sieve_ref.py unpack h32.sieve --to h32_oracle > /dev/null && diff -r h32 h32_oracle
-# v32 in the making, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
-# scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place with the draft. The
+# v32, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
+# scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place at v32. The
 # code alone, smaller than D60's and read back by the oracle (its own trie and weights); a text, and
-# two texts mixed together as a group, with the draft: v32, given back by Sieve, sieve-install and
-# the oracle; without the draft, scowl-en-60 as before.
+# two texts mixed together as a group: v32, given back by Sieve, sieve-install and
+# the oracle; with --v31, scowl-en-60 as before.
 $S mix dq.txt --words 80 --by-use --out dqf.mix | tr -d '\r' | grep -c "^mix       B17 F80 (mix-v4)" > /dev/null
 python sieve_ref.py mix-unpack dqf.mix --v4 --params "B17 F80" --size 40000 --out dqf.back > /dev/null
 cmp dq.txt dqf.back
@@ -980,9 +981,9 @@ cmp dq.txt dqf.back
 rm -rf f32 f32g && mkdir f32 f32g
 head -c 9000 ../docs/METHODS.md > f32/methods.md
 head -c 9000 ../docs/METHODS.md > f32g/methods.md && head -c 7000 ../docs/FORMATS.md > f32g/formats.md
-$S locate f32 --installer f32.sieve --items --v32-draft 2>&1 | tr -d '\r' > f32.txt
+$S locate f32 --installer f32.sieve --items 2>&1 | tr -d '\r' > f32.txt
 grep -c "^mix       1 file(s) carried by mixing, mix-v4, 1 with a word list (1 counted by use) ([0-9]* bytes, carried in [0-9]*; sieve-manifest-v32)" f32.txt > /dev/null
-$S locate f32g --installer f32g.sieve --items --v32-draft 2>&1 | tr -d '\r' > f32g.txt
+$S locate f32g --installer f32g.sieve --items 2>&1 | tr -d '\r' > f32g.txt
 grep -c "	mixt B[0-9]* F80 T" f32g.txt > /dev/null
 for d in f32 f32g; do
     rm -rf ${d}_inst ${d}_si ${d}_oracle
@@ -993,7 +994,7 @@ for d in f32 f32g; do
     python sieve_ref.py unpack $d.sieve --to ${d}_oracle > /dev/null
     diff -r $d ${d}_oracle
 done
-$S locate f32 --installer f32v31.sieve --items 2>&1 | tr -d '\r' > f32v31.txt
+$S locate f32 --v31 --installer f32v31.sieve --items 2>&1 | tr -d '\r' > f32v31.txt
 if grep -q "sieve-manifest-v32\|F80" f32v31.txt; then exit 1; fi
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or

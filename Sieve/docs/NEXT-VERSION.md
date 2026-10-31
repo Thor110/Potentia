@@ -1,8 +1,20 @@
 # The next manifest version: a plan for `sieve-manifest-v32`
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,
-SHOWCASE-PLAN, SPECIFICATIONS, SIEVE-FORMAT, STATISTICS) and the code. Nothing here is built. Every
-figure is quoted from the document named beside it; "not measured" means nothing was found.*
+SHOWCASE-PLAN, SPECIFICATIONS, SIEVE-FORMAT, STATISTICS) and the code. Every figure is quoted from
+the document named beside it; "not measured" means nothing was found.*
+
+**Frozen, 31 October 2026** (Edward: "Yes, freeze v32 and we will prepare to update all the relevant
+statistics").
+- **What changed:** the draft switch is gone, and v32 is the newest. `kNewestRope` is 15, so every
+  instructions-maker makes v32 at its newest. `--v31` makes v31, byte for byte as before (checked on
+  a small file), and `--v32-draft` is still accepted but does nothing.
+- **What v32 holds:** §4a, items 1 to 7 below.
+- **The documents:** SPECIFICATIONS §12.2 and SIEVE-FORMAT.md describe it.
+- **Still to do:**
+  - the same codes on Windows, Linux and macOS (Edward's CI on all three);
+  - the Proof samples made again, and Proof/STATISTICS.md and PROOF.md measured again (WoWRevived's
+    two runs among them, §4a, 1).
 
 ## 1. Where things stand
 

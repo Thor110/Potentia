@@ -1,4 +1,4 @@
-// Sieve CLI -- a PNG re-saved at its smallest (v32 in the making, `pngr`).
+// Sieve CLI -- a PNG re-saved at its smallest (v32, `pngr`).
 //
 // What Compressed Formats' permanent box installs for a PNG: the same picture, every chunk as it
 // was but its pixels' (IDATs), which are written again as one IDAT, the rows filtered and deflated
@@ -32,7 +32,7 @@ std::optional<PngResaved> png_resave(const std::vector<uint8_t>& png);
 // bits. The IDAT goes at `split` bytes into the head. Refused where the head does not read.
 std::vector<uint8_t> png_resave_make(const std::vector<uint8_t>& inner, int filter, int strategy, uint64_t split, uint64_t head);
 
-// v32 in the making (`skr`), for temporary: a PNG made again exactly from its skeleton (v21's `sk`,
+// v32 (`skr`), for temporary: a PNG made again exactly from its skeleton (v21's `sk`,
 // its IDATs' deflate by preflate) whose rows are carried unfiltered. PNG's filters are sums and
 // differences modulo 256, so each row's can be undone and done again exactly given its filter byte;
 // preflate sees the same filtered stream either way, so its corrections are the same. What is

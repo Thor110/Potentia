@@ -1,7 +1,7 @@
 # The `.sieve` format, on one page
 
-What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v31` (the format rests
-there: HANDOFF's standing rules). It is for anyone writing a decoder of their own. The rules in full
+What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v32` (the format rests
+there, frozen 31 October 2026: HANDOFF's standing rules). It is for anyone writing a decoder of their own. The rules in full
 are in [SPECIFICATIONS §12.2](SPECIFICATIONS.md), written as each version's changes to the one
 before; this page puts the newest together in one place and says where each part's rules are.
 
@@ -39,11 +39,11 @@ The manifest begins with its head, in bytes (since `sieve-manifest-v16`):
 | Field | Bytes |
 | :--- | :--- |
 | the bytes `sieve` | 5 |
-| the version: 16 to 31 for `sieve-manifest-v16` to `v31` | 1 |
+| the version: 16 to 32 for `sieve-manifest-v16` to `v32` | 1 |
 | flags | 1 |
 | the root's name, if flag 1: a varint of its length, then it | varies |
-| each stream present, in the order x86 (flag 2), lzma2 (4), items (8): a varint of its packed size, a varint of its size, then one byte, below | varies |
-| the rope stream, if flag 16: a varint of its size (it is carried as it is) | varies |
+| each stream present, in the order x86 (flag 2), lzma2 (4), items (8): a varint of its packed size, a varint of its size, then one byte, below (v32: below) | varies |
+| the rope stream, if flag 16: a varint of its size (it is carried as it is; v32: left out where it is the last part) | varies |
 | the tree's SHA-256 (section 5) | 32 |
 | the body (section 3) | varies |
 
@@ -57,14 +57,34 @@ shifted left by `p / 2 + 11`; 40 is 4 GiB − 1); 255, carried as it is (no LZMA
 the lzma2 stream only), mixed by mix-v4, followed by a varint of the length of its parameters and
 the parameters as text (`B22`, or `B22 D60` with the word list; never a picture's).
 
-Sieve writes the **lowest version that holds what a `.sieve` uses**, so a v31 writer's files carry
-16 to 31 here. (Oracle: `v16_text`, which turns the head back into the older text form, then reads
+**v32's head** (the version byte 32; the flags as before: the version says how the head is read).
+Each stream (the x86, lzma2 and items streams, and the body when packed) is its packed size as a
+varint, **left out for the file's last part** (the rope stream if there is one, else the items
+stream, else the lzma2, else the x86: its size is what is left of the file after the head and the
+parts before it), then a varint of its size times 4 plus its **form**:
+
+| Form | The stream | After it |
+| :--- | :--- | :--- |
+| 0 | raw LZMA2, its dictionary the one its size gives (the smallest `2 | (p & 1)` shifted left by `p / 2 + 11`, at least 4 KiB, that is at least its size, at most 64 MiB) | nothing |
+| 1 | as before v32 | the byte above (and for 254 its parameters) |
+| 2 | one LZMA2 chunk, carried as its data alone, the dictionary as form 0, lc 3, lp 0, pb 2 | nothing |
+| 3 | as 2 | the chunk's settings' byte, `(pb × 5 + lp) × 9 + lc`, below 225 |
+
+For forms 2 and 3 a reader puts back before the data the chunk's control byte (`0xE0` with the top
+five of the 21 bits of size − 1), the low 16 bits of size − 1 and data size − 1 (16 bits), both high
+byte first, the settings' byte, and after it a 0 byte, and reads that as raw LZMA2: so such a stream
+is 1 byte to 2 MiB, its data 1 to 65,536 bytes. (Oracle: `stream32` and `framed` in `v16_text`.)
+
+Sieve writes the **lowest version that holds what a `.sieve` uses**, and at its newest every
+`.sieve` in bytes is v32 for its smaller head (`--v31` and older ask for older), so a v32 writer's
+files carry 16 to 32 here. (Oracle: `v16_text`, which turns the head back into the older text form, then reads
 that. Specification: §12.2, `sieve-manifest-v16` and each later version's "in bytes".)
 
 ## 3. The body: the listing
 
 The body is packed where flag 32 is set (a varint of its packed size, a varint of its size, a
-dictionary byte as a stream's, then raw LZMA2), else a varint of its size and then it. Unpacked, it
+dictionary byte as a stream's, then raw LZMA2; v32: its packed size, then its size and form as a
+stream's, then its bytes as carried), else a varint of its size and then it. Unpacked, it
 is the folder's listing.
 
 From v20 the listing is **records** (unless flag 128), one after another, each standing for one line
@@ -89,11 +109,14 @@ for their order.
 
 A **way** is a byte, then: **1** `raw`; **3** `rope` and the rest of the way as text; **4** `pieces`
 and the rest as text; **2** an archive made again on installing: its format number, the rest of its
-recipe as text, then its inner way (a way again); **0** any other way, as text.
+recipe as text (v32: its words after the kind, as many as the kind has, each a varint: twice the
+number for a word that is a number as Sieve writes one, digits only, no leading zero, at most 18
+digits; else twice its length and one, then the word), then its inner way (a way again); **0** any
+other way, as text.
 
 A **format** is a varint: 1 `xz`, 2 `gz`, 3 `bz2`, 4 `zst`, 5 `lz4`, 6 `br`, 7 `lzma`, 8 `lz`, 9 `7z`,
 10 `zip`, 11 `rar`, 12 `cab`, 13 `iso`, 14 `lha`, 15 `cpio`, 16 `ar`, 17 `warc`, 18 `sk`, 19 `stb`,
-20 `skm` (only ever added to); in a record 4, 0 then the name as text for one not listed.
+20 `skm`, 21 `jbr`, 22 `pngr`, 23 `skr` (only ever added to); in a record 4, 0 then the name as text for one not listed.
 
 The `line` lines come first; a reader puts the tree's line after them. A tab or line feed where the
 record allows none is refused, as is a record, way or format the reader does not know. (Oracle:
@@ -102,21 +125,23 @@ record allows none is refused, as is a record, way or format the reader does not
 ## 4. The streams, and each file's way
 
 After the body come the streams' bytes, in the order **x86, lzma2, items, rope**, each its packed
-size long. The files are then made in the listing's order, each taking the next bytes of the
+size long (v32: each as its form carries it, the last what is left of the file). The files are then made in the listing's order, each taking the next bytes of the
 stream its way names:
 
 | Way | What it takes | Its rules |
 | :--- | :--- | :--- |
 | `raw` | its size, next in the lzma2 stream | §12.2 v4 |
 | `x86` | its size, next in the x86 stream (raw LZMA2 after the x86 BCJ filter) | §12.2 v4 |
-| `lines K` | a mask of file K's lines, one bit a line, lowest bit first, next in the lzma2 stream *after every other file's bytes there*; K counts the listing's files from 0, and file K is carried `raw` or `x86` | §12.2 v4 |
+| `lines K` | a mask of file K's lines, one bit a line, lowest bit first, next in the lzma2 stream *after every other file's bytes there*; K counts the listing's files from 0, and file K is carried as itself (`raw`, `x86`, an item, the rope, pieces, mixing or a group's; never derived itself) | §12.2 v4 |
+| `delta K L` | its script, L bytes, next in the lzma2 stream at its turn, applied to file K once every other file is made (delta-v1: a varint t; t even, t/2 new bytes follow; t odd, t/2 bytes copied from file K from where the last copy ended moved by a zigzag varint) | §12.2 v32 |
 | `item K` (an `i` line) | its place, next in the items stream: `width` bytes big-endian, or with `digit-histogram-v1` a varint length and a code; made again as an item of line K | §12.2 v5 to v7 |
 | `rope <parameters>` | a varint length and a code, next in the rope stream; `rope-wave-v1` to `v6` by its parameters | §12.2 `rope-wave-v1` to `v6` |
 | `pieces z<n> r<n> ... rope <parameters>` | its z pieces next in the lzma2 stream; its r pieces joined, coded as one rope code, next in the rope stream; laid out in order | §12.2 v13 |
-| `mix4 <parameters>` | a varint length and a code, next in the rope stream, decoded by mix-v4 (`B<bits>`, a picture's ` I<w>x<c>`, a text's ` D<n>` word list) | §12.2 `mix-v4`, v28 |
-| `mixt <parameters> T<total>` and `mixn` | a group of files mixed together: the first file's way holds the group's code (next in the rope stream) and its total size, and the file is the group's first bytes; each `mixn` file after it (its own size in its record) is the group's next bytes. The group is used up exactly, and no file of another way stands in its middle | §12.2 v30 |
+| `mix4 <parameters>` | a varint length and a code, next in the rope stream, decoded by mix-v4 (`B<bits>`, a picture's ` I<w>x<c>`, a text's ` D<n>` word list, or ` F80`, scowl-en-80 with each word counted 4,096, 64 or 1 by whether scowl-en-35 or only scowl-en-60 holds it) | §12.2 `mix-v4`, v28, v32 |
+| `mixt <parameters> T<total>` and `mixn` | a group of files mixed together: the first file's way holds the group's code (next in the rope stream) and its total size, and the file is the group's first bytes; each `mixn` file after it (its own size in its record) is the group's next bytes. The group is used up exactly, before the next group and at the end; files of other ways may come between its files | §12.2 v30 |
 | `mix`, `mix2`, `mix3` | as `mix4`, by mix-v1, v2 and v3 (read; no longer written) | §12.2 v24, v26, v27 |
 | an archive made again: `xz`, `gz`, `bz2`, `zst`, `lz4`, `br`, `lzma`, `sk`, `stb`, each `<recipe> <inner size> <inner way>` (for `stb`, the inner bytes are the pixels); `skm <members> <skeleton size> <inner way>` | the inner bytes by the inner way (`raw`, `rope`, `pieces`, a mix way, `mixt` or `mixn`: never `x86`, nor another recipe), then the archive made from them by the named compressor and recipe; for `skm`, the inner bytes are its skeleton, and its data the members below | §12.2 v14, v17, v19 to v21, v25, v31 |
+| a JPEG or PNG made again (v32): `jbr <form size>`, `pngr <filter> <strategy> <split> <head size> <inner size>`, `skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>`, each then its inner way | `jbr`: the JPEG's brunsli form, made into the JPEG by brunsli; `pngr`: the PNG without its IDATs, then its rows unfiltered, the PNG re-saved by zlib at level 9 (each row by `filter`, or 5 each its own, at `strategy`), one IDAT put in at `split`; `skr`: the rows unfiltered, their filter bytes, then a v21 skeleton, the rows filtered again by their bytes and the PNG made as `sk` makes it | §12.2 v32 |
 
 A stream left over, or one that runs out, is refused. The x86 and lzma2 streams are raw LZMA2 at the
 dictionary their byte names (the lzma2 stream may instead be carried as it is, byte 255, or mixed,
@@ -155,11 +180,13 @@ understanding.
 | `rope` and `pieces` | rope-wave v1 to v6 | §12.2 `rope-wave-v1` to `v6`; oracle `rope_wave_file` |
 | `mix4`, `mixt`, a mixed stream | mix-v4, and for `D35`, `D60` or `D80` the registered SCOWL list `scowl-en-35`, `-60` or `-80` (`data/dictionaries/`, each checked by its SHA-256 in `dictionaries.tsv`) | §12.2 `mix-v1`, `mix-v2`, `mix-v4`; oracle `mix4_file`, `mix_word_list` |
 | `item` | the line's items made again from their places: Sieve's lines (pages, image, video, audio, AI), with `digit-histogram-v1` for coded places | §§3 to 12 and 12.2 v5 to v7; oracle `v7_item` (pages; PNG and MIDI items from a folder) |
-| archives made again | the very compressor named, at the version named: zlib (`gz`), liblzma (`xz`, `lzma`), libbzip2 1.0.8, libzstd 1.5.7, liblz4 1.10.0, brotli 1.2.1, preflate and the LZMA SDK's encoder (`sk`, `skm`), stb_image_write (`stb`) | §12.2 v14 to v31 |
+| `F80` | the registered `scowl-en-35`, `-60` and `-80` (each checked by its SHA-256) | §12.2 v32; oracle `mix_word_list` |
+| `delta` | nothing but file K's bytes | §12.2 v32 |
+| archives made again | the very compressor named, at the version named: zlib (`gz`, `pngr`), liblzma (`xz`, `lzma`), libbzip2 1.0.8, libzstd 1.5.7, liblz4 1.10.0, brotli 1.2.1, preflate and the LZMA SDK's encoder (`sk`, `skm`, `skr`), stb_image_write (`stb`), brunsli at the commit pinned in CMakeLists.txt (`jbr`) | §12.2 v14 to v32 |
 
 A decoder for most files needs only the first four rows. Where it meets what it cannot make (an
 item, an archive made again), it should refuse that file and say why, as the oracle does for
-preflate, the LZMA SDK and stb_image_write, which it does not have: it reads and checks their
+preflate, the LZMA SDK, stb_image_write and brunsli, which it does not have: it reads and checks their
 skeletons and recipes, and names the files it could not make.
 
 The tests hold examples of every version: `tests/` and the CI's step 11 (`ci/steps/11-oracle.sh`),

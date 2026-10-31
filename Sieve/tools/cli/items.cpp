@@ -274,7 +274,7 @@ const MixDictionary& mix_word_list(uint32_t list)
             throw std::runtime_error("the word list " + d.id + " (" + d.path + ") is not the one registered: its SHA-256 differs");
         return bytes;
     };
-    // v32 (in the making): scowl-en-80 counted by use, by the commoner lists scowl-en-35 and -60 ("F80").
+    // v32: scowl-en-80 counted by use, by the commoner lists scowl-en-35 and -60 ("F80").
     if (list & kMixWordsByUse)
     {
         if ((list & ~kMixWordsByUse) != 80) throw std::runtime_error("a word list counted by use is scowl-en-80's only");

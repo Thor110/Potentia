@@ -3,7 +3,7 @@
 This page covers making an installer for a folder, handing it to someone, and installing from it.
 Installers **pack their files themselves**, so there is no separate compressing step. The plain
 installer is `sieve-manifest-v4` (`--v4`), described first below; the hallway's File Locator and
-`sieve locate --installer` make the newest (`sieve-manifest-v31`), which also mixes, pulls files
+`sieve locate --installer` make the newest (`sieve-manifest-v32`), which also mixes, pulls files
 tight with the rope, cuts them into pieces, and carries items of Sieve's lines by their places
 (*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
 option: `sieve help locate`, `sieve help install`, `sieve-install --help`.
@@ -66,7 +66,7 @@ unpacks it; see below.)
 ## The formats, as they grew
 
 Every version is still read, and `sieve locate --installer` and the File Locator make the newest,
-**`sieve-manifest-v31`**, where the format now rests (HANDOFF's standing rules). Each version is in
+**`sieve-manifest-v32`**, where the format now rests (HANDOFF's standing rules). Each version is in
 full in SPECIFICATIONS §12.2; the figures below were measured when each was built.
 
 **The older installers, by flag.** `--v4` makes the plain installer above. `--v3` makes every
@@ -102,6 +102,7 @@ installer's manifest compressed.
 | v28 | `mix-v4`: the SSE stages retired for decoding speed | |
 | v29, v30 | Files mixed together, then in groups of up to 8 MiB decoded at once | Sieve's data folder 3,160,426 (v29) → 3,100,643 (v30) |
 | v31 | Compressed formats temporary (made again on installing) and permanent (kept as their contents): `--compressed-temporary`, `--compressed-permanent` | The source's 7z 8,005,603 → 6,189,674 |
+| v32 | Files alike as their differences (`delta`); JPEGs as their brunsli form; PNGs' rows unfiltered, and under permanent PNGs and JPEGs re-saved smaller; mixing's word list counted by use; a smaller head (`--v31` for the one before) | WoWRevived 1,075,924,966 → 1,001,994,144 (6.68% under 7z); a small file 9 bytes smaller |
 
 v8 and later need no line, so `sieve-install` installs them unless they carry items. Prioritise
 Decoding Speed (`--prioritise-decoding`) leaves mixing out where installing time matters more than
@@ -151,7 +152,7 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 - **A `.sieve` file:** put it beside `sieve-install` and run that (it opens the one `.sieve` beside
   it), drop the file on its window, or open the file with it.
 - **From the command line:** `sieve install NAME.sieve --to FOLDER`, which also accepts an
-  installer program, or an installer's manifest itself (any version, v2 to v31). Add `--force` to
+  installer program, or an installer's manifest itself (any version, v2 to v32). Add `--force` to
   replace files that are already there.
 - **In the hallway:** the File Locator's **Install from Sieve instructions...** (or I) takes a
   `.sieve` or an installer program, then asks for the folder to put it in.

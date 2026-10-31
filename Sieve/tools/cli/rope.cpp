@@ -123,7 +123,7 @@ int cmd_mix(const Args& a)
         if (w != "35" && w != "60" && w != "80") throw std::invalid_argument("mix --words is 35, 60 or 80 (scowl-en-35, 60 or 80): " + w);
         asked = uint32_t(std::stoul(w));
     }
-    // v32 (in the making): --by-use, scowl-en-80 with each word counted by how common it is ("F80").
+    // v32: --by-use, scowl-en-80 with each word counted by how common it is ("F80").
     if (a.has("by-use"))
     {
         if ((asked != 80 && a.has("words")) || a.has("v1") || a.has("v2")) throw std::invalid_argument("mix --by-use is for --words 80 with mix-v4 (\"B22 F80\")");

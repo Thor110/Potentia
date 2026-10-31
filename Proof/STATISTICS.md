@@ -15,6 +15,7 @@ from the sizes given.
 - [enwik9: the first 1 GB of English Wikipedia](#enwik9-the-first-1-gb-of-english-wikipedia)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A game's release: WoWRevived](#a-games-release-wowrevived)
+- [A game engine: ALTEngine](#a-game-engine-altengine)
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
 - [Photographs (JPEG)](#photographs-jpeg)
@@ -30,7 +31,8 @@ from the sizes given.
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,675,870 | 4.61:1 | −16.89% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 186,081,966 | 5.37:1 | −19.14% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
-| [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,075,924,966 | 1.33:1 | +0.20% |
+| [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
+| [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,052 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,557,978 | 1.01:1 | −0.38% |
@@ -237,6 +239,47 @@ like it (three 125 MB files of noise, as compressed films are, and this reposito
 
 The installer program less the `.sieve` and its 24-byte trailer gives `sieve-install` itself on
 Windows: 4,497,408 bytes, every installer program's fixed cost.
+
+**Made again with v32 (31 October 2026, Edward's machine, the File Locator, Try every way and Keep
+a log; compressed formats as they are).** The two maps are 98.7% alike, and v32 carries the larger
+as its differences from the smaller (a script of 2,087,830 bytes before LZMA2, for 162,426,225):
+
+| | Bytes | Ratio | Of the folder | Against 7z | Made in | Installed in |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **`.sieve`, for size** | **1,001,994,144** | **1.42:1** | **70.25%** | **−6.68%** | 4,997.6 s | 210.3 s |
+| `.sieve`, Prioritise Decoding Speed | 1,016,369,457 | 1.40:1 | 71.26% | −5.34% | 4,966.7 s | 30.1 s |
+
+- **For size:**
+  - MAPS.WoW mixed, 52,996,076 bytes;
+  - the 8 WAVs (433,241,104 bytes) to 311,258,496, 71.8%;
+  - the two MP4s (405,723,932) carried as pieces at 99.9%.
+- **For decoding speed:** nothing mixed. MAPS.WoW by LZMA2 (60,136,858) and the WAVs by the rope
+  (318,253,720, 73.5%).
+- **Installing:** the size run decoded in 203.3 s and the decoding-speed run in 22.9 s, each then
+  checked and written in about 7 s.
+
+## A game engine: ALTEngine
+
+Edward's ALTEngine v0.9.2 ([its commit](https://github.com/Thor110/AlienTrilogyResurrection/commit/068454aac5031fbff266f874f302f21615f77c82); 0.9.2 within the project, though the build itself still says 0.9.0), his reimplementation of the *Alien Trilogy* engine: 43 files, most of it
+programs (the engine and FFmpeg's and SDL3's DLLs). Made on Edward's machine on 31 October 2026, in
+the File Locator, as v32 (the draft, which made the same files), with Try every way and Keep a log,
+Prioritise Decoding Speed off, compressed formats as they are. It took 140.9 s to make, and
+installed in 3.7 s (decoded in 3.587 s, checked and written in 0.143 s).
+
+| | Bytes | Ratio | Of the folder | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| The folder | 25,396,730 | | | |
+| zip | 10,011,145 | 2.54:1 | 39.42% | +30.61% |
+| 7z | 7,664,970 | 3.31:1 | 30.18% | |
+| **`.sieve`** | **7,546,366** | **3.37:1** | **29.71%** | **−1.55%** |
+
+- **The programs:** seven of them, 22,164,992 bytes, 87% of the folder. They went through the x86
+  filter by LZMA2 as one stream: 7,212,820 bytes, 96% of the `.sieve`. So this is where 7z's BCJ2
+  would be weighed against Sieve's BCJ (ROADMAP C.3).
+- **The rest:** 28 texts, manifests and shaders were mixed together in one group, 331,425 bytes
+  against 334,745 apart, most with the word list counted by use (`F80`). The largest of them,
+  `LightManifestExample.json` (2,408,120 bytes), mixed alone came to 286,875.
+- **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,893,553, and Edward's 7z 7,664,970.
 
 ## A million digits of pi
 

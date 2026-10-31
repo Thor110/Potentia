@@ -61,7 +61,7 @@ What is left, in order:
 | B.3 | **A small file's overhead** | *Built 31 October, behind the draft:* 9 bytes a small `.sieve` (1,153 → 1,144) | Done: v32's head (NEXT-VERSION §4a, 7) |
 | B.4 | **The archive's format as a number** (the recipes' settings) | *Built:* 18 to 26 bytes on four remade files | Done, with B.3 |
 | B.5 | **A second flags byte** | The first is full (all eight bits used) | *Decided (Edward):* none; the version byte says how a head is read |
-| B.6 | **Freeze**: SIEVE-FORMAT's v32 edition, the Proof samples made again, the same codes on Windows, Linux and macOS | | NEXT-VERSION §5, steps 4 and 5 |
+| B.6 | **Freeze**: SIEVE-FORMAT's v32 edition, the Proof samples made again, the same codes on Windows, Linux and macOS | *Frozen 31 October (Edward):* v32 the newest, the draft switch gone, SIEVE-FORMAT's v32 edition written | Edward: the CI on all three systems; the Proof samples and STATISTICS measured again |
 
 The rope's wave direction was measured for v32 and is **not** to go in (part E).
 
