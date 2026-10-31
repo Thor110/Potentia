@@ -1,46 +1,74 @@
-# A wave direction for the rope, measured (30 October 2026)
+# PNG and JPEG under all three methods (31 October 2026)
 
-Unzip this over the repository root, on top of the last zip ("rope designs"). It is committed
-locally, not pushed. Nothing in Sieve's code changes: there is one new script, one results table
-and one IDEAS entry.
+Unzip this over the repository root, on top of the last zip ("rope direction"). It is committed
+locally, not pushed. Everything here is behind `--v32-draft`. Without it, every output is byte for
+byte what the build before made: the twelve PNGs and the seven JPEGs were measured with no box,
+temporary and permanent.
 
-## `tools/rope_direction_probe.py` (new)
+New files: `tools/cli/png_resave.{hpp,cpp}`, added to `sieve_compare` in CMakeLists.txt.
 
-```
-python tools/rope_direction_probe.py FILE... [--width W] [--rows 16] [--pixel P]
-```
+## What each method does now (with the draft)
 
-It reads a file as rows of W bytes, in one of four ways:
+| | no box | temporary | permanent |
+| :--- | :--- | :--- | :--- |
+| **JPEG** | as it is | brunsli form, given back byte for byte (`jbr`) | the same coefficients with optimised Huffman tables, carried as its brunsli form; else as temporary |
+| **PNG** | as it is | made again exactly (as before) | **re-saved at its smallest** (`pngr`), the same picture under its own name; else made again exactly; else as it is |
 
-- **one direction:** each byte as its difference from one chosen neighbour (left, above,
-  above-left or above-right), for the whole file;
-- **a direction a stretch:** the neighbour chosen afresh every 16 rows;
-- **direction or triangle:** the same, with the rope's triangle (P4) as a fifth choice;
-- **the triangle**, measured beside them.
+With both boxes, a file is made again exactly first.
 
-Each remainder is measured by its order-0 entropy (the rope's own coder) and by LZMA2.
-`--pixel 3` makes the left neighbour a pixel back in RGB, so it is the same colour.
+- **JPEGs and the boxes:** a JPEG now follows the boxes, as other compressed formats do. Before,
+  the draft used brunsli with no box ticked. So the CI's JPEG check now passes
+  `--compressed-temporary`.
+- **The PNG flaw:** a PNG is never installed as its pixel rows any more (v31 installed
+  `example_book_cover.png` as a 76,800-byte file named `cover`).
 
-## The results (`results/rope-direction-2026-10-30.md`, IDEAS §19.108)
+## Measured
 
-Bytes, by order-0 entropy:
+**PNG under permanent**, each of the twelve on its own:
 
-| File | xz of the file | triangle | best direction way |
-| :--- | ---: | ---: | ---: |
-| diagonal (designed) | 848 | 926,317 | 8,964 |
-| two directions (designed) | 1,148 | 972,274 | 9,633 (one direction: 597,283) |
-| diagonal + noise (designed) | 133,552 | 976,609 | 127,507 |
-| hallway door, 1280×720 RGB | 14,220 | 38,167 | 76,325 |
-| icon128, RGBA | 11,760 | 32,406 | 29,660 |
-| survey table (tsv) | 6,340 | 66,482 | 64,341 |
-| the sieve program, first MiB | 372,048 | 963,166 | 907,274 |
+| PNG | original | installed | `.sieve` temporary | `.sieve` permanent |
+| :--- | ---: | ---: | ---: | ---: |
+| example_book_cover | 859 | 202 | 151 | 183 |
+| icon128 | 27,749 | 17,537 | 19,776 | 11,376 |
+| hallway-door | 46,647 | 20,053 | 7,883 | 7,914 |
+| m1_sieve_scowl60 | 146,344 | 105,324 | 84,641 | 48,136 |
+| long-pages-64MB-cache | 128,597 | 58,841 | 45,667 | 45,704 |
 
-- **Designed files:** a direction cancels what the rope could not. Choosing it a stretch at a time
-  handles two directions in one file.
-- **Real files:** the triangle stays best, or about even, on the pictures. A direction takes off
-  3% to 8.5% on the icon, the tables and the program.
-- **Against xz:** no remainder came under xz on the file as it is, on any real file.
+The other seven are in FORMATS.md.
 
-**So it is not built.** On these files it would not change which way Sieve takes. Your game data
-(sprite sheets, textures) is what would decide it, and the probe runs on it as it is. A raw
-texture needs `--width` (its width × bytes a pixel) and `--pixel`.
+- Every PNG was installed smaller, with the same pixels (checked by Pillow).
+- Sieve, sieve-install and the oracle gave back the same bytes.
+- The installed PNGs were smaller than Pillow's re-save on eleven of the twelve, and the same on
+  hallway-door.
+- The `.sieve` under permanent is often smaller than under temporary, since rows carried
+  unfiltered pack better. Where it's larger, it is by 31 to 43 bytes.
+
+**JPEG under permanent:**
+- **The repository's seven:** Vitruvian.jpg went from 207,500 to 203,455 bytes (−1.95%). The other
+  six are optimised already, so they come back exact.
+- **JPEGs Pillow wrote with its standard tables:** 9% to 11% smaller, for example baseline 172,212
+  to 156,746. Restart markers, greyscale and 4:4:4 all work.
+- **Progressive JPEGs** are left exact; the optimiser doesn't handle them yet.
+
+Every picture had the same pixels.
+
+## Checked here
+
+- Unit suite: 77,110 checks, 0 failures.
+- CI step 11: the new lines (JPEG with no box, temporary and permanent; PNG permanent; without the
+  draft), run on their own, pass.
+- The oracle made all twelve re-saved PNGs and agreed with Sieve.
+
+## Changed
+
+- `pack.cpp`: the PNG branch, the JPEG step under the boxes, and two new report lines, `optimised`
+  and `pngs`.
+- `jpeg_glue`: `jpeg_optimised`.
+- `locate.cpp`: the reader takes `pngr`.
+- `sieve_ref.py`: `pngr_make`.
+- `help.cpp`: the help text.
+- CI step 11: the new checks.
+- Docs: SPECIFICATIONS v32, METHODS §2a, FORMATS (now "decided and built"), NEXT-VERSION §4a item
+  4, HANDOFF.
+- IDEAS §19.88: an idea found on the way. Temporary could carry a PNG's rows unfiltered too and
+  still give back the original exactly. Not measured.

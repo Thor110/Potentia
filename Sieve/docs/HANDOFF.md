@@ -4112,6 +4112,23 @@ a text, 659,333 → 555,677 bytes, every file back byte for byte. Measured first
 `cjxl` on ten original JPEGs (Edward's three among them, deleted after): brunsli the smaller on all
 ten, quicker, and a tenth the size.
 
+*PNG and JPEG under the three methods (31 October 2026, the draft).* Edward: "go ahead with the
+png/jpeg design yes". A JPEG now follows the Compressed Formats boxes:
+- no box: as it is;
+- temporary: `jbr`;
+- permanent: `jbr` of the same coefficients with optimised tables (`jpeg_optimised` in
+  jpeg_glue.cpp, Annex K).
+
+A PNG under permanent is no longer installed as its rows. It is re-saved at its smallest (`pngr`,
+tools/cli/png_resave.cpp; format 22), and the oracle makes it by zlib. Measured:
+- all twelve PNGs measured were installed smaller with the same pixels, often in a smaller `.sieve`
+  than temporary's;
+- Vitruvian.jpg 207,500 → 203,455 bytes;
+- Pillow's standard-table JPEGs 9% to 11% smaller.
+
+FORMATS.md has the tables; CI step 11 checks both. Without the draft, every output is unchanged
+(measured against the build before).
+
 *Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's
 overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.

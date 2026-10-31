@@ -21,4 +21,11 @@ std::optional<std::vector<uint8_t>> jpeg_to_brunsli(const std::vector<uint8_t>& 
 // The JPEG again from its brunsli form; refused where the form does not read.
 std::vector<uint8_t> brunsli_to_jpeg(const std::vector<uint8_t>& form);
 
+// The same JPEG with Huffman tables made for its own values (ITU T.81 Annex K.2, as `jpegtran
+// -optimize` makes them): the same coefficients, so the same pixels, in fewer bytes. Only for a
+// sequential JPEG whose tables are each defined once, before its first scan; given only where it
+// reads back to the same coefficients and quantisation tables and is smaller; else nothing. (v32 in
+// the making: what Compressed Formats' permanent box installs for a JPEG.)
+std::optional<std::vector<uint8_t>> jpeg_optimised(const std::vector<uint8_t>& jpeg);
+
 } // namespace sieve::cli

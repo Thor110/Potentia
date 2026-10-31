@@ -6654,8 +6654,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6}
 
 
 def listing_from_bytes(b):
@@ -7115,6 +7115,17 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a JPEG recipe Sieve does not write")
             remakes[i] = ("jbr", size)
             size = int(n)
+        if v32 and way.startswith("pngr "):
+            # "pngr <filter> <strategy> <split> <head size> <inner size> <way>" (SPECIFICATIONS v32, a
+            # draft): a PNG re-saved at its smallest from its head (the PNG without its IDATs) and its
+            # rows unfiltered, by zlib, which the oracle has: made here, then checked as every file is.
+            _, filt, strat, split, head, n, way = way.split(" ", 6)
+            if not (re.fullmatch(r"[0-5]", filt) and strat in ("0", "1") and split.isdigit() and head.isdigit() and n.isdigit() and
+                    33 <= int(split) <= int(head) <= int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                sys.exit(f"{path}: a re-saved PNG's recipe Sieve does not write")
+            remakes[i] = ("pngr", int(filt), int(strat), int(split), int(head), size)
+            size = int(n)
         if v31 and way.startswith("skm "):
             # "skm <members> <skeleton size> <way>": a gzip, zip or 7z as a skeleton, what it holds its members.
             _, n, skel, way = way.split(" ", 3)
@@ -7344,6 +7355,9 @@ def cmd_unpack_v7(args, data):
         if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
+        if r[0] == "pngr":  # v32 (a draft): the PNG re-saved, by zlib
+            got[i] = pngr_make(got[i], r[1], r[2], r[3], r[4], files[i][0])
+            continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
             inner = got[i] + b"".join(got[k] for k in sorted(members) if members[k] == i) if r[0] == "skm" else got[i]  # v31: its members after it
@@ -7448,6 +7462,58 @@ def refused_path(p):
     if parts[-1] == "":
         parts = parts[:-1]
     return any(part in ("", ".", "..") for part in parts)
+
+
+def pngr_make(inner, filt, strat, split, head, path):
+    """SPECIFICATIONS v32 (a draft): a PNG re-saved from its head (the PNG without its IDATs) and its
+    rows unfiltered. Filter 0 to 4 for every row, or 5 for each row the filter whose bytes, read as
+    signed, sum to the least (the lower of equals); deflated by zlib at level 9, memory level 9, a
+    window of 15 bits, strategy 0 its default or 1 its filtered; one IDAT, at `split` bytes into the
+    head."""
+    import zlib
+    h = inner[:head]
+    if len(h) < 33 or h[:8] != b"\x89PNG\r\n\x1a\n" or h[8:16] != b"\x00\x00\x00\x0dIHDR":
+        sys.exit(f"{path}: a re-saved PNG whose head is not a PNG's")
+    w, ht, depth, ctype, _, _, interlace = struct.unpack(">IIBBBBB", h[16:29])
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(ctype)
+    if not channels or interlace:
+        sys.exit(f"{path}: a re-saved PNG whose head is not a PNG's")
+    bits = channels * depth
+    n, bpp = (w * bits + 7) // 8, max(1, bits // 8)
+    rows = inner[head:]
+    if len(rows) != n * ht:
+        sys.exit(f"{path}: a re-saved PNG whose head and rows do not agree")
+
+    def paeth(a, b, c):
+        p = a + b - c
+        pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+        return a if pa <= pb and pa <= pc else b if pb <= pc else c
+
+    def filtered(t, row, prior):
+        out = bytearray(n)
+        for x in range(n):
+            a = row[x - bpp] if x >= bpp else 0
+            b = prior[x]
+            c = prior[x - bpp] if x >= bpp else 0
+            pred = 0 if t == 0 else a if t == 1 else b if t == 2 else (a + b) // 2 if t == 3 else paeth(a, b, c)
+            out[x] = (row[x] - pred) & 255
+        return out
+
+    data = bytearray()
+    prior = bytes(n)
+    for y in range(ht):
+        row = rows[y * n:(y + 1) * n]
+        if filt < 5:
+            t, f = filt, filtered(filt, row, prior)
+        else:
+            t, f = min(((sum(v if v < 128 else 256 - v for v in fx), k, fx) for k, fx in ((k, filtered(k, row, prior)) for k in range(5))),
+                       key=lambda z: (z[0], z[1]))[1:]
+        data += bytes([t]) + f
+        prior = row
+    z = zlib.compressobj(9, zlib.DEFLATED, 15, 9, zlib.Z_FILTERED if strat else zlib.Z_DEFAULT_STRATEGY)
+    idat = z.compress(bytes(data)) + z.flush()
+    chunk = struct.pack(">I", len(idat)) + b"IDAT" + idat + struct.pack(">I", zlib.crc32(b"IDAT" + idat))
+    return h[:split] + chunk + h[split:]
 
 
 def skeleton_remake(inner, skel, path):

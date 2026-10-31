@@ -1000,7 +1000,8 @@ static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst",
                                               "sk", // (v21: 18, a skeleton and what it holds: a gzip, zip or 7z made again)
                                               "stb", // (v25: 19, a PNG stb_image_write made, made again from its pixels)
                                               "skm", // (v31: 20, a skeleton, what it holds carried as its own files)
-                                              "jbr"}; // (v32, in the making: 21, a JPEG made again from its brunsli form)
+                                              "jbr", // (v32, in the making: 21, a JPEG made again from its brunsli form)
+                                              "pngr"}; // (v32, in the making: 22, a PNG re-saved at its smallest from its head and rows)
 
 int archive_format_number(const std::string& name)
 {
@@ -1019,7 +1020,7 @@ static int recipe_words(std::string_view way)
 {
     const std::string_view kind = way.substr(0, way.find(' '));
     return kind == "xz" ? 4 : kind == "gz" ? 5 : kind == "bz2" ? 3 : kind == "zst" ? 6 : kind == "lz4" ? 8 : kind == "br" ? 4 : kind == "lzma" ? 3 :
-           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : 0;
+           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : kind == "pngr" ? 6 : 0;
 }
 
 static void put_text(std::vector<uint8_t>& o, std::string_view t)
@@ -1807,7 +1808,8 @@ Manifest Manifest::parse(std::string_view whole)
             const bool stb = m.v25 && e.way.rfind("stb ", 0) == 0;
             const bool skm = m.v31 && e.way.rfind("skm ", 0) == 0;
             const bool jbr = m.v32 && e.way.rfind("jbr ", 0) == 0; // v32 (in the making): "jbr <form size> <way>"
-            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr)
+            const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32 (in the making): "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
+            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
                 // <header> <inner size> <way>"; v19: "bz2 <block size> <inner size> <way>", "zst
@@ -1818,7 +1820,7 @@ Manifest Manifest::parse(std::string_view whole)
                 // <inner size> <way>".
                 // v21: "sk <skeleton size> <inner size> <way>". v25: "stb <level> <filter> <width>
                 // <height> <components> <inner size> <way>". v31: "skm <members> <skeleton size> <way>".
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : 4;
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : 4;
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");

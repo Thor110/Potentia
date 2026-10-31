@@ -1054,7 +1054,9 @@ const std::vector<Page>& pages()
                                      "exactly on installing (what it holds carried, the original given back); one Sieve cannot make\n"
                                      "again is left as it is. With --compressed-permanent, or as --optimise-compressed: either."},
           {"--compressed-permanent", "Optimise Compressed Formats, permanent (v31): an archive or compressed file carried as what it\n"
-                                     "holds, and installed so (its files, not the archive), even where Sieve could make it again."},
+                                     "holds, and installed so (its files, not the archive), even where Sieve could make it again.\n"
+                                     "With --v32-draft, a PNG or JPEG is installed as the same picture, smaller: a PNG re-saved\n"
+                                     "at its smallest, a JPEG with tables made for its values (else made again exactly)."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},
@@ -1096,7 +1098,9 @@ const std::vector<Page>& pages()
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
           {"--v32-draft", "sieve-manifest-v32 in the making (docs/NEXT-VERSION.md), for testing only: its ways are\n"
                           "made too (a file carried as its differences from another of the folder, where it is\n"
-                          "mostly that file). Without it, instructions are made as before. What it makes is a\n"
+                          "mostly that file; with the Compressed Formats boxes, a JPEG as its brunsli form, and with\n"
+                          "permanent a PNG re-saved and a JPEG's tables optimised, the same pictures, smaller).\n"
+                          "Without it, instructions are made as before. What it makes is a\n"
                           "draft: not to be published, and the finished v32 need not read it."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"

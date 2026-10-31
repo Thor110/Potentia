@@ -811,13 +811,16 @@ diff -r d32 d32_si
 $S locate d32 --installer d32v31.sieve --items 2>&1 | tr -d '\r' > d32v31.txt
 if grep -q "sieve-manifest-v32\|^deltas " d32v31.txt; then exit 1; fi
 # v32 in the making, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
-# for byte. The repository's seven JPEGs (all public domain or Sieve's own) and a text: with the
-# draft, each JPEG carried so and the folder given back by Sieve and by sieve-install; the oracle
-# reads the recipes, names the JPEGs as files it has not made (it has no brunsli) and makes the text;
+# for byte, under Compressed Formats' boxes. The repository's seven JPEGs (all public domain or
+# Sieve's own) and a text: with the draft and temporary, each JPEG carried so and the folder given
+# back by Sieve and by sieve-install; the oracle reads the recipes, names the JPEGs as files it has
+# not made (it has no brunsli) and makes the text; with the draft and no box, nothing is v32;
 # without the draft, nothing is v32.
 rm -rf j32 && mkdir j32
 cp ../data/anchors/public-domain/Vitruvian.jpg ../web/test-site/src/pictures/*.jpg ../docs/VAULT.md j32/
-$S locate j32 --installer j32.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32.txt
+$S locate j32 --installer j32none.sieve --items --v32-draft 2>&1 | tr -d '\r' > j32none.txt
+if grep -q "sieve-manifest-v32\|^jpegs " j32none.txt; then exit 1; fi
+$S locate j32 --installer j32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' > j32.txt
 grep -c "^jpegs     7 JPEG(s) carried as their brunsli form, made again byte for byte" j32.txt > /dev/null
 rm -rf j32_inst j32_oracle j32_si
 $S install j32.sieve --to j32_inst > /dev/null
@@ -829,6 +832,69 @@ python sieve_ref.py unpack j32.sieve --to j32_oracle > j32o.txt
 cmp j32/VAULT.md j32_oracle/VAULT.md
 $S locate j32 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
 if grep -q "sieve-manifest-v32\|^jpegs " j32v31.txt; then exit 1; fi
+# Permanent alone: the same coefficients with tables made for them where that is smaller (of the
+# seven, Vitruvian.jpg: its pixels the same, its file smaller); the rest made again byte for byte.
+# Given back the same by Sieve and by sieve-install; the oracle reads the recipes as above.
+$S locate j32 --installer j32p.sieve --items --v32-draft --compressed-permanent 2>&1 | tr -d '\r' > j32p.txt
+grep -c "^optimised 1 of those JPEG(s) installed with tables made for their values, the same pictures" j32p.txt > /dev/null
+rm -rf j32p_inst j32p_si j32p_oracle
+$S install j32p.sieve --to j32p_inst > /dev/null
+$SI j32p.sieve --to j32p_si --yes > /dev/null
+diff -r j32p_inst j32p_si
+[ "$(wc -c < j32p_inst/Vitruvian.jpg)" -lt "$(wc -c < j32/Vitruvian.jpg)" ]
+for f in audio book door filters picture-in-hand vitruvian; do cmp j32/$f.jpg j32p_inst/$f.jpg; done
+python sieve_ref.py unpack j32p.sieve --to j32p_oracle > j32po.txt
+[ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32po.txt)" -eq 7 ]
+# v32 in the making, too: with permanent, a PNG installed as the same picture re-saved at its
+# smallest ("pngr <filter> <strategy> <split> <head size> <inner size>"), never as its rows alone.
+# Four of the repository's small PNGs (the oracle filters each row in Python, slowly): each
+# re-saved smaller under its own name, given back the same by Sieve, sieve-install and the oracle
+# (which makes them by zlib), each the same pixels as before (its rows read back by zlib alone);
+# without the draft, nothing is v32.
+rm -rf p32 && mkdir p32
+cp ../tests/example_book_cover.png ../web/extension/icon16.png ../web/extension/icon32.png ../web/extension/icon128.png p32/
+$S locate p32 --installer p32.sieve --items --v32-draft --compressed-permanent 2>&1 | tr -d '\r' > p32.txt
+grep -c "^pngs      4 PNG(s) installed re-saved at their smallest, the same pictures" p32.txt > /dev/null
+rm -rf p32_inst p32_si p32_oracle
+$S install p32.sieve --to p32_inst > /dev/null
+$SI p32.sieve --to p32_si --yes > /dev/null
+diff -r p32_inst p32_si
+python sieve_ref.py unpack p32.sieve --to p32_oracle > /dev/null
+diff -r p32_inst p32_oracle
+python - p32 p32_inst <<'PY'
+import os, struct, sys, zlib
+def rows(path):
+    b = open(path, "rb").read()
+    at, data, ihdr = 8, b"", None
+    while at < len(b):
+        n = struct.unpack(">I", b[at:at + 4])[0]
+        kind = b[at + 4:at + 8]
+        if kind == b"IHDR": ihdr = b[at + 8:at + 8 + n]
+        if kind == b"IDAT": data += b[at + 8:at + 8 + n]
+        at += 12 + n
+    w, h, depth, ctype = struct.unpack(">IIBB", ihdr[:10])
+    bits = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}[ctype] * depth
+    n, bpp, raw = (w * bits + 7) // 8, max(1, bits // 8), zlib.decompress(data)
+    out, prior = [], bytearray(n)
+    for y in range(h):
+        f, row = raw[y * (n + 1)], bytearray(raw[y * (n + 1) + 1:(y + 1) * (n + 1)])
+        for x in range(n):
+            a = row[x - bpp] if x >= bpp else 0
+            c = prior[x - bpp] if x >= bpp else 0
+            p = a + prior[x] - c
+            pa, pb, pc = abs(p - a), abs(p - prior[x]), abs(p - c)
+            pred = [0, a, prior[x], (a + prior[x]) // 2, a if pa <= pb and pa <= pc else prior[x] if pb <= pc else c][f]
+            row[x] = (row[x] + pred) & 255
+        out.append(bytes(row))
+        prior = row
+    return ihdr, out
+for name in sorted(os.listdir(sys.argv[1])):
+    a, b = os.path.join(sys.argv[1], name), os.path.join(sys.argv[2], name)
+    if rows(a) != rows(b) or os.path.getsize(b) >= os.path.getsize(a):
+        sys.exit(f"{name}: not the same picture re-saved smaller")
+PY
+$S locate p32 --installer p32v31.sieve --items --compressed-permanent 2>&1 | tr -d '\r' > p32v31.txt
+if grep -q "sieve-manifest-v32\|^pngs " p32v31.txt; then exit 1; fi
 # Prioritise Decoding Speed (27 October 2026; --prioritise-decoding, the File Locator's box): no
 # file mixed, so the instructions install quickly: Don Quixote's start carried by the rope or
 # LZMA2 instead, larger than with mixing, the report saying so; installed by Sieve and the oracle.

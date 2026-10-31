@@ -299,8 +299,8 @@ quicker, and about a tenth of libjxl's size in `sieve-install`.
 - **Readers:** `sieve install` and `sieve-install` make the JPEG again. The oracle reads the recipe
   and names the file as not made.
 - **Documented and tested:** SPECIFICATIONS v32, METHODS §2a, CI step 11.
-- **Not tied to Optimise Compressed Formats** (for Edward to confirm): brunsli guesses no encoder's
-  settings and makes the same bytes from the same form.
+- **Under Optimise Compressed Formats** (decided 31 October 2026, item 4 below): first built as
+  not tied to the boxes, it now follows them, as every compressed format does.
 - **Measured:** the repository's seven JPEGs and a text, 691,007 bytes, came to 659,333 as before
   (v28) and **555,677 with the draft** (15.72% smaller), made in 1 s against 3 s, and given back
   identical by `sieve install` and `sieve-install`. The seven JPEGs: 675,293 bytes as 550,050.
@@ -347,7 +347,8 @@ scratchpad), every file's pixels identical:
 - the repository's seven: −1.93% (Vitruvian) and within ±0.2% for the rest (already optimised);
 - Edward's three originals (measured in a scratch folder, deleted after): −0.01%, −2.20%, −2.10%.
 
-*The design, for Edward to confirm:*
+*The design* (confirmed by Edward on 31 October 2026, "go ahead with the png/jpeg design yes", and
+built behind the draft switch: SPECIFICATIONS v32, METHODS §2a, FORMATS.md, CI step 11):
 
 | | normal | temporary | permanent |
 | :--- | :--- | :--- | :--- |
@@ -355,8 +356,26 @@ scratchpad), every file's pixels identical:
 | JPEG | as it is | its brunsli form, made again exactly (v32's draft; moved under the box) | its brunsli form, installed with the same coefficients and optimised tables (about 2% smaller on phone photos) |
 
 Permanent then means "the same picture, its smallest usable file", not "what the file holds", for
-these two. The installed file differs from the original, as permanent's always do, and the tree's
+these two. Every format and method is now in [FORMATS.md](FORMATS.md), with the long-run aim Edward
+set the same day: the engine as an optimisation and benchmark engine, and a "best defaults" box. The installed file differs from the original, as permanent's always do, and the tree's
 SHA-256 is of what is installed. Both permanent ways are new remade kinds, so v32's.
+
+*As built:* a PNG's re-save is the remade kind `pngr` (format 22). It carries the PNG without its
+IDATs, then its rows unfiltered, and zlib makes the PNG again on installing; the oracle makes it
+too, by Python's zlib. A JPEG's permanent form is `jbr` of the JPEG with optimised tables, so it
+needs no kind of its own. *Measured* (FORMATS.md has the table):
+- all twelve PNGs were installed smaller, the same pixels, and smaller than Pillow's re-save on
+  eleven (the twelfth the same);
+- the `.sieve` under permanent is often smaller than under temporary, since unfiltered rows pack
+  better (the scowl 48,136 bytes against 84,641);
+- of the seven JPEGs, Vitruvian.jpg was installed 1.95% smaller, and the other six exactly.
+
+Without the draft every output is as before: the twelve PNGs and the seven JPEGs, with no box,
+temporary and permanent, came out byte for byte what the build before it made.
+
+*Found on the way:* temporary could carry a PNG's rows unfiltered too, with each row's filter byte
+and preflate's corrections, and so pack as small as permanent does while still giving back the
+original. Not measured; noted in IDEAS §19.88.
 
 **Found on the way, for Edward to decide: a group with another file in its middle.** SPECIFICATIONS
 v30 says a reader refuses a group of files mixed together that holds a file of another way in its

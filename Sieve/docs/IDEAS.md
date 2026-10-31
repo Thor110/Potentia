@@ -4327,6 +4327,14 @@ lost:
     names the format and its recipe follows. A new manifest version, with the next one.
   - The versions compared: GNU gzip 1.12 against zlib 1.3, and the `xz` program 5.4.5 against the
     liblzma Sieve was built with here.
+  - **A PNG's rows carried unfiltered, made again exactly (an idea, 31 October 2026, not
+    measured).** Re-saving a PNG under permanent (v32's draft, `pngr`) showed that a PNG's rows pack
+    smaller unfiltered than as PNG filtered them. The scowl's `.sieve` was 48,136 bytes so, against
+    84,641 for temporary's skeleton, which carries the filtered rows. Temporary could carry them
+    unfiltered too, with each row's filter byte beside them, filter them again on installing, then
+    deflate them by preflate as now. Then it would give back the original and pack about as small
+    as permanent. Whether preflate's corrections stay as small for rows filtered again is what to
+    measure.
 
 **19.89 ~~Sieve instructions for the internet: size and decoding time as one setting~~ (Edward, 20
 October 2026; deprecated for now, §17.3).** Another box: optimise for file size and decoding time

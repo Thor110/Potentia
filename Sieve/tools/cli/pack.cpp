@@ -3,6 +3,7 @@
 #include "cli/pack.hpp"
 #include "cli/delta.hpp"
 #include "cli/jpeg_glue.hpp"
+#include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
 
 #include "sieve/filekind.hpp"
@@ -1840,6 +1841,17 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
             throw std::runtime_error("a JPEG's recipe this Sieve does not know: " + recipe);
         return brunsli_to_jpeg(inner);
     }
+    if (recipe.rfind("pngr ", 0) == 0)
+    {
+        // "pngr <filter> <strategy> <split> <head size> <inner size>" (v32, in the making): a PNG
+        // re-saved at its smallest, from its head and its rows unfiltered (png_resave.hpp).
+        int filter = 0, strategy = 0;
+        unsigned long long split = 0, head = 0, size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "pngr %d %d %llu %llu %llu%c", &filter, &strategy, &split, &head, &size, &extra) != 5 || size != inner.size())
+            throw std::runtime_error("a PNG's recipe this Sieve does not know: " + recipe);
+        return png_resave_make(inner, filter, strategy, split, head);
+    }
     if (recipe.rfind("stb ", 0) == 0)
     {
         // "stb <level> <filter> <width> <height> <components> <inner size>" (v25): a PNG stb_image_write
@@ -2501,6 +2513,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool delta_on = rope_newest >= 14 && v21 && v32_draft();
     // v32 (in the making): a JPEG carried as its brunsli form and made again exactly, only with the draft switch.
     const bool jpeg_on = rope_newest >= 14 && v21 && v32_draft();
+    // v32 (in the making): with permanent, a PNG installed as the same picture re-saved at its
+    // smallest, only with the draft switch.
+    const bool pngr_on = png_on && rope_newest >= 14 && v32_draft();
+    size_t pngs_resaved = 0;
+    uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
     m.remake_gz = false;
@@ -2675,6 +2692,63 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 return true;
             };
+            // v32 (in the making, behind the draft switch): with permanent, a PNG is never installed as
+            // its rows alone, which no viewer opens. Permanent alone: the same picture re-saved at its
+            // smallest ("pngr", every chunk but its pixels' as it was), where that is smaller than the
+            // PNG; else made again exactly, as temporary would; else left as it is. Both boxes: made
+            // again exactly first, else re-saved. Measured on twelve of the repository's PNGs, re-saved
+            // smaller every time (NEXT-VERSION §4a, 4).
+            if (pngr_on && permanent_ok && is_png(b))
+            {
+                auto exact = [&]() {
+                    std::vector<uint8_t> px;
+                    int w = 0, h = 0, c = 0;
+                    if (png_pixels(b.data(), b.size(), px, w, h, c))
+                        for (const int level : {8, 9, 7, 6, 5, 4, 3, 2, 1, 0})
+                        {
+                            const std::string again = stb_png(px, w, h, c, level, -1);
+                            if (again.size() != b.size() || !std::equal(again.begin(), again.end(), reinterpret_cast<const char*>(b.data()))) continue;
+                            if (!worth(px, 40)) break;
+                            ManifestEntry r = e;
+                            r.remake = "stb " + std::to_string(level) + " -1 " + std::to_string(w) + " " + std::to_string(h) + " " + std::to_string(c) + " " +
+                                       std::to_string(px.size());
+                            add_file(r, std::move(px), std::move(b));
+                            return true;
+                        }
+                    if (auto sk = png_skeleton(b))
+                    {
+                        size_t skeleton = 0;
+                        std::vector<uint8_t> whole = sk->inner(skeleton);
+                        if (deflate_skeleton_remake(whole, skeleton) == b && worth(whole, 40))
+                        {
+                            ManifestEntry r = e;
+                            r.remake = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                            add_file(r, std::move(whole), std::move(b));
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                auto resaved = [&]() {
+                    auto rs = png_resave(b);
+                    if (!rs || rs->png.size() >= b.size() || !worth(rs->inner, 40)) return false;
+                    ++pngs_resaved;
+                    png_bytes += b.size();
+                    png_resaved_bytes += rs->png.size();
+                    progress(e.path + ", a PNG of " + std::to_string(b.size()) + " bytes, installed re-saved at its smallest, " + std::to_string(rs->png.size()) +
+                             " bytes, the same picture (" + rs->recipe + ")");
+                    ManifestEntry r = e;
+                    r.remake = rs->recipe;
+                    add_file(r, std::move(rs->inner), std::move(rs->png));
+                    return true;
+                };
+                bool made = false;
+                if (temporary_ok) made = exact() || resaved();
+                else made = resaved() || exact();
+                if (made && entries.back().remake.rfind("pngr ", 0) != 0) png_made = true;
+                if (!made) add_file(e, std::move(b), {});
+                continue;
+            }
             // v25: a PNG made again exactly from its skeleton: its IDATs' deflate by preflate, their CRCs
             // worked out again; what it holds (its rows, as PNG filters them) carried as any file is.
             if (png_on && is_png(b))
@@ -3054,18 +3128,44 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     }
 
     // v32 (in the making, behind the draft switch): a JPEG carried as its brunsli form ("jbr <form
-    // size>"), made again exactly on installing: brunsli recodes the JPEG's own coded values by a
-    // model made for them. Taken where brunsli gives the file back byte for byte (checked here,
-    // before it is kept) and the form is smaller; any other JPEG is carried as it is. Not tied to
-    // Optimise Compressed Formats: nothing is guessed (no encoder's settings to find), brunsli makes
-    // the same bytes from the same form. Measured on ten original JPEGs, 15.25% to 21.91% smaller.
-    size_t jpegs_made = 0;
-    uint64_t jpeg_bytes = 0, jpeg_forms = 0;
-    if (jpeg_on && !stop_requested())
+    // size>"), made again on installing: brunsli recodes the JPEG's own coded values by a model made
+    // for them. A compressed format, so under Compressed Formats' boxes, as a PNG is (Edward, 30
+    // October 2026: "packed under all three methods"): with neither, carried as it is; temporary,
+    // the JPEG made again byte for byte; permanent alone, the same coefficients with Huffman tables
+    // made for them (Annex K, as `jpegtran -optimize`), so the same pixels in fewer bytes, made
+    // again from its brunsli form, where that is smaller (else as temporary). Taken where brunsli
+    // gives the file back byte for byte (checked here, before it is kept) and the form is smaller;
+    // any other JPEG is carried as it is. Measured on ten original JPEGs, the form 15.25% to 21.91%
+    // smaller; the tables −2.10% and −2.20% on Edward's phone photos.
+    size_t jpegs_made = 0, jpegs_optimised = 0;
+    uint64_t jpeg_bytes = 0, jpeg_forms = 0, jpeg_was = 0, jpeg_now = 0;
+    if (jpeg_on && optimise_archives && m.compact && !stop_requested())
         for (size_t i = 0; i < files.size(); ++i)
         {
             if (!files[i]->remake.empty() || files[i]->member || bytes[i].size() < 1024 || !is_jpeg(bytes[i])) continue;
             const timings::Scope t("pack.jpeg");
+            if (!compressed_temporary())
+                if (auto better = jpeg_optimised(bytes[i]))
+                    if (auto form = jpeg_to_brunsli(*better); form && form->size() < better->size())
+                    {
+                        progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
+                                 std::to_string(bytes[i].size()) + " bytes, installed with tables made for its values, " + std::to_string(better->size()) +
+                                 " bytes, the same picture, as its brunsli form of " + std::to_string(form->size()));
+                        ++jpegs_made;
+                        ++jpegs_optimised;
+                        jpeg_was += bytes[i].size();
+                        jpeg_now += better->size();
+                        jpeg_bytes += better->size();
+                        jpeg_forms += form->size();
+                        m.bytes = m.bytes - files[i]->size + better->size();
+                        files[i]->size = better->size();
+                        files[i]->sha256 = sha256_hex(*better);
+                        files[i]->remake = "jbr " + std::to_string(form->size());
+                        if (original.size() != bytes.size()) original.resize(bytes.size());
+                        original[i] = std::move(*better);
+                        bytes[i] = std::move(*form);
+                        continue;
+                    }
             auto form = jpeg_to_brunsli(bytes[i]);
             if (!form || form->size() >= bytes[i].size()) continue;
             progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", a JPEG of " +
@@ -3349,6 +3449,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.jpegs = jpegs_made;
     r.jpeg_bytes = jpeg_bytes;
     r.jpeg_forms = jpeg_forms;
+    r.jpegs_optimised = jpegs_optimised;
+    r.jpeg_was = jpeg_was;
+    r.jpeg_now = jpeg_now;
+    r.pngs_resaved = pngs_resaved;
+    r.png_bytes = png_bytes;
+    r.png_resaved_bytes = png_resaved_bytes;
     r.delta_bytes = delta_bytes;
     r.delta_scripts = delta_script_bytes;
     m.roped = m.rope_columns = m.rope_lines = m.rope_groups = m.pieces = m.rope_above = false;
@@ -4128,7 +4234,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool had_v21 = m.v21, had_v22 = m.v22;
     const bool had_v25 = m.v25;
     // v31: some archive made again from its skeleton and its members (only where the newest are made: above).
-    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0; });
+    m.v32 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0; });
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
@@ -4264,6 +4370,12 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.jpegs)
             o << "jpegs     " << r.jpegs << " JPEG(s) carried as their brunsli form, made again byte for byte (" << r.jpeg_bytes << " bytes as "
               << r.jpeg_forms << "; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
+        if (r.jpegs_optimised)
+            o << "optimised " << r.jpegs_optimised << " of those JPEG(s) installed with tables made for their values, the same pictures (" << r.jpeg_was
+              << " bytes as " << r.jpeg_now << "; Compressed Formats, permanent)\n";
+        if (r.pngs_resaved)
+            o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
+              << r.png_resaved_bytes << "; Compressed Formats, permanent; " << kDeltaManifestVersion << ", a draft: not to be published)\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
               << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ", a draft: not to be published)\n";

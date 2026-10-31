@@ -84,6 +84,10 @@ struct PackReport
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'
     uint64_t jpeg_bytes = 0, jpeg_forms = 0;
+    size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
+    uint64_t jpeg_was = 0, jpeg_now = 0;
+    size_t pngs_resaved = 0;             // v32: PNGs installed re-saved at their smallest (permanent), their bytes before and after
+    uint64_t png_bytes = 0, png_resaved_bytes = 0;
     size_t member_archives = 0, members = 0; // v31: those archives, and their files
     size_t mix_groups = 0, mix_group_files = 0; // v30: the groups, and the files in them
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart

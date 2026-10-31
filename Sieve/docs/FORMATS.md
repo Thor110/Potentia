@@ -36,8 +36,8 @@ every installed file is checked against its SHA-256 before anything is written.
 | RAR (`.rar`) | libarchive | by the machine's own `rar`, where it gives the archive back byte for byte (v22) | its folder | RAR 5; RAR 4 only as its contents; the real `rar` not yet measured |
 | cab, ISO, LHA, cpio, ar (`.deb`), WARC | libarchive | not made again | its folder | |
 | tar (`.tar`) | Sieve | (not compressed: carried as it is) | (as it is) | `sieve-install` extracts it |
-| **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | **its pixel rows: a flaw** (below) | |
-| **JPEG** | brunsli | (normal and both boxes alike, in v32's draft: its brunsli form) | | v32's draft; to move under the boxes (below) |
+| **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32's draft: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
+| **JPEG** | brunsli | v32's draft: from its brunsli form (`jbr`) | v32's draft: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
 
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.
 
@@ -57,16 +57,55 @@ every installed file is checked against its SHA-256 before anything is written.
   - the same coefficients with optimised Huffman tables: −2.10% and −2.20% on Edward's phone photos,
     about nothing on JPEGs already optimised.
 
-## Decided and open (30 October 2026)
+## Decided and built (31 October 2026, v32's draft)
 
-- **PNG under permanent is a flaw:** a PNG installs as its headerless pixel rows, a file no viewer
-  opens (`tests/example_book_cover.png`, 859 bytes, as `cover`, 76,800 bytes). The design to
-  confirm: permanent installs the same picture re-saved by Sieve at its smallest.
-- **JPEG under the boxes** (Edward: both are compressed formats, so "packed under all three
-  methods"): normal as it is; temporary its brunsli form, made again exactly; permanent the same
-  coefficients with optimised tables.
+Edward confirmed the design ("go ahead with the png/jpeg design yes"); built behind `--v32-draft`:
+
+- **PNG under permanent** no longer installs as its headerless pixel rows, a file no viewer opens
+  (v31: `tests/example_book_cover.png`, 859 bytes, as `cover`, 76,800 bytes). It installs as the
+  same picture re-saved by Sieve at its smallest (`pngr`), under its own name. Without the draft,
+  v31's packer is unchanged, the flaw with it.
+- **JPEG under the boxes:** normal as it is; temporary its brunsli form, made again exactly;
+  permanent the same coefficients with optimised tables, from its brunsli form.
 - So for pictures, permanent means "the same picture, its smallest usable file" rather than "what
   the file holds".
+- *Measured* (each PNG alone; every installed picture the same pixels by Pillow, and the same
+  bytes from Sieve, sieve-install and the oracle):
+
+  | PNG | original | installed | `.sieve` temporary | `.sieve` permanent |
+  | :--- | ---: | ---: | ---: | ---: |
+  | example_book_cover | 859 | 202 | 151 | 183 |
+  | icon16 | 1,258 | 936 | 1,322 | 947 |
+  | icon128 | 27,749 | 17,537 | 19,776 | 11,376 |
+  | beautiful-screens | 16,289 | 14,824 | 7,218 | 5,517 |
+  | viewer-picture | 29,899 | 5,509 | 1,733 | 1,768 |
+  | font-test-french | 31,413 | 6,150 | 3,789 | 3,054 |
+  | gallery-tiles | 38,986 | 28,562 | 26,385 | 17,950 |
+  | hallway-door | 46,647 | 20,053 | 7,883 | 7,914 |
+  | hallway-compact | 53,569 | 24,828 | 16,059 | 16,102 |
+  | m1_sieve_scowl60 | 146,344 | 105,324 | 84,641 | 48,136 |
+  | long-pages-64MB-cache | 128,597 | 58,841 | 45,667 | 45,704 |
+  | long-pages-1024MB-cache | 129,272 | 59,298 | 45,972 | 46,009 |
+
+  - **Installed:** every PNG came out smaller, and smaller than Pillow's re-save at zlib 9 with
+    optimisation on all but hallway-door (the same 20,053). For example icon128 is 17,537 against
+    Pillow's 27,649.
+  - **The `.sieve`:** under permanent it is often the smaller of the two, since rows carried
+    unfiltered pack better than rows as PNG filtered them (temporary's). The scowl is 48,136 against
+    84,641, and icon128 11,376 against 19,776. Where it is larger, it is by 31 to 43 bytes, the
+    recipe's.
+  - **JPEGs** (the repository's seven): permanent installed Vitruvian.jpg in 203,455 bytes, from
+    207,500 (−1.95%). The other six are optimised already, so they come back exact. The `.sieve`
+    is 555,738 bytes against temporary's 555,677, and 659,333 with no box (v31's).
+  - **JPEGs that Pillow wrote** with its standard tables, from the hallway door at quality 85 to 92,
+    made for this test:
+    - baseline 172,212 bytes to 156,746;
+    - greyscale 148,510 to 132,517;
+    - with restart markers 172,470 to 156,855;
+    - 4:4:4 at quality 92 346,331 to 310,963.
+
+    Every one has the same pixels. A progressive JPEG is left exact: its scans code their values
+    otherwise, and the optimiser does not yet handle them.
 
 ## The long run: an optimisation and benchmark engine
 

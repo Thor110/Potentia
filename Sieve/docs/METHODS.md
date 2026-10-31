@@ -39,8 +39,10 @@ carried as its contents and installed as them. The kinds:
 - gzip and zip: made again by preflate from their skeleton;
 - 7z and zip: made again from their skeleton and the data they hold;
 - RAR 5: made again by the machine's own `rar`, where that gives it back byte for byte;
-- PNG: made again from its skeleton;
+- PNG: made again from its skeleton (with the draft and permanent, re-saved at its smallest: §2a);
 - lzip: carried as its contents.
+
+Every format, and what each method does to it, is in [FORMATS.md](FORMATS.md).
 
 Before the costly search for the levels that make an archive's blocks again, its contents are
 weighed cheaply, and the search is not started where they would come out no smaller.
@@ -63,15 +65,35 @@ Log: `file N of M: NAME, S bytes: as its differences from OTHER: C copies coveri
 bytes, a script of L bytes in the lzma2 stream`, then `not searched (carried as its differences from
 OTHER (above))`.
 
-With the draft too, a **JPEG** of 1 KiB or more is carried as its **brunsli form** (the `jbr` way):
-- **What it is:** Google's brunsli recodes the JPEG's own coded values by a model made for them.
-- **When it's kept:** where brunsli gives the file back byte for byte (checked before it is kept)
-  and the form is smaller; any other JPEG is carried as it is.
-- **Not searched:** the form is coded already.
-- **Measured:** 15.25% to 21.91% off ten original JPEGs.
+With the draft too, PNGs and JPEGs are packed under the **Compressed formats** boxes, as the other
+compressed formats are ([FORMATS.md](FORMATS.md)):
 
-Log: `file N of M: NAME, a JPEG of S bytes, as its brunsli form of F (made again byte for byte)`,
-then `not searched (a JPEG carried as its brunsli form (above), coded already)`.
+| | no box | temporary | permanent |
+| :--- | :--- | :--- | :--- |
+| **JPEG** | as it is | its brunsli form, made again byte for byte (`jbr`) | the same coefficients with tables made for them, smaller, as its brunsli form; else as temporary |
+| **PNG** | as it is | made again exactly (v25, v21) | re-saved at its smallest (`pngr`), the same picture; else made again exactly; else as it is |
+
+With both boxes, made again exactly first.
+
+- **A JPEG's brunsli form:** Google's brunsli recodes the JPEG's own coded values by a model made
+  for them. It's kept where brunsli gives the file back byte for byte (checked before it is kept)
+  and the form is smaller. Measured: 15.25% to 21.91% off ten original JPEGs.
+- **A JPEG's tables (permanent):** Huffman tables made for its own values (Annex K, as `jpegtran
+  -optimize`), for a sequential JPEG. Kept where it reads back to the same coefficients and is
+  smaller. Measured: Vitruvian.jpg 207,500 bytes to 203,455; JPEGs already optimised are left as
+  they are.
+- **A PNG re-saved (permanent):** every chunk as it was but its pixels', which are written again as
+  one IDAT. The rows are filtered six ways (each filter alone, or each row its own) and deflated by
+  zlib at level 9 with two strategies, and the smallest is kept. The `.sieve` carries the rows
+  unfiltered. Kept where it is smaller than the PNG. Measured: smaller every time on twelve of the
+  repository's PNGs, the same pixels (hallway-door 46,647 bytes to 20,053).
+- **Not searched:** a JPEG's form is coded already. A PNG's rows are searched as any file is.
+
+Log: `file N of M: NAME, a JPEG of S bytes, as its brunsli form of F (made again byte for byte)`, or
+with permanent `..., installed with tables made for its values, N bytes, the same picture, as its
+brunsli form of F`; then `not searched (a JPEG carried as its brunsli form (above), coded already)`.
+For a PNG: `NAME, a PNG of S bytes, installed re-saved at its smallest, R bytes, the same picture
+(RECIPE)`.
 
 ## 3. The search, for every other file (`file N of M: NAME, the rope and pieces`)
 
