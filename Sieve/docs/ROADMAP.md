@@ -13,7 +13,8 @@ is a recommendation.*
   ignored). D.5's tool is built.
 - **Measured:** C.2.
 - **Left for Edward's decision:** B.3 and B.4, since they take bytes out of v32's head, which is
-  B.5's question.
+  B.5's question. *Decided the same day (Edward): (a) for B.2, the version byte for B.5; B.2 to B.5
+  then built.*
 - Each item below says where it stands.
 
 ## The short list
@@ -56,10 +57,10 @@ What is left, in order:
 | | What | Measured | Cost |
 | :--- | :--- | :--- | :--- |
 | B.1 | **PNG rows unfiltered under temporary** (D.1) | *Built:* 23% to 40% on the five PNGs other programs wrote | Done, behind the draft |
-| B.2 | **The group question**: a v30 group with another file in its middle, which the reader takes and the specification and oracle refuse | Making the packer cut such groups cost 14% | Recommended: change the specification and oracle to allow it (a); no bytes change |
-| B.3 | **A small file's overhead** | About 11 bytes a small `.sieve`: two stream sizes, a dictionary byte, LZMA2's framing. `control.py` 731 to about 720 | Small, but it changes what v32's head holds: decided with B.5 |
-| B.4 | **The archive's format as a number** (v31's `skm` text and the recipes' settings) | A few bytes a temporary archive; not measured | With B.3 |
-| B.5 | **A second flags byte** | The first is full (all eight bits used) | A decision, before any new optional part |
+| B.2 | **The group question**: a v30 group with another file in its middle, which the reader takes and the specification and oracle refused | Making the packer cut such groups cost 14% | *Decided (a), done 31 October:* the specification and the oracle allow it; no bytes change |
+| B.3 | **A small file's overhead** | *Built 31 October, behind the draft:* 9 bytes a small `.sieve` (1,153 → 1,144) | Done: v32's head (NEXT-VERSION §4a, 7) |
+| B.4 | **The archive's format as a number** (the recipes' settings) | *Built:* 18 to 26 bytes on four remade files | Done, with B.3 |
+| B.5 | **A second flags byte** | The first is full (all eight bits used) | *Decided (Edward):* none; the version byte says how a head is read |
 | B.6 | **Freeze**: SIEVE-FORMAT's v32 edition, the Proof samples made again, the same codes on Windows, Linux and macOS | | NEXT-VERSION §5, steps 4 and 5 |
 
 The rope's wave direction was measured for v32 and is **not** to go in (part E).

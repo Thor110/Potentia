@@ -6679,7 +6679,7 @@ ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7
 RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6}
 
 
-def listing_from_bytes(b):
+def listing_from_bytes(b, v32=False):
     """sieve-manifest-v20's body in bytes read back into its text lines (SPECIFICATIONS §12.2): each
     record a line, 1 a folder, 2 a file, 3 any other line as it is, 4 an archive carried as its
     contents, 5 a "line" line; paths as how much they share with the last and the rest; ways as a code."""
@@ -6736,7 +6736,26 @@ def listing_from_bytes(b):
             kind = format_name(varint())
             if kind.decode() not in RECIPE_WORDS:
                 sys.exit("v20: an archive that is not remade")
-            rest = text()
+            if not v32:
+                rest = text()
+            else:
+                # v32 (a draft): each word after the kind a varint, twice the number for a number as
+                # Sieve writes one, else twice its length and one, then the word.
+                words = []
+                for _ in range(RECIPE_WORDS[kind.decode()] - 1):
+                    t = varint()
+                    if not t & 1:
+                        words.append(b"%d" % (t // 2))
+                        continue
+                    n = t // 2
+                    if n > len(b) - at[0]:
+                        sys.exit("v32: its listing ends early")
+                    w = b[at[0]:at[0] + n]
+                    at[0] += n
+                    if not w or re.fullmatch(rb"0|[1-9][0-9]{0,17}", w) or re.search(rb"[ \t\n]", w):
+                        sys.exit("v32: a recipe's word written as no Sieve writes it")
+                    words.append(w)
+                rest = b" ".join(words)
             return kind + b" " + rest + b" " + way(depth + 1)
         if k == 3:
             return b"rope " + text()
@@ -6849,6 +6868,45 @@ def v16_text(data):
             sys.exit(f"v16: a dictionary byte its {name} cannot have")
         return packed, size, dictionary(b)
 
+    def dictionary_for(n):
+        # v32: the dictionary a stream's size gives (the packer's): the smallest 2 or 3 times a power of
+        # two that holds it, at least 4 KiB, at most 64 MiB.
+        for p in range(40):
+            d = (2 | (p & 1)) << (p // 2 + 11)
+            if d >= 4096 and (d >= n or d >= 64 << 20):
+                return d
+        return 64 << 20
+
+    def stream32(name, last):
+        """v32 (a draft): a stream in the head: its packed size (left out for the file's last part:
+        what is left of the file), then its size times 4 and its form: 0 LZMA2 with the dictionary
+        its size gives; 1 as before, a byte after; 2 one LZMA2 chunk's data alone, lc 3 lp 0 pb 2;
+        3 the same with its settings' byte after."""
+        packed = None if last else varint()
+        m4 = varint()
+        size, form, props, mixed, d = m4 >> 2, m4 & 3, 93, None, 0
+        if form == 1:
+            b = take(1)[0]
+            if b == 0xFE and name == "lzma2":
+                mixed = take(varint()).decode("ascii")
+            elif b > 40 and not (b == 0xFF and name in ("lzma2", "items")):
+                sys.exit(f"v32: a dictionary byte its {name} cannot have")
+            else:
+                d = dictionary(b)
+        else:
+            d = dictionary_for(size)
+            if form == 3:
+                props = take(1)[0]
+        return [name, packed, size, d, mixed, form, props]
+
+    def framed(data, size, props, what):
+        """v32: one LZMA2 chunk's data framed again: its control byte (0xE0, the size's top bits), the
+        size less one, the data's size less one, the settings' byte, the data, then the end, 0."""
+        if not (1 <= size <= 1 << 21 and 1 <= len(data) <= 1 << 16 and props < 225):
+            sys.exit(f"v32: {what}'s one chunk of LZMA data that LZMA2 cannot frame")
+        u, p = size - 1, len(data) - 1
+        return bytes([0xE0 | (u >> 16), (u >> 8) & 255, u & 255, p >> 8, p & 255, props]) + data + b"\x00"
+
     flags = take(1)[0]
     if (flags & 0x80 and not v20) or (flags & 0x40 and not (v18 or v19 or v20)):
         sys.exit("v16: flags this reader does not know")
@@ -6857,27 +6915,64 @@ def v16_text(data):
     head = b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
+    parts = []
+    last = 16 if flags & 16 else 8 if flags & 8 else 4 if flags & 4 else 2 if flags & 2 else 0
     for bit, name in ((2, b"x86"), (4, b"lzma2"), (8, b"items")):
         if flags & bit:
+            if v32:
+                parts.append(stream32(name.decode(), last == bit))
+                continue
             s4 = stream(name.decode())
             head += b"stream %s %d %d %d" % ((name,) + s4[:3]) + (b" mix4 " + s4[3].encode("ascii") if len(s4) == 4 else b"") + b"\n"
     if flags & 16:
-        n = varint()
-        head += b"stream rope %d %d 0\n" % (n, n)
+        if v32:
+            parts.append(["rope", None if last == 16 else varint(), None, 0, None, -1, 93])
+        else:
+            n = varint()
+            head += b"stream rope %d %d 0\n" % (n, n)
     tree = take(32).hex().encode()
     if flags & 32:
-        packed, size, d = stream("body")
-        body = raw_lzma2(take(packed), [{"id": lzma.FILTER_LZMA2, "dict_size": d}], "v16: its body")
+        if v32:
+            _, packed, size, d, _, form, props = stream32("body", False)
+            if d == 0:
+                sys.exit("v32: its body carried as it is")
+            carried = take(packed)
+            if form >= 2:
+                carried = framed(carried, size, props, "its body")
+        else:
+            packed, size, d = stream("body")
+            carried = take(packed)
+        body = raw_lzma2(carried, [{"id": lzma.FILTER_LZMA2, "dict_size": d}], "v16: its body")
         if len(body) != size:
             sys.exit("v16: its body unpacks to the wrong size")
     else:
         body = take(varint())
     if v20 and not flags & 0x80:  # (v20's flag 128: its body as text after all)
-        body = listing_from_bytes(body)
+        body = listing_from_bytes(body, v32)
+    tail, rest = b"", at[0]
+    if v32:
+        # The parts after the head: the last's size what is left; each one chunk's data framed again.
+        known = sum(p[1] for p in parts if p[1] is not None)
+        if known > len(data) - at[0]:
+            sys.exit("v32: the file ends before its parts do")
+        for p in parts:
+            name, packed, size, d, mixed, form, props = p
+            if packed is None:
+                packed = len(data) - at[0] - known
+            piece, rest = data[rest:rest + packed], rest + packed
+            if len(piece) != packed:
+                sys.exit("v32: the file ends before its parts do")
+            if form >= 2:
+                piece = framed(piece, size, props, f"its {name} stream")
+            tail += piece
+            if form == -1:
+                head += b"stream rope %d %d 0\n" % (len(piece), len(piece))
+            else:
+                head += b"stream %s %d %d %d" % (name.encode(), len(piece), size, d) + (b" mix4 " + mixed.encode("ascii") if mixed else b"") + b"\n"
     split = 0
     while body.startswith(b"line ", split):
         split = body.index(b"\n", split) + 1
-    return head + body[:split] + b"tree " + tree + b"\n" + body[split:] + b"end\n" + data[at[0]:]
+    return head + body[:split] + b"tree " + tree + b"\n" + body[split:] + b"end\n" + tail + data[rest:]
 
 
 def v7_listing(data):
@@ -7236,9 +7331,8 @@ def cmd_unpack_v7(args, data):
                           {"none": lzma.CHECK_NONE, "crc32": lzma.CHECK_CRC32, "crc64": lzma.CHECK_CRC64, "sha256": lzma.CHECK_SHA256}[check],
                           size)
             size = int(n)
-        if v30 and group is not None and group[1] != len(group[0]) and way != "mixn":
-            # (SPECIFICATIONS v30: a group that holds a file of another way in the middle is refused.)
-            sys.exit(f"{group[2]}'s group ends before its files have its bytes ({path} is in its middle)")
+        # (SPECIFICATIONS v30: a file of another way may come between a group's files; the group stays
+        # open until its total is used, which it must be before the next group and at the end.)
         if way == "x86":
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
@@ -7371,10 +7465,13 @@ def cmd_unpack_v7(args, data):
                 got[i] = v7_item(item_lines[k], place, None, path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
         if way.startswith("lines "):
-            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw; the
-            # mask is one bit a line, and holds none past K's last line.)
-            if not re.fullmatch(r"0|[1-9][0-9]*", way[6:]) or int(way[6:]) >= len(files) or files[int(way[6:])][3] not in ("x86", "raw"):
-                sys.exit(f"{path}: its lines name no file carried x86 or raw")
+            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw, or in
+            # later versions any way of its own: an item, the rope, pieces, mixing or a group's, never
+            # derived itself, as Sieve's reader takes it; the mask is one bit a line, and holds none
+            # past K's last line.)
+            kw = files[int(way[6:])][3] if re.fullmatch(r"0|[1-9][0-9]*", way[6:]) and int(way[6:]) < len(files) else ""
+            if not (kw in ("x86", "raw", "mixn") or re.match(r"(item|rope|pieces|mix|mix2|mix3|mix4|mixt) ", kw)):
+                sys.exit(f"{path}: its lines name no file carried as itself")
             k = int(way[6:])
             base = got[k].split(b"\n")
             n = (len(base) + 7) // 8
@@ -7798,10 +7895,13 @@ def cmd_unpack(args):
             got[i] = v5_item(item_lines[int(way.split(" ")[1])], way.split(" ")[2], path, args.items_from)
     for i, (path, size, sha, way) in enumerate(files):
         if way.startswith("lines "):
-            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw; the
-            # mask is one bit a line, and holds none past K's last line.)
-            if not re.fullmatch(r"0|[1-9][0-9]*", way[6:]) or int(way[6:]) >= len(files) or files[int(way[6:])][3] not in ("x86", "raw"):
-                sys.exit(f"{path}: its lines name no file carried x86 or raw")
+            # (SPECIFICATIONS v4: K counts the listing's files from 0, and is carried x86 or raw, or in
+            # later versions any way of its own: an item, the rope, pieces, mixing or a group's, never
+            # derived itself, as Sieve's reader takes it; the mask is one bit a line, and holds none
+            # past K's last line.)
+            kw = files[int(way[6:])][3] if re.fullmatch(r"0|[1-9][0-9]*", way[6:]) and int(way[6:]) < len(files) else ""
+            if not (kw in ("x86", "raw", "mixn") or re.match(r"(item|rope|pieces|mix|mix2|mix3|mix4|mixt) ", kw)):
+                sys.exit(f"{path}: its lines name no file carried as itself")
             k = int(way[6:])
             base = got[k].split(b"\n")
             n = (len(base) + 7) // 8

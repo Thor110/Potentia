@@ -393,6 +393,11 @@ refuses it, and Sieve gives it back identical. Two ways out:
 
 (a) is the recommendation. The draft packs groups as v31 does until Edward decides.
 
+*Decided (Edward, 31 October 2026): (a).* "if b is resulting in larger filesizes for sieves then we
+should go with a". SPECIFICATIONS v30 now allows files of other ways between a group's files, and
+the oracle reads them (the three files above: refused before, given back the same now). CI step 11
+checks it on two texts with random bytes between them.
+
 **5. Word frequencies for mixing: built, behind the draft switch (31 October 2026).** Edward: "See
 what you can implement with regards to ... word frequencies". SCOWL has no frequencies, but its
 sizes are a measure of how common a word is (its size 35 holds the commonest), and the three Sieve
@@ -440,6 +445,32 @@ switch (31 October 2026).** Edward: "Work through all of that" (ROADMAP D.1 and 
   parameters.
 - **Without the draft,** the `.sieve`s of five PNGs are byte for byte as before.
 - **CI step 11:** blocks for both (the extension's four icons; hallway-compact).
+
+**7. v32's head, read by its version byte: built, behind the draft switch (31 October 2026).**
+Edward: "the version byte itself would make the most sense for determining the version and how to
+read it / reducing overhead is best here". So there is no second flags byte. A head whose byte is 32
+is read as v32's (SPECIFICATIONS v32), and with the draft every `.sieve` in bytes is made v32.
+- **Each stream:** its dictionary byte is left out where the stream's size gives it. A stream that
+  is one LZMA2 chunk is carried as the chunk's data alone; the reader puts the chunk's six bytes
+  before it and the end after it, so every reader after that is unchanged. The file's last part
+  carries no packed size: it's what is left of the file.
+- **A remade file's recipe** in the listing: its numbers as varints, its other words as text.
+- **Not done:** leaving out a stream's unpacked size, which the listing could give. Working it out
+  needs every way's share of the stream, and getting that wrong would refuse good files, for 2 bytes.
+- **Measured** (each given back the same by Sieve; the small files by the oracle too):
+
+  | Folder | v20 to v31 | v32 |
+  | :--- | ---: | ---: |
+  | `tools/fetch_corpus.py` | 1,153 | 1,144 |
+  | `tools/png_unfiltered_probe.py` | 1,365 | 1,356 |
+  | `ci/trace_times.py` | 1,249 | 1,240 |
+  | the extension's four icons (draft, temporary) | 16,706 | 16,680 |
+  | three 7-Zip archives and a gzip (draft, temporary) | 16,413 | 16,395 |
+
+- **Without the draft,** nothing changes: the same files, byte for byte.
+- **Found on the way:** the oracle refused a `lines K` file whose base is mixed, which every packer
+  since v24 has made and Sieve's reader takes. As with the groups, the specification and the oracle
+  now allow any base carried as itself.
 
 ## 5. The order of work
 
@@ -494,4 +525,5 @@ Made by Edward, 30 October 2026:
 
 Still open:
 1. Whether BCJ2 and word frequencies are worth measuring now.
-2. Whether a new optional part takes a second flags byte (the first is full).
+2. ~~Whether a new optional part takes a second flags byte (the first is full).~~ Decided (Edward,
+   31 October 2026): the version byte says how a head is read; no second flags byte.

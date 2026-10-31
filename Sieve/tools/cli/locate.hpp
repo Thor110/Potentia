@@ -367,8 +367,9 @@ std::string tree_sha256(const Manifest& m);
 struct Manifest;
 std::string listing_body(const Manifest& m);
 // v20: the body in bytes, and back (locate.cpp says how); and the archives' formats by number.
-std::vector<uint8_t> listing_to_bytes(const std::string& body);
-std::string listing_from_bytes(std::string_view bytes);
+// (v32, in the making: each recipe word after its kind a number where it is one; locate.cpp's put_way.)
+std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32 = false);
+std::string listing_from_bytes(std::string_view bytes, bool v32 = false);
 int archive_format_number(const std::string& name);
 std::string archive_format_name(int number);
 using Remaker = std::function<std::vector<uint8_t>(const std::string& recipe, const std::vector<uint8_t>& inner)>;

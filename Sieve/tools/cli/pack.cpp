@@ -2614,6 +2614,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool pngr_on = png_on && rope_newest >= 14 && v32_draft();
     // v32 (in the making): a PNG made again exactly with its rows carried unfiltered ("skr").
     const bool skr_on = png_on && rope_newest >= 14 && v32_draft();
+    // v32 (in the making): with the draft, every .sieve in bytes is v32, for its smaller head (taken
+    // here: rope_newest is held to the rope's own versions below).
+    const bool v32_head_on = rope_newest >= 14 && v32_draft();
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
     const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
     size_t pngs_resaved = 0;
@@ -4342,8 +4345,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v32 (in the making): some file as its differences from another, a JPEG as its brunsli form, a
     // PNG re-saved, or mixing with the word list counted by use ("F80": a file's, a group's or the
     // lzma2 stream's parameters).
+    // With the draft, too, every binary .sieve is v32, for its smaller head (SPECIFICATIONS v32: the
+    // head read by its version byte; a small file's .sieve about 11 bytes smaller).
     auto by_use = [](const std::string& w) { return (w.rfind("mix4 ", 0) == 0 || w.rfind("mixt ", 0) == 0) && w.find(" F80") != std::string::npos; };
-    m.v32 = m.binary && (m.lzma2.mixed.find(" F80") != std::string::npos ||
+    m.v32 = m.binary && (v32_head_on || m.lzma2.mixed.find(" F80") != std::string::npos ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
                              return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || x.remake.rfind("skr ", 0) == 0 || by_use(x.way);
                          }));
@@ -4392,7 +4397,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         std::string body = text;
         if (m.v20)
         {
-            const std::vector<uint8_t> bytes = listing_to_bytes(text);
+            const std::vector<uint8_t> bytes = listing_to_bytes(text, m.v32);
             auto carried = [&](const std::string& b) {
                 if (b.empty()) return size_t(1);
                 const std::vector<uint8_t> p = pack_stream(std::vector<uint8_t>(b.begin(), b.end()), dictionary_for(b.size()), false, 9 | LZMA_PRESET_EXTREME, tune);

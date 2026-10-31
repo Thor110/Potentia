@@ -4142,6 +4142,17 @@ FORMATS.md has the tables; CI step 11 checks both. Without the draft, every outp
 - **Built:** step 11's time added up by block (`ci/trace_times.py`).
 - **Left for Edward:** B.3 and B.4 (they change v32's head, B.5's question).
 
+*Edward's decisions of 31 October 2026, built the same day.*
+- **B.2, (a):** a v30 group may have files of other ways between its files. The specification and
+  the oracle now allow it, as the reader always has.
+- **B.5:** the version byte says how a head is read; there is no second flags byte.
+- **B.3 and B.4:** v32's head drops each stream's dictionary byte where its size gives it, LZMA2's
+  framing of a one-chunk stream, and the last part's size, and writes recipes' numbers as numbers.
+  With the draft every `.sieve` in bytes is v32: a small file's is 9 bytes smaller (NEXT-VERSION
+  §4a, 7).
+- **Found on the way:** the oracle refused a `lines` file whose base is mixed. The packer has made
+  those since v24 and the reader takes them, so the specification and the oracle now allow it.
+
 *Then the next format version* (planned in [NEXT-VERSION.md](NEXT-VERSION.md), 30 October 2026), from IDEAS's list "Waiting for the next format version" (a file as
 its differences from another, the archive's format as a number, headers modelled, the small file's
 overhead, the rope's next contexts, BCJ2, and the rest), best gathered into one version.

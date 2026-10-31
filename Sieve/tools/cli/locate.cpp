@@ -25,9 +25,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -789,6 +793,69 @@ uint32_t dictionary_of_byte(uint8_t p)
     return p == 40 ? 0xFFFFFFFFu : (2u | (p & 1u)) << (p / 2 + 11);
 }
 
+// v32 (in the making): the LZMA2 dictionary a stream's size gives, the one the packer chooses: the
+// smallest 2 or 3 times a power of two that holds it, at least 4 KiB, at most 64 MiB.
+uint32_t lzma2_dictionary_for(uint64_t n)
+{
+    for (uint32_t p = 0; p < 40; ++p)
+    {
+        const uint64_t d = uint64_t(2 | (p & 1)) << (p / 2 + 11);
+        if (d >= 4096 && (d >= n || d >= (uint64_t(64) << 20))) return uint32_t(d);
+    }
+    return uint32_t(64) << 20;
+}
+
+// v32: an LZMA2 stream that is one chunk of LZMA data and its end: a control byte that resets the
+// dictionary, the state and the settings (0xE0 to 0xFF), the size less one in 21 bits, the data's
+// size less one in 16, the settings' byte, the data, then 0. Its settings' byte and where its data is.
+constexpr uint8_t kLzma2DefaultProps = 93; // lc 3, lp 0, pb 2: (pb * 5 + lp) * 9 + lc
+struct OneChunk
+{
+    uint8_t props = 0;
+    size_t size = 0; // its data's, from byte 6
+};
+std::optional<OneChunk> one_chunk(std::span<const uint8_t> s, uint64_t bytes)
+{
+    if (s.size() < 8 || bytes == 0 || (s[0] & 0xE0) != 0xE0) return std::nullopt;
+    const uint64_t u = ((uint64_t(s[0] & 0x1F) << 16) | (uint64_t(s[1]) << 8) | s[2]) + 1, p = ((uint64_t(s[3]) << 8) | s[4]) + 1;
+    if (u != bytes || s.size() != 6 + p + 1 || s.back() != 0) return std::nullopt;
+    return OneChunk{s[5], size_t(p)};
+}
+
+// v32: the LZMA2 stream again from one chunk's data alone (as one_chunk reads it).
+std::vector<uint8_t> chunk_framed(std::span<const uint8_t> data, uint64_t bytes, uint8_t props)
+{
+    if (bytes == 0 || bytes > (uint64_t(1) << 21) || data.empty() || data.size() > (size_t(1) << 16) || props >= 225)
+        throw std::runtime_error("manifest: a stream's one chunk of LZMA data that LZMA2 cannot frame");
+    const uint64_t u = bytes - 1, p = data.size() - 1;
+    std::vector<uint8_t> o = {uint8_t(0xE0 | (u >> 16)), uint8_t(u >> 8), uint8_t(u), uint8_t(p >> 8), uint8_t(p), props};
+    o.insert(o.end(), data.begin(), data.end());
+    o.push_back(0);
+    return o;
+}
+
+// v32: whether a stream is written in its v32 head as LZMA2 with the dictionary its size gives, and
+// as one chunk's data alone (SPECIFICATIONS v32).
+bool implied_dictionary(const PackedStream& s) { return s.mixed.empty() && s.dictionary != 0 && s.dictionary == lzma2_dictionary_for(s.bytes); }
+std::optional<OneChunk> v32_chunk(const PackedStream& s, std::span<const uint8_t> carried)
+{
+    return implied_dictionary(s) ? one_chunk(carried, s.bytes) : std::nullopt;
+}
+
+// v32: what a stream's bytes are carried as: one chunk's data alone, where it is one; else as they are.
+std::span<const uint8_t> v32_carried(const PackedStream& s, std::span<const uint8_t> carried)
+{
+    if (const auto c = v32_chunk(s, carried)) return carried.subspan(6, c->size);
+    return carried;
+}
+
+// v32: a stream in the head: its packed size (left out for the file's last part, which is what is
+// left of the file), then a varint of its size times 4 and its form: 0 LZMA2 with the dictionary its
+// size gives; 1 as before v32, a byte after (the dictionary's, 0xFF carried as it is, or 0xFE mixed,
+// then its parameters' length and them); 2 one LZMA2 chunk's data alone, with the dictionary its
+// size gives and lc 3, lp 0, pb 2; 3 the same with the chunk's settings' byte after.
+void put_stream_v32(std::vector<uint8_t>& o, const PackedStream& s, std::span<const uint8_t> carried, bool last);
+
 void put_varint_to(std::vector<uint8_t>& out, uint64_t v)
 {
     while (v >= 0x80)
@@ -797,6 +864,30 @@ void put_varint_to(std::vector<uint8_t>& out, uint64_t v)
         v >>= 7;
     }
     out.push_back(uint8_t(v));
+}
+
+void put_stream_v32(std::vector<uint8_t>& o, const PackedStream& s, std::span<const uint8_t> carried, bool last)
+{
+    if (s.bytes >= (uint64_t(1) << 62)) throw std::logic_error("a stream too large for v32's head");
+    const auto chunk = v32_chunk(s, carried);
+    if (!last) put_varint_to(o, chunk ? chunk->size : s.packed);
+    if (chunk)
+    {
+        const bool settings = chunk->props != kLzma2DefaultProps;
+        put_varint_to(o, s.bytes * 4 + (settings ? 3 : 2));
+        if (settings) o.push_back(chunk->props);
+        return;
+    }
+    if (implied_dictionary(s)) return put_varint_to(o, s.bytes * 4);
+    put_varint_to(o, s.bytes * 4 + 1);
+    if (!s.mixed.empty())
+    {
+        o.push_back(0xFE);
+        put_varint_to(o, s.mixed.size());
+        o.insert(o.end(), s.mixed.begin(), s.mixed.end());
+        return;
+    }
+    o.push_back(dictionary_byte(s.dictionary));
 }
 
 uint64_t get_varint_from(std::string_view in, size_t& at)
@@ -1053,7 +1144,18 @@ static void put_text(std::vector<uint8_t>& o, std::string_view t)
     o.insert(o.end(), t.begin(), t.end());
 }
 
-static void put_way(std::vector<uint8_t>& o, std::string_view way)
+// v32 (in the making): a recipe's word in the listing in bytes: a varint of twice the number for a
+// word that is a number as Sieve writes one (digits only, no leading zero, below 2^62), else of twice
+// its length and one, then the word.
+static bool plain_number(std::string_view w)
+{
+    if (w.empty() || w.size() > 18 || (w.size() > 1 && w[0] == '0')) return false;
+    for (const char c : w)
+        if (c < '0' || c > '9') return false;
+    return true;
+}
+
+static void put_way(std::vector<uint8_t>& o, std::string_view way, bool v32)
 {
     if (way == "raw") return o.push_back(1);
     if (const int w = recipe_words(way); w > 0)
@@ -1065,8 +1167,22 @@ static void put_way(std::vector<uint8_t>& o, std::string_view way)
         {
             o.push_back(2);
             put_varint_to(o, uint64_t(archive_format_number(kind)));
-            put_text(o, way.substr(kind.size() + 1, at - kind.size() - 1));
-            return put_way(o, way.substr(at + 1));
+            const std::string_view rest = way.substr(kind.size() + 1, at - kind.size() - 1);
+            if (!v32) put_text(o, rest);
+            else
+                for (size_t p = 0; p <= rest.size();)
+                {
+                    const size_t sp = std::min(rest.find(' ', p), rest.size());
+                    const std::string_view word = rest.substr(p, sp - p);
+                    if (plain_number(word)) put_varint_to(o, std::stoull(std::string(word)) * 2);
+                    else
+                    {
+                        put_varint_to(o, uint64_t(word.size()) * 2 + 1);
+                        o.insert(o.end(), word.begin(), word.end());
+                    }
+                    p = sp + 1;
+                }
+            return put_way(o, way.substr(at + 1), v32);
         }
     }
     for (const auto& [code, word] : {std::pair<uint8_t, std::string_view>{3, "rope "}, {4, "pieces "}})
@@ -1080,7 +1196,7 @@ static void put_way(std::vector<uint8_t>& o, std::string_view way)
 }
 
 
-std::vector<uint8_t> listing_to_bytes(const std::string& body)
+std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32)
 {
     std::vector<uint8_t> o;
     std::string last; // the last path written
@@ -1114,7 +1230,7 @@ std::vector<uint8_t> listing_to_bytes(const std::string& body)
         {
             o.push_back(2);
             put_varint_to(o, std::stoull(std::string(f[1])));
-            put_way(o, f[2]);
+            put_way(o, f[2], v32);
             put_path(f[3]);
         }
         else if (f.size() == 5 && f[0] == "u" && decimal(f[2]))
@@ -1139,12 +1255,12 @@ std::vector<uint8_t> listing_to_bytes(const std::string& body)
             put_text(o, line);
         }
     }
-    if (listing_from_bytes(std::string_view(reinterpret_cast<const char*>(o.data()), o.size())) != body)
+    if (listing_from_bytes(std::string_view(reinterpret_cast<const char*>(o.data()), o.size()), v32) != body)
         throw std::logic_error("a listing in bytes that does not read back as its text");
     return o;
 }
 
-std::string listing_from_bytes(std::string_view b)
+std::string listing_from_bytes(std::string_view b, bool v32)
 {
     size_t at = 0;
     auto byte = [&]() {
@@ -1178,7 +1294,25 @@ std::string listing_from_bytes(std::string_view b)
         {
             const std::string kind = archive_format_name(int(get_varint_from(b, at)));
             if (kind.empty() || !recipe_words(kind + " ")) throw std::runtime_error("manifest: its listing names an archive's kind this Sieve does not know");
-            const std::string rest = text();
+            std::string rest;
+            if (!v32) rest = text();
+            else
+                // v32: each word after the kind (as many as the kind has) a number or a word (put_way).
+                for (int k = 1; k < recipe_words(kind + " "); ++k)
+                {
+                    const uint64_t t = get_varint_from(b, at);
+                    if (k > 1) rest += ' ';
+                    if (!(t & 1)) rest += std::to_string(t / 2);
+                    else
+                    {
+                        if (t / 2 > b.size() - at) throw std::runtime_error("manifest: its listing ends early");
+                        const std::string_view word = b.substr(at, size_t(t / 2));
+                        at += size_t(t / 2);
+                        if (word.empty() || plain_number(word) || word.find_first_of(" \t\n") != std::string_view::npos)
+                            throw std::runtime_error("manifest: its listing has a recipe's word written as no Sieve writes it");
+                        rest += word;
+                    }
+                }
             return kind + " " + rest + " " + way(depth + 1);
         }
         case 3: return "rope " + text();
@@ -1254,23 +1388,47 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
         }
         o.push_back(dictionary_byte(s.dictionary));
     };
-    if (m.x86.packed) stream(m.x86);
-    if (m.lzma2.packed) stream(m.lzma2);
-    if (items) stream(m.item_stream);
-    if (m.roped) put_varint_to(o, m.rope_stream.packed);
+    if (m.v32)
+    {
+        // v32 (in the making): each stream in its v32 form (put_stream_v32), the file's last part's
+        // packed size left out.
+        if (m.streams.size() != m.x86.packed + m.lzma2.packed) throw std::logic_error("streams whose sizes do not add up");
+        const std::span<const uint8_t> all(m.streams);
+        const int last = m.roped ? 16 : items ? 8 : m.lzma2.packed ? 4 : m.x86.packed ? 2 : 0;
+        if (m.x86.packed) put_stream_v32(o, m.x86, all.subspan(0, size_t(m.x86.packed)), last == 2);
+        if (m.lzma2.packed) put_stream_v32(o, m.lzma2, all.subspan(size_t(m.x86.packed), size_t(m.lzma2.packed)), last == 4);
+        if (items) put_stream_v32(o, m.item_stream, m.items_carried, last == 8);
+        if (m.roped && last != 16) put_varint_to(o, m.rope_stream.packed);
+    }
+    else
+    {
+        if (m.x86.packed) stream(m.x86);
+        if (m.lzma2.packed) stream(m.lzma2);
+        if (items) stream(m.item_stream);
+        if (m.roped) put_varint_to(o, m.rope_stream.packed);
+    }
     if (m.tree.size() != 64) throw std::logic_error("a tree's SHA-256 that is not 64 hex digits");
     for (size_t i = 0; i < 64; i += 2) o.push_back(uint8_t(std::stoul(m.tree.substr(i, 2), nullptr, 16)));
     if (body_packed)
     {
         if (m.listing_of != listing_body(m)) throw std::logic_error("Sieve instructions changed after their listing was packed");
-        stream(m.listing_stream);
-        o.insert(o.end(), m.listing_carried.begin(), m.listing_carried.end());
+        if (m.v32)
+        {
+            put_stream_v32(o, m.listing_stream, m.listing_carried, false);
+            const std::span<const uint8_t> c = v32_carried(m.listing_stream, m.listing_carried);
+            o.insert(o.end(), c.begin(), c.end());
+        }
+        else
+        {
+            stream(m.listing_stream);
+            o.insert(o.end(), m.listing_carried.begin(), m.listing_carried.end());
+        }
     }
     else
     {
         // (v20: the body in bytes; before it, as text.)
         const std::string text = listing_body(m);
-        const std::vector<uint8_t> body = m.v20 && !m.body_text ? listing_to_bytes(text) : std::vector<uint8_t>(text.begin(), text.end());
+        const std::vector<uint8_t> body = m.v20 && !m.body_text ? listing_to_bytes(text, m.v32) : std::vector<uint8_t>(text.begin(), text.end());
         put_varint_to(o, body.size());
         o.insert(o.end(), body.begin(), body.end());
     }
@@ -1287,8 +1445,21 @@ std::vector<uint8_t> Manifest::file() const
         // v16: the head in bytes, then the body (its listing's lines after the streams', the tree's
         // left out, "end" too), as carried.
         out = binary_head(*this);
-        out.insert(out.end(), streams.begin(), streams.end());
-        out.insert(out.end(), items_carried.begin(), items_carried.end());
+        if (v32)
+        {
+            // v32: each stream as its head says it is carried (v32_carried).
+            const std::span<const uint8_t> all(streams);
+            for (const std::span<const uint8_t> c : {v32_carried(x86, all.subspan(0, size_t(x86.packed))),
+                                                     v32_carried(lzma2, all.subspan(size_t(x86.packed), size_t(lzma2.packed))),
+                                                     (!trimmed || item_stream.packed || item_stream.bytes) ? v32_carried(item_stream, items_carried)
+                                                                                                         : std::span<const uint8_t>(items_carried)})
+                out.insert(out.end(), c.begin(), c.end());
+        }
+        else
+        {
+            out.insert(out.end(), streams.begin(), streams.end());
+            out.insert(out.end(), items_carried.begin(), items_carried.end());
+        }
         if (roped) out.insert(out.end(), rope_carried.begin(), rope_carried.end());
         return out;
     }
@@ -1465,13 +1636,64 @@ Manifest Manifest::parse(std::string_view whole)
             }
             return PackedStream{packed, bytes, dictionary_of_byte(b)};
         };
-        if (flags & 2) text += stream_line("x86", stream());
-        if (flags & 4) text += stream_line("lzma2", stream());
-        if (flags & 8) text += stream_line("items", stream());
-        if (flags & 16)
+        // v32 (in the making): each stream in its v32 form (put_stream_v32), its line made once the
+        // head is read, since the file's last part's size is what is left of the file.
+        struct Part32
         {
-            const uint64_t n = get_varint_from(whole, at);
-            text += stream_line("rope", PackedStream{n, n, 0});
+            const char* name = "";
+            PackedStream s;
+            int form = 1; // put_stream_v32's; -1 the rope's stream (its size alone)
+            uint8_t props = kLzma2DefaultProps;
+            bool sized = true;
+        };
+        std::vector<Part32> parts;
+        auto stream32 = [&](const char* name, bool last) {
+            Part32 p;
+            p.name = name;
+            if (last) p.sized = false;
+            else p.s.packed = get_varint_from(whole, at);
+            const uint64_t m4 = get_varint_from(whole, at);
+            p.s.bytes = m4 >> 2;
+            p.form = int(m4 & 3);
+            if (p.form == 1)
+            {
+                const uint8_t b = uint8_t(take(1)[0]);
+                if (b == 0xFE) p.s.mixed = std::string(take(get_varint_from(whole, at)));
+                else p.s.dictionary = dictionary_of_byte(b);
+            }
+            else
+            {
+                p.s.dictionary = lzma2_dictionary_for(p.s.bytes);
+                if (p.form == 3) p.props = uint8_t(take(1)[0]);
+            }
+            return p;
+        };
+        const int last32 = (flags & 16) ? 16 : (flags & 8) ? 8 : (flags & 4) ? 4 : (flags & 2) ? 2 : 0;
+        if (v == 32)
+        {
+            if (flags & 2) parts.push_back(stream32("x86", last32 == 2));
+            if (flags & 4) parts.push_back(stream32("lzma2", last32 == 4));
+            if (flags & 8) parts.push_back(stream32("items", last32 == 8));
+            if (flags & 16)
+            {
+                Part32 p;
+                p.name = "rope";
+                p.form = -1;
+                if (last32 == 16) p.sized = false;
+                else p.s.packed = get_varint_from(whole, at);
+                parts.push_back(p);
+            }
+        }
+        else
+        {
+            if (flags & 2) text += stream_line("x86", stream());
+            if (flags & 4) text += stream_line("lzma2", stream());
+            if (flags & 8) text += stream_line("items", stream());
+            if (flags & 16)
+            {
+                const uint64_t n = get_varint_from(whole, at);
+                text += stream_line("rope", PackedStream{n, n, 0});
+            }
         }
         const std::string_view tree = take(32);
         static const char* hex = "0123456789abcdef";
@@ -1486,15 +1708,64 @@ Manifest Manifest::parse(std::string_view whole)
         std::vector<uint8_t> carried;
         if (flags & 32)
         {
-            ls = stream();
-            if (ls.dictionary == 0 || ls.bytes > (uint64_t(1) << 32)) throw std::runtime_error("manifest: its listing's sizes do not fit");
-            const std::string_view c = take(ls.packed);
-            carried.assign(c.begin(), c.end());
+            if (v == 32)
+            {
+                // (v32: one chunk's data alone framed again, so the listing is the LZMA2 stream it was.)
+                const Part32 p = stream32("listing", false);
+                ls = p.s;
+                if (ls.dictionary == 0 || ls.bytes > (uint64_t(1) << 32)) throw std::runtime_error("manifest: its listing's sizes do not fit");
+                const std::string_view c = take(ls.packed);
+                const std::span<const uint8_t> cs(reinterpret_cast<const uint8_t*>(c.data()), c.size());
+                if (p.form >= 2) carried = chunk_framed(cs, ls.bytes, p.props);
+                else carried.assign(cs.begin(), cs.end());
+                ls.packed = carried.size();
+            }
+            else
+            {
+                ls = stream();
+                if (ls.dictionary == 0 || ls.bytes > (uint64_t(1) << 32)) throw std::runtime_error("manifest: its listing's sizes do not fit");
+                const std::string_view c = take(ls.packed);
+                carried.assign(c.begin(), c.end());
+            }
             const std::vector<uint8_t> b = unpack_stream(carried, ls, false);
             body.assign(b.begin(), b.end());
         }
         else body = std::string(take(get_varint_from(whole, at)));
-        if (v >= 20 && !(flags & 0x80)) body = listing_from_bytes(body); // v20: the body in bytes (unless flag 128), read back as its text
+        if (v >= 20 && !(flags & 0x80)) body = listing_from_bytes(body, v == 32); // v20: the body in bytes (unless flag 128), read back as its text
+        // v32: the parts after the head, their sizes (the last's what is left), each framed again where
+        // it is one chunk's data alone; their lines, as v31's head gives them.
+        std::string tail;
+        size_t from = at;
+        if (v == 32)
+        {
+            uint64_t known = 0;
+            for (const Part32& p : parts)
+                if (p.sized)
+                {
+                    if (p.s.packed > whole.size()) throw std::runtime_error("manifest: its parts are larger than the file");
+                    known += p.s.packed;
+                }
+            if (known > whole.size() - at) throw std::runtime_error("manifest: the file ends before its parts do");
+            std::string lines;
+            for (Part32& p : parts)
+            {
+                if (!p.sized) p.s.packed = whole.size() - at - known;
+                if (p.s.packed > whole.size() - from) throw std::runtime_error("manifest: the file ends before its parts do");
+                const std::string_view piece = whole.substr(from, size_t(p.s.packed));
+                from += size_t(p.s.packed);
+                if (p.form >= 2)
+                {
+                    const std::vector<uint8_t> f =
+                        chunk_framed(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(piece.data()), piece.size()), p.s.bytes, p.props);
+                    tail.append(f.begin(), f.end());
+                    p.s.packed = f.size();
+                }
+                else tail.append(piece);
+                if (p.form == -1) p.s = PackedStream{p.s.packed, p.s.packed, 0};
+                lines += stream_line(p.name, p.s);
+            }
+            text += lines;
+        }
         // The lines first, then the tree's, then the rest.
         size_t split = 0;
         while (split < body.size() && body.compare(split, 5, "line ") == 0)
@@ -1505,7 +1776,8 @@ Manifest Manifest::parse(std::string_view whole)
         }
         if (!body.empty() && body.back() != '\n') throw std::runtime_error("manifest: its body's last line has no line feed");
         text += body.substr(0, split) + "tree " + tree_hex + "\n" + body.substr(split) + "end\n";
-        text.append(whole.substr(at));
+        text.append(tail);
+        text.append(whole.substr(from));
         Manifest m = parse(text);
         m.binary = true;
         m.body_text = v >= 20 && (flags & 0x80);

@@ -783,6 +783,15 @@ SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31p.sieve --items --compresse
 if grep -q "^members \|^remade " z31p.txt; then exit 1; fi
 $S install z31p.sieve --to z31p_inst > /dev/null
 cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
+# v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
+# October 2026): two texts mixed as one group, random bytes carried as they are between them, read
+# back the same by Sieve and the oracle.
+rm -rf g30 && mkdir g30 && head -c 6000 ../docs/GAME.md > g30/a.txt && python -c "import random; random.seed(30); open('g30/b.bin', 'wb').write(bytes(random.getrandbits(8) for _ in range(3000)))" && head -c 6000 ../docs/SHOWCASE-PLAN.md > g30/c.txt
+$S locate g30 --installer g30.sieve 2>&1 | tr -d '\r' > g30.txt
+grep -q "^groups    2 file(s) mixed together in 1 group(s)" g30.txt
+grep -q "	raw	3000	b.bin$" g30.txt && grep -q "^mixn	6000	c.txt$" g30.txt
+rm -rf g30_inst g30_oracle && $S install g30.sieve --to g30_inst > /dev/null && diff -r g30 g30_inst
+python sieve_ref.py unpack g30.sieve --to g30_oracle > /dev/null && diff -r g30 g30_oracle
 # v32 in the making (30 October 2026; only with --v32-draft, for testing: docs/NEXT-VERSION.md): a
 # file carried as its differences from another of the folder ("delta K L", delta-v1). Two files of
 # about 330 KB, the second the first with stretches changed and bytes put in (so all after them is
@@ -946,6 +955,19 @@ rm -rf s32 && mkdir s32 && cp ../docs/images/hallway-compact.png s32/
 $S locate s32 --installer s32.sieve --items --v32-draft --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
 rm -rf s32_inst && $S install s32.sieve --to s32_inst > /dev/null && diff -r s32 s32_inst
 $S locate s32 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 raw	hallway-compact.png"
+# v32 in the making, too: its head read by its version byte (SPECIFICATIONS v32), with the draft
+# made for every .sieve in bytes: each stream's dictionary left out where its size gives it, a stream
+# of one LZMA2 chunk carried as the chunk's data alone, the last part's size left out, a recipe's
+# numbers as numbers. A small file: v32, 9 bytes smaller than v20's, given back the same by Sieve,
+# sieve-install and the oracle.
+rm -rf h32 && mkdir h32 && cp ../tools/fetch_corpus.py h32/
+$S locate h32 --installer h32.sieve --v32-draft 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32, "
+$S locate h32 --installer h32v20.sieve 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v20, "
+[ "$(( $(wc -c < h32v20.sieve) - $(wc -c < h32.sieve) ))" -eq 9 ]
+rm -rf h32_inst h32_si h32_oracle
+$S install h32.sieve --to h32_inst > /dev/null && diff -r h32 h32_inst
+$SI h32.sieve --to h32_si --yes > /dev/null && diff -r h32 h32_si
+python sieve_ref.py unpack h32.sieve --to h32_oracle > /dev/null && diff -r h32 h32_oracle
 # v32 in the making, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
 # scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place with the draft. The
 # code alone, smaller than D60's and read back by the oracle (its own trie and weights); a text, and

@@ -1,76 +1,60 @@
-# The plan worked through
+# Your decisions, built (commits 5e7abd7 and 95ba0c7)
 
-Holds everything since your last update of the repository: the step 11 case fix and the plan
-(both sent before, in sieve-ci-case-fix.zip and sieve-plan.zip), and the work below. Commits
-4060ad2, c6b59d6, a5d120a, 0e859d9, 9d64180 and aab7b4b. Each item's state is in
-`Sieve/docs/ROADMAP.md`.
+## B.2: (a), groups with another file in the middle
 
-## Built
+- **The rule now:** SPECIFICATIONS v30 allows files of other ways between a group's files. A group
+  stays open until its total is used, which it must be before the next group and at the end.
+- **Oracle:** its refusal is gone. The three files it refused before now read back the same.
+- **No `.sieve` changes.** Every packer has made such groups, and Sieve's reader has always read
+  them.
+- **CI step 11:** two texts grouped with random bytes between them, read back the same by Sieve and
+  the oracle.
 
-1. **Names that are one where case is ignored (D.3, no version).**
-   - A `.sieve` or an archive made on Linux can hold `A.txt` and `a.txt`. Installing it on Windows
-     or macOS would have written one over the other without a word.
-   - All three installers now refuse such a pair before writing anything, and name it:
-     `install_tree`, `unpack_archive` and `unpack_7z`.
-   - Whether the destination ignores case is looked at, not assumed, so WSL's `/mnt/c` counts.
-   - `sieve locate` warns of such a pair.
-   - New: `tools/cli/case_names.{hpp,cpp}`, and `tests/case_pair.sieve` (80 bytes).
-   - CI step 11 installs that file and a zip of the pair. On Windows it checks the refusal for
-     real; here, with the check forced on, all three refused and wrote nothing.
+## B.5: the version byte says how a head is read
 
-2. **A PNG's rows carried unfiltered, `skr` (D.1, v32 draft, archive format 23).**
-   - Under temporary, a PNG that preflate makes again carries its rows unfiltered, then their
-     filter bytes, then the skeleton. Installing filters the rows again, exactly, and makes the PNG
-     as `sk` does.
-   - Specification, packer, reader, oracle and CI.
-   - The five PNGs here that other programs wrote, as a `.sieve`, each back byte for byte:
+There is no second flags byte. A head whose byte is 32 is read as v32's.
 
-     | PNG | before | with `skr` | |
-     | :--- | ---: | ---: | ---: |
-     | icon16 | 1,321 | 1,014 | −23.2% |
-     | icon32 | 2,757 | 1,911 | −30.7% |
-     | icon48 | 4,446 | 3,215 | −27.7% |
-     | icon128 | 19,775 | 11,863 | −40.0% |
-     | m1_sieve_scowl60 | 84,640 | 59,895 | −29.2% |
+## B.3 and B.4: v32's head with less overhead (behind the draft)
 
-3. **Pixels mixed as their own shape (D.2, v32 draft).**
-   - Mixing now also weighs the shape a PNG's recipe gives, beside the shapes it guessed before.
-   - Before, a screenshot's pixels were tested as "3 wide", lost to LZMA2, and were never mixed.
-   - The 18 hallway screenshots as one `.sieve`: 245,100 → 211,937 bytes (−13.5%), installed the
-     same.
-   - It's behind the draft only because the packer must make the same bytes without it. It writes
-     only v26's picture parameters.
+**Each stream in the head** (x86, lzma2, items, and the listing when packed) is written as its
+packed size, then its size × 4 plus a form:
+- **0:** LZMA2 with the dictionary its size gives, so no dictionary byte;
+- **1:** as before v32, with a byte after (the dictionary, carried as it is, or mixed);
+- **2:** a stream that is a single LZMA2 chunk, carried as the chunk's data alone. The reader puts
+  the chunk's six header bytes and the end byte back, so every reader after that is unchanged;
+- **3:** as 2, with the chunk's settings byte after.
 
-4. **Step 11's time by block (D.5).**
-   - Each traced command now carries its start time.
-   - `python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh` adds a step's time up by
-     block.
-   - Its first run found 27.6% of step 11 in one command: the oracle decoding, in Python, 1.4 MB
-     of mixed archive contents. That block now packs with Prioritise Decoding Speed: 726 s → 3 s,
-     the same checks.
+**The last part of the file carries no packed size;** it's what is left of the file.
 
-## Measured, not built
+**Remade files' recipes** in the listing write their numbers as varints rather than text.
 
-- **C.2, progressive JPEGs.** libjpeg already optimises a progressive JPEG's tables, so there's
-  nothing to gain there (0.0% on twelve). Installing a baseline JPEG as progressive is about 6%
-  smaller on large pictures (the door 156,746 → 147,587 bytes at quality 85), and 0.2% larger on
-  icon128. It would need a progressive JPEG writer of Sieve's own.
+**With the draft, every `.sieve` in bytes is v32.** Measured, each given back the same:
 
-## Left for you
+| | before | v32 |
+| :--- | ---: | ---: |
+| `tools/fetch_corpus.py` | 1,153 | 1,144 |
+| `tools/png_unfiltered_probe.py` | 1,365 | 1,356 |
+| `ci/trace_times.py` | 1,249 | 1,240 |
+| the extension's four icons (temporary) | 16,706 | 16,680 |
+| three 7-Zip archives and a gzip (temporary) | 16,413 | 16,395 |
 
-- **B.3 and B.4** (a small file's overhead; the archive format as a number). They take bytes out
-  of v32's head, which is the same decision as B.5, the second flags byte.
-- **B.2**, the group question, (a) or (b).
+**The saving is 9 bytes rather than the 11 estimated.** I left in the stream's unpacked size: the
+listing could give it, but working it out needs every way's share of the stream. Getting that wrong
+would refuse good files, to save 2 bytes.
 
-## Corrected
+## Found on the way
 
-- My plan had listed the book cover among other programs' PNGs; it is Sieve's own (stb).
-- It had also said hallway-door's 7,882 bytes were LZMA2's; they were mixing's already.
+The oracle refused a `lines` file whose base is mixed (`all.txt` as `mix4`, `third.txt` from its
+lines). Every packer since v24 makes these, and Sieve's reader takes them, so it's the same case as
+the groups. Following your rule (allowing it changes no file; forbidding it would make files
+larger), the specification and the oracle now allow any base carried as itself. Tell me if you'd
+rather decide that one separately.
 
 ## Tested here
 
-- The unit suite: 77,110 checks, 0 failures.
-- Full CI step 11 passed (2,646 s) with every new block in it, on the build before the last two
-  small changes. Those were the `skr` check made cheaper and the a21 speed-up; both blocks were
-  run again after them and passed.
-- Without the draft, the `.sieve`s of five PNGs are byte for byte as before.
+- Unit suite: 77,110 checks, 0 failures.
+- CI step 11, every block from the groups block through the v32 section (including the new ones),
+  passed.
+- A folder with a program, lines, a remade gzip, a `skr` PNG and mixing, with the draft: installed
+  the same by Sieve, and read the same by the oracle (but for the PNG, which needs preflate).
+- Without the draft, eight files' `.sieve`s are byte for byte as before.
