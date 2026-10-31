@@ -37,7 +37,7 @@ from the sizes given.
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 533,148 | 4.49:1 | −22.28% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,557,978 | 1.01:1 | −0.38% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 731 | 2.18:1 | −11.07% |
-| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,887 | 1,689:1 | −65.65% |
+| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,865 | 1,694:1 | −65.75% |
 
 "Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
 
@@ -387,10 +387,12 @@ All four take one cluster on disk, 4,096 bytes.
 
 `degrees.sieve` (in this folder) holds 3,960 files: an item of every dimension at every whole degree
 from 0 to 359. Each is an item of one of Sieve's lines, so the `.sieve` carries only its place on its
-line, and Sieve makes it again on installing. 13,321,756 bytes come to **7,887** (1,689:1), where a
-7z of the same folder is 22,961. Installed on Edward's machine: 3,960 files, every one checked
-against its SHA-256, decoded in 0.356 s, checked and written in 1.461 s.
+line, and Sieve makes it again on installing. 13,321,756 bytes come to **7,865** (1,694:1; v32,
+made again 31 October 2026: 7,887 as v20), where a 7z of the same folder is 22,961 (the File
+Locator's own LZMA2 at preset 9e, one stream, makes 9,226). Made in 149.3 s with Try every way.
+Installed on Edward's machine: 3,960 files, every one checked against its SHA-256, decoded in 0.356
+s, checked and written in 1.428 s.
 
 This works only for files that are Sieve's own items, made from their places; a file from anywhere
 else is carried as itself. [PROOF.md](PROOF.md) has the sample, and `welcome to the sieve.sieve`
-(the starting page: 32 bytes as 159), where the overhead is more than the file.
+(the starting page: 32 bytes as 158; 159 as v20), where the overhead is more than the file.
