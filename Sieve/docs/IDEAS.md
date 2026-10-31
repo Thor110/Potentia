@@ -5504,3 +5504,17 @@ cancel out a file to 0"), recording whatever remains.
     files it would not change which way Sieve takes. What would decide it is Edward's game data
     (sprite sheets, textures), which the probe can be run on as it is.
 
+**19.109 A look round, 31 October 2026 (three ideas measured; nothing built).** Edward: "give the
+ideas and current work a look over ... Even come up with your own ideas if you wish". The plan is
+[ROADMAP.md](ROADMAP.md). Its part D holds the new ideas, three of them measured:
+- **A PNG's rows carried unfiltered under temporary:** PNG's filters are sums and differences modulo
+  256, so the original comes back byte for byte by construction. It is about 22% to 41% smaller at
+  worst on the two PNGs written by other programs, and larger on small and flat pictures, so it is
+  weighed. The tables are in `results/png-unfiltered-2026-10-31.md`.
+- **Mixing tried on an `stb` PNG's pixels:** hallway-compact's pixels were carried by LZMA2 in
+  15,957 bytes, where mixing as a picture gives 14,059. No version is needed.
+- **Names equal but for case** (found by CI step 11's failure on Windows): installing checks that
+  no file is already there before writing. Two names in one `.sieve` that differ only in case both
+  pass, and on Windows or macOS the second is written over the first. Read from the code, not tried
+  on Windows.
+
