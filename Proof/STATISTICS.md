@@ -13,6 +13,7 @@ from the sizes given.
 - [Sieve's source tree, against the usual compressors](#sieves-source-tree-against-the-usual-compressors)
 - [enwik8: the first 100 MB of English Wikipedia](#enwik8-the-first-100-mb-of-english-wikipedia)
 - [enwik9: the first 1 GB of English Wikipedia](#enwik9-the-first-1-gb-of-english-wikipedia)
+- [Four ways each: Try every way and not](#four-ways-each-try-every-way-and-not)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A game's release: WoWRevived](#a-games-release-wowrevived)
 - [A game engine: ALTEngine](#a-game-engine-altengine)
@@ -29,7 +30,7 @@ from the sizes given.
 | [Sieve's own release](#the-application-itself) | 45,967,736 | 8,235,077 | 6,470,236 | 7.10:1 | −21.43% |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,547,893 | 4.64:1 | −17.38% |
-| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 186,081,966 | 5.37:1 | −19.14% |
+| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
 | [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
@@ -174,11 +175,16 @@ for the `.zip`), not at their strongest.
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
 | zip | 312,712,170 | 3.20:1 | 31.27% | +35.89% | 1 min 30 s | about 4 s |
 | 7z | 230,120,517 | 4.35:1 | 23.01% | | 1 min 37 s | about 1 s |
-| Sieve, prioritised for decoding | 211,195,701 | 4.73:1 | 21.12% | −8.22% | 5,999.7 s (1 h 40 min) | 10.892 s, then checked and written in 4.962 s |
-| **Sieve** (`.sieve`), optimised for size | **186,081,966** | **5.37:1** | **18.61%** | **−19.14%** | 6,631.6 s (1 h 50 min) | 1,153.583 s, then checked and written in 5.332 s |
+| Sieve v31, prioritised for decoding | 211,195,701 | 4.73:1 | 21.12% | −8.22% | 5,999.7 s (1 h 40 min) | 10.892 s, then checked and written in 4.962 s |
+| Sieve v32, prioritised for decoding | 211,195,696 | 4.73:1 | 21.12% | −8.22% | 5,035.7 s (1 h 24 min) | 10.902 s, then checked and written in 4.982 s |
+| Sieve v31, optimised for size | 186,081,966 | 5.37:1 | 18.61% | −19.14% | 6,631.6 s (1 h 50 min) | 1,153.583 s, then checked and written in 5.332 s |
+| **Sieve v32** (`.sieve`), optimised for size | **185,105,231** | **5.40:1** | **18.51%** | **−19.56%** | 5,627.9 s (1 h 34 min) | 1,097.360 s, then checked and written in 5.050 s |
 | PPMd var. J (`enwik9.pmd`), as published | 183,964,915 | 5.44:1 | 18.40% | −20.06% | | |
 
-Optimised for size, Sieve is 19.14% under 7z (on enwik8, 16.89%) and 2,117,051 bytes (1.15%) larger
+Made again at `sieve-manifest-v32` on the night of 31 October 2026 by `tools/bench_files.bat` (no
+search limit; for size with Try every way, for decoding without it, which makes the same file):
+v32's word list counted by use took 976,735 bytes (0.52%) off v31's, and the gap to PPMd from 1.15%
+to 0.62%. At v31: optimised for size, Sieve was 19.14% under 7z (on enwik8, 16.89%) and 2,117,051 bytes (1.15%) larger
 than PPMd at its strongest; it unpacks at about 0.87 MB a second (mixing decodes as slowly as it codes). Prioritised for decoding, it is
 13.50% larger than that, still 8.22% under 7z, and decodes at about 92 MB a second: 15.9 s in all,
 checked and written (29 October 2026, measured again).
@@ -209,8 +215,42 @@ were made (it was missing from the reports: now "reading them back, as installin
 weighing's own search, the 734 s and 790.5 s of the first runs, took 1.0 s on enwik9 here: it now
 takes the file's ways as packing found them.
 
+At v32 it is 1,140,316 bytes (0.62%) larger than PPMd, and unpacks at about 0.91 MB a second.
+
 PPMd's figure is from the same page as enwik8's, not measured here; the benchmark's other published
 enwik9 sizes are in the enwik8 section's second table.
+
+## Four ways each: Try every way and not
+
+`tools/bench_files.bat` (31 October to 1 November 2026, Edward's machine, Sieve at v32, no search
+limit) made each file four ways, each installed again and checked: for size and for decoding speed,
+each with Try every way and without. The `.sieve` in bytes; the 7z here is LZMA2 at preset 9e as one
+stream, as the File Locator gives it (not 7-Zip's own, as in the sections above):
+
+| File | 7z (9e) | size, Try every way | size, without | decoding, Try every way | decoding, without |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| enwik9 | 211,776,158 | **185,105,231** | 211,195,696 | 211,195,696 | 211,195,696 |
+| enwik8 | 24,831,587 | **21,547,893** | 24,768,406 | 24,768,406 | 24,768,406 |
+| 20240407_153939.jpg | 4,575,072 | **4,425,909** | 4,557,967 | 4,557,967 | 4,557,967 |
+| 20230830_163945.jpg | 4,127,288 | **3,980,423** | 4,111,467 | 4,111,467 | 4,111,467 |
+| A picture at 3653×5480 | 3,844,130 | **3,716,743** | **3,716,743** | 3,826,022 | 3,826,022 |
+| pg996.txt | 685,794 | **524,389** | **524,389** | 683,194 | 683,194 |
+| pi6.txt | 505,978 | **417,049** | **417,049** | **417,049** | **417,049** |
+| control.py | 690 | **591** | 722 | 722 | 722 |
+
+What it shows:
+- **Try every way matters for size where mixing's limits apply:** files over 16 MiB (enwik8 and
+  enwik9, mixed only with it) and under 4 KiB (`control.py`). It matters too where mixing's test on a
+  file's start says no: two of the photographs, whose starts mix no better than LZMA2.
+- **Elsewhere it changes nothing:** Don Quixote, the third photograph and pi come to the same bytes
+  without it. Making takes longer with it, though: pi 10.0 s against 2.4.
+- **For decoding speed it changes nothing here**, since no file is mixed. It only lifts the rope's
+  early stops, and on these files that found nothing more.
+- **The time:**
+  - enwik9 took 5,627.9 s for size with it, against 5,213.5 without.
+  - Installing it took 1,097.4 s mixed, against 11.4 s.
+
+The full tables, with each way's making, decoding and checking times, are in the run's results.md.
 
 ## A game archive: MAPS.WoW
 

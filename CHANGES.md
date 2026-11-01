@@ -1,26 +1,18 @@
-# tools/bench_files.bat (commit b03b009)
+# The overnight run, recorded (commit e9a6dbf)
 
-Double-click `Sieve\tools\bench_files.bat`. It asks for a folder (type the path, or drag the folder
-into the window), then runs overnight.
+Every one of the 32 runs installed back the same.
 
-- **What it runs:** each file of that folder, largest first, four ways, with no search limit:
-  size/try, size/no, decode/try, decode/no.
-- **Each run:** installed again (`sieve install`) and checked against the original.
-- **What it keeps:** the `.sieve`'s size, how long making took, and how long decoding and checking
-  and writing took. Once a file, beside them: zip (deflate 9) and 7z (LZMA2 9e, one stream), as the
-  File Locator gives them.
-- **Where the results go:** beside your folder, as `<folder>-bench-<date and time>`, so nothing goes
-  into the repository. In it:
-  - `results.md`, a table a file;
-  - `results.tsv`, every figure;
-  - `runs\`, each run's full output with `--timings`.
-- **If stopped part way:** the tables are rewritten after every run, so closing the window keeps
-  what finished.
-- **Options:**
-  - `bench_files.bat D:\bench --keep` keeps each `.sieve` made;
-  - an `.exe` as the first option uses another `sieve.exe` (the default is
-    `out\build\x64-Release\sieve.exe`).
+**enwik9 at v32:**
+- For size: **185,105,231** (v31: 186,081,966, −0.52%). That's 0.62% over PPMd J, where v31 was
+  1.15% over. Installed in 1,102 s.
+- For decoding speed: 211,195,696. Installed in 15.9 s.
 
-**Tested here** on three small files: every run installed back the same.
+**New section, "Four ways each"**: the eight files side by side. Try every way changes the size only
+- for files over 16 MiB (enwik8, enwik9),
+- under 4 KiB (control.py),
+- and where mixing's test on a file's start says no (two of the photographs).
 
-Files: `Sieve/tools/bench_files.bat`, `Sieve/tools/bench/bench_files.py`, and MANUAL's row.
+Elsewhere it gives the same bytes and takes longer. For decoding speed it changed nothing on any of
+these files.
+
+**Files:** `Proof/STATISTICS.md`, `Sieve/docs/ROADMAP.md`, `Sieve/docs/NEXT-VERSION.md`.
