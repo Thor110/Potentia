@@ -37,7 +37,10 @@ Sieve beside 7z at each size, to show where Sieve starts to win for each kind of
 3. **Public test data**, so the results sit beside published tables: the Silesia corpus (211 MB of
    mixed files) and enwik8 (the first 100 MB of English Wikipedia, used by the Large Text
    Compression Benchmark). *enwik8 done 28 October 2026* (Proof/STATISTICS.md: 21,675,870 bytes,
-   7z 26,080,445).
+   7z 26,080,445; v32, 21,547,893). *enwik9 and Silesia done at v32, 1 November 2026*:
+   185,105,231, and 42,091,120 for Silesia's twelve files, 13.13% under LZMA2 9e. The comparison
+   with 7-Zip itself, xz, zstd, brotli and paq8px on Silesia (`tools/bench/compare.py`) is still to
+   run.
 4. **Folders people recognise:** a game's install folder, a program's folder, a photo folder (expect
    little: JPEGs are already compressed until step 3 of the plan in `HANDOFF.md`), a large source
    tree.

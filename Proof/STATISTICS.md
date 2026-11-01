@@ -14,6 +14,7 @@ from the sizes given.
 - [enwik8: the first 100 MB of English Wikipedia](#enwik8-the-first-100-mb-of-english-wikipedia)
 - [enwik9: the first 1 GB of English Wikipedia](#enwik9-the-first-1-gb-of-english-wikipedia)
 - [Four ways each: Try every way and not](#four-ways-each-try-every-way-and-not)
+- [Silesia: the standard corpus of mixed files](#silesia-the-standard-corpus-of-mixed-files)
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A game's release: WoWRevived](#a-games-release-wowrevived)
 - [A game engine: ALTEngine](#a-game-engine-altengine)
@@ -31,6 +32,7 @@ from the sizes given.
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,547,893 | 4.64:1 | −17.38% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% |
+| [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 42,091,120 | 5.04:1 | −13.13% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
 | [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
@@ -251,6 +253,47 @@ What it shows:
   - Installing it took 1,097.4 s mixed, against 11.4 s.
 
 The full tables, with each way's making, decoding and checking times, are in the run's results.md.
+
+## Silesia: the standard corpus of mixed files
+
+The [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia): twelve files of
+211,938,580 bytes in all (texts, a dictionary, XML, a database, programs, medical and astronomical
+data), each measured on its own. Made by `tools/bench_files.bat` on Edward's machine, 1 November
+2026, Sieve at v32, no search limit, four ways each; every `.sieve` was installed again and checked.
+The 7z is LZMA2 at preset 9e as one stream a file, without its container (as the File Locator gives
+it), not 7-Zip's own.
+
+| File | Bytes | 7z (9e) | size, Try every way | size, without | decoding (either) | Against 7z, for size |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| mozilla | 51,220,480 | 13,376,180 | **13,376,239** | 13,376,239 | 13,376,239 | +59 bytes |
+| webster | 41,458,703 | 8,368,609 | **6,246,725** | 8,355,800 | 8,355,800 | −25.36% |
+| nci | 33,553,445 | 1,449,209 | **1,293,653** | 1,440,114 | 1,440,114 | −10.73% |
+| samba | 21,606,400 | 3,739,464 | **3,287,995** | 3,728,015 | 3,728,015 | −12.07% |
+| dickens | 10,192,446 | 2,831,149 | **2,210,442** | 2,210,442 | 2,825,117 | −21.92% |
+| osdb | 10,085,684 | 2,844,493 | **2,389,894** | 2,389,894 | 2,835,826 | −15.98% |
+| mr | 9,970,564 | 2,751,831 | **1,967,650** | 1,967,650 | 2,314,195 | −28.50% |
+| x-ray | 8,474,240 | 4,491,203 | **3,622,683** | 3,622,683 | 4,146,903 | −19.34% |
+| sao | 7,251,944 | 4,425,604 | **4,170,594** | 4,413,371 | 4,413,371 | −5.76% |
+| reymont | 6,627,202 | 1,315,531 | **1,093,050** | 1,093,050 | 1,313,857 | −16.91% |
+| ooffice | 6,152,192 | 2,427,163 | **2,079,028** | 2,079,028 | 2,079,028 | −14.34% |
+| xml | 5,345,280 | 434,830 | **353,167** | 353,167 | 433,871 | −18.78% |
+| **all twelve** | **211,938,580** | **48,455,266** | **42,091,120** | **45,029,453** | **47,262,336** | **−13.13%** |
+
+| All twelve | Bytes | Ratio | Of the corpus | Against 7z | Made in | Installed in |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| zip (deflate 9) | 67,643,201 | 3.13:1 | 31.92% | +39.60% | | |
+| 7z (LZMA2 9e) | 48,455,266 | 4.37:1 | 22.86% | | | |
+| Sieve, prioritised for decoding | 47,262,336 | 4.48:1 | 22.30% | −2.46% | 803.3 s | 3.6 s |
+| Sieve, for size, without Try every way | 45,029,453 | 4.71:1 | 21.25% | −7.07% | 875.4 s | 49.6 s |
+| **Sieve, for size, Try every way** | **42,091,120** | **5.04:1** | **19.86%** | **−13.13%** | 1,279.5 s | 141.6 s |
+
+- **Try every way's share:** without it, mixing is tried only on files of 4 KiB to 16 MiB. With it,
+  `webster` (41 MB) went from 8,355,800 to 6,246,725, and `nci` and `samba` were mixed too.
+- **`mozilla`, a tar of programs:** it was carried by LZMA2 as 7z carries it, 59 bytes larger (the
+  head and listing). Sieve reads it as one file of unknown kind, so its programs inside get no x86
+  filter, and mixing came out no smaller. A tar read as its members would let each program through
+  the x86 filter, but nothing here measures how much that would save.
+- **For decoding speed:** Try every way made no difference to any file.
 
 ## A game archive: MAPS.WoW
 

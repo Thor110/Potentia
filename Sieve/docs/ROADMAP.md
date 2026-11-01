@@ -30,8 +30,9 @@ If only seven things were done next, in this order:
    (packer rule: no change without it): the 18 hallway screenshots 245,100 → 211,937 bytes.
 5. **Names equal but for case, refused before installing** (D.3). *Built 31 October.* Edward's
    Windows run of step 11 checks the refusal.
-6. **The Silesia benchmark** (C.4): the one public corpus not yet measured. Nothing is posted
-   without it.
+6. **The Silesia benchmark** (C.4). *Measured 1 November (Edward, `tools/bench_files.bat`):*
+   42,091,120 bytes for the twelve files, 13.13% under 7z's LZMA2 9e. Still to set beside it: 7-Zip
+   itself, xz, zstd, brotli and paq8px (`tools/bench/compare.py`).
 7. **Word frequencies on enwik8 and enwik9** (C.1): built; only the large measurement is left.
 
 ## A. In progress now
@@ -92,7 +93,10 @@ holds it, 64 if only scowl-en-60 does, else 1 (mix-v4's `F80`).
 the reason to look at; if not, BCJ2 can be dropped.
 
 **C.4 Silesia** (SHOWCASE-PLAN §2): 211 MB of mixed files, run by `tools/bench/compare.py` against
-7-Zip, xz, zstd and brotli, and paq8px for honesty.
+7-Zip, xz, zstd and brotli, and paq8px for honesty. *Sieve's side measured 1 November 2026*
+(Proof/STATISTICS.md): 42,091,120 bytes for size, 47,262,336 for decoding speed. `mozilla`, a tar of
+programs, is the one file where Sieve does no better than LZMA2. A tar read as its members, its
+programs through the x86 filter, is the lead there; it's not measured.
 
 **C.5 Mixing as a kind of piece** (IDEAS §19.103): a picture and text in one file (a tar), each
 mixed as what it is. Not measured.
