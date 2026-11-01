@@ -4,7 +4,9 @@ figures in Proof/STATISTICS.md (Edward, 1 November 2026: one run overnight, each
 updating).
 
   tools\bench_files.bat                         (Windows: asks for the folder, finds Python and sieve.exe)
-  python tools/bench/bench_files.py SIEVE FOLDER [--keep]
+  tools\bench_files_optimise_temporary.bat      the same with Compressed formats, temporary
+  tools\bench_files_optimise_permanent.bat      the same with Compressed formats, permanent
+  python tools/bench/bench_files.py SIEVE FOLDER [--keep] [--compressed temporary|permanent]
 
 The files of FOLDER (not its subfolders), largest first. Each is made four ways, with no search
 limit (as the File Locator's figures are made):
@@ -14,13 +16,19 @@ limit (as the File Locator's figures are made):
   decode/try   Prioritise Decoding Speed, Try every way   (--prioritise-decoding --search-every-wave)
   decode/no    Prioritise Decoding Speed, without it
 
-and each `.sieve` is installed again (`sieve install`), its file checked against the original. For
+and each `.sieve` is installed again (`sieve install`), its file checked against the original.
+With --compressed temporary, every run has the box ticked (`--compressed-temporary`: an archive,
+compressed file, PNG or JPEG made again exactly on installing), so the check is the same. With
+--compressed permanent (`--compressed-permanent`: installed as what it holds, or a PNG or JPEG
+re-saved smaller), what is installed is not the file's bytes by design: the check is then that
+installing succeeded, Sieve itself having checked every file it wrote against its SHA-256. For
 each it keeps the `.sieve`'s size, how long making it took (the command's own time, start to end),
 and how long installing took (decoding, and checking and writing, as Sieve reports them). Beside
 them, once a file: the zip and 7z figures the File Locator gives (deflate at level 9; LZMA2 at
 preset 9e, one stream, no container), made here by Python's zlib and lzma.
 
-Results go to a folder beside FOLDER, `<FOLDER>-bench-<date and time>`, outside the repository
+Results go to a folder beside FOLDER, `<FOLDER>-bench-<date and time>` (with a box,
+`<FOLDER>-bench-temporary-...` or `-permanent-...`, so its tables stay apart), outside the repository
 (the files may be one's own): results.md (a table a file), results.tsv (every figure), and each
 run's own output. Each table is written again after every run, so a run stopped part way keeps what
 it finished. The `.sieve` files are deleted once measured, unless --keep.
@@ -84,15 +92,19 @@ def against(a, b):
     return f"{100.0 * (a - b) / b:+.2f}%" if b else ""
 
 
-def write_tables(out, rows, files_info, started, sieve):
+def write_tables(out, rows, files_info, started, sieve, box):
     with open(out / "results.tsv", "w", encoding="utf-8") as f:
         f.write("file\tbytes\tzip\t7z\tmode\tsieve\tmade (s)\tdecoded (s)\tchecked and written (s)\tinstalled the same\n")
         for r in rows:
             f.write("\t".join(str(r[k]) for k in ("file", "bytes", "zip", "7z", "mode", "sieve", "made", "decoded", "written", "same")) + "\n")
     with open(out / "results.md", "w", encoding="utf-8") as f:
-        f.write(f"# Sieve on {len(files_info)} file(s), four ways each\n\n")
+        title = {"": "", "temporary": ", Compressed formats temporary", "permanent": ", Compressed formats permanent"}[box]
+        f.write(f"# Sieve on {len(files_info)} file(s), four ways each{title}\n\n")
         f.write(f"Made {started:%Y-%m-%d %H:%M} on {platform.node()} ({platform.system()} {platform.release()}, {os.cpu_count()} logical processors), "
-                f"with {sieve}, no search limit. zip is deflate at level 9 and 7z LZMA2 at preset 9e as one stream, each without its container "
+                f"with {sieve}, no search limit"
+                + {"": "", "temporary": ", the Compressed formats box temporary ticked (made again exactly on installing)",
+                   "permanent": ", the Compressed formats box permanent ticked (installed as what it holds, or re-saved smaller: \"The same\" is then whether installing succeeded, Sieve checking what it wrote)"}[box]
+                + ". zip is deflate at level 9 and 7z LZMA2 at preset 9e as one stream, each without its container "
                 f"(as the File Locator gives them). \"Against 7z\" is the `.sieve` against that 7z.\n")
         for name, info in files_info.items():
             f.write(f"\n## {name}\n\n{info['bytes']:,} bytes; zip {info['zip']:,} ({pct(info['zip'], info['bytes'])}); 7z {info['7z']:,} ({pct(info['7z'], info['bytes'])})\n\n")
@@ -113,7 +125,10 @@ def main():
     ap.add_argument("sieve", help="sieve (sieve.exe on Windows)")
     ap.add_argument("folder", help="the folder whose files to measure")
     ap.add_argument("--keep", action="store_true", help="keep each .sieve made")
+    ap.add_argument("--compressed", choices=["temporary", "permanent"], help="tick a Compressed formats box for every run")
     a = ap.parse_args()
+    box = a.compressed or ""
+    box_flags = {"": [], "temporary": ["--compressed-temporary"], "permanent": ["--compressed-permanent"]}[box]
     sieve = str(Path(a.sieve).resolve())
     folder = Path(a.folder).resolve()
     if not folder.is_dir():
@@ -122,7 +137,7 @@ def main():
     if not files:
         sys.exit(f"{folder} holds no files")
     started = datetime.datetime.now()
-    out = folder.parent / f"{folder.name}-bench-{started:%Y%m%d-%H%M%S}"
+    out = folder.parent / f"{folder.name}-bench-{box + '-' if box else ''}{started:%Y%m%d-%H%M%S}"
     (out / "runs").mkdir(parents=True)
     print(f"{len(files)} file(s), largest first; results in {out}")
     rows, files_info = [], {}
@@ -138,14 +153,14 @@ def main():
             tag = mode.replace("/", "-")
             made = out / f"{path.name}.{tag}.sieve"
             print(f"  {mode}: making ...", flush=True)
-            code, said, seconds = run([sieve, "locate", str(path), "--installer", str(made), "--search-per-file", "0", "--timings"] + flags,
+            code, said, seconds = run([sieve, "locate", str(path), "--installer", str(made), "--search-per-file", "0", "--timings"] + flags + box_flags,
                                       out / "runs" / f"{path.name}.{tag}.make.txt")
             row = {"file": path.name, "bytes": size, "zip": zipped, "7z": seven, "mode": mode, "sieve": "", "made": f"{seconds:.1f}",
                    "decoded": "", "written": "", "same": ""}
             if code != 0 or not made.exists():
                 print(f"  {mode}: making failed (exit {code}); its output is in runs/")
                 rows.append(row)
-                write_tables(out, rows, files_info, started, sieve)
+                write_tables(out, rows, files_info, started, sieve, box)
                 continue
             row["sieve"] = made.stat().st_size
             dest = out / "installed"
@@ -156,13 +171,17 @@ def main():
             if m:
                 row["decoded"], row["written"] = m.group(1), m.group(2)
             got = dest / path.name
-            row["same"] = "yes" if code == 0 and got.exists() and sha256_of(got) == original else "NO"
+            if box == "permanent":
+                # (installed as what it holds, or re-saved: not the file's bytes by design)
+                row["same"] = ("yes" if got.is_file() and sha256_of(got) == original else "installed") if code == 0 else "NO"
+            else:
+                row["same"] = "yes" if code == 0 and got.exists() and sha256_of(got) == original else "NO"
             print(f"  {mode}: decoded in {row['decoded']} s, checked and written in {row['written']} s; the same: {row['same']}")
             shutil.rmtree(dest, ignore_errors=True)
             if not a.keep:
                 made.unlink()
             rows.append(row)
-            write_tables(out, rows, files_info, started, sieve)
+            write_tables(out, rows, files_info, started, sieve, box)
     print(f"\nDone: {out / 'results.md'}")
 
 

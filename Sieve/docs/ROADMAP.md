@@ -98,6 +98,13 @@ the reason to look at; if not, BCJ2 can be dropped.
 programs, is the one file where Sieve does no better than LZMA2. A tar read as its members, its
 programs through the x86 filter, is the lead there; it's not measured.
 
+**C.4a A tar carried as its members** (found on Silesia's `mozilla`, 1 November 2026). A tar is no
+compressed format, so neither Compressed formats box touches it (the packer reads one only to
+extract it), and its programs get no x86 filter: `mozilla` came to LZMA2's own bytes. v31's `skm`
+already carries an archive as a skeleton plus its members as files of their own. A tar's skeleton
+would be its headers and padding, each member's data a file, so each program would go through the
+x86 filter. That's the packer only, not a new version. Not measured.
+
 **C.5 Mixing as a kind of piece** (IDEAS §19.103): a picture and text in one file (a tar), each
 mixed as what it is. Not measured.
 
