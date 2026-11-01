@@ -596,7 +596,7 @@ std::string pieces_text(const std::vector<std::pair<char, uint64_t>>& list)
     return t;
 }
 
-// ---- v14: archives ("Optimise Compressed Formats")
+// ---- v14: archives ("Archive and Compressed Formats")
 
 bool is_xz(const std::vector<uint8_t>& b)
 {
@@ -906,11 +906,9 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     archive_read_support_format_cpio(a);
     archive_read_support_format_ar(a);
     archive_read_support_format_warc(a);
-    if (extract)
-    {
-        archive_read_support_format_tar(a);
-        archive_read_support_format_zip(a);
-    }
+    // (A tar too, under Archive and compressed formats' permanent: installed as its files.)
+    archive_read_support_format_tar(a);
+    if (extract) archive_read_support_format_zip(a);
     std::vector<sieve::install::InMemory> out;
     std::unordered_set<std::string> names;
     bool ok = archive_read_open_memory(a, b.data(), b.size()) == ARCHIVE_OK;
@@ -976,7 +974,7 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     if (!ok || out.empty()) return std::nullopt;
     format = fmt == ARCHIVE_FORMAT_RAR || fmt == ARCHIVE_FORMAT_RAR_V5 ? "rar" : fmt == ARCHIVE_FORMAT_CAB ? "cab" : fmt == ARCHIVE_FORMAT_ISO9660 ? "iso" :
              fmt == ARCHIVE_FORMAT_LHA ? "lha" : fmt == ARCHIVE_FORMAT_CPIO ? "cpio" : fmt == ARCHIVE_FORMAT_AR ? "ar" : fmt == ARCHIVE_FORMAT_WARC ? "warc" :
-             extract && fmt == ARCHIVE_FORMAT_TAR ? "tar" : extract && fmt == ARCHIVE_FORMAT_ZIP ? "zip" : "";
+             fmt == ARCHIVE_FORMAT_TAR ? "tar" : extract && fmt == ARCHIVE_FORMAT_ZIP ? "zip" : "";
     if (format.empty()) return std::nullopt;
     if (extract) return out;
     // One top folder: every entry is it or inside it, at least one inside: left out (as a zip's).
@@ -1448,6 +1446,79 @@ bool is_png(const std::vector<uint8_t>& b)
 {
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     return b.size() >= 8 + 25 && std::memcmp(b.data(), sig, 8) == 0;
+}
+
+// A tar (Archive and compressed formats, 1 November 2026): no compression, a container of headers
+// and files. Its skeleton is its headers, each file's padding and its end, as they are, and each
+// regular file's data stored, in order, so it is made again exactly from the skeleton and its files
+// (v31's "skm", each file carried its own way: a program through the x86 filter). Nothing where it
+// is not a POSIX or GNU tar (the "ustar" magic), a header's checksum is wrong, or a size runs past
+// the end.
+struct TarSkeleton
+{
+    DeflateSkeleton sk;
+    std::vector<sieve::install::InMemory> members; // the regular files' data, in the tar's order
+};
+
+static bool tar_header_ok(const uint8_t* h)
+{
+    uint64_t sum = 0, want = 0;
+    for (size_t i = 0; i < 512; ++i) sum += (i >= 148 && i < 156) ? 0x20 : h[i];
+    size_t i = 148;
+    while (i < 156 && h[i] == ' ') ++i;
+    bool digits = false;
+    for (; i < 156 && h[i] >= '0' && h[i] <= '7'; ++i) want = want * 8 + uint64_t(h[i] - '0'), digits = true;
+    return digits && sum == want;
+}
+
+bool is_tar(const std::vector<uint8_t>& b)
+{
+    return b.size() >= 1024 && std::memcmp(b.data() + 257, "ustar", 5) == 0 && tar_header_ok(b.data());
+}
+
+static std::optional<TarSkeleton> tar_skeleton(const std::vector<uint8_t>& b)
+{
+    if (!is_tar(b)) return std::nullopt;
+    TarSkeleton t;
+    size_t at = 0;
+    while (b.size() - at >= 512)
+    {
+        const uint8_t* h = b.data() + at;
+        if (std::all_of(h, h + 512, [](uint8_t c) { return c == 0; })) break; // the end
+        if (!tar_header_ok(h)) return std::nullopt;
+        uint64_t size = 0;
+        if (h[124] & 0x80)
+        {
+            // (GNU's base-256, for files of 8 GiB or more: the field's other bytes, high first)
+            for (size_t i = 125; i < 136; ++i)
+            {
+                if (size >> 55) return std::nullopt;
+                size = size << 8 | h[i];
+            }
+        }
+        else
+            for (size_t i = 124; i < 136 && h[i] >= '0' && h[i] <= '7'; ++i)
+            {
+                if (size >> 60) return std::nullopt;
+                size = size * 8 + uint64_t(h[i] - '0');
+            }
+        const uint64_t padded = (size + 511) / 512 * 512;
+        if (padded > b.size() - at - 512) return std::nullopt;
+        const char type = char(h[156]);
+        t.sk.literal(h, 512);
+        if ((type == '0' || type == '\0' || type == '7') && size > 0)
+        {
+            t.sk.stored(h + 512, size_t(size));
+            t.sk.literal(h + 512 + size, size_t(padded - size));
+            sieve::install::InMemory in;
+            in.bytes.assign(h + 512, h + 512 + size);
+            t.members.push_back(std::move(in));
+        }
+        else t.sk.literal(h + 512, size_t(padded)); // (a folder, a link, a long name or pax's headers: as they are)
+        at += 512 + size_t(padded);
+    }
+    t.sk.literal(b.data() + at, b.size() - at);
+    return t;
 }
 
 std::optional<DeflateSkeleton> png_skeleton(const std::vector<uint8_t>& b)
@@ -2558,7 +2629,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
     }
 
-    // v14, "Optimise Compressed Formats" (asked for, never by default): an xz file remade exactly from
+    // v14, "Archive and Compressed Formats" (asked for, never by default): an xz file remade exactly from
     // what it holds where liblzma does that, its contents carried; else, and a 7z always (Sieve has
     // no 7-Zip encoder), the archive carried as its contents, in a folder (or file) named after it,
     // and said so. Where that name is taken, or the archive cannot be read, it stays as it is.
@@ -3124,6 +3195,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 if (!why.empty()) rar_said.push_back(e.path + ": not made again by rar: " + why);
             }
+            // A tar, with temporary: made again exactly from its skeleton, its files carried as its
+            // members, each its own way (tar_skeleton). Checked to give the tar back before it is kept.
+            if (members_on && temporary_ok && is_tar(b))
+                if (auto t = tar_skeleton(b))
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = t->sk.inner(skeleton);
+                    if (deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
+                }
             if (v20)
             {
                 std::string format;
@@ -4530,10 +4610,10 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << r.jpeg_forms << "; " << kDeltaManifestVersion << ")\n";
         if (r.jpegs_optimised)
             o << "optimised " << r.jpegs_optimised << " of those JPEG(s) installed with tables made for their values, the same pictures (" << r.jpeg_was
-              << " bytes as " << r.jpeg_now << "; Compressed Formats, permanent)\n";
+              << " bytes as " << r.jpeg_now << "; Archive and Compressed Formats, permanent)\n";
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
-              << r.png_resaved_bytes << "; Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
+              << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
               << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ")\n";
@@ -4541,7 +4621,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
             o << "members   " << r.member_archives << " of them made again from their skeleton and their " << r.members
               << " file(s), each carried its own way (" << kSkeletonMembersManifestVersion << ")\n";
         if (r.unpacked)
-            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Optimise Compressed Formats; " << version
+            o << "unpacked  " << r.unpacked << " archive(s) carried as their contents, not as the archives (Archive and Compressed Formats; " << version
               << ")\n";
         // v22: each RAR the machine's rar was tried on, and what came of it.
         for (const std::string& t : r.rar_said) o << "rar       " << t << "\n";

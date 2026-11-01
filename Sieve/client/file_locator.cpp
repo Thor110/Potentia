@@ -345,7 +345,7 @@ void FileLocator::open_log(const std::string& what, const std::string& path, boo
          << what << " " << path << "\n";
     if (search)
         log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
-         << (sieve::prioritise_decoding() ? "on" : "off") << "; compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
+         << (sieve::prioritise_decoding() ? "on" : "off") << "; archive and compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
          << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "") << "\n"
          << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
          << "a step on less than 64 KiB does not count for \"last new best\")\n";
@@ -1124,8 +1124,8 @@ void FileLocator::event(const SDL_Event& e)
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
-        case SDLK_A: pressed = "temporary"; break; // Compressed formats: temporary, on or off
-        case SDLK_U: pressed = "permanent"; break; // Compressed formats: permanent, on or off
+        case SDLK_A: pressed = "temporary"; break; // Archive and compressed formats: temporary, on or off
+        case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
         case SDLK_E: pressed = "every"; break;    // Try every way, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
         case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
@@ -1368,7 +1368,7 @@ void FileLocator::draw(float W, float H)
         draw_text(r_, bx, row_y + 8, run, 1, white);
         bx += text_width(run, 1) + 12;
         button("search_run_more", "+", row_y);
-        // Compressed formats, under it: two boxes, off unless ticked (v31; Optimise Compressed Formats,
+        // Compressed formats, under it: two boxes, off unless ticked (v31; Archive and Compressed Formats,
         // one box, before). Temporary: an archive or compressed file made again exactly on installing,
         // what it holds carried (only where Sieve can make it again). Permanent: carried as what it
         // holds, installed so (what installing gives back changes, so neither is ever on by itself).

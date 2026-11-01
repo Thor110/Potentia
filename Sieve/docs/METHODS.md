@@ -64,13 +64,14 @@ Log: `file N of M: NAME, S bytes: as its differences from OTHER: C copies coveri
 bytes, a script of L bytes in the lzma2 stream`, then `not searched (carried as its differences from
 OTHER (above))`.
 
-PNGs and JPEGs are packed under the **Compressed formats** boxes, as the other
-compressed formats are ([FORMATS.md](FORMATS.md)):
+PNGs and JPEGs are packed under the **Archive and compressed formats** boxes (once Compressed
+formats), as the other compressed formats and archives are, a tar among them ([FORMATS.md](FORMATS.md)):
 
 | | no box | temporary | permanent |
 | :--- | :--- | :--- | :--- |
 | **JPEG** | as it is | its brunsli form, made again byte for byte (`jbr`) | the same coefficients with tables made for them, smaller, as its brunsli form; else as temporary |
 | **PNG** | as it is | made again exactly (v25, v21), its rows carried unfiltered where it is v21's (`skr`) | re-saved at its smallest (`pngr`), the same picture; else made again exactly; else as it is |
+| **tar** | as it is | made again exactly from its headers, its files carried each its own way (`skm`) | its files, where that is smaller |
 
 With both boxes, made again exactly first.
 

@@ -103,7 +103,10 @@ compressed format, so neither Compressed formats box touches it (the packer read
 extract it), and its programs get no x86 filter: `mozilla` came to LZMA2's own bytes. v31's `skm`
 already carries an archive as a skeleton plus its members as files of their own. A tar's skeleton
 would be its headers and padding, each member's data a file, so each program would go through the
-x86 filter. That's the packer only, not a new version. Not measured.
+x86 filter. That's the packer only, not a new version. *Built 1 November 2026:* a test tar of
+two programs and three texts (9,584,640 bytes) went from 3,287,224 to 3,069,619 under temporary
+(−6.6%), given back byte for byte, and 3,069,430 under permanent. The boxes are now "Archive and
+compressed formats". Silesia's `mozilla` is for Edward's next run.
 
 **C.5 Mixing as a kind of piece** (IDEAS §19.103): a picture and text in one file (a tar), each
 mixed as what it is. Not measured.

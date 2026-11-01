@@ -1028,7 +1028,7 @@ const std::vector<Page>& pages()
                       "of the AI line as its weights' digits, not its file's floats. The pages are\n"
                       "--page-length characters of --alphabet; the AI line is --ai-layers, --ai-width,\n"
                       "--ai-heads and --ai-bits (Micro without them)."},
-          {"--optimise-compressed", "With --items: Optimise Compressed Formats (sieve-manifest-v14, v17, v19 to v22, v25).\n"
+          {"--optimise-compressed", "With --items: Archive and Compressed Formats (sieve-manifest-v14, v17, v19 to v22, v25).\n"
                                   "An .xz, a .bz2, a .zst libzstd 1.5.7 made, an .lz4, a .br and an .lzma is carried\n"
                                   "as what it holds and remade exactly on installing; so is a .gz or .zip whoever made\n"
                                   "it (its deflate by preflate) and a .7z whose blocks are 7-Zip's LZMA or LZMA2\n"
@@ -1055,11 +1055,13 @@ const std::vector<Page>& pages()
           {"--v25", "As sieve-manifest-v25 at newest: mixing by mix-v1, not mix-v2 (v26)."},
           {"--v24", "As sieve-manifest-v24 at newest: no PNG made again from its skeleton (v25)."},
           {"--optimise-archives", "The old name of --optimise-compressed (once Optimise Archive Formats); the same."},
-          {"--compressed-temporary", "Optimise Compressed Formats, temporary (v31): an archive or compressed file only made again\n"
+          {"--compressed-temporary", "Archive and Compressed Formats, temporary (v31): an archive or compressed file only made again\n"
                                      "exactly on installing (what it holds carried, the original given back); one Sieve cannot make\n"
-                                     "again is left as it is. With --compressed-permanent, or as --optimise-compressed: either."},
-          {"--compressed-permanent", "Optimise Compressed Formats, permanent (v31): an archive or compressed file carried as what it\n"
-                                     "holds, and installed so (its files, not the archive), even where Sieve could make it again.\n"
+                                     "again is left as it is (a tar too: made again from its headers, its files carried each its\n"
+                                     "own way). With --compressed-permanent, or as --optimise-compressed: either."},
+          {"--compressed-permanent", "Archive and Compressed Formats, permanent (v31): an archive or compressed file carried as what it\n"
+                                     "holds, and installed so (its files, not the archive; a tar's too), even where Sieve could\n"
+                                     "make it again.\n"
                                      "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
                                      "smallest, a JPEG with tables made for its values (else made again exactly)."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},

@@ -784,6 +784,29 @@ SIEVE_ARCHIVES_ALWAYS=1 $S locate z31 --installer z31p.sieve --items --compresse
 if grep -q "^members \|^remade " z31p.txt; then exit 1; fi
 $S install z31p.sieve --to z31p_inst > /dev/null
 cmp z31p_inst/three/tools/check_help.py ../tools/check_help.py
+# A tar (Archive and compressed formats, 1 November 2026): with temporary, made again exactly from
+# its skeleton (its headers, padding and end) with its files carried as its members, each its own way
+# (v31's skm), and given back byte for byte by Sieve, sieve-install and the oracle (which makes a
+# skeleton of bytes and stored data itself); with permanent, installed as its files (taken so here
+# whether or not smaller: SIEVE_ARCHIVES_ALWAYS; three texts mix smaller as the tar).
+rm -rf tar32 && mkdir tar32
+python -c "
+import tarfile, io
+with tarfile.open('tar32/bundle.tar', 'w', format=tarfile.USTAR_FORMAT) as t:
+    for name in ('../README.md', '../docs/GAME.md', '../ci/stand_in_rar.py'):
+        data = open(name, 'rb').read()
+        info = tarfile.TarInfo('bundle/' + name.split('/')[-1]); info.size = len(data); info.mtime = 0
+        t.addfile(info, io.BytesIO(data))
+"
+$S locate tar32 --installer tar32t.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > tar32t.txt
+grep -q "^members   1 of them made again from their skeleton and their 3 file(s), each carried its own way" tar32t.txt
+rm -rf tar32t_inst tar32t_si tar32t_oracle
+$S install tar32t.sieve --to tar32t_inst > /dev/null && diff -r tar32 tar32t_inst
+$SI tar32t.sieve --to tar32t_si --yes > /dev/null && diff -r tar32 tar32t_si
+python sieve_ref.py unpack tar32t.sieve --to tar32t_oracle > /dev/null && diff -r tar32 tar32t_oracle
+SIEVE_ARCHIVES_ALWAYS=1 $S locate tar32 --installer tar32p.sieve --items --compressed-permanent 2>&1 | tr -d '\r' | grep -q "^unpacked  1 archive(s) carried as their contents"
+rm -rf tar32p_inst && $S install tar32p.sieve --to tar32p_inst > /dev/null
+cmp tar32p_inst/bundle.contents/GAME.md ../docs/GAME.md || cmp tar32p_inst/bundle/GAME.md ../docs/GAME.md
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
 # back the same by Sieve and the oracle.
