@@ -1,42 +1,30 @@
-# Archive and compressed formats: tar (commit 3c2bf66)
+# Tar: sizes after leading spaces (commit ec62d61)
 
-**The rename.** The boxes are now **Archive and compressed formats**, in the File Locator, the
-report lines, `sieve help` and the hallway's options. Unchanged: the command line's flags
-(`--compressed-temporary`, `--compressed-permanent`, `--optimise-compressed`) and the
-`sieve-hallway.ini` keys, so settings and scripts still work.
+## What was wrong with mozilla
 
-**A tar, under each box:**
-- **temporary:** a POSIX or GNU tar (its `ustar` mark, every header's checksum right) is carried as
-  v31's `skm`: its headers, padding and end as the skeleton, and each file's data as a member,
-  carried its own way (a program through the x86 filter). It's checked to give the tar back before
-  it's kept, and installs byte for byte.
-- **permanent:** libarchive now reads a tar here too (before, only for extracting), so it's
-  installed as its files where that's smaller.
-- **No new version:** both are ways v31 and v20 already have.
+mozilla is an old GNU tar. It writes its file sizes as octal after leading spaces
+(`"     120000 "`), and Sieve read every one of them as 0. That put the next header in the
+wrong place, its checksum failed, and the tar was never taken apart on either box. The reader
+now skips the leading spaces. That change is in `tools/cli/pack.cpp`.
 
-**Measured here,** on a tar of two programs and three texts (9,584,640 bytes):
+## mozilla, measured after the fix
 
-| | `.sieve` |
+All runs used `--search-per-file 0`, and every one installed back, either as the tar byte for
+byte or as its 525 files.
+
+| Way | `.sieve` |
 | :--- | ---: |
-| no box | 3,287,224 |
-| temporary | **3,069,619** (−6.6%), the tar byte for byte |
-| permanent | 3,069,430, installed as its files |
+| Temporary, as the packer weighs it (kept whole) | 13,376,239 |
+| Permanent, as the packer weighs it (kept whole) | 13,376,239 |
+| Temporary, forced apart (`SIEVE_ARCHIVES_ALWAYS=1`) | 13,794,627 |
+| Permanent, forced to its files (`SIEVE_ARCHIVES_ALWAYS=1`) | 13,781,869 |
 
-A tar of three texts alone stays whole under permanent: it mixes smaller as the tar than its files
-apart.
+So both boxes now see inside mozilla and choose to keep it whole, because apart is about 3%
+bigger. Taking a tar apart only pays where its programs go through the x86 filter, and
+mozilla's programs are for Alpha processors (Tru64 COFF), so the filter doesn't help them.
 
-**Tested:**
-- a new CI step 11 block for tar, both boxes, read back by Sieve, sieve-install and the oracle (which
-  makes the tar again itself);
-- CI step 10 in full, with the renamed report lines;
-- `check_help.py`: no option missing.
+## Tested
 
-The rest of step 11 wasn't run again here.
-
-**For mozilla:** rerun Silesia with `bench_files_optimise_temporary.bat`.
-
-**Files:**
-- the code: `tools/cli/pack.cpp`, `locate.cpp`, `help.cpp`, `client/app_main.cpp`,
-  `app_settings.cpp`, `file_locator.cpp`, `data/lang/en.txt`;
-- CI steps 10 and 11;
-- MANUAL, METHODS, FORMATS (tar's row), SPECIFICATIONS (v32 paragraph) and ROADMAP (C.4a built).
+- The unit suite: 77,110 checks, 0 failures.
+- CI step 11's new block: a tar with space-padded sizes is taken apart and made again byte for
+  byte by Sieve and the oracle.

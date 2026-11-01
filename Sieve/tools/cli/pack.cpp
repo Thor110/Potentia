@@ -1497,11 +1497,16 @@ static std::optional<TarSkeleton> tar_skeleton(const std::vector<uint8_t>& b)
             }
         }
         else
-            for (size_t i = 124; i < 136 && h[i] >= '0' && h[i] <= '7'; ++i)
+        {
+            // (Octal digits, after any spaces: older tars write "     120000 ", newer "00000120000")
+            size_t i = 124;
+            while (i < 136 && h[i] == ' ') ++i;
+            for (; i < 136 && h[i] >= '0' && h[i] <= '7'; ++i)
             {
                 if (size >> 60) return std::nullopt;
                 size = size * 8 + uint64_t(h[i] - '0');
             }
+        }
         const uint64_t padded = (size + 511) / 512 * 512;
         if (padded > b.size() - at - 512) return std::nullopt;
         const char type = char(h[156]);
@@ -3195,14 +3200,42 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 if (!why.empty()) rar_said.push_back(e.path + ": not made again by rar: " + why);
             }
+            // A tar apart, estimated as the packer will carry it: its skeleton, its programs together
+            // through the x86 filter (the x86 stream) and its other files together (the lzma2 stream,
+            // or mixed). Against it, the tar whole: LZMA2's estimate of it, or the same parts but its
+            // programs without the filter (mixing's estimate of a whole tar is no guide: a tar of two
+            // programs and three texts was estimated at 3,031,331 mixed, and came to 3,287,159 by
+            // LZMA2). Kept apart only by a clear margin. (Of two programs and three texts: 3,287,222
+            // bytes whole, 3,069,629 apart, taken. Of a program of 131 KB, links to it and two texts:
+            // 158,975 whole, 159,563 apart, taken too: there mixing the whole tar did better than the
+            // filter apart, which LZMA2's estimates cannot see; 0.37% given up. Of Silesia's mozilla, 525 files
+            // whose programs are Alpha's, which the filter does not fit: 13,376,239 whole, kept whole;
+            // forced apart, 13,794,627 with temporary and 13,781,869 with permanent.)
+            auto tar_worth = [&](const TarSkeleton& t, const std::vector<uint8_t>& whole, size_t skeleton) {
+                if (archives_always) return true;
+                std::vector<uint8_t> programs, rest;
+                for (const auto& in : t.members)
+                {
+                    std::vector<uint8_t>& to = is_program(in.bytes) ? programs : rest;
+                    to.insert(to.end(), in.bytes.begin(), in.bytes.end());
+                }
+                const uint64_t shared = estimate(std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton))) +
+                                        (rest.empty() ? 0 : std::min(estimate(rest), mixed_estimate(rest)));
+                const uint64_t filtered = programs.empty() ? 0 : pack_stream(programs, dictionary_for(programs.size()), true, 6, false, true).size();
+                const uint64_t unfiltered = programs.empty() ? 0 : estimate(programs);
+                const uint64_t apart = shared + filtered + 16 * t.members.size();
+                const uint64_t as_one = std::min(as_is, shared + unfiltered);
+                return apart + 64 + as_one / 200 < as_one;
+            };
             // A tar, with temporary: made again exactly from its skeleton, its files carried as its
-            // members, each its own way (tar_skeleton). Checked to give the tar back before it is kept.
+            // members, each its own way (tar_skeleton), where that is smaller. Checked to give the tar
+            // back before it is kept.
             if (members_on && temporary_ok && is_tar(b))
                 if (auto t = tar_skeleton(b))
                 {
                     size_t skeleton = 0;
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
-                    if (deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
+                    if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
             if (v20)
             {
@@ -3215,6 +3248,16 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     if (contents(format.c_str(), std::move(*all), ext.c_str())) continue;
                 }
             }
+            // A tar with permanent alone that was not taken as its files (one holding links, which its
+            // files alone would lose, or where its files are not smaller): made again exactly from its
+            // skeleton instead, as temporary would, where Sieve can.
+            if (members_on && permanent_ok && !temporary_ok && is_tar(b))
+                if (auto t = tar_skeleton(b))
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = t->sk.inner(skeleton);
+                    if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
+                }
             add_file(e, std::move(b), {});
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
