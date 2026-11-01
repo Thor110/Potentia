@@ -3866,12 +3866,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // in 14.1 s; 16 MiB 3,099,798 in 28.6 s. (On 34 MB of the repository's texts 16 MiB was 4%
         // smaller than 8.) The size is the packer's choice: a reader takes a group of any size.
         constexpr uint64_t kGroup = uint64_t(8) << 20;
+        // A file mixed alone as a picture, or carried by the rope, may cost less in a group than alone:
+        // its way was chosen against it alone, not against what it shares with the group. Such a file
+        // is a candidate too, and a group holding one is weighed with it and without it (each its own
+        // way), the smaller kept. (Edward, 1 November 2026: Try every way, which mixes more files alone,
+        // made docs/ 1,069,076 bytes where the defaults made 1,056,189.)
+        std::vector<char> optional(files.size(), 0);
         std::vector<size_t> cand;
         for (size_t i = 0; i < files.size(); ++i)
         {
             const std::string& w = files[i]->way;
-            const bool alone = (w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0) && w.find(" I") == std::string::npos;
-            if ((!alone && w != "raw") || bytes[i].empty() || bytes[i].size() > kGroup) continue;
+            const bool mixed_alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
+            const bool alone = mixed_alone && w.find(" I") == std::string::npos;
+            optional[i] = (mixed_alone && !alone) || w.rfind("rope ", 0) == 0;
+            if ((!alone && w != "raw" && !optional[i]) || bytes[i].empty() || bytes[i].size() > kGroup) continue;
             {
                 // (already compressed, carried as it is or mixed alone for the little mixing finds in it:
                 // LZMA2 makes its start no smaller than 95% of it)
@@ -3895,16 +3903,25 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::string params;
             uint64_t apart = 0, total = 0;
             bool kept = false;
+            std::vector<size_t> members; // the group's files as kept (without its optional ones, where that was smaller)
         };
         std::vector<Made> made(groups.size());
         const uint64_t free = memory_free(), each = (uint64_t(16) << 22) * 4 + (uint64_t(48) << 20);
         const unsigned at_once = unsigned(std::clamp<uint64_t>(free ? free / 2 / each : 2, 1, pack_threads()));
         progress("the files mixed together, in groups");
-        for_each_index(groups.size(), at_once, [&](size_t g) {
-            if (stop_requested() || groups[g].size() < 2) return;
+        // A file's own code with its length's varint, as the rope stream carries it.
+        auto own = [&](size_t i) {
+            uint64_t len = rope_codes[i].size(), vl = 1;
+            while (len >>= 7) ++vl;
+            return rope_codes[i].size() + vl;
+        };
+        // One group's files mixed together: its code, and whether it is smaller than its files apart.
+        auto mix_group = [&](const std::vector<size_t>& members) {
+            Made d;
+            d.members = members;
             std::vector<uint8_t> joined, rest;
             uint64_t apart = 0;
-            for (const size_t i : groups[g])
+            for (const size_t i : members)
             {
                 joined.insert(joined.end(), bytes[i].begin(), bytes[i].end());
                 if (files[i]->way == "raw") rest.insert(rest.end(), bytes[i].begin(), bytes[i].end());
@@ -3931,7 +3948,6 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // (no word list here: without it)
                 }
             const Mix4Params mp = Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
-            Made& d = made[g];
             d.code = mix4_code(joined, mp, words);
             d.params = mp.text();
             d.apart = apart;
@@ -3939,30 +3955,61 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             uint64_t len = d.code.size(), vl = 1;
             while (len >>= 7) ++vl;
             // (its way's text, "mixt ... T<bytes>" and the others' "mixn", against theirs: counted as their length)
-            d.kept = d.code.size() + vl + d.params.size() + 24 + 5 * groups[g].size() < apart;
+            d.kept = d.code.size() + vl + d.params.size() + 24 + 5 * members.size() < apart;
+            return d;
+        };
+        // What a group costs as made: its code and ways where kept, else its files apart.
+        auto cost = [&](const Made& d) {
+            uint64_t len = d.code.size(), vl = 1;
+            while (len >>= 7) ++vl;
+            return d.kept ? d.code.size() + vl + d.params.size() + 24 + 5 * d.members.size() : d.apart;
+        };
+        for_each_index(groups.size(), at_once, [&](size_t g) {
+            if (stop_requested() || groups[g].size() < 2) return;
+            Made with = mix_group(groups[g]);
+            std::vector<size_t> without;
+            uint64_t theirs = 0;
+            for (const size_t i : groups[g])
+                if (optional[i]) theirs += own(i);
+                else without.push_back(i);
+            if (without.size() < groups[g].size() && !stop_requested())
+            {
+                // (without its optional files, they carried their own ways: weighed whole against it)
+                Made alone = without.size() >= 2 ? mix_group(without) : Made{};
+                if (without.size() < 2)
+                {
+                    alone.members = without;
+                    for (const size_t i : without) alone.apart += files[i]->way == "raw" ? estimate(bytes[i]) : own(i);
+                }
+                if (cost(alone) + theirs < cost(with)) with = std::move(alone);
+            }
+            made[g] = std::move(with);
         });
         for (size_t g = 0; g < groups.size(); ++g)
         {
-            if (groups[g].size() >= 2 && made[g].total) // (said once a group: Keep a log keeps it)
+            const std::vector<size_t>& members = made[g].members;
+            if (members.size() >= 2 && made[g].total) // (said once a group: Keep a log keeps it)
             {
                 uint64_t len = made[g].code.size(), vl = 1;
                 while (len >>= 7) ++vl;
-                progress("group " + std::to_string(g + 1) + ": " + std::to_string(groups[g].size()) + " files from " + files[groups[g].front()]->path + " to " +
-                         files[groups[g].back()]->path + ", " + std::to_string(made[g].total) + " bytes: mixed together " +
-                         std::to_string(made[g].code.size() + vl) + ", apart " + std::to_string(made[g].apart) + (made[g].kept ? "; taken" : "; apart taken"));
+                const size_t left = groups[g].size() - members.size();
+                progress("group " + std::to_string(g + 1) + ": " + std::to_string(members.size()) + " files from " + files[members.front()]->path + " to " +
+                         files[members.back()]->path + ", " + std::to_string(made[g].total) + " bytes: mixed together " +
+                         std::to_string(made[g].code.size() + vl) + ", apart " + std::to_string(made[g].apart) + (made[g].kept ? "; taken" : "; apart taken") +
+                         (left ? " (" + std::to_string(left) + " file(s) mixed alone as pictures or by the rope left out: smaller so)" : ""));
             }
             if (!made[g].kept) continue;
-            for (size_t k = 0; k < groups[g].size(); ++k)
+            for (size_t k = 0; k < members.size(); ++k)
             {
-                const size_t i = groups[g][k];
+                const size_t i = members[k];
                 files[i]->way = k == 0 ? "mixt " + made[g].params + " T" + std::to_string(made[g].total) : "mixn";
                 rope_codes[i].clear();
                 rope_params[i] = RopeParams{};
                 piece_z[i].clear();
             }
-            rope_codes[groups[g][0]] = std::move(made[g].code);
+            rope_codes[members[0]] = std::move(made[g].code);
             ++r.mix_groups;
-            r.mix_group_files += groups[g].size();
+            r.mix_group_files += members.size();
             r.mix_group_bytes += made[g].total;
             r.mix_group_apart += made[g].apart;
         }

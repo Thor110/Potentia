@@ -26,7 +26,7 @@ from the sizes given.
 
 | What | Original | 7z | `.sieve` | Ratio | Against 7z |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| [Sieve's own release](#the-application-itself) | 44,647,549 | | 6,319,561 | 7.06:1 | |
+| [Sieve's own release](#the-application-itself) | 45,967,736 | 8,235,077 | 6,470,236 | 7.10:1 | −21.43% |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,547,893 | 4.64:1 | −17.38% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 186,081,966 | 5.37:1 | −19.14% |
@@ -52,11 +52,32 @@ Sieve's release folder (the programs and their data) as a `.sieve`, version by v
 | v30 | 6,311,463 | 44,582,469 | 7.06:1 | 14.16% |
 | v31 | 6,318,477 | 44,621,183 | 7.06:1 | 14.16% |
 | v31, the release in the READMEs | 6,319,561 | 44,647,549 | 7.06:1 | 14.15% |
+| **v32** (1 November 2026) | **6,470,236** | **45,967,736** | **7.10:1** | **14.08%** |
 
 The same folder at v30 as a 7z: **7,774,880** bytes (5.73:1), which the `.sieve` beat by 18.82%.
 
 From v29 to v30 the payload grew by 40,448 bytes and the `.sieve` shrank by 1,094. From v30 to v31
 the payload grew by 38,714 bytes and the `.sieve` grew by 7,014.
+
+**v32** was made on Edward's machine on 1 November 2026, in the File Locator with Try every way and
+compressed formats as they are: 166 files, 45,967,736 bytes. The folder is 1,320,187 bytes larger
+than v31's release, and its `.sieve` 150,675. The File Locator's own 7z (LZMA2 9e, one stream) made
+8,235,077, so the `.sieve` is 21.43% under it. It took 265.6 s to make, and installed in 8.8 s
+(decoded in 8.457 s, checked and written in 0.294 s).
+
+**The release's source folder** (`release/source`, as the release package carries it, with
+`data/anchors/` included: 802 files, 97,770,905 bytes, 85,336,833 of them `data/`), the same day
+and the same way:
+
+| | Bytes | Ratio | Of the folder | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| zip | 59,331,890 | 1.65:1 | 60.68% | +20.43% |
+| 7z (the File Locator's: LZMA2 9e, one stream) | 49,266,046 | 1.98:1 | 50.39% | |
+| **`.sieve`** | **47,352,238** | **2.06:1** | **48.43%** | **−3.88%** |
+
+It took 572.5 s to make, and installed in 13.4 s (decoded in 12.003 s, checked and written in 1.378
+s). Most of its size is files already compressed among the anchors, so the lead is small. The table
+below is the tree without `data/anchors/`, measured with the usual compressors.
 
 ## Sieve's source tree, against the usual compressors
 

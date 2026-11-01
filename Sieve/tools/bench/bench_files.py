@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+r"""Every file of a folder made into Sieve instructions four ways, each installed again, for the
+figures in Proof/STATISTICS.md (Edward, 1 November 2026: one run overnight, each time they need
+updating).
+
+  tools\bench_files.bat                         (Windows: asks for the folder, finds Python and sieve.exe)
+  python tools/bench/bench_files.py SIEVE FOLDER [--keep]
+
+The files of FOLDER (not its subfolders), largest first. Each is made four ways, with no search
+limit (as the File Locator's figures are made):
+
+  size/try     for size, Try every way            (--search-every-wave)
+  size/no      for size, without it
+  decode/try   Prioritise Decoding Speed, Try every way   (--prioritise-decoding --search-every-wave)
+  decode/no    Prioritise Decoding Speed, without it
+
+and each `.sieve` is installed again (`sieve install`), its file checked against the original. For
+each it keeps the `.sieve`'s size, how long making it took (the command's own time, start to end),
+and how long installing took (decoding, and checking and writing, as Sieve reports them). Beside
+them, once a file: the zip and 7z figures the File Locator gives (deflate at level 9; LZMA2 at
+preset 9e, one stream, no container), made here by Python's zlib and lzma.
+
+Results go to a folder beside FOLDER, `<FOLDER>-bench-<date and time>`, outside the repository
+(the files may be one's own): results.md (a table a file), results.tsv (every figure), and each
+run's own output. Each table is written again after every run, so a run stopped part way keeps what
+it finished. The `.sieve` files are deleted once measured, unless --keep.
+"""
+
+import argparse
+import datetime
+import hashlib
+import lzma
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import time
+import zlib
+from pathlib import Path
+
+MODES = [
+    ("size/try", ["--search-every-wave"]),
+    ("size/no", []),
+    ("decode/try", ["--prioritise-decoding", "--search-every-wave"]),
+    ("decode/no", ["--prioritise-decoding"]),
+]
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def others(path):
+    """The File Locator's comparison: zip's deflate at level 9, and LZMA2 at preset 9e as one
+    stream, each without its container."""
+    data = Path(path).read_bytes()
+    z = zlib.compressobj(9, zlib.DEFLATED, -15)
+    zipped = len(z.compress(data) + z.flush())
+    seven = len(lzma.compress(data, format=lzma.FORMAT_RAW, filters=[{"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME}]))
+    return zipped, seven
+
+
+def run(cmd, log):
+    t0 = time.perf_counter()
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    seconds = time.perf_counter() - t0
+    out = p.stdout.decode("utf-8", "replace").replace("\r", "")
+    with open(log, "w", encoding="utf-8") as f:
+        f.write("$ " + " ".join(str(c) for c in cmd) + "\n" + out + f"\n(exit {p.returncode}, {seconds:.3f} s)\n")
+    return p.returncode, out, seconds
+
+
+def pct(a, b):
+    return f"{100.0 * a / b:.2f}%" if b else ""
+
+
+def against(a, b):
+    return f"{100.0 * (a - b) / b:+.2f}%" if b else ""
+
+
+def write_tables(out, rows, files_info, started, sieve):
+    with open(out / "results.tsv", "w", encoding="utf-8") as f:
+        f.write("file\tbytes\tzip\t7z\tmode\tsieve\tmade (s)\tdecoded (s)\tchecked and written (s)\tinstalled the same\n")
+        for r in rows:
+            f.write("\t".join(str(r[k]) for k in ("file", "bytes", "zip", "7z", "mode", "sieve", "made", "decoded", "written", "same")) + "\n")
+    with open(out / "results.md", "w", encoding="utf-8") as f:
+        f.write(f"# Sieve on {len(files_info)} file(s), four ways each\n\n")
+        f.write(f"Made {started:%Y-%m-%d %H:%M} on {platform.node()} ({platform.system()} {platform.release()}, {os.cpu_count()} logical processors), "
+                f"with {sieve}, no search limit. zip is deflate at level 9 and 7z LZMA2 at preset 9e as one stream, each without its container "
+                f"(as the File Locator gives them). \"Against 7z\" is the `.sieve` against that 7z.\n")
+        for name, info in files_info.items():
+            f.write(f"\n## {name}\n\n{info['bytes']:,} bytes; zip {info['zip']:,} ({pct(info['zip'], info['bytes'])}); 7z {info['7z']:,} ({pct(info['7z'], info['bytes'])})\n\n")
+            f.write("| Way | `.sieve` | Of the file | Against 7z | Made in | Decoded in | Checked and written in | The same |\n")
+            f.write("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- |\n")
+            for r in rows:
+                if r["file"] != name:
+                    continue
+                if r["sieve"] == "":
+                    f.write(f"| {r['mode']} | failed | | | {r['made']} s | | | |\n")
+                    continue
+                f.write(f"| {r['mode']} | {r['sieve']:,} | {pct(r['sieve'], r['bytes'])} | {against(r['sieve'], r['7z'])} | {r['made']} s | "
+                        f"{r['decoded']} s | {r['written']} s | {r['same']} |\n")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("sieve", help="sieve (sieve.exe on Windows)")
+    ap.add_argument("folder", help="the folder whose files to measure")
+    ap.add_argument("--keep", action="store_true", help="keep each .sieve made")
+    a = ap.parse_args()
+    sieve = str(Path(a.sieve).resolve())
+    folder = Path(a.folder).resolve()
+    if not folder.is_dir():
+        sys.exit(f"{folder} is not a folder")
+    files = sorted((p for p in folder.iterdir() if p.is_file()), key=lambda p: (-p.stat().st_size, p.name))
+    if not files:
+        sys.exit(f"{folder} holds no files")
+    started = datetime.datetime.now()
+    out = folder.parent / f"{folder.name}-bench-{started:%Y%m%d-%H%M%S}"
+    (out / "runs").mkdir(parents=True)
+    print(f"{len(files)} file(s), largest first; results in {out}")
+    rows, files_info = [], {}
+    for n, path in enumerate(files, 1):
+        size = path.stat().st_size
+        print(f"\n[{n}/{len(files)}] {path.name}: {size:,} bytes")
+        print("  zip and 7z (by zlib and lzma) ...", flush=True)
+        zipped, seven = others(path)
+        files_info[path.name] = {"bytes": size, "zip": zipped, "7z": seven}
+        print(f"  zip {zipped:,}, 7z {seven:,}")
+        original = sha256_of(path)
+        for mode, flags in MODES:
+            tag = mode.replace("/", "-")
+            made = out / f"{path.name}.{tag}.sieve"
+            print(f"  {mode}: making ...", flush=True)
+            code, said, seconds = run([sieve, "locate", str(path), "--installer", str(made), "--search-per-file", "0", "--timings"] + flags,
+                                      out / "runs" / f"{path.name}.{tag}.make.txt")
+            row = {"file": path.name, "bytes": size, "zip": zipped, "7z": seven, "mode": mode, "sieve": "", "made": f"{seconds:.1f}",
+                   "decoded": "", "written": "", "same": ""}
+            if code != 0 or not made.exists():
+                print(f"  {mode}: making failed (exit {code}); its output is in runs/")
+                rows.append(row)
+                write_tables(out, rows, files_info, started, sieve)
+                continue
+            row["sieve"] = made.stat().st_size
+            dest = out / "installed"
+            shutil.rmtree(dest, ignore_errors=True)
+            print(f"  {mode}: {row['sieve']:,} bytes in {seconds:.1f} s; installing ...", flush=True)
+            code, said, _ = run([sieve, "install", str(made), "--to", str(dest)], out / "runs" / f"{path.name}.{tag}.install.txt")
+            m = re.search(r"decoded in ([0-9.]+) s, checked and written in ([0-9.]+) s", said)
+            if m:
+                row["decoded"], row["written"] = m.group(1), m.group(2)
+            got = dest / path.name
+            row["same"] = "yes" if code == 0 and got.exists() and sha256_of(got) == original else "NO"
+            print(f"  {mode}: decoded in {row['decoded']} s, checked and written in {row['written']} s; the same: {row['same']}")
+            shutil.rmtree(dest, ignore_errors=True)
+            if not a.keep:
+                made.unlink()
+            rows.append(row)
+            write_tables(out, rows, files_info, started, sieve)
+    print(f"\nDone: {out / 'results.md'}")
+
+
+if __name__ == "__main__":
+    main()

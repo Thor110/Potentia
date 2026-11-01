@@ -1,18 +1,26 @@
-# STATISTICS: four more at v32 (commit 55e2708)
+# tools/bench_files.bat (commit b03b009)
 
-| | v31 or v20 | v32 | against 7z |
-| :--- | ---: | ---: | ---: |
-| pi6.txt | 417,052 | **417,049** (1,808 above the floor) | −18.66% |
-| Don Quixote | 533,148 | **524,389** (−1.64%) | −23.56% |
-| 20240407_153939.jpg | 4,557,978 | **4,425,909** | −3.26% |
-| control.py | 731 | **591** | −28.10% |
+Double-click `Sieve\tools\bench_files.bat`. It asks for a folder (type the path, or drag the folder
+into the window), then runs overnight.
 
-- **pi:** the rope still wins (416,970, against mixing's 418,822); v32's head took 3 bytes off.
-- **Don Quixote:** mixed with the word list counted by use (F80).
-- **The photographs:** with the boxes off they're carried as their bytes, mixed as pictures: 3.3% to
-  3.6% under 7z. With the temporary box they'd be brunsli, about 20% off (that table is in the
-  section).
-- **control.py:** Try every way lifts mixing's 4 KiB floor, so the script was mixed with F80: 522
-  bytes against LZMA2's 690.
+- **What it runs:** each file of that folder, largest first, four ways, with no search limit:
+  size/try, size/no, decode/try, decode/no.
+- **Each run:** installed again (`sieve install`) and checked against the original.
+- **What it keeps:** the `.sieve`'s size, how long making took, and how long decoding and checking
+  and writing took. Once a file, beside them: zip (deflate 9) and 7z (LZMA2 9e, one stream), as the
+  File Locator gives them.
+- **Where the results go:** beside your folder, as `<folder>-bench-<date and time>`, so nothing goes
+  into the repository. In it:
+  - `results.md`, a table a file;
+  - `results.tsv`, every figure;
+  - `runs\`, each run's full output with `--timings`.
+- **If stopped part way:** the tables are rewritten after every run, so closing the window keeps
+  what finished.
+- **Options:**
+  - `bench_files.bat D:\bench --keep` keeps each `.sieve` made;
+  - an `.exe` as the first option uses another `sieve.exe` (the default is
+    `out\build\x64-Release\sieve.exe`).
 
-Still to come from you: enwik9, Sieve's release, and the source tree.
+**Tested here** on three small files: every run installed back the same.
+
+Files: `Sieve/tools/bench_files.bat`, `Sieve/tools/bench/bench_files.py`, and MANUAL's row.
