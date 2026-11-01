@@ -1,30 +1,40 @@
-# Tar: sizes after leading spaces (commit ec62d61)
+# Mixed files weighed against the stream; real-rope recorded (commit 498dbcf)
 
-## What was wrong with mozilla
+## 1. Mixed files weighed against the stream they'd share (`tools/cli/pack.cpp`)
 
-mozilla is an old GNU tar. It writes its file sizes as octal after leading spaces
-(`"     120000 "`), and Sieve read every one of them as 0. That put the next header in the
-wrong place, its checksum failed, and the tar was never taken apart on either box. The reader
-now skips the leading spaces. That change is in `tools/cli/pack.cpp`.
+The packer chose each file's way, and each group's, against LZMA2 of that file or group *alone*.
+Files that share a lot with each other, like mozilla's programs, cost far less side by side in
+the shared LZMA2 stream than they do mixed separately. After the groups are made, the packer now
+weighs the mixed files against that stream: the files that aren't pictures first, then the
+pictures. Where the stream with them is smaller, they go in as they are. No new way: every reader
+reads it.
 
-## mozilla, measured after the fix
+| Measured (no search limit) | Before | After |
+| :--- | ---: | ---: |
+| Silesia's mozilla, forced apart | 13,794,627 | 13,530,583 |
+| Two 4.3 MB texts sharing 4 MiB | 1,992,382 | 1,042,336 |
+| `docs/` and `tools/` (the same snapshot) | unchanged | unchanged |
 
-All runs used `--search-per-file 0`, and every one installed back, either as the tar byte for
-byte or as its 525 files.
+mozilla whole is still smaller (13,376,239), and the packer keeps it whole as before. Every
+result above installs back exactly.
 
-| Way | `.sieve` |
-| :--- | ---: |
-| Temporary, as the packer weighs it (kept whole) | 13,376,239 |
-| Permanent, as the packer weighs it (kept whole) | 13,376,239 |
-| Temporary, forced apart (`SIEVE_ARCHIVES_ALWAYS=1`) | 13,794,627 |
-| Permanent, forced to its files (`SIEVE_ARCHIVES_ALWAYS=1`) | 13,781,869 |
+- **The report** has a new line where the step takes the stream:
+  `weighed   N file(s) mixed carried as they are instead, smaller in the stream they share (...)`.
+- **For testing:** `SIEVE_MIX_GROUP_BYTES=N` makes the groups at most N bytes, so small files can
+  show what happens past a group's end.
+- **CI step 11** has a new block: two 65 KB texts, given back by Sieve, sieve-install and the
+  oracle.
+- **Docs:** METHODS (section 4) and SPECIFICATIONS (v30) describe it.
 
-So both boxes now see inside mozilla and choose to keep it whole, because apart is about 3%
-bigger. Taking a tar apart only pays where its programs go through the x86 filter, and
-mozilla's programs are for Alpha processors (Tru64 COFF), so the filter doesn't help them.
+## 2. IDEAS §19.110: real-rope
+
+Your design as you meant it: keep bytes *or* propagate noise, points that move, and splits up to
+half the file. It sits beside what the rope does now (fixed points; keeping tried only on the best
+wave), with today's measurements. The rope itself is unchanged.
 
 ## Tested
 
 - The unit suite: 77,110 checks, 0 failures.
-- CI step 11's new block: a tar with space-padded sizes is taken apart and made again byte for
-  byte by Sieve and the oracle.
+- CI step 11, the blocks the change touches: the map's group, the mixing blocks, t29/t30, g30, the
+  new block, and the tar blocks.
+- Here, sieve-install needs `SDL_VIDEODRIVER=dummy`, since there's no display.

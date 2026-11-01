@@ -92,6 +92,8 @@ struct PackReport
     size_t mix_groups = 0, mix_group_files = 0; // v30: the groups, and the files in them
     uint64_t mix_group_bytes = 0, mix_group_code = 0, mix_group_apart = 0; // v30: their bytes, codes, and what they came to apart
     uint64_t mixed_together_apart = 0;   // v29: what they and the stream came to apart (their codes, and LZMA2's estimate)
+    size_t unmixed = 0;                  // files mixed carried as they are instead, smaller in the stream they share (no new format)
+    uint64_t unmixed_mixed = 0, unmixed_stream = 0; // what they and the stream came to mixed, and all in the stream (LZMA2's estimates)
     size_t mixed4 = 0, mixed4_pictures = 0, mixed4_words = 0; // v28: files carried by mix-v4, as pictures, with a word list
     size_t mixed4_by_use = 0;            // v32 (draft): of those with a word list, counted by use (F80)
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures

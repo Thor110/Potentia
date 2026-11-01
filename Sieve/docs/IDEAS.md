@@ -5527,3 +5527,55 @@ ideas and current work a look over ... Even come up with your own ideas if you w
   - The book cover, first counted among other programs' PNGs, was Sieve's own (stb): corrected in
     the results.
 
+
+**19.110 Real-rope: keep bytes or propagate noise, as first designed (Edward, 1 November 2026;
+measured, nothing built).** Found while looking at why Silesia's mozilla is not made smaller taken
+apart. Edward: "It was supposed to do one or the other, not both, hence 'keep bytes OR propagate
+noise'". The rope as built (§19.87) is left as it is, "because it gets results"; the design as he
+meant it is recorded here under its own name, real-rope.
+- *The design, in his words.* A filter that can keep bytes, or propagate noise, or both. "The 1/3
+  and 2/3 locked byte was supposed to be able to fluctuate, they were just the starting positions";
+  the divisions go further, to fifths, sevenths and ninths "the same way the inspiration jig does",
+  scalable "up to maybe 1/2 the length of the file", with the centre a value where the file's
+  length is odd and a gap where it is even, as in §19.87's fifth answer. It would "try to lock in
+  any and every byte across the file with the start, the end and a starting value at 1/3 and 2/3 or
+  further divisions", then search every variant of the file those locks allow, "a filter that
+  might truly not end before the universe does". Each file reduced to the values needed to find
+  it, with settings of its own.
+- *What the rope does instead (read from `core/src/rope_wave.cpp`).* Its kept points are fixed
+  (`kept_points`: the start, a third, the centre where the length is odd, two thirds, the end), and
+  keeping (K1) is tried once, on the best wave the search found without it. P0 with K1 is keeping
+  alone and P1 to P4 with K0 propagating alone, so each exists, but keeping is never searched in
+  its own right and its points never move. The "and" of §19.87's title came in when his answers
+  were written up as "the design as it now stands".
+- *Measured (Claude, 1 November 2026).*
+  - More divisions in the rope as built (a throwaway switch dividing by D rather than 3; 120 s a
+    search): the mozilla program `libxpcom.so` (1,622,016 bytes) 1,076,708 at every D of 3, 5, 7,
+    9 and 33 (LZMA2 361,372); `msgbase.xpt` 21,011 at every D (LZMA2 10,291); `raptor.jpg`'s pixels
+    34,019 at every D (LZMA2 30,809); a 1920 by 1080 screenshot's pixels 919,078 to 919,081 (LZMA2
+    388,812). On three of the four the best wave keeps nothing.
+  - Keeping alone with the points moved (a model costing what the line leaves by its order-0
+    entropy, the points moved by a search of about 1,000 to 57,000 tries): `libxpcom.so` 1,203,335
+    keeping nothing, 1,498,110 kept at the thirds, 1,326,890 with 5 points moved, 1,300,914 with 9,
+    1,212,600 with 33; `msgbase.xpt` 20,158, 29,401, then 20,156 at best; `raptor.jpg`'s pixels
+    49,767, 125,180, then 49,767. Moving the points undoes the harm fixed points do, and no more.
+  - Half the file kept (every other byte, each between coded from its two neighbours): 95.4% of
+    `libxpcom.so`, 93.9% of `msgbase.xpt`, 66.8% of `raptor.jpg`'s pixels, 100.0% of LZMA2's output
+    of `libxpcom.so`. The kept half is carried as it is, so it cannot promise a size.
+  - The rope after LZMA2 (its output searched, every wave): `libxpcom.so`'s 361,372 to 362,377, the
+    screenshot's 388,812 to 389,821.
+- *Why the search over locks cannot make every file shorter.* Locking k bytes of n leaves 256^(n−k)
+  variants; the k bytes are said and the variant is named, and naming one of 256^(n−k) takes n − k
+  bytes: n in all, whichever bytes are locked. A rotation is the same: one that can carry any file
+  to address 0 is one of 256^n, so it is the file again. Rounded to a step of 2^s it takes s bits
+  fewer and leaves a remainder of s bits, which the installer needs to land exactly; checked on
+  every 2-byte file, 16 bits at every step, and 19.17 bits on average where each file takes its own
+  best step and the step is named. Edward's 13.1313 recurring bumped to 13.0: the filter that does
+  it must be named, and a different file needs a different filter, so a million six-decimal files
+  need a million filters, six digits to name one. What pays is a rule fixed in advance that real
+  files fit (a recurring value, a smooth wave, an earlier copy), chosen from a few and paid for, as
+  §19.98's fraction route found ("rfb rfb rfb ...", 256 → 78 bits; nothing on real text).
+- *What real-rope can be, measured before it is built:* the locks and waves as a small set of rules
+  the search chooses among per file, each choice paid for, tried first where the rope already wins
+  (pictures, sound, tables of digits); or its prediction given to mixing as one input among the
+  others. Either is a new way, so the next version.

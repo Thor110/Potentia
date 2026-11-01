@@ -3988,7 +3988,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // install: v29 3,160,426 bytes in 12.4 s; groups of 4 MiB 3,154,427 in 9.9 s; 8 MiB 3,100,643
         // in 14.1 s; 16 MiB 3,099,798 in 28.6 s. (On 34 MB of the repository's texts 16 MiB was 4%
         // smaller than 8.) The size is the packer's choice: a reader takes a group of any size.
-        constexpr uint64_t kGroup = uint64_t(8) << 20;
+        // (SIEVE_MIX_GROUP_BYTES=N in the environment: groups of at most N bytes instead, for testing
+        // with small files what happens past a group's end)
+        const char* group_env = std::getenv("SIEVE_MIX_GROUP_BYTES");
+        const uint64_t kGroup = group_env && *group_env ? std::max<uint64_t>(1, std::strtoull(group_env, nullptr, 10)) : uint64_t(8) << 20;
         // A file mixed alone as a picture, or carried by the rope, may cost less in a group than alone:
         // its way was chosen against it alone, not against what it shares with the group. Such a file
         // is a candidate too, and a group holding one is weighed with it and without it (each its own
@@ -4137,6 +4140,76 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.mix_group_apart += made[g].apart;
         }
         if (r.mix_groups) m.roped = true;
+    }
+    // The files mixed (alone, or together in groups) weighed again against the stream the files
+    // carried as they are share: each way was chosen against LZMA2 of the file or the group alone,
+    // but in the shared stream a file costs only what the others have not already said. Where the
+    // stream with them, by LZMA2's estimate, is smaller than the stream without them and their codes,
+    // they are carried as they are. Weighed twice: the files that are not pictures, then the pictures
+    // (which have models of their own, so are likelier kept). Silesia's mozilla taken apart (525
+    // files, most of them programs that share code; 1 November 2026): 13,794,627 bytes with the
+    // groups, 13,530,583 with them weighed so (all but its 6 pictures carried as they are); whole,
+    // 13,376,239. Sieve's docs/, tools/ and Images/Sieve came out the same either way, their mixing
+    // kept.
+    if (mix_groups_on && !prioritise_decoding() && !stop_requested())
+    {
+        const timings::Scope t("pack.mix_against_stream");
+        for (const bool pictures : {false, true})
+        {
+            std::vector<char> back(files.size(), 0);
+            uint64_t codes = 0;
+            size_t n_back = 0;
+            for (size_t i = 0; i < files.size(); ++i)
+            {
+                const std::string& w = files[i]->way;
+                const bool alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
+                const bool grouped = w.rfind("mixt ", 0) == 0 || w == "mixn";
+                if (!(alone && (w.find(" I") != std::string::npos) == pictures) && !(grouped && !pictures)) continue;
+                back[i] = 1;
+                ++n_back;
+                uint64_t len = rope_codes[i].size(), vl = 1;
+                while (len >>= 7) ++vl;
+                codes += (rope_codes[i].empty() ? 0 : rope_codes[i].size() + vl) + 5;
+            }
+            if (!n_back || stop_requested()) continue;
+            progress(std::string("the files mixed") + (pictures ? " as pictures" : "") + ", weighed against the stream they would share");
+            auto stream_of = [&](bool with) {
+                std::vector<uint8_t> out;
+                for (size_t i = 0; i < files.size(); ++i)
+                    if (files[i]->way == "raw" || (with && back[i])) out.insert(out.end(), bytes[i].begin(), bytes[i].end());
+                    else if (files[i]->way.rfind("pieces ", 0) == 0) out.insert(out.end(), piece_z[i].begin(), piece_z[i].end());
+                    else if (is_delta[i]) out.insert(out.end(), delta_scripts[i].begin(), delta_scripts[i].end());
+                return out;
+            };
+            // (one file with nothing else in the stream was weighed against LZMA2 of itself already)
+            if (n_back < 2 && stream_of(false).empty()) continue;
+            std::vector<uint64_t> both(2, 0);
+            for_each_index(2, 2, [&](size_t k) {
+                const std::vector<uint8_t> st = stream_of(k == 1);
+                both[k] = st.empty() ? 0 : estimate(st);
+            });
+            const uint64_t now = both[0] + codes, as_is = both[1];
+            const bool take = as_is + 64 + now / 200 < now;
+            progress(std::string(pictures ? "pictures" : "files") + " mixed: " + std::to_string(now) + " bytes (" + std::to_string(n_back) + " files' codes " + std::to_string(codes) +
+                     ", the stream " + std::to_string(both[0]) + "); all in the stream: " + std::to_string(as_is) + (take ? "; the stream taken" : "; mixing kept"));
+            if (!take) continue;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (back[i])
+                {
+                    files[i]->way = "raw";
+                    rope_codes[i].clear();
+                    rope_params[i] = RopeParams{};
+                }
+            r.unmixed += n_back;
+            r.unmixed_mixed += now;
+            r.unmixed_stream += as_is;
+            if (!pictures)
+            {
+                r.mix_groups = r.mix_group_files = 0;
+                r.mix_group_bytes = r.mix_group_apart = r.mix_group_code = 0;
+            }
+            m.roped = std::any_of(files.begin(), files.end(), [](const auto& f) { return f->way.rfind("rope ", 0) == 0 || f->way.rfind("pieces ", 0) == 0 || f->way.rfind("mix", 0) == 0; });
+        }
     }
     std::vector<uint8_t> premixed;
     std::string premixed_params;
@@ -4710,6 +4783,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
                                      std::to_string(r.mixed_together_apart) + " bytes apart)"
                                : std::string())
           << " (sieve-manifest-v29)\n";
+    if (r.unmixed)
+        o << "weighed   " << r.unmixed << " file(s) mixed carried as they are instead, smaller in the stream they share (" << r.unmixed_stream
+          << " bytes by LZMA2's estimate, against " << r.unmixed_mixed << " mixed)\n";
     o << "packed    " << r.packed << " bytes (" << pct(r.packed) << " of " << original << "): " << r.x86 << " program(s) in the x86 stream ("
       << r.x86_bytes << " bytes), " << r.raw << " file(s) as they are (" << r.raw_bytes << " bytes), " << r.derived
       << " derived from another's lines (" << r.derived_bytes << " bytes, as " << r.mask_bytes << " bytes of masks)\n";

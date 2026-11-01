@@ -148,9 +148,10 @@ C2 G1 A1), pieces not cut (...), mix4 B22 D60 21675799 [...]; taken: mix4, 21675
 | Way | When | Log |
 | :--- | :--- | :--- |
 | **Groups mixed together** (v30): files in the listing's order, in groups of up to 8 MiB, each group mixed as one | for files mixed alone or carried as they are, that compress; a group is kept where it comes out smaller than its files apart | `group N: K files from A to B, S bytes: mixed together X, apart Y; taken` (or `apart taken`) |
+| **Mixed files weighed against the stream** (1 November 2026, no new way; from v30, after the groups): the files mixed, alone or in groups, carried as they are instead, in the lzma2 stream they would share | where the stream with them comes out smaller (by LZMA2's estimate, by 64 bytes and 0.5%) than the stream without them and their codes; weighed twice, the files that are not pictures, then the pictures; not for one file alone in the stream (Silesia's mozilla taken apart: 13,794,627 bytes to 13,530,583) | `files mixed: X bytes (N files' codes C, the stream S); all in the stream: T; the stream taken` (or `mixing kept`); the report's `weighed   N file(s) mixed carried as they are instead, smaller in the stream they share (T bytes by LZMA2's estimate, against X mixed)` |
 | **The stream mixed** (v29): the files mixed one by one, mixed together instead in the stream with those carried as they are | where the stream with them, mixed whole, comes out smaller than their codes and the stream without them | `the files mixed one by one, mixed together`, `the files carried together, mixed` |
 
-Neither runs with **Prioritise decoding speed** ticked.
+None of them runs with **Prioritise decoding speed** ticked.
 
 ## 5. The streams
 

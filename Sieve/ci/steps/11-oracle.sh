@@ -825,6 +825,25 @@ SIEVE_ARCHIVES_ALWAYS=1 $S locate tar32o --installer tar32o.sieve --items --comp
 rm -rf tar32o_inst tar32o_oracle
 $S install tar32o.sieve --to tar32o_inst > /dev/null && diff -r tar32o tar32o_inst
 python sieve_ref.py unpack tar32o.sieve --to tar32o_oracle > /dev/null && diff -r tar32o tar32o_oracle
+# Files mixed weighed again against the stream they would share (1 November 2026, no new format):
+# two texts holding much of the same, too large together for one group (groups made small here by
+# SIEVE_MIX_GROUP_BYTES, for testing), each mixed alone, then carried as they are instead, as LZMA2
+# in one stream finds what they share; given back by Sieve, sieve-install and the oracle.
+rm -rf ws32 && mkdir ws32
+python -c "
+import random
+r = random.Random(32)
+words = [''.join(r.choice('abcdefghijklmnopqrstuvwxyz') for _ in range(r.randint(2, 9))) for _ in range(3000)]
+shared = ' '.join(r.choice(words) for _ in range(10000)).encode()[:60000]
+for k in range(2):
+    own = ' '.join(r.choice(words) for _ in range(800)).encode()
+    open('ws32/part%d.txt' % k, 'wb').write(own + shared)
+"
+SIEVE_MIX_GROUP_BYTES=80000 $S locate ws32 --installer ws32.sieve --search-per-file 1 2>&1 | tr -d '\r' | grep -q "^weighed   [0-9]* file(s) mixed carried as they are instead"
+rm -rf ws32_inst ws32_si ws32_oracle
+$S install ws32.sieve --to ws32_inst > /dev/null && diff -r ws32 ws32_inst
+$SI ws32.sieve --to ws32_si --yes > /dev/null && diff -r ws32 ws32_si
+python sieve_ref.py unpack ws32.sieve --to ws32_oracle > /dev/null && diff -r ws32 ws32_oracle
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
 # back the same by Sieve and the oracle.
