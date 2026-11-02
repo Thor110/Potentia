@@ -49,6 +49,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
         --judge ../tests/plugins/moby-sentences.txt   # too large to determinise: subsets as reached
 """
 import argparse
+import base64
 import collections
 import hashlib
 import itertools
@@ -6749,8 +6750,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "b64"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "b64": 3}
 
 
 def listing_from_bytes(b, v32=False):
@@ -7069,6 +7070,64 @@ def v7_listing(data):
     return version + listing + data[nl + 1 + packed:]
 
 
+def base64_written(b, how, width):
+    """(v33 draft, spans-v1) bytes written as base64: bit 0 of how the URL-safe alphabet, bit 1 padded,
+    bit 2 lines ending CR LF; width the characters a line (0: one line), a line end between lines."""
+    chars = base64.b64encode(b)
+    if how & 1:
+        chars = chars.translate(bytes.maketrans(b"+/", b"-_"))
+    if not how & 2:
+        chars = chars.rstrip(b"=")
+    if not width:
+        return chars
+    end = b"\r\n" if how & 4 else b"\n"
+    return end.join(chars[k:k + width] for k in range(0, len(chars), width))
+
+
+def spans_made(skeleton, members, path):
+    """(v33 draft, spans-v1) a text made again from its skeleton (a varint of its spans; for each, a
+    varint of the text before it, a byte of how it is written, a varint of its width; then the text)
+    and its members, each written again as base64 where the table says."""
+    at = 0
+
+    def varint():
+        nonlocal at
+        v, shift = 0, 0
+        while True:
+            if at >= len(skeleton) or shift > 56:
+                sys.exit(f"{path}: its skeleton ends inside a number")
+            c = skeleton[at]
+            at += 1
+            v |= (c & 0x7F) << shift
+            if not c & 0x80:
+                if c == 0 and shift:
+                    sys.exit(f"{path}: a number in its skeleton not written as Sieve writes it")
+                return v
+            shift += 7
+    n = varint()
+    if n == 0 or n != len(members):
+        sys.exit(f"{path}: its skeleton does not count its members")
+    table = []
+    for _ in range(n):
+        gap = varint()
+        if at >= len(skeleton):
+            sys.exit(f"{path}: its skeleton ends inside its table")
+        how = skeleton[at]
+        at += 1
+        width = varint()
+        if how > 7 or width > 1 << 30:
+            sys.exit(f"{path}: a span not written as Sieve writes it")
+        table.append((gap, how, width))
+    text, t, out = skeleton[at:], 0, bytearray()
+    for (gap, how, width), m in zip(table, members):
+        if gap > len(text) - t or not m:
+            sys.exit(f"{path}: a span placed past its skeleton's text, or empty")
+        out += text[t:t + gap]
+        t += gap
+        out += base64_written(m, how, width)
+    return bytes(out + text[t:])
+
+
 def delta_apply(base, script, size, path):
     """delta-v1 (SPECIFICATIONS v32): a run of operations, each a varint t; t even, t/2 new bytes
     follow; t odd, t/2 bytes copied from the base, from where the last copy ended moved by a second
@@ -7276,6 +7335,18 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path} does not list the members its recipe counts")
             for k in mine:
                 members[k] = i
+        if v33 and way.startswith("b64 "):
+            # (v33 draft) a text's spans of base64 the same: its members "<text>/<n>", each carried as
+            # it is or, the one recipe a member has, a JPEG as its brunsli form.
+            n = way.split(" ")[1]
+            if not n.isdigit():
+                sys.exit(f"{path}: a text's spans not counted as Sieve counts them")
+            mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
+            if len(mine) != int(n) or any(k in members for k in mine) or \
+                    any(files[k][3].split(" ")[0] in RECIPE_WORDS and not files[k][3].startswith("jbr ") for k in mine):
+                sys.exit(f"{path} does not list the members its recipe counts")
+            for k in mine:
+                members[k] = i
     # SPECIFICATIONS §12.1 and §12.2: entries sorted by their paths' bytes, but for two that keep an
     # archive's own order and are left out of it: v31's members, and the contents of an archive
     # carried as its contents (a `u` line: the entries under its folder; where the archive was the
@@ -7299,6 +7370,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a PNG recipe Sieve does not write")
             remakes[i] = ("stb", size)
             size = int(n)
+        if v33 and way.startswith("b64 "):
+            # (v33 draft) "b64 <members> <skeleton size> <way>": a text with its spans of base64 taken
+            # out, a table first saying where each was and how it was written (spans-v1).
+            _, n, skel, way = way.split(" ", 3)
+            if not re.fullmatch(r"[1-9][0-9]*", n) or not re.fullmatch(r"0|[1-9][0-9]*", skel) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: a base64 recipe Sieve does not write")
+            remakes[i] = ("b64", size)
+            size = int(skel)
         if v32 and way.startswith("jbr "):
             # "jbr <form size> <way>" (SPECIFICATIONS v32): a JPEG made again from its brunsli
             # form, by brunsli (which the oracle has not): the recipe read and checked, the file not made.
@@ -7625,6 +7705,8 @@ def cmd_unpack_v7(args, data):
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
+        if r[0] == "b64":  # (v33 draft) made below, once its members are
+            continue
         if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
@@ -7680,6 +7762,16 @@ def cmd_unpack_v7(args, data):
             got[i] = header + c.compress(inner) + c.flush() + struct.pack("<II", zlib.crc32(inner) & 0xFFFFFFFF,
                                                                            len(inner) & 0xFFFFFFFF)
         if i not in unchecked and len(got[i]) != size:
+            sys.exit(f"{files[i][0]}: not remade at its size")
+    for i, r in remakes.items():  # (v33 draft) each text with its base64 made again from its skeleton and members
+        if r[0] != "b64":
+            continue
+        mine = [k for k in sorted(members) if members[k] == i]
+        if any(k in unchecked for k in mine):
+            unchecked.add(i)  # (a JPEG among them not made here, so neither is the text)
+            continue
+        got[i] = spans_made(got[i], [got[k] for k in mine], files[i][0])
+        if len(got[i]) != r[1]:
             sys.exit(f"{files[i][0]}: not remade at its size")
     if group is not None and group[1] != len(group[0]):
         sys.exit(f"{group[2]}'s group ends before its files have its bytes")

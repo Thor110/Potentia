@@ -89,6 +89,8 @@ struct PackReport
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes
     uint64_t copy_bytes = 0;
+    size_t spans = 0;                    // v33 draft: texts carried with their base64 decoded (spans-v1)
+    uint64_t span_bytes = 0;             // the bytes their spans hold, decoded
     size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'
     uint64_t jpeg_bytes = 0, jpeg_forms = 0;
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after

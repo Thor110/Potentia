@@ -6001,7 +6001,11 @@ first):
    program as a hex dump 48,330 / 41,679 (-14%). Common in mail, HTML, CSS, SVG, JSON, XML, PEM, Intel
    HEX and C byte arrays. A text with such spans could be carried as an archive is (v31's skeleton
    and members): the text with the spans taken out, and each span decoded as a member with its own
-   way, the recipe saying how each was written (alphabet, line width, padding).
+   way, the recipe saying how each was written (alphabet, line width, padding). **Built for base64 (2 November
+   2026, the v33 draft's `b64`, spans-v1):** pack.cpp as base64 76,813 → 50,323 bytes, the JPEG in
+   HTML 203,542 → 170,423 (each within 83 bytes of the decoded file packed alone); in the
+   repository's own texts, three spans found (two alphabet strings and a 392-character key), none
+   taken by the weighing. Hex and decimal not yet.
 2. *Palette* (palette-size): raw 24- or 32-bit pixels of 256 colours or fewer as indices before
    mixing or the rope (screenshots, sprites, uncompressed BMP/TGA/TIFF); a few per cent over mixing,
    to measure.

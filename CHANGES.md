@@ -1,48 +1,51 @@
-# The walk's hashes reused, and the walk on every core (2 November 2026)
+# Base64 in a text carried decoded (2 November 2026)
 
-Unzip this over the repository root, on top of sieve-copies.zip (a72f732, b362980, 34a5f06). One
-more local commit, not pushed: 4076d90. The unit suite passes (77,133 checks, 0 failures). The full
-CI steps 10 and 11 haven't been run on it.
+Unzip this over the repository root, on top of your commit 0cfa985 ("sieve hashes"). One local
+commit, not pushed: b99d5f5. There's a new source file, `Sieve/tools/cli/text_spans.cpp`, so
+CMake needs to configure again (the build does that itself, as CMakeLists.txt changed). The unit
+suite passes (77,133 checks, 0 failures). The new CI block in step 11 passes here; the full steps 10
+and 11 haven't been run on it.
 
-## 1. The walk's hashes reused
+## What it does (v33 draft only)
 
-The walk hashes every file once (in the same read as the vault's checks). The packer hashed them
-again in three places, and now takes the walk's hash wherever the bytes are still the file's own:
-- the archive step's listing (an archive's members and files made again are still hashed: their
-  bytes are new);
-- the JPEG step's copies;
-- the search's copies and mixing's notes.
+A text holding base64 is carried the way v31 carries an archive made again from its skeleton:
+- **The skeleton:** the text with each span of base64 taken out, plus a small table saying where
+  each span was and how it was written (alphabet, padding, line width, CR LF or LF).
+- **The members:** each span decoded, listed after the text as `<text>/<n>` and carried its own way.
+  A JPEG among them reaches brunsli; a text reaches mixing's word list.
+- **The recipe:** `b64 <members> <skeleton size>`.
 
-One check stays, on purpose: the packer reads each file again and checks it against the walk's
-hash, so a file changed between the two is refused, not packed under the wrong hash. It used to
-run one file at a time; it now runs on every core.
+Each span is taken only where encoding it again gives exactly the characters written. The whole
+file is weighed (LZMA2's estimate, or mixing's where that is less) against the skeleton and members
+together, and must come out clearly smaller.
 
-## 2. The walk itself on every core
+| File | v32 (as written) | The draft | Decoded file packed alone |
+| :--- | ---: | ---: | ---: |
+| pack.cpp as base64, lines of 76 | 76,813 | 50,323 | 50,358 |
+| The Vitruvian JPEG in an HTML page | 203,542 | 170,423 | 170,340 |
 
-The walk was the larger cost: one file at a time, and the vault's picture check alone was 3.3 s
-of 7.8 s on 100 copies of a JPEG. It now lists the folder, then hashes and checks the files on
-every core. If a file can't be read or the vault withholds it, the first such in the listing's
-order is still the one named. The listings are the same bytes.
+Without the draft nothing changes (the same bytes as before, checked).
 
-| Folder (the walk alone, 4 processors) | Before | After |
-| :--- | ---: | ---: |
-| 100 copies of a 1.2 MB JPEG, 114 MB | 7.56 s | 2.10 s |
-| 200 MB of random bytes, four files | 2.68 s | 0.88 s |
-| Sieve's docs/ | 0.55 s | 0.19 s |
+## Checks
 
-The JPEG and PNG copies pack to the same bytes as before, with and without the v33 draft.
+- Sieve, sieve-install and the oracle give both files back byte for byte. The oracle makes a text
+  with base64 itself, and leaves one holding a JPEG unmade, as it does every JPEG (it has no
+  brunsli).
+- Fuzzed: 20,000 made-up texts mixing prose, data: URLs, PEM-like blocks, CR LF, the URL-safe
+  alphabet, no padding and odd widths. 32,339 spans found, every one given back exactly. 20,000
+  malformed skeletons, every one refused without a crash (run under the address and
+  undefined-behaviour sanitisers).
+- The repository's own texts: three spans found (two alphabet strings in sources and a key in
+  web/extension/manifest.json); the weighing took none of them.
+- Speed: about 0.1 s to look through 12.9 MB of text, 1.4 s through 60 MB of solid base64.
 
-## 3. The delta check's place: measured, it stays
+## New CI block (step 11)
 
-On the two 160 MB maps (1,518 s in all), the delta check took 1.8 s. Everything before it (reading
-again, the vault's chunks, the ways) took a few seconds; it already comes before every step that
-costs. Those were the rope's search on the base map (768 s; the rope didn't carry it in the end),
-the rope's code (135 s) and LZMA2's passes (about 800 s). It can't go before the archive step
-(members aren't files until the archive is opened), and exact copies are already found first
-(`copy K`, v33 draft).
+A page with a JPEG as a data: URL, a mail with a text as base64 (lines of 76, CR LF) and 300 random
+bytes in the URL-safe alphabet unpadded, and a plain text. With the draft, the two texts with base64
+are carried so and the plain one isn't; at v32, none, and the file is larger (77,509 bytes against
+63,937). Given back by Sieve, sieve-install and the oracle.
 
-## 4. Noticed: docs/ doesn't pack the same twice
+## Not yet
 
-The same build packed `docs/` to 594,466 bytes on two runs and 598,620 on two others. The
-difference is in the group of 22 texts mixed together. The rope search stops at a time limit, the
-likely cause; not yet confirmed. It's in results/weighing-order-2026-11-02.md with the rest.
+Hex and decimal, the other two kinds of binary written as text, aren't done.

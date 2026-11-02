@@ -1046,6 +1046,32 @@ diff -r cp33 cp33_si
 python sieve_ref.py unpack cp33-33.sieve --to cp33_oracle | tr -d '\r' | grep -c "^copy [0-9]*	" | grep -q "^2$"
 cmp cp33/t.txt cp33_oracle/t.txt
 cmp cp33/noise.bin cp33_oracle/sub/noise.bin
+# Base64 carried decoded (the v33 draft, spans-v1, IDEAS §19.114): a page holding a JPEG as a data:
+# URL, and a mail holding a text as base64 in lines of 76 ending CR LF and 300 random bytes in the
+# URL-safe alphabet unpadded, each carried as a skeleton ("b64 <members> <skeleton size>") and its
+# spans decoded as members (the JPEG reaching brunsli); a text without base64 left as it is. Given
+# back by Sieve, sieve-install and the oracle (which makes the mail, not the page: brunsli); at v32,
+# none, and larger.
+rm -rf b64
+mkdir b64
+python -c "import base64; j = base64.b64encode(open('../web/test-site/src/pictures/door.jpg', 'rb').read()).decode(); open('b64/page.html', 'w', newline='').write('<html><body><p>A door.</p><img src=\"data:image/jpeg;base64,' + j + '\"></body></html>\n')"
+python -c "import base64, random; random.seed(64); t = base64.b64encode(open('../docs/GAME.md', 'rb').read()[:30000]).decode(); body = '\r\n'.join(t[k:k + 76] for k in range(0, len(t), 76)); u = base64.urlsafe_b64encode(bytes(random.getrandbits(8) for _ in range(300))).decode().rstrip('='); open('b64/mail.txt', 'w', newline='').write('From: someone\r\nContent-Transfer-Encoding: base64\r\n\r\n' + body + '\r\n\r\ntoken \"' + u + '\" ends.\r\n')"
+head -c 6000 ../docs/METHODS.md > b64/plain.txt
+$S locate b64 --installer b64-33.sieve --compressed-temporary --v33-draft 2>&1 | tr -d '\r' > b64-33.txt
+grep -q "^base64    2 text(s) carried with their base64 decoded" b64-33.txt
+grep -q "^manifest  sieve-manifest-v33" b64-33.txt
+$S locate b64 --installer b64-32.sieve --compressed-temporary 2>&1 | tr -d '\r' > b64-32.txt
+if grep -q "^base64 " b64-32.txt; then exit 1; fi
+[ "$(wc -c < b64-33.sieve)" -lt "$(wc -c < b64-32.sieve)" ]
+rm -rf b64_inst b64_si b64_oracle
+$S install b64-33.sieve --to b64_inst > /dev/null
+diff -r b64 b64_inst
+$SI b64-33.sieve --to b64_si --yes > /dev/null
+diff -r b64 b64_si
+python sieve_ref.py unpack b64-33.sieve --to b64_oracle | tr -d '\r' > b64-oracle.txt
+grep -c "^b64 2 " b64-oracle.txt | grep -q "^1$"
+cmp b64/mail.txt b64_oracle/mail.txt
+cmp b64/plain.txt b64_oracle/plain.txt
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
 # macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds

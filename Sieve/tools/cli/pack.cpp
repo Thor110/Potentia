@@ -3,6 +3,7 @@
 #include "cli/pack.hpp"
 #include "cli/case_names.hpp"
 #include "cli/delta.hpp"
+#include "cli/text_spans.hpp"
 #include "cli/jpeg_glue.hpp"
 #include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
@@ -2970,6 +2971,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // (Without it, 100 copies of a 1.2 MB JPEG came to the size of one only because they lay
     // within LZMA2's window of each other, after LZMA2 had packed all 118 MB of their forms.)
     const bool copy_way_on = rope_newest >= 16;
+    const bool spans_on = rope_newest >= 16; // v33 draft: base64 in a text carried decoded (spans-v1)
+    std::unordered_map<std::string, std::vector<uint8_t>> brunsli_kept; // a JPEG found in base64: its brunsli form, by its SHA-256
+    size_t spans_files = 0;
+    uint64_t spans_bytes = 0;
     std::unordered_map<std::string, std::string> copy_of; // a copy's path, its first's
     if (copy_way_on)
     {
@@ -3675,6 +3680,62 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
+            // v33 draft: a text holding base64 (spans-v1, text_spans.hpp), carried as an archive made
+            // again from its skeleton is: its entry the text with each span taken out ("b64
+            // <members> <skeleton size>"), each span decoded after it as a member, "<file>/<n>",
+            // carried its own way. Each span checked to give its characters back when written again;
+            // the whole checked to give the file back. Where LZMA2's estimate of the skeleton and the members together
+            // comes out clearly smaller than the file's.
+            if (spans_on && b.size() >= 256)
+            {
+                std::vector<spans::Span> found = spans::base64_spans(b, 48);
+                if (!found.empty())
+                {
+                    std::vector<uint8_t> sk = spans::skeleton_of(b, found);
+                    std::vector<uint8_t> joined = sk;
+                    std::vector<std::span<const uint8_t>> parts;
+                    uint64_t jpegs = 0; // what the JPEGs among them come to as their brunsli forms (below)
+                    for (const spans::Span& x : found)
+                    {
+                        parts.emplace_back(x.bytes);
+                        // A JPEG reaches brunsli below, as a file does: its form made now, for the
+                        // weighing, and kept for the JPEG step by its SHA-256.
+                        if (jpeg_on && x.bytes.size() >= 1024 && is_jpeg(x.bytes))
+                            if (auto form = jpeg_to_brunsli(x.bytes); form && form->size() < x.bytes.size())
+                            {
+                                jpegs += form->size();
+                                brunsli_kept.emplace(sha256_hex(x.bytes), std::move(*form));
+                                continue;
+                            }
+                        joined.insert(joined.end(), x.bytes.begin(), x.bytes.end());
+                    }
+                    // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
+                    // of the file as it is and of the skeleton and its members.
+                    const uint64_t whole = std::min(as_is, mixed_estimate(b));
+                    const uint64_t apart = std::min(estimate(joined), mixed_estimate(joined)) + jpegs + 8 * found.size();
+                    if (apart + 64 + whole / 200 < whole && spans::made_from(sk, parts) == b)
+                    {
+                        progress(e.path + ", " + std::to_string(b.size()) + " bytes holding " + std::to_string(found.size()) + " span(s) of base64: carried decoded (about " +
+                                 std::to_string(apart) + " bytes packed, against " + std::to_string(whole) + ")");
+                        ++spans_files;
+                        ManifestEntry r = e;
+                        r.remake = "b64 " + std::to_string(found.size()) + " " + std::to_string(sk.size());
+                        add_file(r, std::move(sk), std::move(b), e.sha256);
+                        const size_t digits = std::to_string(found.size()).size();
+                        for (size_t k = 0; k < found.size(); ++k)
+                        {
+                            std::string n = std::to_string(k + 1);
+                            n.insert(0, digits - n.size(), '0');
+                            ManifestEntry me;
+                            me.path = e.path + "/" + n;
+                            me.member = true;
+                            spans_bytes += found[k].bytes.size();
+                            add_file(me, std::move(found[k].bytes), {});
+                        }
+                        continue;
+                    }
+                }
+            }
             add_file(e, std::move(b), {}, e.sha256);
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
@@ -3742,9 +3803,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     {
         // Each JPEG on its own, on every core (the same result at any thread count), a stop heard at
         // each; then taken in the listing's order.
+        // (v33 draft: a JPEG found in a text's base64 too, a member of its text: the one kind of
+        // member carried with a recipe of its own.)
+        std::unordered_set<std::string> texts_with_base64;
+        for (const ManifestEntry* f : files)
+            if (f->remake.rfind("b64 ", 0) == 0) texts_with_base64.insert(f->path);
+        auto in_base64 = [&](const ManifestEntry& f) {
+            const size_t slash = f.path.rfind('/');
+            return slash != std::string::npos && texts_with_base64.count(f.path.substr(0, slash)) > 0;
+        };
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
-            if (files[i]->remake.empty() && !files[i]->member && bytes[i].size() >= 1024 && is_jpeg(bytes[i]) && !copy_of.count(files[i]->path)) todo.push_back(i);
+            if (files[i]->remake.empty() && (!files[i]->member || in_base64(*files[i])) && bytes[i].size() >= 1024 && is_jpeg(bytes[i]) && !copy_of.count(files[i]->path))
+                todo.push_back(i);
         struct Recoded
         {
             std::vector<uint8_t> form, better; // its brunsli form, and (permanent) the JPEG it installs as, where that is not the file
@@ -3772,6 +3843,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         recoded[k] = Recoded{std::move(*form), std::move(*better)};
                         return;
                     }
+            if (const auto kept = brunsli_kept.find(files[todo[k]]->sha256); kept != brunsli_kept.end())
+            {
+                recoded[k] = Recoded{kept->second, {}}; // (made already, weighing its text's base64)
+                return;
+            }
             if (auto form = jpeg_to_brunsli(b); form && form->size() < b.size()) recoded[k] = Recoded{std::move(*form), {}};
         });
         for (size_t k = 0; k < todo.size(); ++k)
@@ -4102,6 +4178,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.deltas = delta_count;
     r.copies = copies_made;
     r.copy_bytes = copies_bytes;
+    r.spans = spans_files;
+    r.span_bytes = spans_bytes;
     r.jpegs = jpegs_made;
     r.jpeg_bytes = jpeg_bytes;
     r.jpeg_forms = jpeg_forms;
@@ -5179,7 +5257,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         return false;
     };
     m.v33 = m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
-                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way); }));
+                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("b64 ", 0) == 0; }));
     m.v32 = m.v32 || m.v33;
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
@@ -5325,6 +5403,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.copies)
             o << "copies    " << r.copies << " file(s) carried as copies of another with the same bytes (" << r.copy_bytes << " bytes; " << kMatchWaysManifestVersion << ")\n";
+        if (r.spans)
+            o << "base64    " << r.spans << " text(s) carried with their base64 decoded (" << r.span_bytes << " bytes decoded; " << kMatchWaysManifestVersion << ")\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
               << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ")\n";
