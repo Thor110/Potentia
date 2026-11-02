@@ -2953,7 +2953,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             at += size_t(e.size);
         }
         else bytes[i] = read_file_bytes(root / fs::path(std::u8string(e.path.begin(), e.path.end())));
-        if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
+        if (bytes[i].size() != e.size) throw std::runtime_error(e.path + " changed while the folder was being read");
+    }
+    // Each against the walk's SHA-256, on every core (it was one file at a time, as each was read).
+    {
+        std::vector<char> changed(files.size(), 0);
+        for_each_index(files.size(), pack_threads(), [&](size_t i) { changed[i] = sha256_hex(bytes[i]) != files[i]->sha256; });
+        for (size_t i = 0; i < files.size(); ++i)
+            if (changed[i]) throw std::runtime_error(files[i]->path + " changed while the folder was being read");
     }
     // v33 draft (2 November 2026, Edward: "a nested folder or game with countless duplicate assets,
     // or even just a folder with 100 of the same images in"): a file with the same bytes as one
@@ -3117,9 +3124,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         std::vector<ManifestEntry> entries;
         std::vector<std::vector<uint8_t>> carried, kept;
         size_t fi = 0;
-        auto add_file = [&](ManifestEntry e, std::vector<uint8_t> b, std::vector<uint8_t> orig) {
+        // (known: the SHA-256 of what the file installs as, where that is the walk's file read
+        // above, whose hash the walk has made already; else it is worked out here.)
+        auto add_file = [&](ManifestEntry e, std::vector<uint8_t> b, std::vector<uint8_t> orig, const std::string& known = {}) {
             e.size = (orig.empty() ? b : orig).size();
-            e.sha256 = sha256_hex(orig.empty() ? b : orig);
+            e.sha256 = known.empty() ? sha256_hex(orig.empty() ? b : orig) : known;
             entries.push_back(std::move(e));
             carried.push_back(std::move(b));
             kept.push_back(std::move(orig));
@@ -3151,7 +3160,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::vector<uint8_t>& b = bytes[fi++];
             if (copy_of.count(e.path))
             {
-                add_file(e, std::move(b), {}); // (a copy: carried as its first, below)
+                add_file(e, std::move(b), {}, e.sha256); // (a copy: carried as its first, below)
                 continue;
             }
             // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
@@ -3193,7 +3202,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     ManifestEntry r = e;
                     r.remake = recipe;
-                    add_file(r, std::move(*inner), std::move(b));
+                    add_file(r, std::move(*inner), std::move(b), e.sha256);
                     return true;
                 }
                 if (!permanent_ok || taken.count(name)) return false; // (temporary only: what Sieve cannot make again is left as it is)
@@ -3260,7 +3269,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (at != whole.size() || parts.size() < 2) return false;
                 ManifestEntry r = e;
                 r.remake = "skm " + std::to_string(parts.size()) + " " + std::to_string(skeleton);
-                add_file(r, std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton)), std::move(b));
+                add_file(r, std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton)), std::move(b), e.sha256);
                 const size_t digits = std::to_string(parts.size()).size();
                 for (size_t k = 0; k < parts.size(); ++k)
                 {
@@ -3287,7 +3296,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         {
                             ManifestEntry r = e;
                             r.remake = std::move(x->second);
-                            add_file(r, std::move(x->first), std::move(b));
+                            add_file(r, std::move(x->first), std::move(b), e.sha256);
                             return true;
                         }
                     return false;
@@ -3309,7 +3318,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (temporary_ok) made = exact() || resaved();
                 else made = resaved() || exact();
                 if (made && entries.back().remake.rfind("pngr ", 0) != 0) png_made = true;
-                if (!made) add_file(e, std::move(b), {});
+                if (!made) add_file(e, std::move(b), {}, e.sha256);
                 continue;
             }
             // v25: a PNG made again exactly from its skeleton: its IDATs' deflate by preflate, their CRCs
@@ -3666,7 +3675,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
-            add_file(e, std::move(b), {});
+            add_file(e, std::move(b), {}, e.sha256);
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
         {
@@ -3747,11 +3756,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // copies of a 1.2 MB JPEG took 146 s, each recoded.)
         std::vector<int64_t> twin_of(todo.size(), -1);
         {
-            std::vector<std::string> h(todo.size());
-            for_each_index(todo.size(), pack_threads(), [&](size_t k) { h[k] = sha256_hex(bytes[todo[k]]); });
+            // (By the listing's SHA-256: a JPEG here is not remade, so its bytes are the file's own.)
             std::unordered_map<std::string, size_t> first;
             for (size_t k = 0; k < todo.size(); ++k)
-                if (const auto [it, fresh] = first.emplace(h[k], k); !fresh) twin_of[k] = int64_t(it->second);
+                if (const auto [it, fresh] = first.emplace(files[todo[k]]->sha256, k); !fresh) twin_of[k] = int64_t(it->second);
         }
         for_each_index(todo.size(), pack_threads(), [&](size_t k) {
             if (stop_requested() || twin_of[k] >= 0) return;
@@ -4113,9 +4121,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     bool mixed4 = false;        // v28: some file carried by mix-v4
     if (m.compact && rope_seconds >= 0)
     {
-        // Each file's SHA-256, worked out once (on every core) for the copies here and mixing's note below.
+        // Each file's bytes' SHA-256, for the copies here and mixing's note below: the listing's, where
+        // the bytes carried are the file's own (not remade); else worked out (on every core).
         std::vector<std::string> sha(files.size());
-        for_each_index(files.size(), pack_threads(), [&](size_t i) { sha[i] = sha256_hex(bytes[i]); });
+        for_each_index(files.size(), pack_threads(), [&](size_t i) {
+            const bool own = files[i]->remake.empty() && (i >= original.size() || original[i].empty()) && files[i]->sha256.size() == 64;
+            sha[i] = own ? files[i]->sha256 : sha256_hex(bytes[i]);
+        });
         std::unordered_map<std::string, size_t> copies;
         for (size_t i = 0; i < files.size(); ++i) ++copies[sha[i]];
         // v33 draft (2 November 2026): a program too (the x86 stream's), to be weighed mixed whole,

@@ -17,6 +17,7 @@
 #include "Lzma2Dec.h"
 
 #include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <exception>
 #include <mutex>
@@ -1603,6 +1604,10 @@ Manifest walk_folder(const fs::path& root_in)
         const std::u8string u = r.filename().generic_u8string();
         m.root = std::string(u.begin(), u.end());
     }
+    // The files' places in m.entries and their paths on disk, hashed and checked by the vault after
+    // the listing, on every core (one file at a time, 100 copies of a 1.2 MB JPEG took 7.8 s here,
+    // 3.3 s of it the vault's picture check).
+    std::vector<std::pair<size_t, fs::path>> to_hash;
     for (auto it = fs::recursive_directory_iterator(root, fs::directory_options::none); it != fs::recursive_directory_iterator(); ++it)
     {
         const fs::directory_entry& d = *it;
@@ -1622,7 +1627,7 @@ Manifest walk_folder(const fs::path& root_in)
         {
             e.path = manifest_path(d.path(), root);
             e.size = uint64_t(d.file_size());
-            e.sha256 = vault::hash_checked_file(d.path(), e.path); // read once: its hash, and the vault's check
+            to_hash.emplace_back(m.entries.size(), d.path()); // read once, below: its hash, and the vault's check
             ++m.files;
             m.bytes += e.size;
         }
@@ -1632,6 +1637,37 @@ Manifest walk_folder(const fs::path& root_in)
             continue;
         }
         m.entries.push_back(std::move(e));
+    }
+    {
+        // Where a file cannot be read or the vault withholds it, the first such in the listing's
+        // order is the one reported, as when they were read one at a time; files after it are
+        // not read.
+        std::atomic<size_t> next{0}, failed{to_hash.size()};
+        std::vector<std::exception_ptr> why(to_hash.size());
+        auto work = [&] {
+            for (size_t k; (k = next.fetch_add(1)) < to_hash.size();)
+            {
+                if (k > failed.load()) continue;
+                ManifestEntry& e = m.entries[to_hash[k].first];
+                try
+                {
+                    e.sha256 = vault::hash_checked_file(to_hash[k].second, e.path);
+                }
+                catch (...)
+                {
+                    why[k] = std::current_exception();
+                    for (size_t f = failed.load(); k < f && !failed.compare_exchange_weak(f, k);)
+                    {
+                    }
+                }
+            }
+        };
+        const size_t n = std::min<size_t>(pack_threads(), to_hash.size());
+        std::vector<std::thread> pool;
+        for (size_t t = 1; t < n; ++t) pool.emplace_back(work);
+        work();
+        for (std::thread& t : pool) t.join();
+        if (failed.load() < to_hash.size()) std::rethrow_exception(why[failed.load()]);
     }
     // By the paths' bytes, as unsigned bytes, so the order is the same on every system (char is
     // signed on some, which would put every non-ASCII name first).

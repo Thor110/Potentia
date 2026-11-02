@@ -140,6 +140,59 @@ few to come back (one 51 MB estimate saved on mozilla's tar with two small texts
   preset 6 estimate did. The LZMA2 figure the ways are weighed against is now the pass itself, a
   little smaller than the estimate, so a near tie goes to LZMA2 where it went to mixing before.
 
+## The hashes, and the delta check's place (2 November 2026, evening)
+
+Edward: "As we already hash the files once for the format, shouldn't we just be reusing that work
+already done and not hashing them again? ... Sounds like the delta check should be the first step
+in the weighing process."
+
+**The hashes.** The walk hashes each file once, with the vault's checks in the same read. The packer
+hashed each file again in three places, and now takes the walk's hash in each where the bytes are
+still the file's own:
+- the archive step, where every file not opened or remade is listed again (the walk's hash kept;
+  a member of an archive, or a file made again, is still hashed, its bytes being new);
+- the JPEG step's copies (the walk's hash: a JPEG there is not remade);
+- the search's copies and mixing's notes (the walk's hash, where the file is not remade).
+
+One check stays, by design: the packer reads every file again and checks it against the walk's
+hash, so a file changed between the two is refused rather than packed under the wrong hash. It ran
+one file at a time; it now runs on every core.
+
+**The walk itself was the larger cost.** It read and checked one file at a time; the vault's
+picture check alone was 3.3 s of 7.8 s on 100 copies of a 1.2 MB JPEG. It now lists the folder
+first, then hashes and checks the files on every core. Where a file cannot be read or is withheld,
+the first such in the listing's order is still the one reported. The listings are the same bytes:
+
+| Folder (the walk alone, `locate --manifest`, 4 processors) | Before | After |
+| :--- | ---: | ---: |
+| 100 copies of a 1.2 MB JPEG, 114 MB | 7.56 s | 2.10 s |
+| four files of random bytes, 200 MB | 2.68 s | 0.88 s |
+| Sieve's docs/, 2.6 MB | 0.55 s | 0.19 s |
+
+Packed, the JPEG copies and the PNG copies came to the same bytes before and after, with and
+without the v33 draft (978,332 and 963,838; 1,052,540 and 1,052,127).
+
+**Seen on the way: docs/ is not packed the same twice.** The same build gave 594,466 bytes on two
+runs and 598,620 on two others (the difference in the group of 22 texts mixed together: apart
+438,831 against 458,440). The rope's search stops at its time limit, which is the likely cause;
+not yet confirmed. Comparisons of packers here use folders whose results do not move.
+
+**The delta check.** Timed on the 160 MB pair of maps (one 160,068,077 bytes, carried as its
+differences from the other, 160,000,000; 1,518 s in all, `--timings`):
+
+| Step | Time |
+| :--- | ---: |
+| reading again, the vault's chunks | 2.9 s, 3.0 s |
+| the delta check (fingerprints, the script) | 1.8 s |
+| the rope's search on the base | 768 s |
+| the rope's code | 135 s |
+| LZMA2's passes (first, tuned, 7-Zip's; the stream and the estimates) | about 800 s |
+
+The delta check already runs before every step that costs: what comes before it took seconds. It
+cannot go before the archive step (an archive's members are not files until it is opened), and
+exact copies are found first already (`copy K`, v33 draft). So its place stays. What the pair
+shows instead is the base's cost: 768 s of rope search on a 160 MB file the rope did not carry.
+
 **The review's first pass is done.** Built from it: the pattern check first, the rope not searched
 on texts it cannot win, the weighing's second estimate skipped where it cannot change anything, and
 one file's estimate kept as its stream's first pass. Measured and left: LZMA2's passes (each wins
