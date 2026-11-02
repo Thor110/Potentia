@@ -77,11 +77,12 @@ few to come back (one 51 MB estimate saved on mozilla's tar with two small texts
   chose (lc0 lp0 pb0) came out 2.4% larger. The match length of 64 won none of the four. So the
   passes cannot be cut to one by these four; the 64 pass is the one to watch (a quarter of the
   whole passes' time): to measure on Edward's folders and enwik8 before it goes.
-- **Copies and the delta matcher.** A file over 8 MiB with the same bytes as another is carried
-  as a delta of it (all copied), which is right: LZMA2's window cannot reach a copy more than 64 MiB
-  back, and would pay for it whole. But it is found by fingerprinting both; their SHA-256, made
-  anyway at step 6, would find it at once and spare the fingerprints. A small saving, and only
-  where such copies are.
+- **Copies and the delta matcher (looked at; nothing to change).** A file with the same bytes as
+  another never reaches the delta matcher: the masks before it (step 4, a text made from another's
+  lines) find every line of the one in the other and carry it as a mask of them, for almost nothing,
+  and even random bytes have line feeds (two 10 MiB files of random bytes and a near copy: the copy
+  carried as "lines 1", the near copy as a delta of 1,108 bytes; the whole 10,487,574 bytes). Finding
+  copies by their SHA-256 first was built, tried and taken out: it found nothing the masks had not.
 - **Mixing's four weighings** (alone, in groups, against the stream, the stream mixed). Measured on
   mozilla taken apart (525 files, 51.2 MB; 452 s here; processor seconds, all threads):
 
@@ -117,9 +118,12 @@ few to come back (one 51 MB estimate saved on mozilla's tar with two small texts
   default stays, and the setting stays for measuring Edward's folders. (Beside it: on the docs the
   group's word list, chosen on the group's start, came out 202 bytes larger than without it on the
   whole, 1,073,679 against 1,073,477: 0.02%, noted, not acted on.)
-- **The JPEG step before Optimise Search's rule.** Every JPEG is recoded first; the rule (a JPEG:
-  mixed whole) and the case where every file of a run is carried by a recipe already coded (IDEAS:
-  the extra searches skipped, as they can change nothing) come after it.
+- **The JPEG step and Optimise Search's rule (looked at; nothing to change).** The JPEG step runs
+  only with Compressed formats ticked: a JPEG becomes its brunsli form (15.25% to 21.91% smaller on
+  ten originals) and is left out of the search, its bytes being coded already, as any file carried
+  by such a recipe is. Unticked, a JPEG is carried as it is and searched, and Optimise Search's rule
+  for it (mixed whole, 2.7% smaller, the median of Edward's 153, measured with the box unticked)
+  is the one that applies. The two do not meet.
 - **The per-file estimate and the stream (built).** Where a run has one file, carried as it is, its
   LZMA2 figure for weighing its ways is now made as the stream's own first pass (preset 9e, the
   stream's dictionary) and kept, and the stream's first pass takes it rather than packing the same
@@ -135,6 +139,12 @@ few to come back (one 51 MB estimate saved on mozilla's tar with two small texts
   Where the file is not carried as it is (mixed, here), the 9e pass costs a little more than the
   preset 6 estimate did. The LZMA2 figure the ways are weighed against is now the pass itself, a
   little smaller than the estimate, so a near tie goes to LZMA2 where it went to mixing before.
+
+**The review's first pass is done.** Built from it: the pattern check first, the rope not searched
+on texts it cannot win, the weighing's second estimate skipped where it cannot change anything, and
+one file's estimate kept as its stream's first pass. Measured and left: LZMA2's passes (each wins
+somewhere; the 64 pass to watch), mixing's order (`SIEVE_MIX_ORDER`), copies (the masks find them),
+the JPEG step.
 
 After this: the lines' filters read for what they set aside that a compressor could name in a few
 bytes (Edward: "cross referencing filter designs for use in compression"); not-a-pattern-v1's
