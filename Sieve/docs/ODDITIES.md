@@ -31,7 +31,14 @@ a result surprises; close it with what explained it.
   ways' gain is the next question; the group size (8 MiB) and the limit could be searched too, at
   the cost of a combinatorial search (Edward).
 
-### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026; fixed, to be confirmed)
+### Some of Edward's JPEGs
+- *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.
+- *Next:* Edward is to run his pictures again under the new JPEG and PNG ways (v32's `jbr`, `skr`,
+  `pngr`), and the entry is to be filled in or closed from what comes back.
+
+## Resolved
+
+### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026; fixed 2 November)
 - *Seen:* of 153 JPEGs (no box ticked), five of 58 KB to 176 KB came out 18 to 225 bytes larger
   with Try every way than without (0.03% to 0.13%): it took mixing as a picture where without it
   LZMA2 was taken.
@@ -45,14 +52,10 @@ a result surprises; close it with what explained it.
   installed about thirty times slower (0.16 s against 0.005 s on the largest).
 - *Fixed (2 November 2026, no new version):* mixing now replaces LZMA2 only by the margin the
   packer's other weighings use, 64 bytes and 0.5% (mixing's wins on the other 148 had a median of
-  2.7%). To be confirmed on the five when Edward runs his pictures again.
-
-### Some of Edward's JPEGs
-- *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.
-- *Next:* Edward is to run his pictures again under the new JPEG and PNG ways (v32's `jbr`, `skr`,
-  `pngr`), and the entry is to be filled in or closed from what comes back.
-
-## Resolved
+  2.7%). Confirmed on the five (Edward sent them): with Try every way each now comes out exactly as
+  without it (174,857; 169,495; 80,681; 64,109; 57,273 bytes), LZMA2 kept. All five are small baseline
+  JPEGs whose entropy-coded data leaves mixing nothing to find; with the temporary box, brunsli makes
+  them 17.5% to 21.8% smaller (143,565; 137,154; 70,813; 52,376; 45,863), their route.
 
 ### control.py, a small script, came out larger than its 7z (overcome by 31 October 2026)
 - *Seen:* a Python script of 1,597 bytes, first measured at 832 bytes, 10 more than its 7z (822):

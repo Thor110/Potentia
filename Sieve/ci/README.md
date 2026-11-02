@@ -40,7 +40,11 @@ The steps write files where they run, so `run.sh` makes a fresh copy of the Siev
 build folders) for each run, copies the build's programs and data folders in as `build/`, and runs
 the steps asked for there, one after another. Each step's output goes to a log; a step that fails
 shows its last lines and where its log is, and the copy is kept to look at (`--keep` keeps it
-anyway). Python is `python` where that is Python 3, else the `py` launcher (`ci/lib.sh`).
+anyway). When every step passes the copy is removed, everything in it made writable first and tried
+again for a few seconds where a file is still held (Windows), and said where it cannot be; a run
+says at its start how many earlier copies are still in the temporary folder, and `ci/run.sh --clean`
+removes them (2 November 2026: on Windows they had been left behind, more than 2 GB of them).
+Python is `python` where that is Python 3, else the `py` launcher (`ci/lib.sh`).
 
 Each step's commands also go to a `.trace` beside its log, each as it starts and after the time it
 started (in bash 5). `python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh` adds a

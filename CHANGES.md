@@ -1,58 +1,53 @@
-# Optimise Search, the draft as one number, the JPEG fix, GAME-OF-LIFE.md (commit 64b9ebc)
+# Optimise Search and the draft (as before), plus the CI temp-folder fix (commits 5349a04, 3684660)
 
-**Needs a rebuild:** both sieve and the hallway changed. `file-locator-optimise-search.png` shows
-the File Locator with the v33 draft on. It's a screenshot, not part of the repository.
+This zip is made against **your** latest commit (128b9c6, "sieve metrics"), so it holds everything
+since then: the Optimise Search zip's contents (you were extracting it) and today's two fixes. Unzip
+over the repository and rebuild.
 
-## 1. Optimise Search (the File Locator's box, O, ticked unless you untick it)
+## 1. Optimise Search, the draft as one number, the JPEG margin, GAME-OF-LIFE.md
 
-Try every way is chosen for each file by its kind, from what we've measured, and its own box is
-greyed "(chosen file by file)" while Optimise Search does it:
+The same as `sieve-optimise-search.zip` (see its notes). `file-locator-optimise-search.png` shows
+the File Locator with it. It's a screenshot, not part of the repository.
 
-| Aim | File | Try every way | Measured |
-| :--- | :--- | :--- | :--- |
-| Decoding speed | any | off | your 153 JPEGs gave the same bytes, 1.24 h against 5 min; enwik8 and enwik9 the same |
-| Size | a JPEG | on | 2.7% smaller (median of 153) |
-| Size | over 16 MiB or under 4 KiB | on | enwik8, enwik9, control.py |
-| Size | anything between | off | the same size measured either way |
+## 2. The five JPEGs, confirmed on your files
 
-- **The box:** ini `[locator] optimise_search`, and `--optimise-search` on the command line. If you
-  ask for `--search-every-wave` by name, the hallway unticks Optimise Search for that run.
-- **Test here:**
-  - Vitruvian's JPEG for size: 203,790 bytes in 10.6 s.
-  - The same for decoding speed: 206,946 in 0.2 s.
+With Try every way, each now comes out exactly as without it (LZMA2 kept):
 
-  Each is the better of the box off and on.
-- **Each file's choice and why** is written in the log.
-- **Other kinds** get their own rule as their measurements come in.
+| JPEG | Bytes | size/try now | temporary box (brunsli) |
+| :--- | ---: | ---: | ---: |
+| K2_00001.jpg | 175,693 | 174,857 | 143,565 (−18.3%) |
+| K2_00000.jpg | 170,042 | 169,495 | 137,154 (−19.3%) |
+| 1fuv6bxsbj7f1.jpeg | 85,821 | 80,681 | 70,813 (−17.5%) |
+| 358023683_…_n.jpg | 64,624 | 64,109 | 52,376 (−19.0%) |
+| 362302622_…_n.jpg | 58,664 | 57,273 | 45,863 (−21.8%) |
 
-## 2. The next version's draft, made one number
+- **What they share:** all five are small baseline JPEGs whose entropy-coded data leaves mixing
+  nothing to find.
+- **Their route:** brunsli, with the temporary box.
+- **ODDITIES** now lists them under Resolved.
 
-`tools/cli/draft.hpp` holds `kDraftVersion = 33`. These all follow from it:
+## 3. CI's temporary folder (`ci/run.sh`)
 
-- the switch `--v33-draft` (sieve and the hallway);
-- `[locator] v33_draft` in sieve-hallway.ini;
-- the help text;
-- the File Locator's orange "v33 DRAFT ON (testing only) ..." line.
+**Why it was left:** `ci/run.sh` removed its copy with one unchecked `rm -rf`. On Windows a
+read-only file, or a file still held for a moment by a program or a virus scanner, made it fail
+silently. Failed or stopped runs keep their copy on purpose, and nothing ever cleared those.
+(The steps themselves make no temporary folders; only `run.sh` does.)
 
-The next draft starts by changing that number. An older draft's ini line is read and ignored.
+Now:
+- **Removing:** everything is made writable first, then tried five times a couple of seconds apart,
+  then by Windows' own `rmdir`. It says plainly if a folder still can't be removed.
+- **The reminder:** each run starts by saying how many earlier copies are left, and their size.
+- **`ci/run.sh --clean`:** removes every `sieve-ci-*` folder left in the temporary folder.
 
-## 3. The five JPEGs (ODDITIES)
+Tested here:
+- A copy with read-only files was removed.
+- A one-step run removed its folder at the end.
 
-- **What went wrong:** in all five, mixing's code was no smaller than LZMA2's stream, and it
-  installed about 30 times slower.
-- **The fix:** mixing now replaces LZMA2 only by the packer's usual margin, 64 bytes and 0.5%. Your
-  other wins have a median of 2.7%, well past it.
-- **Please confirm** when you rerun the pictures.
+On your machine, please try `ci/run.sh --clean` once, then a normal run.
 
-## 4. docs/GAME-OF-LIFE.md, new
+## On step 11's time
 
-- **The gliders:** how they work, what was measured (15 bytes on a page of zeros with two glider
-  trails drawn through it; gliders that meet, and the combinatorial explosion), and what's still to
-  try: spaceships, glider guns, other Life-like rules, and searches that try gliders together.
-
-## Tested
-
-- The unit suite: 77,110 checks, 0 failures.
-- CI step 10's File Locator blocks.
-- Optimise Search and the draft from the command line.
-- Screenshots: the box, the greyed Try every way, the draft line.
+On your machine it took over 20 minutes before this. The new blocks add about 1 to 2 minutes (the
+v33 mixing check, about 40 s here; the stream-weighing check, about 55 s). The trace's times
+(`python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh`) show which blocks take the
+longest, if you'd like to trim it.
