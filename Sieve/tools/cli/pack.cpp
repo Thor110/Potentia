@@ -408,6 +408,17 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
             made[k] = encode_lzma2(data, dict, x86, preset, chosen, passes[k].nice); // (empty: abandoned)
         }
     });
+    // (SIEVE_PASS_SIZES=1 in the environment: each pass's size to standard error, for measuring
+    // which passes pay: the preset's, the chosen settings at the preset's match length and at 64,
+    // 7-Zip's encoder)
+    if (const char* e = std::getenv("SIEVE_PASS_SIZES"); e && *e == '1')
+    {
+        std::string line = what + ": preset " + std::to_string(best.size()) + " (lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) +
+                           " pb" + std::to_string(chosen % 10) + " chosen)";
+        for (size_t k = 0; k < passes.size(); ++k)
+            line += std::string(passes[k].sdk ? ", 7-Zip's " : passes[k].nice ? ", nice 64 " : ", chosen ") + std::to_string(made[k].size());
+        std::fprintf(stderr, "%s\n", line.c_str());
+    }
     for (std::vector<uint8_t>& t : made)
         if (!t.empty() && t.size() < best.size()) best = std::move(t);
     said("done");
@@ -2422,9 +2433,209 @@ void forget_file_ways()
     g_mixed.clear();
 }
 
+// Repeating bytes or patterns (Edward, 2 November 2026: "That should be tracked and squashed down
+// to length x 00 using a repeating character counter"; "the check likely needs to come before
+// anything else ... Should track a big uint count and the repeating byte or pattern"). The file cut
+// into segments, each a pattern of 1 to 64 bytes and how many times it repeats (the smallest
+// pattern whose repeats from there reach 4 KiB, followed as far as they go), with what lies between
+// carried as it is (a segment of one, the bytes their own pattern); given only where the segments
+// average 4 KiB or more and what lies between is at most a sixty-fourth of the file, and the file is
+// 64 KiB or more. (Each place is tried against the 64 patterns at most once, and a file that is not
+// so is given up on after a sixty-fourth of it: about one look a byte at most.) The code, as the v33
+// draft's "runs" carries it: each segment its count (a varint, as long as it needs: a count of any
+// size), its pattern's length (a varint) and its pattern's bytes. LZMA2 repeats at most 273 bytes at
+// a time (300 MB of zeros: 43,713 bytes), the rope's wave of differences codes one value in a few
+// bytes but two at about a bit a byte, and the runs a segment in a few bytes.
+// Ramps too (2 November 2026, Edward: "scales of repeating bytes", as not-a-pattern-v1 sets aside
+// for the lines, FILTER-PLUGINS §17): values of 1, 2, 4 or 8 bytes, little- or big-endian, each the
+// one before plus a fixed step other than 0, wrapping (a counter, an index of offsets, a gradient),
+// tried where no pattern holds, to the same 4 KiB. Its segment: the count of values, a pattern
+// length of 0 to say it is a ramp, a byte for the values' width and order (0 to 3 for 1, 2, 4 or 8
+// bytes, plus 4 for big-endian), then the first value and the step, each of that width,
+// little-endian.
+struct PatternRuns
+{
+    uint64_t segments = 0;
+    std::vector<uint8_t> code;
+};
+
+std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b)
+{
+    const size_t n = b.size();
+    if (n < (size_t(64) << 10)) return std::nullopt;
+    constexpr size_t kMaxPattern = 64, kLong = 4096;
+    const uint64_t most_segments = n / kLong, most_between = n / 64;
+    PatternRuns out;
+    auto put = [&](uint64_t v) {
+        while (v >= 0x80)
+        {
+            out.code.push_back(uint8_t(v | 0x80));
+            v >>= 7;
+        }
+        out.code.push_back(uint8_t(v));
+    };
+    uint64_t between = 0;
+    size_t from = n; // (where bytes between patterns began; n: none)
+    auto flush = [&](size_t to) {
+        if (from >= to) return;
+        put(1);
+        put(to - from);
+        out.code.insert(out.code.end(), b.begin() + std::ptrdiff_t(from), b.begin() + std::ptrdiff_t(to));
+        ++out.segments;
+        from = n;
+    };
+    for (size_t i = 0; i < n;)
+    {
+        size_t pattern = 0;
+        for (size_t p = 1; p <= kMaxPattern && i + kLong <= n; ++p)
+        {
+            size_t j = i + p;
+            while (j < i + kLong && b[j] == b[j - p]) ++j;
+            if (j == i + kLong)
+            {
+                pattern = p;
+                break;
+            }
+        }
+        if (!pattern)
+        {
+            // A ramp: the first width and order whose values from here step evenly for 4 KiB.
+            int width_code = -1;
+            bool big = false;
+            uint64_t first = 0, step = 0;
+            for (int wc = 0; wc < 4 && width_code < 0 && i + kLong <= n; ++wc)
+                for (const bool be : {false, true})
+                {
+                    if (wc == 0 && be) continue;
+                    const size_t w = size_t(1) << wc;
+                    const uint64_t mask = w == 8 ? ~uint64_t(0) : (uint64_t(1) << (8 * w)) - 1;
+                    auto value = [&](size_t at) {
+                        uint64_t v = 0;
+                        for (size_t k = 0; k < w; ++k) v |= uint64_t(b[at + k]) << (8 * (be ? w - 1 - k : k));
+                        return v;
+                    };
+                    const uint64_t a = value(i), d = (value(i + w) - a) & mask;
+                    if (d == 0) continue;
+                    // (each value the one before plus d, as far as 4 KiB of whole values)
+                    uint64_t expect = a;
+                    size_t at = i;
+                    while (at + w <= i + kLong && value(at) == expect)
+                    {
+                        at += w;
+                        expect = (expect + d) & mask;
+                    }
+                    if (at + w > i + kLong)
+                    {
+                        width_code = wc, big = be, first = a, step = d;
+                        break;
+                    }
+                }
+            if (width_code < 0)
+            {
+                if (from == n) from = i;
+                ++i;
+                if (++between > most_between) return std::nullopt;
+                continue;
+            }
+            flush(i);
+            const size_t w = size_t(1) << width_code;
+            const uint64_t mask = w == 8 ? ~uint64_t(0) : (uint64_t(1) << (8 * w)) - 1;
+            uint64_t expect = first, count = 0;
+            size_t at = i;
+            while (at + w <= n)
+            {
+                uint64_t v = 0;
+                for (size_t k = 0; k < w; ++k) v |= uint64_t(b[at + k]) << (8 * (big ? w - 1 - k : k));
+                if (v != expect) break;
+                ++count;
+                at += w;
+                expect = (expect + step) & mask;
+            }
+            put(count);
+            put(0);
+            out.code.push_back(uint8_t(width_code | (big ? 4 : 0)));
+            for (size_t k = 0; k < w; ++k) out.code.push_back(uint8_t(first >> (8 * k)));
+            for (size_t k = 0; k < w; ++k) out.code.push_back(uint8_t(step >> (8 * k)));
+            if (++out.segments > most_segments) return std::nullopt;
+            i = at;
+            continue;
+        }
+        flush(i);
+        size_t j = i + kLong;
+        while (j < n && b[j] == b[j - pattern]) ++j;
+        const uint64_t count = (j - i) / pattern;
+        put(count);
+        put(pattern);
+        out.code.insert(out.code.end(), b.begin() + std::ptrdiff_t(i), b.begin() + std::ptrdiff_t(i + pattern));
+        if (++out.segments > most_segments) return std::nullopt;
+        i += size_t(count * pattern);
+    }
+    flush(n);
+    if (out.segments > most_segments) return std::nullopt;
+    return out;
+}
+
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     FileWays w;
+    if (auto pr = pattern_runs(bytes))
+    {
+        progress("a file of " + std::to_string(pr->segments) + " segment(s) of a repeating byte or pattern, averaging " +
+                 std::to_string(bytes.size() / pr->segments) + " bytes: LZMA2, the rope's wave of differences and the segments, not searched");
+        w.runs = pr->segments;
+        w.lzma2 = estimate(bytes);
+        w.rope = RopeParams::parse("L8 W1 S1 P1 K0");
+        w.rope_code = rope_code(bytes, w.rope);
+        uint64_t n = w.rope_code.size(), vl = 1;
+        while (n >>= 7) ++vl;
+        w.rope_bytes = w.rope_code.size() + vl;
+        w.tried = 1;
+        w.runs_code = std::move(pr->code);
+        w.pieces_said = "a repeating byte or pattern: not cut";
+        if (force_requested()) w.forced = true;
+        return w;
+    }
+    // A text the rope cannot win (the review of the weighing's order, 2 November 2026: on Edward's
+    // enwik9, made for decoding, the rope's search took 3,123 of 4,759 s and LZMA2 carried it). On
+    // text the rope's best is its line wave (C2 G1 A1, IDEAS 19.99: "always the line wave"), so that wave
+    // alone on the file's first 256 KiB, against LZMA2's estimate of the same, says how the search
+    // would end: where the rope wins (a table of digits, a CSV, a word list) it came to 0.84 to 0.98
+    // of LZMA2 there and 0.84 to 0.92 after the whole search; where it loses (prose, code, the
+    // manual) 1.74 to 2.54 there and 1.77 to 2.57 after. At 1.25 or more, neither the rope's search
+    // nor the pieces (LZMA2 and the rope by turns) are tried: LZMA2 alone is weighed, and mixing
+    // after it as before. Not where Try every way is asked for itself (Edward: "make sure that
+    // people can search longer if they choose to"; METHODS: with it the rope's shortcuts are off),
+    // only where Optimise Search turns it on for a file, for mixing's sake (over 16 MiB).
+    const bool asked_every = rope_search_every_wave() && !optimise_search();
+    if (rope_newest >= 5 && !asked_every && bytes.size() >= (size_t(64) << 10))
+    {
+        const std::span<const uint8_t> start(bytes.data(), std::min<size_t>(bytes.size(), size_t(256) << 10));
+        if (text_like(start))
+        {
+            size_t longest = 0, line = 0;
+            for (const uint8_t c : start)
+            {
+                ++line;
+                if (c == '\n') longest = std::max(longest, line), line = 0;
+            }
+            longest = std::max(longest, line);
+            const RopeParams wave = RopeParams::parse("L8 W" + std::to_string(std::clamp<size_t>(longest, 2, 4096)) + " S1 P0 K0 C2 G1 A1");
+            const uint64_t by_rope = rope_code(start, wave).size();
+            const uint64_t by_lzma2 = estimate(std::vector<uint8_t>(start.begin(), start.end()));
+            if (by_rope * 4 >= by_lzma2 * 5)
+            {
+                char ratio[32];
+                std::snprintf(ratio, sizeof ratio, "%.2f", double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1)));
+                w.rope_said = std::string("not searched: a text whose start its line wave makes ") + ratio + " times LZMA2's";
+                progress(w.rope_said);
+                w.lzma2 = estimate(bytes);
+                w.rope_bytes = UINT64_MAX;
+                w.pieces_said = "not cut: the rope does not win this text";
+                if (force_requested()) w.forced = true;
+                return w;
+            }
+        }
+    }
     // LZMA2's estimate of the whole file beside the rope's search and the pieces, on a thread of its
     // own: the same numbers, sooner (32 MB of random bytes: 22.9 s to 21.7; the estimate alone is
     // 17.7 s of it, and LZMA2 gives it no faster without a different number). With one thread, one
@@ -2729,6 +2940,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // Quixote 1.2% larger with all three and 0.2% smaller with C2 alone; a screenshot a little larger
     // (so weighed, not always on).
     const bool match_ways_on = mix4_on && rope_newest >= 16; // (v33's own number: still on once v33 is frozen and the draft moves on)
+    // v33 draft (2 November 2026): a file of a repeating byte or pattern carried as its segments ("runs").
+    const bool runs_way_on = rope_newest >= 16;
     auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
         if (!match_ways_on || f.size() < 4096) return mp;
         const std::span<const uint8_t> start = f.first(std::min<size_t>(f.size(), size_t(256) << 10));
@@ -3452,14 +3665,22 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
     }
 
+    // A repeating byte or pattern (pattern_runs), seen first, before anything else looks at a file
+    // (Edward, 2 November 2026: "the check likely needs to come before anything else"): such a file
+    // is not looked for as an item of a line, a text made from another's lines or a delta of
+    // another, each of which would go over all of it for nothing; the search below weighs it with no
+    // search. (300 MB of zeros: looked at in under a second.)
+    std::vector<char> patterned(files.size(), 0);
+    for_each_index(files.size(), pack_threads(), [&](size_t i) { patterned[i] = pattern_runs(bytes[i]).has_value(); });
+
     // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
     // stream; a text made from another's lines, a mask; the rest as it is.
     std::vector<bool> item(files.size(), false);
     std::vector<size_t> used_lines;
     for (size_t i = 0; i < files.size(); ++i)
     {
-        files[i]->way = is_program(bytes[i]) && files[i]->remake.empty() ? "x86" : "raw";
-        if (!items || bytes[i].empty() || !files[i]->remake.empty()) continue;
+        files[i]->way = !patterned[i] && is_program(bytes[i]) && files[i]->remake.empty() ? "x86" : "raw";
+        if (patterned[i] || !items || bytes[i].empty() || !files[i]->remake.empty()) continue;
         if (const auto found = (*items)(bytes[i]))
         {
             // v6 carries an item only where its place is shorter than the file: the least of the two.
@@ -3581,7 +3802,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<std::string_view>> lines(files.size());
     std::vector<bool> text(files.size(), false);
     for (size_t i = 0; i < files.size(); ++i)
-        if (files[i]->way == "raw" && files[i]->remake.empty() && std::find(bytes[i].begin(), bytes[i].end(), uint8_t('\n')) != bytes[i].end())
+        if (files[i]->way == "raw" && files[i]->remake.empty() && !patterned[i] && std::find(bytes[i].begin(), bytes[i].end(), uint8_t('\n')) != bytes[i].end())
         {
             text[i] = true;
             lines[i] = lines_of(bytes[i]);
@@ -3657,7 +3878,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (*from) kSmallest = std::max<uint64_t>(4096, std::strtoull(from, nullptr, 10));
         auto can_be = [&](size_t i) {
             const std::string& w = files[i]->way;
-            return (w == "raw" || w == "x86") && files[i]->remake.empty() && !files[i]->member && !derived[i] && bytes[i].size() >= kSmallest &&
+            return (w == "raw" || w == "x86") && files[i]->remake.empty() && !files[i]->member && !derived[i] && !patterned[i] && bytes[i].size() >= kSmallest &&
                    bytes[i].size() < (uint64_t(1) << 32);
         };
         std::vector<std::vector<delta::Block>> prints(files.size());
@@ -3851,6 +4072,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 code = std::move(fw.rope_code);
                 params = fw.rope;
             }
+            // v33 draft: runs of one byte, each its length and byte (Edward: "squashed down to length x
+            // 00 using a repeating character counter"), where that is the smallest.
+            if (runs_way_on && !fw.runs_code.empty())
+            {
+                uint64_t n = fw.runs_code.size(), vl = 1;
+                while (n >>= 7) ++vl;
+                if (fw.runs_code.size() + vl < best)
+                {
+                    best = fw.runs_code.size() + vl;
+                    way = "runs";
+                    code = fw.runs_code;
+                    params = RopeParams{};
+                }
+            }
             if (fw.has_pieces && fw.pieces_bytes < best)
             {
                 best = fw.pieces_bytes;
@@ -3879,7 +4114,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 else if (bytes[i].size() > (size_t(16) << 20)) mixed_said = "mixing not tried (over 16 MiB: Try every way mixes a file of any size)";
             }
             if (mix_on && !decoding_first && stop_requested()) mixed_said = "mixing not tried (stopped)";
-            if (mix_on && !decoding_first && !stop_requested() && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
+            if (mix_on && fw.runs) mixed_said = "mixing not tried (a repeating byte or pattern: its segments cost a few bytes each)";
+            if (mix_on && !decoding_first && !stop_requested() && !fw.runs && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
                 const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
@@ -4031,6 +4267,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 std::string said = "file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " +
                                    std::to_string(bytes[i].size()) + " bytes: " +
                                    (program ? "a program, LZMA2 with the x86 filter about " + std::to_string(fw.lzma2)
+                                    : fw.runs ? std::to_string(fw.runs) + " segment(s) of a repeating byte or pattern, LZMA2 about " + std::to_string(fw.lzma2) + ", rope " +
+                                                    std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ", not searched)"
+                                    : !fw.rope_said.empty() ? "LZMA2 about " + std::to_string(fw.lzma2) + ", rope " + fw.rope_said
                                             : "LZMA2 about " + std::to_string(fw.lzma2) + ", rope " + std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ")");
                 if (fw.has_pieces) said += ", pieces " + std::to_string(fw.pieces_bytes);
                 else if (!fw.pieces_said.empty()) said += ", pieces not cut (" + fw.pieces_said + ")";
@@ -4102,7 +4341,104 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // than the listing's order, 0.4% smaller (not worth a way to say it). Groups are mixed at once too,
     // on as many threads as the memory free holds them (the groups, so the instructions, are the same
     // at any count). Not with Prioritise Decoding Speed (as mixing).
-    if (mix_groups_on && !prioritise_decoding() && !stop_requested())
+    auto weigh_against_stream = [&](std::initializer_list<int> passes_wanted) {
+        if (!mix_groups_on || prioritise_decoding() || stop_requested()) return;
+        const timings::Scope t("pack.mix_against_stream");
+        // (v33 draft: a third time, the programs mixed through the x86 filter against the x86
+        // stream they would otherwise share, which is where they go back to.)
+        for (const int pass : passes_wanted)
+        {
+            const bool pictures = pass == 1, programs = pass == 2;
+            std::vector<char> back(files.size(), 0);
+            uint64_t codes = 0;
+            size_t n_back = 0;
+            for (size_t i = 0; i < files.size(); ++i)
+            {
+                const std::string& w = files[i]->way;
+                const bool alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
+                const bool grouped = w.rfind("mixt ", 0) == 0 || w == "mixn";
+                const bool filtered = alone && w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0;
+                if (filtered != programs) continue;
+                if (!(alone && (w.find(" I") != std::string::npos) == pictures) && !(grouped && !pictures && !programs)) continue;
+                back[i] = 1;
+                ++n_back;
+                uint64_t len = rope_codes[i].size(), vl = 1;
+                while (len >>= 7) ++vl;
+                codes += (rope_codes[i].empty() ? 0 : rope_codes[i].size() + vl) + 5;
+            }
+            if (!n_back || stop_requested()) continue;
+            progress(std::string(programs ? "the programs mixed" : "the files mixed") + (pictures ? " as pictures" : "") + ", weighed against the stream they would share");
+            const char* home = programs ? "x86" : "raw";
+            auto stream_of = [&](bool with) {
+                std::vector<uint8_t> out;
+                for (size_t i = 0; i < files.size(); ++i)
+                    if (files[i]->way == home || (with && back[i])) out.insert(out.end(), bytes[i].begin(), bytes[i].end());
+                    else if (programs) continue;
+                    else if (files[i]->way.rfind("pieces ", 0) == 0) out.insert(out.end(), piece_z[i].begin(), piece_z[i].end());
+                    else if (is_delta[i]) out.insert(out.end(), delta_scripts[i].begin(), delta_scripts[i].end());
+                return out;
+            };
+            // (one file with nothing else in the stream was weighed against LZMA2 of itself already)
+            if (n_back < 2 && stream_of(false).empty()) continue;
+            // (The stream with the files is no smaller than the stream without them, so they come
+            // back only where their codes are more than 64 bytes and 0.5% of all: where they cannot
+            // be, the stream with them is not estimated. Where their codes are a small share of the
+            // stream's bytes, the stream without them is estimated first, alone, to see; else both at
+            // once, as the wait is the same. Either way the same files come back.)
+            std::vector<uint64_t> both(2, 0);
+            uint64_t raw_without = 0;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (files[i]->way == home) raw_without += bytes[i].size();
+            const bool first_alone = codes * 600 < raw_without;
+            auto estimate_here = [&](const std::vector<uint8_t>& st) {
+                return st.empty() ? 0 : programs ? pack_stream(st, dictionary_for(st.size()), true, 6, false, true).size() : estimate(st);
+            };
+            for_each_index(first_alone ? 1 : 2, 2, [&](size_t k) { both[k] = estimate_here(stream_of(k == 1)); });
+            const bool cannot = codes <= 64 + (both[0] + codes) / 200;
+            if (first_alone && !cannot)
+            {
+                if (stop_requested()) continue; // (asked to stop: mixing kept)
+                both[1] = estimate_here(stream_of(true));
+            }
+            const uint64_t now = both[0] + codes, as_is = both[1];
+            const bool take = !cannot && as_is + 64 + now / 200 < now;
+            progress(std::string(pictures ? "pictures" : programs ? "programs" : "files") + " mixed: " + std::to_string(now) + " bytes (" + std::to_string(n_back) + " files' codes " + std::to_string(codes) +
+                     ", the stream " + std::to_string(both[0]) + "); " +
+                     (cannot ? std::string("their codes too few to come back (not weighed in the stream)") : "all in the stream: " + std::to_string(as_is)) +
+                     (take ? "; the stream taken" : "; mixing kept"));
+            if (!take) continue;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (back[i])
+                {
+                    files[i]->way = home;
+                    rope_codes[i].clear();
+                    rope_params[i] = RopeParams{};
+                }
+            r.unmixed += n_back;
+            r.unmixed_mixed += now;
+            r.unmixed_stream += as_is;
+            if (pass == 0)
+            {
+                r.mix_groups = r.mix_group_files = 0;
+                r.mix_group_bytes = r.mix_group_apart = r.mix_group_code = 0;
+            }
+            m.roped = std::any_of(files.begin(), files.end(), [](const auto& f) { return f->way.rfind("rope ", 0) == 0 || f->way.rfind("pieces ", 0) == 0 || f->way.rfind("mix", 0) == 0 || f->way == "runs"; });
+        }
+        };
+    // (SIEVE_MIX_ORDER=stream-first in the environment, for measuring which order pays: the files
+    // mixed alone weighed against the stream before the groups are made, and where the stream takes
+    // them, no groups made at all. mozilla taken apart, 2 November 2026: of about 313 processor
+    // seconds spent mixing, all but its 7 pictures undone by the weighing after the groups.)
+    const char* order_env = std::getenv("SIEVE_MIX_ORDER");
+    bool groups_skipped = false;
+    if (order_env && std::string(order_env) == "stream-first")
+    {
+        const size_t was = r.unmixed;
+        weigh_against_stream({0});
+        groups_skipped = r.unmixed > was;
+        if (groups_skipped) progress("the files mixed alone went back to the stream: no groups made (SIEVE_MIX_ORDER=stream-first)");
+    }
+    if (!groups_skipped && mix_groups_on && !prioritise_decoding() && !stop_requested())
     {
         const timings::Scope t("pack.mix_groups");
         // Groups of up to 8 MiB: a group decodes on one thread (about 0.6 MB a second), so the largest
@@ -4275,90 +4611,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // groups, 13,530,583 with them weighed so (all but its 6 pictures carried as they are); whole,
     // 13,376,239. Sieve's docs/, tools/ and Images/Sieve came out the same either way, their mixing
     // kept.
-    if (mix_groups_on && !prioritise_decoding() && !stop_requested())
-    {
-        const timings::Scope t("pack.mix_against_stream");
-        // (v33 draft: a third time, the programs mixed through the x86 filter against the x86
-        // stream they would otherwise share, which is where they go back to.)
-        for (const int pass : {0, 1, 2})
-        {
-            const bool pictures = pass == 1, programs = pass == 2;
-            std::vector<char> back(files.size(), 0);
-            uint64_t codes = 0;
-            size_t n_back = 0;
-            for (size_t i = 0; i < files.size(); ++i)
-            {
-                const std::string& w = files[i]->way;
-                const bool alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
-                const bool grouped = w.rfind("mixt ", 0) == 0 || w == "mixn";
-                const bool filtered = alone && w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0;
-                if (filtered != programs) continue;
-                if (!(alone && (w.find(" I") != std::string::npos) == pictures) && !(grouped && !pictures && !programs)) continue;
-                back[i] = 1;
-                ++n_back;
-                uint64_t len = rope_codes[i].size(), vl = 1;
-                while (len >>= 7) ++vl;
-                codes += (rope_codes[i].empty() ? 0 : rope_codes[i].size() + vl) + 5;
-            }
-            if (!n_back || stop_requested()) continue;
-            progress(std::string(programs ? "the programs mixed" : "the files mixed") + (pictures ? " as pictures" : "") + ", weighed against the stream they would share");
-            const char* home = programs ? "x86" : "raw";
-            auto stream_of = [&](bool with) {
-                std::vector<uint8_t> out;
-                for (size_t i = 0; i < files.size(); ++i)
-                    if (files[i]->way == home || (with && back[i])) out.insert(out.end(), bytes[i].begin(), bytes[i].end());
-                    else if (programs) continue;
-                    else if (files[i]->way.rfind("pieces ", 0) == 0) out.insert(out.end(), piece_z[i].begin(), piece_z[i].end());
-                    else if (is_delta[i]) out.insert(out.end(), delta_scripts[i].begin(), delta_scripts[i].end());
-                return out;
-            };
-            // (one file with nothing else in the stream was weighed against LZMA2 of itself already)
-            if (n_back < 2 && stream_of(false).empty()) continue;
-            // (The stream with the files is no smaller than the stream without them, so they come
-            // back only where their codes are more than 64 bytes and 0.5% of all: where they cannot
-            // be, the stream with them is not estimated. Where their codes are a small share of the
-            // stream's bytes, the stream without them is estimated first, alone, to see; else both at
-            // once, as the wait is the same. Either way the same files come back.)
-            std::vector<uint64_t> both(2, 0);
-            uint64_t raw_without = 0;
-            for (size_t i = 0; i < files.size(); ++i)
-                if (files[i]->way == home) raw_without += bytes[i].size();
-            const bool first_alone = codes * 600 < raw_without;
-            auto estimate_here = [&](const std::vector<uint8_t>& st) {
-                return st.empty() ? 0 : programs ? pack_stream(st, dictionary_for(st.size()), true, 6, false, true).size() : estimate(st);
-            };
-            for_each_index(first_alone ? 1 : 2, 2, [&](size_t k) { both[k] = estimate_here(stream_of(k == 1)); });
-            const bool cannot = codes <= 64 + (both[0] + codes) / 200;
-            if (first_alone && !cannot)
-            {
-                if (stop_requested()) continue; // (asked to stop: mixing kept)
-                both[1] = estimate_here(stream_of(true));
-            }
-            const uint64_t now = both[0] + codes, as_is = both[1];
-            const bool take = !cannot && as_is + 64 + now / 200 < now;
-            progress(std::string(pictures ? "pictures" : programs ? "programs" : "files") + " mixed: " + std::to_string(now) + " bytes (" + std::to_string(n_back) + " files' codes " + std::to_string(codes) +
-                     ", the stream " + std::to_string(both[0]) + "); " +
-                     (cannot ? std::string("their codes too few to come back (not weighed in the stream)") : "all in the stream: " + std::to_string(as_is)) +
-                     (take ? "; the stream taken" : "; mixing kept"));
-            if (!take) continue;
-            for (size_t i = 0; i < files.size(); ++i)
-                if (back[i])
-                {
-                    files[i]->way = home;
-                    rope_codes[i].clear();
-                    rope_params[i] = RopeParams{};
-                }
-            r.unmixed += n_back;
-            r.unmixed_mixed += now;
-            r.unmixed_stream += as_is;
-            if (pass == 0)
-            {
-                r.mix_groups = r.mix_group_files = 0;
-                r.mix_group_bytes = r.mix_group_apart = r.mix_group_code = 0;
-            }
-            m.roped = std::any_of(files.begin(), files.end(), [](const auto& f) { return f->way.rfind("rope ", 0) == 0 || f->way.rfind("pieces ", 0) == 0 || f->way.rfind("mix", 0) == 0; });
-        }
-    }
+    weigh_against_stream({0, 1, 2});
+
     std::vector<uint8_t> premixed;
     std::string premixed_params;
     if (mix_stream_on && !prioritise_decoding() && !stop_requested())
@@ -4441,7 +4695,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             mixed2 = mixed2 || w.rfind("mix2 ", 0) == 0;
             mixed3 = mixed3 || w.rfind("mix3 ", 0) == 0;
             mixed4 = mixed4 || w.rfind("mix4 ", 0) == 0;
-            m.roped = m.roped || w.rfind("rope ", 0) == 0 || w.rfind("pieces ", 0) == 0 || w.rfind("mix", 0) == 0;
+            m.roped = m.roped || w.rfind("rope ", 0) == 0 || w.rfind("pieces ", 0) == 0 || w.rfind("mix", 0) == 0 || w == "runs";
         }
     }
 
@@ -4477,7 +4731,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way.rfind("rope ", 0) == 0 || files[i]->way.rfind("pieces ", 0) == 0 || files[i]->way.rfind("mix ", 0) == 0 ||
             files[i]->way.rfind("mix2 ", 0) == 0 || files[i]->way.rfind("mix3 ", 0) == 0 || files[i]->way.rfind("mix4 ", 0) == 0 ||
-            files[i]->way.rfind("mixt ", 0) == 0)
+            files[i]->way.rfind("mixt ", 0) == 0 || files[i]->way == "runs")
         {
             uint64_t len = rope_codes[i].size();
             while (len >= 0x80)
@@ -4740,6 +4994,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                              return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || x.remake.rfind("skr ", 0) == 0 || by_use(x.way);
                          }));
     auto ways_in = [](const std::string& w) {
+        if (w == "runs") return true; // (v33 draft: runs of one byte)
         for (const char* tag : {"mix4 ", "mixt "})
             if (w.rfind(tag, 0) == 0)
             {

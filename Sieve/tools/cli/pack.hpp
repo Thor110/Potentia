@@ -196,6 +196,9 @@ struct FileWays
     uint64_t pieces_bytes = 0;      // LZMA2's estimate of z, the code, its length and the way's longer text
     size_t tried = 0;               // waves tried
     bool forced = false;            // a force stop came first: only `lzma2` and `tried` are set
+    uint64_t runs = 0;              // where the file is long runs of one byte, how many (else 0): no search was made
+    std::vector<uint8_t> runs_code; // and (v33 draft) each run's length (a varint) and byte
+    std::string rope_said;          // where the rope was not searched, why (said in its place)
 };
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 6, bool pieces = true);
 // The ways file_ways keeps for the run (the File Locator's weighing asks for them again) let go:

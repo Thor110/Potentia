@@ -21,6 +21,7 @@ add_library(sieve_core STATIC
     core/src/unicode_blocks.cpp
     core/src/audio.cpp
     core/src/biguint.cpp
+    core/src/jpeg_dc.cpp
     core/src/booksieve.cpp
     core/src/composition.cpp
     core/src/bookspace.cpp

@@ -116,6 +116,16 @@ many as the threads and memory allow, and the result is the same at any thread c
    the early stops on text and on bytes already packed.
    - Log: `the rope's search: N ways tried, best so far B bytes of S (PARAMETERS)`, marked `first`,
      then `new best` each time it improves.
+   - Not searched for a text whose start the rope cannot win (2 November 2026): a file of 64 KiB or
+     more whose first 256 KiB are 95% printable is coded there by the rope's line wave alone
+     (`C2 G1 A1`, its best on text), and where that comes to 1.25 times LZMA2's estimate of the same
+     or more, neither the rope nor the pieces are tried. Where the rope wins on text (tables of
+     digits, CSVs, word lists) it came to 0.84 to 0.98 there; prose and code 1.74 to 2.54
+     (results/weighing-order-2026-11-02.md). Not with Try every way ticked itself (only where
+     Optimise Search turns it on). Log: `rope not searched: a text whose start its line wave makes
+     R times LZMA2's`.
+   - Not searched either for a repeating byte or pattern (found before anything else): LZMA2, the
+     rope's wave of differences and (v33 draft) the segments are weighed, with no search.
 3. **Pieces**: the file cut into 4 KiB blocks, each weighed by LZMA2 against the rope. Runs of
    blocks go to the way that codes them smaller, and runs saving under 64 bytes join their
    neighbours. Each boundary is then moved, up to a block either way, to where the two cost least.

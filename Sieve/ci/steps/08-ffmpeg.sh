@@ -32,13 +32,15 @@ $exe warp --line video --frames 8 --file "it's a folder/clip.mkv" | tr -d '\r' |
 # The same file gives the same address every time.
 c=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
 d=$($exe warp --line video --frames 8 --mode positional --file "it's a folder/clip.mkv" | tr -d '\r' | awk '$1 == "positional" {print $2}')
-test -n "$c" && test "$c" = "$d"
+test -n "$c"
+test "$c" = "$d"
 # Sound in any format ffmpeg reads: FLAC lands where the same sound as WAV does.
 ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=16000:duration=0.2" -c:a pcm_s16le s.wav
 ffmpeg -v error -y -i s.wav s.flac
 e=$($exe warp --line audio --note-set pcm --mode positional --file s.wav | tr -d '\r' | awk '$1 == "positional" {print $2}')
 f=$($exe warp --line audio --note-set pcm --mode positional --file s.flac | tr -d '\r' | awk '$1 == "positional" {print $2}')
-test -n "$e" && test "$e" = "$f"
+test -n "$e"
+test "$e" = "$f"
 # And saved through ffmpeg: a lossless format comes back to the same address.
 echo "$e" > e.hex
 $exe read --line audio --note-set pcm --mode positional --address-file e.hex --out back.flac > /dev/null

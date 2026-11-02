@@ -326,7 +326,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         {
             const std::string inner = e.remake.substr(e.remake.rfind(' ') + 1);
             if (inner.empty() || inner.size() > 19 || inner.find_first_not_of("0123456789") != std::string::npos ||
-                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0 && e.way.rfind("mix3 ", 0) != 0 && e.way.rfind("mix4 ", 0) != 0 && e.way.rfind("mixt ", 0) != 0 && e.way != "mixn"))
+                (e.way != "raw" && e.way.rfind("rope ", 0) != 0 && e.way.rfind("pieces ", 0) != 0 && e.way.rfind("mix ", 0) != 0 && e.way.rfind("mix2 ", 0) != 0 && e.way.rfind("mix3 ", 0) != 0 && e.way.rfind("mix4 ", 0) != 0 && e.way.rfind("mixt ", 0) != 0 && e.way != "mixn" && e.way != "runs"))
                 throw std::runtime_error("manifest: " + e.path + " is remade from what no way gives");
             e.size = std::stoull(inner);
         }
@@ -562,6 +562,73 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             }
             ra += size_t(len);
         }
+        else if (m.roped && e.way == "runs")
+        {
+            // v33 draft: a repeating byte or pattern, its code next in the rope stream (a varint of its
+            // length first): each segment its count (a varint, 1 or more), its pattern's length (a
+            // varint, 1 or more) and its pattern's bytes, repeated count times; the segments making
+            // the file's size and the code read to its end.
+            if (!m.v33) throw std::runtime_error("manifest: " + e.path + " is carried as a repeating byte or pattern, which is sieve-manifest-v33's");
+            uint64_t len = 0;
+            for (int shift = 0;; shift += 7)
+            {
+                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+                const uint8_t b = m.rope_carried[ra++];
+                len |= uint64_t(b & 0x7F) << shift;
+                if (!(b & 0x80)) break;
+            }
+            if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
+            const uint8_t* c = m.rope_carried.data() + ra;
+            const size_t end = size_t(len);
+            ra += end;
+            auto varint = [&](size_t& at) {
+                uint64_t v = 0;
+                for (int shift = 0;; shift += 7)
+                {
+                    if (at >= end || shift > 63) throw std::runtime_error("manifest: " + e.path + "'s segments end part way");
+                    const uint8_t b = c[at++];
+                    v |= uint64_t(b & 0x7F) << shift;
+                    if (!(b & 0x80)) return v;
+                }
+            };
+            std::vector<uint8_t> out;
+            out.reserve(size_t(e.size));
+            for (size_t at = 0; at < end;)
+            {
+                const uint64_t count = varint(at), length = varint(at);
+                if (count != 0 && length == 0)
+                {
+                    // A ramp: a byte for its values' width and order (0 to 3 for 1, 2, 4 or 8
+                    // bytes, plus 4 for big-endian; one byte has no order), then its first value
+                    // and its step (not 0), each of that width, little-endian; count values, each
+                    // the one before plus the step, wrapping.
+                    if (at >= end || c[at] > 7 || c[at] == 4) throw std::runtime_error("manifest: " + e.path + "'s segments are not written as Sieve writes them");
+                    const size_t w = size_t(1) << (c[at] & 3);
+                    const bool big = (c[at] & 4) != 0;
+                    ++at;
+                    if (end - at < 2 * w) throw std::runtime_error("manifest: " + e.path + "'s segments end part way");
+                    uint64_t value = 0, step = 0;
+                    for (size_t k = 0; k < w; ++k) value |= uint64_t(c[at + k]) << (8 * k), step |= uint64_t(c[at + w + k]) << (8 * k);
+                    at += 2 * w;
+                    const uint64_t mask = w == 8 ? ~uint64_t(0) : (uint64_t(1) << (8 * w)) - 1;
+                    if (step == 0) throw std::runtime_error("manifest: " + e.path + "'s segments are not written as Sieve writes them");
+                    if (count > (e.size - out.size()) / w) throw std::runtime_error("manifest: " + e.path + "'s segments do not make its size");
+                    for (uint64_t k = 0; k < count; ++k)
+                    {
+                        for (size_t j = 0; j < w; ++j) out.push_back(uint8_t(value >> (8 * (big ? w - 1 - j : j))));
+                        value = (value + step) & mask;
+                    }
+                    continue;
+                }
+                if (count == 0 || length == 0 || length > end - at) throw std::runtime_error("manifest: " + e.path + "'s segments are not written as Sieve writes them");
+                const uint64_t room = e.size - out.size();
+                if (length > room || count > room / length) throw std::runtime_error("manifest: " + e.path + "'s segments do not make its size");
+                for (uint64_t k = 0; k < count; ++k) out.insert(out.end(), c + at, c + at + length);
+                at += size_t(length);
+            }
+            if (out.size() != e.size) throw std::runtime_error("manifest: " + e.path + "'s segments do not make its size");
+            bytes[i] = std::move(out);
+        }
         else if (m.v32 && e.way.rfind("delta ", 0) == 0)
         {
             // v32: "delta <K> <L>": its L-byte script next in the lzma2 stream, applied below.
@@ -616,7 +683,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         const size_t k = size_t(listed_number(e.way.substr(6), "a mask's file"));
         if (k >= files.size() || (files[k]->way != "x86" && files[k]->way != "raw" && files[k]->way.rfind("item ", 0) != 0 &&
                                   files[k]->way.rfind("rope ", 0) != 0 && files[k]->way.rfind("pieces ", 0) != 0 && files[k]->way.rfind("mix ", 0) != 0 && files[k]->way.rfind("mix2 ", 0) != 0 && files[k]->way.rfind("mix3 ", 0) != 0 && files[k]->way.rfind("mix4 ", 0) != 0 && files[k]->way.rfind("mixt ", 0) != 0 &&
-                                  files[k]->way != "mixn"))
+                                  files[k]->way != "mixn" && files[k]->way != "runs"))
             throw std::runtime_error("manifest: " + e.path + " is derived from a file that is not carried");
         const auto lines = lines_of(bytes[k]);
         masks[i] = {k, take(plain, pa, (lines.size() + 7) / 8, e.path)};

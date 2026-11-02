@@ -7294,7 +7294,7 @@ def cmd_unpack_v7(args, data):
             _, level, filt, w, h, c, n, way = way.split(" ", 7)
             if not (level.isdigit() and int(level) <= 9 and re.fullmatch(r"-1|[0-4]", filt) and w.isdigit() and h.isdigit() and
                     c in ("1", "2", "3", "4") and n.isdigit() and int(w) * int(h) * int(c) == int(n)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a PNG recipe Sieve does not write")
             remakes[i] = ("stb", size)
             size = int(n)
@@ -7303,7 +7303,7 @@ def cmd_unpack_v7(args, data):
             # form, by brunsli (which the oracle has not): the recipe read and checked, the file not made.
             _, n, way = way.split(" ", 2)
             if not re.fullmatch(r"[1-9][0-9]*", n) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a JPEG recipe Sieve does not write")
             remakes[i] = ("jbr", size)
             size = int(n)
@@ -7314,7 +7314,7 @@ def cmd_unpack_v7(args, data):
             _, filt, strat, split, head, n, way = way.split(" ", 6)
             if not (re.fullmatch(r"[0-5]", filt) and strat in ("0", "1") and split.isdigit() and head.isdigit() and n.isdigit() and
                     33 <= int(split) <= int(head) <= int(n)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a re-saved PNG's recipe Sieve does not write")
             remakes[i] = ("pngr", int(filt), int(strat), int(split), int(head), size)
             size = int(n)
@@ -7326,7 +7326,7 @@ def cmd_unpack_v7(args, data):
             _, skel, rb, pb, rows, n, way = way.split(" ", 6)
             if not (all(x.isdigit() for x in (skel, n, rb, pb, rows)) and int(rb) >= 1 and 1 <= int(pb) <= 8 and int(rows) >= 1 and
                     (int(rb) + 1) * int(rows) + int(skel) == int(n)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: an unfiltered PNG's recipe Sieve does not write")
             remakes[i] = ("skr", int(skel), int(rb), int(pb), int(rows), size)
             size = int(n)
@@ -7334,7 +7334,7 @@ def cmd_unpack_v7(args, data):
             # "skm <members> <skeleton size> <way>": a gzip, zip or 7z as a skeleton, what it holds its members.
             _, n, skel, way = way.split(" ", 3)
             if not skel.isdigit() or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a skeleton recipe Sieve does not write")
             remakes[i] = ("skm", int(skel), size)
             size = int(skel)
@@ -7342,7 +7342,7 @@ def cmd_unpack_v7(args, data):
             # "sk <skeleton size> <inner size> <way>": a gzip, zip or 7z as a skeleton and the data it holds.
             _, skel, n, way = way.split(" ", 3)
             if not (skel.isdigit() and n.isdigit() and int(skel) <= int(n)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a skeleton recipe Sieve does not write")
             remakes[i] = ("sk", int(skel), size)
             size = int(n)
@@ -7352,7 +7352,7 @@ def cmd_unpack_v7(args, data):
             _, level, block, linked, bsum, csum, sflag, n, way = way.split(" ", 8)
             if not re.fullmatch(r"-?[0-9]+", level) or block not in ("4", "5", "6", "7") or \
                     any(x not in ("0", "1") for x in (linked, bsum, csum, sflag)) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: an lz4 recipe Sieve does not write")
             remakes[i] = ("lz4", int(level), int(block), linked == "1", bsum == "1", csum == "1", sflag == "1", size)
             size = int(n)
@@ -7360,21 +7360,21 @@ def cmd_unpack_v7(args, data):
             # "br <quality> <window> <inner size> <way>": brotli, as the brotli program writes.
             _, quality, window, n, way = way.split(" ", 4)
             if not re.fullmatch(r"[0-9]|1[01]", quality) or not re.fullmatch(r"1[0-9]|2[0-4]", window) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a brotli recipe Sieve does not write")
             remakes[i] = ("br", int(quality), int(window), size)
             size = int(n)
         if v20 and way.startswith("lzma "):
             # "lzma <preset>[e] <inner size> <way>": LZMA_Alone, as the lzma program writes.
             _, preset, n, way = way.split(" ", 3)
-            if not re.fullmatch(r"[0-9]e?", preset) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+            if not re.fullmatch(r"[0-9]e?", preset) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: an lzma recipe Sieve does not write")
             remakes[i] = ("lzma", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0), size)
             size = int(n)
         if v19 and way.startswith("bz2 "):
             # "bz2 <block size> <inner size> <way>": libbzip2, as the bzip2 program writes one stream.
             _, level, n, way = way.split(" ", 3)
-            if not re.fullmatch(r"[1-9]", level) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+            if not re.fullmatch(r"[1-9]", level) or not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a bzip2 recipe Sieve does not write")
             remakes[i] = ("bz2", int(level), size)
             size = int(n)
@@ -7383,7 +7383,7 @@ def cmd_unpack_v7(args, data):
             # by that version of libzstd (the zstandard module's, here).
             _, version, level, checksum, size_flag, n, way = way.split(" ", 6)
             if not re.fullmatch(r"-?[0-9]+", level) or checksum not in ("0", "1") or size_flag not in ("0", "1") or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a zstd recipe Sieve does not write")
             remakes[i] = ("zst", version, int(level), checksum == "1", size_flag == "1", size)
             size = int(n)
@@ -7393,7 +7393,7 @@ def cmd_unpack_v7(args, data):
             _, level, mem, header, n, way = way.split(" ", 5)
             if not re.fullmatch(r"[1-9]", level) or not re.fullmatch(r"[1-9]", mem) or \
                     not re.fullmatch(r"(?:[0-9a-f]{2}){10,}", header) or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a gzip recipe Sieve does not write")
             remakes[i] = ("gz", int(level), int(mem), bytes.fromhex(header), size)
             size = int(n)
@@ -7401,7 +7401,7 @@ def cmd_unpack_v7(args, data):
             # "xz <preset> <check> <inner size> <way>": what it holds first, by that way; remade below.
             _, preset, check, n, way = way.split(" ", 4)
             if not re.fullmatch(r"[0-9]e?", preset) or check not in ("none", "crc32", "crc64", "sha256") or \
-                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn"):
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: an xz recipe Sieve does not write")
             remakes[i] = ("xz", int(preset[0]) | (lzma.PRESET_EXTREME if preset.endswith("e") else 0),
                           {"none": lzma.CHECK_NONE, "crc32": lzma.CHECK_CRC32, "crc64": lzma.CHECK_CRC64, "sha256": lzma.CHECK_SHA256}[check],
@@ -7523,6 +7523,65 @@ def cmd_unpack_v7(args, data):
                 got[i], ra = mix2_file(ropes[ra:ra + n], way[5:], size, lists), ra + n
             else:
                 got[i], ra = (mix2_file(ropes[ra:ra + n], way[5:], size) if way.startswith("mix2 ") else mix_file(ropes[ra:ra + n], way[4:], size)), ra + n
+        elif v33 and way == "runs":
+            # v33 draft: a repeating byte or pattern, its code next in the rope stream (its length
+            # first): each segment its count (a varint, 1 or more), its pattern's length (a varint, 1
+            # or more) and its pattern's bytes, repeated count times; the segments making the size.
+            n, shift = 0, 0
+            while True:
+                b = ropes[ra]
+                ra += 1
+                n |= (b & 0x7F) << shift
+                shift += 7
+                if not b & 0x80:
+                    break
+            code, ra = ropes[ra:ra + n], ra + n
+            if len(code) != n:
+                sys.exit(f"{path}: the rope stream ends before its segments")
+
+            def varint(at):
+                v, shift = 0, 0
+                while True:
+                    if at >= len(code):
+                        sys.exit(f"{path}: its segments end part way")
+                    b = code[at]
+                    at += 1
+                    v |= (b & 0x7F) << shift
+                    shift += 7
+                    if not b & 0x80:
+                        return v, at
+            out, at = bytearray(), 0
+            while at < len(code):
+                count, at = varint(at)
+                length, at = varint(at)
+                if count and length == 0:
+                    # a ramp: its values' width and order (0 to 3 for 1, 2, 4 or 8 bytes, plus 4 for
+                    # big-endian), its first value and its step (not 0), each of that width,
+                    # little-endian; count values, each the one before plus the step, wrapping
+                    if at >= len(code) or code[at] > 7 or code[at] == 4:
+                        sys.exit(f"{path}: its segments are not written as Sieve writes them")
+                    w, big = 1 << (code[at] & 3), bool(code[at] & 4)
+                    at += 1
+                    if at + 2 * w > len(code):
+                        sys.exit(f"{path}: its segments end part way")
+                    value = int.from_bytes(code[at:at + w], "little")
+                    step = int.from_bytes(code[at + w:at + 2 * w], "little")
+                    at += 2 * w
+                    if step == 0 or len(out) + count * w > size:
+                        sys.exit(f"{path}: its segments do not make its size")
+                    mask = (1 << (8 * w)) - 1
+                    order = "big" if big else "little"
+                    for _ in range(count):
+                        out += value.to_bytes(w, order)
+                        value = (value + step) & mask
+                    continue
+                if count == 0 or length == 0 or at + length > len(code) or len(out) + count * length > size:
+                    sys.exit(f"{path}: its segments do not make its size")
+                out += code[at:at + length] * count
+                at += length
+            if len(out) != size:
+                sys.exit(f"{path}: its segments do not make its size")
+            got[i] = bytes(out)
         elif way.startswith("item "):
             k = int(way.split(" ")[1])
             if coded[k]:

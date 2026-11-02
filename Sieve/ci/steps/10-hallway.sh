@@ -66,17 +66,25 @@ test -s installer.bmp
 if build/sieve-install fx.sieve --to fx_installed --yes; then exit 1; fi
 # Files already there, asked about one at a time (--answers stands in for the person): Zebra.txt
 # replaced (y), a.txt left as it was (n), the rest written; then Replace writes over them all.
-rm -rf fx_ask && mkdir fx_ask && echo OLD > fx_ask/a.txt && echo OLD > fx_ask/Zebra.txt
+rm -rf fx_ask
+mkdir fx_ask
+echo OLD > fx_ask/a.txt
+echo OLD > fx_ask/Zebra.txt
 build/sieve-install fx.sieve --to fx_ask --answers yn > fx_ask.txt
 grep -q "a.txt was already there and is left as it was" fx_ask.txt
 test "$(cat fx_ask/a.txt)" = OLD
-cmp fx_ask/Zebra.txt tests/manifest_fixture/Zebra.txt && cmp "fx_ask/sub dir/b.bin" "tests/manifest_fixture/sub dir/b.bin"
-build/sieve-install fx.sieve --to fx_ask --yes --replace && diff -r tests/manifest_fixture fx_ask
+cmp fx_ask/Zebra.txt tests/manifest_fixture/Zebra.txt
+cmp "fx_ask/sub dir/b.bin" "tests/manifest_fixture/sub dir/b.bin"
+build/sieve-install fx.sieve --to fx_ask --yes --replace
+diff -r tests/manifest_fixture fx_ask
 head -c 100 fx.sieve > broken.sieve
 if build/sieve-install broken.sieve --to fx_broken --yes; then exit 1; fi
 test ! -e fx_broken
-rm -rf fx4 fx4_installed && cp -r tests/manifest_fixture fx4 && cp build/sieve fx4/program
-seq 1 20000 > fx4/all.txt && awk 'NR % 3 == 0' fx4/all.txt > fx4/third.txt
+rm -rf fx4 fx4_installed
+cp -r tests/manifest_fixture fx4
+cp build/sieve fx4/program
+seq 1 20000 > fx4/all.txt
+awk 'NR % 3 == 0' fx4/all.txt > fx4/third.txt
 build/sieve locate fx4 --installer fx4.sieve --v4 2>&1 | grep -c "1 derived from another's lines" > /dev/null
 build/sieve-install fx4.sieve --to fx4_installed --yes
 diff -r fx4 fx4_installed
@@ -92,12 +100,17 @@ cmp tests/manifest_fixture.7z fx7raw/manifest_fixture.7z
 # sieve-view, the picture viewer (2 November 2026): a PNG read (its header, then its pixels); made
 # into NAME.simage by the sieve beside it (Prioritise Decoding Speed) and read back from that; a
 # .sieve holding texts refused by its listing, before anything is decoded; a PNG whose header says
-# 100,000 by 100,000 pixels refused by its header; the window drawn with the .simage open.
-cp docs/images/hallway-audio.png view_pic.png && rm -f view_pic.simage
+# 100,000 by 100,000 pixels refused by its header; with the memory it may take held to 4 MB
+# (--budget), the Vitruvian JPEG shown at an eighth from its blocks' averages and a PNG refused;
+# the window drawn with the .simage open.
+cp docs/images/hallway-audio.png view_pic.png
+rm -f view_pic.simage
 build/sieve-view --check view_pic.png | tr -d '\r' | grep -q "^view_pic.png: 1280 by 720 pixels"
-build/sieve-view --make-simage view_pic.png > /dev/null && test -s view_pic.simage
+build/sieve-view --make-simage view_pic.png > /dev/null
+test -s view_pic.simage
 build/sieve-view --check view_pic.simage | tr -d '\r' > view.txt
-grep -q "^listing: 1 picture" view.txt && grep -q "^view_pic.png: 1280 by 720 pixels" view.txt
+grep -q "^listing: 1 picture" view.txt
+grep -q "^view_pic.png: 1280 by 720 pixels" view.txt
 if build/sieve-view --check fx.sieve > view.txt; then exit 1; fi
 grep -q "^refused: .*not a picture (by its recipe and its name)" view.txt
 python -c "
@@ -106,20 +119,28 @@ def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zl
 open('view_huge.png', 'wb').write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 100000, 100000, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(1000))) + chunk(b'IEND', b''))
 "
 if build/sieve-view --check view_huge.png > view.txt; then exit 1; fi
-grep -q "^refused: view_huge.png: not a picture this viewer reads, or one too large to" view.txt
-build/sieve-view view_pic.simage --screenshot view.bmp && test -s view.bmp
+grep -q "^refused: view_huge.png: 100000 by 100000 pixels: its pixels need about" view.txt
+build/sieve-view --check data/anchors/public-domain/Vitruvian.jpg --budget 4000000 | tr -d '\r' | grep -q "^Vitruvian.jpg: 949 by 1300 pixels, .*, shown at an eighth (119 by 163)"
+if build/sieve-view --check view_pic.png --budget 4000000 > view.txt; then exit 1; fi
+grep -q "(only a JPEG is shown reduced)" view.txt
+build/sieve-view view_pic.simage --screenshot view.bmp
+test -s view.bmp
 # Archives of other kinds, extracted as an archiver extracts them (the right-click menu's Extract on
 # a .zip, .rar, .tar.gz ...), one layer at a time; each made from the repository's own files.
 python ci/extract_check.py build/sieve-install extract_check
 # A release's layout: sieve and sieve-install in tools/ below the data folders. sieve there
 # finds the dictionaries and models in the folder above, and still makes installer
 # programs from the sieve-install beside it.
-rm -rf layout && mkdir -p layout/tools
-cp build/sieve build/sieve-install layout/tools/ && cp -r build/dictionaries build/models layout/
+rm -rf layout
+mkdir -p layout/tools
+cp build/sieve build/sieve-install layout/tools/
+cp -r build/dictionaries build/models layout/
 (cd layout/tools && ./sieve dicts | grep -q "layout/dictionaries/dictionaries.tsv")
 (cd layout/tools && ./sieve models | grep -q "layout/models/models.tsv")
 layout/tools/sieve locate tests/manifest_fixture --program layout-installer --v4 > /dev/null
-rm -rf fx_layout && ./layout-installer --to fx_layout --yes && diff -r tests/manifest_fixture fx_layout
+rm -rf fx_layout
+./layout-installer --to fx_layout --yes
+diff -r tests/manifest_fixture fx_layout
 # An installer program: sieve-install with the installer attached, run on its own, and
 # read by sieve install; exactly the program, the installer and a 24-byte trailer; and
 # made from a program that already has one attached, the old one replaced, not added to.
@@ -134,12 +155,16 @@ rm -rf fx_gui
 $H --no-menu --install fx.sieve --install-to fx_gui --screenshot locinstall.png | q "saved locinstall.png"
 diff -r tests/manifest_fixture fx_gui
 # Keep a log: an install writes one too, in logs/ beside the settings, with its times.
-rm -rf fx_gui_log ilog && mkdir ilog
+rm -rf fx_gui_log ilog
+mkdir ilog
 $H --no-menu --settings ilog/s.ini --locate-log --install fx.sieve --install-to fx_gui_log --screenshot ilog.png | q "saved ilog.png"
 grep -q "decoded in .*, checked and written in" ilog/logs/locate-*-fx.sieve.txt
 grep -q "^took .* s in all" ilog/logs/locate-*-fx.sieve.txt
 test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
-rm -rf again && mkdir again && cp build/sieve again/ && cp fx-installer again/sieve-install
+rm -rf again
+mkdir again
+cp build/sieve again/
+cp fx-installer again/sieve-install
 again/sieve locate tests/manifest_fixture --program fx-again --v4 > /dev/null
 cmp fx-installer fx-again
 # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
@@ -173,7 +198,8 @@ q "^figure 2 by figures-2x32: fff29e4e04fbf01b3e05e9fff" chat.txt
 q "^you: Hello there" chat.txt
 # Cards show what a file is: a picture's thumbnail (the vault looking at it too), a text's first
 # lines (one cut mid-character among them), anything else its first bytes.
-head -c 30 data/anchors/public-domain/universalbibliothek.txt > cut.txt && printf '\303' >> cut.txt
+head -c 30 data/anchors/public-domain/universalbibliothek.txt > cut.txt
+printf '\303' >> cut.txt
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach "data/anchors/public-domain/Vitruvian.jpg;cut.txt;data/anchors/public-domain/universalbibliothek.txt;data/anchors/public-domain/hurrian-hymn-6.mid" --training-dir data/training --screenshot chat-cards.png | tr -d '\r' > cards.txt
 q "^file: Vitruvian.jpg (207,500 bytes)" cards.txt
 q "^file: cut.txt (31 bytes)" cards.txt
@@ -236,7 +262,9 @@ $H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
 # same; a run recorded there from a folder, its second file moved first and read in order, is
 # trained and its result written; and GO TO IT stands on the AI line with the model in hand.
 $H --harness --training-dir data/training --script "Return" --screenshot harness.png | tr -d '\r' | q "^harness: REPRODUCED EXACTLY"
-mkdir -p hruns corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+mkdir -p hruns corp
+cp tests/training_corpus.txt corp/a.txt
+head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
 $H --harness --training-dir hruns --script "N,=corp,Return,Down,Shift+Up,M,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
 [ -f hruns/corp/result.txt ]
 q "^reading = in-order" hruns/corp/training.ini
@@ -359,7 +387,8 @@ diff -r degrees deg_oracle7h
 # A model trained by Sieve alone (universalbibliothek): carried as its 4,096 bytes of digits on the
 # AI line, not its 34,072-byte file, smaller than the file packed (v4); the oracle makes the
 # model's file again from the place itself, as sieve install does.
-rm -rf ub_run ub_model ub_one ub_inst ub_oracle && mkdir ub_one
+rm -rf ub_run ub_model ub_one ub_inst ub_oracle
+mkdir ub_one
 build/sieve install data/training/universalbibliothek.sieve --to ub_run > /dev/null
 grep '^final ' ub_run/result.txt | cut -d' ' -f2 > ub_final.hex
 build/sieve ai --address-file ub_final.hex --out ub_model > /dev/null
@@ -386,7 +415,9 @@ cmp ub_one/model.safetensors ub_inst7/model.safetensors
 python reference/sieve_ref.py unpack ub-v7.manifest --to ub_oracle7 > /dev/null
 cmp ub_one/model.safetensors ub_oracle7/model.safetensors
 # One file on its own: no root line (it is the file's name), 4,257 bytes for this name.
-rm -rf ub_named ub_named_inst && mkdir ub_named && cp ub_one/model.safetensors ub_named/sieve-ai-16432c2a3953.safetensors
+rm -rf ub_named ub_named_inst
+mkdir ub_named
+cp ub_one/model.safetensors ub_named/sieve-ai-16432c2a3953.safetensors
 build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-file.sieve --items --v15 > /dev/null
 [ "$(wc -c < ub-file.sieve)" -eq 4257 ]
 build/sieve install ub-file.sieve --to ub_named_inst > /dev/null
@@ -399,7 +430,8 @@ build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --installer ub-fil
 # each, its entry too).
 build/sieve locate ub_named/sieve-ai-16432c2a3953.safetensors --v31 --installer ub-file20.sieve --items > /dev/null
 [ "$(wc -c < ub-file20.sieve)" -eq 4182 ]
-rm -rf ub_named20 && build/sieve install ub-file20.sieve --to ub_named20 > /dev/null
+rm -rf ub_named20
+build/sieve install ub-file20.sieve --to ub_named20 > /dev/null
 cmp ub_one/model.safetensors ub_named20/sieve-ai-16432c2a3953.safetensors
 build/sieve install ub-file16.sieve --to ub_named16 > /dev/null
 cmp ub_one/model.safetensors ub_named16/sieve-ai-16432c2a3953.safetensors
@@ -414,7 +446,8 @@ python reference/sieve_ref.py unpack ub-v16.manifest --to ub_oracle16 > /dev/nul
 cmp ub_one/model.safetensors ub_oracle16/model.safetensors
 # Pages of 64 characters: the line's options trimmed to what its id does not give (the
 # alphabet is the default and goes; the length is not and stays), read back by both.
-rm -rf pg64 pg64_inst pg64_oracle && mkdir pg64
+rm -rf pg64 pg64_inst pg64_oracle
+mkdir pg64
 python -c "import random; random.seed(3); [open(f'pg64/p{i}.txt','w').write(''.join(random.choice('abcdefghijklmnopqrstuvwxyz ') for _ in range(64))) for i in range(5)]"
 build/sieve locate pg64 --v31 --installer pg64.sieve --items --page-length 64 --manifest pg64.manifest | tr -d '\r' | q "^items     5 file(s) carried as items of Sieve's lines (320 bytes, as 195 bytes of places"
 [ "$(wc -c < pg64.sieve)" -eq 339 ] # LZMA2's settings chosen for its listing (v16 345; v7, its listing as text: 422)
@@ -429,7 +462,9 @@ python reference/sieve_ref.py unpack pg64.manifest --to pg64_oracle > /dev/null
 diff -r pg64 pg64_oracle
 # LZMA2's settings chosen per stream (v17's packing; the reader takes them from the stream):
 # the oracle's own source as one file is smaller than v16 made it, and both read it back.
-rm -rf tune tune_inst tune_oracle && mkdir tune && cp reference/sieve_ref.py tune/
+rm -rf tune tune_inst tune_oracle
+mkdir tune
+cp reference/sieve_ref.py tune/
 build/sieve locate tune --installer tune.sieve --items --manifest tune.manifest > /dev/null
 build/sieve locate tune --installer tune16.sieve --items --v16 > /dev/null
 [ "$(wc -c < tune.sieve)" -lt "$(wc -c < tune16.sieve)" ]
@@ -440,7 +475,8 @@ diff -r tune tune_oracle
 # The tightened rope (rope-wave-v1, IDEAS 19.87): a smooth picture in lines and a noisy
 # sound, made here from a fixed generator. The search finds each one's wave, the code is
 # smaller than LZMA2's, and the oracle's own decoding gives the file back.
-rm -rf rope_mix rope_inst rope_oracle rope_si && mkdir rope_mix
+rm -rf rope_mix rope_inst rope_oracle rope_si
+mkdir rope_mix
 python -c "
 import math
 s = 12345
@@ -490,7 +526,8 @@ q "^  shared: rope, [1-3] file(s): shape 96 bits$" ropeweigh.txt
 # rope-wave-v4: the search groups the columns (the digits' share one table): smaller again,
 # sieve-manifest-v12 (no items, so no items line), installed by all three readers; --v11 makes
 # v11 again, a line longer.
-rm -rf digits digits_inst digits_oracle digits_si digits_inst9 digits_oracle9 digits_si9 && mkdir digits
+rm -rf digits digits_inst digits_oracle digits_si digits_inst9 digits_oracle9 digits_si9
+mkdir digits
 python -c "
 s = 271828
 def r():
@@ -520,7 +557,8 @@ build/sieve-install digits.sieve --to digits_si --yes > /dev/null
 diff -r digits digits_si
 build/sieve locate digits --installer digits11.sieve --items --v11 --manifest digits11.manifest | tr -d '\r' | q "; sieve-manifest-v11)"
 [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits11.sieve)" ]
-rm -rf digits_oracle11 && python reference/sieve_ref.py unpack digits11.manifest --to digits_oracle11 > /dev/null
+rm -rf digits_oracle11
+python reference/sieve_ref.py unpack digits11.manifest --to digits_oracle11 > /dev/null
 diff -r digits digits_oracle11
 build/sieve locate digits --installer digits9.sieve --items --v9 --manifest digits9.manifest | tr -d '\r' | q "^rope      1 file(s) pulled tight by rope-wave-v1 and v2 (222000 bytes, carried in [0-9]*; sieve-manifest-v9)"
 [ "$(wc -c < digits.sieve)" -lt "$(wc -c < digits9.sieve)" ]
@@ -536,7 +574,8 @@ diff -r digits digits_si9
 # digits: 41,525 bytes) and below LZMA2; sieve-manifest-v10 (--v10); all three readers give it
 # back. rope-wave-v4: the columns grouped, smaller again; rope-wave-v5: the byte above too,
 # smaller again; sieve-manifest-v15, all three readers.
-rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 lines_bad && mkdir lines
+rm -rf lines lines_inst lines_oracle lines_si lines_inst10 lines_oracle10 lines_si10 lines_bad
+mkdir lines
 python -c "
 s = 314159
 def r():
@@ -595,7 +634,8 @@ diff -r lines lines_si10
 # sieve-manifest-v12: a file LZMA2 cannot make smaller (bytes from a fixed generator, as a
 # PNG's or a JPEG's are, near enough) carried as it is, its stream "stream lzma2 B B 0"; the
 # instructions are the file and 153 bytes (v11: 179, with LZMA2's framing and an items line).
-rm -rf noisy noisy_inst noisy_oracle noisy_si && mkdir noisy
+rm -rf noisy noisy_inst noisy_oracle noisy_si
+mkdir noisy
 python -c "
 s = 161803
 out = bytearray()
@@ -628,7 +668,8 @@ test ! -e noisy_bad
 # (the rope's), as a phone's photo has its metadata before its picture. Smaller than v12 (one
 # way for the whole file) and than xz; the cut found within a block of where it is; all
 # three readers give it back, and the same instructions called v12 are refused.
-rm -rf mixed mixed_inst mixed_oracle mixed_si mixed_bad && mkdir mixed
+rm -rf mixed mixed_inst mixed_oracle mixed_si mixed_bad
+mkdir mixed
 python -c "
 import math
 s = 2718281
@@ -643,7 +684,8 @@ open('mixed/photo-like.bin', 'wb').write(text + body)
 build/sieve locate mixed --installer mixed.sieve --items --manifest mixed.manifest | tr -d '\r' > mixed.txt
 q "^pieces    1 file(s) cut into pieces: [0-9]* bytes packed by LZMA2, [0-9]* pulled tight by the rope (sieve-manifest-v13)$" mixed.txt
 z=$(sed -n 's/^pieces .* cut into pieces: \([0-9]*\) bytes packed.*/\1/p' mixed.txt)
-[ "$z" -ge 15904 ] && [ "$z" -le 24096 ] # the text's 20,000, within a block either way
+[ "$z" -ge 15904 ]
+[ "$z" -le 24096 ]  # the text's 20,000, within a block either way
 build/sieve locate mixed --installer mixed12.sieve --items --v12 > /dev/null
 [ "$(wc -c < mixed.sieve)" -lt "$(wc -c < mixed12.sieve)" ]
 [ "$(wc -c < mixed.sieve)" -lt "$(xz -9e -c mixed/photo-like.bin | wc -c)" ]
@@ -669,7 +711,8 @@ test ! -e mixed_bad
 # of the pi-like table above, 22,222 bytes in 10,513) is carried as its contents, in a folder
 # named after it, installing saying so; each only where clearly smaller. Sieve and the oracle
 # give the same, and so does sieve-install (the full installer); called v13, refused.
-rm -rf arch arch_inst arch_oracle arch_si arch_bad arch_bad16 && mkdir -p arch/x
+rm -rf arch arch_inst arch_oracle arch_si arch_bad arch_bad16
+mkdir -p arch/x
 cp tests/optimise_fixture.7z arch/digits.7z
 python -c "
 s = 314159
@@ -738,7 +781,8 @@ test ! -e arch_bad16
 # exactly; a zstd file of two frames is carried as its contents. Sieve, the oracle and
 # sieve-install give the same; called v18, refused.
 pip_add "zstandard==0.25.0"
-rm -rf arch19 arch19_inst arch19_oracle arch19_si arch19_bad && mkdir -p arch19
+rm -rf arch19 arch19_inst arch19_oracle arch19_si arch19_bad
+mkdir -p arch19
 python -c "
 import bz2, zstandard
 t = open('arch-y.txt', 'rb').read()
@@ -821,7 +865,8 @@ python -c "b=open('vt.manifest','rb').read(); n=int.from_bytes(b,'big')+(256**le
 rm -rf vti vti2
 if build/sieve install vt.sieve --to vti > /dev/null 2>&1; then exit 1; fi
 if build/sieve-install vt.sieve --to vti2 --yes; then exit 1; fi
-test ! -e vti && test ! -e vti2
+test ! -e vti
+test ! -e vti2
 printf 'nonsense\n' > data/vault/broken.vault
 printf 'harmless' > vok.txt
 build/sieve vault | q "FAILED CLOSED"
@@ -845,7 +890,9 @@ build/sieve vault --chunks listed.bin > data/vault/listed.vault
 build/sieve vault --parse data/vault/listed.vault | q "1 chunks), well formed"
 if build/sieve vault listed-piece.bin > /dev/null; then exit 1; fi
 rm data/vault/listed.vault
-rm -rf ordinary && mkdir ordinary && cp listed-piece.bin ordinary/
+rm -rf ordinary
+mkdir ordinary
+cp listed-piece.bin ordinary/
 test "$(build/sieve vault --chunks listed.bin --common ordinary | tail -2 | head -1 | tr ',' '\n' | wc -l)" -lt "$(build/sieve vault --chunks listed.bin | tail -2 | head -1 | tr ',' '\n' | wc -l)"
 # Filter plugins that do not load are listed with the reason, never skipped: a malformed
 # file, and two different files under one name (neither is used: versions are never edited).
@@ -990,7 +1037,9 @@ build/sieve info --line image | q "fills whole tiles exactly"
 $H --menu --screenshot menu.png | q "saved menu.png"
 $H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | q "saved menu2.png"
 $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | q "saved menu3.png"
-test -s menu.png && test -s menu2.png && test -s menu3.png
+test -s menu.png
+test -s menu2.png
+test -s menu3.png
 # Books: the fifth line. Its books are a cover, a title and pages; the committed example
 # book opens on its shelf when the lines have its shape, and page N turns.
 $H --line books --walk "0,0" --screenshot books.png | sed -n 1p | q "BOOKS line, positional, filters: none"
@@ -1063,7 +1112,8 @@ echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps
 # Door Portals: Real Graphics brings them, and they also stand alone with the wireframe.
 $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "door portals on"
 $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
-test -s portal.png && test -s noportal.png
+test -s portal.png
+test -s noportal.png
 $H --main-menu --press "Down,Down,Down,Down,Down,Return,Return,Return" --screenshot main-res.png | q "saved"
 # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
 # turns the glow back off, the two being mutually exclusive. From a settings file that
@@ -1079,10 +1129,13 @@ rm -f vr.ini
 $H --main-menu --settings vr.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
 grep -q "^view_rooms = 8" vr.ini
 grep -q "^picture_rooms = 3" vr.ini
-mkdir -p lt/data/lang && cp data/lang/en.txt lt/data/lang/ && printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
+mkdir -p lt/data/lang
+cp data/lang/en.txt lt/data/lang/
+printf 'language.name = Test\nitem.start = START TEST\n' > lt/data/lang/tt.txt
 (cd lt && ../$H --main-menu --language tt --screenshot ../main-tt.png) | q "main menu: language tt, font sieve8x8"
 # The language's font: sieve8x8 draws accented and Greek letters; a missing font is reported.
-mkdir -p lt/data/fonts && cp data/fonts/sieve8x8.hex lt/data/fonts/
+mkdir -p lt/data/fonts
+cp data/fonts/sieve8x8.hex lt/data/fonts/
 printf 'font = sieve8x8\nlanguage.name = Fran\xc3\xa7ais\nitem.start = D\xc3\xa9marrer Sieve\n' > lt/data/lang/fr.txt
 out=$(cd lt && ../$H --main-menu --language fr --screenshot ../main-fr.png 2>&1)
 echo "$out" | q "main menu: language fr, font sieve8x8"
@@ -1192,4 +1245,7 @@ build/sieve check --length 26 --filters pat.ini --model none "abcdefghijklmnopqr
 build/sieve check --length 26 --filters pat.ini --model none "it was the best of times it" | q "stack: passes"
 printf "[binary]\nmode = compact\nfilters = not-an-item-v1\n[binary.not-an-item-v1]\nitems = all\n" > nia.ini
 $H --no-menu --line binary --filters nia.ini --walk "0,0" --screenshot nia.png | q "^BINARY line, positional, filters: 1 hide (compact: not-an-item-v1 judges models file by file"
-test -s compact.png && test -s mixed.png && test -s mark.png && test -s overlay.png
+test -s compact.png
+test -s mixed.png
+test -s mark.png
+test -s overlay.png

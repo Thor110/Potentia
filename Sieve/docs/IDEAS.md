@@ -5933,3 +5933,53 @@ the day's measurements and review, roughly in the order they would pay:
     above before anything is decoded, and its Sieve button making NAME.simage.
   - *A bar for mixing over 16 MiB:* not built: it waits on the power benchmark's figures, which say
     what a second of installing costs against a byte saved.
+
+**19.113 From Edward's enwik9 bench and the enwik8 power bench (2 November 2026).**
+- *enwik9, four ways (no search limit, 12 logical processors):* size/try mixed it, 185,105,231 bytes
+  (12.59% under 7z's 211,776,158), installing in 1,007 s; size/no, decode/try and decode/no all came
+  to LZMA2's 211,195,696 (0.27% under 7z), installing in about 10.5 s. Each took 4,753 to 5,269 s to
+  make. Of decode/no's 4,759 s, the rope's search took 3,123 (66%) and LZMA2's tuned passes about
+  1,600, for a file the rope did not carry: the first thing for the weighing order's review (§19.114).
+- *enwik8, the power bench (assumed settings: 0.006 to 0.06 kWh a GB moved, 35 W the user, 65 W the
+  maker):* Sieve 24,768,406 bytes (63,181 under 7z's 24,831,587) for 786 processor seconds of making
+  (7z: 65) and 1.625 of installing (7z: 1.109; both write what they install, Sieve's also checks its
+  SHA-256 and reads its instructions' head). On those settings a fetch saves the networks 3.79e-4 to 3.79e-3 Wh and moves 5.01e-3
+  Wh onto its user, so it never pays for itself. Without Try every way enwik8 (over 16 MiB) is not
+  mixed; mixed, it is 21,547,893 (Proof/STATISTICS.md), 13% under 7z, but installs as slowly as
+  mixing decodes: the power page needs both rows. Written up with what follows from it in
+  docs/POWER-USAGE.md (Edward: "a POWER-USAGE.md specifically for these results and future results").
+- *Light versions of every bench (Edward, the same day; an idea until more results agree):* each
+  bench script (bench_files, the two Compressed formats ones, bench_power, bench_all) with a light
+  form that skips size/no and decode/try, which came to the same bytes as size/try and decode/no on
+  153 JPEGs and on enwik9. Built so far: bench_files.py --ways and tools/bench_light.bat.
+- *Filter designs cross-referenced for compression (Edward, the same day; after the review):* the
+  lines' filters set aside what is not content (FILTER-PLUGINS: not-a-pattern-v1's repeats and ramps,
+  max-run, the statistics filters), which is what a compressor can name in a few bytes. Each filter
+  read for whether what it rules out is a shortcut the packer could take; not-a-pattern-v1's repeats
+  and ramps are the first so taken (`runs`, v33 draft).
+- *Operators as mortar (Edward, the same day: "Block A + Operator + Block B ... Every brick needs
+  mortar"; measured, not built).* A code file's most frequent operator taken out, its blocks joined
+  again on installing. The operator's places must still be carried, by a separator or each block's
+  length, and the operator is already the cheapest marker of them: compressors predict it well.
+  pack.cpp's 386 `&&` (bytes kept / a one-byte separator / blocks with their lengths): raw
+  284,652 / 284,266 / 284,487; xz 61,316 / 61,305 / 61,703; mixing 50,339 / 50,338 / 50,927. Every
+  operator used 8 times or more as one byte each: 0.1% to 0.26% smaller under xz and mixing on
+  seven source files, nothing on the oracle. A place is free only where a block's boundary is fixed
+  (the pieces' 4 KiB), at most one operator a boundary, and moving boundaries onto operators costs
+  their lengths. What pays instead is mortar with no places to keep: a repeating byte, pattern or
+  ramp, whose count is all there is (`runs`).
+- *Code cut at its operators instead of fixed blocks, each block packed (Edward, the same day: "it
+  might not be worth it but it is definitely worth measuring and noting"; measured, not built).*
+  Three source files cut at every operator (`->`, `::`, `&&`, `==`, `<<` and 16 more; 3,829 in
+  pack.cpp), bytes:
+
+  | File | Whole (xz / mixing) | Each block packed alone (xz) | Blocks gathered by the operator after them, and the operators' order (xz / mixing) |
+  | :--- | :--- | ---: | :--- |
+  | pack.cpp | 61,316 / 50,339 | 219,189 | 79,489 / 68,087 |
+  | locate.cpp | 29,896 / 24,569 | 122,105 | 40,603 / 34,604 |
+  | test_core.cpp | 67,884 / 56,853 | 275,629 | 86,960 / 75,288 |
+
+  Code's context runs across its operators (the identifiers before an `==` say what comes after
+  it, a line's start says what ends it), so cutting there takes from each block what predicts it:
+  alone, 3.6 to 4.1 times the whole; gathered by kind (as XML packers gather tags apart from text),
+  28% to 41% larger. The whole file in order is the cheapest of the three by far.

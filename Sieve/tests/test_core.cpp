@@ -38,6 +38,7 @@
 #include "sieve/guided.hpp"
 #include "sieve/model.hpp"
 #include "sieve/image.hpp"
+#include "sieve/jpeg_dc.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/space.hpp"
@@ -3333,6 +3334,29 @@ void test_json()
         CHECK(throws([&] { (void)parse(badtext); }));
 }
 
+// A JPEG at an eighth of its size from its blocks' averages (sieve-view's reduced view): the public
+// domain Vitruvian (baseline, 949 by 1300) read by its frame alone and then whole, its eighth pinned;
+// cut short or not a JPEG, nothing (and no crash).
+void test_jpeg_eighth(const std::string& dir)
+{
+    std::ifstream f(dir + "../data/anchors/public-domain/Vitruvian.jpg", std::ios::binary);
+    const std::vector<uint8_t> jpeg((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK(jpeg.size() > 1000);
+    const auto size = jpeg_size(jpeg);
+    CHECK(size && size->first == 949 && size->second == 1300);
+    const auto e = jpeg_eighth(jpeg);
+    CHECK(e && e->eighth_w == 119 && e->eighth_h == 163 && e->rgba.size() == size_t(119) * 163 * 4);
+    if (e) CHECK(Sha256::hex(Sha256::hash(std::string(e->rgba.begin(), e->rgba.end()))) == "7f9dad61cffe05f1c4ff1215371598df30b3f5ab79f852b03c65d880574d98f3");
+    bool quiet = true;
+    for (const size_t cut : {size_t(2), size_t(100), jpeg.size() / 3, jpeg.size() - 10})
+    {
+        const std::vector<uint8_t> part(jpeg.begin(), jpeg.begin() + std::ptrdiff_t(cut));
+        (void)jpeg_eighth(part); // (whatever it gives, it gives without a crash)
+        quiet = quiet && !jpeg_eighth(std::vector<uint8_t>(10, 0xFF));
+    }
+    CHECK(quiet && !jpeg_size(std::vector<uint8_t>{0x89, 'P', 'N', 'G'}));
+}
+
 void test_safetensors()
 {
     namespace st = sieve::safetensors;
@@ -6534,6 +6558,7 @@ void run_all(int argc, char** argv)
         test_world_sieve();
         test_json();
         test_safetensors();
+        test_jpeg_eighth(dir);
         test_weights();
         test_llm(dir);
         test_ai_vectors(dir);

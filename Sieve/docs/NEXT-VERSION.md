@@ -24,6 +24,14 @@ ways that win somewhere; the rope's search giving keeping its own turn, or real-
   weighed again against the x86 stream they would share. Sixteen programs of 98 KB to 11.8 MB came
   out 3.0% to 15.1% under LZMA2's best (`results/programs-mixed-2026-11-02.md`). Sieve, sieve-install
   and the oracle (its own filter, checked against the SDK's) read it.
+- **Built (2 November 2026, the third piece):** a repeating byte or pattern (`runs`: each segment's
+  count, pattern length and pattern; SPECIFICATIONS, v33), after Edward's "squashed down to length x
+  00 using a repeating character counter" and "the check likely needs to come before anything else".
+  The packer looks for them first at any version, before items, masks and deltas, and makes no
+  search for such a file (300 MB of zeros: about 30 s, where the rope's search took over 10
+  minutes); with the draft the segments are weighed too: two runs of 4 MiB 81 bytes against v32's
+  1,351, DEADBEEF repeated 80 against 2,573. Ramps too (values of 1 to 8 bytes stepping evenly,
+  as not-a-pattern-v1 sets aside): a 16-bit counter over 8 MiB 83 bytes against 44,470.
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

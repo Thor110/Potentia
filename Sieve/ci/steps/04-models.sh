@@ -102,7 +102,9 @@ $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev
 # matter: its windows' gradients are summed). A run in the first runs' format still trains
 # to its result, by the tool and the oracle; and the run shipped with Sieve trains again to
 # its own result, as it did where it was made.
-mkdir -p corp && cp tests/training_corpus.txt corp/a.txt && head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
+mkdir -p corp
+cp tests/training_corpus.txt corp/a.txt
+head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
 printf 'b.txt\n' > file-order.txt
 for rd in in-order shuffled-within-files shuffled; do
   $exe ai-train --record corp --out run-$rd --reading $rd --file-order file-order.txt --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --quiet > /dev/null
@@ -111,7 +113,8 @@ done
 q "^file = corpus/b.txt" run-in-order/training.ini
 # A corpus is a folder: a single file is refused.
 if $exe ai-train --record tests/training_corpus.txt --out not-a-run > /dev/null 2>&1; then exit 1; fi
-mkdir -p tiny-corp && cp tests/training_corpus.txt tiny-corp/
+mkdir -p tiny-corp
+cp tests/training_corpus.txt tiny-corp/
 $exe ai-train --record tiny-corp --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
 python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
 $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
@@ -366,5 +369,8 @@ if grep -Eq "binary[_-]edge" be.ini; then exit 1; fi
 if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
 test -s walk.png
 test -s edge.png
-test -s models.png && test -s cube.png && test -s crates.png && test -s map6.png
+test -s models.png
+test -s cube.png
+test -s crates.png
+test -s map6.png
 if $exe mesh --coords 12 > /dev/null 2>&1; then exit 1; fi

@@ -629,13 +629,17 @@ holding several shows each in turn, the wheel zooms about the pointer, 0 fits an
 **Sieve** makes the picture shown into `NAME.simage` beside it (by the `sieve` beside the viewer,
 `sieve locate --installer --prioritise-decoding`, so it opens about as quickly as the picture did);
 **Export** writes the picture as a PNG; **Save file** writes a `.sieve`'s picture file as it was
-carried. Since a `.sieve` can hold anything under any name, its listing is read before anything is
-decoded and the whole refused where a file is not a picture by its recipe (`jbr`, `stb`, `skr`,
-`pngr`) or its name, or where there are more than 4,096 files, a file over 256 MiB or all over
-1 GiB; installing then stops at each file's declared size and checks its SHA-256 (in a folder of
-its own, removed after); and each picture's header is read, and one over 32,768 pixels a side or
-268 million in all refused, before its pixels are made. `sieve-view --help` gives the keys and the
-options for testing (`--check`, `--make-simage`, `--screenshot`). `tests/example_book_v1.book` is a committed book record: the CI
+carried. Since a `.sieve` can hold anything under any name, its listing alone is read first,
+nothing decoded, and the whole refused where a file is not a picture by its recipe (`jbr`, `stb`,
+`skr`, `pngr`) or its name, where there are more than 4,096 files, or where its files come to more
+than half the memory free; installing then stops at each file's declared size and checks its
+SHA-256 (in a folder of its own, removed after); and each picture's header is read before its
+pixels are made, which they are only where they fit in half the memory free (and in what
+stb_image decodes: a JPEG's under 2 GB, a PNG's to 1 GiB). A JPEG too large for that is shown at
+an eighth, from its blocks' averages alone (a sixty-fourth of the memory: a 380 MB JPEG of 30,000
+by 20,000 opened in 7.7 s, at most 517 MiB, here); any other is refused, with why. A `.sieve`'s
+pictures are made one at a time, as each is shown. `sieve-view --help` gives the keys and the
+options for testing (`--check`, `--make-simage`, `--budget`, `--screenshot`). `tests/example_book_v1.book` is a committed book record: the CI
 unbinds it, binds its source again to the identical record, and has the Python oracle read it
 to the same id and text.
 
