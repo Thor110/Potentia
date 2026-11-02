@@ -1039,6 +1039,37 @@ $S install probe-lose.sieve --to probe_lose_inst > /dev/null
 diff -r probe/lose probe_lose_inst
 $S install probe-win.sieve --to probe_win_inst > /dev/null
 diff -r probe/win probe_win_inst
+# A picture of few colours mixed as its palette (the v33 draft, mix-v4's P): 320 by 240 pixels of 3
+# bytes in six colours, each pixel most often its left or upper neighbour's, as raw pixels (the
+# rope reads it as 3 wide, so the shape guessed from its bytes is weighed too). With the draft,
+# mixed as a palette of six (its indices, one byte a pixel, then the palette) and smaller than v32;
+# given back by Sieve, sieve-install and the oracle.
+rm -rf pal
+mkdir pal
+python -c "
+import random
+random.seed(6)
+cols = [(250, 250, 245), (30, 30, 40), (200, 60, 50), (40, 120, 200), (90, 170, 90), (240, 200, 60)]
+w, h = 320, 240
+px = [[0] * w for _ in range(h)]
+for y in range(h):
+    for x in range(w):
+        r = random.random()
+        px[y][x] = px[y][x - 1] if r < 0.7 and x else px[y - 1][x] if r < 0.93 and y else random.randrange(6)
+open('pal/picture.rgb', 'wb').write(bytes(c for row in px for i in row for c in cols[i]))
+"
+$S locate pal --installer pal-33.sieve --v33-draft --progress 2>&1 | tr -d '\r' > pal-33.txt
+grep -q "as a palette of 6 colours" pal-33.txt
+grep -q "mix4 B[0-9]* I[0-9]*x3 P6" pal-33.txt
+$S locate pal --installer pal-32.sieve 2>&1 | tr -d '\r' > pal-32.txt
+[ "$(wc -c < pal-33.sieve)" -lt "$(wc -c < pal-32.sieve)" ]
+rm -rf pal_inst pal_si pal_oracle
+$S install pal-33.sieve --to pal_inst > /dev/null
+diff -r pal pal_inst
+$SI pal-33.sieve --to pal_si --yes > /dev/null
+diff -r pal pal_si
+python sieve_ref.py unpack pal-33.sieve --to pal_oracle > /dev/null
+cmp pal/picture.rgb pal_oracle/picture.rgb
 # Copies (the v33 draft, 2 November 2026, Edward: "a folder with 100 of the same images in"): a text,
 # a JPEG and 40,000 random bytes, each with a copy in a folder of its own. With the draft each copy
 # is carried as "copy K", decided before anything else (the JPEG not recoded twice), and given back

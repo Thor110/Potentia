@@ -6191,6 +6191,49 @@ void test_mix4()
         }
     CHECK(x86_back);
     CHECK(mix4_code(calls, Mix4Params::parse("B16 X")).size() < mix4_code(calls, Mix4Params::parse("B16")).size());
+    // The v33 draft's palette (P): written after a picture's shape, before the match model's ways,
+    // only for pixels of 2 to 4 bytes and 1 to 256 colours; the colours as first seen, the rest of
+    // the palette zero; more colours than it, or not whole pixels, refused; an index past it
+    // refused on the way back; every picture given back mixed with it, and a picture of few colours
+    // smaller with it.
+    CHECK(Mix4Params::parse("B16 I60x3 P6 R1 C2").text() == "B16 I60x3 P6 R1 C2" && Mix4Params::parse("B16 I60x3 P6").palette == 6 &&
+          match_ways(Mix4Params::parse("B16 I60x3 P6")));
+    CHECK(throws([] { Mix4Params::parse("B16 I60x1 P6"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 I60x3 P257"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 P6"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 I60x3 R1 P6"); }));
+    {
+        const std::vector<uint8_t> px{9, 9, 9, 1, 2, 3, 9, 9, 9, 4, 5, 6};
+        const auto split = palette_split(px, 3, 4);
+        CHECK(split && (*split == std::vector<uint8_t>{0, 1, 0, 2, 9, 9, 9, 1, 2, 3, 4, 5, 6, 0, 0, 0}));
+        CHECK(split && palette_join(*split, 3, 4) == px);
+        CHECK(!palette_split(px, 3, 2));
+        CHECK(!palette_split(std::vector<uint8_t>{1, 2, 3, 4}, 3, 4));
+        CHECK(colours_of(px, 3) == 3 && colours_of(std::vector<uint8_t>{1, 2, 3, 4}, 3) == 0);
+        CHECK(throws([] { palette_join(std::vector<uint8_t>{0, 2, 9, 9, 9, 1, 2, 3}, 3, 2); }));
+    }
+    std::vector<uint8_t> drawing;
+    {
+        uint32_t r = 11;
+        const uint8_t cols[5][3] = {{250, 250, 245}, {30, 30, 40}, {200, 60, 50}, {40, 120, 200}, {90, 170, 90}};
+        std::vector<uint8_t> idx(96 * 64);
+        for (size_t i = 0; i < idx.size(); ++i)
+        {
+            r = r * 1103515245u + 12345u;
+            const uint32_t v = (r >> 16) % 100;
+            idx[i] = v < 70 && i % 96 ? idx[i - 1] : v < 93 && i >= 96 ? idx[i - 96] : uint8_t(v % 5);
+        }
+        for (const uint8_t k : idx) drawing.insert(drawing.end(), cols[k], cols[k] + 3);
+    }
+    bool palette_back = true;
+    for (const char* params : {"B16 I96x3 P5", "B16 I96x3 P5 R1 M4 C2", "B16 I96x3 P200"})
+    {
+        const Mix4Params p = Mix4Params::parse(params);
+        palette_back = palette_back && mix4_file(mix4_code(drawing, p), p, nullptr, drawing.size()) == drawing;
+    }
+    CHECK(palette_back);
+    CHECK(throws([&] { mix4_code(drawing, Mix4Params::parse("B16 I96x3 P4")); }));
+    CHECK(mix4_code(drawing, Mix4Params::parse("B16 I96x3 P5")).size() < mix4_code(drawing, Mix4Params::parse("B16 I96x3")).size());
 }
 
 void test_rope_wave()

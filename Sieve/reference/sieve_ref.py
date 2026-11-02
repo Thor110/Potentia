@@ -2799,6 +2799,22 @@ def mix4_file(code, params, size, v32=False, v33=False):
             sys.exit(f"mix-v4: the match model's ways ({tail.strip()}) are the v33 draft's: {params}")
         ways = {"recover": " R1" in tail, "min_match": 4 if " M4" in tail else 6, "candidates": 2 if " C2" in tail else 1}
         params = params[: len(params) - len(tail)]
+    # (v33 draft) " P<n>" after a picture's shape: its indices into a palette of n colours (one byte a
+    # pixel, the same width), then the palette, n entries of its pixel's bytes (the colours as the
+    # picture first shows them, the rest zero): mixed so, and the pixels made from them after.
+    palette = re.fullmatch(r"(B(?:1[6-9]|2[0-2]) I([1-9][0-9]*)x([2-4])) P([1-9][0-9]*)", params)
+    if palette:
+        if not v33:
+            sys.exit(f"mix-v4: a palette (P) is the v33 draft's: {params}")
+        n, c = int(palette.group(4)), int(palette.group(3))
+        if n > 256 or size % c:
+            sys.exit(f"mix-v4: a palette of 1 to 256 colours, for whole pixels: {params}")
+        split = mix2_file(code, f"{palette.group(1).rsplit('x', 1)[0]}x1", size // c + n * c, None, sse=False, ways=ways)
+        indices, table = split[:size // c], split[size // c:]
+        if any(k >= n for k in indices):
+            sys.exit(f"mix-v4: a palette's index past its palette: {params}")
+        colours = [table[k * c:k * c + c] for k in range(n)]
+        return b"".join(colours[k] for k in indices)
     m = re.fullmatch(r"B(1[6-9]|2[0-2])(?: I[1-9][0-9]*x[1-4]| D(35|60|80)| (F80))?", params)
     if not m or (m.group(3) and not v32):
         sys.exit(f"mix-v4: parameters are written \"B22\", \"B22 I949x1\" or \"B22 D60\" (v32: \"B22 F80\"): {params}")

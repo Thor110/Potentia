@@ -47,6 +47,11 @@ ways that win somewhere; the rope's search giving keeping its own turn, or real-
   so; the Vitruvian JPEG in an HTML page 203,542, 170,423 so; a 101,888-byte program (41,667 packed
   as itself) as plain hex, a C array, spaced hex and a decimal list 46,682 to 52,065, 41,571 to
   41,639 so. Sieve, sieve-install and the oracle read it.
+- **Built (2 November 2026, the sixth piece):** a picture of 256 colours or fewer mixed as its
+  palette (mix-v4's `P<n>`; SPECIFICATIONS, v33; IDEAS §19.114, 2): its pixels mixed as one-byte
+  indices, a picture of the same width, then the palette, weighed on the picture's start against
+  its best without. The hallway's 17 screenshots 185,088 bytes at v32, 146,999 so, every one
+  smaller (`results/palette-2026-11-02.md`). Sieve, sieve-install and the oracle read it.
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

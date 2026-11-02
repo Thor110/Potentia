@@ -1,62 +1,53 @@
-# The rope not searched on a file it cannot win (2 November 2026)
+# docs/ settled, and the palette (2 November 2026)
 
-Unzip this over the repository root, on top of your commit 5eaaabe ("sieve hexdec"). One local
-commit, not pushed: 30d1fe4. The unit suite passes (77,133 checks, 0 failures). The new CI block
-in step 11 passes here; the full steps 10 and 11 haven't been run on it.
+Unzip this over the repository root, on top of your commit 6471ef0 ("sieve rope probe"). Two local
+commits, not pushed: a06486b and d06c887. The unit suite passes (77,147 checks, 0 failures; 14 new
+for the palette). The new CI block in step 11 passes here; the full steps 10 and 11 haven't been
+run on it.
 
-## What changed (every version, not only the draft)
+## 1. docs/ packs the same every run (a06486b)
 
-Texts already had a test on their start that skips the rope's search where it can't win. Other
-files had none, and the search has no time limit by default, so on your 160 MB maps it spent 768 s
-for nothing.
+The run-to-run difference (594,466 or 598,620 bytes) was my test setup, not Sieve. The runs giving
+598,620 used copies of the binary I'd moved out of its build folder, away from the dictionaries
+Sieve finds beside it, so mixing had no word list (each file's log says "the word list not to be
+had here"). The same binary beside its data gives 594,466. Four runs of the current build, alone
+and two at once, all gave the same bytes. The note in `results/weighing-order-2026-11-02.md` now
+says so. My other comparisons hold: the JPEG and PNG ones don't use the word list, and I reran the
+rope-probe pictures with the data in place (same sizes).
 
-Now a file over 512 KiB that isn't text gets the rope's own search on its first 256 KiB first. Where
-that comes to 1.1 times LZMA2's estimate of the same or more, neither the whole search nor the
-pieces are tried; LZMA2 and mixing are weighed as before. Try every way ticked by hand still
-searches everything.
+Worth knowing: a Sieve binary moved without its data files still works, but packs text a little
+larger (0.7% on docs/), and only the per-file log mentions it. A warning in the summary could be
+added if you want one.
 
-**Calibrated on 22 files** (pictures as raw pixels, a synthetic sound, programs, the map, mozilla's
-tar, random bytes):
+## 2. A picture of few colours mixed as its palette (v33 draft, d06c887)
 
-| Whole search | On the first 256 KiB |
+**Measured first.** The repository's PNGs with 256 colours or fewer are the hallway's 17
+screenshots (3 to 21 colours each). As raw pixels against one-byte indices plus the palette, the
+indices won 16 of 17. Against what Sieve does with the PNGs today (they're stb_image_write's, so
+already carried as their pixels and mixed), the indices came to 14% less overall.
+
+**Built** as a mixing parameter, like the x86 filter's `X`: `mix4 B22 I1280x3 P7`. Mixing codes
+the picture's one-byte indices (a picture of the same width), then the palette; installing turns
+them back into pixels. The packer weighs it on the picture's start and keeps it where it's smaller.
+
+| The hallway's 17 screenshots (PNGs, Compressed formats temporary) | Bytes |
 | :--- | ---: |
-| rope won (0.73 to 0.94 of LZMA2) | 0.69 to 0.94 |
-| rope lost (1.15 to 5.71) | 1.23 to 3.71 |
+| the PNGs | 896,976 |
+| v32 | 185,088 |
+| the draft | **146,999** (−20.6%) |
 
-The test took 0.2 to 7 s, where the whole search took 6 to 168 s.
+Every one smaller (−11% to −33%), every one given back exactly. Sieve, sieve-install and the oracle
+read it. The table per screenshot is in `results/palette-2026-11-02.md`.
 
-**Packed whole, before and after** (same bytes unless marked):
+**A packer change at every version, found on the way.** Where the rope's best wave reads a file as
+a picture under 16 wide (in effect "each pixel from the one before", with no rows), the shape
+guessed from the bytes is now weighed too, kept only if 2% better. On the 13 decoded pictures from
+the rope-probe work it changed nothing. On six-colour drawings of 320 × 240 that the rope read as
+3 wide: 10,944 → 9,133 bytes and 8,005 → 7,516.
 
-| File | Before | After |
-| :--- | ---: | ---: |
-| the map, first 16 MiB | 165.9 s | 42.2 s |
-| mozilla's tar, first 16 MiB | 97.5 s | 26.2 s |
-| a hallway screenshot | 10,475 bytes, 16.5 s | **8,939 bytes**, 9.6 s |
-| the word-list picture | 55,611 bytes, 20.6 s | **49,221 bytes**, 10.5 s |
-| the Vitruvian picture (rope wins) | 24.4 s | 26.8 s |
-| the synthetic sound (rope wins) | 15.2 s | 20.1 s |
+**New CI block (step 11):** a 320 × 240 six-colour drawing as raw pixels. With the draft it's mixed
+as a palette of 6, smaller than v32 (8,843 against 9,135 bytes here), and given back by Sieve,
+sieve-install and the oracle.
 
-Programs and random bytes took the same time either way. The two pictures came out smaller because
-mixing got a better shape: the rope's wave read the screenshot as 3,840 one-byte pixels a row; with
-no search, the shape was guessed from the bytes as 1,280 pixels of 3 bytes, the true one. Where the
-rope wins, the test adds a few seconds to the search (2.4 s and 4.9 s here).
-
-All of this is in `results/rope-probe-2026-11-02.md`; METHODS.md describes the step.
-
-## STATISTICS.md (pi6)
-
-The table already had 417,049, and your 12 bytes are its last two steps (417,061 → 417,052 →
-417,049: 9 from the rope wave's update, 3 from v32's head). I added a paragraph for your run today:
-the same 417,049 bytes in 2.8 s with the File Locator's defaults (it was 11.4 s with Try every
-way), installed in 0.045 s.
-
-## A correction
-
-Last zip I guessed `docs/` packs differently from run to run because of the rope search's time
-limit. There is no time limit by default, so that guess was wrong; the cause isn't found yet. The
-note in `results/weighing-order-2026-11-02.md` now says so.
-
-## New CI block (step 11)
-
-1 MiB of random blocks repeated in a shuffled order (LZMA2 wins) logs "not searched"; a smooth
-800 KB 16-bit sound (the rope wins) is searched. Both installed back exactly.
+**Not yet measured:** other kinds of few-colour pictures (sprites, diagrams, pixel art, BMP/TGA),
+and PNGs with their own palette (PLTE).

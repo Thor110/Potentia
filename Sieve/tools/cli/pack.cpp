@@ -3079,13 +3079,16 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool match_ways_on = mix4_on && rope_newest >= 16; // (v33's own number: still on once v33 is frozen and the draft moves on)
     // v33 draft (2 November 2026): a file of a repeating byte or pattern carried as its segments ("runs").
     const bool runs_way_on = rope_newest >= 16;
+    const bool palette_on = rope_newest >= 16; // v33 draft: a picture of 256 colours or fewer mixed as its palette (mix-v4's P)
     auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
         if (!match_ways_on || f.size() < 4096) return mp;
-        const std::span<const uint8_t> start = f.first(std::min<size_t>(f.size(), size_t(256) << 10));
+        // (Under a palette, whole pixels: P is only for them.)
+        const size_t sample = std::min<size_t>(f.size(), size_t(256) << 10);
+        const std::span<const uint8_t> start = f.first(mp.palette ? sample - sample % mp.channels : sample);
         // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
         // and shape, so the answer is kept, by thread, for the second.)
         uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
-                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62;
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
         thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
         if (const auto hit = weighed.find(key); hit != weighed.end())
@@ -4408,13 +4411,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // their shape in the recipe, which is weighed in its place: the rope's reading of a
                 // screenshot can be a few bytes wide (ROADMAP D.2).
                 std::optional<std::pair<uint32_t, uint32_t>> guessed;
-                if (mix2_on && !picture && !program) guessed = picture_shape(bytes[i]);
+                // (And where the rope's reading is a picture under 16 wide: a wave whose line is a pixel
+                // or two, predicting each pixel from the one before, which gives mixing no rows. 2
+                // November 2026: six-colour drawings of 320 by 240 read by the rope as 3 wide.)
+                if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
+                uint32_t palette = 0; // (v33 draft: P, its colours where taken)
                 const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
                     if (mix4_on)
                     {
                         Mix4Params base = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
+                        if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         const Mix4Params mp = with_ways(base, f, words);
                         way_text = "mix4 " + mp.text();
                         return mix4_code(f, mp, words);
@@ -4478,6 +4486,22 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         }
                     }
                 }
+                // v33 draft (2 November 2026): a picture of 2 to 4 bytes a pixel holding 256 colours or
+                // fewer, mixed as its palette's indices and its palette (mix-v4's P), weighed on its
+                // start against its pixels, the smaller kept. 17 of the hallway's screenshots
+                // (stb_image_write's PNGs, 3 to 21 colours), carried as their pixels: 185,088 bytes
+                // together, 159,087 as indices (results/palette-2026-11-02.md).
+                if (palette_on && mix4_on && pw && pc >= 2 && pc <= 4 && !stop_requested())
+                    if (const uint32_t n = colours_of(bytes[i], pc); n >= 1 && n <= 256)
+                    {
+                        if (ms == 0) ms = code_of(start, unused, pw, pc).size();
+                        palette = n;
+                        const std::span<const uint8_t> whole_pixels(start.data(), start.size() - start.size() % pc);
+                        const uint64_t with = code_of(whole_pixels, unused, pw, pc).size() + (start.size() - whole_pixels.size());
+                        test_said("as a palette of " + std::to_string(n) + " colours", with);
+                        if (with < ms) ms = with;
+                        else palette = 0;
+                    }
                 // v27: a text not taken as a picture with the word list too (scowl-en-60, where it can be
                 // had), weighed on its start against it without: the smaller kept.
                 const MixDictionary* words = nullptr;

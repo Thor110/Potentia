@@ -172,11 +172,14 @@ the first such in the listing's order is still the one reported. The listings ar
 Packed, the JPEG copies and the PNG copies came to the same bytes before and after, with and
 without the v33 draft (978,332 and 963,838; 1,052,540 and 1,052,127).
 
-**Seen on the way: docs/ is not packed the same twice.** The same build gave 594,466 bytes on two
-runs and 598,620 on two others (the difference in the group of 22 texts mixed together: apart
-438,831 against 458,440). The cause is not found yet: not the rope's time limit, as first guessed
-here, since by default the search has none. Comparisons of packers here use folders whose results
-do not move.
+**Seen on the way, and settled: docs/ seemed not to pack the same twice.** Runs gave 594,466 bytes
+or 598,620 (the difference in the group of 22 texts mixed together: apart 438,831 against
+458,440). The cause was how they were run, not Sieve: the runs giving 598,620 used copies of the
+binary moved out of its build folder, away from the data files Sieve finds beside it, so mixing ran
+without its word list (each file's log says "the word list not to be had here"). The same binary
+beside its data gave 594,466; four runs of the current build, alone and two at once, all gave the
+same bytes. (The first guess here, the rope's time limit, was wrong: by default the search has
+none.) The JPEG and PNG comparisons above do not use the word list and stand.
 
 **The delta check.** Timed on the 160 MB pair of maps (one 160,068,077 bytes, carried as its
 differences from the other, 160,000,000; 1,518 s in all, `--timings`):

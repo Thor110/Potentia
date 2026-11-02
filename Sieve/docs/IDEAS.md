@@ -6011,7 +6011,9 @@ first):
    vectors 263,921 → 259,086, its icon's pixels as a C array 5,395 → 4,267.
 2. *Palette* (palette-size): raw 24- or 32-bit pixels of 256 colours or fewer as indices before
    mixing or the rope (screenshots, sprites, uncompressed BMP/TGA/TIFF); a few per cent over mixing,
-   to measure.
+   to measure. **Measured and built (2 November 2026, the v33 draft's mix-v4 `P`):** the
+   hallway's 17 screenshots 185,088 bytes at v32, 146,999 mixed as their palettes (−20.6%, every
+   one smaller; results/palette-2026-11-02.md).
 3. *Scattered substitutions* (near-model, near): a file as another with k bytes changed, coded by the
    combinatorial number system NearRanker already counts with (weights.cpp); delta-v1 spends several
    bytes a change and starts at 8 MiB. Save files, patched data, pages of a database.

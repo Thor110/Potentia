@@ -144,7 +144,10 @@ many as the threads and memory allow, and the result is the same at any thread c
    - First tried on the file's first 256 KiB, three ways, the smallest kept:
      - as bytes;
      - as a picture: the rope's shape where its best wave reads the file as one, or a shape guessed
-       from its bytes;
+       from its bytes (that too where the rope's picture is under 16 wide, a pixel or two a line);
+     - (v33 draft) a picture of 2 to 4 bytes a pixel holding 256 colours or fewer, as its palette:
+       one-byte indices, then the colours (mix-v4's `P`; the hallway's screenshots 20.6% smaller,
+       results/palette-2026-11-02.md);
      - for a text, with an English word list (from v32, SCOWL's size 80 with each word
        counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start; v31, size 60).
    - With `--v33-draft` (the v33 draft), each of those codes also weighs the match model's ways on

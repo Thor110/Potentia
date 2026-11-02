@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdio>
+#include <optional>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -1010,12 +1012,14 @@ void Mix4Params::check() const
     if (min_match != 6 && min_match != 4) bad4("a match taken after 6 bytes, or 4 (M4)");
     if (candidates != 1 && candidates != 2) bad4("one candidate for a match, or two (C2)");
     if (x86 && (width || dictionary)) bad4("the x86 filter for a program's bytes, not a picture or text with a word list (X)");
+    if (palette && (palette > 256 || width == 0 || channels < 2)) bad4("a palette of 1 to 256 colours, for a picture of 2 to 4 bytes a pixel (P)");
 }
 
 std::string Mix4Params::text() const
 {
     std::string t = "B" + std::to_string(table_bits);
     if (width) t += " I" + std::to_string(width) + "x" + std::to_string(channels);
+    if (palette) t += " P" + std::to_string(palette);
     if (dictionary) t += (by_use ? " F" : " D") + std::to_string(dictionary);
     if (recover) t += " R1";
     if (min_match != 6) t += " M" + std::to_string(min_match);
@@ -1044,9 +1048,10 @@ Mix4Params Mix4Params::parse(std::string_view t)
             if (tail[1] == 'R') p.recover = true;
             s.resize(s.size() - 3);
         }
-    unsigned b = 0, w = 0, c = 0, d = 0;
+    unsigned b = 0, w = 0, c = 0, d = 0, n = 0;
     char extra = 0;
-    if (std::sscanf(s.c_str(), "B%u I%ux%u%c", &b, &w, &c, &extra) == 3) p.width = w, p.channels = c;
+    if (std::sscanf(s.c_str(), "B%u I%ux%u P%u%c", &b, &w, &c, &n, &extra) == 4) p.width = w, p.channels = c, p.palette = n; // (v33 draft)
+    else if (std::sscanf(s.c_str(), "B%u I%ux%u%c", &b, &w, &c, &extra) == 3) p.width = w, p.channels = c;
     else if (std::sscanf(s.c_str(), "B%u D%u%c", &b, &d, &extra) == 2) p.dictionary = d;
     else if (std::sscanf(s.c_str(), "B%u F%u%c", &b, &d, &extra) == 2) p.dictionary = d, p.by_use = true;
     else if (std::sscanf(s.c_str(), "B%u%c", &b, &extra) != 1)
@@ -1084,10 +1089,86 @@ Mix2Params shape_of(const Mix4Params& p)
     Mix2Params s;
     s.table_bits = p.table_bits;
     s.width = p.width;
-    s.channels = p.channels;
+    s.channels = p.palette ? 1 : p.channels; // (a palette's indices: one byte a pixel)
     return s;
 }
 } // namespace
+
+namespace {
+uint32_t pixel_at(std::span<const uint8_t> b, size_t at, uint32_t channels)
+{
+    uint32_t v = 0;
+    for (uint32_t k = 0; k < channels; ++k) v |= uint32_t(b[at + k]) << (8 * k);
+    return v;
+}
+} // namespace
+
+uint32_t colours_of(std::span<const uint8_t> pixels, uint32_t channels)
+{
+    if (channels < 1 || channels > 4 || pixels.size() % channels) return 0;
+    std::vector<uint32_t> seen;
+    uint32_t last = 0;
+    bool any = false;
+    for (size_t at = 0; at < pixels.size(); at += channels)
+    {
+        const uint32_t v = pixel_at(pixels, at, channels);
+        if (any && v == last) continue; // (runs of one colour, the commonest case, looked up once)
+        any = true, last = v;
+        if (std::find(seen.begin(), seen.end(), v) == seen.end())
+        {
+            seen.push_back(v);
+            if (seen.size() > 256) return 257;
+        }
+    }
+    return uint32_t(seen.size());
+}
+
+std::optional<std::vector<uint8_t>> palette_split(std::span<const uint8_t> pixels, uint32_t channels, uint32_t colours)
+{
+    if (channels < 2 || channels > 4 || colours < 1 || colours > 256 || pixels.size() % channels) return std::nullopt;
+    const size_t n = pixels.size() / channels;
+    std::vector<uint8_t> out(n + size_t(colours) * channels, 0);
+    std::vector<uint32_t> palette;
+    uint32_t last = 0;
+    uint8_t last_index = 0;
+    bool any = false;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const uint32_t v = pixel_at(pixels, i * channels, channels);
+        if (!any || v != last)
+        {
+            const auto it = std::find(palette.begin(), palette.end(), v);
+            if (it == palette.end())
+            {
+                if (palette.size() == colours) return std::nullopt;
+                palette.push_back(v);
+                last_index = uint8_t(palette.size() - 1);
+            }
+            else last_index = uint8_t(it - palette.begin());
+            any = true, last = v;
+        }
+        out[i] = last_index;
+    }
+    for (size_t k = 0; k < palette.size(); ++k)
+        for (uint32_t c = 0; c < channels; ++c) out[n + k * channels + c] = uint8_t(palette[k] >> (8 * c));
+    return out;
+}
+
+std::vector<uint8_t> palette_join(std::span<const uint8_t> split, uint32_t channels, uint32_t colours)
+{
+    if (channels < 2 || channels > 4 || colours < 1 || colours > 256 || split.size() < size_t(colours) * channels)
+        bad4("a palette's indices and palette not of their shape (P)");
+    const size_t n = split.size() - size_t(colours) * channels;
+    const std::span<const uint8_t> palette = split.subspan(n);
+    std::vector<uint8_t> out(n * channels);
+    for (size_t i = 0; i < n; ++i)
+    {
+        const uint8_t k = split[i];
+        if (k >= colours) bad4("a palette's index past its palette (P)");
+        std::copy_n(palette.begin() + std::ptrdiff_t(size_t(k) * channels), channels, out.begin() + std::ptrdiff_t(i * channels));
+    }
+    return out;
+}
 
 void x86_filter(std::span<uint8_t> data, bool encoding)
 {
@@ -1157,6 +1238,13 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
     p.check();
     if (file.size() >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    if (p.palette)
+    {
+        const auto split = palette_split(file, p.channels, p.palette);
+        if (!split) bad4("a picture with more colours than its palette (P), or not whole pixels");
+        Model2 m(shape_of(p), split->size(), nullptr, false, ways_of(p));
+        return code_with(m, *split);
+    }
     Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
     if (p.x86)
     {
@@ -1169,10 +1257,19 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
 
 std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size)
 {
-    if (!code_can_make(code, size)) bad4("a file larger than its code can make");
     p.check();
     if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    if (p.palette)
+    {
+        // (Its indices, one a pixel, then the palette: the file's pixels, whole, give their count.)
+        if (size % p.channels) bad4("a picture under a palette (P) that is not whole pixels");
+        const uint64_t split = size / p.channels + uint64_t(p.palette) * p.channels;
+        if (!code_can_make(code, split)) bad4("a file larger than its code can make");
+        Model2 m(shape_of(p), split, nullptr, false, ways_of(p));
+        return palette_join(file_with(m, code, split, bad4), p.channels, p.palette);
+    }
+    if (!code_can_make(code, size)) bad4("a file larger than its code can make");
     Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false, ways_of(p));
     std::vector<uint8_t> out = file_with(m, code, size, bad4);
     if (p.x86) x86_filter(out, false);
