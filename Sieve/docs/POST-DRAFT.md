@@ -41,9 +41,9 @@ pi6.txt stress test, file sourced from : https://www.exeter.ac.uk/v8media/facult
 
 1 Million Digits of Pi									Theoretical floor distance remaining
 														Increase								Decrease
-pi6.txt.sieve : 417,061 bytes (417,792 bytes on disk)	: 0.43829968620632354%					: -0.436387003340039%
+pi6.txt.sieve : 417,049 bytes (417,792 bytes on disk)	: 0.43540979816540276%					: -0.4335222000292531%
 
-now 1,820 bytes away from the theoretical limit
+now 1,808 bytes away from the theoretical limit
 
 The theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.43% of it.
 
@@ -98,9 +98,7 @@ I view the Sieve method as a Kolmogorov complexity limit searcher in essence.
 	Links
 
 Current Release : Planned for Manifest v33 - release link - NOTE
-
 YouTube Video Tutorial - not yet created - NOTE
-
 https://github.com/Thor110/Potentia
 https://thor110.github.io/Potentia/index.html
 

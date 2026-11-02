@@ -6005,7 +6005,10 @@ first):
    2026, the v33 draft's `b64`, spans-v1):** pack.cpp as base64 76,813 → 50,323 bytes, the JPEG in
    HTML 203,542 → 170,423 (each within 83 bytes of the decoded file packed alone); in the
    repository's own texts, three spans found (two alphabet strings and a 392-character key), none
-   taken by the weighing. Hex and decimal not yet.
+   taken by the weighing. **Hex and lists of byte values too (the same evening, the recipe renamed
+   `spn`):** a 101,888-byte program as plain hex, a C array, spaced hex and a decimal list, 46,682
+   to 52,065 bytes at v32, 41,571 to 41,639 so (the program itself 41,667); the repository's test
+   vectors 263,921 → 259,086, its icon's pixels as a C array 5,395 → 4,267.
 2. *Palette* (palette-size): raw 24- or 32-bit pixels of 256 colours or fewer as indices before
    mixing or the rope (screenshots, sprites, uncompressed BMP/TGA/TIFF); a few per cent over mixing,
    to measure.

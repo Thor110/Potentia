@@ -37,15 +37,16 @@ ways that win somewhere; the rope's search giving keeping its own turn, or real-
   the two are and however the first is carried. 100 copies of a 1.2 MB JPEG: 13.6 s against 90.2,
   and a little smaller. (At every version, copies now cost one file's work: JPEGs recoded once,
   PNGs made once, LZMA2's estimates kept.)
-- **Built (2 November 2026, the fifth piece):** base64 in a text carried decoded (`b64 <members>
-  <skeleton size>`, spans-v1; SPECIFICATIONS, v33; IDEAS §19.114, 1). The text is carried as an
-  archive made again from its skeleton is: the text with each span of base64 taken out, a table at
-  its start saying where each was and how it was written (alphabet, padding, line width, line
-  ends), each span decoded after it as a member carried its own way, a JPEG among them reaching
-  brunsli. Each span is checked to give its characters back exactly before it is taken. pack.cpp
-  as base64 76,813 bytes as written, 50,323 so (decoded alone 50,358); the Vitruvian JPEG in an HTML
-  page 203,542, 170,423 so (decoded alone 170,340). Sieve, sieve-install and the oracle read it.
-  Hex and decimal to follow.
+- **Built (2 November 2026, the fifth piece):** binary written as text carried decoded (`spn
+  <members> <skeleton size>`, spans-v1; SPECIFICATIONS, v33; IDEAS §19.114, 1): base64, hex, and
+  lists of byte values (C arrays, escaped strings, spaced hex, decimal lists). The text is carried
+  as an archive made again from its skeleton is: the text with each span taken out, a table at its
+  start saying where each was and how it was written, each span decoded after it as a member
+  carried its own way, a JPEG among them reaching brunsli. Each span is checked to give its
+  characters back exactly before it is taken. pack.cpp as base64 76,813 bytes as written, 50,323
+  so; the Vitruvian JPEG in an HTML page 203,542, 170,423 so; a 101,888-byte program (41,667 packed
+  as itself) as plain hex, a C array, spaced hex and a decimal list 46,682 to 52,065, 41,571 to
+  41,639 so. Sieve, sieve-install and the oracle read it.
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

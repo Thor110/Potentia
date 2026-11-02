@@ -6750,8 +6750,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "b64"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "b64": 3}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3}
 
 
 def listing_from_bytes(b, v32=False):
@@ -7070,14 +7070,32 @@ def v7_listing(data):
     return version + listing + data[nl + 1 + packed:]
 
 
-def base64_written(b, how, width):
-    """(v33 draft, spans-v1) bytes written as base64: bit 0 of how the URL-safe alphabet, bit 1 padded,
-    bit 2 lines ending CR LF; width the characters a line (0: one line), a line end between lines."""
-    chars = base64.b64encode(b)
-    if how & 1:
-        chars = chars.translate(bytes.maketrans(b"+/", b"-_"))
-    if not how & 2:
-        chars = chars.rstrip(b"=")
+def span_written(b, how, width, prefix=b"", separator=b"", line=b""):
+    """(v33 draft, spans-v1) bytes written as text, as a span's table entry says: bits 3 and 4 of how
+    its kind. Kind 0, base64: bit 0 the URL-safe alphabet, bit 1 padded, bit 2 lines ending CR LF;
+    kind 1, hex, two digits a byte: bit 0 capitals, bit 2 CR LF; for both, width the characters a
+    line (0: one line), a line end between lines. Kind 2, a list of byte values: bits 0 and 1 the
+    value's form (two hex digits small, two capitals, decimal), each value after its prefix, the
+    separator between each two but the line break after every width-th (0: none)."""
+    kind = how >> 3
+    if kind == 2:
+        form = how & 3
+        out = bytearray()
+        for k, v in enumerate(b):
+            if k:
+                out += line if width and k % width == 0 else separator
+            out += prefix + (b"%02x" % v if form == 0 else b"%02X" % v if form == 1 else b"%d" % v)
+        return bytes(out)
+    if kind == 1:
+        chars = b.hex().encode()
+        if how & 1:
+            chars = chars.upper()
+    else:
+        chars = base64.b64encode(b)
+        if how & 1:
+            chars = chars.translate(bytes.maketrans(b"+/", b"-_"))
+        if not how & 2:
+            chars = chars.rstrip(b"=")
     if not width:
         return chars
     end = b"\r\n" if how & 4 else b"\n"
@@ -7086,8 +7104,9 @@ def base64_written(b, how, width):
 
 def spans_made(skeleton, members, path):
     """(v33 draft, spans-v1) a text made again from its skeleton (a varint of its spans; for each, a
-    varint of the text before it, a byte of how it is written, a varint of its width; then the text)
-    and its members, each written again as base64 where the table says."""
+    varint of the text before it, a byte of how it is written, a varint of its width and, for a list,
+    its prefix, separator and line break; then the text) and its members, each written again where
+    the table says."""
     at = 0
 
     def varint():
@@ -7104,6 +7123,14 @@ def spans_made(skeleton, members, path):
                     sys.exit(f"{path}: a number in its skeleton not written as Sieve writes it")
                 return v
             shift += 7
+
+    def string():
+        nonlocal at
+        n = varint()
+        if n > 64 or n > len(skeleton) - at:
+            sys.exit(f"{path}: a list's string not written as Sieve writes it")
+        at += n
+        return skeleton[at - n:at]
     n = varint()
     if n == 0 or n != len(members):
         sys.exit(f"{path}: its skeleton does not count its members")
@@ -7115,16 +7142,18 @@ def spans_made(skeleton, members, path):
         how = skeleton[at]
         at += 1
         width = varint()
-        if how > 7 or width > 1 << 30:
+        kind = how >> 3
+        if not (kind == 0 and how < 8 or kind == 1 and how & ~0b1101 == 0 or kind == 2 and how & ~0b10011 == 0 and how & 3 != 3) or width > 1 << 30:
             sys.exit(f"{path}: a span not written as Sieve writes it")
-        table.append((gap, how, width))
+        strings = (string(), string(), string() if width else b"") if kind == 2 else (b"", b"", b"")
+        table.append((gap, how, width, strings))
     text, t, out = skeleton[at:], 0, bytearray()
-    for (gap, how, width), m in zip(table, members):
+    for (gap, how, width, strings), m in zip(table, members):
         if gap > len(text) - t or not m:
             sys.exit(f"{path}: a span placed past its skeleton's text, or empty")
         out += text[t:t + gap]
         t += gap
-        out += base64_written(m, how, width)
+        out += span_written(m, how, width, *strings)
     return bytes(out + text[t:])
 
 
@@ -7335,8 +7364,8 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path} does not list the members its recipe counts")
             for k in mine:
                 members[k] = i
-        if v33 and way.startswith("b64 "):
-            # (v33 draft) a text's spans of base64 the same: its members "<text>/<n>", each carried as
+        if v33 and way.startswith("spn "):
+            # (v33 draft) a text's spans of binary written as text the same: its members "<text>/<n>", each carried as
             # it is or, the one recipe a member has, a JPEG as its brunsli form.
             n = way.split(" ")[1]
             if not n.isdigit():
@@ -7370,14 +7399,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a PNG recipe Sieve does not write")
             remakes[i] = ("stb", size)
             size = int(n)
-        if v33 and way.startswith("b64 "):
-            # (v33 draft) "b64 <members> <skeleton size> <way>": a text with its spans of base64 taken
-            # out, a table first saying where each was and how it was written (spans-v1).
+        if v33 and way.startswith("spn "):
+            # (v33 draft) "spn <members> <skeleton size> <way>": a text with its spans of binary
+            # written as text taken out, a table first saying where each was and how it was written
+            # (spans-v1).
             _, n, skel, way = way.split(" ", 3)
             if not re.fullmatch(r"[1-9][0-9]*", n) or not re.fullmatch(r"0|[1-9][0-9]*", skel) or \
                     not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
-                sys.exit(f"{path}: a base64 recipe Sieve does not write")
-            remakes[i] = ("b64", size)
+                sys.exit(f"{path}: a spans recipe Sieve does not write")
+            remakes[i] = ("spn", size)
             size = int(skel)
         if v32 and way.startswith("jbr "):
             # "jbr <form size> <way>" (SPECIFICATIONS v32): a JPEG made again from its brunsli
@@ -7705,7 +7735,7 @@ def cmd_unpack_v7(args, data):
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
-        if r[0] == "b64":  # (v33 draft) made below, once its members are
+        if r[0] == "spn":  # (v33 draft) made below, once its members are
             continue
         if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
@@ -7763,8 +7793,8 @@ def cmd_unpack_v7(args, data):
                                                                            len(inner) & 0xFFFFFFFF)
         if i not in unchecked and len(got[i]) != size:
             sys.exit(f"{files[i][0]}: not remade at its size")
-    for i, r in remakes.items():  # (v33 draft) each text with its base64 made again from its skeleton and members
-        if r[0] != "b64":
+    for i, r in remakes.items():  # (v33 draft) each text with its spans made again from its skeleton and members
+        if r[0] != "spn":
             continue
         mine = [k for k in sorted(members) if members[k] == i]
         if any(k in unchecked for k in mine):

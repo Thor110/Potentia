@@ -3,7 +3,7 @@
 #include "cli/locate.hpp"
 #include "cli/case_names.hpp"
 #include "cli/delta.hpp" // v32: a file as its differences from another
-#include "cli/text_spans.hpp" // v33 draft: a text's base64 carried decoded
+#include "cli/text_spans.hpp" // v33 draft: binary a text writes out carried decoded
 #include "cli/pack.hpp" // pack_threads, memory_free: files decoded at once
 
 #include <functional>
@@ -653,7 +653,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried (its way: \"" + e.way + "\")");
         if (!deferred.empty() && deferred.back().i == i) late[i] = 1;
-        if (!e.remake.empty() && !late[i] && e.remake.rfind("skm ", 0) != 0 && e.remake.rfind("b64 ", 0) != 0) // (a file whose bytes come later, once they have; v31's and v33's, below)
+        if (!e.remake.empty() && !late[i] && e.remake.rfind("skm ", 0) != 0 && e.remake.rfind("spn ", 0) != 0) // (a file whose bytes come later, once they have; v31's and v33's, below)
         {
             if (!remaker())
                 throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
@@ -679,7 +679,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     {
         if (!late[d]) continue;
         const ManifestEntry& e = *files[d];
-        if (e.remake.empty() || e.remake.rfind("skm ", 0) == 0 || e.remake.rfind("b64 ", 0) == 0) continue;
+        if (e.remake.empty() || e.remake.rfind("skm ", 0) == 0 || e.remake.rfind("spn ", 0) == 0) continue;
         if (!remaker())
             throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
                                      "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
@@ -736,12 +736,12 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d].size()) + " bytes, not " + std::to_string(e.size) +
                                      "): this Sieve's compressor writes differently from the one that made the instructions");
     }
-    // v33 draft: each text with its base64 carried decoded made again from its skeleton (its own
+    // v33 draft: each text with the binary it writes out carried decoded made again from its skeleton (its own
     // bytes) and its members, in the listing's order (spans-v1); the members stay (not installed).
     for (size_t d = 0; d < files.size(); ++d)
     {
         const ManifestEntry& e = *files[d];
-        if (e.remake.rfind("b64 ", 0) != 0) continue;
+        if (e.remake.rfind("spn ", 0) != 0) continue;
         const std::string under = e.path + "/";
         std::vector<std::span<const uint8_t>> parts;
         for (size_t k = 0; k < files.size(); ++k)
@@ -1230,7 +1230,7 @@ static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst",
                                               "jbr", // (v32: 21, a JPEG made again from its brunsli form)
                                               "pngr", // (v32: 22, a PNG re-saved at its smallest from its head and rows)
                                               "skr", // (v32: 23, a PNG made again exactly, its rows carried unfiltered)
-                                              "b64"}; // (v33 draft: 24, a text with its base64 carried decoded, spans-v1)
+                                              "spn"}; // (v33 draft: 24, a text with binary it writes out carried decoded, spans-v1)
 
 int archive_format_number(const std::string& name)
 {
@@ -1249,7 +1249,7 @@ static int recipe_words(std::string_view way)
 {
     const std::string_view kind = way.substr(0, way.find(' '));
     return kind == "xz" ? 4 : kind == "gz" ? 5 : kind == "bz2" ? 3 : kind == "zst" ? 6 : kind == "lz4" ? 8 : kind == "br" ? 4 : kind == "lzma" ? 3 :
-           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : kind == "pngr" ? 6 : kind == "skr" ? 6 : kind == "b64" ? 3 : 0;
+           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : kind == "pngr" ? 6 : kind == "skr" ? 6 : kind == "spn" ? 3 : 0;
 }
 
 static void put_text(std::vector<uint8_t>& o, std::string_view t)
@@ -2260,8 +2260,8 @@ Manifest Manifest::parse(std::string_view whole)
             const bool jbr = m.v32 && e.way.rfind("jbr ", 0) == 0; // v32: "jbr <form size> <way>"
             const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32: "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
             const bool skr = m.v32 && e.way.rfind("skr ", 0) == 0; // v32: "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>"
-            const bool b64 = m.v33 && e.way.rfind("b64 ", 0) == 0; // v33 draft: "b64 <members> <skeleton size> <way>"
-            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr || b64)
+            const bool spn = m.v33 && e.way.rfind("spn ", 0) == 0; // v33 draft: "spn <members> <skeleton size> <way>"
+            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr || spn)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
                 // <header> <inner size> <way>"; v19: "bz2 <block size> <inner size> <way>", "zst
@@ -2272,7 +2272,7 @@ Manifest Manifest::parse(std::string_view whole)
                 // <inner size> <way>".
                 // v21: "sk <skeleton size> <inner size> <way>". v25: "stb <level> <filter> <width>
                 // <height> <components> <inner size> <way>". v31: "skm <members> <skeleton size> <way>".
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : b64 ? 3 : 4;
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : spn ? 3 : 4;
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");
@@ -2353,12 +2353,12 @@ Manifest Manifest::parse(std::string_view whole)
     if (!m.root.empty() && leaves_folder(m.root)) throw std::runtime_error("manifest: refused root " + m.root);
     // v31: each archive made again from its skeleton and its members: those listed under its own
     // path ("<archive>/<n>"), as many as its recipe says, files and nothing more.
-    // v33 draft: a text's spans of base64 the same ("b64 <members> <skeleton size>").
+    // v33 draft: a text's spans of binary written as text the same ("spn <members> <skeleton size>").
     if (m.v31)
         for (const ManifestEntry& a : m.entries)
         {
-            const bool b64 = m.v33 && a.remake.rfind("b64 ", 0) == 0;
-            if (a.remake.rfind("skm ", 0) != 0 && !b64) continue;
+            const bool spn = m.v33 && a.remake.rfind("spn ", 0) == 0;
+            if (a.remake.rfind("skm ", 0) != 0 && !spn) continue;
             const std::string n = a.remake.substr(4, a.remake.find(' ', 4) - 4);
             if (n.empty() || n.size() > 9 || n.find_first_not_of("0123456789") != std::string::npos)
                 throw std::runtime_error("manifest: " + a.path + "'s members are not counted as Sieve counts them");
@@ -2367,9 +2367,9 @@ Manifest Manifest::parse(std::string_view whole)
             for (ManifestEntry& e : m.entries)
             {
                 if (e.path.rfind(under, 0) != 0) continue;
-                // (A member of a text's base64 may be a JPEG carried as its brunsli form: the one
+                // (A member of a text's spans may be a JPEG carried as its brunsli form: the one
                 // recipe a member has.)
-                if (e.dir || e.member || (!e.remake.empty() && !(b64 && e.remake.rfind("jbr ", 0) == 0)))
+                if (e.dir || e.member || (!e.remake.empty() && !(spn && e.remake.rfind("jbr ", 0) == 0)))
                     throw std::runtime_error("manifest: " + e.path + " is not a member as Sieve writes one");
                 e.member = true;
                 ++found;
