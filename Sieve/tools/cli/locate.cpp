@@ -287,6 +287,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     std::vector<std::pair<size_t, std::vector<uint8_t>>> masks(files.size()); // derived: its base, its mask
     std::vector<std::pair<size_t, std::vector<uint8_t>>> deltas(files.size()); // v32: its base, its script
     std::vector<char> is_delta(files.size(), 0);
+    std::vector<int64_t> copy_from(files.size(), -1); // v33 draft: a copy's first
     size_t xa = 0, pa = 0, ra = 0;
     std::vector<Deferred> deferred; // the rope's and mixing's files, decoded at once after the listing is read
     std::vector<char> late(files.size(), 0); // files whose bytes come after the listing is read (remade after, too)
@@ -639,6 +640,15 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             deltas[i] = {size_t(std::stoull(k)), take(plain, pa, std::stoull(l), e.path)};
             is_delta[i] = 1;
         }
+        else if (e.way.rfind("copy ", 0) == 0)
+        {
+            // v33 draft: "copy <K>": the same bytes as file K (not itself a copy), filled in once every
+            // other file is made, below.
+            if (!m.v33) throw std::runtime_error("manifest: " + e.path + " is carried as a copy of another, which is sieve-manifest-v33's");
+            const std::string k = e.way.substr(5);
+            if (!decimal(k) || !e.remake.empty() || e.member) throw std::runtime_error("manifest: " + e.path + "'s copy is not written as Sieve writes it");
+            copy_from[i] = int64_t(std::stoull(k));
+        }
         else if (e.way.rfind("lines ", 0) != 0) throw std::runtime_error("manifest: " + e.path + " has no way to be carried (its way: \"" + e.way + "\")");
         if (!deferred.empty() && deferred.back().i == i) late[i] = 1;
         if (!e.remake.empty() && !late[i] && e.remake.rfind("skm ", 0) != 0) // (a file whose bytes come later, once they have; v31's, below)
@@ -741,6 +751,15 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             throw std::runtime_error("manifest: " + files[i]->path + ": " + x.what());
         }
         std::vector<uint8_t>().swap(deltas[i].second);
+    }
+    // v33 draft: each copy the bytes of its first, as installed (any way but a copy), the same size.
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        if (copy_from[i] < 0) continue;
+        const size_t k = size_t(copy_from[i]);
+        if (k >= i || copy_from[k] >= 0 || files[k]->member || files[k]->size != files[i]->size || bytes[k].size() != files[i]->size)
+            throw std::runtime_error("manifest: " + files[i]->path + " is a copy of a file that is not carried before it as itself, at its size");
+        bytes[i] = bytes[k];
     }
     // (Each file let go once it is in the contents: the streams, its files and the contents were all
     // held to the end, about three times the files' size at once.)

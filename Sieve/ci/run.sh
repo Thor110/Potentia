@@ -40,7 +40,10 @@ remove_folder() {
         rm -rf "$d" 2> /dev/null
         [ -e "$d" ] || return 0
         if command -v cygpath > /dev/null 2>&1 && command -v cmd > /dev/null 2>&1; then
-            MSYS2_ARG_CONV_EXCL="*" cmd //c rmdir //s //q "$(cygpath -w "$d")" > /dev/null 2>&1 # (//s //q: Git Bash would take /s /q for paths)
+            # (Git Bash's turning of /x into paths off, so /c /s /q reach cmd as they are written; and
+            # no input, so cmd can never sit waiting at a prompt: with //c, which the turning off left
+            # as it was, cmd opened one and the run never ended, 2 November 2026.)
+            MSYS2_ARG_CONV_EXCL="*" cmd /c rmdir /s /q "$(cygpath -w "$d")" < /dev/null > /dev/null 2>&1
             [ -e "$d" ] || return 0
         fi
         sleep 2

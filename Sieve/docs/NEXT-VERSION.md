@@ -32,6 +32,11 @@ ways that win somewhere; the rope's search giving keeping its own turn, or real-
   minutes); with the draft the segments are weighed too: two runs of 4 MiB 81 bytes against v32's
   1,351, DEADBEEF repeated 80 against 2,573. Ramps too (values of 1 to 8 bytes stepping evenly,
   as not-a-pattern-v1 sets aside): a 16-bit counter over 8 MiB 83 bytes against 44,470.
+- **Built (2 November 2026, the fourth piece):** copies (`copy K`; SPECIFICATIONS, v33): a file with
+  the same bytes as one before it carried as a copy of it, decided before anything else, wherever
+  the two are and however the first is carried. 100 copies of a 1.2 MB JPEG: 13.6 s against 90.2,
+  and a little smaller. (At every version, copies now cost one file's work: JPEGs recoded once,
+  PNGs made once, LZMA2's estimates kept.)
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

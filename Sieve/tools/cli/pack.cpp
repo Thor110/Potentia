@@ -462,7 +462,29 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
 // (Abandoned by a force stop, it gives 0: whoever asked checks force_requested() before using it.)
 std::atomic<uint32_t> g_sample_floor{0};
 
-uint64_t estimate(const std::vector<uint8_t>& data) { return data.empty() ? 0 : pack_stream(data, dictionary_for(data.size()), false, 6, false, true).size(); }
+// (Each estimate kept by the SHA-256 of what it measured, its dictionary floor beside it: copies of a
+// file ask for the same ones over and over, in the masks, the groups and the weighings; 100 copies
+// of a 1.2 MB JPEG asked for 201. At most 4,096 kept; a force stop's 0 is not.)
+std::mutex g_estimates_mx;
+std::unordered_map<std::string, uint64_t> g_estimates;
+
+uint64_t estimate(const std::vector<uint8_t>& data)
+{
+    if (data.empty()) return 0;
+    const std::string key = sha256_hex(data) + "|" + std::to_string(g_sample_floor.load(std::memory_order_relaxed));
+    {
+        std::lock_guard<std::mutex> lock(g_estimates_mx);
+        if (auto it = g_estimates.find(key); it != g_estimates.end()) return it->second;
+    }
+    const uint64_t n = pack_stream(data, dictionary_for(data.size()), false, 6, false, true).size();
+    if (n && !force_requested())
+    {
+        std::lock_guard<std::mutex> lock(g_estimates_mx);
+        if (g_estimates.size() >= 4096) g_estimates.clear();
+        g_estimates.emplace(key, n);
+    }
+    return n;
+}
 
 // v13: a file cut into pieces, each coded by the way that suits it: LZMA2 (z, carried in the lzma2
 // stream) where its bytes repeat, the rope (r, all of them joined and coded as one) where they do
@@ -2933,6 +2955,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         else bytes[i] = read_file_bytes(root / fs::path(std::u8string(e.path.begin(), e.path.end())));
         if (bytes[i].size() != e.size || sha256_hex(bytes[i]) != e.sha256) throw std::runtime_error(e.path + " changed while the folder was being read");
     }
+    // v33 draft (2 November 2026, Edward: "a nested folder or game with countless duplicate assets,
+    // or even just a folder with 100 of the same images in"): a file with the same bytes as one
+    // before it in the listing (by their SHA-256, which the walk has made) is carried as a copy of it,
+    // "copy K", decided before anything else, so nothing after looks at it: not recoded, not
+    // searched, not packed, wherever in the folder its first is and whatever way that is carried.
+    // (Without it, 100 copies of a 1.2 MB JPEG came to the size of one only because they lay
+    // within LZMA2's window of each other, after LZMA2 had packed all 118 MB of their forms.)
+    const bool copy_way_on = rope_newest >= 16;
+    std::unordered_map<std::string, std::string> copy_of; // a copy's path, its first's
+    if (copy_way_on)
+    {
+        std::unordered_map<std::string, std::string> first_with;
+        for (const ManifestEntry* f : files)
+        {
+            if (f->member || f->size < 32 || f->sha256.empty()) continue; // (a file under 32 bytes costs no more as it is)
+            if (const auto [it, fresh] = first_with.emplace(f->sha256, f->path); !fresh) copy_of.emplace(f->path, it->second);
+        }
+    }
 
     // v14, "Archive and Compressed Formats" (asked for, never by default): an xz file remade exactly from
     // what it holds where liblzma does that, its contents carried; else, and a 7z always (Sieve has
@@ -3027,6 +3067,31 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     };
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
     const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
+    // (Each maker's result for a PNG, and its re-saving, kept by the PNG's SHA-256 where the folder
+    // holds another file of the same bytes, so a copy of a PNG takes what its first was made into
+    // rather than making it again; a PNG with no copy is kept no longer than it is used.)
+    std::unordered_map<std::string, size_t> listed_times;
+    for (const ManifestEntry& x : m.entries)
+        if (!x.dir && !x.sha256.empty()) ++listed_times[x.sha256];
+    std::unordered_map<std::string, std::optional<std::pair<std::vector<uint8_t>, std::string>>> png_made_by;
+    auto png_made_with = [&](size_t maker, const std::vector<uint8_t>& b, const std::string& sha) {
+        const bool copied = !sha.empty() && listed_times[sha] > 1;
+        const std::string key = std::to_string(maker) + sha;
+        if (copied)
+            if (auto it = png_made_by.find(key); it != png_made_by.end()) return it->second;
+        auto x = png_makers[maker](b);
+        if (copied) png_made_by.emplace(key, x);
+        return x;
+    };
+    std::unordered_map<std::string, std::optional<PngResaved>> png_resaved_by;
+    auto png_resave_kept = [&](const std::vector<uint8_t>& b, const std::string& sha) {
+        const bool copied = !sha.empty() && listed_times[sha] > 1;
+        if (copied)
+            if (auto it = png_resaved_by.find(sha); it != png_resaved_by.end()) return it->second;
+        auto x = png_resave(b);
+        if (copied) png_resaved_by.emplace(sha, x);
+        return x;
+    };
     size_t pngs_resaved = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
@@ -3084,6 +3149,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 continue;
             }
             std::vector<uint8_t>& b = bytes[fi++];
+            if (copy_of.count(e.path))
+            {
+                add_file(e, std::move(b), {}); // (a copy: carried as its first, below)
+                continue;
+            }
             // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
             // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
             // remembered, so packing it later does not search again), its names and recipe counted.
@@ -3212,8 +3282,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (pngr_on && permanent_ok && is_png(b))
             {
                 auto exact = [&]() {
-                    for (const PngMaker made : png_makers)
-                        if (auto x = made(b); x && worth(x->first, 40))
+                    for (size_t mk = 0; mk < png_makers.size(); ++mk)
+                        if (auto x = png_made_with(mk, b, e.sha256); x && worth(x->first, 40))
                         {
                             ManifestEntry r = e;
                             r.remake = std::move(x->second);
@@ -3223,7 +3293,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     return false;
                 };
                 auto resaved = [&]() {
-                    auto rs = png_resave(b);
+                    auto rs = png_resave_kept(b, e.sha256);
                     if (!rs || rs->png.size() >= b.size() || !worth(rs->inner, 40)) return false;
                     ++pngs_resaved;
                     png_bytes += b.size();
@@ -3247,8 +3317,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (png_on && is_png(b))
             {
                 bool done = false;
-                for (const PngMaker made : png_makers)
-                    if (auto x = made(b); x && single("png", std::move(x->first), x->second, contents_name(e.path, ".png"), 40))
+                for (size_t mk = 0; mk < png_makers.size(); ++mk)
+                    if (auto x = png_made_with(mk, b, e.sha256); x && single("png", std::move(x->first), x->second, contents_name(e.path, ".png"), 40))
                     {
                         done = true;
                         break;
@@ -3665,15 +3735,26 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // each; then taken in the listing's order.
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
-            if (files[i]->remake.empty() && !files[i]->member && bytes[i].size() >= 1024 && is_jpeg(bytes[i])) todo.push_back(i);
+            if (files[i]->remake.empty() && !files[i]->member && bytes[i].size() >= 1024 && is_jpeg(bytes[i]) && !copy_of.count(files[i]->path)) todo.push_back(i);
         struct Recoded
         {
             std::vector<uint8_t> form, better; // its brunsli form, and (permanent) the JPEG it installs as, where that is not the file
         };
         std::vector<std::optional<Recoded>> recoded(todo.size());
         const bool permanent_alone = !compressed_temporary();
+        // (A JPEG with the same bytes as one before it, by their SHA-256, takes its recoding rather than
+        // making it again: Edward, 2 November 2026, on folders with many copies of an asset. 100
+        // copies of a 1.2 MB JPEG took 146 s, each recoded.)
+        std::vector<int64_t> twin_of(todo.size(), -1);
+        {
+            std::vector<std::string> h(todo.size());
+            for_each_index(todo.size(), pack_threads(), [&](size_t k) { h[k] = sha256_hex(bytes[todo[k]]); });
+            std::unordered_map<std::string, size_t> first;
+            for (size_t k = 0; k < todo.size(); ++k)
+                if (const auto [it, fresh] = first.emplace(h[k], k); !fresh) twin_of[k] = int64_t(it->second);
+        }
         for_each_index(todo.size(), pack_threads(), [&](size_t k) {
-            if (stop_requested()) return;
+            if (stop_requested() || twin_of[k] >= 0) return;
             const timings::Scope t("pack.jpeg");
             const std::vector<uint8_t>& b = bytes[todo[k]];
             if (permanent_alone)
@@ -3685,6 +3766,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     }
             if (auto form = jpeg_to_brunsli(b); form && form->size() < b.size()) recoded[k] = Recoded{std::move(*form), {}};
         });
+        for (size_t k = 0; k < todo.size(); ++k)
+            if (twin_of[k] >= 0 && recoded[size_t(twin_of[k])]) recoded[k] = recoded[size_t(twin_of[k])];
         for (size_t k = 0; k < todo.size(); ++k)
         {
             if (!recoded[k]) continue;
@@ -3725,7 +3808,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // another, each of which would go over all of it for nothing; the search below weighs it with no
     // search. (300 MB of zeros: looked at in under a second.)
     std::vector<char> patterned(files.size(), 0);
-    for_each_index(files.size(), pack_threads(), [&](size_t i) { patterned[i] = pattern_runs(bytes[i]).has_value(); });
+    for_each_index(files.size(), pack_threads(), [&](size_t i) { patterned[i] = !copy_of.count(files[i]->path) && pattern_runs(bytes[i]).has_value(); });
+    // (Each copy's first, by its place in the listing now that archives may have added files.)
+    std::unordered_map<std::string, size_t> file_index;
+    if (!copy_of.empty())
+        for (size_t i = 0; i < files.size(); ++i) file_index.emplace(files[i]->path, i);
+    size_t copies_made = 0;
+    uint64_t copies_bytes = 0;
 
     // Each file's way: an item of one of Sieve's lines, its place there (v5); a program in the x86
     // stream; a text made from another's lines, a mask; the rest as it is.
@@ -3733,6 +3822,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<size_t> used_lines;
     for (size_t i = 0; i < files.size(); ++i)
     {
+        if (const auto c = copy_of.find(files[i]->path); c != copy_of.end())
+            if (const auto k = file_index.find(c->second); k != file_index.end() && k->second < i)
+            {
+                files[i]->way = "copy " + std::to_string(k->second);
+                ++copies_made;
+                copies_bytes += bytes[i].size();
+                continue;
+            }
         files[i]->way = !patterned[i] && is_program(bytes[i]) && files[i]->remake.empty() ? "x86" : "raw";
         if (patterned[i] || !items || bytes[i].empty() || !files[i]->remake.empty()) continue;
         if (const auto found = (*items)(bytes[i]))
@@ -3893,7 +3990,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 best_base = b;
             }
         }
-        // Only where the mask packs smaller than the text itself.
+        // Only where the mask packs smaller than the text itself. (Copies of a file ask for the same two
+        // estimates, the file and a mask of all its lines: estimate keeps them, so 100 copies cost two.)
         if (best && estimate(*best) < estimate(bytes[t]))
         {
             derived[t] = true;
@@ -3994,6 +4092,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<std::vector<uint8_t>> piece_z(files.size()); // v13: a file's LZMA2 pieces, joined
     PackReport r;
     r.deltas = delta_count;
+    r.copies = copies_made;
+    r.copy_bytes = copies_bytes;
     r.jpegs = jpegs_made;
     r.jpeg_bytes = jpeg_bytes;
     r.jpeg_forms = jpeg_forms;
@@ -5057,7 +5157,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                              return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || x.remake.rfind("skr ", 0) == 0 || by_use(x.way);
                          }));
     auto ways_in = [](const std::string& w) {
-        if (w == "runs") return true; // (v33 draft: runs of one byte)
+        if (w == "runs" || w.rfind("copy ", 0) == 0) return true; // (v33 draft: runs of one byte, copies)
         for (const char* tag : {"mix4 ", "mixt "})
             if (w.rfind(tag, 0) == 0)
             {
@@ -5211,6 +5311,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
+        if (r.copies)
+            o << "copies    " << r.copies << " file(s) carried as copies of another with the same bytes (" << r.copy_bytes << " bytes; " << kMatchWaysManifestVersion << ")\n";
         if (r.deltas)
             o << "deltas    " << r.deltas << " file(s) carried as their differences from another (" << r.delta_bytes << " bytes, as scripts of "
               << r.delta_scripts << " before LZMA2; " << kDeltaManifestVersion << ")\n";

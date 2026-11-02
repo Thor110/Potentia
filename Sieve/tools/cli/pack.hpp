@@ -87,6 +87,8 @@ struct PackReport
     bool v33 = false;                    // v33 (draft): some mixing with the match model's ways
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
+    size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes
+    uint64_t copy_bytes = 0;
     size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'
     uint64_t jpeg_bytes = 0, jpeg_forms = 0;
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after

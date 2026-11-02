@@ -1021,6 +1021,31 @@ $SI runs33.sieve --to runs_si --yes > /dev/null
 diff -r runs runs_si
 python sieve_ref.py unpack runs33.sieve --to runs_oracle | grep -c "^runs	" | grep -q "^3$"
 diff -r runs runs_oracle
+# Copies (the v33 draft, 2 November 2026, Edward: "a folder with 100 of the same images in"): a text,
+# a JPEG and 40,000 random bytes, each with a copy in a folder of its own. With the draft each copy
+# is carried as "copy K", decided before anything else (the JPEG not recoded twice), and given back
+# by Sieve, sieve-install and the oracle (which cannot make the JPEG, so neither its copy); at v32,
+# no copies.
+rm -rf cp33 && mkdir -p cp33/sub
+head -c 3000 ../docs/GAME.md > cp33/t.txt
+cp ../web/test-site/src/pictures/door.jpg cp33/door.jpg
+python -c "import random; random.seed(33); open('cp33/noise.bin', 'wb').write(bytes(random.getrandbits(8) for _ in range(40000)))"
+cp cp33/t.txt cp33/door.jpg cp33/noise.bin cp33/sub/
+$S locate cp33 --installer cp33-33.sieve --compressed-temporary --v33-draft 2>&1 | tr -d '\r' > cp33.txt
+grep -q "^copies    3 file(s) carried as copies of another with the same bytes" cp33.txt
+grep -q "^manifest  sieve-manifest-v33" cp33.txt
+$S locate cp33 --installer cp33-32.sieve --compressed-temporary 2>&1 | tr -d '\r' > cp32.txt
+if grep -q "^copies " cp32.txt; then exit 1; fi
+rm -rf cp33_inst cp33_si cp33_oracle
+$S install cp33-33.sieve --to cp33_inst > /dev/null
+diff -r cp33 cp33_inst
+$SI cp33-33.sieve --to cp33_si --yes > /dev/null
+diff -r cp33 cp33_si
+# (The listing's order puts sub/t.txt before t.txt, so t.txt is the copy; the JPEG's copy is not
+# listed by the oracle, which leaves both unmade.)
+python sieve_ref.py unpack cp33-33.sieve --to cp33_oracle | tr -d '\r' | grep -c "^copy [0-9]*	" | grep -q "^2$"
+cmp cp33/t.txt cp33_oracle/t.txt
+cmp cp33/noise.bin cp33_oracle/sub/noise.bin
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
 # macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds

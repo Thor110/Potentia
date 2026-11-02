@@ -7262,6 +7262,7 @@ def cmd_unpack_v7(args, data):
     group = None  # v30: the open group of files mixed together: its bytes, how many are given out, its first file
     remakes = {}
     deltas = {}  # v32: a file's base and its delta's script
+    copies = {}  # v33 draft: a copy's first
     # v31: each archive made again from its skeleton and its members, the files listed under its own
     # path ("<archive>/<n>"), as many as its recipe says: not files of the tree.
     members = {}
@@ -7413,6 +7414,13 @@ def cmd_unpack_v7(args, data):
             got[i], xa = x86[xa:xa + size], xa + size
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
+        elif v33 and way.startswith("copy "):
+            # "copy K" (the v33 draft): the same bytes as file K, not itself a copy, filled in once every
+            # other file is made.
+            mc = re.fullmatch(r"0|[1-9][0-9]*", way[5:])
+            if not mc or i in remakes:
+                sys.exit(f"{path}: a copy not written as Sieve writes it")
+            copies[i] = int(way[5:])
         elif v32 and way.startswith("delta "):
             # "delta K L" (SPECIFICATIONS v32): its L-byte script next in the lzma2 stream, applied to
             # file K once every other file is made.
@@ -7682,6 +7690,13 @@ def cmd_unpack_v7(args, data):
             unchecked.add(i)  # (its base not made here, so neither is it)
             continue
         got[i] = delta_apply(got[k], script, files[i][1], files[i][0])
+    for i, k in sorted(copies.items()):  # v33 draft: each the bytes of its first, as installed
+        if k >= i or k in copies or k in members or files[k][1] != files[i][1]:
+            sys.exit(f"{files[i][0]}: a copy of a file that is not carried before it as itself, at its size")
+        if k in unchecked:
+            unchecked.add(i)
+            continue
+        got[i] = got[k]
     if xa != len(x86) or pa != len(plain) or ia != len(places) or ra != len(ropes):
         sys.exit("the streams hold more than the files")
     for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):
