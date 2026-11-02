@@ -5867,3 +5867,13 @@ weighing each route by everything the installer needs against the file and the o
   tables now carry each run's way as its listing writes it, read back from the `.sieve`
   (`stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3`: made again by stb_image's PNG recipe, its pixels
   mixed as a picture 1280 wide of 3 bytes), so a result can be made again from its line alone.
+- *Optimise Search, built (2 November 2026; the File Locator's box O, ticked unless unticked;
+  `--optimise-search`):* Try every way chosen for each file by its kind, from what was measured: off
+  for every file with Prioritise Decoding Speed; else on for a JPEG, a file over 16 MiB or under 4
+  KiB, off between. Here, each case at the smaller size and the quicker time of the box on and off:
+  Vitruvian's JPEG for size 203,790 bytes in 10.6 s (the box off: 206,946 in 1.0 s; on: 203,790 in
+  10.7 s); for decoding speed 206,946 in 0.2 s (on: the same bytes in 9.2 s); README for size 3,411 in
+  0.4 s (on: 0.8 s). Only JPEGs have data enough yet for a rule of their own; the rest follow sizes,
+  and each kind gains a rule as its measurements come in (the record of what carried each result).
+- *The next version's draft, made one number (2 November 2026):* see NEXT-VERSION.md.
+- *Game of Life:* its findings and what is still to try are gathered in [GAME-OF-LIFE.md](GAME-OF-LIFE.md).

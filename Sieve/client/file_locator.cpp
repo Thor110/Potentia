@@ -276,6 +276,16 @@ std::function<void(bool)>& kept_every()
 void FileLocator::remember_every(std::function<void(bool)> changed) { kept_every() = std::move(changed); }
 
 namespace {
+std::function<void(bool)>& kept_optimise()
+{
+    static std::function<void(bool)> k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_optimise(std::function<void(bool)> changed) { kept_optimise() = std::move(changed); }
+
+namespace {
 struct KeptLog
 {
     bool on = false;
@@ -346,7 +356,9 @@ void FileLocator::open_log(const std::string& what, const std::string& path, boo
     if (search)
         log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
          << (sieve::prioritise_decoding() ? "on" : "off") << "; archive and compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
-         << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "") << "\n"
+         << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "")
+         << "; Optimise Search " << (sieve::cli::optimise_search() ? "on (Try every way chosen file by file)" : "off")
+         << "; " << sieve::cli::draft_name() << " draft " << (sieve::cli::draft_on() ? "on (" + sieve::cli::draft_manifest() + " where it is smaller; not to be published)" : std::string("off")) << "\n"
          << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
          << "a step on less than 64 KiB does not count for \"last new best\")\n";
     log_.flush();
@@ -847,6 +859,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_rope_seconds = by_total ? total : per_file;
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
+                r.made_optimise = sieve::cli::optimise_search();
                 r.made_decoding = sieve::prioritise_decoding();
                 refine_estimate(5);
             }
@@ -913,6 +926,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.instructions_raw = std::move(raw);
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
+                r.made_optimise = sieve::cli::optimise_search();
                 r.made_decoding = sieve::prioritise_decoding();
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
@@ -1001,7 +1015,7 @@ void FileLocator::save(const std::string& to)
     // Made when it was read, with what is set now: written as it is, nothing packed again (and the
     // graph of how it was made is kept).
     const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == boxes &&
-                      r.made_every == sieve::rope_search_every_wave() && r.made_decoding == sieve::prioritise_decoding();
+                      r.made_every == sieve::rope_search_every_wave() && r.made_optimise == sieve::cli::optimise_search() && r.made_decoding == sieve::prioritise_decoding();
     start_job(!made);
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -1126,7 +1140,8 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
         case SDLK_A: pressed = "temporary"; break; // Archive and compressed formats: temporary, on or off
         case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
-        case SDLK_E: pressed = "every"; break;    // Try every way, on or off
+        case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
+        case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
         case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
@@ -1156,7 +1171,13 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "search_file_more") step_search(false, 1);
     else if (pressed == "search_run_less") step_search(true, -1);
     else if (pressed == "search_run_more") step_search(true, 1);
-    else if (pressed == "every")
+    else if (pressed == "optimise")
+    {
+        const bool on = !sieve::cli::optimise_search();
+        sieve::cli::set_optimise_search(on);
+        if (kept_optimise()) kept_optimise()(on);
+    }
+    else if (pressed == "every" && !sieve::cli::optimise_search())
     {
         const bool on = !sieve::rope_search_every_wave();
         sieve::set_rope_search_every_wave(on);
@@ -1276,7 +1297,10 @@ void FileLocator::draw(float W, float H)
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
     draw_text(r_, 20, 16, tr("loc.title"), 3, ink);
-    draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
+    // (the next version's draft on: said in place of the subtitle, so a run made with it is never
+    // taken for one of the frozen version)
+    if (sieve::cli::draft_on()) draw_text(r_, 20, 48, fit_text(trf("loc.draft", {sieve::cli::draft_name(), sieve::cli::draft_manifest()}), W - 40, 1), 1, SDL_Color{255, 170, 60, 255});
+    else draw_text(r_, 20, 48, fit_text(tr("loc.subtitle"), W - 40, 1), 1, grey);
     buttons_.clear();
     // (A top button the window is too narrow for goes up beside the title, at its right, where there
     // is room; else onto a row below, and what is under them starts that much lower. Every later
@@ -1389,7 +1413,17 @@ void FileLocator::draw(float W, float H)
         };
         box("temporary", temporary_, tr("loc.temporary"));
         box("permanent", permanent_, tr("loc.permanent"));
-        box("every", sieve::rope_search_every_wave(), tr("loc.every"));
+        // (Optimise Search, ticked unless unticked: Try every way chosen for each file by its kind,
+        // so its own box is shown greyed and not pressed while it is)
+        box("optimise", sieve::cli::optimise_search(), tr("loc.optimise"));
+        if (sieve::cli::optimise_search())
+        {
+            const std::string text = std::string(sieve::rope_search_every_wave() ? "[x] " : "[ ] ") + tr("loc.every") + " " + tr("loc.every.chosen");
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
+            draw_text(r_, bx + 12, box_y + 8, text, 2, grey);
+            bx += text_width(text, 2) + 24 + 12;
+        }
+        else box("every", sieve::rope_search_every_wave(), tr("loc.every"));
         box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
         box("log", kept_log().on, tr("loc.log"));
         return box_y;
@@ -1454,9 +1488,11 @@ void FileLocator::draw(float W, float H)
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
-            for (const char* id : {"loc.temporary", "loc.permanent", "loc.every", "loc.decoding", "loc.log"})
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.decoding", "loc.log"})
             {
-                const float w = text_width("[ ] " + tr(id), 2) + 24;
+                // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
+                const std::string label = tr(id) + (std::string(id) == "loc.every" && sieve::cli::optimise_search() ? " " + tr("loc.every.chosen") : std::string());
+                const float w = text_width("[ ] " + label, 2) + 24;
                 if (x > 20 && x + w > W - 20) ++rows, x = 20;
                 x += w + 12;
             }

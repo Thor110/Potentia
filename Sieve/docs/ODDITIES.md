@@ -31,15 +31,21 @@ a result surprises; close it with what explained it.
   ways' gain is the next question; the group size (8 MiB) and the limit could be searched too, at
   the cost of a combinatorial search (Edward).
 
-### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026)
+### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026; fixed, to be confirmed)
 - *Seen:* of 153 JPEGs (no box ticked), five of 58 KB to 176 KB came out 18 to 225 bytes larger
   with Try every way than without (0.03% to 0.13%): it took mixing as a picture where without it
   LZMA2 was taken.
 - *Known:* a file's ways are weighed against LZMA2's estimate (preset 6), and the stream as made
   (preset 9, its settings tried) comes out smaller than that estimate; mixing beat the estimate and
   lost to the stream, its way's text in the listing a little longer too.
-- *Next (no new version):* weigh mixing against the stream as it will be made, or keep LZMA2 unless
-  mixing is under it by a margin; measured on these five first.
+- *The five (Edward's pictures):* K2_00001.jpg 175,693 bytes, LZMA2's stream 174,795 against
+  mixing's code 174,829 (the `.sieve` 174,857 against 174,908); K2_00000.jpg 169,433 against 169,641;
+  a 85,821-byte JPEG 80,613 against 80,683; two of 64,624 and 58,664 bytes 64,008 against 64,009 and
+  57,176 against 57,180. In every one mixing's code was no smaller than LZMA2's stream, and it
+  installed about thirty times slower (0.16 s against 0.005 s on the largest).
+- *Fixed (2 November 2026, no new version):* mixing now replaces LZMA2 only by the margin the
+  packer's other weighings use, 64 bytes and 0.5% (mixing's wins on the other 148 had a median of
+  2.7%). To be confirmed on the five when Edward runs his pictures again.
 
 ### Some of Edward's JPEGs
 - *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.

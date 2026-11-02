@@ -2375,7 +2375,7 @@ std::optional<MixedAs> mixed_as_found(const std::vector<uint8_t>& bytes)
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     char t[64];
-    std::snprintf(t, sizeof t, "|%.6f|%u|%d|%d", rope_seconds, rope_newest, int(pieces), int(rope_search_every_wave()));
+    std::snprintf(t, sizeof t, "|%.6f|%u|%d|%d|%d", rope_seconds, rope_newest, int(pieces), int(rope_search_every_wave()), int(optimise_search()));
     Sha256 h;
     h.update(std::span<const uint8_t>(bytes.data(), bytes.size()));
     const std::string key = Sha256::hex(h.finish()) + t;
@@ -2608,11 +2608,41 @@ std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_skeleton_unfi
 
 } // namespace
 
+namespace {
+std::atomic<bool> g_draft{false};
+} // namespace
+
+void set_draft(bool on) { g_draft = on && kDraftVersion != 0; }
+bool draft_on() { return g_draft.load(std::memory_order_relaxed); }
+
+namespace {
+std::atomic<bool> g_optimise_search{false};
+} // namespace
+
+void set_optimise_search(bool on) { g_optimise_search = on; }
+bool optimise_search() { return g_optimise_search.load(std::memory_order_relaxed); }
+
+std::pair<bool, const char*> optimised_every_way(std::span<const uint8_t> b)
+{
+    // (Measured, 1 November 2026 and before: Edward's 153 JPEGs, decode/try the same bytes as
+    // decode/no on every one, in 1.24 h against 0.08 h, and size/try smaller on 148 by a median of
+    // 2.7%; enwik8 and enwik9 for decoding the same either way; Try every way paying for size over
+    // mixing's 16 MiB and under its 4 KiB (enwik8, enwik9, control.py), and the same size between
+    // (Don Quixote, pi, a 3653 by 5480 picture): Proof/STATISTICS.md.)
+    if (prioritise_decoding()) return {false, "decoding speed chosen: Try every way changed nothing measured so"};
+    if (b.size() >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return {true, "a JPEG: mixed whole, 2.7% smaller (median of 153)"};
+    if (b.size() > (uint64_t(16) << 20)) return {true, "over 16 MiB: mixed only so"};
+    if (b.size() < 4096) return {true, "under 4 KiB: mixed only so"};
+    return {false, "between 4 KiB and 16 MiB: the same size measured either way"};
+}
+
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
                 bool v20_on, bool v21_on, bool v22_on)
 {
     const timings::Scope t_all("pack.all");
+    // The draft switch on (draft.hpp): where the newest is asked for, the draft's is made.
+    if (draft_on() && rope_newest == kNewestRope) rope_newest = kDraftRope;
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
     std::vector<ManifestEntry*> files;
@@ -2687,13 +2717,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
     // rope_newest is held to the rope's own versions below).
     const bool v32_head_on = rope_newest >= 15;
-    // v33 (draft, --v33-draft only, 2 November 2026): mixing's match model may take its ways (mix-v4's
+    // v33 (the draft: draft.hpp, made only with the switch on, 2 November 2026): mixing's match model may take its ways (mix-v4's
     // R1, M4, C2), weighed on a file's start: none, C2, or all three, the smallest kept. Measured
     // (docs/ODDITIES.md): Silesia's mozilla mixed whole 13,778,604 bytes, with all three 13,318,505,
     // under LZMA2's 13,376,180; 8 MiB of its programs 3.5% smaller, 4 MiB of Sieve's 3.4%; Don
     // Quixote 1.2% larger with all three and 0.2% smaller with C2 alone; a screenshot a little larger
     // (so weighed, not always on).
-    const bool match_ways_on = mix4_on && rope_newest >= 16;
+    const bool match_ways_on = mix4_on && rope_newest >= kDraftRope && kDraftVersion == 33;
     auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
         if (!match_ways_on || f.size() < 4096) return mp;
         const std::span<const uint8_t> start = f.first(std::min<size_t>(f.size(), size_t(256) << 10));
@@ -3756,6 +3786,17 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const InnerThreads inner(share);
             if (stop_requested()) return; // asked to stop: the rest carried as they are, by LZMA2
             Found& got = found[i];
+            // Optimise Search (2 November 2026, Edward): Try every way chosen for this file by its
+            // kind, from what was measured, in place of the box.
+            bool every_here = rope_search_every_wave();
+            if (optimise_search())
+            {
+                const auto [on, why] = optimised_every_way(bytes[i]);
+                every_here = on;
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", Optimise Search: Try every way " +
+                         (on ? "on" : "off") + " (" + why + ")");
+            }
+            const EveryWaveHere every_wave_here(every_here);
             progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
             // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
             FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
@@ -3918,7 +3959,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
                     note_mixed(sha[i], mix_way, mc.size() + vl); // (for the weighing)
-                    if (mc.size() + vl < best)
+                    // Against LZMA2 (the file carried as it is), by a clear margin, 64 bytes and 0.5%:
+                    // LZMA2's figure here is its estimate (preset 6), and the stream as made comes out
+                    // a little smaller, while mixing installs 15 to 60 times slower. (Edward's JPEGs, 1
+                    // November 2026: five of 58 KB to 176 KB were mixed with Try every way for 18 to 225
+                    // bytes more than LZMA2 made them, the mixing code no smaller than the stream.)
+                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 200) : best;
+                    if (mc.size() + vl < need)
                     {
                         best = mc.size() + vl;
                         way = mix_way;

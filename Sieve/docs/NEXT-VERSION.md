@@ -7,11 +7,16 @@ and nothing makes v33 by default until Edward freezes it. Packer changes needing
 land freely. Queued for it, each measured before it is built (IDEAS §19.111): the shortcut seed's
 ways that win somewhere; the rope's search giving keeping its own turn, or real-rope as its own way
 (§19.110).
-- **Built (2 November 2026):** the switch, `--v33-draft` (`sieve locate`), and its first piece,
+- **The draft system (2 November 2026, Edward: "a dynamic next version draft setup system"):** the
+  version in the making is one number, `kDraftVersion` in `tools/cli/draft.hpp`; the switch's name
+  (`--v33-draft`), the ini key (`[locator] v33_draft`), the help text and the File Locator's orange
+  line ("v33 DRAFT ON") all follow from it, so the next draft is begun by changing that number (and
+  giving its pieces their gate). An older draft's ini line is read and let go.
+- **Built (2 November 2026):** the switch, `--v33-draft` (`sieve locate`, the hallway), and its first piece,
   mixing's match model with its ways (mix-v4's `R1`, `M4`, `C2`; SPECIFICATIONS, v33), weighed on
   each mixed file's start: Silesia's mozilla mixed whole under LZMA2 for the first time (13,318,505
   against 13,376,180). Sieve, sieve-install and the oracle read it; CI step 11 checks it. The
-  hallway's File Locator has no box for it yet.
+  hallway takes it from `[locator] v33_draft` or `--v33-draft`, and says so in the File Locator.
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

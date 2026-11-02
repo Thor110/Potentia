@@ -17,6 +17,10 @@
 // gives back something else.
 #pragma once
 
+#include "draft.hpp"
+
+#include <span>
+
 #include "cli/locate.hpp"
 #include "sieve/rope_wave.hpp"
 
@@ -147,6 +151,17 @@ struct SampleAsWhole
 // sieve-manifest-v32 (frozen 31 October 2026); 14 is v31's.
 // Everything that makes instructions passes it unless an older version is asked for by name.
 inline constexpr uint32_t kNewestRope = 15;
+// The draft's (draft.hpp, kDraftVersion): what an instructions-maker asked for the newest makes
+// while the draft switch is on.
+inline constexpr uint32_t kDraftRope = kNewestRope + 1;
+
+// Optimise Search (Edward, 2 November 2026; the File Locator's box, ticked unless unticked;
+// --optimise-search): Try every way chosen for each file by its kind, from what was measured, in
+// place of the box: off for every file with Prioritise Decoding Speed; else on for a JPEG, a file
+// over 16 MiB or under 4 KiB, off between. The choice and why.
+void set_optimise_search(bool on);
+bool optimise_search();
+std::pair<bool, const char*> optimised_every_way(std::span<const uint8_t> file);
 
 // What Optimise Compressed Formats does with an archive or a compressed file, for the whole run:
 // `temporary`, made again exactly on installing, so the program that wants it still finds it (only

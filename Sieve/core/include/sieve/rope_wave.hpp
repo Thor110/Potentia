@@ -126,5 +126,18 @@ inline bool rope_v6(const RopeParams& p) { return p.phases == 4 || p.triangle; }
 // time (--search-every-wave, the File Locator's [locator] search_every_wave). For the whole run.
 void set_rope_search_every_wave(bool every);
 bool rope_search_every_wave();
+// Try every way chosen for this thread alone while it lives (Optimise Search: the packer's choice
+// for the file a thread is searching), the run's choice again after.
+class EveryWaveHere
+{
+public:
+    explicit EveryWaveHere(bool every);
+    ~EveryWaveHere();
+    EveryWaveHere(const EveryWaveHere&) = delete;
+    EveryWaveHere& operator=(const EveryWaveHere&) = delete;
+
+private:
+    int was_;
+};
 
 } // namespace sieve

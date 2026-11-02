@@ -997,8 +997,16 @@ void forget_rope_searches()
     g_cache.clear();
 }
 
+namespace {
+// (Optimise Search, 2 November 2026: the packer may choose Try every way file by file, each on the
+// thread searching it; -1: the run's choice.)
+thread_local int t_every_wave = -1;
+} // namespace
+
 void set_rope_search_every_wave(bool every) { g_every_wave = every; }
-bool rope_search_every_wave() { return g_every_wave.load(std::memory_order_relaxed); }
+bool rope_search_every_wave() { return t_every_wave >= 0 ? t_every_wave == 1 : g_every_wave.load(std::memory_order_relaxed); }
+EveryWaveHere::EveryWaveHere(bool every) : was_(t_every_wave) { t_every_wave = every ? 1 : 0; }
+EveryWaveHere::~EveryWaveHere() { t_every_wave = was_; }
 
 RopeSearch rope_search(std::span<const uint8_t> file, double seconds, uint32_t newest)
 {
@@ -1110,12 +1118,12 @@ RopeSearch rope_search_uncached(std::span<const uint8_t> file, double seconds, u
         // Then a text's search ends: on 118 texts measured (24 October 2026: this repository's docs,
         // code, tables, word lists, meshes and pi's digits) the best was always one tried by now, or
         // within 5 bytes of it; the waves after found nothing better. --search-every-wave goes on.
-        if (!g_every_wave.load(std::memory_order_relaxed)) goto keep;
+        if (!rope_search_every_wave()) goto keep;
     }
     // Bytes that nothing so far makes even 2% smaller (a JPEG, a PNG, a film: already packed) are
     // not searched further: no wave has ever helped them, and the search would take its whole time
     // for nothing. rope_search_every_wave(true) searches on regardless.
-    if (!g_every_wave.load(std::memory_order_relaxed) && r.estimate >= 0.98 * double(file.size())) goto keep;
+    if (!rope_search_every_wave() && r.estimate >= 0.98 * double(file.size())) goto keep;
     for (const uint32_t bits : {8u, 16u, 32u})
     {
         const uint32_t vb = bits / 8;

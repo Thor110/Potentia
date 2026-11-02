@@ -2451,7 +2451,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 :
                      a.has("v15") || a.has("v16") || a.has("v19") || a.has("v20") || a.has("v21") || a.has("v22") ? 5 :
-                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : a.has("v28") ? 11 : a.has("v29") ? 12 : a.has("v30") ? 13 : a.has("v31") ? 14 : a.has("v33-draft") ? 16 : kNewestRope,
+                     a.has("v23") ? 6 : a.has("v24") ? 7 : a.has("v25") ? 8 : a.has("v26") ? 9 : a.has("v27") ? 10 : a.has("v28") ? 11 : a.has("v29") ? 12 : a.has("v30") ? 13 : a.has("v31") ? 14 : kNewestRope,
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11")),
                      !(a.has("v8") || a.has("v9") || a.has("v10") || a.has("v11") || a.has("v12")),
                      (a.has("optimise-compressed") || a.has("optimise-archives") || temporary || permanent) && !a.has("v13"), !a.has("v15"), !a.has("v16"),
@@ -3186,6 +3186,8 @@ int main(int argc, char** argv)
         if (a.has("timings")) timings::enable();
         if (a.has("search-every-wave")) set_rope_search_every_wave(true); // the rope's search through every wave
         if (a.has("prioritise-decoding")) set_prioritise_decoding(true);   // no file mixed: quicker to install
+        if (a.has(draft_flag())) set_draft(true);                          // the next version's draft (draft.hpp)
+        if (a.has("optimise-search")) set_optimise_search(true);           // Try every way chosen file by file
         // --filter-memory MB, on any command: what one count's tables may take (the setup menu's
         // FILTER MEMORY; 512 MB unless given).
         if (a.has("filter-memory")) set_filter_memory(double(a.get_positive("filter-memory", 512)) * 1024 * 1024);
