@@ -2713,6 +2713,37 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
             }
         }
     }
+    // Any other file (not a text) over 512 KiB the rope cannot win (2 November 2026, on Edward's two maps of 160
+    // MB: 768 s of search, and LZMA2 carried the file). The rope's own search on the file's first
+    // 256 KiB, against LZMA2's estimate of the same, says how the whole search would end: on 22
+    // files (pictures as raw pixels, a sound, programs, a map, mozilla's tar, random bytes) where the
+    // rope won whole (0.73 to 0.94 of LZMA2) it came to 0.69 to 0.94 there, and where it lost (1.15
+    // to 5.71 whole) 1.23 to 3.71 there, in 0.2 to 7 s against 6 to 168 s for the whole
+    // (results/rope-probe-2026-11-02.md). At 1.1 or more, neither the rope's search nor the pieces
+    // are tried, as for a text above.
+    if (rope_newest >= 5 && !asked_every && bytes.size() > (size_t(512) << 10) && !text_like(std::span<const uint8_t>(bytes.data(), size_t(256) << 10)))
+    {
+        const std::span<const uint8_t> start(bytes.data(), size_t(256) << 10);
+        const RopeSearch probe = [&] {
+            const timings::Scope t("pack.rope.probe");
+            return rope_search(start, rope_seconds, rope_newest);
+        }();
+        const uint64_t by_rope = rope_code(start, probe.best).size();
+        const uint64_t by_lzma2 = estimate(std::vector<uint8_t>(start.begin(), start.end()));
+        if (by_rope * 10 >= by_lzma2 * 11 && !force_requested())
+        {
+            char ratio[32];
+            std::snprintf(ratio, sizeof ratio, "%.2f", double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1)));
+            w.rope_said = std::string("not searched: its first 256 KiB the rope's search makes ") + ratio + " times LZMA2's";
+            progress(w.rope_said);
+            w.tried += probe.tried;
+            w.lzma2 = whole_estimate(bytes);
+            w.rope_bytes = UINT64_MAX;
+            w.pieces_said = "not cut: the rope does not win this file";
+            if (force_requested()) w.forced = true;
+            return w;
+        }
+    }
     // LZMA2's estimate of the whole file beside the rope's search and the pieces, on a thread of its
     // own: the same numbers, sooner (32 MB of random bytes: 22.9 s to 21.7; the estimate alone is
     // 17.7 s of it, and LZMA2 gives it no faster without a different number). With one thread, one

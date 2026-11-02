@@ -174,8 +174,9 @@ without the v33 draft (978,332 and 963,838; 1,052,540 and 1,052,127).
 
 **Seen on the way: docs/ is not packed the same twice.** The same build gave 594,466 bytes on two
 runs and 598,620 on two others (the difference in the group of 22 texts mixed together: apart
-438,831 against 458,440). The rope's search stops at its time limit, which is the likely cause;
-not yet confirmed. Comparisons of packers here use folders whose results do not move.
+438,831 against 458,440). The cause is not found yet: not the rope's time limit, as first guessed
+here, since by default the search has none. Comparisons of packers here use folders whose results
+do not move.
 
 **The delta check.** Timed on the 160 MB pair of maps (one 160,068,077 bytes, carried as its
 differences from the other, 160,000,000; 1,518 s in all, `--timings`):

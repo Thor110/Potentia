@@ -1021,6 +1021,24 @@ $SI runs33.sieve --to runs_si --yes > /dev/null
 diff -r runs runs_si
 python sieve_ref.py unpack runs33.sieve --to runs_oracle | grep -c "^runs	" | grep -q "^3$"
 diff -r runs runs_oracle
+# The rope not searched on a file it cannot win (any version, 2 November 2026): a file over 512 KiB
+# that is not text has the rope's search made on its first 256 KiB first, and where that comes to
+# 1.1 times LZMA2's estimate of the same or more, no whole search. 64 random blocks of 16 KiB
+# repeated in a shuffled order (LZMA2 finds the repeats; the rope cannot) is not searched; a smooth
+# 16-bit sound, which the rope wins, is. Both given back.
+rm -rf probe
+mkdir -p probe/lose probe/win
+python -c "import random; random.seed(56); b = [bytes(random.getrandbits(8) for _ in range(16384)) for _ in range(16)]; open('probe/lose/blocks.bin', 'wb').write(b''.join(random.choice(b) for _ in range(64)))"
+python -c "import math, random; random.seed(57); open('probe/win/sound.raw', 'wb').write(b''.join(int(9000 * math.sin(i / 7.0) + 3000 * math.sin(i / 2.3) + random.gauss(0, 40)).to_bytes(2, 'little', signed=True) for i in range(400000)))"
+$S locate probe/lose --installer probe-lose.sieve --progress 2>&1 | tr -d '\r' > probe-lose.txt
+grep -q "rope not searched: its first 256 KiB the rope's search makes [0-9.]* times LZMA2's" probe-lose.txt
+$S locate probe/win --installer probe-win.sieve --progress 2>&1 | tr -d '\r' > probe-win.txt
+if grep -q "not searched" probe-win.txt; then exit 1; fi
+rm -rf probe_lose_inst probe_win_inst
+$S install probe-lose.sieve --to probe_lose_inst > /dev/null
+diff -r probe/lose probe_lose_inst
+$S install probe-win.sieve --to probe_win_inst > /dev/null
+diff -r probe/win probe_win_inst
 # Copies (the v33 draft, 2 November 2026, Edward: "a folder with 100 of the same images in"): a text,
 # a JPEG and 40,000 random bytes, each with a copy in a folder of its own. With the draft each copy
 # is carried as "copy K", decided before anything else (the JPEG not recoded twice), and given back

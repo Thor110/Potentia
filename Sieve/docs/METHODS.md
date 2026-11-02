@@ -124,6 +124,14 @@ many as the threads and memory allow, and the result is the same at any thread c
      (results/weighing-order-2026-11-02.md). Not with Try every way ticked itself (only where
      Optimise Search turns it on). Log: `rope not searched: a text whose start its line wave makes
      R times LZMA2's`.
+   - Not searched for any other file the rope cannot win (2 November 2026): a file of more than 512
+     KiB whose first 256 KiB are not text has the rope's search made on those 256 KiB first, and
+     where that comes to 1.1 times LZMA2's estimate of the same or more, neither the rope nor the
+     pieces are tried. Where the rope won whole (pictures, a sound) the test came to 0.69 to 0.94;
+     where it lost (programs, a map, mozilla's tar, screenshots) 1.23 to 3.71; the map packed in 42
+     s where it took 166, to the same bytes (results/rope-probe-2026-11-02.md). Not with Try every
+     way ticked itself. Log: `rope not searched: its first 256 KiB the rope's search makes R times
+     LZMA2's`.
    - Not searched either for a repeating byte or pattern (found before anything else): LZMA2, the
      rope's wave of differences and (v33 draft) the segments are weighed, with no search.
 3. **Pieces**: the file cut into 4 KiB blocks, each weighed by LZMA2 against the rope. Runs of

@@ -421,6 +421,12 @@ The v32 figure was made on Edward's machine with Try every way (in 11.4 s; insta
 rope, 416,970 bytes, came under mixing (418,822) and LZMA2 (507,033), as before, and v32's head took
 3 bytes off.
 
+Made again on 2 November 2026 (Sieve 0.13.77, on Edward's machine, Try every way off and Optimise
+Search on, the File Locator's defaults): the same 417,049 bytes in **2.8 s** (the rope's search 0.05
+s; mixing, weighed beside it, 1.7 s), installed and checked in 0.045 s. The rope came to 416,970
+bytes again, under mixing (418,822) and the File Locator's own 7z of the file (505,978). The twelve
+bytes from 417,061 are the last two steps above: 9 from the rope wave's update, 3 from v32's head.
+
 "Above the floor" is how much larger than 415,241 bytes the file is, as a share of the floor; "the
 floor below it" is how much smaller the floor is, as a share of the file; "against 7z" is how much
 smaller the `.sieve` is than `pi6.7z` (512,745 bytes).
