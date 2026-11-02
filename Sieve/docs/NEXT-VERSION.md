@@ -17,6 +17,13 @@ ways that win somewhere; the rope's search giving keeping its own turn, or real-
   each mixed file's start: Silesia's mozilla mixed whole under LZMA2 for the first time (13,318,505
   against 13,376,180). Sieve, sieve-install and the oracle read it; CI step 11 checks it. The
   hallway takes it from `[locator] v33_draft` or `--v33-draft`, and says so in the File Locator.
+- **Built (2 November 2026, the second piece):** programs mixed through the x86 filter (mix-v4's
+  `X`, last of its parameters; SPECIFICATIONS, v33). A program the x86 stream would carry is
+  weighed mixed whole, through the filter, against LZMA2 with the filter, with no test on its start
+  (which turned away 5 of 16 programs that came out smaller whole), then the programs so mixed are
+  weighed again against the x86 stream they would share. Sixteen programs of 98 KB to 11.8 MB came
+  out 3.0% to 15.1% under LZMA2's best (`results/programs-mixed-2026-11-02.md`). Sieve, sieve-install
+  and the oracle (its own filter, checked against the SDK's) read it.
 
 
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,

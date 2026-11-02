@@ -2735,7 +2735,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
         // and shape, so the answer is kept, by thread, for the second.)
         uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
-                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31;
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
         thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
         if (const auto hit = weighed.find(key); hit != weighed.end())
@@ -3743,9 +3743,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for_each_index(files.size(), pack_threads(), [&](size_t i) { sha[i] = sha256_hex(bytes[i]); });
         std::unordered_map<std::string, size_t> copies;
         for (size_t i = 0; i < files.size(); ++i) ++copies[sha[i]];
+        // v33 draft (2 November 2026): a program too (the x86 stream's), to be weighed mixed whole,
+        // through the x86 filter, against the stream: 16 programs of 98 KB to 11.8 MB (Linux's and
+        // Windows', x86 and x86-64) mixed so 3.0% to 15.1% under LZMA2 with the filter, every one
+        // (results/programs-mixed-2026-11-02.md). Not where decoding speed is chosen.
+        // (Where mixing would be tried: 4 KiB to 16 MiB, or any size with Try every way or Optimise
+        // Search, which turns it on over 16 MiB.)
+        const bool programs_mixed = match_ways_on && !prioritise_decoding();
+        auto program_mixed = [&](size_t i) {
+            return programs_mixed && files[i]->way == "x86" && bytes[i].size() >= 4096 &&
+                   (bytes[i].size() <= (size_t(16) << 20) || rope_search_every_wave() || optimise_search());
+        };
         std::vector<size_t> todo;
         for (size_t i = 0; i < files.size(); ++i)
-            if (files[i]->way == "raw" && bytes[i].size() >= 512 && copies[sha[i]] == 1 && files[i]->remake.rfind("jbr ", 0) != 0)
+            if ((files[i]->way == "raw" || program_mixed(i)) && bytes[i].size() >= 512 && copies[sha[i]] == 1 && files[i]->remake.rfind("jbr ", 0) != 0)
                 todo.push_back(i); // (a JPEG's brunsli form is coded already: nothing to search for)
         // Every file not searched, and why, said once for it as the searched ones are below (Keep a
         // log keeps it): nothing a file was or was not tried for goes unsaid.
@@ -3815,9 +3826,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                          (on ? "on" : "off") + " (" + why + ")");
             }
             const EveryWaveHere every_wave_here(every_here);
-            progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
-            // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
-            FileWays fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
+            // (A program, v33 draft: against LZMA2 with the x86 filter, as the x86 stream carries it,
+            // and mixing whole through the filter; not the rope or pieces, which its bytes do not suit.)
+            const bool program = files[i]->way == "x86";
+            FileWays fw;
+            if (program)
+                fw.lzma2 = pack_stream(bytes[i], dictionary_for(bytes[i].size()), true, 6, false, true).size(), fw.rope_bytes = UINT64_MAX;
+            else
+            {
+                progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
+                // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
+                fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
+            }
             got.tried = fw.tried;
             if (fw.forced || force_requested()) return; // force stop: this file and the rest as they are
             std::string way;
@@ -3865,7 +3885,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
                 const std::vector<uint8_t> start(bytes[i].begin(), bytes[i].begin() + std::ptrdiff_t(sn));
                 const RopeParams& rp = fw.rope;
-                const bool picture = mix2_on && rp.bits == 8 && rp.phases >= 2 && rp.step >= 1 && rp.step <= 4 && rp.width > rp.step &&
+                const bool picture = !program && mix2_on && rp.bits == 8 && rp.phases >= 2 && rp.step >= 1 && rp.step <= 4 && rp.width > rp.step &&
                                      rp.width % rp.step == 0 && rp.width / rp.step <= (uint32_t(1) << 24) &&
                                      uint64_t(rp.width) * 2 <= bytes[i].size(); // (two whole lines at least)
                 uint32_t pw = picture ? rp.width / rp.step : 0, pc = picture ? rp.step : 1;
@@ -3874,12 +3894,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // their shape in the recipe, which is weighed in its place: the rope's reading of a
                 // screenshot can be a few bytes wide (ROADMAP D.2).
                 std::optional<std::pair<uint32_t, uint32_t>> guessed;
-                if (mix2_on && !picture) guessed = picture_shape(bytes[i]);
-                const auto known = pixels_shape_on ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
+                if (mix2_on && !picture && !program) guessed = picture_shape(bytes[i]);
+                const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
                     if (mix4_on)
                     {
-                        const Mix4Params mp = with_ways(Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on), f, words);
+                        Mix4Params base = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
+                        base.x86 = program;
+                        const Mix4Params mp = with_ways(base, f, words);
                         way_text = "mix4 " + mp.text();
                         return mix4_code(f, mp, words);
                     }
@@ -3904,7 +3926,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // (Each trial on its start said in the file's line: every way tried, and what it came to.)
                 std::string tests;
                 auto test_said = [&](const std::string& what, uint64_t n) { tests += (tests.empty() ? "" : ", ") + what + " " + std::to_string(n); };
-                if (!every || guessed || known)
+                if ((!every && !program) || guessed || known)
                 {
                     ms = code_of(start, unused, pw, pc).size();
                     test_said(pw ? "as a picture " + std::to_string(pw) + " wide, " + std::to_string(pc) + " a pixel (the rope's shape)" : std::string("as bytes"), ms);
@@ -3945,7 +3967,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // v27: a text not taken as a picture with the word list too (scowl-en-60, where it can be
                 // had), weighed on its start against it without: the smaller kept.
                 const MixDictionary* words = nullptr;
-                if (mix3_on && pw == 0 && mix_words() && text_like(start))
+                if (mix3_on && pw == 0 && !program && mix_words() && text_like(start))
                 {
                     try
                     {
@@ -3968,7 +3990,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         tests += std::string(tests.empty() ? "" : ", ") + "the word list not to be had here"; // (mix-v2 alone)
                     }
                 }
-                const bool tried = every || [&] {
+                // (A program is mixed whole, its start no guide: of the 16 above, 5 that came out
+                // smaller whole were not 3% smaller on their first 256 KiB, cmake 9% larger there.)
+                const bool tried = every || program || [&] {
                     const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
                     return ms * 100 < ls * 97;
                 }();
@@ -4005,12 +4029,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // window shows it only until the next; it is where a folder's bytes went, file by file).
             {
                 std::string said = "file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", " +
-                                   std::to_string(bytes[i].size()) + " bytes: LZMA2 about " + std::to_string(fw.lzma2) + ", rope " +
-                                   std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ")";
+                                   std::to_string(bytes[i].size()) + " bytes: " +
+                                   (program ? "a program, LZMA2 with the x86 filter about " + std::to_string(fw.lzma2)
+                                            : "LZMA2 about " + std::to_string(fw.lzma2) + ", rope " + std::to_string(fw.rope_bytes) + " (" + fw.rope.text() + ")");
                 if (fw.has_pieces) said += ", pieces " + std::to_string(fw.pieces_bytes);
                 else if (!fw.pieces_said.empty()) said += ", pieces not cut (" + fw.pieces_said + ")";
                 if (!mixed_said.empty()) said += ", " + mixed_said;
-                said += "; taken: " + (way.empty() ? std::string("LZMA2, in the lzma2 stream with the others") : way.substr(0, way.find(' '))) + ", " +
+                said += "; taken: " + (way.empty() ? std::string(program ? "LZMA2, in the x86 stream with the other programs" : "LZMA2, in the lzma2 stream with the others")
+                                                   : way.substr(0, way.find(' '))) + ", " +
                         std::to_string(best) + " bytes";
                 progress(said);
             }
@@ -4100,6 +4126,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const std::string& w = files[i]->way;
             const bool mixed_alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
             const bool alone = mixed_alone && w.find(" I") == std::string::npos;
+            // (a program mixed through the x86 filter stays out: a group's mixing has no filter)
+            if (mixed_alone && w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0) continue;
             optional[i] = (mixed_alone && !alone) || w.rfind("rope ", 0) == 0;
             if ((!alone && w != "raw" && !optional[i]) || bytes[i].empty() || bytes[i].size() > kGroup) continue;
             {
@@ -4250,8 +4278,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     if (mix_groups_on && !prioritise_decoding() && !stop_requested())
     {
         const timings::Scope t("pack.mix_against_stream");
-        for (const bool pictures : {false, true})
+        // (v33 draft: a third time, the programs mixed through the x86 filter against the x86
+        // stream they would otherwise share, which is where they go back to.)
+        for (const int pass : {0, 1, 2})
         {
+            const bool pictures = pass == 1, programs = pass == 2;
             std::vector<char> back(files.size(), 0);
             uint64_t codes = 0;
             size_t n_back = 0;
@@ -4260,7 +4291,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const std::string& w = files[i]->way;
                 const bool alone = w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0;
                 const bool grouped = w.rfind("mixt ", 0) == 0 || w == "mixn";
-                if (!(alone && (w.find(" I") != std::string::npos) == pictures) && !(grouped && !pictures)) continue;
+                const bool filtered = alone && w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0;
+                if (filtered != programs) continue;
+                if (!(alone && (w.find(" I") != std::string::npos) == pictures) && !(grouped && !pictures && !programs)) continue;
                 back[i] = 1;
                 ++n_back;
                 uint64_t len = rope_codes[i].size(), vl = 1;
@@ -4268,38 +4301,57 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 codes += (rope_codes[i].empty() ? 0 : rope_codes[i].size() + vl) + 5;
             }
             if (!n_back || stop_requested()) continue;
-            progress(std::string("the files mixed") + (pictures ? " as pictures" : "") + ", weighed against the stream they would share");
+            progress(std::string(programs ? "the programs mixed" : "the files mixed") + (pictures ? " as pictures" : "") + ", weighed against the stream they would share");
+            const char* home = programs ? "x86" : "raw";
             auto stream_of = [&](bool with) {
                 std::vector<uint8_t> out;
                 for (size_t i = 0; i < files.size(); ++i)
-                    if (files[i]->way == "raw" || (with && back[i])) out.insert(out.end(), bytes[i].begin(), bytes[i].end());
+                    if (files[i]->way == home || (with && back[i])) out.insert(out.end(), bytes[i].begin(), bytes[i].end());
+                    else if (programs) continue;
                     else if (files[i]->way.rfind("pieces ", 0) == 0) out.insert(out.end(), piece_z[i].begin(), piece_z[i].end());
                     else if (is_delta[i]) out.insert(out.end(), delta_scripts[i].begin(), delta_scripts[i].end());
                 return out;
             };
             // (one file with nothing else in the stream was weighed against LZMA2 of itself already)
             if (n_back < 2 && stream_of(false).empty()) continue;
+            // (The stream with the files is no smaller than the stream without them, so they come
+            // back only where their codes are more than 64 bytes and 0.5% of all: where they cannot
+            // be, the stream with them is not estimated. Where their codes are a small share of the
+            // stream's bytes, the stream without them is estimated first, alone, to see; else both at
+            // once, as the wait is the same. Either way the same files come back.)
             std::vector<uint64_t> both(2, 0);
-            for_each_index(2, 2, [&](size_t k) {
-                const std::vector<uint8_t> st = stream_of(k == 1);
-                both[k] = st.empty() ? 0 : estimate(st);
-            });
+            uint64_t raw_without = 0;
+            for (size_t i = 0; i < files.size(); ++i)
+                if (files[i]->way == home) raw_without += bytes[i].size();
+            const bool first_alone = codes * 600 < raw_without;
+            auto estimate_here = [&](const std::vector<uint8_t>& st) {
+                return st.empty() ? 0 : programs ? pack_stream(st, dictionary_for(st.size()), true, 6, false, true).size() : estimate(st);
+            };
+            for_each_index(first_alone ? 1 : 2, 2, [&](size_t k) { both[k] = estimate_here(stream_of(k == 1)); });
+            const bool cannot = codes <= 64 + (both[0] + codes) / 200;
+            if (first_alone && !cannot)
+            {
+                if (stop_requested()) continue; // (asked to stop: mixing kept)
+                both[1] = estimate_here(stream_of(true));
+            }
             const uint64_t now = both[0] + codes, as_is = both[1];
-            const bool take = as_is + 64 + now / 200 < now;
-            progress(std::string(pictures ? "pictures" : "files") + " mixed: " + std::to_string(now) + " bytes (" + std::to_string(n_back) + " files' codes " + std::to_string(codes) +
-                     ", the stream " + std::to_string(both[0]) + "); all in the stream: " + std::to_string(as_is) + (take ? "; the stream taken" : "; mixing kept"));
+            const bool take = !cannot && as_is + 64 + now / 200 < now;
+            progress(std::string(pictures ? "pictures" : programs ? "programs" : "files") + " mixed: " + std::to_string(now) + " bytes (" + std::to_string(n_back) + " files' codes " + std::to_string(codes) +
+                     ", the stream " + std::to_string(both[0]) + "); " +
+                     (cannot ? std::string("their codes too few to come back (not weighed in the stream)") : "all in the stream: " + std::to_string(as_is)) +
+                     (take ? "; the stream taken" : "; mixing kept"));
             if (!take) continue;
             for (size_t i = 0; i < files.size(); ++i)
                 if (back[i])
                 {
-                    files[i]->way = "raw";
+                    files[i]->way = home;
                     rope_codes[i].clear();
                     rope_params[i] = RopeParams{};
                 }
             r.unmixed += n_back;
             r.unmixed_mixed += now;
             r.unmixed_stream += as_is;
-            if (!pictures)
+            if (pass == 0)
             {
                 r.mix_groups = r.mix_group_files = 0;
                 r.mix_group_bytes = r.mix_group_apart = r.mix_group_code = 0;
@@ -4316,7 +4368,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t i = 0; i < files.size(); ++i)
         {
             const std::string& w = files[i]->way;
-            if ((w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0) && w.find(" I") == std::string::npos)
+            // (not a program mixed through the x86 filter: the stream's mixing has no filter)
+            if ((w.rfind("mix2 ", 0) == 0 || w.rfind("mix3 ", 0) == 0 || w.rfind("mix4 ", 0) == 0) && w.find(" I") == std::string::npos &&
+                !(w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0))
             {
                 join[i] = 1;
                 uint64_t len = rope_codes[i].size(), vl = 1;

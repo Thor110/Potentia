@@ -8,7 +8,7 @@
 | :--- | :--- |
 | `core/` | Dependency-free C++20 library: alphabets, palettes, notes, exact big integers, SHA-256, address map, canonicalisation, sieve, guided coder, the filtration stack (`core/src/filters/`) |
 | `tools/sieve_cli.cpp`, `tools/cli/` | The `sieve` command-line tool |
-| `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models, worlds, AI and binary (SDL3); and `sieve-install`, the small installer |
+| `client/` | The `hallway`: a 3D wireframe walk along the lines: image, pages, books, audio, tracks, video, movies, models, worlds, AI and binary (SDL3); `sieve-install`, the small installer; and `sieve-view`, the picture viewer |
 | `web/` | Sieve on the web: the Chrome extension (`extension/`), its native host's registration (`host/`), and the test site (`test-site/`, built by `sieve site`); [web/README.md](../web/README.md) |
 | `context/` | Sieve in Windows' right-click menu for `.sieve` files and every other archive Sieve reads (Extract here, Extract to a folder of its name), by `sieve-install`; [context/README.md](../context/README.md) |
 | `engine/` | Notes towards a Sieve game engine (far future): games' own formats, kept out of the main architecture; [engine/README.md](../engine/README.md) |
@@ -620,7 +620,22 @@ unit 1/1  "it was the best of times        "
 
 `sieve-install`, the small installer, is described in
 [docs/SIEVE-INSTALL-USAGE.md](SIEVE-INSTALL-USAGE.md), with how a release is made
-(`tools/make_release.py`). `tests/example_book_v1.book` is a committed book record: the CI
+(`tools/make_release.py`).
+
+`sieve-view`, the picture viewer (2 November 2026), opens a picture (PNG, JPEG, BMP, GIF, TGA) or
+Sieve instructions holding only pictures: a `.simage`, an `.isieve`, or a `.sieve` whose files are
+all pictures. The other pictures in its folder come next and before (Right and Left), a `.sieve`
+holding several shows each in turn, the wheel zooms about the pointer, 0 fits and 1 is one to one.
+**Sieve** makes the picture shown into `NAME.simage` beside it (by the `sieve` beside the viewer,
+`sieve locate --installer --prioritise-decoding`, so it opens about as quickly as the picture did);
+**Export** writes the picture as a PNG; **Save file** writes a `.sieve`'s picture file as it was
+carried. Since a `.sieve` can hold anything under any name, its listing is read before anything is
+decoded and the whole refused where a file is not a picture by its recipe (`jbr`, `stb`, `skr`,
+`pngr`) or its name, or where there are more than 4,096 files, a file over 256 MiB or all over
+1 GiB; installing then stops at each file's declared size and checks its SHA-256 (in a folder of
+its own, removed after); and each picture's header is read, and one over 32,768 pixels a side or
+268 million in all refused, before its pixels are made. `sieve-view --help` gives the keys and the
+options for testing (`--check`, `--make-simage`, `--screenshot`). `tests/example_book_v1.book` is a committed book record: the CI
 unbinds it, binds its source again to the identical record, and has the Python oracle read it
 to the same id and text.
 

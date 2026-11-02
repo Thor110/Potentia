@@ -6127,6 +6127,46 @@ void test_mix4()
         }
     CHECK(ways_back);
     CHECK(mix4_code(code_like, Mix4Params::parse("B16 R1 M4 C2")).size() < mix4_code(code_like, pt).size());
+    // The v33 draft's x86 filter (X): written last, not with a picture or a word list; the filter
+    // as the LZMA SDK's (a call E8 at 0 to 0 bytes on is made the place it goes, 5; one whose
+    // distance's top byte is neither 00 nor FF is left), in place and back; every file given back
+    // mixed with it; calls to the same few places, at many places, smaller with it.
+    CHECK(Mix4Params::parse("B22 R1 M4 C2 X").text() == "B22 R1 M4 C2 X" && Mix4Params::parse("B16 X").x86 && match_ways(Mix4Params::parse("B16 X")));
+    CHECK(throws([] { Mix4Params::parse("B22 X R1"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 X X"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 I60x3 X"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 D60 X"); }));
+    {
+        std::vector<uint8_t> call{0xE8, 0, 0, 0, 0, 0xE9, 0x10, 0x20, 0x30, 0x12, 0x90, 0x90};
+        const std::vector<uint8_t> was = call;
+        x86_filter(call, true);
+        CHECK((call == std::vector<uint8_t>{0xE8, 5, 0, 0, 0, 0xE9, 0x10, 0x20, 0x30, 0x12, 0x90, 0x90}));
+        x86_filter(call, false);
+        CHECK(call == was);
+        std::vector<uint8_t> tiny{0xE8, 1, 2, 3};
+        x86_filter(tiny, true);
+        CHECK((tiny == std::vector<uint8_t>{0xE8, 1, 2, 3}));
+    }
+    std::vector<uint8_t> calls;
+    uint32_t seed = 7;
+    while (calls.size() < 60000)
+    {
+        seed = seed * 1103515245u + 12345u;
+        const uint32_t target = 0x4000 + ((seed >> 16) % 12) * 0x100; // (twelve places called)
+        const uint32_t from = uint32_t(calls.size()) + 5;
+        const uint32_t rel = target - from;
+        calls.insert(calls.end(), {0x55, 0x89, uint8_t(seed >> 24), 0xE8, uint8_t(rel), uint8_t(rel >> 8), uint8_t(rel >> 16), uint8_t(rel >> 24)});
+        // (the call's distance counted from its E8 at calls.size() - 5; the filter counts from there too)
+    }
+    bool x86_back = true;
+    for (const auto& f : {files[3], noise, text, code_like, calls})
+        for (const char* params : {"B16 X", "B16 R1 M4 C2 X"})
+        {
+            const Mix4Params p = Mix4Params::parse(params);
+            x86_back = x86_back && mix4_file(mix4_code(f, p), p, nullptr, f.size()) == f;
+        }
+    CHECK(x86_back);
+    CHECK(mix4_code(calls, Mix4Params::parse("B16 X")).size() < mix4_code(calls, Mix4Params::parse("B16")).size());
 }
 
 void test_rope_wave()

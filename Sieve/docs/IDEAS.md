@@ -5910,3 +5910,26 @@ the day's measurements and review, roughly in the order they would pay:
 - *The hallway.* The picture viewer (`.simage`, its checks before anything is decoded), the power
   page on the site once figures exist, and the File Locator's starting with `--search-every-wave`
   unticking Optimise Search for the run, which a setting saved during it writes to the ini (minor).
+- *Taken up the same day (2 November 2026, Edward: "start with the programs and the 3% test, then try
+  to work through the rest"):*
+  - *Programs:* measured on 16 programs of 98 KB to 11.8 MB (`results/programs-mixed-2026-11-02.md`):
+    every one smaller mixed with the match ways, the x86 ones 3.0% to 15.1% under LZMA2 with the
+    filter once the x86 filter goes before the mixing, the Alpha ones 2.9% to 4.3% under LZMA2. The
+    start test would have turned away 5 of the 16. Built (v33 draft): mix-v4's `X`, the x86 filter
+    before mixing, and a program the x86 stream would carry weighed mixed whole through it, with no
+    start test, then weighed again against the x86 stream (SPECIFICATIONS, v33). Left: programs the
+    packer does not know for programs (Alpha's COFF, ARM's ELF, which `X` would not fit), still
+    under the start test; and the packer's smaller tables for a small program (t32.exe 98 KB:
+    39,804 bytes at B18 against LZMA2's 39,438, 38,248 at B22).
+  - *The stream weighing's cost:* the stream with the mixed files is no smaller than the stream
+    without them, so where their codes are no more than 64 bytes and 0.5% of all they cannot come
+    back, and the stream with them is not estimated (the same files come back either way; where
+    their codes are a small share of the stream, the stream without them is estimated first, alone,
+    to see). It halves the weighing's processor time where it applies, not its wait.
+  - *The bitwise matched literal:* built in the shortcut seed (`CODER["matched"] = "bits"`, now its
+    default), with order 0 too: 0.9% off the program, 0.6% off the teapot, 0.3% off Don Quixote,
+    pack.cpp the same (results/shortcut-coder-2026-11-02.md). Still 16.8% behind xz on the program.
+  - *The picture viewer:* `sieve-view` (client/view_main.cpp; MANUAL, Commands), with the checks
+    above before anything is decoded, and its Sieve button making NAME.simage.
+  - *A bar for mixing over 16 MiB:* not built: it waits on the power benchmark's figures, which say
+    what a second of installing costs against a byte saved.

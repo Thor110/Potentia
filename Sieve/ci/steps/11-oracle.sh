@@ -867,6 +867,39 @@ rm -rf m33_inst m33_si m33_oracle
 $S install m33-33.sieve --to m33_inst > /dev/null && diff -r m33 m33_inst
 $SI m33-33.sieve --to m33_si --yes > /dev/null && diff -r m33 m33_si
 python sieve_ref.py unpack m33-33.sieve --to m33_oracle > /dev/null && diff -r m33 m33_oracle
+# The v33 draft's second piece (2 November 2026): a program mixed through the x86 filter (mix-v4's
+# X). A made-up ELF of 48,000 bytes, a third of its instructions calls to 40 places: with the draft,
+# mixed whole through the filter (its own mix4 ... X), smaller than v32 makes it (in the x86 stream),
+# and given back by Sieve, sieve-install and the oracle (its own filter, the LZMA SDK's); without the
+# switch, v32. (9,627 bytes against 13,948 here; the oracle reads it in about 18 s.)
+rm -rf x33 && mkdir x33
+python - <<'PY'
+import random
+r = random.Random(33)
+b = bytearray(b"\x7fELF\x02\x01\x01" + bytes(57))
+places = [r.randrange(1 << 20) for _ in range(40)]
+while len(b) < 48000:
+    k = r.randrange(6)
+    if k < 3:
+        rel = (0x10000 + places[r.randrange(40)] % 0x8000 - (len(b) + 5)) & 0xFFFFFFFF
+        b += bytes([0xE8]) + rel.to_bytes(4, "little")
+    elif k == 3:
+        b += bytes([0x48, 0x89, 0xC7 + r.randrange(8)])
+    elif k == 4:
+        b += bytes([0x8B, 0x45, r.randrange(256) & 0xF8])
+    else:
+        b += bytes([0xC3, 0x90, 0x55])
+open("x33/prog", "wb").write(bytes(b))
+PY
+$S locate x33 --installer x33-32.sieve --items 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
+$S locate x33 --installer x33-33.sieve --items --v33-draft 2>&1 | tr -d '\r' > x33.txt
+grep -q "^manifest  sieve-manifest-v33" x33.txt
+[ "$(wc -c < x33-33.sieve)" -lt "$(wc -c < x33-32.sieve)" ]
+rm -rf x33_inst x33_si x33_oracle
+$S install x33-33.sieve --to x33_inst > /dev/null && diff -r x33 x33_inst
+$SI x33-33.sieve --to x33_si --yes > /dev/null && diff -r x33 x33_si
+python sieve_ref.py unpack x33-33.sieve --to x33_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 X	48000	prog$"
+diff -r x33 x33_oracle
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
 # back the same by Sieve and the oracle.

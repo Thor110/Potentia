@@ -89,6 +89,25 @@ build/sieve-install fx7.sieve --to fx7 --yes
 diff -r tests/manifest_fixture fx7
 build/sieve install fx7.sieve --to fx7raw > /dev/null
 cmp tests/manifest_fixture.7z fx7raw/manifest_fixture.7z
+# sieve-view, the picture viewer (2 November 2026): a PNG read (its header, then its pixels); made
+# into NAME.simage by the sieve beside it (Prioritise Decoding Speed) and read back from that; a
+# .sieve holding texts refused by its listing, before anything is decoded; a PNG whose header says
+# 100,000 by 100,000 pixels refused by its header; the window drawn with the .simage open.
+cp docs/images/hallway-audio.png view_pic.png && rm -f view_pic.simage
+build/sieve-view --check view_pic.png | tr -d '\r' | grep -q "^view_pic.png: 1280 by 720 pixels"
+build/sieve-view --make-simage view_pic.png > /dev/null && test -s view_pic.simage
+build/sieve-view --check view_pic.simage | tr -d '\r' > view.txt
+grep -q "^listing: 1 picture" view.txt && grep -q "^view_pic.png: 1280 by 720 pixels" view.txt
+if build/sieve-view --check fx.sieve > view.txt; then exit 1; fi
+grep -q "^refused: .*not a picture (by its recipe and its name)" view.txt
+python -c "
+import struct, zlib
+def chunk(t, d): return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d))
+open('view_huge.png', 'wb').write(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 100000, 100000, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(bytes(1000))) + chunk(b'IEND', b''))
+"
+if build/sieve-view --check view_huge.png > view.txt; then exit 1; fi
+grep -q "^refused: view_huge.png: not a picture this viewer reads, or one too large to" view.txt
+build/sieve-view view_pic.simage --screenshot view.bmp && test -s view.bmp
 # Archives of other kinds, extracted as an archiver extracts them (the right-click menu's Extract on
 # a .zip, .rar, .tar.gz ...), one layer at a time; each made from the repository's own files.
 python ci/extract_check.py build/sieve-install extract_check

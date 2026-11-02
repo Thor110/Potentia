@@ -277,7 +277,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     if (!m.lzma2.mixed.empty() && !m.v32 && Mix4Params::parse(m.lzma2.mixed).by_use)
         throw std::runtime_error("manifest: its lzma2 stream mixed with a word list counted by use (F80), which is sieve-manifest-v32's");
     if (!m.lzma2.mixed.empty() && !m.v33 && match_ways(Mix4Params::parse(m.lzma2.mixed)))
-        throw std::runtime_error("manifest: its lzma2 stream mixed with the match model's ways (R1, M4, C2), which are sieve-manifest-v33's");
+        throw std::runtime_error("manifest: its lzma2 stream mixed with the match model's ways (R1, M4, C2) or the x86 filter (X), which are sieve-manifest-v33's");
     std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
     std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
     std::vector<ManifestEntry*> files;
@@ -462,7 +462,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             {
                 const Mix4Params mp = Mix4Params::parse(w.substr(0, t));
                 if (mp.width) throw std::invalid_argument("a picture's parameters for a group of files");
-                if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2) are sieve-manifest-v33's");
+                if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2) and the x86 filter (X) are sieve-manifest-v33's");
                 const MixDictionary* words = nullptr;
                 if (mp.dictionary)
                 {
@@ -519,7 +519,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 {
                     // v28: mix-v4 (a word list where its parameters name one, made ready here, once).
                     const Mix4Params mp = Mix4Params::parse(e.way.substr(5));
-                    if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2) are sieve-manifest-v33's");
+                    if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2) and the x86 filter (X) are sieve-manifest-v33's");
                     const MixDictionary* words = nullptr;
                     if (mp.dictionary)
                     {
@@ -1602,6 +1602,11 @@ static bool leaves_folder(const std::string& p)
     return false;
 }
 
+namespace {
+// (listing_of_installer: this thread's parse reads the head and the listing only, decoding nothing)
+thread_local bool t_listing_only = false;
+} // namespace
+
 Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
@@ -2220,6 +2225,7 @@ Manifest Manifest::parse(std::string_view whole)
             }
             if (found != listed_number(n, "an archive's count of members")) throw std::runtime_error("manifest: " + a.path + " does not list the members its recipe counts");
         }
+    if (t_listing_only) return m; // (the listing alone: nothing decoded, nothing checked against it)
     if (m.packed) m.contents = unpack_v4(m); // every file's bytes, each by its way
     if (m.compact)
     {
@@ -2600,13 +2606,13 @@ static Manifest without_members(Manifest m)
         const size_t from = at;
         at += size_t(e.size);
         if (e.member) continue;
-        if (m.with_contents) contents.insert(contents.end(), m.contents.begin() + std::ptrdiff_t(from), m.contents.begin() + std::ptrdiff_t(at));
+        if (m.with_contents && !t_listing_only) contents.insert(contents.end(), m.contents.begin() + std::ptrdiff_t(from), m.contents.begin() + std::ptrdiff_t(at));
         ++m.files;
         m.bytes += e.size;
         entries.push_back(std::move(e));
     }
     m.entries = std::move(entries);
-    if (m.with_contents) m.contents = std::move(contents);
+    if (m.with_contents && !t_listing_only) m.contents = std::move(contents);
     return m;
 }
 
@@ -2645,6 +2651,18 @@ Manifest installable_manifest(const fs::path& file, bool hex)
     }
     if (!hex) return manifest_of_installer_raw(read_file_bytes(file));
     return manifest_of_installer(read_address_file(file, hex));
+}
+
+Manifest listing_of_installer(const fs::path& file)
+{
+    struct Only
+    {
+        Only() { t_listing_only = true; }
+        ~Only() { t_listing_only = false; }
+    } only;
+    Manifest m = installable_manifest(file, false);
+    m.contents.clear();
+    return m;
 }
 
 std::string install_times_text(double decode_seconds, double write_seconds)

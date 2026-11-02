@@ -711,4 +711,15 @@ if(SIEVE_BUILD_CLIENT)
     if(WIN32)
         target_sources(sieve-install PRIVATE tools/utf8.manifest)
     endif()
+
+    # sieve-view: the picture viewer (2 November 2026), a window of its own over the installer's
+    # code (a .sieve's pictures installed into a folder of its own and shown) and stb_image's
+    # decoders. Like sieve-install it needs no data files; it is linked with the hallway's SDL. Its
+    # "Sieve" button runs the sieve program beside it.
+    add_executable(sieve-view WIN32 client/view_main.cpp client/window_front.cpp client/win_console.cpp ${SIEVE_ICON_RC})
+    target_link_libraries(sieve-view PRIVATE sieve_lzma sieve_lines sieve_compare sieve_locate sieve_image_io SDL3::SDL3)
+    if(WIN32)
+        target_link_libraries(sieve-view PRIVATE ole32 shell32 uuid)
+        target_sources(sieve-view PRIVATE tools/utf8.manifest)
+    endif()
 endif()

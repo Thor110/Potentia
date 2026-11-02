@@ -57,8 +57,12 @@ KINDS = ("copy", "again", "run", "grid", "skiprun", "again2")
 #   lit_all     with "blend", the counts learn from every byte the installer has made, not only
 #               the literal ones (it has them all)
 #   matched     a literal just after a copy counted by the byte the copy would have given next
-#               (LZMA's matched literal), falling back to the literal's own counts
-CODER = {"flag_ctx": True, "rep2": True, "lit_model": "blend", "lit_all": False, "beta": 2.0, "matched": False}
+#               (LZMA's matched literal), falling back to the literal's own counts: True, as whole
+#               bytes; "bits", bit by bit as LZMA does (while the literal's bits are the copy's
+#               byte's, each bit counted by its place and the copy's bit; from the first that
+#               differs, the literal's own counts); "bits+own", the same with each bit while they
+#               agree counted by both, the copy's counts and the literal's own, together
+CODER = {"flag_ctx": True, "rep2": True, "lit_model": "blend", "lit_all": False, "beta": 2.0, "matched": "bits"}
 GRID_DIRS = ((0, "above"), (-1, "above-left"), (1, "above-right"))
 GEOMETRIC = ["zigzag", "diagonals", "spiral", "rings", "morton", "tiles", "plane", "radial"]
 TRANSFORMS = ["none", "diff1", "diff2", "diff3", "diff4", "left", "up", "average", "triangle", "columns", "palette"] + GEOMETRIC
@@ -435,14 +439,16 @@ class Literals:
     count adaptive (what an arithmetic coder pays, step by step), learning from every byte made
     or from the literals alone."""
 
-    def __init__(self, alphabet, beta):
-        self.A, self.beta = alphabet, beta
+    def __init__(self, alphabet, beta, order0=False):
+        self.A, self.beta, self.order0 = alphabet, beta, order0
         self.c0, self.n0 = [0] * 256, 0
         self.c1, self.c2 = {}, {}
         self.cm = {}  # by the byte a copy would have given next
 
     def prob(self, a2, a1, s):
         p = (self.c0[s] + 0.5) / (self.n0 + 0.5 * self.A)
+        if self.order0:
+            return p
         r = self.c1.get(a1)
         if r:
             p = (r[0].get(s, 0) + self.beta * p) / (r[1] + self.beta)
@@ -494,20 +500,66 @@ def after_copy(path):
     return out
 
 
-def literal_bits(y, path, alphabet):
-    """What the literals cost as an adaptive coder codes them, byte by byte in order."""
-    lit = Literals(alphabet, CODER["beta"])
+class MatchedBits:
+    """LZMA's matched literal, bit by bit: while the bits so far are the copy's byte's, bit k is
+    counted by the bits so far and the copy's bit k (0x300 counts, shared by every byte); from the
+    first that differs, the rest by the literal's own counts, the byte's chances among those that
+    begin with the bits so far."""
+
+    def __init__(self):
+        self.c = {}
+
+    def bits(self, own, s, mb, both):
+        """The cost in bits of literal s, the copy's byte mb, the literal's own chances `own` (256)."""
+        cost, pre, agree = 0.0, 1, True
+        for k in range(7, -1, -1):
+            bit, mbit = (s >> k) & 1, (mb >> k) & 1
+            # (the literal's own chance of this bit, given the bits so far)
+            base = (pre - (1 << (7 - k))) << (k + 1)
+            span = 1 << k
+            p0 = sum(own[base:base + span])
+            p1 = sum(own[base + span:base + 2 * span])
+            q1 = p1 / (p0 + p1) if p0 + p1 > 0 else 0.5
+            if agree:
+                n = self.c.get((pre, mbit), [0.4, 0.4])
+                m1 = n[1] / (n[0] + n[1])
+                if both:
+                    st = math.log(m1 / (1 - m1)) + math.log(max(q1, 1e-9) / max(1 - q1, 1e-9))
+                    q = 1 / (1 + math.exp(-st))
+                else:
+                    q = m1
+                n[bit] += 1
+                self.c[(pre, mbit)] = n
+            else:
+                q = q1
+            q = min(max(q, 1e-6), 1 - 1e-6)
+            cost -= math.log2(q if bit else 1 - q)
+            if bit != mbit:
+                agree = False
+            pre = (pre << 1) | bit
+        return cost
+
+
+def literal_bits(y, path, alphabet, order0=False):
+    """What the literals cost as an adaptive coder codes them, byte by byte in order (by the two
+    bytes before, or with order0 counted alone, as the static order-0 count but learned as it goes,
+    which costs the same; the matched literal, where on, with either)."""
+    lit = Literals(alphabet, CODER["beta"], order0)
     total = 0.0
     is_lit = bytearray(len(y))
     for st in path:
         if st[0] == "lit":
             is_lit[st[3]] = 1
     ac = after_copy(path) if CODER["matched"] else {}
+    mbits = MatchedBits() if str(CODER["matched"]).startswith("bits") else None
     for i in range(len(y)):
         a2, a1 = (y[i - 2] if i > 1 else 0), (y[i - 1] if i else 0)
         if is_lit[i]:
             d = ac.get(i)
-            if d is not None and i >= d:
+            if d is not None and i >= d and mbits is not None:
+                own = [lit.prob(a2, a1, t) for t in range(256)]
+                total += mbits.bits(own, y[i], y[i - d], CODER["matched"] == "bits+own")
+            elif d is not None and i >= d:
                 total -= math.log2(lit.prob_matched(a2, a1, y[i], y[i - d]))
                 lit.learn_matched(y[i - d], y[i])
             else:
@@ -574,11 +626,17 @@ def cost_of(path, n, t, w, alphabet=256, y=None):
     o0 = kt_bits(lits, alphabet)
     o1 = sum(kt_bits(r, alphabet) for r in lits1.values())
     ob = literal_bits(y, path, alphabet) if (CODER["lit_model"] == "blend" and y is not None) else float("inf")
+    # (With the matched literal bit by bit, order 0 with it too: where the bytes alone are the
+    # cheapest count, as in a program, the matched literal is still had.)
+    om = literal_bits(y, path, alphabet, order0=True) if (str(CODER["matched"]).startswith("bits") and y is not None) else float("inf")
     numbers += sum(kt_bits(v, BUCKETS) for v in sizes.values())
     flag_bits = sum(kt_bits(r, 2) for r in flags_by) if CODER["flag_ctx"] else kt_bits(flags, 2)
-    body = 2 + min(o0, o1, ob) + flag_bits + kt_bits(list(tags.values()), len(KINDS)) + numbers
-    order = min((o0, 0), (o1, 1), (ob, 2))[1]
-    return header + body, {"literals": flags[0], "shortcuts": flags[1], "order": order, "sizes": sizes, "flags_by": flags_by, **tags}
+    body = 2 + min(o0, o1, ob, om) + flag_bits + kt_bits(list(tags.values()), len(KINDS)) + numbers
+    order = min((o0, 0), (o1, 1), (ob, 2), (om, 3))[1]
+    # (the costs the next round's parse is steered by: the order-0 matched coder's, or where the
+    # literals by two bytes beat order 0 alone, theirs, the better guide to what a literal costs)
+    steer = 2 if order == 3 and ob < o0 else order
+    return header + body, {"literals": flags[0], "shortcuts": flags[1], "order": order, "steer": steer, "sizes": sizes, "flags_by": flags_by, **tags}
 
 
 def decode(path, n, w):
@@ -643,10 +701,10 @@ def search(x, w):
             if best is None or bits < best[0]:
                 best = (bits, counts, path)
             # The costs the next round's parse uses, learned from this path.
-            if counts["order"] == 2:
+            if counts["steer"] == 2:
                 litc = literal_costs(y, path, alphabet)
-                mcost = matched_costs(y, path) if CODER["matched"] else None
-            elif counts["order"] == 0:
+                mcost = matched_costs(y, path) if CODER["matched"] is True else None
+            elif counts["steer"] in (0, 3):
                 lits = [1] * 256
                 for st in path:
                     if st[0] == "lit":

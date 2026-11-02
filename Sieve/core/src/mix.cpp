@@ -1009,6 +1009,7 @@ void Mix4Params::check() const
     if (by_use && dictionary != 80) bad4("a word list counted by use only of scowl-en-80 (F80)");
     if (min_match != 6 && min_match != 4) bad4("a match taken after 6 bytes, or 4 (M4)");
     if (candidates != 1 && candidates != 2) bad4("one candidate for a match, or two (C2)");
+    if (x86 && (width || dictionary)) bad4("the x86 filter for a program's bytes, not a picture or text with a word list (X)");
 }
 
 std::string Mix4Params::text() const
@@ -1019,6 +1020,7 @@ std::string Mix4Params::text() const
     if (recover) t += " R1";
     if (min_match != 6) t += " M" + std::to_string(min_match);
     if (candidates != 1) t += " C" + std::to_string(candidates);
+    if (x86) t += " X";
     return t;
 }
 
@@ -1026,8 +1028,14 @@ Mix4Params Mix4Params::parse(std::string_view t)
 {
     Mix4Params p;
     std::string s(t);
-    // (v33 draft: the match model's ways after the rest, " R1", " M4", " C2", each at most once)
+    // (v33 draft: the match model's ways after the rest, " R1", " M4", " C2", each at most once,
+    // and the x86 filter last, " X")
     const std::string whole = s;
+    if (s.size() >= 2 && s.compare(s.size() - 2, 2, " X") == 0)
+    {
+        p.x86 = true;
+        s.resize(s.size() - 2);
+    }
     for (const char* tail : {" C2", " M4", " R1"})
         if (s.size() >= 3 && s.compare(s.size() - 3, 3, tail) == 0)
         {
@@ -1081,12 +1089,81 @@ Mix2Params shape_of(const Mix4Params& p)
 }
 } // namespace
 
+void x86_filter(std::span<uint8_t> data, bool encoding)
+{
+    // (The LZMA SDK's x86_Convert, its state starting at 0 and its place at 0: Bra86.c, public
+    // domain. A call or jump E8/E9 is converted where its distance's top byte is 00 or FF, unless
+    // one of the three bytes before was itself an E8/E9 whose bytes this one would cut through.)
+    static constexpr uint8_t allowed[8] = {1, 1, 1, 0, 1, 0, 0, 0};
+    static constexpr uint8_t bit_number[8] = {0, 1, 2, 2, 3, 3, 3, 3};
+    auto ms_byte = [](uint8_t b) { return b == 0 || b == 0xFF; };
+    const size_t size = data.size();
+    if (size < 5) return;
+    uint8_t* const d = data.data();
+    const uint32_t ip = 5;
+    size_t pos = 0, prev_pos = size_t(0) - 1;
+    uint32_t prev_mask = 0;
+    for (;;)
+    {
+        while (pos < size - 4 && (d[pos] & 0xFE) != 0xE8) ++pos;
+        if (pos >= size - 4) break;
+        const size_t gap = pos - prev_pos;
+        if (gap > 3) prev_mask = 0;
+        else
+        {
+            prev_mask = (prev_mask << (int(gap) - 1)) & 7;
+            if (prev_mask != 0)
+            {
+                const uint8_t b = d[pos + 4 - bit_number[prev_mask]];
+                if (!allowed[prev_mask] || ms_byte(b))
+                {
+                    prev_pos = pos;
+                    prev_mask = ((prev_mask << 1) & 7) | 1;
+                    ++pos;
+                    continue;
+                }
+            }
+        }
+        prev_pos = pos;
+        if (ms_byte(d[pos + 4]))
+        {
+            uint32_t src = uint32_t(d[pos + 4]) << 24 | uint32_t(d[pos + 3]) << 16 | uint32_t(d[pos + 2]) << 8 | d[pos + 1];
+            uint32_t dest;
+            for (;;)
+            {
+                dest = encoding ? (ip + uint32_t(pos)) + src : src - (ip + uint32_t(pos));
+                if (prev_mask == 0) break;
+                const int index = bit_number[prev_mask] * 8;
+                const uint8_t b = uint8_t(dest >> (24 - index));
+                if (!ms_byte(b)) break;
+                src = dest ^ ((uint32_t(1) << (32 - index)) - 1);
+            }
+            d[pos + 4] = uint8_t(~(((dest >> 24) & 1) - 1));
+            d[pos + 3] = uint8_t(dest >> 16);
+            d[pos + 2] = uint8_t(dest >> 8);
+            d[pos + 1] = uint8_t(dest);
+            pos += 5;
+        }
+        else
+        {
+            prev_mask = ((prev_mask << 1) & 7) | 1;
+            ++pos;
+        }
+    }
+}
+
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words)
 {
     p.check();
     if (file.size() >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
     Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
+    if (p.x86)
+    {
+        std::vector<uint8_t> filtered(file.begin(), file.end());
+        x86_filter(filtered, true);
+        return code_with(m, filtered);
+    }
     return code_with(m, file);
 }
 
@@ -1097,7 +1174,9 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
     if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
     Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false, ways_of(p));
-    return file_with(m, code, size, bad4);
+    std::vector<uint8_t> out = file_with(m, code, size, bad4);
+    if (p.x86) x86_filter(out, false);
+    return out;
 }
 
 namespace {

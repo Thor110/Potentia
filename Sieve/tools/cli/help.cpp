@@ -1112,7 +1112,8 @@ const std::vector<Page>& pages()
           {"--v32-draft", "(v32 is the newest now; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"
                           "not be read by a later Sieve; the File Locator's [locator] " + draft_ini_key() + "): its ways are in docs/NEXT-VERSION.md\n"
-                          "(v33: mixing's match model with its ways, R1, M4, C2, weighed on each mixed file's start)."},
+                          "(v33: mixing's match model with its ways, R1, M4, C2, weighed on each mixed file's start; and a program\n"
+                          "mixed whole through the x86 filter, X, where that is smaller than the x86 stream)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

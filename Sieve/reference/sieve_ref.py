@@ -2787,6 +2787,11 @@ def mix4_file(code, params, size, v32=False, v33=False):
     " R1" (a match goes on past one wrong byte), " M4" (taken after 4 bytes) and " C2" (two places
     a context was seen), each at most once and in that order."""
     ways = {"recover": False, "min_match": 6, "candidates": 1}
+    x86 = params.endswith(" X")  # (v33 draft: the x86 filter, last; undone after the mixing)
+    if x86:
+        if not v33:
+            sys.exit(f"mix-v4: the x86 filter (X) is the v33 draft's: {params}")
+        params = params[:-2]
     tail = re.search(r"((?: R1)?(?: M4)?(?: C2)?)$", params).group(1)
     if tail:
         if not v33:
@@ -2797,7 +2802,56 @@ def mix4_file(code, params, size, v32=False, v33=False):
     if not m or (m.group(3) and not v32):
         sys.exit(f"mix-v4: parameters are written \"B22\", \"B22 I949x1\" or \"B22 D60\" (v32: \"B22 F80\"): {params}")
     words = mix_word_list(int(m.group(2))) if m.group(2) else mix_word_list(80, by_use=True) if m.group(3) else None
-    return mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways)
+    if x86 and params != f"B{m.group(1)}":
+        sys.exit(f"mix-v4: the x86 filter (X) is for a program's bytes, not a picture or text with a word list: {params}")
+    out = mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways)
+    return x86_filter(out, encoding=False) if x86 else out
+
+
+def x86_filter(data, encoding):
+    """The x86 filter (BCJ), as the LZMA SDK's x86_Convert and xz's --x86 make it, starting at 0:
+    each E8 or E9 byte (a call or a jump) whose distance's top byte is 00 or FF has its four bytes
+    made the place it goes (encoding) or a distance again (decoding), unless one of the three bytes
+    before was an E8 or E9 whose bytes this one would cut through. The same length in and out."""
+    d = bytearray(data)
+    size = len(d)
+    if size < 5:
+        return bytes(d)
+    allowed = (1, 1, 1, 0, 1, 0, 0, 0)
+    bit_number = (0, 1, 2, 2, 3, 3, 3, 3)
+    ms = lambda b: b == 0 or b == 0xFF
+    pos, prev_pos, prev_mask, ip = 0, -1, 0, 5
+    while True:
+        while pos < size - 4 and (d[pos] & 0xFE) != 0xE8:
+            pos += 1
+        if pos >= size - 4:
+            break
+        gap = pos - prev_pos
+        if gap > 3:
+            prev_mask = 0
+        else:
+            prev_mask = (prev_mask << (gap - 1)) & 7
+            if prev_mask and (not allowed[prev_mask] or ms(d[pos + 4 - bit_number[prev_mask]])):
+                prev_pos, prev_mask, pos = pos, ((prev_mask << 1) & 7) | 1, pos + 1
+                continue
+        prev_pos = pos
+        if ms(d[pos + 4]):
+            src = d[pos + 4] << 24 | d[pos + 3] << 16 | d[pos + 2] << 8 | d[pos + 1]
+            while True:
+                dest = ((ip + pos + src) if encoding else (src - (ip + pos))) & 0xFFFFFFFF
+                if prev_mask == 0:
+                    break
+                index = bit_number[prev_mask] * 8
+                if not ms((dest >> (24 - index)) & 0xFF):
+                    break
+                src = dest ^ ((1 << (32 - index)) - 1)
+            d[pos + 4] = 0xFF if (dest >> 24) & 1 else 0
+            d[pos + 3], d[pos + 2], d[pos + 1] = (dest >> 16) & 0xFF, (dest >> 8) & 0xFF, dest & 0xFF
+            pos += 5
+        else:
+            prev_mask = ((prev_mask << 1) & 7) | 1
+            pos += 1
+    return bytes(d)
 
 
 def mix2_file(code, params, size, words=None, sse=True, ways=None):

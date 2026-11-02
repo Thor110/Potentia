@@ -151,6 +151,10 @@ struct Mix4Params
     bool recover = false;
     uint32_t min_match = 6;
     uint32_t candidates = 1;
+    // v33 draft (2 November 2026): X, the file's bytes through the x86 filter (x86_filter) before
+    // they are mixed, and back through it after: a program's calls and jumps then name the places
+    // they go, not how far away those are, so the same call is the same bytes wherever it is.
+    bool x86 = false;
     // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
     uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;
@@ -160,8 +164,13 @@ struct Mix4Params
     bool operator==(const Mix4Params&) const = default;
 };
 
-// Whether mix-v4's parameters name any of the match model's ways (v33 draft).
-inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1; }
+// Whether mix-v4's parameters name any of the match model's ways or the x86 filter (v33 draft).
+inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1 || p.x86; }
+
+// The x86 filter (BCJ), as the LZMA SDK's and xz's --x86 make it, starting at 0: each E8 or E9 byte
+// (a call or a jump) whose four bytes after it read as a near distance has them made the place it
+// goes (encoding) or made a distance again (decoding). The same length in and out; in place.
+void x86_filter(std::span<uint8_t> data, bool encoding);
 
 // `words`: the word list the parameters name (nullptr where they name none).
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words = nullptr);

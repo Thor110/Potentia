@@ -491,6 +491,12 @@ Manifest manifest_of_installer_raw(std::vector<uint8_t> raw); // (from its raw b
 // files but does not hold them.
 Manifest installable_manifest(const std::filesystem::path& file, bool hex);
 
+// The same file's head and listing alone: its files' names, sizes as declared, ways and recipes,
+// with nothing decoded and its contents empty (so not to install from). For a reader that must
+// look before it decodes anything (sieve-view: a .sieve of gigabytes that pack to nothing is
+// refused by its listing). An attached installer, raw bytes, or a manifest itself, as above.
+Manifest listing_of_installer(const std::filesystem::path& file);
+
 // Puts a v3 (or v2) manifest's tree into `dest`. Every file is cut from the contents (v3) or read
 // back from its address (v2), and checked
 // against its size and SHA-256 before anything is written, so a bad installer leaves `dest` as
