@@ -5983,3 +5983,36 @@ the day's measurements and review, roughly in the order they would pay:
   it, a line's start says what ends it), so cutting there takes from each block what predicts it:
   alone, 3.6 to 4.1 times the whole; gathered by kind (as XML packers gather tags apart from text),
   28% to 41% larger. The whole file in order is the cheapest of the three by far.
+
+**19.114 The lines' filters read for compression (Edward, 2 November 2026: "cross referencing filter
+designs for use in compression"; read through, the first measured).** What each filter sets aside
+as not content, against what the packer already does: most are already exploited (not-a-pattern-v1's
+repeats and ramps by `runs`; max-run, the word lists, letter pairs and n-grams by LZMA2 and mixing's
+orders and word list; symbol entropy by any entropy coder; a picture's row runs and neighbours by
+mixing's triangle and the rope's waves; sound's steps by the rope's waves) or of no use (not-a-file,
+not-packed and figure set aside what real files never are; canonical meshes and models keep one
+order, where a file's own order must be kept). New, ranked by reach and gain (estimates, but the
+first):
+1. *Binary written as text* (not-written-v1's readings: base64, hex, decimal): decoded, checked by
+   encoding it again exactly, and carried as what it is, so a JPEG in a data: URI reaches brunsli and
+   text in base64 reaches the word list. Measured with the packer as it is, Compressed formats
+   temporary, bytes as written against decoded: the Vitruvian JPEG as base64 in an HTML page
+   203,542 / 170,340 (-16%); pack.cpp as base64 390,196 bytes 76,813 / 50,358 (-34%); a 101,888-byte
+   program as a hex dump 48,330 / 41,679 (-14%). Common in mail, HTML, CSS, SVG, JSON, XML, PEM, Intel
+   HEX and C byte arrays. A text with such spans could be carried as an archive is (v31's skeleton
+   and members): the text with the spans taken out, and each span decoded as a member with its own
+   way, the recipe saying how each was written (alphabet, line width, padding).
+2. *Palette* (palette-size): raw 24- or 32-bit pixels of 256 colours or fewer as indices before
+   mixing or the rope (screenshots, sprites, uncompressed BMP/TGA/TIFF); a few per cent over mixing,
+   to measure.
+3. *Scattered substitutions* (near-model, near): a file as another with k bytes changed, coded by the
+   combinatorial number system NearRanker already counts with (weights.cpp); delta-v1 spends several
+   bytes a change and starts at 8 MiB. Save files, patched data, pages of a database.
+4. *Meshes* (not-other-line's .obj, the model filters): vertices predicted from their neighbours,
+   connectivity coded apart; large gains, rare data.
+5. *Code points* (utf8-valid): contexts by character, not byte, for text not in Latin letters.
+6. *Grammar and capitals* (moby-grammar, sentence-shape): a part-of-speech context in mixing, 1% to 3%
+   on English at a guess.
+7. *Melodies* (key, melody-*): a MIDI model; tiny files, negligible.
+The filters' exact counters as coders: NearRanker (3 above) is the one that would serve; the Mobius
+counts add nothing over `runs`, the palette and composition rankers nothing over mixing and rANS.
