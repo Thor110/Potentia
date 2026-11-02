@@ -120,9 +120,21 @@ few to come back (one 51 MB estimate saved on mozilla's tar with two small texts
 - **The JPEG step before Optimise Search's rule.** Every JPEG is recoded first; the rule (a JPEG:
   mixed whole) and the case where every file of a run is carried by a recipe already coded (IDEAS:
   the extra searches skipped, as they can change nothing) come after it.
-- **The per-file estimate and the stream.** Each file searched gets LZMA2's estimate of the whole
-  of it (preset 6); a folder of one large file then packs the same bytes again as its stream. Where
-  the stream is that one file, the estimate's own code could stand as the stream's first pass.
+- **The per-file estimate and the stream (built).** Where a run has one file, carried as it is, its
+  LZMA2 figure for weighing its ways is now made as the stream's own first pass (preset 9e, the
+  stream's dictionary) and kept, and the stream's first pass takes it rather than packing the same
+  bytes again (on Edward's enwik9 the estimate took 617 s and the first pass 658 s, of the same
+  bytes). The same bytes either way:
+
+  | One file | Before | After |
+  | :--- | ---: | ---: |
+  | 12.9 MB of text, for decoding | 44.9 s | 29.4 s |
+  | mozilla's tar, 51 MB, for decoding | 433.0 s | 356.1 s |
+  | the same text, for size (mixed: the kept pass not used) | 67.0 s | 69.5 s |
+
+  Where the file is not carried as it is (mixed, here), the 9e pass costs a little more than the
+  preset 6 estimate did. The LZMA2 figure the ways are weighed against is now the pass itself, a
+  little smaller than the estimate, so a near tie goes to LZMA2 where it went to mixing before.
 
 After this: the lines' filters read for what they set aside that a compressor could name in a few
 bytes (Edward: "cross referencing filter designs for use in compression"); not-a-pattern-v1's

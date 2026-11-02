@@ -277,6 +277,33 @@ std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dic
     return out;
 }
 
+// One first pass kept (2 November 2026, the review of the weighing's order): where a run has one
+// file, carried as it is, its LZMA2 estimate is made as the stream's own first pass would be (preset
+// 9e, the stream's dictionary) and kept here, and the stream's first pass over the same bytes takes
+// it rather than packing them again. On Edward's enwik9 the estimate (preset 6) took 617 s and the
+// stream's first pass 658 s, of the same bytes. Keyed by the bytes' SHA-256, the dictionary, the
+// filter and the preset; at most one, let go once the stream is packed.
+std::atomic<bool> g_keep_first{false};
+std::mutex g_first_mx;
+std::string g_first_key;
+std::vector<uint8_t> g_first_code;
+
+std::string first_pass_key(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset)
+{
+    Sha256 h;
+    h.update(std::span<const uint8_t>(data.data(), data.size()));
+    return Sha256::hex(h.finish()) + "|" + std::to_string(dict) + "|" + (x86 ? "x" : "p") + "|" + std::to_string(preset);
+}
+
+// The kept first pass for these bytes and settings, taken (empty where there is none).
+std::vector<uint8_t> take_first_pass(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset)
+{
+    std::lock_guard<std::mutex> lock(g_first_mx);
+    if (g_first_code.empty() || g_first_key != first_pass_key(data, dict, x86, preset)) return {};
+    g_first_key.clear();
+    return std::move(g_first_code);
+}
+
 void* sdk_alloc(ISzAllocPtr, size_t size) { return size ? std::malloc(size) : nullptr; }
 void sdk_free(ISzAllocPtr, void* address) { std::free(address); }
 const ISzAlloc kSdkAlloc = {sdk_alloc, sdk_free};
@@ -344,6 +371,7 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
 {
     if (!tune || data.empty())
     {
+        if (std::vector<uint8_t> kept = take_first_pass(data, dict, x86, preset); !kept.empty()) return kept;
         const timings::Scope t("pack.lzma2.quick");
         return encode_lzma2(data, dict, x86, preset, -1, 0, abortable); // (empty for data: abandoned by a force stop)
     }
@@ -362,6 +390,11 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     for_each_index(2, passes_at_once(dict), [&](size_t task) {
         if (task == 0)
         {
+            if (std::vector<uint8_t> kept = take_first_pass(data, dict, x86, preset); !kept.empty())
+            {
+                best = std::move(kept); // (made as the file's estimate: the same bytes, the same pass)
+                return;
+            }
             const timings::Scope t("pack.lzma2.first-pass");
             best = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
             return;
@@ -2575,6 +2608,27 @@ std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b)
     return out;
 }
 
+// A file's LZMA2 figure for weighing its ways: LZMA2's estimate (preset 6), or where the run keeps a
+// first pass (g_keep_first, one file carried as it is), the stream's own first pass, kept.
+static uint64_t whole_estimate(const std::vector<uint8_t>& bytes)
+{
+    if (!g_keep_first.load(std::memory_order_relaxed) || bytes.empty()) return estimate(bytes);
+    const uint32_t dict = std::max(dictionary_for(bytes.size()), g_sample_floor.load(std::memory_order_relaxed));
+    constexpr uint32_t preset = 9 | LZMA_PRESET_EXTREME;
+    std::vector<uint8_t> code = [&] {
+        const timings::Scope t("pack.lzma2.first-pass-kept");
+        return encode_lzma2(bytes, dict, false, preset, -1, 0, true);
+    }();
+    const uint64_t n = code.size(); // (0: abandoned by a force stop, as estimate gives)
+    if (n)
+    {
+        std::lock_guard<std::mutex> lock(g_first_mx);
+        g_first_key = first_pass_key(bytes, dict, false, preset);
+        g_first_code = std::move(code);
+    }
+    return n;
+}
+
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     FileWays w;
@@ -2583,7 +2637,7 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
         progress("a file of " + std::to_string(pr->segments) + " segment(s) of a repeating byte or pattern, averaging " +
                  std::to_string(bytes.size() / pr->segments) + " bytes: LZMA2, the rope's wave of differences and the segments, not searched");
         w.runs = pr->segments;
-        w.lzma2 = estimate(bytes);
+        w.lzma2 = whole_estimate(bytes);
         w.rope = RopeParams::parse("L8 W1 S1 P1 K0");
         w.rope_code = rope_code(bytes, w.rope);
         uint64_t n = w.rope_code.size(), vl = 1;
@@ -2628,7 +2682,7 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
                 std::snprintf(ratio, sizeof ratio, "%.2f", double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1)));
                 w.rope_said = std::string("not searched: a text whose start its line wave makes ") + ratio + " times LZMA2's";
                 progress(w.rope_said);
-                w.lzma2 = estimate(bytes);
+                w.lzma2 = whole_estimate(bytes);
                 w.rope_bytes = UINT64_MAX;
                 w.pieces_said = "not cut: the rope does not win this text";
                 if (force_requested()) w.forced = true;
@@ -2642,7 +2696,7 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
     // after the other as before.
     uint64_t lzma2 = 0;
     for_each_index(2, std::min(2u, pack_threads()), [&](size_t task) {
-        if (task == 1) lzma2 = estimate(bytes);
+        if (task == 1) lzma2 = whole_estimate(bytes);
         else ways_but_lzma2(w, bytes, rope_seconds, rope_newest, pieces);
     }, true);
     w.lzma2 = lzma2;
@@ -4031,6 +4085,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         const uint64_t each = std::max<uint64_t>(mixer, uint64_t(dictionary_for(largest)) * 12 + (uint64_t(16) << 20) + largest * 3);
         const unsigned workers = unsigned(std::clamp<uint64_t>(std::min<uint64_t>(todo.size(), free_now ? free_now / 2 / each : 2), 1, pack_threads()));
         const unsigned share = workers > 1 ? std::max(1u, pack_threads() / workers) : 0;
+        // (One file, carried as it is, its estimate made as the stream's first pass and kept: whole_estimate.)
+        g_keep_first = files.size() == 1 && todo.size() == 1 && files[0]->way == "raw";
         for_each_index(todo.size(), workers, [&](size_t k) {
             const size_t i = todo[k];
             const InnerThreads inner(share);
@@ -4784,6 +4840,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool tune = gzip && binary;
     std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune, true),
                          pp = pack_stream(plain, m.lzma2.dictionary, false, 9 | LZMA_PRESET_EXTREME, tune, true);
+    {
+        // (the kept first pass let go, taken or not)
+        g_keep_first = false;
+        std::lock_guard<std::mutex> lock(g_first_mx);
+        g_first_key.clear();
+        std::vector<uint8_t>().swap(g_first_code);
+    }
     // A force stop before a stream's first pass was done: the x86 stream (never carried as it is)
     // packed at LZMA2's quickest preset, which is not broken off; the lzma2 stream carried as it is
     // where the version allows (below), else the same.
