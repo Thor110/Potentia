@@ -1,40 +1,56 @@
-# Mixed files weighed against the stream; real-rope recorded (commit 498dbcf)
+# The shortcut seed begins; oddities recorded (commits 9cfa73e, 902d090, f79981a)
 
-## 1. Mixed files weighed against the stream they'd share (`tools/cli/pack.cpp`)
+Nothing in Sieve itself changed: these are new tools, results and notes. Unzip over the repository.
 
-The packer chose each file's way, and each group's, against LZMA2 of that file or group *alone*.
-Files that share a lot with each other, like mozilla's programs, cost far less side by side in
-the shared LZMA2 stream than they do mixed separately. After the groups are made, the packer now
-weighs the mixed files against that stream: the files that aren't pictures first, then the
-pictures. Where the stream with them is smaller, they go in as they are. No new way: every reader
-reads it.
+## New tools
 
-| Measured (no search limit) | Before | After |
-| :--- | ---: | ---: |
-| Silesia's mozilla, forced apart | 13,794,627 | 13,530,583 |
-| Two 4.3 MB texts sharing 4 MiB | 1,992,382 | 1,042,336 |
-| `docs/` and `tools/` (the same snapshot) | unchanged | unchanged |
+- **`tools/shortcut_seed.py`**: the shortcut seed, stage 1. A small language of shortcuts to a file:
+  - the shortcuts: copy an earlier stretch, the same distance again, a counting run, a grid copy
+    (above, above-left, above-right), and your skip-and-insert;
+  - the transforms in front of them: differences, the rope's four waves, read by columns, or the
+    values a file uses;
+  - each recipe searched for the fewest bits, decoded again and checked byte for byte;
+  - measured beside zlib, xz, the rope and mixing, and in both of your directions (the seed on what
+    beat it, and a transform in front of xz and mixing).
 
-mozilla whole is still smaller (13,376,239), and the packer keeps it whole as before. Every
-result above installs back exactly.
+  Run:
+  `python tools/shortcut_seed.py PATH\TO\sieve.exe FILE... --out FOLDER`
 
-- **The report** has a new line where the step takes the stream:
-  `weighed   N file(s) mixed carried as they are instead, smaller in the stream they share (...)`.
-- **For testing:** `SIEVE_MIX_GROUP_BYTES=N` makes the groups at most N bytes, so small files can
-  show what happens past a group's end.
-- **CI step 11** has a new block: two 65 KB texts, given back by Sieve, sieve-install and the
-  oracle.
-- **Docs:** METHODS (section 4) and SPECIFICATIONS (v30) describe it.
+  Each file is cut to its first 32 KiB by default (`--cut`). It's a Python prototype, slow:
+  minutes a file.
+- **`tools/shortcut_tiny.py`**: stage 1b.
+  - Every file of four sets of 65,536 small files, searched whole.
+  - Real files' 2-, 3- and 4-byte arrangements counted by kind, then tried on held-out halves.
 
-## 2. IDEAS §19.110: real-rope
+## Results (`results/`)
 
-Your design as you meant it: keep bytes *or* propagate noise, points that move, and splits up to
-half the file. It sits beside what the rope does now (fixed points; keeping tried only on the best
-wave), with today's measurements. The rope itself is unchanged.
+- **`shortcut-seed-2026-11-01.md` and `.tsv`** (24 files, the repository's own):
+  - Designed files: under every other way on several (the gradient 13 bytes, against xz's 401).
+  - Text and code: within 2 to 5% of xz, behind mixing.
+  - Seeds on what beat it: no shortcut found into xz's or mixing's output.
+- **`shortcut-arrangements-2026-11-01.md`**: the tiny sets. Regular arrangements come cheapest, but
+  every file costs more than 16 bits, because of the framing.
+- **`shortcut-counting-2026-11-01.md`**: real files' arrangements by rank cost 4.7 to 5.6 bits a
+  byte, against 8. The shuffle carries over only between kinds that are alike.
+- **Your 20-byte example** (`00 01 02 0F ...`): found as one shortcut, 7 bytes, as you worked it.
 
-## Tested
+## Notes
 
-- The unit suite: 77,110 checks, 0 failures.
-- CI step 11, the blocks the change touches: the map's group, the mixing blocks, t29/t30, g30, the
-  new block, and the tar blocks.
-- Here, sieve-install needs `SDL_VIDEODRIVER=dummy`, since there's no display.
+- **`docs/ODDITIES.md`**, new:
+  - Open: mozilla. Mixing the whole tar is 3% over LZMA2, so a longer-reaching copy model is wanted.
+    Also some of your JPEGs, to fill in.
+  - Resolved: control.py (591 bytes at v32, 28.10% under its 7z), the Try-every-way group bug, the
+    release script's smaller `.sieve`, and the tar sizes.
+  - Measured: the floor, between 192 and 256 bytes for text.
+- **IDEAS §19.111** records the plan and your ideas:
+  - geometric filters and gliders;
+  - recording what carried each result;
+  - reading a `.sieve` back (light and full);
+  - the world's energy cost and saving, and "Sieve Power Savings" on the site;
+  - the picture viewer and its checks;
+  - Optimise Search;
+  - and every measurement so far.
+
+## Still running
+
+The stage 1 rerun with skip-and-insert, columns and palette. Its table comes in the next zip.

@@ -5579,3 +5579,197 @@ meant it is recorded here under its own name, real-rope.
   the search chooses among per file, each choice paid for, tried first where the rope already wins
   (pictures, sound, tables of digits); or its prediction given to mixing as one input among the
   others. Either is a new way, so the next version.
+
+**19.111 The shortcut seed (Edward, 1 November 2026; stage 1 built as a prototype, measuring).**
+Edward: "The main focus of the compression should be to search more potential shortcuts to the file
+than standard filter ruleset shortcuts"; "Every filter/method is a shortcut"; the name is his. The
+aim is his first one (§19.87, §19.110): to shuffle the state space so that a file can be warped to,
+weighing each route by everything the installer needs against the file and the other ways.
+- *The plan (agreed the same day).* Any file, of any kind, and what is installed is the file byte for
+  byte. A small language of shortcuts, combined freely, searched for the fewest bits, measured at
+  every stage on the repository's files beside xz, mixing and the rope; stage 1b, every arrangement
+  of small files and the arrangements real files favour; then the pieces that win somewhere built
+  into Sieve as ways of the next version.
+- *Stage 1 (`tools/shortcut_seed.py`).* A recipe is literal bytes and shortcuts after one transform
+  of the whole file: copy an earlier stretch, the same distance again, a counting run, a copy of the
+  byte above, above-left or above-right in rows of W, and Edward's skip-and-insert; the transforms
+  none, differences at 1 to 4, the rope's waves (left, up, their average, the triangle) and the file
+  read by columns. Costed as an adaptive coder would code it; every recipe decoded again and checked.
+- *The two prongs (Edward):* "infinite addresses -> filters -> compression techniques -> infinite
+  filters", and back: the seed searched on what beat it (xz's output, mixing's code), and each
+  transform's output given to xz and to mixing.
+- *Counting the cards (Edward):* "design a limited file with every possible arrangement and check
+  every possible filter against it ... think counting cards but bytes". Stage 1b
+  (`tools/shortcut_tiny.py`): four sets of 65,536 small files searched whole, and the 2-, 3- and
+  4-byte arrangements of the repository's files counted by kind, the shuffle they give (the
+  commonest first) tried on files held out and across kinds.
+- *Skip-and-insert (Edward's example, worked on paper):* `00 01 02 0F 03 04 05 0F ... 0C 0D 0E 0F`
+  (20 bytes) as "L3 W1 S1 0F", a wave counting by 1 that every 3 bytes puts in 0F, "a 7 byte address
+  for a 20 byte file". Built as the shortcut `skiprun` (a start, a step, how often, the byte put in,
+  a length) and measured: the seed finds it alone, one shortcut, 55.6 bits, 7 bytes, as he worked it.
+- *Every shape a chance (Edward):* "each rule, shape or filter that I or we can spot or come up with,
+  stands a chance at hitting a real file ... at that small a scale that rule would beat any existing
+  form of compression, but obviously only for that file or files with similar layouts." So the
+  language grows a piece at a time, each measured on the files it is meant for and on the rest.
+- *Geometric filters (Edward, to be tried):* "a purely geometric expansion filter that uses geometric
+  rulesets to shift the files bytes around, as well as one that alters the bytes; think circles,
+  lines, squares, grids, geometric principles used to shuffle up a file."
+  - *Moving the bytes:* orders of reading a file laid out as a grid other than row by row: by
+    columns (built), zigzag, spirals in or out, rings round a centre, a Hilbert or Morton curve
+    (which keep near bytes near), diagonals, rotations and reflections, and tiles read one at a time.
+  - *Altering the bytes:* values changed by a shape laid over the file: a plane or a gradient taken
+    away, a ramp along a line, rings of equal change round a centre, a grid's lines, each named by a
+    few numbers.
+  - *Its own chaos (Edward: "As with any filter it introduces its own element of chaos"):* a filter
+    that helps one layout scatters another, and each kind of shortcut the language holds costs every
+    recipe a little to say which kind it is (the tags' share). Both are weighed: a shape is kept where
+    the files it fits gain more than the language's growth costs the others.
+- *Gliders through a file (Edward, the same day):* "what chaos a few gliders might cause through a
+  file from the game of life, or how the rules from Conway's game of life might be turned into a
+  random filter: pick some random bytes, fire them off, have them alter values as they go through
+  the bytes with a +1/-1 type schema, that could also be adjusted to be +256/-256 making sure to
+  wrap the value around"; "probably the most chaotic one I can think of for sure, perhaps even
+  useless". Notes for when it is tried:
+  - The file is laid out as a grid (rows of W) and the gliders start from a few places, each named
+    by the recipe; Life's rules move them, and each cell they pass is changed by a step (+1 or −1,
+    or any step, wrapping round). On bytes a step of 256 wraps back to the same value, so the steps
+    are 1 to 255 there, and ±256 counts on 16-bit values.
+  - Life cannot be run backwards (many boards come to the same next board), so the gliders decide
+    only where values change and by how much, from their starts and the rules, never from the
+    file's bytes; installing then makes the same gliders and takes the same changes away.
+  - What decides it is §19.91's: the gliders' starts are a seed, which saves at most about its own
+    bits over a fixed pattern, so it pays only on a file whose bytes happen to follow the gliders'
+    trails. Measured like every other piece: on designed files made by gliders first (it should
+    cancel them), then on real ones.
+- *What each result was made of (Edward, the same day):* "with our benchmarks and tests we start
+  recording how much of what existing compression methods were used, how they were used and whether
+  or not the rope or mixed methods are what finished them off. That way we can ensure it isn't
+  presented purely as a new compression 'algorithm' and as a compression engine that mixes and
+  matches existing techniques with the manifold warping of n-dimensional state spaces. Plus we can
+  start to get a feel for what wins/loses where, when and why." A standing rule for every benchmark
+  and test from now on:
+  - *Recorded with every result:* how many files and bytes each way carried, and what that came to:
+    LZMA2 (and its x86 filter), mixing alone, mixing in groups, the stream mixed, the rope, the
+    pieces, lines of another file, deltas, the recipes that make archives, PNGs and JPEGs again
+    (preflate, stb, brunsli, skeletons), and from the shortcut seed which shortcuts and transforms
+    its recipes used; and, where one way's output went on through another, the order they ran in
+    and which one finished.
+  - *Named for what they are:* each existing method by its name and maker (LZMA2 and the x86 filter
+    from xz/7-Zip, deflate from zlib, preflate, brunsli, stb_image, libarchive), and Sieve's own
+    (the rope, mixing, the groups and weighing, the shortcut seed, the lines and the line's places)
+    as Sieve's: Sieve is the engine that weighs and chooses among them and the routes between them.
+  - *Already there:* the packer's report says most of this file by file and way by way (its `mix`,
+    `groups`, `weighed`, `packed`, `deltas`, `jpegs` and other lines), and `tools/bench_files.py`
+    keeps each run's report in `runs/`; what is still to do is to gather those lines into the
+    results' tables, so a table shows what carried each figure as well as the figure.
+  - *From a `.sieve` alone (Edward, the same day):* "a script that can log that from an existing
+    .sieve ... That way we can reverse engineer the results if they ever get lost." To build: a
+    reader of a `.sieve` in two depths. Light: its head and its listing decoded (the listing is
+    itself LZMA2, but small: 1,735 bytes for mozilla's 525 files), writing each file's way and size
+    and each stream's size and form, and each code a file has of its own read by its length (the
+    rope's stream holds each mixed file's, a group's and the rope's codes, each after its length),
+    with no stream decoded. Full (Edward: "it would have to decode the file to get the methods used
+    or partially at least"): every stream decoded, so that what each file cost inside a shared LZMA2
+    stream, which is one code for all of its files, is measured again (each file packed alone, and
+    the stream with and without it), an estimate rather than the record, since the stream was made
+    as one. What
+    the install's log already says (Keep a log) is to be checked against it: it records each
+    phase's time, and may not name the ways.
+- *What it costs the world and what it saves (Edward, the same day):* "Presume a file is regularly
+  downloaded, the kind of thing most of the world downloads daily (a Facebook page, the YouTube home
+  page, the Google home page, a game's patch) ... weigh up the real costs vs savings for the world's
+  IT infrastructure, where it goes, how much it could save for data centres and how much it might
+  shift onto the end user", less on the user with Prioritise Decoding Speed and more with size. A
+  benchmark to build, beside the record of what carried each result:
+  - *Measured, for each way of making it* (Sieve for size, Sieve for decoding speed, zip, 7z,
+    brotli, as they are): its bytes; the processor seconds to make it, once; the processor seconds
+    to install it, on the user's machine.
+  - *Assumed, and said as such:* how many times a day it is fetched; the energy to store and to move
+    a byte (published figures for a network's energy a gigabyte differ by about ten times between
+    studies); the power of a server's and a user's processor. Each a setting, the values used
+    written beside the results, and the answer shown across a range of them rather than as one
+    figure.
+  - *What it reports:* a day's energy on each side: the servers' and the networks' (the bytes
+    stored and moved, against the file as the others make it), the making (once, shared over every
+    fetch), and the users' (installing, every fetch); so where the saving falls, where the cost moves,
+    and at how many fetches a day each way of making it starts to pay.
+  - *Real figures, later (Edward):* "base it off a single spec and try to get some real figures",
+    which in full would need dedicated infrastructure. A step towards it with none: one reference
+    machine, its spec written beside the results, and the making and installing measured in joules
+    rather than assumed, by the processor's own energy counters (RAPL, under `/sys/class/powercap`
+    on Linux; read on Windows by tools such as LibreHardwareMonitor) and a wattmeter at the wall to
+    check them. The servers' and networks' side stays a stated range until it can be measured too.
+- *On the website (Edward, the same day), for when the figures exist:*
+  - The site's "Sieve State Space" button (`index.html`, to `Pages/sieve.html`) to become "Sieve
+    Power Savings": the energy benchmark's results, what a day of fetches saves and what it moves
+    onto users, for size and for decoding speed, with the machine's spec and every assumption beside.
+  - The hallway in the browser, run on the user's end through the page, as first planned. How is
+    open: written again for the web, built for it (C++ through WebAssembly, the build's own
+    libraries with it), or emulated, depending on what the visiting system can run; to be weighed
+    when the numbers are there to go with it.
+- *Stage 1, measured (32 KiB of each of 24 files; `results/shortcut-seed-2026-11-01.md`).*
+  - Designed files: the seed came under every other way on several (the gradient 13 bytes, xz 401,
+    the rope 167; the checker 20, mixing 30, xz 83; the vertical 269, xz 345).
+  - Real files: text and code within 2% to 5% of xz and behind mixing (README 4,291, xz 4,195,
+    mixing 3,708; Sieve's program 8,216, xz 6,887); random and compressed bytes carried as they
+    are (32,773 against 32,768).
+  - The grey picture: the seed 22,178, the rope 22,228, xz 23,492; the triangle wave and then
+    mixing 21,105, against mixing as a picture 21,166 (61 bytes, 0.3%).
+  - The two prongs: the seed on xz's output and on mixing's code was 3 to 5 bytes larger on every
+    file (no shortcut into them found); a transform in front of mixing helped the designed files
+    (the checker 24 against 30, the gradient 17 against 464) and the grey picture, nothing else.
+- *Stage 1b, measured (`results/shortcut-arrangements-2026-11-01.md`,
+  `results/shortcut-counting-2026-11-01.md`).*
+  - Every arrangement: in each set the shortcuts put the regular arrangements first (all one
+    value, alternating, counting runs: in the 16 bytes of 00 or FF, 45.6 bits at best, 118.9 at
+    worst), but every file cost more than the 16 bits that name one of 65,536, and the sum of
+    2^-bits was near 0, since the seed codes bytes, not the set's values, and pays for its framing.
+    A list of the values a file uses, said once (`palette`, built after), took off only 3 to 13 bits
+    on 4 KiB of two or four values, and nothing on 16 bytes: the adaptive coder learns the values
+    within a few bytes. (Claude had said it would bring 98 bits towards 16; measured, it does not.)
+    The cost on small files is the framing: the length, the transform, the width, and the choice
+    before every step. Next: literal runs given one length rather than a choice each.
+  - Counting the cards: each kind's arrangements, named by their rank in the counted order, cost
+    on held-out halves 5.55 bits a byte for text (2-byte arrangements), 5.51 for code, 4.69 for
+    pixels (4-byte), against 8 as they are; on compressed files 14.38 (worse, as expected). Across
+    kinds the shuffle travels only between alike ones: text's on code 8.27, but pixels' on text
+    19.78. A shuffle a kind, chosen by the file, as Edward put it: "generalise types of data
+    towards specific routes".
+- *Mixing the whole of mozilla (the same day):* mix-v4 on the whole tar came to 13,778,604, 3.0%
+  over LZMA2's 13,376,180 (docs/ODDITIES.md): a longer-reaching copy model in mixing is to be
+  tried, its reach and the group's size searchable, at a combinatorial cost (Edward).
+- *Pictures, from Edward's benchmarks (2 November 2026):* on his folders of JPEGs and PNGs,
+  decode/no (Prioritise Decoding Speed, without Try every way) is the best choice for decoding
+  speed, and decode/try and size/no came to the same size as decode/no most if not all of the time,
+  taking longer. A packer improvement to weigh, needing no new version: where every file of a run is
+  carried by a recipe whose inner bytes are already coded (`jbr`, a picture re-saved), the extra
+  searches are skipped, as they can change nothing. To be confirmed against his tables first.
+- *A viewer for Sieve's pictures (Edward, the same day):* a `.sieve` image viewer, with zoom,
+  next and previous, export as, and the like; perhaps its own extension for `.sieve` files holding
+  only pictures (`.simage`, `.isieve`, as `.sfilter` names filters), so that local use can be tried
+  as the web extension's was (whose decoding was borderline instant). Reading any `.sieve` raises
+  what a renamed file could hold: gigabytes as a pure rotation, a zip bomb. Against it, before
+  anything large is decoded:
+  - the head and the listing first (the light reader, above): each file's name, its declared size
+    and its recipe, which says what it is (`jbr` a JPEG; `sk`, `skr`, `stb`, `pngr` a PNG); a file
+    whose recipe is not a picture's, or whose size is over the viewer's limit, refused there;
+  - then the start of the stream decoded and the picture's header checked (Edward's suggestion),
+    and its width and height against a limit;
+  - installing already stops at the declared size and checks every file's SHA-256, so a file
+    cannot grow past what the listing says.
+- *Optimise Search, a box in the File Locator (Edward, 2 November 2026):* "a checkbox ... ticked by
+  default called 'Optimise Search'. This could disable the other checkboxes and guide any search
+  towards the paths we predetermine to give the best results for data types. Then if the checkbox
+  is turned off it would open up the other options again."
+  - *What it would set:* the options that shape the search (Try every way, the search's time,
+    temporary's recipes), chosen by each file's kind from what the benchmarks measured: a JPEG
+    through brunsli with no extra search; text and code mixed; no rope search over bytes LZMA2
+    cannot shrink when decoding speed is chosen (Edward's JPEGs: decode/try made the same bytes as
+    decode/no, 5,134,123, in 48.2 s against 2.6 s); Try every way where it was measured to pay
+    (mixing past its limits: the same JPEG with size/try 4,993,512, installing in 5.1 s, not 0.1 s).
+  - *Left to the user even with it ticked (Claude's suggestion):* Prioritise Decoding Speed (the aim,
+    size or quick installs, which the routes then follow), the permanent box (it changes what is
+    installed), and Keep a log.
+  - *What it rests on:* the record of what carried each result, gathered across the benchmarks into
+    a table of routes by kind of file, kept up to date as results come in, so the box's choices are
+    measured ones.
