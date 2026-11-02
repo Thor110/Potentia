@@ -1104,6 +1104,8 @@ const std::vector<Page>& pages()
                                     "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
+          {"--progress", "What the packer says as it goes, to standard error with the seconds since the start: each file's ways\n"
+                         "weighed and the one taken, as the File Locator's Keep a log writes them."},
           {"--optimise-search", "Optimise Search (the File Locator's box): Try every way chosen for each file by its kind, from\n"
                                 "what was measured, in place of --search-every-wave: off for every file with --prioritise-decoding\n"
                                 "(it changed nothing so); else on for a JPEG, a file over 16 MiB or under 4 KiB, off between."},

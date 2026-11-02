@@ -1,53 +1,66 @@
-# Optimise Search and the draft (as before), plus the CI temp-folder fix (commits 5349a04, 3684660)
+# The night's work (2 November 2026)
 
-This zip is made against **your** latest commit (128b9c6, "sieve metrics"), so it holds everything
-since then: the Optimise Search zip's contents (you were extracting it) and today's two fixes. Unzip
-over the repository and rebuild.
+Unzip this over the repository root, on top of your commit 2390b34 ("sieve bench all"). It holds four
+local commits, none pushed: 4bccd0c, 49e5adc, 31a4094 and 6d2eb14. v32 stays frozen, and every new
+format piece is still behind `--v33-draft`. The unit suite passes (77,118 checks, 0 failures).
 
-## 1. Optimise Search, the draft as one number, the JPEG margin, GAME-OF-LIFE.md
+## 1. mozilla is mixed, not LZMA2 (49e5adc)
 
-The same as `sieve-optimise-search.zip` (see its notes). `file-locator-optimise-search.png` shows
-the File Locator with it. It's a screenshot, not part of the repository.
+With `--optimise-search --v33-draft`, Silesia's mozilla is now mixed as bytes with the match ways
+(`mix4 B22 R1 M4 C2`): 13,318,582 bytes against LZMA2's 13,376,239 (−0.43%). It installs back byte
+for byte, in 96 s against LZMA2's 3 s. Two packer settings had kept it under LZMA2:
 
-## 2. The five JPEGs, confirmed on your files
+- **Mixing's margin.** Mixing replaced LZMA2 only when 0.5% smaller. That bar was set the day before
+  for your five JPEGs. It is now 64 bytes and 0.25%, which still keeps the five JPEGs under LZMA2
+  and lets mozilla be mixed.
+- **A guessed picture shape.** A shape guessed from mozilla's start (48 wide) won the start by
+  0.56% and lost the whole file. A guessed shape now has to win its start by 2%. Where the start is
+  the whole file, the 2% bar doesn't apply and the smaller result is taken. With the bar,
+  Vitruvian.jpg would have grown by 387 bytes.
 
-With Try every way, each now comes out exactly as without it (LZMA2 kept):
+Also new: `sieve locate --progress` prints the packer's progress as it goes (each file's ways weighed
+and the one taken), as the hallway's Keep a log does.
 
-| JPEG | Bytes | size/try now | temporary box (brunsli) |
-| :--- | ---: | ---: | ---: |
-| K2_00001.jpg | 175,693 | 174,857 | 143,565 (−18.3%) |
-| K2_00000.jpg | 170,042 | 169,495 | 137,154 (−19.3%) |
-| 1fuv6bxsbj7f1.jpeg | 85,821 | 80,681 | 70,813 (−17.5%) |
-| 358023683_…_n.jpg | 64,624 | 64,109 | 52,376 (−19.0%) |
-| 362302622_…_n.jpg | 58,664 | 57,273 | 45,863 (−21.8%) |
+## 2. Fixes from the night's code review (31a4094)
 
-- **What they share:** all five are small baseline JPEGs whose entropy-coded data leaves mixing
-  nothing to find.
-- **Their route:** brunsli, with the temporary box.
-- **ODDITIES** now lists them under Resolved.
+- Optimise Search's choice for a file now reaches every thread its work runs on. Without that,
+  two runs of the same folder could differ.
+- Installing now budgets C2's second match table (16 MiB) for each file mixed with it.
+- The oracle reads a v33 head given as raw bytes, and v33 in `graph`.
+- `ci/run.sh`: Windows' `rmdir` now gets `//s //q`, which Git Bash would otherwise turn into paths.
+- `bench_power.py` reads the processor's energy from its package zones alone (their sub-zones had
+  been counted twice). It also no longer stops when Windows can't report a process's times.
+- `bench_files.py`: when the oracle refuses a file, the "Ways in full" cell is left empty and the
+  bench carries on.
 
-## 3. CI's temporary folder (`ci/run.sh`)
+## 3. The roof (4bccd0c, 6d2eb14)
 
-**Why it was left:** `ci/run.sh` removed its copy with one unchecked `rm -rf`. On Windows a
-read-only file, or a file still held for a moment by a program or a virus scanner, made it fail
-silently. Failed or stopped runs keep their copy on purpose, and nothing ever cleared those.
-(The steps themselves make no temporary folders; only `run.sh` does.)
+`tools/bench/bench_roof.py` (or `tools\bench_roof.bat`, which asks for the file) measures time and
+memory for a large file's first 1, 4, 16, 64, 256 and 1,024 MiB. `results/roof-mozilla-2026-11-02.md`
+has the results for mozilla, from this container (4 processors). Making took about 44 times the
+file in memory at 49 MiB (2,152 MiB), and about 7.7 s per MiB. Installing took about 3 times the
+file. On enwik9, your machine would show where the curve bends: `tools\bench_roof.bat` and give it
+enwik9.
 
-Now:
-- **Removing:** everything is made writable first, then tried five times a couple of seconds apart,
-  then by Windows' own `rmdir`. It says plainly if a folder still can't be removed.
-- **The reminder:** each run starts by saying how many earlier copies are left, and their size.
-- **`ci/run.sh --clean`:** removes every `sieve-ci-*` folder left in the temporary folder.
+## 4. CI step 11: about 800 s shorter (6d2eb14)
 
-Tested here:
-- A copy with read-only files was removed.
-- A one-step run removed its folder at the end.
+Step 11 took 2,860 s here. Timed line by line, two of the oracle's reads took 800 s of that. Both
+read files that have been mixed since v32, and the oracle mixes in Python:
 
-On your machine, please try `ci/run.sh --clean` once, then a normal run.
+| Block | Oracle's read before | After |
+| :--- | ---: | ---: |
+| v25 PNGs (the screenshot's 2.76 MB of pixels) | about 605 s | 0.3 s |
+| v32 delta (its 330 KB base file) | about 195 s | 0.3 s |
 
-## On step 11's time
+Neither block is about mixing, so each now uses `--prioritise-decoding`, which keeps those bytes
+under LZMA2. Each block still checks what it was written for: the PNGs are made again exactly
+(25,221 bytes, under the block's 50,000), and the delta is made, installed and read back by the
+oracle. Blocks that test mixing on purpose are left as they are; the next slowest reads take 27 to
+58 s each.
 
-On your machine it took over 20 minutes before this. The new blocks add about 1 to 2 minutes (the
-v33 mixing check, about 40 s here; the stream-weighing check, about 55 s). The trace's times
-(`python ci/trace_times.py LOGS/11-oracle.trace ci/steps/11-oracle.sh`) show which blocks take the
-longest, if you'd like to trim it.
+## 5. Ideas for the next pass (IDEAS §19.112)
+
+In the order they would pay: programs and the 3% test; a bar for mixing over 16 MiB that grows with
+install time; the stream weighing's cost on large folders; a bitwise matched literal for the shortcut
+seed; counting the cards as a transform; Optimise Search's rules for other kinds (waiting on your
+runs); gliders and Life; and the hallway (the picture viewer and the power page).

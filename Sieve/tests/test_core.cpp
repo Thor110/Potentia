@@ -6106,6 +6106,27 @@ void test_mix4()
     CHECK(sha(ct) == "41e1ecd2da3a84f4c7230125ff73ed390b5b08d5cde7fb84925959713c21d116");
     CHECK(sha(cw) == "be848447a86d69e0603c8659c9c548d39c2d4e89d0fac5ddb4837af6fa3702e8");
     CHECK(sha(cp) == "300960c718b6a53ab2cf6b1837e6e29798f455ede671303747875f40731d535f");
+    // The v33 draft's match ways (R1, M4, C2): written after the rest, each at most once and in that
+    // order, refused otherwise; off unless written (the codes above, pinned, are as they were); every
+    // file given back with each and all of them; a repetitive program-like file smaller with them.
+    CHECK(Mix4Params::parse("B22 R1 M4 C2").text() == "B22 R1 M4 C2" && Mix4Params::parse("B16 D60 C2").candidates == 2);
+    CHECK(Mix4Params::parse("B16 I60x3 R1").recover && Mix4Params::parse("B16 M4").min_match == 4 && !match_ways(Mix4Params::parse("B22")));
+    CHECK(throws([] { Mix4Params::parse("B22 C2 R1"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 R1 R1"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 M5"); }));
+    CHECK(throws([] { Mix4Params::parse("B22 C3"); }));
+    std::vector<uint8_t> code_like;
+    for (int k = 0; k < 40; ++k)
+        for (int i = 0; i < 400; ++i) code_like.push_back(uint8_t((i * 7 + (i % 23 == k % 23 ? k : 0)) & 255)); // (blocks alike but for a byte here and there)
+    bool ways_back = true;
+    for (const auto& f : {files[3], noise, text, picture, code_like})
+        for (const char* params : {"B16 R1", "B16 M4", "B16 C2", "B16 R1 M4 C2", "B16 I60x3 R1 M4 C2", "B16 D60 R1 M4 C2"})
+        {
+            const Mix4Params p = Mix4Params::parse(params);
+            ways_back = ways_back && mix4_file(mix4_code(f, p, &words), p, &words, f.size()) == f;
+        }
+    CHECK(ways_back);
+    CHECK(mix4_code(code_like, Mix4Params::parse("B16 R1 M4 C2")).size() < mix4_code(code_like, pt).size());
 }
 
 void test_rope_wave()

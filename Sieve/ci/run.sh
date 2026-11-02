@@ -40,7 +40,7 @@ remove_folder() {
         rm -rf "$d" 2> /dev/null
         [ -e "$d" ] || return 0
         if command -v cygpath > /dev/null 2>&1 && command -v cmd > /dev/null 2>&1; then
-            cmd //c rmdir /s /q "$(cygpath -w "$d")" > /dev/null 2>&1
+            MSYS2_ARG_CONV_EXCL="*" cmd //c rmdir //s //q "$(cygpath -w "$d")" > /dev/null 2>&1 # (//s //q: Git Bash would take /s /q for paths)
             [ -e "$d" ] || return 0
         fi
         sleep 2

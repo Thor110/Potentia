@@ -1,72 +1,80 @@
 @echo off
-rem Every benchmark over several folders, one after another, for a night's run: bench_files.bat
-rem (no box), bench_files_optimise_temporary.bat and bench_files_optimise_permanent.bat on each
-rem folder, then bench_power.bat on one. Put it in Sieve's tools folder, beside those scripts.
-rem Each script writes its results beside the folder it was given; this one writes bench_all.log
-rem beside itself: when each run began and ended, so the morning shows how long each took.
-setlocal enabledelayedexpansion
-cd /d "%~dp0"
-for %%S in (bench_files.bat bench_files_optimise_temporary.bat bench_files_optimise_permanent.bat bench_power.bat) do (
-    if not exist "%~dp0%%S" (
-        echo %%S is not beside this script ^(%~dp0^): put bench_all.bat in Sieve's tools folder.
-        pause
-        exit /b 1
-    )
-)
+rem Every benchmark over several folders, one after another, for a night's run: bench_files.py with
+rem no box, with temporary and with permanent on each folder, then bench_power.py on one. Put it in
+rem Sieve's tools folder. It runs the Python scripts itself (not the other .bat files), and every
+rem run's output goes to bench_all.log beside it, as well as when each began and ended, so a run that
+rem stops is seen in the morning with why. Each run's results go beside the folder it was given.
+setlocal
+set "HERE=%~dp0"
+cd /d "%HERE%"
 
-rem The folders to benchmark (one per line; leave one empty to skip it).
+rem The folders to benchmark (one per line; leave one empty to skip it), and the power benchmark's.
 set "F1=C:\Users\Edward\Pictures\my-test-bench"
 set "F2=C:\Users\Edward\Pictures\silesia"
 set "F3=C:\Users\Edward\Pictures\jpeg-test"
 set "F4=C:\Users\Edward\Pictures\png-test"
-rem The folder the power benchmark runs on.
 set "POWER=%F2%"
 
-set "LOG=%~dp0bench_all.log"
-echo bench_all started %DATE% %TIME%>> "%LOG%"
-echo ==========================================================
-echo Starting the Sieve benchmarks (each run's times go to %LOG%)
-echo ==========================================================
-
-for %%F in ("%F1%" "%F2%" "%F3%" "%F4%") do (
-    if "%%~F"=="" (
-        echo.>nul
-    ) else if not exist "%%~F\" (
-        echo.
-        echo No such folder: %%~F ^(skipped^)
-        echo   skipped %%~F: no such folder>> "%LOG%"
-    ) else (
-        echo.
-        echo ==========================================================
-        echo Folder: %%~F
-        echo ==========================================================
-        echo [1/3] bench_files.bat ^(no box^)
-        echo   %%~F, no box: began !DATE! !TIME!>> "%LOG%"
-        call "%~dp0bench_files.bat" "%%~F" <nul
-        echo   %%~F, no box: ended !DATE! !TIME!>> "%LOG%"
-        echo [2/3] bench_files_optimise_temporary.bat
-        echo   %%~F, temporary: began !DATE! !TIME!>> "%LOG%"
-        call "%~dp0bench_files_optimise_temporary.bat" "%%~F" <nul
-        echo   %%~F, temporary: ended !DATE! !TIME!>> "%LOG%"
-        echo [3/3] bench_files_optimise_permanent.bat
-        echo   %%~F, permanent: began !DATE! !TIME!>> "%LOG%"
-        call "%~dp0bench_files_optimise_permanent.bat" "%%~F" <nul
-        echo   %%~F, permanent: ended !DATE! !TIME!>> "%LOG%"
-    )
+set "LOG=%HERE%bench_all.log"
+set "SIEVE=%HERE%..\out\build\x64-Release\sieve.exe"
+if not exist "%SIEVE%" (
+    echo sieve.exe is not at %SIEVE%: build the Release first.
+    echo sieve.exe not found at %SIEVE%>> "%LOG%"
+    pause
+    exit /b 1
+)
+for %%S in ("%SIEVE%") do set "SIEVE=%%~fS"
+set "PY="
+py -3 --version >nul 2>&1 && set "PY=py -3"
+if not defined PY python -c "import sys; sys.exit(sys.version_info[0] != 3)" >nul 2>&1 && set "PY=python"
+if not defined PY (
+    echo Python 3 was not found: install it from python.org ^(it adds the py launcher^).
+    echo Python 3 not found>> "%LOG%"
+    pause
+    exit /b 1
 )
 
-if not "%POWER%"=="" if exist "%POWER%\" (
-    echo.
-    echo ==========================================================
-    echo The power benchmark on %POWER%
-    echo ==========================================================
-    echo   power, %POWER%: began !DATE! !TIME!>> "%LOG%"
-    call "%~dp0bench_power.bat" "%POWER%" <nul
-    echo   power, %POWER%: ended !DATE! !TIME!>> "%LOG%"
-)
-
+echo ==========================================================>> "%LOG%"
+echo bench_all started %DATE% %TIME%, with %SIEVE% and %PY%>> "%LOG%"
+echo Starting the Sieve benchmarks: each run's output and times go to %LOG%
+call :folder "%F1%"
+call :folder "%F2%"
+call :folder "%F3%"
+call :folder "%F4%"
+if not "%POWER%"=="" call :power "%POWER%"
 echo bench_all ended %DATE% %TIME%>> "%LOG%"
+echo All done: each folder's results are beside it; the times and output are in %LOG%
+exit /b 0
+
+:folder
+if "%~1"=="" exit /b 0
+if not exist "%~1\" (
+    echo No such folder: %~1 ^(skipped^)
+    echo skipped %~1: no such folder>> "%LOG%"
+    exit /b 0
+)
+call :run "%~1" "no box" ""
+call :run "%~1" "temporary" "--compressed temporary"
+call :run "%~1" "permanent" "--compressed permanent"
+exit /b 0
+
+:run
 echo.
-echo ==========================================================
-echo All done: each folder's results are beside it; the times are in %LOG%
-echo ==========================================================
+echo %~1, %~2: running ^(see %LOG%^)
+echo ---------------------------------------------------------->> "%LOG%"
+echo %~1, %~2: began %DATE% %TIME%>> "%LOG%"
+%PY% "%HERE%bench\bench_files.py" "%SIEVE%" "%~1" %~3 >> "%LOG%" 2>&1
+echo %~1, %~2: ended %DATE% %TIME%, exit %ERRORLEVEL%>> "%LOG%"
+exit /b 0
+
+:power
+if not exist "%~1\" exit /b 0
+echo.
+echo the power benchmark on %~1: running ^(see %LOG%^)
+echo ---------------------------------------------------------->> "%LOG%"
+echo power, %~1: began %DATE% %TIME%>> "%LOG%"
+set "FILES="
+for %%F in ("%~1\*") do call set FILES=%%FILES%% "%%~fF"
+%PY% "%HERE%bench\bench_power.py" "%SIEVE%" %FILES% >> "%LOG%" 2>&1
+echo power, %~1: ended %DATE% %TIME%, exit %ERRORLEVEL%>> "%LOG%"
+exit /b 0

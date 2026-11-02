@@ -5877,3 +5877,36 @@ weighing each route by everything the installer needs against the file and the o
   and each kind gains a rule as its measurements come in (the record of what carried each result).
 - *The next version's draft, made one number (2 November 2026):* see NEXT-VERSION.md.
 - *Game of Life:* its findings and what is still to try are gathered in [GAME-OF-LIFE.md](GAME-OF-LIFE.md).
+
+**19.112 Ideas for the next pass (gathered the night of 2 to 3 November 2026; none built).** From
+the day's measurements and review, roughly in the order they would pay:
+- *Programs and the 3% test.* With the v33 draft's match ways, programs mix about 1% under xz (2 MiB
+  of mozilla's 2.4% under v32's mixing), but a file is mixed whole only where its start is 3% under
+  LZMA2, so between 4 KiB and 16 MiB a program stays LZMA2 unless Try every way is on. To measure:
+  programs of 1 to 16 MiB (x86, Alpha, game executables) by LZMA2 with the x86 filter against mixed
+  with the ways; if mixing wins on most, Optimise Search's rule for programs under the draft, or the
+  test's bar lowered for them.
+- *Mixing whole over 16 MiB.* mozilla mixed whole installs in 96 s against LZMA2's 3 s for 0.43%.
+  For size that is the choice asked for, but a bar that grows with the install's time (a larger
+  gain asked of a slower decode) would keep near ties fast; the power benchmark's figures decide
+  where it sits.
+- *The stream weighing's cost on large folders.* It estimates the shared LZMA2 stream twice (with and
+  without the mixed files); on a folder of hundreds of MB that is minutes. Where the mixed files are
+  a small share of the stream (under 1%), or their codes already far under their bytes' share, it
+  could be skipped; or estimated on the stretch of the stream around them.
+- *A bitwise matched literal (the shortcut seed, and maybe mixing).* Counted as whole bytes it did
+  nothing (a table for each byte a copy would give, 32 KiB too little to fill them); bit by bit, as
+  LZMA codes it, what one byte teaches carries to like ones. The shortcut seed's program and teapot
+  are 9% to 18% behind xz, and this is the largest piece of xz's coder the seed lacks.
+- *Counting the cards as a transform.* Each kind's 2-byte arrangements named by rank cost 5.5 bits a
+  byte on held-out text against 8 (§19.111); a transform that renames bytes by a kind's ranks (the
+  ranks carried, or a fixed table a kind) in front of the shortcuts or of mixing, measured per kind.
+- *Optimise Search's other kinds.* JPEGs have their rule from 153 files; PNGs, text, programs and
+  archives wait on Edward's runs with the boxes ticked ("Carried by" and "Ways in full" give the
+  routes). Each rule written with the figures it rests on, as the JPEG one is.
+- *Gliders and Life (GAME-OF-LIFE.md).* Glider guns (a few numbers naming many trails), other
+  Life-like rules, a search guided by where the file's bytes change most; tried first on files made
+  by cellular automata.
+- *The hallway.* The picture viewer (`.simage`, its checks before anything is decoded), the power
+  page on the site once figures exist, and the File Locator's starting with `--search-every-wave`
+  unticking Optimise Search for the run, which a setting saved during it writes to the ini (minor).

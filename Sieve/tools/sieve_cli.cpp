@@ -80,6 +80,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include "sieve/stop.hpp"
+#include <optional>
+#include <mutex>
 #include <unordered_map>
 #include <cmath>
 #include <cstdio>
@@ -2448,6 +2451,18 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     // --optimise-compressed, made again where Sieve can, else carried as what it holds.
     const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
     set_compressed_modes(temporary || !permanent, permanent || !temporary);
+    // --progress: what the packer says as it goes (each file's ways weighed and the one taken, each
+    // step's new best), to standard error with the seconds since the start, as the hallway's Keep a
+    // log writes it (2 November 2026: so a run's reasons are seen without the hallway).
+    const auto progress_start = std::chrono::steady_clock::now();
+    std::mutex progress_mx;
+    std::optional<StopScope> said;
+    if (a.has("progress"))
+        said.emplace(nullptr, [&](const std::string& what, double best, double) {
+            if (best >= 0) return; // (a step's new best: the graph's, not a line)
+            std::lock_guard<std::mutex> lock(progress_mx);
+            std::fprintf(stderr, "%9.3f  %s\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - progress_start).count(), what.c_str());
+        });
     add_packed_items(m, root, a, &rep, a.has("v5") ? 5 : a.has("v6") ? 6 : a.has("v7") ? 7 : 8, a.has("item-hashes") || a.has("file-hashes"),
                      rope_seconds, a.has("v8") ? 1 : a.has("v9") ? 2 : a.has("v10") ? 3 : a.has("v11") || a.has("v12") || a.has("v13") || a.has("v14") ? 4 :
                      a.has("v15") || a.has("v16") || a.has("v19") || a.has("v20") || a.has("v21") || a.has("v22") ? 5 :

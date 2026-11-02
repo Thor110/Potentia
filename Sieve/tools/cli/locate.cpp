@@ -476,7 +476,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 groups.back()->total = total;
                 groups.back()->first = e.path;
                 const std::span<const uint8_t> code(m.rope_carried.data() + ra, size_t(len));
-                const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) + total;
+                const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) * mp.candidates + total; // (C2: a second match table)
                 deferred.push_back({i, e.path, [code, mp, words, total] { return mix4_file(code, mp, words, total); }, memory, &groups.back()->bytes});
             }
             catch (const std::invalid_argument& x)
@@ -529,7 +529,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                         if (mp.by_use && !m.v32) throw std::invalid_argument("a word list counted by use (F80) is sieve-manifest-v32's");
                         words = &mix_words()(mp.list());
                     }
-                    const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) + size;
+                    const uint64_t memory = (uint64_t(16) << mp.table_bits) * 4 + (uint64_t(16) << 20) * mp.candidates + size; // (C2: a second match table)
                     deferred.push_back({i, e.path, [code, mp, words, size] { return mix4_file(code, mp, words, size); }, memory});
                 }
                 else if (e.way.rfind("mix3 ", 0) == 0)

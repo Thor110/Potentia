@@ -167,7 +167,7 @@ def ways_in_full(made):
         out = [f["way"] for f in info["files"]]
         out += [r.split(" ", 3)[2] if r.count(" ") >= 2 else r for r in info["remade"]]
         return "; ".join(dict.fromkeys(out))
-    except Exception:
+    except (Exception, SystemExit):  # (the oracle refuses by sys.exit: the column left empty, the bench goes on)
         return ""
 
 

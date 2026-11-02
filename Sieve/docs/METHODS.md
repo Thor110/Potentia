@@ -132,7 +132,11 @@ many as the threads and memory allow, and the result is the same at any thread c
    - With `--v33-draft` (the v33 draft), each of those codes also weighs the match model's ways on
      the same start: none, `C2`, or `R1 M4 C2`, the smallest kept (programs: Silesia's mozilla 3.3%
      smaller mixed whole, under LZMA2; SPECIFICATIONS, v33).
-   - It is then mixed whole only where that start came out at least 3% under LZMA2's.
+   - A shape guessed from the bytes alone (not the rope's, not a PNG's own) is taken only where it
+     wins the start by 2% (2 November 2026: a near tie is no guide to the whole; Silesia's mozilla).
+   - It is then mixed whole only where that start came out at least 3% under LZMA2's; and mixed whole,
+     it replaces LZMA2 only where it is under LZMA2's estimate by 64 bytes and 0.25% (the estimate
+     can come out above the stream as made: five small JPEGs, 2 November 2026).
    - Not tried for a file under 4 KiB or over 16 MiB, nor with **Prioritise decoding speed** ticked.
    - With **Try every way**, every file is mixed whole, of any size, with no test first.
    - Log: in the file's line, `mix4 B22 D60 SIZE [mixing on its first 262144 bytes: as bytes X,

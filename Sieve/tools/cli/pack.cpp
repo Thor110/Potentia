@@ -46,6 +46,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <tuple>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -183,10 +184,14 @@ void for_each_index(size_t n, unsigned threads, F&& f, bool heard = false)
             next = n; // the rest left undone
         }
     };
+    // (and Try every way as this thread has it, the run's or a file's own under Optimise Search, so
+    // a file's search on another thread is the file's: found in review, 2 November 2026)
+    const bool every = rope_search_every_wave();
     std::vector<std::thread> pool;
     for (unsigned k = 1; k < threads; ++k)
-        pool.emplace_back([&, stop] {
+        pool.emplace_back([&, stop, every] {
             const StopScope scope(stop, sink);
+            const EveryWaveHere every_here(every);
             work();
         });
     std::optional<StopScope> mine; // (this thread too, so its reports and the others' take turns)
@@ -2723,10 +2728,22 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // under LZMA2's 13,376,180; 8 MiB of its programs 3.5% smaller, 4 MiB of Sieve's 3.4%; Don
     // Quixote 1.2% larger with all three and 0.2% smaller with C2 alone; a screenshot a little larger
     // (so weighed, not always on).
-    const bool match_ways_on = mix4_on && rope_newest >= kDraftRope && kDraftVersion == 33;
+    const bool match_ways_on = mix4_on && rope_newest >= 16; // (v33's own number: still on once v33 is frozen and the draft moves on)
     auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
         if (!match_ways_on || f.size() < 4096) return mp;
         const std::span<const uint8_t> start = f.first(std::min<size_t>(f.size(), size_t(256) << 10));
+        // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
+        // and shape, so the answer is kept, by thread, for the second.)
+        uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31;
+        for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
+        thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
+        if (const auto hit = weighed.find(key); hit != weighed.end())
+        {
+            std::tie(mp.recover, mp.min_match, mp.candidates) = hit->second;
+            return mp;
+        }
+        if (weighed.size() > 256) weighed.clear();
         Mix4Params best = mp, s = mp;
         s.table_bits = Mix4Params::for_size(start.size()).table_bits;
         uint64_t least = mix4_code(start, s, words).size();
@@ -2738,6 +2755,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (const uint64_t n = mix4_code(start, t, words).size(); n < least)
                 least = n, best = mp, best.candidates = 2, best.recover = t.recover, best.min_match = t.min_match;
         }
+        weighed[key] = {best.recover, best.min_match, best.candidates};
         return best;
     };
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
@@ -3896,7 +3914,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     const uint64_t as_picture = code_of(start, unused, guessed->first, guessed->second).size();
                     test_said("as a picture " + std::to_string(guessed->first) + " wide, " + std::to_string(guessed->second) + " a pixel (a shape guessed from its bytes)",
                               as_picture);
-                    if (as_picture < ms)
+                    // (A shape guessed from the bytes alone is taken only where it beats them by 2%:
+                    // a near tie on the start is no guide to the whole, as a picture's mixing uses
+                    // shorter contexts. Silesia's mozilla, 2 November 2026: a shape 48 wide won its
+                    // start by 0.56% and lost the whole, 13,373,422 bytes against 13,318,505 as bytes;
+                    // shapes that were pictures won by more, a designed diagonal 7.07%, a MIDI 4.41%.
+                    // Where the start is the whole file it is no sample: the smaller is taken.)
+                    if (sn == bytes[i].size() ? as_picture < ms : as_picture + as_picture / 50 < ms)
                     {
                         ms = as_picture;
                         pw = guessed->first;
@@ -3959,12 +3983,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
                     note_mixed(sha[i], mix_way, mc.size() + vl); // (for the weighing)
-                    // Against LZMA2 (the file carried as it is), by a clear margin, 64 bytes and 0.5%:
-                    // LZMA2's figure here is its estimate (preset 6), and the stream as made comes out
-                    // a little smaller, while mixing installs 15 to 60 times slower. (Edward's JPEGs, 1
-                    // November 2026: five of 58 KB to 176 KB were mixed with Try every way for 18 to 225
-                    // bytes more than LZMA2 made them, the mixing code no smaller than the stream.)
-                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 200) : best;
+                    // Against LZMA2 (the file carried as it is), by a margin, 64 bytes and 0.25%: LZMA2's
+                    // figure here is its estimate (preset 6), which can come out above the stream as
+                    // made. (Edward's JPEGs, 1 November 2026: five of 58 KB to 176 KB were mixed with Try
+                    // every way for 18 to 225 bytes more than LZMA2 made them, their estimates 0.06% to
+                    // 0.26% over the stream and their mixing codes no smaller than it; Silesia's mozilla
+                    // with the v33 draft's match ways mixed 0.43% under LZMA2, its estimate a little under
+                    // the stream: 0.25% keeps the five and takes mozilla, 0.5% kept both.)
+                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best;
                     if (mc.size() + vl < need)
                     {
                         best = mc.size() + vl;

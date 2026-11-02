@@ -7,7 +7,14 @@ a result surprises; close it with what explained it.
 
 ## Open
 
-### Silesia's mozilla is not made smaller than LZMA2 makes it
+### Some of Edward's JPEGs
+- *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.
+- *Next:* Edward is to run his pictures again under the new JPEG and PNG ways (v32's `jbr`, `skr`,
+  `pngr`), and the entry is to be filled in or closed from what comes back.
+
+## Resolved
+
+### Silesia's mozilla was not made smaller than LZMA2 makes it (overcome 2 November 2026, with the v33 draft)
 - *Seen:* a tar of 51,220,480 bytes (525 files, most of them programs for the Alpha processor,
   Tru64's COFF). Sieve keeps it whole, by LZMA2: 13,376,239 bytes, level with xz -9e on the same
   files (13.34 to 13.51 MB by their order).
@@ -25,18 +32,17 @@ a result surprises; close it with what explained it.
   it lacked was keeping a match past one wrong byte (as LZMA's last distance does), shorter matches
   and a second candidate. With those (the v33 draft's R1, M4, C2) the whole tar mixed is 13,318,505
   bytes, under LZMA2's 13,376,180 for the first time (results/mixing-match-ways-2026-11-02.md).
-- *Still open:* the packer mixes a file whole only where mixing on its start is 3% under LZMA2,
-  or with Try every way, and mozilla is over mixing's 16 MiB; so with `--v33-draft` alone it stays
-  LZMA2, and with Try every way as well it can be mixed. Whether the 3% test should weigh the match
-  ways' gain is the next question; the group size (8 MiB) and the limit could be searched too, at
-  the cost of a combinatorial search (Edward).
-
-### Some of Edward's JPEGs
-- *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.
-- *Next:* Edward is to run his pictures again under the new JPEG and PNG ways (v32's `jbr`, `skr`,
-  `pngr`), and the entry is to be filled in or closed from what comes back.
-
-## Resolved
+- *Overcome (2 November 2026, night):* two things more stood in the way, both packer-only:
+  - Mixing was weighed against LZMA2 with a margin of 0.5% (set that day for five small JPEGs), and
+    mozilla's gain is 0.43%. The five's estimates ran 0.06% to 0.26% over their streams; a margin of
+    64 bytes and 0.25% keeps them as LZMA2 and lets mozilla through.
+  - Mixing on its start guessed a shape, 48 bytes wide, which won the start by 0.56% and lost the
+    whole (13,373,422 bytes as a picture). A guessed shape is now taken only where it wins its start
+    by 2% (shapes that were pictures won by more: a designed diagonal 7.07%, a MIDI 4.41%).
+  - With both, `sieve locate mozilla --optimise-search --v33-draft` (Try every way chosen by
+    Optimise Search, the file being over 16 MiB) mixes it as bytes with the match model's ways,
+    `mix4 B22 R1 M4 C2`: **13,318,582 bytes**, against LZMA2's 13,376,239 (−0.43%), installed back
+    byte for byte in 96 s (LZMA2's in about 3 s). With v32 alone it stays LZMA2.
 
 ### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026; fixed 2 November)
 - *Seen:* of 153 JPEGs (no box ticked), five of 58 KB to 176 KB came out 18 to 225 bytes larger

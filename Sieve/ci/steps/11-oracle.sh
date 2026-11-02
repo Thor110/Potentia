@@ -633,8 +633,11 @@ cmp dq.txt dq_oracle/dq.txt
 # stb_image_write; the extension's icon (zlib's deflate) from its skeleton, its IDATs one run of
 # chunks, their deflate by preflate and their CRCs worked out again. Installed exactly; the oracle
 # reads both and names them (it has neither stb_image_write nor preflate); --v24 makes neither.
+# (Prioritising decoding keeps their pixels under LZMA2: mixed, as they are since v32, the oracle's
+# own mixing took about 600 s of the step's 2,860 here, 2 November 2026, and 0.3 s without; mixing
+# pictures has blocks of its own below.)
 rm -rf png25 && mkdir png25 && cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-2]\))$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives --prioritise-decoding 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-2]\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -879,6 +882,8 @@ python sieve_ref.py unpack g30.sieve --to g30_oracle > /dev/null && diff -r g30 
 # shifted; SIEVE_DELTA_FROM takes files this small, which the packer leaves to its groups): at v32,
 # one is a delta, given back by Sieve, by the oracle (which reads delta-v1
 # itself, from the specification) and by sieve-install; with --v31, nothing is v32.
+# (Prioritising decoding keeps the first file under LZMA2: mixed, the oracle's own mixing took
+# about 195 s here, 2 November 2026, and 0.3 s without.)
 rm -rf d32 && mkdir d32
 python - <<'PY'
 a = b"".join(open(f, "rb").read() for f in ("../docs/MANUAL.md", "../docs/SPECIFICATIONS.md"))[:330000]
@@ -890,7 +895,7 @@ for k in range(8):  # (the same changes every run)
 open("d32/one.txt", "wb").write(a)
 open("d32/two.txt", "wb").write(bytes(b))
 PY
-SIEVE_DELTA_FROM=65536 $S locate d32 --installer d32.sieve --items 2>&1 | tr -d '\r' > d32.txt
+SIEVE_DELTA_FROM=65536 $S locate d32 --installer d32.sieve --items --prioritise-decoding 2>&1 | tr -d '\r' > d32.txt
 grep -c "^deltas    1 file(s) carried as their differences from another" d32.txt > /dev/null
 grep -c "^manifest  sieve-manifest-v32" d32.txt > /dev/null
 rm -rf d32_inst d32_oracle d32_si

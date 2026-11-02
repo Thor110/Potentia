@@ -50,7 +50,9 @@ try:
 except ImportError:
     brotli = None
 
-RAPL = [p for p in Path("/sys/class/powercap").glob("intel-rapl:*/energy_uj")] if Path("/sys/class/powercap").exists() else []
+# (the package zones alone, intel-rapl:0, intel-rapl:1 ...: their sub-zones, core and uncore, are
+# counted inside them, so adding those would count the same joules twice)
+RAPL = [p for p in Path("/sys/class/powercap").glob("intel-rapl:*/energy_uj") if p.parent.name.count(":") == 1] if Path("/sys/class/powercap").exists() else []
 
 
 def rapl_uj():
@@ -85,7 +87,7 @@ def run(cmd):
         r1 = resource.getrusage(resource.RUSAGE_CHILDREN)
         cpu = (r1.ru_utime + r1.ru_stime) - (r0.ru_utime + r0.ru_stime)
     else:
-        cpu = windows_cpu(p)
+        cpu = windows_cpu(p) or 0.0  # (0 where Windows would not say)
     if p.returncode:
         raise RuntimeError(" ".join(map(str, cmd)) + ": " + out.decode("utf-8", "replace")[-400:])
     return cpu, (e1 - e0) / 1e6 if e0 is not None and e1 is not None and e1 >= e0 else None
