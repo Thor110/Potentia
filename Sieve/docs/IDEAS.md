@@ -5757,6 +5757,9 @@ weighing each route by everything the installer needs against the file and the o
     and its width and height against a limit;
   - installing already stops at the declared size and checks every file's SHA-256, so a file
     cannot grow past what the listing says.
+  - *It opens ordinary pictures too (Edward, 2 November 2026):* PNG, JPEG and the other usual
+    extensions, with a "Sieve" button that makes one into Sieve's picture form, Prioritise Decoding
+    Speed chosen, so that what it makes opens as quickly as the picture did.
 - *Optimise Search, a box in the File Locator (Edward, 2 November 2026):* "a checkbox ... ticked by
   default called 'Optimise Search'. This could disable the other checkboxes and guide any search
   towards the paths we predetermine to give the best results for data types. Then if the checkbox
@@ -5773,3 +5776,17 @@ weighing each route by everything the installer needs against the file and the o
   - *What it rests on:* the record of what carried each result, gathered across the benchmarks into
     a table of routes by kind of file, kept up to date as results come in, so the box's choices are
     measured ones.
+- *Stage 1 again, with skip-and-insert, columns and palette (2 November 2026;
+  `results/shortcut-seed-pieces-2026-11-02.md`):* palette was the best transform on every text and
+  code file, 0.4% to 2.0% under the first pass (Don Quixote 12,262 to 12,019, README 4,291 to 4,245,
+  pack.cpp 10,492 to 10,379), so where the values are few and the file long enough, saying them once
+  pays (on 4 KiB of two values it did not: the coder had learned them as soon). Text and code are
+  now within 1% to 2.5% of xz, mixing still ahead. Skip-and-insert took part in three recipes, none
+  the best; columns was never the best. Neither fits these files, as expected: each shape is for
+  the layouts it describes, and is kept for them.
+- *The prototype's speed (2 November 2026):* finding a 32 KiB file's candidates took 144 s (a table a
+  distance, thousands of them), then ran on without end on the designed checker (every distance of
+  its zeros carried, and skip-and-insert matching a plain run at every place); now each match is
+  measured directly and carried one shorter to the next place, and a skip-and-insert whose byte put
+  in is the count's own next value is left to `run`: 1.2 s for the candidates, the checker's whole
+  search 31.7 s, every recipe still decoded and checked.

@@ -1,56 +1,39 @@
-# The shortcut seed begins; oddities recorded (commits 9cfa73e, 902d090, f79981a)
+# The shortcut seed's rerun with three more pieces (commit 6388894)
 
-Nothing in Sieve itself changed: these are new tools, results and notes. Unzip over the repository.
+Nothing in Sieve itself changed: a tool, a results table and notes. Unzip over the repository.
 
-## New tools
+## The rerun (`results/shortcut-seed-pieces-2026-11-02.md` and `.tsv`)
 
-- **`tools/shortcut_seed.py`**: the shortcut seed, stage 1. A small language of shortcuts to a file:
-  - the shortcuts: copy an earlier stretch, the same distance again, a counting run, a grid copy
-    (above, above-left, above-right), and your skip-and-insert;
-  - the transforms in front of them: differences, the rope's four waves, read by columns, or the
-    values a file uses;
-  - each recipe searched for the fewest bits, decoded again and checked byte for byte;
-  - measured beside zlib, xz, the rope and mixing, and in both of your directions (the seed on what
-    beat it, and a transform in front of xz and mixing).
+The same 24 files as before, with three more pieces: your skip-and-insert, the file read by
+columns, and palette (the values a file uses, said once).
 
-  Run:
-  `python tools/shortcut_seed.py PATH\TO\sieve.exe FILE... --out FOLDER`
+| File (first 32 KiB) | Before | Now | Taken | xz | Mixing |
+| :--- | ---: | ---: | :--- | ---: | ---: |
+| Don Quixote | 12,262 | 12,019 | palette | 11,727 | 9,988 |
+| IDEAS.md | 13,685 | 13,556 | palette | 13,311 | 11,529 |
+| pack.cpp | 10,492 | 10,379 | palette | 10,189 | 9,102 |
+| README.md | 4,291 | 4,245 | palette | 4,195 | 3,708 |
+| the teapot | 6,553 | 6,511 | palette | 5,860 | 4,767 |
+| designed gradient | 13 | 13 | left | 401 | 464 |
+| designed checker | 20 | 20 | none | 83 | 30 |
 
-  Each file is cut to its first 32 KiB by default (`--cut`). It's a Python prototype, slow:
-  minutes a file.
-- **`tools/shortcut_tiny.py`**: stage 1b.
-  - Every file of four sets of 65,536 small files, searched whole.
-  - Real files' 2-, 3- and 4-byte arrangements counted by kind, then tried on held-out halves.
+- **Palette:** the best transform on every text and code file, 0.4% to 2.0% smaller. Text and code
+  are now within 1% to 2.5% of xz, with mixing still ahead.
+- **Skip-and-insert:** used in three recipes, none the best. **Columns:** never the best. Neither
+  shape fits these files, as expected, so both are kept for the layouts they describe.
 
-## Results (`results/`)
+## The prototype's search (`tools/shortcut_seed.py`)
 
-- **`shortcut-seed-2026-11-01.md` and `.tsv`** (24 files, the repository's own):
-  - Designed files: under every other way on several (the gradient 13 bytes, against xz's 401).
-  - Text and code: within 2 to 5% of xz, behind mixing.
-  - Seeds on what beat it: no shortcut found into xz's or mixing's output.
-- **`shortcut-arrangements-2026-11-01.md`**: the tiny sets. Regular arrangements come cheapest, but
-  every file costs more than 16 bits, because of the framing.
-- **`shortcut-counting-2026-11-01.md`**: real files' arrangements by rank cost 4.7 to 5.6 bits a
-  byte, against 8. The shuffle carries over only between kinds that are alike.
-- **Your 20-byte example** (`00 01 02 0F ...`): found as one shortcut, 7 bytes, as you worked it.
+- **Slow on repetitive files:** it ran on without end on the designed checker, because every
+  distance was carried at every place. Only the distances just looked at are carried now.
+- **Skip-and-insert matching plain runs:** a skip-and-insert whose inserted byte is the count's own
+  next value is a plain run, so it's left to `run`.
+- **Speed:** the checker now takes 31.7 s, with the same results, and every recipe is still decoded
+  and checked.
+- **The table** has a skip-and-insert column now.
 
-## Notes
+## Notes (IDEAS §19.111)
 
-- **`docs/ODDITIES.md`**, new:
-  - Open: mozilla. Mixing the whole tar is 3% over LZMA2, so a longer-reaching copy model is wanted.
-    Also some of your JPEGs, to fill in.
-  - Resolved: control.py (591 bytes at v32, 28.10% under its 7z), the Try-every-way group bug, the
-    release script's smaller `.sieve`, and the tar sizes.
-  - Measured: the floor, between 192 and 256 bytes for text.
-- **IDEAS §19.111** records the plan and your ideas:
-  - geometric filters and gliders;
-  - recording what carried each result;
-  - reading a `.sieve` back (light and full);
-  - the world's energy cost and saving, and "Sieve Power Savings" on the site;
-  - the picture viewer and its checks;
-  - Optimise Search;
-  - and every measurement so far.
-
-## Still running
-
-The stage 1 rerun with skip-and-insert, columns and palette. Its table comes in the next zip.
+- The rerun's results.
+- The viewer opens ordinary pictures too, with a "Sieve" button that converts them (decoding speed
+  first).

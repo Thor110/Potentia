@@ -171,6 +171,8 @@ def candidates(y, w):
             if any(((y[i + k] - v - k * stp) & 255) for k in range(e)):
                 break
             X = y[i + e]
+            if X == (v + e * stp) & 255:
+                continue  # (the byte put in is the count's own next value: a plain run, which `run` says)
             m, k = 0, 0
             while i + m < n:
                 pos = m % (e + 1)
@@ -228,10 +230,10 @@ def candidates(y, w):
             found.sort(reverse=True)
             for m, nd in found[:4]:
                 cand[i].append(("copy", -nd, m))
-        # (each match is one shorter at the next place, by the same distance, whether looked at here
-        # or carried from before)
-        carried.update(now)
-        carried = {d: m - 1 for d, m in carried.items() if m >= 2}
+        # (each match looked at here is one shorter at the next place, by the same distance; only
+        # these are carried, so a repetitive file's thousands of distances are not walked at every
+        # place)
+        carried = {d: m - 1 for d, m in now.items() if m >= 2}
         heads.setdefault(key, []).append(i)
     return cand
 
@@ -540,23 +542,23 @@ def main():
 
 def write(out, rows, a):
     with open(out / "results.tsv", "w", encoding="utf-8") as f:
-        f.write("file\tbytes\twidth\ttransform\tshortcut seed\tliterals\tshortcuts\tcopy\tagain\trun\tgrid\tseconds\tzlib\txz\trope\tmixing\n")
+        f.write("file\tbytes\twidth\ttransform\tshortcut seed\tliterals\tshortcuts\tcopy\tagain\trun\tgrid\tskiprun\tseconds\tzlib\txz\trope\tmixing\n")
         for r in rows:
             for t in r["res"]:
                 c = t["counts"]
-                f.write("\t".join(str(v) for v in (r["file"], r["n"], r["w"], t["transform"], t["bytes"], c["literals"], c["shortcuts"], c["copy"], c["again"], c["run"], c["grid"],
+                f.write("\t".join(str(v) for v in (r["file"], r["n"], r["w"], t["transform"], t["bytes"], c["literals"], c["shortcuts"], c["copy"], c["again"], c["run"], c["grid"], c.get("skiprun", 0),
                                                    f"{t['seconds']:.1f}", r["zlib"], r["xz"], r["rope"], r["mix"])) + "\n")
     with open(out / "results.md", "w", encoding="utf-8") as f:
         f.write(f"# The shortcut seed, stage 1\n\nEach file's first {a.cut:,} bytes (the whole file where smaller). The shortcut seed's best recipe "
                 "(its transform, then how many steps were literal bytes and how many shortcuts of each kind), every recipe decoded again and checked "
                 "byte for byte; beside it zlib -9, xz -9e (raw LZMA2), the rope's search "
                 f"({a.rope_seconds:g} s) and mixing (mix-v4), all on the same bytes. W: the row width guessed for the grid and the waves (0: none).\n\n")
-        f.write("| File | Bytes | W | Shortcut seed | Its transform | Literals / shortcuts (copy, again, run, grid) | xz | Mixing | Rope | zlib |\n")
+        f.write("| File | Bytes | W | Shortcut seed | Its transform | Literals / shortcuts (copy, again, run, grid, skip-and-insert) | xz | Mixing | Rope | zlib |\n")
         f.write("| :--- | ---: | ---: | ---: | :--- | :--- | ---: | ---: | ---: | ---: |\n")
         for r in rows:
             b, c = r["best"], r["best"]["counts"]
             f.write(f"| {r['file']} | {r['n']:,} | {r['w']} | {b['bytes']:,} | {b['transform']} | {c['literals']:,} / {c['shortcuts']:,} "
-                    f"({c['copy']}, {c['again']}, {c['run']}, {c['grid']}) | {r['xz']:,} | {r['mix'] if r['mix'] is not None else ''} | "
+                    f"({c['copy']}, {c['again']}, {c['run']}, {c['grid']}, {c.get('skiprun', 0)}) | {r['xz']:,} | {r['mix'] if r['mix'] is not None else ''} | "
                     f"{r['rope'] if r['rope'] is not None else ''} | {r['zlib']:,} |\n")
         f.write("\n## The two prongs\n\nForward: the shortcut seed searched on what beat it (xz's output, mixing's code): smaller than that "
                 "output only if a shortcut into it exists. Back: each transform's output put through xz and through mixing, a byte added to say "
