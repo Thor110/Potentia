@@ -64,14 +64,14 @@ The theoretical floor for a million digits treated as random is ~415,241 bytes, 
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve :    3,829,436 bytes ( 3,829,760 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk )
 
-AI generated control script : 
+AI generated control script : https://github.com/Thor110/Potentia/blob/main/Sieve/data/anchors/ai-generated-content/gemini/control.py
 
 control.py					: 1,597 bytes		(4,096 bytes on disk)
 control.7z					: 822 bytes			(4,096 bytes on disk)
 control.7z.sieve			: 959 bytes			(4,096 bytes on disk)
 control.py.sieve			: 591 bytes			(0 bytes on disk)
 
-Good old windows reports this control script as 0 bytes on disk.
+Good old windows reports this control script as 0 bytes on disk...
 
 POWER-USAGE.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/POWER-USAGE.md
 
