@@ -80,6 +80,7 @@ struct PackReport
     bool v30 = false;                    // v30: files mixed together in groups
     bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
     bool v32 = false;                    // v32 (draft): some file carried as its differences from another
+    bool v33 = false;                    // v33 (draft): some mixing with the match model's ways
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'

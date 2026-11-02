@@ -21,9 +21,25 @@ a result surprises; close it with what explained it.
     of 9.71 MB), so not built.
   - Mixing the whole tar as one (`sieve mix`, mix-v4) came to 13,778,604, 3.0% larger than LZMA2:
     on these programs mixing's model of earlier copies does not reach as LZMA2's matches do.
-- *Next:* a longer-reaching copy model in mixing (IDEAS §19.111, the next version's), measured
-  on mozilla first, then on programs and game data. The reach, the group size (8 MiB) and mixing's
-  limit (16 MiB) could be searched too, at the cost of a combinatorial search (Edward).
+- *The cause, found (2 November 2026):* mixing's match model already reaches the whole file; what
+  it lacked was keeping a match past one wrong byte (as LZMA's last distance does), shorter matches
+  and a second candidate. With those (the v33 draft's R1, M4, C2) the whole tar mixed is 13,318,505
+  bytes, under LZMA2's 13,376,180 for the first time (results/mixing-match-ways-2026-11-02.md).
+- *Still open:* the packer mixes a file whole only where mixing on its start is 3% under LZMA2,
+  or with Try every way, and mozilla is over mixing's 16 MiB; so with `--v33-draft` alone it stays
+  LZMA2, and with Try every way as well it can be mixed. Whether the 3% test should weigh the match
+  ways' gain is the next question; the group size (8 MiB) and the limit could be searched too, at
+  the cost of a combinatorial search (Edward).
+
+### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026)
+- *Seen:* of 153 JPEGs (no box ticked), five of 58 KB to 176 KB came out 18 to 225 bytes larger
+  with Try every way than without (0.03% to 0.13%): it took mixing as a picture where without it
+  LZMA2 was taken.
+- *Known:* a file's ways are weighed against LZMA2's estimate (preset 6), and the stream as made
+  (preset 9, its settings tried) comes out smaller than that estimate; mixing beat the estimate and
+  lost to the stream, its way's text in the listing a little longer too.
+- *Next (no new version):* weigh mixing against the stream as it will be made, or keep LZMA2 unless
+  mixing is under it by a margin; measured on these five first.
 
 ### Some of Edward's JPEGs
 - *Seen:* noted by Edward as results that surprised; the figures are in his logs, not here.

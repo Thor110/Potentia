@@ -1104,6 +1104,8 @@ const std::vector<Page>& pages()
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
           {"--v32-draft", "(v32 is the newest now; kept so older command lines work: it changes nothing.)"},
+          {"--v33-draft", "Make the v33 draft where it is smaller (sieve-manifest-v33, not frozen: what it makes may not be read\n"
+                          "by a later Sieve): mixing's match model with its ways (R1, M4, C2), weighed on each mixed file's start."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

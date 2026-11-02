@@ -1,5 +1,19 @@
 # The next manifest version: a plan for `sieve-manifest-v32`
 
+**v33, a draft held open (Edward, 2 November 2026: "lets stay locked at manifest v33 draft for a
+while again until we get all the new systems and ideas implemented").** Every piece that needs a new
+format waits behind a `--v33-draft` switch (to be built, as v32's was, with the first such piece),
+and nothing makes v33 by default until Edward freezes it. Packer changes needing no new format still
+land freely. Queued for it, each measured before it is built (IDEAS §19.111): the shortcut seed's
+ways that win somewhere; the rope's search giving keeping its own turn, or real-rope as its own way
+(§19.110).
+- **Built (2 November 2026):** the switch, `--v33-draft` (`sieve locate`), and its first piece,
+  mixing's match model with its ways (mix-v4's `R1`, `M4`, `C2`; SPECIFICATIONS, v33), weighed on
+  each mixed file's start: Silesia's mozilla mixed whole under LZMA2 for the first time (13,318,505
+  against 13,376,180). Sieve, sieve-install and the oracle read it; CI step 11 checks it. The
+  hallway's File Locator has no box for it yet.
+
+
 *Written 30 October 2026, from a reading of the documentation (IDEAS, HANDOFF, REVIEW,
 SHOWCASE-PLAN, SPECIFICATIONS, SIEVE-FORMAT, STATISTICS) and the code. Every figure is quoted from
 the document named beside it; "not measured" means nothing was found.*

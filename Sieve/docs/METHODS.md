@@ -129,6 +129,9 @@ many as the threads and memory allow, and the result is the same at any thread c
        from its bytes;
      - for a text, with an English word list (from v32, SCOWL's size 80 with each word
        counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start; v31, size 60).
+   - With `--v33-draft` (the v33 draft), each of those codes also weighs the match model's ways on
+     the same start: none, `C2`, or `R1 M4 C2`, the smallest kept (programs: Silesia's mozilla 3.3%
+     smaller mixed whole, under LZMA2; SPECIFICATIONS, v33).
    - It is then mixed whole only where that start came out at least 3% under LZMA2's.
    - Not tried for a file under 4 KiB or over 16 MiB, nor with **Prioritise decoding speed** ticked.
    - With **Try every way**, every file is mixed whole, of any size, with no test first.

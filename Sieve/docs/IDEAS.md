@@ -5790,3 +5790,80 @@ weighing each route by everything the installer needs against the file and the o
   measured directly and carried one shorter to the next place, and a skip-and-insert whose byte put
   in is the count's own next value is left to `run`: 1.2 s for the candidates, the checker's whole
   search 31.7 s, every recipe still decoded and checked.
+- *Site maps that keep themselves up to date (Edward, 2 November 2026):* "a web extension fork
+  system for dynamic and automatically updateable site maps? Think YouTube: hashing everything all
+  the time wouldn't be practical, unless perhaps just the hash map for a user's uploads is updated
+  when uploading a video. Though this doesn't account for comments and much more." Notes for when it
+  is taken up:
+  - *The shape:* a site's map as a tree (as Sieve's maps hold one, `sieve-map-v1`'s nodes and edges), a node a part of the site, each
+    user's uploads a node of its own, updated only when they upload, so a change rehashes one node
+    and the path from it to the root, not the site (a Merkle tree, as Git keeps its trees).
+  - *What changes all the time:* comments, counts and recommendations change faster than any map
+    should; they would sit outside the hashed tree, fetched live, or be hashed in pages that close
+    (a day's comments, a closed thread) and are then fixed.
+  - *Who keeps it:* the site itself, publishing its own map (the cheapest, since it knows when
+    anything changes); or users' extensions, each hashing what it fetched and sharing it, which
+    needs agreement on what was seen (two users see different pages of the same address) and trust
+    in who hashed it.
+- *Measured, 2 November 2026:*
+  - *The geometric filters (`results/shortcut-geometry-2026-11-02.md`, `tools/shortcut_designs.py`):*
+    zigzag, diagonals, spiral, rings, the Morton curve, 8 by 8 tiles, a plane and a slope from the
+    centre taken away. Each designed grid of 64 by 64 is cancelled by its own filter: the count
+    along a spiral 11 bytes (xz 2,652), along the Morton curve 11 (xz 297), the snake 11 (xz 265),
+    the diagonal stripes 13 (xz 42). On the real files (two pictures, Sieve's program, the teapot)
+    none came under no filter at all: on the program the spiral made it nearly twice the size.
+    Edward's chaos, measured: an order that suits one layout scatters another; the search keeps a
+    filter only where it wins, so a real file pays only the bit more that names the transform.
+  - *The coder (`results/shortcut-coder-2026-11-02.md`):* the choice counted by the step before, a
+    second recent distance, and the literals by the two bytes before (learned from the literals
+    alone) each took 0.3% to 1.2% off (Sieve's program 8,214 to 8,115, Don Quixote 12,000 to 11,855);
+    learning the literals from every byte was worse than from the literals alone (the bytes copies
+    give are not like the literals); the matched literal, counted by whole bytes, did nothing. Text is
+    now within about 1% to 1.5% of xz; Sieve's program 18% over and the teapot 9% over, where xz's
+    codes for distances and lengths and its matched literal, bit by bit, are what is left to try.
+  - *What carried each result:* `tools/bench/bench_files.py` now writes a "Carried by" column (and
+    each report line whole in results.tsv); `tools/sieve_read.py` reads it back from a `.sieve`
+    alone (light: head and listing, 0.19 s for docs/'s; full: installed, each file packed alone).
+    Silesia's mozilla taken apart, read so: 510 files by LZMA2 (13,181,157 bytes), 5 mixed alone
+    (282,420), 10 from another's lines, and the tar's skeleton mixed as a picture.
+- *The power benchmark, built (`tools/bench/bench_power.py`, `tools/bench_power.bat`, 2 November
+  2026).* Measured: each way's bytes, and the processor time (user and system, every thread) to make
+  and to install it, Sieve's own start-up taken off (measured on a 1-byte file) and the other ways
+  writing what they install too; joules by the processor's counter where Linux lets it be read.
+  Assumed, as settings: moving a gigabyte 0.006 to 0.06 kWh (Aslan et al. 2018's 0.06 for 2015,
+  falling by about half every two years), the user's processor 35 W, the maker's 65 W. First run here
+  (a container, no counter; three of the repository's files), against 7z, a fetch:
+  - Vitruvian's JPEG, Sieve either way: 37,184 bytes less, saving the networks 0.00022 to 0.0022
+    Wh, and moving 0.0008 Wh onto the user (brunsli and the JPEG made again, 0.08 cpu s);
+  - the PNG, Sieve for decoding speed: 43,987 less, 0.00026 to 0.0026 Wh saved, 0.0008 moved; for
+    size (mixing): 52,288 less, 0.00031 to 0.0031 saved, 0.024 moved (2.4 cpu s);
+  - so on pictures fetched often, decoding speed about breaks even a fetch and pays at the higher
+    estimate of the networks' energy; size first, by mixing, moves more onto users than it saves
+    the networks at any count of fetches, and suits what is stored long and installed seldom. The
+    answer turns within the assumed range, so the counter on a real machine and a network figure
+    agreed on are what decide it.
+- *Measured, 2 November 2026, later:*
+  - *Mixing's long reach (docs/ODDITIES.md; `results/mixing-match-ways-2026-11-02.md`):* the
+    match model already reached the whole file; what it lacked was going on past one wrong byte (as
+    LZMA's last distance does), shorter matches and a second candidate. Built as mix-v4's R1, M4 and
+    C2 for the v33 draft (`--v33-draft`, the first piece behind it), weighed on each file's start:
+    Silesia's mozilla mixed whole 13,318,505 bytes, under LZMA2's 13,376,180 for the first time;
+    programs 3.4% to 3.5% smaller; text and pictures choose none or C2. Sieve, sieve-install and the
+    oracle read it; CI step 11 checks it.
+  - *Gliders (`tools/shortcut_gliders.py`):* two gliders flying apart through zeros are found
+    exactly by a search that adds one glider at a time, at every place and direction (the grid 15
+    bytes, the seed alone 47, xz 71); two that meet leave a still-life, so what they made is not the
+    sum of their trails, one right glider alone makes the file dearer (748 bits against 526), and
+    only the pair cancels it (38 bits), which a search one at a time cannot find and a search of
+    pairs (about 270 million boards here) is Edward's combinatorial explosion. On the first 4 KiB of
+    the grey picture and of Sieve's program no glider paid.
+- *Edward's JPEGs, no box (1 November 2026, his machine, 153 files, 452,571,666 bytes; 7z
+  450,438,090):* size/try 436,004,003 (−3.20% against 7z, mixing on 143 files, 441.7 s to install
+  them all), size/no 448,587,039 (−0.41%), decode/try and decode/no 448,777,954 (−0.37%, 9.4 s to
+  install), decode/try taking 1.24 h for decode/no's 0.08 h: the case for Optimise Search. On 106 of
+  them the rope led for decoding speed (each cut into pieces, its metadata by LZMA2 and its picture
+  by the rope). Every file installed the same. The temporary box (brunsli) is still to be run.
+- *Ways in full (Edward: "list the exact formulae used behind each end result"):* the benchmark's
+  tables now carry each run's way as its listing writes it, read back from the `.sieve`
+  (`stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3`: made again by stb_image's PNG recipe, its pixels
+  mixed as a picture 1280 wide of 3 bytes), so a result can be made again from its line alone.

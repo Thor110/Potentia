@@ -2687,6 +2687,29 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
     // rope_newest is held to the rope's own versions below).
     const bool v32_head_on = rope_newest >= 15;
+    // v33 (draft, --v33-draft only, 2 November 2026): mixing's match model may take its ways (mix-v4's
+    // R1, M4, C2), weighed on a file's start: none, C2, or all three, the smallest kept. Measured
+    // (docs/ODDITIES.md): Silesia's mozilla mixed whole 13,778,604 bytes, with all three 13,318,505,
+    // under LZMA2's 13,376,180; 8 MiB of its programs 3.5% smaller, 4 MiB of Sieve's 3.4%; Don
+    // Quixote 1.2% larger with all three and 0.2% smaller with C2 alone; a screenshot a little larger
+    // (so weighed, not always on).
+    const bool match_ways_on = mix4_on && rope_newest >= 16;
+    auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
+        if (!match_ways_on || f.size() < 4096) return mp;
+        const std::span<const uint8_t> start = f.first(std::min<size_t>(f.size(), size_t(256) << 10));
+        Mix4Params best = mp, s = mp;
+        s.table_bits = Mix4Params::for_size(start.size()).table_bits;
+        uint64_t least = mix4_code(start, s, words).size();
+        for (const int k : {1, 2})
+        {
+            Mix4Params t = s;
+            t.candidates = 2;
+            if (k == 2) t.recover = true, t.min_match = 4;
+            if (const uint64_t n = mix4_code(start, t, words).size(); n < least)
+                least = n, best = mp, best.candidates = 2, best.recover = t.recover, best.min_match = t.min_match;
+        }
+        return best;
+    };
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
     const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
     size_t pngs_resaved = 0;
@@ -3797,7 +3820,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
                     if (mix4_on)
                     {
-                        const Mix4Params mp = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
+                        const Mix4Params mp = with_ways(Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on), f, words);
                         way_text = "mix4 " + mp.text();
                         return mix4_code(f, mp, words);
                     }
@@ -4073,7 +4096,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     // (no word list here: without it)
                 }
-            const Mix4Params mp = Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+            const Mix4Params mp = with_ways(Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on), joined, words);
             d.code = mix4_code(joined, mp, words);
             d.params = mp.text();
             d.apart = apart;
@@ -4264,7 +4287,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     {
                         // (no word list here: without it)
                     }
-                const Mix4Params mp = Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                const Mix4Params mp = with_ways(Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on), together, words);
                 std::vector<uint8_t> code = mix4_code(together, mp, words);
                 if (code.size() + mp.text().size() + 1 < apart + without_cost)
                 {
@@ -4445,7 +4468,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const uint64_t ls = sn == plain.size() ? pp.size() : estimate(std::vector<uint8_t>(start.begin(), start.end()));
             if (every || ms * 100 < ls * 97)
             {
-                const Mix4Params mp = Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                const Mix4Params mp = with_ways(Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on), plain, words);
                 std::vector<uint8_t> code = mix4_code(plain, mp, words);
                 const std::string params = mp.text();
                 // (the parameters cost their length and a byte in the head, the dictionary byte 0xFE's place)
@@ -4589,6 +4612,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
                              return x.way.rfind("delta ", 0) == 0 || x.remake.rfind("jbr ", 0) == 0 || x.remake.rfind("pngr ", 0) == 0 || x.remake.rfind("skr ", 0) == 0 || by_use(x.way);
                          }));
+    auto ways_in = [](const std::string& w) {
+        for (const char* tag : {"mix4 ", "mixt "})
+            if (w.rfind(tag, 0) == 0)
+            {
+                const size_t t = w.find(" T");
+                return match_ways(Mix4Params::parse(tag[3] == 't' ? w.substr(5, t == std::string::npos ? std::string::npos : t - 5) : w.substr(5)));
+            }
+        return false;
+    };
+    m.v33 = m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
+                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way); }));
+    m.v32 = m.v32 || m.v33;
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
     m.v29 = !m.lzma2.mixed.empty() || m.v30;  // (the stream mixed only where the newest instructions are made: above)
@@ -4617,6 +4652,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v30 = m.v30;
     r.v31 = m.v31;
     r.v32 = m.v32;
+    r.v33 = m.v33;
     for (const ManifestEntry& x : m.entries)
     {
         r.member_archives += x.remake.rfind("skm ", 0) == 0;
@@ -4705,7 +4741,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -4718,7 +4754,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.jpegs)

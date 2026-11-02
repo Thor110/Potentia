@@ -2780,18 +2780,29 @@ def mix_word_list(n, by_use=False):
     return child, counts
 
 
-def mix4_file(code, params, size, v32=False):
+def mix4_file(code, params, size, v32=False, v33=False):
     """mix-v4: mix-v2 (or, with " D<n>", mix-v3) without the SSE stages (sse-v1, retired): the mixers'
     average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"; in v32 also
-    "B22 F80", scowl-en-80 counted by use."""
+    "B22 F80", scowl-en-80 counted by use; in the v33 draft, after them, the match model's ways
+    " R1" (a match goes on past one wrong byte), " M4" (taken after 4 bytes) and " C2" (two places
+    a context was seen), each at most once and in that order."""
+    ways = {"recover": False, "min_match": 6, "candidates": 1}
+    tail = re.search(r"((?: R1)?(?: M4)?(?: C2)?)$", params).group(1)
+    if tail:
+        if not v33:
+            sys.exit(f"mix-v4: the match model's ways ({tail.strip()}) are the v33 draft's: {params}")
+        ways = {"recover": " R1" in tail, "min_match": 4 if " M4" in tail else 6, "candidates": 2 if " C2" in tail else 1}
+        params = params[: len(params) - len(tail)]
     m = re.fullmatch(r"B(1[6-9]|2[0-2])(?: I[1-9][0-9]*x[1-4]| D(35|60|80)| (F80))?", params)
     if not m or (m.group(3) and not v32):
         sys.exit(f"mix-v4: parameters are written \"B22\", \"B22 I949x1\" or \"B22 D60\" (v32: \"B22 F80\"): {params}")
     words = mix_word_list(int(m.group(2))) if m.group(2) else mix_word_list(80, by_use=True) if m.group(3) else None
-    return mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False)
+    return mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways)
 
 
-def mix2_file(code, params, size, words=None, sse=True):
+def mix2_file(code, params, size, words=None, sse=True, ways=None):
+    ways = ways or {"recover": False, "min_match": 6, "candidates": 1}
+    recover, min_match, two = ways["recover"], ways["min_match"], ways["candidates"] == 2
     if words is not None:  # mix-v3: "B22 D60", mix-v2's text with the word list's model
         m = re.fullmatch(r"B(1[6-9]|2[0-2]) D(35|60|80)", params)
         if not m:
@@ -2818,6 +2829,7 @@ def mix2_file(code, params, size, words=None, sse=True):
     w1, w2 = [1 << 14] * (nin * 256), [1 << 14] * (nin * 2048)
     mm = [[32768, 0] for _ in range(64)]
     T = {}  # the match's table: hash -> place
+    T2 = {}  # (C2: the place before)
     apm = [dict(), dict()]  # (context * 33 + point) -> 16-bit probability
 
     def apm_cell(k, i):
@@ -2826,7 +2838,7 @@ def mix2_file(code, params, size, words=None, sse=True):
         return apm[k][i]
 
     x = bytearray()
-    state = {"n": 0, "q": 0, "L": 0, "P": 0, "field": 0, "word": 0, "node": 0, "letters": 0}
+    state = {"n": 0, "q": 0, "L": 0, "P": 0, "field": 0, "word": 0, "node": 0, "letters": 0, "miss": False}
     base = [0] * nctx
 
     def back(k):
@@ -2845,11 +2857,14 @@ def mix2_file(code, params, size, words=None, sse=True):
                 letter = 97 <= b <= 122 or 65 <= b <= 90
                 state["node"] = 0 if not letter else -1 if state["node"] < 0 else words[0][state["node"]].get(b | 32, -1)
                 state["letters"] = min(state["letters"] + 1, 40) if letter else 0
-            if state["n"] > 0 and x[state["q"]] == b:
+            if state["n"] > 0 and not state["miss"] and x[state["q"]] == b:
                 state["n"] += 1
                 state["q"] += 1
+            elif recover and state["n"] >= min_match and state["q"] + 1 < pos:
+                state["n"], state["q"] = 1, state["q"] + 1  # (R1: on past one wrong byte, at the same distance)
             else:
                 state["n"] = 0
+            state["miss"] = False
         k = 0
         base[k] = 0
         k += 1
@@ -2884,18 +2899,21 @@ def mix2_file(code, params, size, words=None, sse=True):
                       h2(0x2001, back(2) | back(3) << 8), h2(0x2002, back(4) | back(3) << 8), h2(0x2003, back(1) | back(3) << 8)):
                 base[k] = v
                 k += 1
-        if pos >= 6:
+        if pos >= min_match:
             h = 0
-            for j in range(1, 7):
+            for j in range(1, min_match + 1):
                 h = ((h * 0x2F0F3C35) ^ (back(j) * 0x9E3779B1)) & M
             h = (h >> 10) & ((1 << 22) - 1)
-            t = T.get(h, 0)
-            if state["n"] == 0 and t > 0:
-                l = 0
-                while l < 32 and l < t and x[t - 1 - l] == x[pos - 1 - l]:
-                    l += 1
-                if l >= 6:
-                    state["n"], state["q"] = l, t
+            if state["n"] == 0:
+                for t in (T.get(h, 0), T2.get(h, 0) if two else 0):
+                    if t > 0:
+                        l = 0
+                        while l < 32 and l < t and x[t - 1 - l] == x[pos - 1 - l]:
+                            l += 1
+                        if l >= min_match and l > state["n"]:
+                            state["n"], state["q"] = l, t
+            if two:
+                T2[h] = T.get(h, 0)
             T[h] = pos
         if words:
             base[k] = h2(0x7001, 0 if state["node"] < 0 else 1 + min(state["letters"], 15))
@@ -2931,10 +2949,12 @@ def mix2_file(code, params, size, words=None, sse=True):
             cells = [tables[i].setdefault(slots[i] + nib, [32768, 0]) for i in range(nctx)]
             st = [stretch[cell[0] >> 4] for cell in cells]
             mi = -1
-            if state["n"] > 0:
+            if state["n"] > 0 and not state["miss"]:
                 e = x[state["q"]]
                 if ((e + 256) >> (8 - place)) == c0:
                     mi = min(state["n"], 31) * 2 + ((e >> (7 - place)) & 1)
+                elif recover:
+                    state["miss"] = True  # (R1: the rest of this byte unpredicted, the match kept)
                 else:
                     state["n"] = 0
             if mi >= 0:
@@ -3008,7 +3028,7 @@ def mix2_file(code, params, size, words=None, sse=True):
 def cmd_mix_unpack(args):
     code = open(args.code, "rb").read()
     if args.v4:
-        out = mix4_file(code, args.params, args.size, v32=True)
+        out = mix4_file(code, args.params, args.size, v32=True, v33=True)  # (a test tool: the v33 draft's ways read too)
     elif args.words:
         out = mix2_file(code, args.params, args.size, mix_word_list(int(args.words)))
     else:
@@ -6813,9 +6833,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 32):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 33):
         return data
-    v32 = data[5] == 32  # v31 whose files may be carried as their differences from another
+    v33 = data[5] == 33  # (the v33 draft) v32 whose mixing may name the match model's ways; its head is v32's
+    v32 = data[5] == 32 or v33  # v31 whose files may be carried as their differences from another
     v31 = data[5] == 31 or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = data[5] == 30 or v31  # v29 whose files may be mixed together in groups
     v29 = data[5] == 29 or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
@@ -6912,7 +6933,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v33\n" if v33 else b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     parts = []
@@ -7046,7 +7067,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v32 = lines[0] == "sieve-manifest-v32"  # v31 whose files may be carried as their differences from another
+    v33 = lines[0] == "sieve-manifest-v33"  # (the v33 draft) v32 whose mixing may name the match model's ways
+    v32 = lines[0] == "sieve-manifest-v32" or v33  # v31 whose files may be carried as their differences from another
     v31 = lines[0] == "sieve-manifest-v31" or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = lines[0] == "sieve-manifest-v30" or v31  # v29 whose files may be mixed together in groups (mix-v4)
     v29 = lines[0] == "sieve-manifest-v29" or v30  # v28 whose lzma2 stream may be mixed (mix-v4)
@@ -7123,7 +7145,7 @@ def cmd_unpack_v7(args, data):
     if mixed_stream:  # v29: mixed by mix-v4 (never a picture's parameters)
         if " I" in mixed_stream:
             sys.exit("a mixed stream with a picture's parameters")
-        plain = mix4_file(payload[sx[0]:sx[0] + sl[0]], mixed_stream, sl[1], v32)
+        plain = mix4_file(payload[sx[0]:sx[0] + sl[0]], mixed_stream, sl[1], v32, v33)
     else:
         plain = payload[sx[0]:sx[0] + sl[0]] if sl[0] and sl[2] == 0 else decode(payload[sx[0]:sx[0] + sl[0]], sl[1], sl[2], False)
     carried = payload[sx[0] + sl[0]:sx[0] + sl[0] + si[0]]
@@ -7408,7 +7430,7 @@ def cmd_unpack_v7(args, data):
             # stream; decoded whole, this file its first bytes, the "mixn" files after the next.
             if group is not None and group[1] != len(group[0]):
                 sys.exit(f"{group[2]}'s group ends before its files have its bytes")
-            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?) T([1-9][0-9]*)", way[5:])
+            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?(?: R1)?(?: M4)?(?: C2)?) T([1-9][0-9]*)", way[5:])
             if not m30:
                 sys.exit(f"{path}: a group not written as Sieve writes it")
             n, shift = 0, 0
@@ -7419,7 +7441,7 @@ def cmd_unpack_v7(args, data):
                 shift += 7
                 if not b & 0x80:
                     break
-            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32), 0, path]
+            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32, v33), 0, path]
             ra += n
             if size > len(group[0]):
                 sys.exit(f"{path} is larger than its group")
@@ -7440,7 +7462,7 @@ def cmd_unpack_v7(args, data):
                 if not b & 0x80:
                     break
             if way.startswith("mix4 "):  # v28: without the SSE stages
-                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32), ra + n
+                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32, v33), ra + n
             elif way.startswith("mix3 "):  # v27: with its word list
                 m3 = re.fullmatch(r"B[0-9]+ D(35|60|80)", way[5:])
                 lists = mix_word_list(int(m3.group(1))) if m3 else None
@@ -7813,7 +7835,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n", b"sieve-manifest-v33\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]

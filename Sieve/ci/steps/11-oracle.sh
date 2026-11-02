@@ -844,6 +844,26 @@ rm -rf ws32_inst ws32_si ws32_oracle
 $S install ws32.sieve --to ws32_inst > /dev/null && diff -r ws32 ws32_inst
 $SI ws32.sieve --to ws32_si --yes > /dev/null && diff -r ws32 ws32_si
 python sieve_ref.py unpack ws32.sieve --to ws32_oracle > /dev/null && diff -r ws32 ws32_oracle
+# The v33 draft (2 November 2026, --v33-draft only): mix-v4's match model with its ways (R1: a match
+# goes on past one wrong byte; M4: taken after 4 bytes; C2: two places a context was seen). Mixing's
+# code with them made by Sieve and read by the oracle; then a slice of the Sieve just built (a
+# program, where they pay) made with --v33-draft and Try every way: v33 where it is smaller, never
+# larger than v32, and given back by Sieve, sieve-install and the oracle; without the switch, v32.
+head -c 24576 ../data/anchors/public-domain/pg996.txt > m33.txt
+$S mix m33.txt --params "B16 R1 M4 C2" --out m33.mix | tr -d '\r' | grep -q "read back and checked"
+python sieve_ref.py mix-unpack m33.mix --v4 --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null && cmp m33.txt m33.back
+if python sieve_ref.py mix-unpack m33.mix --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null 2>&1; then exit 1; fi
+rm -rf m33 && mkdir m33 && head -c 1114112 "$S" | tail -c 65536 > m33/code.bin
+$S locate m33 --installer m33-32.sieve --search-per-file 1 --search-every-wave 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
+$S locate m33 --installer m33-33.sieve --search-per-file 1 --search-every-wave --v33-draft 2>&1 | tr -d '\r' > m33.txt
+if grep -q "^manifest  sieve-manifest-v33" m33.txt; then
+    python ../tools/sieve_read.py m33-33.sieve | grep -q "mix4 B[0-9]* .*\(R1\|M4\|C2\)"
+fi
+[ "$(wc -c < m33-33.sieve)" -le "$(wc -c < m33-32.sieve)" ]
+rm -rf m33_inst m33_si m33_oracle
+$S install m33-33.sieve --to m33_inst > /dev/null && diff -r m33 m33_inst
+$SI m33-33.sieve --to m33_si --yes > /dev/null && diff -r m33 m33_si
+python sieve_ref.py unpack m33-33.sieve --to m33_oracle > /dev/null && diff -r m33 m33_oracle
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
 # back the same by Sieve and the oracle.

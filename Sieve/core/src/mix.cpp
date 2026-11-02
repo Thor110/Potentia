@@ -343,11 +343,24 @@ struct Counter2
 };
 static_assert(sizeof(Counter2) == 4, "a slot of 16 counters is one 64-byte line");
 
+// The match model's ways (v33 draft, 2 November 2026; docs/ODDITIES.md, mozilla): each off as
+// mix-v2 to v4 make it, so their codes are as they were.
+//   recover     a match goes on past one byte it got wrong, at the same distance, as LZMA's last
+//               distance does (programs: the same instruction with one field changed)
+//   min_match   the bytes a new match must agree on before it is taken (6, or 4)
+//   candidates  where each context was seen last and the time before (2), the longer match kept
+struct MatchWays
+{
+    bool recover = false;
+    int min_match = 6;
+    int candidates = 1;
+};
+
 class Model2
 {
 public:
     // `sse`: sse-v1's two stages (mix-v2 and mix-v3); without (mix-v4), the mixers' average is coded.
-    Model2(const Mix2Params& p, uint64_t size, const MixDictionary* words = nullptr, bool sse = true)
+    Model2(const Mix2Params& p, uint64_t size, const MixDictionary* words = nullptr, bool sse = true, MatchWays mw = {})
         : words_(words), sse_(sse), picture_(p.width > 0), bits_(p.table_bits), mask_((uint32_t(1) << p.table_bits) - 1), bpp_(p.channels),
           row_(size_t(p.width) * p.channels), buf_(static_cast<size_t>(size)), ht_(size_t(1) << kMatchBits, 0), a1_(sse ? 65536 : 0), a2_(sse ? 65536 : 0)
     {
@@ -365,6 +378,8 @@ public:
         w1_.assign(ninputs_ * 256 + 8, 1 << 14);
         w2_.assign(ninputs_ * 2048 + 8, 1 << 14);
         padded_ = (ninputs_ + 7) / 8 * 8;
+        mw_ = mw;
+        if (mw_.candidates > 1) ht2_.assign(size_t(1) << kMatchBits, 0);
         new_byte();
     }
     int p()
@@ -398,10 +413,11 @@ public:
         }
         // The match: the bit the byte it expects has here, while the bits so far agree with it.
         mi_ = -1;
-        if (mlen_ > 0)
+        if (mlen_ > 0 && !missed_)
         {
             const int eb = buf_[mptr_];
             if (((eb + 256) >> (8 - bitpos_)) == c0_) mi_ = int(std::min<uint32_t>(mlen_, 31)) * 2 + ((eb >> (7 - bitpos_)) & 1);
+            else if (mw_.recover) missed_ = true; // (the rest of this byte unpredicted; the match kept)
             else mlen_ = 0;
         }
         if (mi_ >= 0)
@@ -578,9 +594,12 @@ private:
                 node_ = !letter ? 0 : node_ < 0 ? -1 : words_->child(node_, (b | 32) - 'a');
                 letters_ = letter ? std::min<uint32_t>(letters_ + 1, 40) : 0;
             }
-            // The match goes on where the byte was the one it expected.
-            if (mlen_ > 0 && buf_[mptr_] == b) ++mlen_, ++mptr_;
+            // The match goes on where the byte was the one it expected; with recover, a long match
+            // goes on past one byte it got wrong, at the same distance, as a match of 1 again.
+            if (mlen_ > 0 && !missed_ && buf_[mptr_] == b) ++mlen_, ++mptr_;
+            else if (mw_.recover && mlen_ >= uint32_t(mw_.min_match) && mptr_ + 1 < pos_) mlen_ = 1, ++mptr_;
             else mlen_ = 0;
+            missed_ = false;
         }
         size_t k = 0;
         base_[k++] = 0;
@@ -620,18 +639,27 @@ private:
         }
         // A new match where there is none: the place the last six bytes were last seen, if the
         // bytes before it agree for six or more (up to 32 counted).
-        if (pos_ >= size_t(kMinMatch))
+        const int mm = mw_.min_match;
+        if (pos_ >= size_t(mm))
         {
             uint32_t h = 0;
-            for (int j = 1; j <= kMinMatch; ++j) h = (h * 0x2F0F3C35u) ^ uint32_t(at(size_t(j))) * 0x9E3779B1u;
+            for (int j = 1; j <= mm; ++j) h = (h * 0x2F0F3C35u) ^ uint32_t(at(size_t(j))) * 0x9E3779B1u;
             h = (h >> 10) & ((uint32_t(1) << kMatchBits) - 1);
-            if (mlen_ == 0 && ht_[h] > 0)
+            if (mlen_ == 0)
             {
-                const size_t cand = ht_[h];
-                uint32_t l = 0;
-                while (l < 32 && l < cand && buf_[cand - 1 - l] == buf_[pos_ - 1 - l]) ++l;
-                if (l >= uint32_t(kMinMatch)) mlen_ = l, mptr_ = cand;
+                // (each candidate checked: the bytes before it agree for min_match or more, up to 32
+                // counted; the longer kept, the later of equals)
+                const size_t cands[2] = {ht_[h], mw_.candidates > 1 ? ht2_[h] : 0};
+                for (int k2 = 0; k2 < mw_.candidates; ++k2)
+                {
+                    const size_t cand = cands[k2];
+                    if (cand == 0) continue;
+                    uint32_t l = 0;
+                    while (l < 32 && l < cand && buf_[cand - 1 - l] == buf_[pos_ - 1 - l]) ++l;
+                    if (l >= uint32_t(mm) && l > mlen_) mlen_ = l, mptr_ = cand;
+                }
             }
+            if (mw_.candidates > 1) ht2_[h] = ht_[h];
             ht_[h] = uint32_t(pos_);
         }
         if (words_) base_[k++] = hash2(0x7001, node_ < 0 ? 0u : 1 + std::min<uint32_t>(letters_, 15));
@@ -658,7 +686,9 @@ private:
     alignas(32) int st_[(kInputs2 + 7) / 8 * 8] = {};
     std::vector<int> w1_, w2_;
     Counter mm_[64];
-    std::vector<uint32_t> ht_;
+    std::vector<uint32_t> ht_, ht2_;
+    MatchWays mw_;
+    bool missed_ = false;  // with recover: this byte's bits left the match's, which goes on after it
     uint32_t mlen_ = 0;
     size_t mptr_ = 0;
     int mi_ = -1;
@@ -977,6 +1007,8 @@ void Mix4Params::check() const
     if (dictionary != 0 && dictionary != 35 && dictionary != 60 && dictionary != 80) bad4("a word list D35, D60 or D80 (scowl-en-35, 60 or 80)");
     if (dictionary && width) bad4("a word list for text, not a picture");
     if (by_use && dictionary != 80) bad4("a word list counted by use only of scowl-en-80 (F80)");
+    if (min_match != 6 && min_match != 4) bad4("a match taken after 6 bytes, or 4 (M4)");
+    if (candidates != 1 && candidates != 2) bad4("one candidate for a match, or two (C2)");
 }
 
 std::string Mix4Params::text() const
@@ -984,13 +1016,26 @@ std::string Mix4Params::text() const
     std::string t = "B" + std::to_string(table_bits);
     if (width) t += " I" + std::to_string(width) + "x" + std::to_string(channels);
     if (dictionary) t += (by_use ? " F" : " D") + std::to_string(dictionary);
+    if (recover) t += " R1";
+    if (min_match != 6) t += " M" + std::to_string(min_match);
+    if (candidates != 1) t += " C" + std::to_string(candidates);
     return t;
 }
 
 Mix4Params Mix4Params::parse(std::string_view t)
 {
     Mix4Params p;
-    const std::string s(t);
+    std::string s(t);
+    // (v33 draft: the match model's ways after the rest, " R1", " M4", " C2", each at most once)
+    const std::string whole = s;
+    for (const char* tail : {" C2", " M4", " R1"})
+        if (s.size() >= 3 && s.compare(s.size() - 3, 3, tail) == 0)
+        {
+            if (tail[1] == 'C') p.candidates = 2;
+            if (tail[1] == 'M') p.min_match = 4;
+            if (tail[1] == 'R') p.recover = true;
+            s.resize(s.size() - 3);
+        }
     unsigned b = 0, w = 0, c = 0, d = 0;
     char extra = 0;
     if (std::sscanf(s.c_str(), "B%u I%ux%u%c", &b, &w, &c, &extra) == 3) p.width = w, p.channels = c;
@@ -1000,7 +1045,7 @@ Mix4Params Mix4Params::parse(std::string_view t)
         bad4("its parameters are written \"B22\", a picture's \"B22 I949x1\", or with a word list \"B22 D60\" (or by use, \"B22 F80\"): " + s);
     p.table_bits = b;
     p.check();
-    if (p.text() != s) bad4("parameters not written as they would be: " + s);
+    if (p.text() != whole) bad4("parameters not written as they would be: " + whole);
     return p;
 }
 
@@ -1017,6 +1062,15 @@ Mix4Params Mix4Params::for_size(uint64_t bytes, uint32_t width, uint32_t channel
 }
 
 namespace {
+MatchWays ways_of(const Mix4Params& p)
+{
+    MatchWays m;
+    m.recover = p.recover;
+    m.min_match = int(p.min_match);
+    m.candidates = int(p.candidates);
+    return m;
+}
+
 Mix2Params shape_of(const Mix4Params& p)
 {
     Mix2Params s;
@@ -1032,7 +1086,7 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
     p.check();
     if (file.size() >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
-    Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false);
+    Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
     return code_with(m, file);
 }
 
@@ -1042,7 +1096,7 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
     p.check();
     if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
     if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
-    Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false);
+    Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false, ways_of(p));
     return file_with(m, code, size, bad4);
 }
 

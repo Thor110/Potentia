@@ -47,9 +47,22 @@ from pathlib import Path
 
 import numpy as np
 
-KINDS = ("copy", "again", "run", "grid", "skiprun")
+KINDS = ("copy", "again", "run", "grid", "skiprun", "again2")
+
+# How the recipe's steps are coded (2 November 2026, each measured on its own; IDEAS §19.111):
+#   flag_ctx    the choice of literal or shortcut counted by the step before it
+#   rep2        a second recent distance to copy from again ("again2")
+#   lit_model   "o01": literal bytes counted alone or by the byte before (the first coder);
+#               "blend": by the two bytes before, falling back to one and to none (PPM's way)
+#   lit_all     with "blend", the counts learn from every byte the installer has made, not only
+#               the literal ones (it has them all)
+#   matched     a literal just after a copy counted by the byte the copy would have given next
+#               (LZMA's matched literal), falling back to the literal's own counts
+CODER = {"flag_ctx": True, "rep2": True, "lit_model": "blend", "lit_all": False, "beta": 2.0, "matched": False}
 GRID_DIRS = ((0, "above"), (-1, "above-left"), (1, "above-right"))
-TRANSFORMS = ["none", "diff1", "diff2", "diff3", "diff4", "left", "up", "average", "triangle", "columns", "palette"]
+GEOMETRIC = ["zigzag", "diagonals", "spiral", "rings", "morton", "tiles", "plane", "radial"]
+TRANSFORMS = ["none", "diff1", "diff2", "diff3", "diff4", "left", "up", "average", "triangle", "columns", "palette"] + GEOMETRIC
+GRID_ONLY = ("left", "up", "average", "triangle", "columns") + tuple(GEOMETRIC)
 COLUMNS = TRANSFORMS + ["stored"]
 
 
@@ -112,19 +125,101 @@ def columns(x, w, back=False):
     return body.tobytes() + x[rows * w:]
 
 
+# ---- geometric filters (Edward, 1 November 2026: "circles, lines, squares, grids, geometric
+# principles used to shuffle up a file"; IDEAS §19.111). The file's whole rows as a grid of w
+# columns; the bytes past the last whole row as they are.
+
+def order_of(t, rows, w):
+    """The grid's places in the order a geometric filter reads them (a permutation of rows * w)."""
+    r, c = np.divmod(np.arange(rows * w), w)
+    if t == "zigzag":  # every other row backwards
+        return np.where(r % 2 == 1, r * w + (w - 1 - c), r * w + c)
+    if t == "diagonals":  # by r + c, then by row
+        return np.lexsort((r, r + c))
+    if t == "rings":  # by distance from the centre, then by angle
+        dy, dx = r - (rows - 1) / 2, c - (w - 1) / 2
+        return np.lexsort((np.arctan2(dy, dx), np.round(np.hypot(dy, dx) * 2)))
+    if t == "morton":  # the Z-order curve: the bits of row and column interleaved
+        key = np.zeros(rows * w, dtype=np.int64)
+        for bit in range(16):
+            key |= ((c >> bit) & 1) << (2 * bit)
+            key |= ((r >> bit) & 1) << (2 * bit + 1)
+        return np.argsort(key, kind="stable")
+    if t == "tiles":  # 8 by 8 tiles, each read row by row, the tiles in rows
+        return np.lexsort((c % 8, r % 8, c // 8, r // 8))
+    if t == "spiral":  # from the outside in, clockwise from the top left
+        out, top, bottom, left, right = [], 0, rows - 1, 0, w - 1
+        while top <= bottom and left <= right:
+            out += [top * w + k for k in range(left, right + 1)]
+            out += [k * w + right for k in range(top + 1, bottom + 1)]
+            if top < bottom:
+                out += [bottom * w + k for k in range(right - 1, left - 1, -1)]
+            if left < right:
+                out += [k * w + left for k in range(bottom - 1, top, -1)]
+            top, bottom, left, right = top + 1, bottom - 1, left + 1, right - 1
+        return np.array(out, dtype=np.int64)
+    raise ValueError(t)
+
+
+def shape_of(t, x, rows, w):
+    """A shape laid over the grid, fitted to it: its numbers (as written) and its values."""
+    v = np.frombuffer(bytes(x[: rows * w]), dtype=np.uint8).astype(np.float64)
+    r, c = np.divmod(np.arange(rows * w), w)
+    if t == "plane":
+        cols = np.stack([np.ones_like(v), c, r], axis=1)
+    else:  # radial: a + b * distance from the centre
+        cols = np.stack([np.ones_like(v), np.hypot(r - (rows - 1) / 2, c - (w - 1) / 2)], axis=1)
+    coef = np.linalg.lstsq(cols, v, rcond=None)[0]
+    q = np.round(coef * 256).astype(np.int64)  # (each a 16-bit number of 256ths, as the recipe says it)
+    q = np.clip(q, -32768, 32767)
+    return q, np.floor((cols @ q) / 256).astype(np.int64)
+
+
+def geometric(t, x, w, back=False, numbers=None):
+    x = bytes(x)
+    rows = len(x) // w if w else 0
+    if rows < 2:
+        return x, None
+    body = np.frombuffer(x[: rows * w], dtype=np.uint8)
+    if t in ("plane", "radial"):
+        if back:
+            q = numbers
+            r, c = np.divmod(np.arange(rows * w), w)
+            cols = np.stack([np.ones(rows * w), c, r], axis=1) if t == "plane" else np.stack([np.ones(rows * w), np.hypot(r - (rows - 1) / 2, c - (w - 1) / 2)], axis=1)
+            shape = np.floor((cols @ q) / 256).astype(np.int64)
+            return ((body.astype(np.int64) + shape) & 255).astype(np.uint8).tobytes() + x[rows * w:], q
+        q, shape = shape_of(t, x, rows, w)
+        return ((body.astype(np.int64) - shape) & 255).astype(np.uint8).tobytes() + x[rows * w:], q
+    perm = order_of(t, rows, w)
+    if back:
+        out = np.empty_like(body)
+        out[perm] = body
+        return out.tobytes() + x[rows * w:], None
+    return body[perm].tobytes() + x[rows * w:], None
+
+
+def geometric_bits(t):
+    """What a geometric filter's own numbers cost in the recipe."""
+    return {"plane": 48, "radial": 32}.get(t, 0)
+
+
 def forward(t, x, w):
     if t == "none":
         return bytes(x)
     if t == "columns":
         return columns(x, w)
+    if t in GEOMETRIC:
+        return geometric(t, x, w)[0]
     return bytes((x[i] - predict(t, x, i, w)) & 255 for i in range(len(x)))
 
 
-def backward(t, y, w):
+def backward(t, y, w, numbers=None):
     if t == "none":
         return bytes(y)
     if t == "columns":
         return columns(y, w, back=True)
+    if t in GEOMETRIC:
+        return geometric(t, y, w, back=True, numbers=numbers)[0]
     x = bytearray(len(y))
     for i in range(len(y)):
         x[i] = (y[i] + predict(t, x, i, w)) & 255
@@ -246,7 +341,7 @@ def lengths_to_try(m, low):
     return out
 
 
-NUM_CATS = ("distance", "copy length", "again length", "run length", "grid length", "skiprun length")
+NUM_CATS = ("distance", "copy length", "again length", "run length", "grid length", "skiprun length", "again2 length")
 BUCKETS = 40
 
 
@@ -256,6 +351,8 @@ def step_numbers(kind, num, L):
         return [("distance", num), ("copy length", L - 2)], 0
     if kind == "again":
         return [("again length", L - 1)], 0
+    if kind == "again2":
+        return [("again2 length", L - 1)], 0
     if kind == "run":
         return [("run length", L - 3)], 16  # (its start and step, a byte each)
     if kind == "skiprun":
@@ -275,65 +372,178 @@ def gamma_costs():
     return {c: [float(bl) for bl in range(BUCKETS)] for c in NUM_CATS}
 
 
-def parse(y, w, cand, lit_cost, flag_cost, tag_cost, bc):
-    """The cheapest path through the candidates under these costs: a list of steps."""
+def parse(y, w, cand, litc, flag_cost, tag_cost, bc, matched=None):
+    """The cheapest path through the candidates under these costs: a list of steps. litc[i] is the
+    cost of byte i as a literal (its context is the file's own bytes before it, so known here);
+    flag_cost[state][0 or 1] the choice's, the state the step before (0 a literal, 1 a shortcut).
+    Each place keeps a path for each state, with its two most recent copy distances."""
     n = len(y)
     INF = float("inf")
-    best = [INF] * (n + 1)
-    step = [None] * (n + 1)
-    last_d = [0] * (n + 1)
-    best[0] = 0.0
+    best = [[INF, INF, INF] for _ in range(n + 1)]
+    back = [[None, None, None] for _ in range(n + 1)]
+    dist = [[(0, 0), (0, 0), (0, 0)] for _ in range(n + 1)]
+    best[0][2] = 0.0  # (the start counts as after a shortcut; state 1 is after a copy)
+
+    def offer(j, st, cost, stepv, prev_state, d):
+        if cost < best[j][st]:
+            best[j][st], back[j][st], dist[j][st] = cost, (stepv, prev_state), d
+
     for i in range(n):
-        if best[i] == INF:
-            continue
-        b = best[i]
-        c = b + flag_cost[0] + lit_cost[y[i - 1] if i else 0][y[i]]
-        if c < best[i + 1]:
-            best[i + 1], step[i + 1], last_d[i + 1] = c, ("lit", y[i], 1, i, y[i - 1] if i else 0), last_d[i]
-        for kind, num, m in cand[i]:
-            if kind == "copy":
-                d = num
-                again = d == last_d[i]
-                for L in lengths_to_try(m, 3 if not again else 2):
-                    if again:
-                        c = b + flag_cost[1] + tag_cost["again"] + number_bits(bc, "again length", L - 1)
-                        k = "again"
+        for ps in (0, 1, 2):
+            b = best[i][ps]
+            if b == INF:
+                continue
+            d1, d2 = dist[i][ps]
+            fc = flag_cost[ps]
+            lc = litc[i]
+            if ps == 1 and matched is not None and i >= d1 > 0:
+                lc = matched(i, y[i - d1], lc)
+            offer(i + 1, 0, b + fc[0] + lc, ("lit", y[i], 1, i, y[i - 1] if i else 0), ps, (d1, d2))
+            for kind, num, m in cand[i]:
+                if kind == "copy":
+                    d = num
+                    if d == d1:
+                        for L in lengths_to_try(m, 2):
+                            offer(i + L, 1, b + fc[1] + tag_cost["again"] + number_bits(bc, "again length", L - 1), ("again", d, L, i), ps, (d1, d2))
+                    elif CODER["rep2"] and d == d2:
+                        for L in lengths_to_try(m, 2):
+                            offer(i + L, 1, b + fc[1] + tag_cost["again2"] + number_bits(bc, "again2 length", L - 1), ("again2", d, L, i), ps, (d2, d1))
                     else:
-                        c = b + flag_cost[1] + tag_cost["copy"] + number_bits(bc, "distance", d) + number_bits(bc, "copy length", L - 2)
-                        k = "copy"
-                    if c < best[i + L]:
-                        best[i + L], step[i + L], last_d[i + L] = c, (k, d, L, i), d
-            elif kind == "run":
-                for L in lengths_to_try(m, 4):
-                    c = b + flag_cost[1] + tag_cost["run"] + 16 + number_bits(bc, "run length", L - 3)
-                    if c < best[i + L]:
-                        best[i + L], step[i + L], last_d[i + L] = c, ("run", num, L, i), last_d[i]
-            elif kind == "skiprun":
-                for L in lengths_to_try(m, 4):
-                    c = b + flag_cost[1] + tag_cost["skiprun"] + 28 + number_bits(bc, "skiprun length", L - 3)
-                    if c < best[i + L]:
-                        best[i + L], step[i + L], last_d[i + L] = c, ("skiprun", num, L, i), last_d[i]
-            else:
-                for L in lengths_to_try(m, 2):
-                    c = b + flag_cost[1] + tag_cost["grid"] + 2 + number_bits(bc, "grid length", L - 1)
-                    if c < best[i + L]:
-                        best[i + L], step[i + L], last_d[i + L] = c, ("grid", num, L, i), last_d[i]
-        # (a copy found at i that holds from i + 1 on is also tried from there: its own candidate)
+                        for L in lengths_to_try(m, 3):
+                            offer(i + L, 1, b + fc[1] + tag_cost["copy"] + number_bits(bc, "distance", d) + number_bits(bc, "copy length", L - 2), ("copy", d, L, i), ps, (d, d1))
+                elif kind == "run":
+                    for L in lengths_to_try(m, 4):
+                        offer(i + L, 2, b + fc[1] + tag_cost["run"] + 16 + number_bits(bc, "run length", L - 3), ("run", num, L, i), ps, (d1, d2))
+                elif kind == "skiprun":
+                    for L in lengths_to_try(m, 4):
+                        offer(i + L, 2, b + fc[1] + tag_cost["skiprun"] + 28 + number_bits(bc, "skiprun length", L - 3), ("skiprun", num, L, i), ps, (d1, d2))
+                else:
+                    for L in lengths_to_try(m, 2):
+                        offer(i + L, 2, b + fc[1] + tag_cost["grid"] + 2 + number_bits(bc, "grid length", L - 1), ("grid", num, L, i), ps, (d1, d2))
     path = []
-    at = n
+    at, st = n, min(range(3), key=lambda k: best[n][k])
     while at > 0:
-        s = step[at]
-        path.append(s)
-        at = s[3]
+        stepv, ps = back[at][st]
+        path.append(stepv)
+        at, st = stepv[3], ps
     path.reverse()
     return path
 
 
-def cost_of(path, n, t, w, alphabet=256):
+class Literals:
+    """The literal bytes' coder: by the two bytes before, falling back to one and to none, each
+    count adaptive (what an arithmetic coder pays, step by step), learning from every byte made
+    or from the literals alone."""
+
+    def __init__(self, alphabet, beta):
+        self.A, self.beta = alphabet, beta
+        self.c0, self.n0 = [0] * 256, 0
+        self.c1, self.c2 = {}, {}
+        self.cm = {}  # by the byte a copy would have given next
+
+    def prob(self, a2, a1, s):
+        p = (self.c0[s] + 0.5) / (self.n0 + 0.5 * self.A)
+        r = self.c1.get(a1)
+        if r:
+            p = (r[0].get(s, 0) + self.beta * p) / (r[1] + self.beta)
+        r = self.c2.get((a2, a1))
+        if r:
+            p = (r[0].get(s, 0) + self.beta * p) / (r[1] + self.beta)
+        return p
+
+    def prob_matched(self, a2, a1, s, mb):
+        p = self.prob(a2, a1, s)
+        r = self.cm.get(mb)
+        return (r[0].get(s, 0) + self.beta * p) / (r[1] + self.beta) if r else p
+
+    def learn_matched(self, mb, s):
+        r = self.cm.setdefault(mb, [{}, 0])
+        r[0][s] = r[0].get(s, 0) + 1
+        r[1] += 1
+
+    def learn(self, a2, a1, s):
+        self.c0[s] += 1
+        self.n0 += 1
+        for table, key in ((self.c1, a1), (self.c2, (a2, a1))):
+            r = table.setdefault(key, [{}, 0])
+            r[0][s] = r[0].get(s, 0) + 1
+            r[1] += 1
+
+
+def literal_costs(y, path, alphabet):
+    """Each place's cost as a literal, from counts made over the last path's file (two passes:
+    what the next round of the parse uses)."""
+    lit = Literals(alphabet, CODER["beta"])
+    is_lit = bytearray(len(y))
+    for st in path:
+        if st[0] == "lit":
+            is_lit[st[3]] = 1
+    for i in range(len(y)):
+        if CODER["lit_all"] or is_lit[i]:
+            lit.learn(y[i - 2] if i > 1 else 0, y[i - 1] if i else 0, y[i])
+    return [-math.log2(lit.prob(y[i - 2] if i > 1 else 0, y[i - 1] if i else 0, y[i])) for i in range(len(y))]
+
+
+def after_copy(path):
+    """For each literal just after a copy, the copy's distance: {place: distance}."""
+    out, last = {}, None
+    for st in path:
+        if st[0] == "lit" and last is not None:
+            out[st[3]] = last
+        last = st[1] if st[0] in ("copy", "again", "again2") else None
+    return out
+
+
+def literal_bits(y, path, alphabet):
+    """What the literals cost as an adaptive coder codes them, byte by byte in order."""
+    lit = Literals(alphabet, CODER["beta"])
+    total = 0.0
+    is_lit = bytearray(len(y))
+    for st in path:
+        if st[0] == "lit":
+            is_lit[st[3]] = 1
+    ac = after_copy(path) if CODER["matched"] else {}
+    for i in range(len(y)):
+        a2, a1 = (y[i - 2] if i > 1 else 0), (y[i - 1] if i else 0)
+        if is_lit[i]:
+            d = ac.get(i)
+            if d is not None and i >= d:
+                total -= math.log2(lit.prob_matched(a2, a1, y[i], y[i - d]))
+                lit.learn_matched(y[i - d], y[i])
+            else:
+                total -= math.log2(lit.prob(a2, a1, y[i]))
+        if CODER["lit_all"] or is_lit[i]:
+            lit.learn(a2, a1, y[i])
+    return total
+
+
+def matched_costs(y, path):
+    """The next round's cost of a literal just after a copy, from this path's counts: a function
+    of the place, the byte the copy would give and the literal's own cost."""
+    ac = after_copy(path)
+    cm = {}
+    for i, d in ac.items():
+        if i >= d:
+            r = cm.setdefault(y[i - d], [{}, 0])
+            r[0][y[i]] = r[0].get(y[i], 0) + 1
+            r[1] += 1
+    beta = CODER["beta"]
+
+    def cost(i, mb, own):
+        r = cm.get(mb)
+        if not r:
+            return own
+        return -math.log2((r[0].get(y[i], 0) + beta * 2.0 ** -own) / (r[1] + beta))
+    return cost
+
+
+def cost_of(path, n, t, w, alphabet=256, y=None):
     """The recipe's bits, as it would be written: header, numbers, and the adaptive counts."""
     lits = [0] * 256
     lits1 = {}
     flags = [0, 0]
+    flags_by = [[0, 0], [0, 0], [0, 0]]
+    state = 2
     tags = {k: 0 for k in KINDS}
     numbers = 0.0
     sizes = {c: [0] * BUCKETS for c in NUM_CATS}
@@ -344,24 +554,31 @@ def cost_of(path, n, t, w, alphabet=256):
             row = lits1.setdefault(s[4], [0] * 256)
             row[num] += 1
             flags[0] += 1
+            flags_by[state][0] += 1
+            state = 0
             continue
         flags[1] += 1
+        flags_by[state][1] += 1
+        state = 1 if kind in ("copy", "again", "again2") else 2
         tags[kind] += 1
         nums, raw = step_numbers(kind, num, L)
         numbers += raw
         for cat, v in nums:
             sizes[cat][v.bit_length()] += 1
             numbers += v.bit_length() - 1
-    header = gamma(n + 1) + 4 + (gamma(w + 1) if w else 1)
+    header = gamma(n + 1) + 5 + (gamma(w + 1) if w else 1)  # (the transform: one of up to 32)
     if alphabet < 256:
         header += min(256, 8 + 8 * alphabet)  # (the values the file uses: a mask of 256 bits, or how many and each)
     # The literal bytes counted alone (order 0) or by the byte before each (order 1), whichever is
     # smaller, and a bit to say which.
     o0 = kt_bits(lits, alphabet)
     o1 = sum(kt_bits(r, alphabet) for r in lits1.values())
+    ob = literal_bits(y, path, alphabet) if (CODER["lit_model"] == "blend" and y is not None) else float("inf")
     numbers += sum(kt_bits(v, BUCKETS) for v in sizes.values())
-    body = 1 + min(o0, o1) + kt_bits(flags, 2) + kt_bits(list(tags.values()), len(KINDS)) + numbers
-    return header + body, {"literals": flags[0], "shortcuts": flags[1], "order": 0 if o0 <= o1 else 1, "sizes": sizes, **tags}
+    flag_bits = sum(kt_bits(r, 2) for r in flags_by) if CODER["flag_ctx"] else kt_bits(flags, 2)
+    body = 2 + min(o0, o1, ob) + flag_bits + kt_bits(list(tags.values()), len(KINDS)) + numbers
+    order = min((o0, 0), (o1, 1), (ob, 2))[1]
+    return header + body, {"literals": flags[0], "shortcuts": flags[1], "order": order, "sizes": sizes, "flags_by": flags_by, **tags}
 
 
 def decode(path, n, w):
@@ -370,7 +587,7 @@ def decode(path, n, w):
         kind, num, L = s[0], s[1], s[2]
         if kind == "lit":
             y.append(num)
-        elif kind in ("copy", "again"):
+        elif kind in ("copy", "again", "again2"):
             for _ in range(L):
                 y.append(y[-num])
         elif kind == "run":
@@ -397,7 +614,7 @@ def search(x, w):
     """Every transform, each with the cheapest recipe; the best kept. Returns a list of results."""
     out = []
     for t in TRANSFORMS:
-        if t in ("left", "up", "average", "triangle", "columns") and not w:
+        if t in GRID_ONLY and not w:
             continue
         t0 = time.time()
         if t == "palette":
@@ -408,35 +625,46 @@ def search(x, w):
             place = {v: k for k, v in enumerate(values)}
             y = bytes(place[v] for v in x)
             alphabet = len(values)
+        elif t in GEOMETRIC:
+            y, numbers = geometric(t, x, w)
+            alphabet = 256
         else:
             y = forward(t, x, w)
             alphabet = 256
+        if t not in GEOMETRIC:
+            numbers = None
         cand = candidates(y, w)
-        lit_cost, flag_cost, tag_cost, bc = [[8.0] * 256] * 256, [1.0, 1.0], {k: 2.0 for k in KINDS}, gamma_costs()
+        litc, flag_cost, tag_cost, bc = [8.0] * len(y), [[1.0, 1.0]] * 3, {k: 2.0 for k in KINDS}, gamma_costs()
+        mcost = None
         best = None
         for _ in range(3):
-            path = parse(y, w, cand, lit_cost, flag_cost, tag_cost, bc)
-            bits, counts = cost_of(path, len(y), t, w, alphabet)
+            path = parse(y, w, cand, litc, flag_cost, tag_cost, bc, mcost)
+            bits, counts = cost_of(path, len(y), t, w, alphabet, y)
             if best is None or bits < best[0]:
                 best = (bits, counts, path)
-            if counts["order"] == 0:
+            # The costs the next round's parse uses, learned from this path.
+            if counts["order"] == 2:
+                litc = literal_costs(y, path, alphabet)
+                mcost = matched_costs(y, path) if CODER["matched"] else None
+            elif counts["order"] == 0:
                 lits = [1] * 256
-                for s in path:
-                    if s[0] == "lit":
-                        lits[s[1]] += 1
+                for st in path:
+                    if st[0] == "lit":
+                        lits[st[1]] += 1
                 tot = sum(lits)
-                lit_cost = [[-math.log2(c / tot) for c in lits]] * 256
+                litc = [-math.log2(lits[v] / tot) for v in y]
             else:
-                rows = [[0.5] * 256 for _ in range(256)]
-                for s in path:
-                    if s[0] == "lit":
-                        rows[s[4]][s[1]] += 1
-                lit_cost = []
-                for r in rows:
-                    tot = sum(r)
-                    lit_cost.append([-math.log2(c / tot) for c in r])
-            nf = [counts["literals"] + 1, counts["shortcuts"] + 1]
-            flag_cost = [-math.log2(c / sum(nf)) for c in nf]
+                rows = {}
+                for st in path:
+                    if st[0] == "lit":
+                        r = rows.setdefault(st[4], [0.5] * 256)
+                        r[st[1]] += 1
+                litc = []
+                for i, v in enumerate(y):
+                    r = rows.get(y[i - 1] if i else 0)
+                    litc.append(-math.log2(r[v] / sum(r)) if r else 8.0)
+            fb = counts["flags_by"] if CODER["flag_ctx"] else [[counts["literals"], counts["shortcuts"]]] * 3
+            flag_cost = [[-math.log2((row[f] + 0.5) / (sum(row) + 1)) for f in (0, 1)] for row in fb]
             nt = {k: counts[k] + 1 for k in KINDS}
             tag_cost = {k: -math.log2(nt[k] / sum(nt.values())) for k in KINDS}
             bc = {}
@@ -444,7 +672,8 @@ def search(x, w):
                 tot = sum(v) + BUCKETS * 0.5
                 bc[cat] = [-math.log2((c + 0.5) / tot) for c in v]
         bits, counts, path = best
-        back = bytes(values[v] for v in decode(path, len(y), w)) if t == "palette" else backward(t, decode(path, len(y), w), w)
+        bits += geometric_bits(t)
+        back = bytes(values[v] for v in decode(path, len(y), w)) if t == "palette" else backward(t, decode(path, len(y), w), w, numbers)
         assert back == bytes(x), f"{t}: the recipe does not give the file back"
         out.append({"transform": t, "bytes": math.ceil(bits / 8), "bits": bits, "counts": counts, "seconds": time.time() - t0})
     # Carried as it is: its length, the transform's code, and its bytes (the floor every file has).
@@ -524,7 +753,7 @@ def main():
             seed_mix = min(r["bytes"] for r in search(mix_file.read_bytes(), 0)) if mix is not None and mix_file.exists() else None
             front = []
             for t in TRANSFORMS[1:]:
-                if (t in ("left", "up", "average", "triangle", "columns") and not w) or t == "palette":
+                if (t in GRID_ONLY and not w) or t == "palette":
                     continue
                 y = forward(t, x, w)
                 ty = Path(tmp) / "t.bin"

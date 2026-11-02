@@ -145,6 +145,12 @@ struct Mix4Params
     uint32_t width = 0, channels = 1; // a picture's shape, as mix-v2's (0: not a picture)
     uint32_t dictionary = 0;          // a word list, as mix-v3's (0: none; else 35, 60 or 80)
     bool by_use = false;              // v32: that list counted by how common each word is ("F80": 80 only)
+    // v33 draft (2 November 2026): the match model's ways, each off as v32 makes it. R1: a match goes
+    // on past one wrong byte at the same distance; M4: a match taken after 4 bytes, not 6; C2: two
+    // places a context was seen, the longer match kept.
+    bool recover = false;
+    uint32_t min_match = 6;
+    uint32_t candidates = 1;
     // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
     uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;
@@ -153,6 +159,9 @@ struct Mix4Params
     static Mix4Params for_size(uint64_t bytes, uint32_t width = 0, uint32_t channels = 1, uint32_t dictionary = 0, bool by_use = false);
     bool operator==(const Mix4Params&) const = default;
 };
+
+// Whether mix-v4's parameters name any of the match model's ways (v33 draft).
+inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1; }
 
 // `words`: the word list the parameters name (nullptr where they name none).
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words = nullptr);

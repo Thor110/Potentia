@@ -212,6 +212,10 @@ inline constexpr const char* kSkeletonMembersManifestVersion = "sieve-manifest-v
 // lzma2 stream at the file's turn, applied once every other file is made (delta-v1: SPECIFICATIONS
 // §12.2, sieve-manifest-v32).
 inline constexpr const char* kDeltaManifestVersion = "sieve-manifest-v32";
+// v33 (a draft, 2 November 2026: Edward, "lets stay locked at manifest v33 draft for a while";
+// made only with --v33-draft): v32 whose mixing may name the match model's ways (mix-v4's "R1",
+// "M4", "C2"). Its head is v32's, read by its version byte.
+inline constexpr const char* kMatchWaysManifestVersion = "sieve-manifest-v33";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -318,6 +322,7 @@ struct Manifest
     bool v30 = false; // v30: files mixed together in groups (v29 is set too)
     bool v31 = false; // v31: archives made again from their skeleton and their files apart (v30 is set too)
     bool v32 = false; // v32 (draft): some file carried as its differences from another, "delta" (v31 is set too)
+    bool v33 = false; // v33 (draft): some mixing names the match model's ways (v32 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

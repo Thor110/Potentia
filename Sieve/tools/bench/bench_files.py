@@ -27,6 +27,11 @@ and how long installing took (decoding, and checking and writing, as Sieve repor
 them, once a file: the zip and 7z figures the File Locator gives (deflate at level 9; LZMA2 at
 preset 9e, one stream, no container), made here by Python's zlib and lzma.
 
+Beside each run, what carried it: the packer's report lines that name a way (LZMA2 and the x86
+filter, mixing alone or in groups, the rope, pieces, deltas, brunsli, the recipes that make archives
+and pictures again), gathered into a "Carried by" column, and each line whole in results.tsv
+(IDEAS §19.111: a record of which existing methods were used, how, and what finished the job).
+
 Results go to a folder beside FOLDER, `<FOLDER>-bench-<date and time>` (with a box,
 `<FOLDER>-bench-temporary-...` or `-permanent-...`, so its tables stay apart), outside the repository
 (the files may be one's own): results.md (a table a file), results.tsv (every figure), and each
@@ -47,6 +52,12 @@ import sys
 import time
 import zlib
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    import sieve_read  # (tools/sieve_read.py: each file's way read back from the .sieve)
+except Exception:  # (the oracle not to be had: the column left empty)
+    sieve_read = None
 
 MODES = [
     ("size/try", ["--search-every-wave"]),
@@ -92,11 +103,82 @@ def against(a, b):
     return f"{100.0 * (a - b) / b:+.2f}%" if b else ""
 
 
+# What carried each result (Edward, 1 November 2026: "recording how much of what existing compression
+# methods were used, how they were used and whether or not the rope or mixed methods are what
+# finished them off ... a compression engine that mixes and matches existing techniques"). Each of
+# the packer's report lines, by the way it names, and the method with its maker.
+CARRIERS = [
+    ("packed", "LZMA2 (xz/7-Zip's), with the x86 filter for programs"),
+    ("mix", "mixing (Sieve's mix-v4), alone"),
+    ("groups", "mixing (Sieve's mix-v4), files together in groups"),
+    ("stream", "mixing (Sieve's mix-v4) over the LZMA2 stream"),
+    ("weighed", "files mixed weighed back into the LZMA2 stream (Sieve's)"),
+    ("rope", "the rope (Sieve's)"),
+    ("pieces", "pieces (Sieve's: LZMA2 and the rope by turns)"),
+    ("deltas", "a file as its differences from another (Sieve's delta-v1)"),
+    ("jpegs", "a JPEG as its brunsli form (Google's brunsli)"),
+    ("optimised", "a JPEG's tables made for its values (Sieve's, after jpegtran)"),
+    ("pngs", "a PNG re-saved at its smallest (zlib)"),
+    ("remade", "archives and compressed files made again (their own encoders; preflate for deflate, stb_image's PNG)"),
+    ("members", "archives made again from a skeleton and their files (Sieve's)"),
+    ("unpacked", "archives carried as their contents (libarchive and Sieve's readers)"),
+    ("items", "items of Sieve's lines (Sieve's)"),
+]
+
+
+def carried_by(said):
+    """The report's lines that say what carried the result: {way: its line}."""
+    out = {}
+    for line in said.split("\n"):
+        key = line.split(" ", 1)[0]
+        if any(key == k for k, _ in CARRIERS) and line[len(key):len(key) + 2] == "  ":
+            if key == "items" and "none;" in line:
+                continue
+            out[key] = line[10:].strip() if len(line) > 10 else ""
+    return out
+
+
+def carried_short(c):
+    """One cell: each way that carried something, with its count of files and what it came to."""
+    parts = []
+    for key, _ in CARRIERS:
+        if key not in c:
+            continue
+        line = c[key]
+        if key == "packed":
+            m = re.match(r"(\d+) bytes .*?(\d+) program\(s\) in the x86 stream \((\d+) bytes\), (\d+) file\(s\) as they are \((\d+) bytes\)", line)
+            if m and (int(m.group(2)) or int(m.group(4))):
+                parts.append(f"LZMA2 {m.group(4)} file(s){', x86 ' + m.group(2) if int(m.group(2)) else ''} in {int(m.group(1)):,}")
+            continue
+        n = re.match(r"(\d+)", line)
+        into = re.search(r"carried in (\d+)", line) or re.search(r"as (\d+)[;)]", line)
+        parts.append(f"{key} {n.group(1) if n else ''}" + (f" in {int(into.group(1)):,}" if into else ""))
+    return "; ".join(parts)
+
+
+def ways_in_full(made):
+    """Each file's way as the .sieve's listing writes it (its method and every setting: "mix4 B22 I3x1
+    R1 M4 C2", "rope L8 W949 S1 P3 K0", "raw"), and what made it again on installing, read back from
+    the .sieve (Edward, 2 November 2026: "list the exact formulae used behind each end result")."""
+    if sieve_read is None:
+        return ""
+    try:
+        info = sieve_read.read(made)
+        out = [f["way"] for f in info["files"]]
+        out += [r.split(" ", 3)[2] if r.count(" ") >= 2 else r for r in info["remade"]]
+        return "; ".join(dict.fromkeys(out))
+    except Exception:
+        return ""
+
+
 def write_tables(out, rows, files_info, started, sieve, box):
     with open(out / "results.tsv", "w", encoding="utf-8") as f:
-        f.write("file\tbytes\tzip\t7z\tmode\tsieve\tmade (s)\tdecoded (s)\tchecked and written (s)\tinstalled the same\n")
+        f.write("file\tbytes\tzip\t7z\tmode\tsieve\tmade (s)\tdecoded (s)\tchecked and written (s)\tinstalled the same\tcarried by\tways in full\t"
+                + "\t".join(f"report: {k}" for k, _ in CARRIERS) + "\n")
         for r in rows:
-            f.write("\t".join(str(r[k]) for k in ("file", "bytes", "zip", "7z", "mode", "sieve", "made", "decoded", "written", "same")) + "\n")
+            c = r.get("carried", {})
+            f.write("\t".join(str(r[k]) for k in ("file", "bytes", "zip", "7z", "mode", "sieve", "made", "decoded", "written", "same"))
+                    + "\t" + carried_short(c) + "\t" + r.get("ways", "") + "\t" + "\t".join(c.get(k, "") for k, _ in CARRIERS) + "\n")
     with open(out / "results.md", "w", encoding="utf-8") as f:
         title = {"": "", "temporary": ", Compressed formats temporary", "permanent": ", Compressed formats permanent"}[box]
         f.write(f"# Sieve on {len(files_info)} file(s), four ways each{title}\n\n")
@@ -108,16 +190,17 @@ def write_tables(out, rows, files_info, started, sieve, box):
                 f"(as the File Locator gives them). \"Against 7z\" is the `.sieve` against that 7z.\n")
         for name, info in files_info.items():
             f.write(f"\n## {name}\n\n{info['bytes']:,} bytes; zip {info['zip']:,} ({pct(info['zip'], info['bytes'])}); 7z {info['7z']:,} ({pct(info['7z'], info['bytes'])})\n\n")
-            f.write("| Way | `.sieve` | Of the file | Against 7z | Made in | Decoded in | Checked and written in | The same |\n")
-            f.write("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- |\n")
+            f.write("| Way | `.sieve` | Of the file | Against 7z | Made in | Decoded in | Checked and written in | The same | Carried by | Ways in full |\n")
+            f.write("| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :--- | :--- | :--- |\n")
             for r in rows:
                 if r["file"] != name:
                     continue
                 if r["sieve"] == "":
-                    f.write(f"| {r['mode']} | failed | | | {r['made']} s | | | |\n")
+                    f.write(f"| {r['mode']} | failed | | | {r['made']} s | | | | | |\n")
                     continue
                 f.write(f"| {r['mode']} | {r['sieve']:,} | {pct(r['sieve'], r['bytes'])} | {against(r['sieve'], r['7z'])} | {r['made']} s | "
-                        f"{r['decoded']} s | {r['written']} s | {r['same']} |\n")
+                        f"{r['decoded']} s | {r['written']} s | {r['same']} | {carried_short(r.get('carried', {}))} | `{r.get('ways', '')}` |\n")
+        f.write("\n## The ways named in Carried by\n\n" + "\n".join(f"- `{k}`: {what}" for k, what in CARRIERS) + "\n")
 
 
 def main():
@@ -163,6 +246,8 @@ def main():
                 write_tables(out, rows, files_info, started, sieve, box)
                 continue
             row["sieve"] = made.stat().st_size
+            row["carried"] = carried_by(said)
+            row["ways"] = ways_in_full(made)
             dest = out / "installed"
             shutil.rmtree(dest, ignore_errors=True)
             print(f"  {mode}: {row['sieve']:,} bytes in {seconds:.1f} s; installing ...", flush=True)
