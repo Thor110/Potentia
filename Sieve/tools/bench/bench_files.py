@@ -6,7 +6,8 @@ updating).
   tools\bench_files.bat                         (Windows: asks for the folder, finds Python and sieve.exe)
   tools\bench_files_optimise_temporary.bat      the same with Compressed formats, temporary
   tools\bench_files_optimise_permanent.bat      the same with Compressed formats, permanent
-  python tools/bench/bench_files.py SIEVE FOLDER [--keep] [--compressed temporary|permanent]
+  tools\bench_light.bat                         the light bench: decode/no and size/try alone
+  python tools/bench/bench_files.py SIEVE FOLDER [--keep] [--compressed temporary|permanent] [--ways W,W]
 
 The files of FOLDER (not its subfolders), largest first. Each is made four ways, with no search
 limit (as the File Locator's figures are made):
@@ -17,6 +18,9 @@ limit (as the File Locator's figures are made):
   decode/no    Prioritise Decoding Speed, without it
 
 and each `.sieve` is installed again (`sieve install`), its file checked against the original.
+--ways names the ones to make (the light bench: "decode/no,size/try", the two that differ; on
+Edward's 153 JPEGs and on enwik9, decode/try came to decode/no's bytes and size/no to size/try's,
+each taking longer, 2 November 2026).
 With --compressed temporary, every run has the box ticked (`--compressed-temporary`: an archive,
 compressed file, PNG or JPEG made again exactly on installing), so the check is the same. With
 --compressed permanent (`--compressed-permanent`: installed as what it holds, or a PNG or JPEG
@@ -209,7 +213,11 @@ def main():
     ap.add_argument("folder", help="the folder whose files to measure")
     ap.add_argument("--keep", action="store_true", help="keep each .sieve made")
     ap.add_argument("--compressed", choices=["temporary", "permanent"], help="tick a Compressed formats box for every run")
+    ap.add_argument("--ways", default=",".join(m[0] for m in MODES), type=lambda v: v.split(","),
+                    help="the ways to make, of size/try, size/no, decode/try, decode/no (the light bench: decode/no,size/try)")
     a = ap.parse_args()
+    if not a.ways or any(w not in [m[0] for m in MODES] for w in a.ways):
+        sys.exit("--ways: of " + ", ".join(m[0] for m in MODES) + ", by commas")
     box = a.compressed or ""
     box_flags = {"": [], "temporary": ["--compressed-temporary"], "permanent": ["--compressed-permanent"]}[box]
     sieve = str(Path(a.sieve).resolve())
@@ -232,7 +240,7 @@ def main():
         files_info[path.name] = {"bytes": size, "zip": zipped, "7z": seven}
         print(f"  zip {zipped:,}, 7z {seven:,}")
         original = sha256_of(path)
-        for mode, flags in MODES:
+        for mode, flags in [m for m in MODES if m[0] in a.ways]:
             tag = mode.replace("/", "-")
             made = out / f"{path.name}.{tag}.sieve"
             print(f"  {mode}: making ...", flush=True)
