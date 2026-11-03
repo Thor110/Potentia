@@ -623,7 +623,7 @@ unit 1/1  "it was the best of times        "
 (`tools/make_release.py`).
 
 `sieve-view`, the picture viewer (2 November 2026), opens a picture (PNG, JPEG, BMP, GIF, TGA) or
-Sieve instructions holding only pictures: a `.simage`, an `.isieve`, or a `.sieve` whose files are
+Sieve instructions holding only pictures: a `.simage` or a `.sieve` whose files are
 all pictures. The other pictures in its folder come next and before (Right and Left), a `.sieve`
 holding several shows each in turn, the wheel zooms about the pointer, 0 fits and 1 is one to one.
 **Sieve** makes the picture shown into `NAME.simage` beside it (by the `sieve` beside the viewer,

@@ -5746,7 +5746,8 @@ weighing each route by everything the installer needs against the file and the o
   searches are skipped, as they can change nothing. To be confirmed against his tables first.
 - *A viewer for Sieve's pictures (Edward, the same day):* a `.sieve` image viewer, with zoom,
   next and previous, export as, and the like; perhaps its own extension for `.sieve` files holding
-  only pictures (`.simage`, `.isieve`, as `.sfilter` names filters), so that local use can be tried
+  only pictures (`.simage`, as `.sfilter` names filters; `.isieve` too until 3 November 2026, when
+  Edward settled on the one), so that local use can be tried
   as the web extension's was (whose decoding was borderline instant). Reading any `.sieve` raises
   what a renamed file could hold: gigabytes as a pure rotation, a zip bomb. Against it, before
   anything large is decoded:

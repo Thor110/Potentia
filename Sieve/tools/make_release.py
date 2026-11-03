@@ -89,7 +89,7 @@ These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folde
   sieve-install{exe}  the installer. The hallway's File Locator copies it to make installer
                       programs; run on its own, it installs a .sieve file beside it or dropped on it.
   sieve-view{exe}     the picture viewer: a picture (PNG, JPEG, BMP, GIF, TGA), or Sieve
-                      instructions holding only pictures (.simage, .isieve, or such a .sieve),
+                      instructions holding only pictures (.simage, or such a .sieve),
                       opened or dropped on it. Its Sieve button makes the picture shown a .simage
                       by the sieve beside it. sieve-view --help gives its keys.
 
@@ -457,7 +457,7 @@ The Gallery of Babel's engine and its hallway: every page, picture, sound, film,
 Start `hallway{EXE}` in the installed folder. `tools\\` holds the command-line tool (`sieve{EXE}`: open a command prompt there and run `sieve help`) and the installer the hallway uses to make installer programs. Esc opens the pause menu (the File Locator, the node graph, the navigator); the full guide is the README in the repository.
 
 Two things to set up if you want them, each for your user only and undone by its uninstall script:
-- **The right-click menu:** `context\\install_context.bat` adds a Sieve submenu to every `.sieve` file, with Extract here and Extract to a folder of its name, and sets `.simage` and `.isieve` files to open in the picture viewer, `tools\\sieve-view` (`context\\README.md`).
+- **The right-click menu:** `context\\install_context.bat` adds a Sieve submenu to every `.sieve` file, with Extract here and Extract to a folder of its name, and sets `.simage` files to open in the picture viewer, `tools\\sieve-view` (`context\\README.md`).
 - **The web extension:** `web\\host\\install_host.bat`, then load `web\\extension` in `chrome://extensions` (Developer mode, Load unpacked): pages' `.sieve` pictures and links, checked against the hash each link states (`web\\README.txt`).
 
 To check a download, compare its SHA-256 with the table above: in PowerShell, `Get-FileHash {program.name}`; elsewhere, `sha256sum`.

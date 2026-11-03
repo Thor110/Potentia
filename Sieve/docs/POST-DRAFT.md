@@ -37,7 +37,11 @@ The written proof describes the basic functionality of the state space which the
 
 Those circumstances would be finding the perfect balance through a filter applied to the state space which would shift the file you are searching for to an exact integer interval rotation in the state space.
 
-Finding such a filter is the intractable part of the search, though I hold out hope to find a real file this way one day...
+No method can shrink every file, so the counting argument holds.
+
+The point of the state space is that for any given file a filter exists that places it at a short address; degrees.sieve noted in and alongside PROOF.md shows this for 3,960 'real' files.
+
+Finding that filter for an arbitrary file is the intractable part, though I hold out hope to find a real file this way one day...
 
 STATISTICS.md - https://github.com/Thor110/Potentia/blob/main/Proof/STATISTICS.md
 

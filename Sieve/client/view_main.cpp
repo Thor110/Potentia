@@ -1,8 +1,8 @@
 // sieve-view: Sieve's picture viewer. One window, a picture in it, and the pictures beside it.
 //
 // It opens the usual pictures (PNG, JPEG, BMP, GIF, TGA: whatever stb_image reads) and Sieve's own:
-// a .simage (Sieve instructions holding only pictures, as a .sfilter is a filter), an .isieve, or
-// any .sieve whose files are all pictures. The other pictures in the same folder come next and
+// a .simage (Sieve instructions holding only pictures, as a .sfilter is a filter), or any .sieve
+// whose files are all pictures. The other pictures in the same folder come next and
 // before (Right and Left), and a .sieve holding several shows each in turn. "Sieve" makes the
 // picture shown into Sieve's picture form beside it (NAME.simage, by `sieve locate --installer
 // --prioritise-decoding`, so it opens as quickly as the picture did); "Export" writes the picture
@@ -122,7 +122,7 @@ bool picture_name(const std::string& name)
 bool sieve_name(const std::string& name)
 {
     const std::string e = lower(fs::path(from_u8(name)).extension().string());
-    return e == ".simage" || e == ".isieve" || e == ".sieve";
+    return e == ".simage" || e == ".sieve";
 }
 
 // A recipe that says the file is a picture made again: a JPEG from its brunsli form, a PNG by
@@ -277,8 +277,8 @@ std::vector<Place> places_beside(const fs::path& opened)
         if (!it->is_regular_file(ec)) continue;
         const std::string name = u8(it->path().filename());
         const std::string e = lower(it->path().extension().string());
-        // (a plain .sieve may hold anything: only the one opened is taken, and .simage and .isieve)
-        if (picture_name(name) || e == ".simage" || e == ".isieve") out.push_back({it->path(), sieve_name(name)});
+        // (a plain .sieve may hold anything: only the one opened is taken, and each .simage)
+        if (picture_name(name) || e == ".simage") out.push_back({it->path(), sieve_name(name)});
     }
     if (std::none_of(out.begin(), out.end(), [&](const Place& p) { return fs::equivalent(p.path, opened, ec); }))
         out.push_back({opened, sieve_name(u8(opened.filename()))});
@@ -365,7 +365,7 @@ const char* const kUsage =
     "Usage: sieve-view [PICTURE | NAME.simage | NAME.sieve] [options]\n"
     "\n"
     "Opens a picture (PNG, JPEG, BMP, GIF, TGA) or Sieve instructions holding only pictures (.simage,\n"
-    ".isieve, or a .sieve whose files are all pictures), with the other pictures in its folder next\n"
+    "or a .sieve whose files are all pictures), with the other pictures in its folder next\n"
     "and before. A .sieve's listing is read first and refused where a file is not a picture by its\n"
     "recipe or name, or over the limits (4,096 files; half the memory free in all); each picture's\n"
     "header is read before its pixels are made, and they are made only where they fit in half the\n"

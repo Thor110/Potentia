@@ -4,8 +4,8 @@ rem extracts (a .zip, .7z, .rar, .tar.gz ...: the list sieve-install gives, so a
 rem Sieve is taken up by running this again), for this user only (context\README.md): a Sieve
 rem submenu with "Extract here" and "Extract to NAME\", as 7-Zip's are. Each opens sieve-install,
 rem which shows what it will install and where, and its progress while it works. With sieve-view
-rem beside sieve-install (3 November 2026), a .simage or .isieve opens in it on a double-click, and
-rem the Sieve submenu of those and of .sieve files has "View pictures" too. Nothing else on the
+rem beside sieve-install (3 November 2026), a .simage opens in it on a double-click, and the Sieve
+rem submenu of .simage and .sieve files has "View pictures" too. Nothing else on the
 rem machine is changed; uninstall_context.bat takes it away again.
 rem
 rem   install_context.bat                              sieve-install from this installation's
@@ -21,26 +21,23 @@ for %%F in ("%INSTALLER%") do set "VIEWER=%%~dpFsieve-view.exe"
 if not exist "%VIEWER%" set "VIEWER="
 call :add .sieve view
 call :add .simage view
-call :add .isieve view
 set /a COUNT=0
 for /f "usebackq delims=" %%E in (`"%INSTALLER%" --archive-extensions`) do (
     call :add %%E
     set /a COUNT+=1
 )
-echo Added Sieve to the right-click menu of .sieve, .simage and .isieve files and %COUNT% kinds of
-echo archive, using
+echo Added Sieve to the right-click menu of .sieve and .simage files and %COUNT% kinds of archive,
+echo using
 echo   %INSTALLER%
 if "%VIEWER%"=="" goto noviewer
-rem A .simage or .isieve (Sieve instructions holding pictures) opens in sieve-view.
+rem A .simage (Sieve instructions holding pictures) opens in sieve-view.
 set "CLASSES=HKCU\Software\Classes"
 reg add "%CLASSES%\Sieve.Picture" /ve /t REG_SZ /d "Sieve picture" /f > nul
 reg add "%CLASSES%\Sieve.Picture\DefaultIcon" /ve /t REG_SZ /d "\"%VIEWER%\",0" /f > nul
 reg add "%CLASSES%\Sieve.Picture\shell\open\command" /ve /t REG_SZ /d "\"%VIEWER%\" \"%%1\"" /f > nul
-for %%X in (.simage .isieve) do (
-    reg add "%CLASSES%\%%X" /ve /t REG_SZ /d "Sieve.Picture" /f > nul
-    reg add "%CLASSES%\%%X\OpenWithProgids" /v Sieve.Picture /t REG_NONE /f > nul
-)
-echo .simage and .isieve files open in
+reg add "%CLASSES%\.simage" /ve /t REG_SZ /d "Sieve.Picture" /f > nul
+reg add "%CLASSES%\.simage\OpenWithProgids" /v Sieve.Picture /t REG_NONE /f > nul
+echo .simage files open in
 echo   %VIEWER%
 goto done
 :noviewer
