@@ -412,31 +412,12 @@ as its differences from the smaller (a script of 2,087,830 bytes before LZMA2, f
 
 ## A game engine: ALTEngine
 
-Edward's ALTEngine v0.9.2 ([its commit](https://github.com/Thor110/AlienTrilogyResurrection/commit/068454aac5031fbff266f874f302f21615f77c82); 0.9.2 within the project, though the build itself still says 0.9.0), his reimplementation of the *Alien Trilogy* engine: 43 files, most of it
-programs (the engine and FFmpeg's and SDL3's DLLs). Made on Edward's machine on 31 October 2026, in
-the File Locator, as v32 (the draft, which made the same files), with Try every way and Keep a log,
-Prioritise Decoding Speed off, compressed formats as they are. It took 140.9 s to make, and
-installed in 3.7 s (decoded in 3.587 s, checked and written in 0.143 s).
-
-| | Bytes | Ratio | Of the folder | Against 7z |
-| :--- | ---: | ---: | ---: | ---: |
-| The folder | 25,396,730 | | | |
-| zip | 10,011,145 | 2.54:1 | 39.42% | +30.61% |
-| 7z | 7,664,970 | 3.31:1 | 30.18% | |
-| **`.sieve`** | **7,546,366** | **3.37:1** | **29.71%** | **−1.55%** |
-
-- **The programs:** seven of them, 22,164,992 bytes, 87% of the folder. They went through the x86
-  filter by LZMA2 as one stream: 7,212,820 bytes, 96% of the `.sieve`. So this is where 7z's BCJ2
-  would be weighed against Sieve's BCJ (ROADMAP C.3).
-- **The rest:** 28 texts, manifests and shaders were mixed together in one group, 331,425 bytes
-  against 334,745 apart, most with the word list counted by use (`F80`). The largest of them,
-  `LightManifestExample.json` (2,408,120 bytes), mixed alone came to 286,875.
-- **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,893,553, and Edward's 7z 7,664,970.
-
-**ALTEngine v0.9.4 at `sieve-manifest-v33` (3 November 2026, Edward's machine, the File Locator with
-Keep a log; Try every way off and Optimise Search on, Prioritise Decoding Speed off, compressed
-formats as they are).** 46 files. It took 109.1 s to make and installed in 14.8 s (decoded in
-14.630 s, checked and written in 0.144 s), every file checked against its SHA-256.
+Edward's ALTEngine v0.9.4, his reimplementation of the *Alien Trilogy* engine: 46 files, most of it
+programs (the engine and FFmpeg's and SDL3's DLLs). Made at `sieve-manifest-v33` on Edward's machine
+on 3 November 2026, in the File Locator with Keep a log; Try every way off and Optimise Search on,
+Prioritise Decoding Speed off, compressed formats as they are. It took 109.1 s to make and installed
+in 14.8 s (decoded in 14.630 s, checked and written in 0.144 s), every file checked against its
+SHA-256.
 
 | | Bytes | Ratio | Of the folder | Against 7z |
 | :--- | ---: | ---: | ---: | ---: |
@@ -450,8 +431,8 @@ formats as they are).** 46 files. It took 109.1 s to make and installed in 14.8 
   7,329,091 for the same six. The smallest, `swresample-6.dll` (124,416 bytes), stayed in the x86
   stream, which was smaller for it. The largest, `avcodec-62.dll` (13,606,400 bytes), kept all
   three match ways after v33's check on its first 4 MiB: 4,387,190 against 4,560,553.
-- **The cost:** installing takes longer, since mixed programs decode as slowly as they were coded:
-  14.8 s here, where v32's `.sieve` of v0.9.2, carried by LZMA2, installed in 3.7 s.
+- **Installing:** mixed programs decode as slowly as they were coded, so most of the 14.8 s is
+  theirs.
 - **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,943,117; the `.sieve` is 7.53% under it.
 
 ## A million digits of pi

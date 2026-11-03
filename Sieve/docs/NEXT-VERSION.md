@@ -64,8 +64,8 @@ MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was ou
   copies of files using `W1` and v33's other ways, given to sieve, sieve-install, the oracle and a
   sanitizer build: every one refused or installed the same. Found beside it: the web extension's
   host had no word lists or primers, so it refused a small page mixed with them; it has them now.
-- **Still to do for v33:** Edward's own files measured at v33 (the photos, pi6 and ALTEngine done;
-  MAPS.WoW, WoWRevived and the release to come).
+- **Still to do for v33:** MAPS.WoW and WoWRevived measured at v33 (the photos, pi6, ALTEngine
+  v0.9.4 and the release package done).
 
 **v33, as it was while a draft (Edward, 2 November 2026: "lets stay locked at manifest v33 draft for a
 while again until we get all the new systems and ideas implemented").** Every piece that needs a new

@@ -6041,3 +6041,34 @@ kind detection already names pictures, sound, text and programs); and the same r
 makes before decoding (the listing read first, sizes against memory), since any program it hands
 to sees what the file claims to be.
 
+
+**19.116 Video: frames carried as deltas of frames (Edward, 3 November 2026: "I wonder if mpeg /
+video / audio encoders could be used to track down deltas across frames or sequences as well, or
+through ffmpeg, search time could be quite taxing though. Imagine how many empty frames or black
+transition fades there are in movies, depending on the source material and editing it could become
+a delta, same for mostly still frames").** Not built; nothing measured yet. Notes for when it is
+taken up:
+- **A film already compressed has done this.** MPEG-2, H.264, H.265 and AV1 code most frames as
+  differences from others: a black fade or a still shot already costs a few bytes a frame (skipped
+  blocks). Sieve must give back the file's exact bytes, so decoding a film with ffmpeg and coding
+  its frames again does not help: no encoder makes the same stream twice across versions or
+  settings, and the frames alone are not the file.
+- **Where the idea does apply as it stands:**
+  - *Video not yet compressed, or barely* (raw YUV, frame sequences as pictures, lossless or
+    intra-only captures and edits, screen recordings): there a frame is near its last, and Sieve
+    has the pieces: `copy K` for identical frames, delta-v1 and mixing's match model for near ones,
+    the picture contexts with the frame's width. A video model (each pixel predicted from the same
+    place one frame back as well as its neighbours) would be mixing's picture model with one more
+    neighbour, a new mix-v4 parameter.
+  - *The same footage in several files* (a trailer and its film, two cuts, a game's films sharing
+    intros and fades, Edward's WoWRevived): where they were encoded at once, their packets are
+    byte for byte the same. ffmpeg can list a file's packets without decoding a frame (`ffprobe
+    -show_packets`, or demuxing with `-c copy`), which is quick, and identical packets found by
+    hash could be carried once, the container made again around them as archives are now (a
+    skeleton and its members).
+- **The step beyond:** lossless recompression of the coded stream itself, as brunsli does for JPEG
+  (the entropy coding, CABAC in H.264, decoded to its symbols and coded better, then made again
+  exactly). Large work for each codec; others have done it for JPEG and MP3, little for video.
+- **To measure first (cheap):** the packets of WoWRevived's films hashed, to count how many bytes are
+  packets seen before in the same or another film. That says whether the packet route is worth
+  building, before any encoder is involved.
