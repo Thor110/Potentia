@@ -89,6 +89,9 @@ struct PackReport
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes
     uint64_t copy_bytes = 0;
+    // Why mixing's word list could not be had, where a text would have been weighed with it (its
+    // files not found beside Sieve, say): such texts are mixed without it, a little larger.
+    std::string word_list_missing;
     size_t spans = 0;                    // v33 draft: texts carried with the binary they write out decoded (spans-v1)
     uint64_t span_bytes = 0;             // the bytes their spans hold, decoded
     size_t jpegs = 0;                    // v32: JPEGs carried as their brunsli form, their bytes, and the forms'

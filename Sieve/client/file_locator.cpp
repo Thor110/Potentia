@@ -358,8 +358,14 @@ void FileLocator::open_log(const std::string& what, const std::string& path, boo
          << (sieve::prioritise_decoding() ? "on" : "off") << "; archive and compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
          << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "")
          << "; Optimise Search " << (sieve::cli::optimise_search() ? "on (Try every way chosen file by file)" : "off")
-         << "; " << sieve::cli::draft_name() << " draft " << (sieve::cli::draft_on() ? "on (" + sieve::cli::draft_manifest() + " where it is smaller; not to be published)" : std::string("off")) << "\n"
-         << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
+         << "; " << sieve::cli::draft_name() << " draft " << (sieve::cli::draft_on() ? "on (" + sieve::cli::draft_manifest() + " where it is smaller; not to be published)" : std::string("off")) << "\n";
+    // (Sieve beside no dictionaries folder still packs, but mixes texts without its word list, a
+    // little larger: said here, where it is seen before any file's line.)
+    if (search)
+        if (const std::string why = cli::mix_word_list_problem(); !why.empty())
+            log_ << "warning: mixing's word list could not be had (" << why << "): texts will be mixed without it, larger (16% on a 20 KB text); Sieve finds its dictionaries folder beside it\n";
+    if (search)
+        log_ << "\nseconds in, then what it reported (\"first\": a step's first result; \"new best\": smaller than its last, on the same bytes;\n"
          << "a step on less than 64 KiB does not count for \"last new best\")\n";
     log_.flush();
     cli::timings::collect();

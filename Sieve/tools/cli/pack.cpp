@@ -3002,6 +3002,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // (Without it, 100 copies of a 1.2 MB JPEG came to the size of one only because they lay
     // within LZMA2's window of each other, after LZMA2 had packed all 118 MB of their forms.)
     const bool copy_way_on = rope_newest >= 16;
+    std::mutex words_missing_mx; // (why mixing's word list could not be had, the first time: the report says so)
+    std::string words_missing;
     const bool spans_on = rope_newest >= 16; // v33 draft: binary a text writes out carried decoded (spans-v1)
     std::unordered_map<std::string, std::vector<uint8_t>> brunsli_kept; // a JPEG found written in a text: its brunsli form, by its SHA-256
     size_t spans_files = 0;
@@ -4523,9 +4525,18 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                             words = &list;
                         }
                     }
-                    catch (const std::exception&)
+                    catch (const std::exception& x)
                     {
                         tests += std::string(tests.empty() ? "" : ", ") + "the word list not to be had here"; // (mix-v2 alone)
+                        std::lock_guard<std::mutex> lock(words_missing_mx);
+                        if (words_missing.empty())
+                        {
+                            // (Its first line, without where it looked: "... Looked in:" and the places.)
+                            std::string why = x.what();
+                            if (const size_t cut = std::min(why.find('\n'), why.find(" Looked in:")); cut != std::string::npos) why.resize(cut);
+                            if (!why.empty() && why.back() == '.') why.pop_back();
+                            words_missing = why;
+                        }
                     }
                 }
                 // (A program is mixed whole, its start no guide: of the 16 above, 5 that came out
@@ -4586,6 +4597,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             got.params = params;
             got.done = true;
         }, true);
+        r.word_list_missing = words_missing;
         for (const size_t i : todo)
         {
             Found& got = found[i];
@@ -5459,6 +5471,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.copies)
             o << "copies    " << r.copies << " file(s) carried as copies of another with the same bytes (" << r.copy_bytes << " bytes; " << kMatchWaysManifestVersion << ")\n";
+        if (!r.word_list_missing.empty())
+            o << "words     mixing's word list could not be had (" << r.word_list_missing << "): the texts that would have been weighed with it were "
+                 "mixed without it, larger (16% on a 20 KB text); Sieve finds its dictionaries folder beside it\n";
         if (r.spans)
             o << "spans     " << r.spans << " text(s) carried with the binary they write out decoded (base64, hex, byte values; " << r.span_bytes << " bytes decoded; " << kMatchWaysManifestVersion << ")\n";
         if (r.deltas)

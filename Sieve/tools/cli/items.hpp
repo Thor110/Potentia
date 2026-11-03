@@ -58,6 +58,11 @@ ItemFinder item_finder(const std::vector<ItemLine>& lines);
 // Lets manifests with items be read (set_item_maker): each line made from its options once, and
 // checked against its space id.
 void use_item_maker();
+// Why mixing's word lists (scowl-en-35, 60 and 80) cannot be had, found without reading them: none
+// registered, or a registered list's file missing; empty where they can.
+std::string mix_word_list_problem();
+// An error's reason, its first line without where it looked ("... Looked in:" and the places after).
+std::string first_reason(const std::string& what);
 // An installer's files packed with the items of Sieve's lines carried as their places: `version` 8
 // (the default: v7, and v8 where a file is carried by the tightened rope, searched for
 // `rope_seconds` a file, 0 for no limit), 7 (no rope), 6 (each place as raw bytes, the listing as v6

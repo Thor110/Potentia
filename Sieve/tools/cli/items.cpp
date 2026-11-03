@@ -14,7 +14,9 @@
 #include <span>
 #include <sstream>
 #include <stdexcept>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <string_view>
 #include <vector>
 
@@ -283,6 +285,32 @@ const MixDictionary& mix_word_list(uint32_t list)
         return *made.emplace(list, std::make_unique<const MixDictionary>(all, commoner, 64)).first->second;
     }
     return *made.emplace(list, std::make_unique<const MixDictionary>(registered(list))).first->second;
+}
+
+std::string first_reason(const std::string& what)
+{
+    std::string why = what.substr(0, what.find('\n'));
+    if (const size_t at = why.find(" Looked in:"); at != std::string::npos) why.resize(at);
+    if (!why.empty() && why.back() == '.') why.pop_back();
+    return why;
+}
+
+std::string mix_word_list_problem()
+{
+    try
+    {
+        for (const char* size : {"35", "60", "80"})
+        {
+            const ResolvedDictionary d = resolve_dictionary(size);
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(d.path, ec)) return "the word list " + d.id + " not found: " + d.path;
+        }
+    }
+    catch (const std::exception& x)
+    {
+        return first_reason(x.what());
+    }
+    return {};
 }
 
 void use_item_maker()

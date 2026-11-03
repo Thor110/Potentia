@@ -71,7 +71,7 @@ control.7z					: 822 bytes			(4,096 bytes on disk)
 control.7z.sieve			: 959 bytes			(4,096 bytes on disk)
 control.py.sieve			: 591 bytes			(0 bytes on disk)
 
-Good old windows reports this control script as 0 bytes on disk...
+As a .sieve file it is so small that it fits within the Master File Table and takes up 0 bytes on disk.
 
 POWER-USAGE.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/POWER-USAGE.md
 
@@ -101,7 +101,7 @@ It can create self extracting installers and there is a context menu function th
 
 Formats can be added and dynamically accessed through this context menu.
 
-I have also created a web extension which allows loading the .sieve format in google chrome (NOTE : and chromium based browsers?), the decoding is routed through the application, websites can be converted to .sieve, links get updated to point to the hash of the .sieve file and a root tree map covers the hashes of the entire website.
+I have also created a web extension which allows loading the .sieve format in google chrome and chromium based browsers, the decoding is routed through the application, websites can be converted to .sieve, links get updated to point to the hash of the .sieve file and a root tree map covers the hashes of the entire website.
 
 Sieve image viewer for loading .sieve images, with the ? extension. NOTE :
 
