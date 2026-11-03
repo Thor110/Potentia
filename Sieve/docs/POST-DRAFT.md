@@ -103,7 +103,7 @@ Formats can be added and dynamically accessed through this context menu.
 
 I have also created a web extension which allows loading the .sieve format in google chrome and chromium based browsers, the decoding is routed through the application, websites can be converted to .sieve, links get updated to point to the hash of the .sieve file and a root tree map covers the hashes of the entire website.
 
-Sieve image viewer for loading .sieve images, with the ? extension. NOTE :
+Sieve image viewer for displaying image files as well as converting images across to the .simage format.
 
 	AI Training Harness
 
