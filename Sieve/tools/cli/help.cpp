@@ -1046,7 +1046,7 @@ const std::vector<Page>& pages()
                                   "and its chunks' CRCs worked out again. Off unless given."},
           {"--v32", "As sieve-manifest-v32 at newest: none of v33's ways (mixing's match ways, the x86\n"
                     "filter in mixing, repeating patterns and ramps, copies, binary written as text decoded,\n"
-                    "a picture's palette), byte for byte as v32 made it."},
+                    "a picture's palette, web text mixed primed on MDN's examples), byte for byte as v32 made it."},
           {"--v31", "As sieve-manifest-v31 at newest: no file carried as its differences from another, no JPEG\n"
                     "as its brunsli form, no PNG re-saved or its rows carried unfiltered, mixing's word list\n"
                     "not counted by use, and v31's head (v32)."},

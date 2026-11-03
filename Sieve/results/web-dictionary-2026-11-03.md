@@ -96,3 +96,22 @@ so a draft version; the oracle priming its own model the same way; mixing tried 
 
 Repeatable with `tools/measure_web_dictionary.py` and the sources above. The trainer gave the same
 mdn 64 KiB dictionary on three runs (SHA-256 3902a572…7fa0b, 65,536 bytes).
+
+## Built (v33, reopened 3 November 2026)
+
+Edward: "Reopen v33 and build it with the MDN 64k dictionary". mix-v4's `W1` primes the model on the
+mdn 64 KiB dictionary (`data/dictionaries/web-mdn-2026-11-03-64k.bin`) before a web text, in a file's
+own mixing, a group's and the lzma2 stream's; web texts of 128 bytes to 4 KiB are mixed too
+(SPECIFICATIONS §12.2 v33). Each page's whole `.sieve`, made by `sieve locate PAGE --installer`,
+before it (v33 as frozen) and with it:
+
+| | Pages | brotli | Sieve before | Sieve with W1 | Smaller than brotli, before / with |
+|---|---|---|---|---|---|
+| 2014 | 258 | 4,194,084 | 3,955,146 (−5.7%) | 3,826,134 (−8.8%) | 221 / 253 |
+| Edward | 11 | 32,518 | 33,911 (+4.3%) | 29,171 (−10.3%) | 2 / 11 |
+| mdn-la | 154 (146 under 4 KiB) | 71,656 | 100,888 (+40.8%) | 66,148 (−7.7%) | 2 / 113 |
+
+No page came out larger than before. Edward's site packed as one folder: 20,192 bytes at v32, 19,421
+with W1 (the pages mixed together as one group, primed). The repository's docs/ folder (Markdown, no
+web text) came out the same bytes, its time as before once web text needed tags at a page's density.
+Priming costs about 0.1 s for each file or group mixed with it, on packing and on installing.

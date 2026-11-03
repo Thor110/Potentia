@@ -465,7 +465,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             {
                 const Mix4Params mp = Mix4Params::parse(w.substr(0, t));
                 if (mp.width) throw std::invalid_argument("a picture's parameters for a group of files");
-                if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X) and the palette (P) are sieve-manifest-v33's");
+                if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) and a primer (W) are sieve-manifest-v33's");
                 const MixDictionary* words = nullptr;
                 if (mp.dictionary)
                 {
@@ -522,7 +522,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 {
                     // v28: mix-v4 (a word list where its parameters name one, made ready here, once).
                     const Mix4Params mp = Mix4Params::parse(e.way.substr(5));
-                    if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X) and the palette (P) are sieve-manifest-v33's");
+                    if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) and a primer (W) are sieve-manifest-v33's");
                     const MixDictionary* words = nullptr;
                     if (mp.dictionary)
                     {

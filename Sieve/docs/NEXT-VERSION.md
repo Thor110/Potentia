@@ -4,6 +4,20 @@
 Sieve makes what the newest makes. Candidates: the web dictionary (IDEAS §19.92), once Edward has
 chosen the pages it is learnt from; scattered substitutions (IDEAS §19.114, 3), on real pairs.
 
+**v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
+MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).
+- **What it adds:** mix-v4's `W1`, the model primed on `data/dictionaries/web-mdn-2026-11-03-64k.bin`
+  (learnt from MDN's CC0 examples) before a web text, in a file's `mix4`, a group's `mixt` and the
+  lzma2 stream's mixing; web text of 128 bytes to 4 KiB mixed too. SPECIFICATIONS §12.2 v33,
+  SIEVE-FORMAT.md, METHODS.md and `data/dictionaries/README.md` describe it; the oracle reads it;
+  CI step 11 checks it.
+- **Found while building it:** two pages that v32 mixed as a group came out larger with W1 on single
+  files only (one primed alone beat the group unprimed: 710 bytes against 692), so groups and the
+  stream are primed too (509). Nine of the repository's Markdown files had four tags or more and
+  were weighed primed for nothing (docs/ 4.6 s slower, the same bytes), so a web text now needs its
+  tags or braces at a page's density.
+- **Measured:** results/web-dictionary-2026-11-03.md.
+
 **v33, frozen 3 November 2026** (Edward: "round off v33 while we are here").
 - **What changed:** `kNewestRope` is 16 and `kDraftVersion` 34, so every instructions-maker makes
   v33 at its newest, and a `.sieve` is v33 only where one of its ways is used (else v32, as

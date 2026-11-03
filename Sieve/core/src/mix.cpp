@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <functional>
 #include <optional>
 #include <memory>
 #include <stdexcept>
@@ -1013,6 +1014,8 @@ void Mix4Params::check() const
     if (candidates != 1 && candidates != 2) bad4("one candidate for a match, or two (C2)");
     if (x86 && (width || dictionary)) bad4("the x86 filter for a program's bytes, not a picture or text with a word list (X)");
     if (palette && (palette > 256 || width == 0 || channels < 2)) bad4("a palette of 1 to 256 colours, for a picture of 2 to 4 bytes a pixel (P)");
+    if (primer > kMixPrimers) bad4("a primer W1 (web-mdn-2026-11-03-64k), or none");
+    if (primer && (width || x86)) bad4("a primer for text, not a picture or a program (W)");
 }
 
 std::string Mix4Params::text() const
@@ -1021,6 +1024,7 @@ std::string Mix4Params::text() const
     if (width) t += " I" + std::to_string(width) + "x" + std::to_string(channels);
     if (palette) t += " P" + std::to_string(palette);
     if (dictionary) t += (by_use ? " F" : " D") + std::to_string(dictionary);
+    if (primer) t += " W" + std::to_string(primer);
     if (recover) t += " R1";
     if (min_match != 6) t += " M" + std::to_string(min_match);
     if (candidates != 1) t += " C" + std::to_string(candidates);
@@ -1040,12 +1044,14 @@ Mix4Params Mix4Params::parse(std::string_view t)
         p.x86 = true;
         s.resize(s.size() - 2);
     }
-    for (const char* tail : {" C2", " M4", " R1"})
+    // (v33, reopened: a primer before them, " W1")
+    for (const char* tail : {" C2", " M4", " R1", " W1"})
         if (s.size() >= 3 && s.compare(s.size() - 3, 3, tail) == 0)
         {
             if (tail[1] == 'C') p.candidates = 2;
             if (tail[1] == 'M') p.min_match = 4;
             if (tail[1] == 'R') p.recover = true;
+            if (tail[1] == 'W') p.primer = 1;
             s.resize(s.size() - 3);
         }
     unsigned b = 0, w = 0, c = 0, d = 0, n = 0;
@@ -1233,6 +1239,36 @@ void x86_filter(std::span<uint8_t> data, bool encoding)
     }
 }
 
+namespace {
+// The bytes read through the model as a file's would be, each bit predicted and then learnt, with
+// no coder: the model's state after is what it would be had they been coded before the file.
+template <class Model>
+void prime(Model& m, std::span<const uint8_t> bytes)
+{
+    for (const uint8_t b : bytes)
+        for (int j = 7; j >= 0; --j)
+        {
+            (void)m.p();
+            m.update((b >> j) & 1);
+        }
+}
+
+MixPrimer& primer_hook()
+{
+    static MixPrimer hook;
+    return hook;
+}
+} // namespace
+
+void set_mix_primer(MixPrimer primer) { primer_hook() = std::move(primer); }
+
+std::span<const uint8_t> mix_primer(uint32_t n)
+{
+    if (n < 1 || n > kMixPrimers) bad4("no primer W" + std::to_string(n));
+    if (!primer_hook()) bad4(std::string("parameters naming a primer (W), and none to be had: ") + kMixPrimerFile[n]);
+    return primer_hook()(n);
+}
+
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words)
 {
     p.check();
@@ -1244,6 +1280,15 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
         if (!split) bad4("a picture with more colours than its palette (P), or not whole pixels");
         Model2 m(shape_of(p), split->size(), nullptr, false, ways_of(p));
         return code_with(m, *split);
+    }
+    if (p.primer)
+    {
+        // (The primer's bytes read through the model first, nothing coded: its history and its
+        // tables then hold them, as if they had come before the file.)
+        const std::span<const uint8_t> primer = mix_primer(p.primer);
+        Model2 m(shape_of(p), primer.size() + file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
+        prime(m, primer);
+        return code_with(m, file);
     }
     Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
     if (p.x86)
@@ -1270,6 +1315,13 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
         return palette_join(file_with(m, code, split, bad4), p.channels, p.palette);
     }
     if (!code_can_make(code, size)) bad4("a file larger than its code can make");
+    if (p.primer)
+    {
+        const std::span<const uint8_t> primer = mix_primer(p.primer);
+        Model2 m(shape_of(p), primer.size() + size, p.dictionary ? words : nullptr, false, ways_of(p));
+        prime(m, primer);
+        return file_with(m, code, size, bad4);
+    }
     Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false, ways_of(p));
     std::vector<uint8_t> out = file_with(m, code, size, bad4);
     if (p.x86) x86_filter(out, false);

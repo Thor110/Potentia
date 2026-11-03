@@ -2799,6 +2799,15 @@ def mix4_file(code, params, size, v32=False, v33=False):
             sys.exit(f"mix-v4: the match model's ways ({tail.strip()}) are the v33 draft's: {params}")
         ways = {"recover": " R1" in tail, "min_match": 4 if " M4" in tail else 6, "candidates": 2 if " C2" in tail else 1}
         params = params[: len(params) - len(tail)]
+    # (v33, reopened 3 November 2026) " W1" before the ways: the model primed on web-mdn-2026-11-03-64k.
+    primer = b""
+    if params.endswith(" W1"):
+        if not v33:
+            sys.exit(f"mix-v4: a primer (W) is v33's: {params}")
+        if x86:
+            sys.exit(f"mix-v4: a primer for text, not a program: {params}")
+        primer = mix_primer(1)
+        params = params[:-3]
     # (v33 draft) " P<n>" after a picture's shape: its indices into a palette of n colours (one byte a
     # pixel, the same width), then the palette, n entries of its pixel's bytes (the colours as the
     # picture first shows them, the rest zero): mixed so, and the pixels made from them after.
@@ -2821,8 +2830,25 @@ def mix4_file(code, params, size, v32=False, v33=False):
     words = mix_word_list(int(m.group(2))) if m.group(2) else mix_word_list(80, by_use=True) if m.group(3) else None
     if x86 and params != f"B{m.group(1)}":
         sys.exit(f"mix-v4: the x86 filter (X) is for a program's bytes, not a picture or text with a word list: {params}")
-    out = mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways)
+    if primer and " I" in params:
+        sys.exit(f"mix-v4: a primer for text, not a picture: {params}")
+    out = mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways, primer=primer)
     return x86_filter(out, encoding=False) if x86 else out
+
+
+MIX_PRIMERS = {1: ("web-mdn-2026-11-03-64k.bin", "3902a57215dcd52f0dbc585c53cad608431d1808ecfbdebf8a738ef83df7fa0b")}
+
+
+def mix_primer(n):
+    """v33's W<n>: primer n's bytes (data/dictionaries), its SHA-256 checked against the one the format names."""
+    name, sha = MIX_PRIMERS[n]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "dictionaries", name)
+    if not os.path.isfile(path):
+        sys.exit(f"mix-v4: the primer {name} not found (data/dictionaries)")
+    data = open(path, "rb").read()
+    if hashlib.sha256(data).hexdigest() != sha:
+        sys.exit(f"mix-v4: {name} is not the registered primer (its SHA-256 differs)")
+    return data
 
 
 def x86_filter(data, encoding):
@@ -2871,7 +2897,9 @@ def x86_filter(data, encoding):
     return bytes(d)
 
 
-def mix2_file(code, params, size, words=None, sse=True, ways=None):
+def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
+    # (v33's W<n>: the primer's bytes read through the model first, each bit predicted and learnt as
+    # the file's are, nothing decoded; the file's bytes after them.)
     ways = ways or {"recover": False, "min_match": 6, "candidates": 1}
     recover, min_match, two = ways["recover"], ways["min_match"], ways["candidates"] == 2
     if words is not None:  # mix-v3: "B22 D60", mix-v2's text with the word list's model
@@ -3011,7 +3039,8 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None):
     for _ in range(4):
         xv = (xv << 8) | nxt()
     slots = [0] * nctx
-    for _ in range(size):
+    for k in range(len(primer) + size):
+        priming = k < len(primer)
         c0 = 1
         for place in range(8):
             if place in (0, 4):
@@ -3065,12 +3094,15 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None):
             if sse:  # (sse-v1's two stages: mix-v2 and mix-v3; mix-v4 has none)
                 p = (2 * p + reads[0][2] + reads[1][2] + 2) >> 2
             p = min(max(p, 1), 4095)
-            xmid = x1 + (((x2 - x1) * p) >> 12)
-            bit = 1 if xv <= xmid else 0
-            if bit:
-                x2 = xmid
+            if priming:
+                bit = (primer[k] >> (7 - place)) & 1
             else:
-                x1 = xmid + 1
+                xmid = x1 + (((x2 - x1) * p) >> 12)
+                bit = 1 if xv <= xmid else 0
+                if bit:
+                    x2 = xmid
+                else:
+                    x1 = xmid + 1
             for wts, off, sk in ((w1, o1, s1), (w2, o2, s2)):
                 err = ((bit << 12) - sq(sk)) * 2
                 for i in range(nin):
@@ -3085,7 +3117,7 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None):
                     v = apm_cell(k, i)
                     apm[k][i] = v + ((target - v) >> 7)
             c0 = c0 * 2 + bit
-            while ((x1 ^ x2) & 0xFF000000) == 0:
+            while not priming and ((x1 ^ x2) & 0xFF000000) == 0:
                 x1, x2, xv = (x1 << 8) & M, ((x2 << 8) & M) | 255, ((xv << 8) & M) | nxt()
         x.append(c0 - 256)
         if at[0] > len(code) + 4:
@@ -3093,7 +3125,7 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None):
         new_byte()
     if at[0] < len(code):
         sys.exit("mix-v2: a code with bytes past the file's end")
-    return bytes(x)
+    return bytes(x[len(primer):])
 
 
 def cmd_mix_unpack(args):
@@ -7618,7 +7650,7 @@ def cmd_unpack_v7(args, data):
             # stream; decoded whole, this file its first bytes, the "mixn" files after the next.
             if group is not None and group[1] != len(group[0]):
                 sys.exit(f"{group[2]}'s group ends before its files have its bytes")
-            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?(?: R1)?(?: M4)?(?: C2)?) T([1-9][0-9]*)", way[5:])
+            m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?(?: W1)?(?: R1)?(?: M4)?(?: C2)?) T([1-9][0-9]*)", way[5:])
             if not m30:
                 sys.exit(f"{path}: a group not written as Sieve writes it")
             n, shift = 0, 0

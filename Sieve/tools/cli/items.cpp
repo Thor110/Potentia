@@ -5,6 +5,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
 #include "sieve/digit_histogram.hpp"
+#include "sieve/mix.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -287,6 +288,24 @@ const MixDictionary& mix_word_list(uint32_t list)
     return *made.emplace(list, std::make_unique<const MixDictionary>(registered(list))).first->second;
 }
 
+std::span<const uint8_t> mix_primer_bytes(uint32_t n)
+{
+    // v33 (W<n>): a primer from the dictionaries' folder (where dictionaries.tsv is found), its
+    // SHA-256 checked against the one the format names, read once a run.
+    static std::mutex mx;
+    static std::map<uint32_t, std::vector<uint8_t>> read;
+    std::lock_guard<std::mutex> lock(mx);
+    if (auto it = read.find(n); it != read.end()) return it->second;
+    if (n < 1 || n > kMixPrimers) throw std::runtime_error("no primer W" + std::to_string(n));
+    const std::filesystem::path path = load_registry().folder / kMixPrimerFile[n];
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) throw std::runtime_error(std::string("the primer ") + kMixPrimerFile[n] + " not found: " + path.string());
+    std::vector<uint8_t> bytes = read_file_bytes(path);
+    if (sha256_hex(bytes) != kMixPrimerSha256[n])
+        throw std::runtime_error(std::string("the primer ") + kMixPrimerFile[n] + " (" + path.string() + ") is not the one registered: its SHA-256 differs");
+    return read.emplace(n, std::move(bytes)).first->second;
+}
+
 std::string first_reason(const std::string& what)
 {
     std::string why = what.substr(0, what.find('\n'));
@@ -317,6 +336,7 @@ void use_item_maker()
 {
     set_remaker(remake_archive); // v14: archives remade exactly from what they hold
     set_mix_words(mix_word_list); // v27: mix-v3's word lists, from the dictionary registry
+    set_mix_primer(mix_primer_bytes); // v33: mixing's primers (W), from the dictionaries' folder
     // A line made from a listing's options: one of the CLI's lines, or the AI line.
     struct MadeLine
     {

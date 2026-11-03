@@ -25,8 +25,10 @@
 #include "cli/pack.hpp"
 #include "sieve/aispace.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -61,6 +63,9 @@ void use_item_maker();
 // Why mixing's word lists (scowl-en-35, 60 and 80) cannot be had, found without reading them: none
 // registered, or a registered list's file missing; empty where they can.
 std::string mix_word_list_problem();
+// v33 (W<n>): primer n's bytes, from the dictionaries' folder, its SHA-256 checked; refused where
+// it cannot be had.
+std::span<const uint8_t> mix_primer_bytes(uint32_t n);
 // An error's reason, its first line without where it looked ("... Looked in:" and the places after).
 std::string first_reason(const std::string& what);
 // An installer's files packed with the items of Sieve's lines carried as their places: `version` 8

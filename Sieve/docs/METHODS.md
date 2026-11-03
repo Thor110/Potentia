@@ -149,7 +149,12 @@ many as the threads and memory allow, and the result is the same at any thread c
        one-byte indices, then the colours (mix-v4's `P`; the hallway's screenshots 20.6% smaller,
        results/palette-2026-11-02.md);
      - for a text, with an English word list (from v32, SCOWL's size 80 with each word
-       counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start; v31, size 60).
+       counted by how common it is, `F80`: 2.6% smaller on Don Quixote's start; v31, size 60);
+     - (from v33, reopened 3 November 2026) for a web text (HTML, CSS, JavaScript: tags or braces
+       at a page's density), primed on MDN's examples first (`W1`), with the word list where that was
+       taken: the log says "primed on the web dictionary". A web text of 128 bytes to 4 KiB, which
+       mixing otherwise leaves alone, is weighed so too. Groups and the lzma2 stream's mixing weigh it
+       on their start the same way (results/web-dictionary-2026-11-03.md).
    - From v33 (frozen 3 November 2026; `--v32` makes none), each of those codes also weighs the match model's ways on
      the same start: none, `C2`, or `R1 M4 C2`, the smallest kept (programs: Silesia's mozilla 3.3%
      smaller mixed whole, under LZMA2; SPECIFICATIONS, v33).

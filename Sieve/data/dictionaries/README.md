@@ -45,3 +45,31 @@ python3 tools/build_dictionary.py --scowl scowl-src/scowl/final --size 60 \
 ```
 
 The output is sorted, one word per line, with LF line endings, so the hashes above reproduce exactly.
+
+## Mixing's primer (v33's `W1`)
+
+`web-mdn-2026-11-03-64k.bin` (65,536 bytes, SHA-256
+`3902a57215dcd52f0dbc585c53cad608431d1808ecfbdebf8a738ef83df7fa0b`) is not a word list and is not in
+`dictionaries.tsv`: its name and SHA-256 are part of the format itself (mix-v4's `W1`,
+SPECIFICATIONS §12.2 v33), so it can never change. Mixing reads it before a web text (HTML, CSS,
+JavaScript), so the text starts with what it taught the model. Sieve, sieve-install, the hallway and
+the oracle all refuse `W1` where this file is missing or differs.
+
+It was learnt on 3 November 2026 by zstd's dictionary trainer (python-zstandard 0.25.0,
+`train_dictionary(65536, samples, threads=-1)`: the same bytes on three runs) from the HTML, CSS and
+JavaScript of MDN's example repositories, each file once, cut into pieces of 64 KiB (4,394,372 bytes,
+1,218 pieces). Those repositories are all under CC0 1.0 (public domain), so the file carries no
+conditions. The repositories and their commits:
+
+| Repository | Commit |
+| :--- | :--- |
+| [mdn/css-examples](https://github.com/mdn/css-examples) | `65b08d2236b304d50d28a807a48c35f6889d902d` |
+| [mdn/dom-examples](https://github.com/mdn/dom-examples) | `03ae1ffb325a9202d3a64f26ab5b8361392a5368` |
+| [mdn/html-examples](https://github.com/mdn/html-examples) | `57ad3ae9d04c0fab8e3fbf9bcb90d8e3af348e20` |
+| [mdn/js-examples](https://github.com/mdn/js-examples) | `0dc0081d4beb71346b2e27c62e3b2d29d3e20d35` |
+| [mdn/web-components-examples](https://github.com/mdn/web-components-examples) | `7e588e43bb8ed439716c413a3bd42466112155c8` |
+| [mdn/webaudio-examples](https://github.com/mdn/webaudio-examples) | `5582dbc39f241117c27c516b21243b041dc69fcb` |
+
+(mdn/learning-area, `21973263ba859ff3477919087b488157f9d618a6`, was held back to test it.)
+`tools/measure_web_dictionary.py` makes it again and weighs it; `results/web-dictionary-2026-11-03.md`
+has what it measured.

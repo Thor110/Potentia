@@ -19,6 +19,7 @@
 
 #include <bit>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -161,6 +162,11 @@ struct Mix4Params
     // palette itself, n entries of `channels` bytes each: the colours in the order the picture first
     // shows them, entries past its last colour all zero (palette_split). 0: none.
     uint32_t palette = 0;
+    // v33 (reopened 3 November 2026): W<n>, the model primed on registered dictionary n before the file:
+    // the dictionary's bytes read through it, every bit predicted and learnt as the file's are, none
+    // coded, so the file starts with what the dictionary taught it. 0: none; 1: web-mdn-2026-11-03-64k
+    // (MDN's CC0 examples, HTML, CSS and JavaScript; mix_primer). Text only, not a picture or a program.
+    uint32_t primer = 0;
     // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
     uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;
@@ -171,7 +177,18 @@ struct Mix4Params
 };
 
 // Whether mix-v4's parameters name any of the match model's ways or the x86 filter (v33 draft).
-inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1 || p.x86 || p.palette; }
+// (And the palette, P, and a primer, W: all v33's.)
+inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1 || p.x86 || p.palette || p.primer; }
+
+// v33 (W<n>): the dictionaries mixing may be primed on, each by its number. The bytes are asked of a
+// hook the program sets (the CLI's reads the registered file and checks its SHA-256); mix4_code and
+// mix4_file refuse parameters naming a primer where none is set, or where the hook refuses.
+inline constexpr uint32_t kMixPrimers = 1;
+inline constexpr const char* kMixPrimerFile[kMixPrimers + 1] = {"", "web-mdn-2026-11-03-64k.bin"};
+inline constexpr const char* kMixPrimerSha256[kMixPrimers + 1] = {"", "3902a57215dcd52f0dbc585c53cad608431d1808ecfbdebf8a738ef83df7fa0b"};
+using MixPrimer = std::function<std::span<const uint8_t>(uint32_t)>;
+void set_mix_primer(MixPrimer primer);
+std::span<const uint8_t> mix_primer(uint32_t n); // refused where no hook is set
 
 // The x86 filter (BCJ), as the LZMA SDK's and xz's --x86 make it, starting at 0: each E8 or E9 byte
 // (a call or a jump) whose four bytes after it read as a near distance has them made the place it

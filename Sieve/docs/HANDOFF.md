@@ -41,7 +41,8 @@ These are not preferences. Work that breaks one of them is wrong.
   Only a genuinely guided ordering is smaller, because a guided ordering *is* a compressor.
   §0 of `docs/IDEAS.md` sets this out; a proposal that forgets it is the commonest mistake.
 - **The `.sieve` format is frozen at `sieve-manifest-v33`** (3 November 2026, Edward: "round off
-  v33"; v32 was frozen 31 October 2026: "Yes, freeze v32"). Each was built as one version gathered,
+  v33"; reopened the same day, before its release, for mixing primed on MDN's examples, `W1`: "Reopen
+  v33 and build it with the MDN 64k dictionary"; v32 was frozen 31 October 2026: "Yes, freeze v32"). Each was built as one version gathered,
   behind a draft switch, from the freeze before (Edward, 27 October 2026: "Yes, it is time I stopped
   pushing more manifest versions, that was just caused by a succession of ideas for filters that
   cascaded into many manifest versions"). Packer improvements that need no new format are free to

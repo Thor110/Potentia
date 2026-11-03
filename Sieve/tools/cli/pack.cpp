@@ -2349,6 +2349,28 @@ static bool text_like(std::span<const uint8_t> b)
     return !b.empty() && double(text) >= 0.95 * double(b.size());
 }
 
+// v33 (W1): whether a text reads as the web's (HTML, XML or SVG: four tags or more, one at least
+// every 256 bytes; CSS or JavaScript: braces with statements in them, one at least every 512 bytes),
+// where mixing primed on MDN's examples is weighed. It is kept only where smaller, so this only spares
+// priming's time (about 0.1 s a try) on texts it would not help; C and C++ (an #include) are left out.
+// Measured 3 November 2026: it lets through 257 of the 258 pages of 2014, all 11 of Edward's and 242
+// of MDN's 255 learning-area files, and none of the repository's 25 Markdown files (9 with four tags
+// or more, the docs folder 4.6 s slower for nothing when they were let in) or 114 sources in tools/.
+static bool web_like(std::span<const uint8_t> b)
+{
+    size_t tags = 0, braces = 0, statements = 0;
+    for (size_t i = 0; i < b.size(); ++i)
+    {
+        const uint8_t c = b[i];
+        if (c == '<' && i + 1 < b.size() && (std::isalpha(b[i + 1]) || b[i + 1] == '/' || b[i + 1] == '!')) ++tags;
+        braces += c == '{';
+        statements += c == ';';
+    }
+    static constexpr std::string_view include = "#include";
+    if (std::search(b.begin(), b.end(), include.begin(), include.end()) != b.end()) return false;
+    return (tags >= 4 && tags * 256 >= b.size()) || (braces >= 2 && statements >= braces && braces * 512 >= b.size());
+}
+
 static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<const uint8_t> b)
 {
     if (b.size() < 64 || text_like(b)) return std::nullopt;
@@ -3086,6 +3108,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v33 draft (2 November 2026): a file of a repeating byte or pattern carried as its segments ("runs").
     const bool runs_way_on = rope_newest >= 16;
     const bool palette_on = rope_newest >= 16; // v33 draft: a picture of 256 colours or fewer mixed as its palette (mix-v4's P)
+    // v33 (reopened 3 November 2026): a web text mixed with the model primed on MDN's examples (W1).
+    const bool primer_on = mix4_on && rope_newest >= 16;
     auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
         if (!match_ways_on || f.size() < 4096) return mp;
         // (Under a palette, whole pixels: P is only for them.)
@@ -3094,7 +3118,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
         // and shape, so the answer is kept, by thread, for the second.)
         uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
-                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48;
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
         thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
         if (const auto hit = weighed.find(key); hit != weighed.end())
@@ -3116,6 +3140,24 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
         weighed[key] = {best.recover, best.min_match, best.candidates};
         return best;
+    };
+    // v33 (reopened 3 November 2026, W1): files mixed together (a group, the mixed stream) primed on
+    // MDN's examples where they are web text and their start comes out smaller so. (Without it, two
+    // pages that v32 mixed as a group came out larger at v33: one primed alone beat the group
+    // unprimed, 710 bytes against v32's 692.)
+    auto primer_for = [&](std::span<const uint8_t> start, const MixDictionary* words) -> uint32_t {
+        if (!primer_on || !text_like(start) || !web_like(start) || stop_requested()) return 0;
+        try
+        {
+            Mix4Params s = Mix4Params::for_size(start.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+            const uint64_t without = mix4_code(start, s, words).size();
+            s.primer = 1;
+            return mix4_code(start, s, words).size() < without ? 1 : 0;
+        }
+        catch (const std::exception&)
+        {
+            return 0; // (no primer to be had here: without it)
+        }
     };
     using PngMaker = std::optional<std::pair<std::vector<uint8_t>, std::string>> (*)(const std::vector<uint8_t>&);
     const std::vector<PngMaker> png_makers{png_by_stb, skr_on ? png_by_skeleton_unfiltered : png_by_skeleton};
@@ -4408,16 +4450,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const bool every = rope_search_every_wave();
             // Prioritise Decoding Speed (prioritise_decoding): no file mixed (r.mix_skipped counts them).
             const bool decoding_first = prioritise_decoding();
+            // v33 (reopened 3 November 2026): a web text under 4 KiB mixed too, where it is 128 bytes or
+            // more: primed on MDN's examples, mixing makes such a page smaller than brotli does
+            // (Edward's sieve.html, 3,878 bytes: brotli 1,121, primed 815; results/web-dictionary-2026-11-03.md).
+            const bool small_web = primer_on && !program && bytes[i].size() >= 128 && bytes[i].size() < 4096 && text_like(bytes[i]) && web_like(bytes[i]);
             if (mix_on && decoding_first) got.decoding_first = true;
             std::string mixed_said = !mix_on ? "" : decoding_first ? "mixing not tried (decoding first)" : "mixing not tried";
             if (mix_on && !decoding_first && !every)
             {
-                if (bytes[i].size() < 4096) mixed_said = "mixing not tried (under 4 KiB)";
+                if (bytes[i].size() < 4096 && !small_web) mixed_said = "mixing not tried (under 4 KiB)";
                 else if (bytes[i].size() > (size_t(16) << 20)) mixed_said = "mixing not tried (over 16 MiB: Try every way mixes a file of any size)";
             }
             if (mix_on && !decoding_first && stop_requested()) mixed_said = "mixing not tried (stopped)";
             if (mix_on && fw.runs) mixed_said = "mixing not tried (a repeating byte or pattern: its segments cost a few bytes each)";
-            if (mix_on && !decoding_first && !stop_requested() && !fw.runs && (every || (bytes[i].size() >= 4096 && bytes[i].size() <= (size_t(16) << 20))))
+            if (mix_on && !decoding_first && !stop_requested() && !fw.runs && (every || ((bytes[i].size() >= 4096 || small_web) && bytes[i].size() <= (size_t(16) << 20))))
             {
                 const timings::Scope t("pack.mix");
                 const size_t sn = std::min<size_t>(bytes[i].size(), size_t(256) << 10);
@@ -4438,11 +4484,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
                 const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
-                auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr) {
+                auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
+                                   uint32_t primer = 0) {
                     if (mix4_on)
                     {
                         Mix4Params base = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
+                        base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         const Mix4Params mp = with_ways(base, f, words);
                         way_text = "mix4 " + mp.text();
@@ -4558,6 +4606,34 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         }
                     }
                 }
+                // v33 (reopened 3 November 2026): a web text (web_like) mixed with the model primed on
+                // MDN's examples (W1), with the word list where that was taken, weighed on its start
+                // against the best above, the smaller kept. On pages none of it was learnt from, 10.6%
+                // under brotli (258 pages saved in 2014) and 18.1% under (Edward's 11; results/
+                // web-dictionary-2026-11-03.md).
+                uint32_t primed = 0;
+                if (primer_on && pw == 0 && !program && text_like(start) && web_like(start) && !stop_requested())
+                {
+                    try
+                    {
+                        if (ms == 0)
+                        {
+                            ms = code_of(start, unused, 0, 1, words).size();
+                            test_said(words ? "with the word list" : "as bytes", ms);
+                        }
+                        const uint64_t with = code_of(start, unused, 0, 1, words, 1).size();
+                        test_said("primed on the web dictionary", with);
+                        if (with < ms)
+                        {
+                            ms = with;
+                            primed = 1;
+                        }
+                    }
+                    catch (const std::exception&)
+                    {
+                        tests += std::string(tests.empty() ? "" : ", ") + "the web dictionary not to be had here";
+                    }
+                }
                 // (A program is mixed whole, its start no guide: of the 16 above, 5 that came out
                 // smaller whole were not 3% smaller on their first 256 KiB, cmake 9% larger there.)
                 const bool tried = every || program || [&] {
@@ -4570,7 +4646,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (tried)
                 {
                     std::string mix_way;
-                    std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words);
+                    std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words, primed);
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
@@ -4866,7 +4942,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     // (no word list here: without it)
                 }
-            const Mix4Params mp = with_ways(Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on), joined, words);
+            Mix4Params base = Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+            base.primer = primer_for(start, words);
+            const Mix4Params mp = with_ways(base, joined, words);
             d.code = mix4_code(joined, mp, words);
             d.params = mp.text();
             d.apart = apart;
@@ -5001,7 +5079,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     {
                         // (no word list here: without it)
                     }
-                const Mix4Params mp = with_ways(Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on), together, words);
+                Mix4Params base = Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                base.primer = primer_for(start, words);
+                const Mix4Params mp = with_ways(base, together, words);
                 std::vector<uint8_t> code = mix4_code(together, mp, words);
                 if (code.size() + mp.text().size() + 1 < apart + without_cost)
                 {
@@ -5189,7 +5269,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const uint64_t ls = sn == plain.size() ? pp.size() : estimate(std::vector<uint8_t>(start.begin(), start.end()));
             if (every || ms * 100 < ls * 97)
             {
-                const Mix4Params mp = with_ways(Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on), plain, words);
+                Mix4Params base = Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                base.primer = primer_for(start, words);
+                const Mix4Params mp = with_ways(base, plain, words);
                 std::vector<uint8_t> code = mix4_code(plain, mp, words);
                 const std::string params = mp.text();
                 // (the parameters cost their length and a byte in the head, the dictionary byte 0xFE's place)

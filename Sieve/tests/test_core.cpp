@@ -6234,6 +6234,36 @@ void test_mix4()
     CHECK(palette_back);
     CHECK(throws([&] { mix4_code(drawing, Mix4Params::parse("B16 I96x3 P4")); }));
     CHECK(mix4_code(drawing, Mix4Params::parse("B16 I96x3 P5")).size() < mix4_code(drawing, Mix4Params::parse("B16 I96x3")).size());
+    // v33 (reopened 3 November 2026): W1, the model primed on a dictionary first. Written after the
+    // word list and before the match ways; text only; refused where no primer can be had. Here a
+    // primer of the test's own (the hook the CLI sets reads the registered file): a page primed on
+    // pages like it given back exactly, with and without the word list and the ways, and smaller.
+    CHECK(Mix4Params::parse("B16 F80 W1 R1 C2").text() == "B16 F80 W1 R1 C2" && Mix4Params::parse("B16 W1").primer == 1 && match_ways(Mix4Params::parse("B16 W1")));
+    CHECK(throws([] { Mix4Params::parse("B16 W2"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 R1 W1"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 I60x3 W1"); }));
+    CHECK(throws([] { Mix4Params::parse("B16 W1 X"); }));
+    std::string pages;
+    for (int i = 0; i < 40; ++i)
+        pages += "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Page " + std::to_string(i) +
+                 "</title>\n</head>\n<body>\n  <div class=\"box\"><p>the rope pulls tight through every value</p></div>\n</body>\n</html>\n";
+    const std::vector<uint8_t> primer_bytes(pages.begin(), pages.end());
+    std::string page_text = "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <title>Sieve</title>\n</head>\n<body>\n";
+    for (int i = 0; i < 12; ++i) page_text += "  <div class=\"box\"><p>" + std::string(said[rng() % 10]) + " " + said[rng() % 10] + "</p></div>\n";
+    page_text += "</body>\n</html>\n";
+    const std::vector<uint8_t> page(page_text.begin(), page_text.end());
+    CHECK(throws([&] { mix4_code(page, Mix4Params::parse("B16 W1")); })); // no primer to be had
+    set_mix_primer([&](uint32_t) { return std::span<const uint8_t>(primer_bytes); });
+    bool primed_back = true;
+    for (const char* params : {"B16 W1", "B16 D60 W1", "B16 W1 R1 M4 C2"})
+    {
+        const Mix4Params p = Mix4Params::parse(params);
+        primed_back = primed_back && mix4_file(mix4_code(page, p, &words), p, &words, page.size()) == page;
+        primed_back = primed_back && mix4_file(mix4_code(std::vector<uint8_t>{}, p, &words), p, &words, 0).empty();
+    }
+    CHECK(primed_back);
+    CHECK(mix4_code(page, Mix4Params::parse("B16 W1")).size() * 2 < mix4_code(page, Mix4Params::parse("B16")).size());
+    set_mix_primer(nullptr);
 }
 
 void test_rope_wave()

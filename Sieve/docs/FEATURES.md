@@ -31,6 +31,12 @@ in groups: Sieve's own docs folder, 5,740,563 bytes mixed one by one against 4,8
 the repository's texts packed in 43.2 s instead of 97.7 s, the same bytes
 (`results/weighing-order-2026-11-02.md`).
 
+**Web pages** (HTML, CSS, JavaScript; v33). Mixed with the model first primed on a 64 KiB dictionary
+learnt from MDN's public-domain examples, which ships with Sieve; pages under 4 KiB are mixed too.
+On pages it never saw, each page's whole `.sieve` against brotli: 258 pages saved in 2014, 8.8% under
+brotli (smaller on 253); Edward's site's 11 pages, 10.3% under (smaller on all 11)
+(`results/web-dictionary-2026-11-03.md`).
+
 **Tables of digits and numbers.** The rope, which reads a file as lines and columns: a million
 digits of pi, 1,111,103 bytes, in 417,049, 1,808 bytes above the 415,241 that a million random
 digits need (7z: 512,745; STATISTICS).

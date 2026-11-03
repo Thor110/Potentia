@@ -1071,6 +1071,30 @@ $SI pal-33.sieve --to pal_si --yes > /dev/null
 diff -r pal pal_si
 python sieve_ref.py unpack pal-33.sieve --to pal_oracle > /dev/null
 cmp pal/picture.rgb pal_oracle/picture.rgb
+# Web text primed (v33, reopened 3 November 2026: mix-v4's W1): mixing's model reads MDN's examples
+# (data/dictionaries/web-mdn-2026-11-03-64k.bin, its SHA-256 checked) before the file. The test
+# site's about page alone (1,117 bytes, mixed though under 4 KiB, as a web text is), and with the
+# extension's viewer page beside it, mixed together as a group: both primed, smaller than v32, given
+# back by Sieve, sieve-install and the oracle. With --v32, no primer.
+rm -rf w33a w33b
+mkdir w33a w33b
+cp ../web/test-site/src/about.html w33a/
+cp ../web/test-site/src/about.html ../web/extension/viewer.html w33b/
+for d in w33a w33b; do
+    $S locate $d --installer $d.sieve 2>&1 | tr -d '\r' > $d.txt
+    $S locate $d --v32 --installer ${d}v32.sieve 2>&1 | tr -d '\r' > ${d}v32.txt
+    if grep -q " W1" ${d}v32.txt; then exit 1; fi
+    [ "$(wc -c < $d.sieve)" -lt "$(wc -c < ${d}v32.sieve)" ]
+    rm -rf ${d}_inst ${d}_si ${d}_oracle
+    $S install $d.sieve --to ${d}_inst > /dev/null
+    diff -r $d ${d}_inst
+    $SI $d.sieve --to ${d}_si --yes > /dev/null
+    diff -r $d ${d}_si
+    python sieve_ref.py unpack $d.sieve --to ${d}_oracle > /dev/null
+    diff -r $d ${d}_oracle
+done
+grep -q "	mix4 B16 F80 W1	about.html" w33a.txt
+grep -q "	mixt B16 F80 W1 T1536	about.html" w33b.txt
 # Copies (the v33 draft, 2 November 2026, Edward: "a folder with 100 of the same images in"): a text,
 # a JPEG and 40,000 random bytes, each with a copy in a folder of its own. With the draft each copy
 # is carried as "copy K", decided before anything else (the JPEG not recoded twice), and given back
