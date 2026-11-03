@@ -272,7 +272,7 @@ python tools/make_release.py --version 0.13.77 --seven-zip      # carry a 7z of 
 It stages only what the program uses (the programs, their data folders, an empty `maps`
 folder, the licences; no map is shipped inside the release, since the published map names the
 release's own files) as the folder `Sieve-<version>`, with `hallway` the one program at the top and
-`sieve` and `sieve-install` in `tools\` (with a short `README.txt`, so nobody starts the wrong
+`sieve`, `sieve-install` and `sieve-view` (the picture viewer, from 3 November 2026) in `tools\` (with a short `README.txt`, so nobody starts the wrong
 program first; `sieve` there finds the data folders above it, checked). From the folder it makes
 `sieve.sieve` and `sieve.exe` (`sieve-setup` on Linux and macOS, where a program has no
 extension), each the folder packed at the newest version (`--items`; until 22 October 2026 they

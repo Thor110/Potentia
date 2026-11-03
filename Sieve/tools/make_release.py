@@ -10,7 +10,7 @@ order matters and is easy to get wrong by hand:
      maps folder, the licences), staged by name, never the build folder's own clutter, and from
      the source the right-click menu (context\) and the web extension with its host's scripts
      (web\), whose scripts find the programs in tools\. The hallway
-     is the one program at the top; sieve and sieve-install go in tools\, with a note saying what
+     is the one program at the top; sieve, sieve-install and sieve-view go in tools\, with a note saying what
      they are, so nobody starts the wrong program first. (A build folder keeps them together; the
      programs look in both places.) No map is
      shipped inside it.
@@ -78,8 +78,8 @@ EXE = ".exe" if os.name == "nt" else ""
 # What a release holds from the build folder (client/node_graph.cpp maps the same list as "This
 # installation"): the programs, the folders they read, and the licences. Anything else in a build
 # folder (CMakeFiles, objects, fetched sources, the trimmed SDL) is the build's, not the release's.
-PROGRAMS = ["hallway", "sieve", "sieve-install"]
-TOOLS = ["sieve", "sieve-install"]  # in the release, these go in tools/ below the hallway
+PROGRAMS = ["hallway", "sieve", "sieve-install", "sieve-view"]
+TOOLS = ["sieve", "sieve-install", "sieve-view"]  # in the release, these go in tools/ below the hallway
 TOOLS_NOTE = """Sieve's tools
 
 These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folder above.
@@ -88,8 +88,13 @@ These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folde
                       maps, filters and models. Run it from a command prompt: sieve help
   sieve-install{exe}  the installer. The hallway's File Locator copies it to make installer
                       programs; run on its own, it installs a .sieve file beside it or dropped on it.
+  sieve-view{exe}     the picture viewer: a picture (PNG, JPEG, BMP, GIF, TGA), or Sieve
+                      instructions holding only pictures (.simage, .isieve, or such a .sieve),
+                      opened or dropped on it. Its Sieve button makes the picture shown a .simage
+                      by the sieve beside it. sieve-view --help gives its keys.
 
-Both find the installation's data folders (dictionaries, models) in the folder above.
+sieve and sieve-install find the installation's data folders (dictionaries, models) in the folder
+above; sieve-view needs none.
 """
 FOLDERS = ["dictionaries", "models", "lang", "prompts", "fonts", "meshes", "vault", "filters", "training", "third_party_licenses"]
 FILES = ["potentia-license.txt"]
@@ -367,7 +372,7 @@ def main():
         if shown.returncode != 0 or "registry  " not in shown.stdout or "hash ok" not in shown.stdout:
             fail(f"tools/sieve{EXE} does not find {folder_name} in the folder above it (is the build older than the "
                  f"source? build Release in Visual Studio, then run this again):\n{shown.stdout}{shown.stderr}")
-    print(f"   {folder}: hallway{EXE} at the top; sieve and sieve-install in tools/, finding the data above")
+    print(f"   {folder}: hallway{EXE} at the top; sieve, sieve-install and sieve-view in tools/, finding the data above")
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / "source"
         run([sieve, "install", source_sieve, "--to", dest])

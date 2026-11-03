@@ -1,19 +1,19 @@
-# The missing word list said plainly (2 November 2026)
+# The picture viewer in the release (3 November 2026)
 
-Unzip this over the repository root, on top of your commit ad9b984 ("sieve docs post link"). One
-local commit, not pushed: 1224dc6. The unit suite passes (77,147 checks, 0 failures). The full CI
-hasn't been run on it.
+Unzip this over the repository root, on top of your commit f4e8200 ("sieve planned post
+adjustments"). One local commit, not pushed: 1157ab0. The hallway and sieve-view build here; I
+couldn't run make_release.py here (it needs 7-Zip and a Windows Release build), so your next
+release is its test.
 
-A Sieve that can't find its dictionaries folder still packs, but mixes texts without the word
-list, and they come out larger: a 20 KB text, 7,217 bytes against 6,205. Until now only each
-file's own line said so ("the word list not to be had here").
+- **`tools/make_release.py`:** `sieve-view` joins the programs a release carries, in `tools\`
+  beside `sieve` and `sieve-install`, so its Sieve button finds the `sieve` beside it. It's
+  required like the others: a release stops if the build has no `sieve-view.exe` (it's built with
+  the client, as `sieve-install` is).
+- **The tools' `README.txt`** says what it is: the picture viewer for PNG, JPEG, BMP, GIF, TGA and
+  Sieve instructions holding only pictures (.simage, .isieve), its Sieve button, and
+  `sieve-view --help` for its keys.
+- **The hallway's "This installation" map** lists it.
+- **`docs/SIEVE-INSTALL-USAGE.md`** names it among the release's tools.
 
-Now it's said in two places:
-- **`sieve locate`'s closing report:** a `words` line with the reason, for example
-  `words     mixing's word list could not be had (cannot find the dictionary registry
-  (dictionaries.tsv)): the texts that would have been weighed with it were mixed without it, larger
-  (16% on a 20 KB text); Sieve finds its dictionaries folder beside it`. Checked here: a copy of
-  sieve away from its data prints it; the one beside its data doesn't.
-- **The File Locator's log:** a `warning:` line under `settings:`, before any file's line. This
-  one compiles but I couldn't run the hallway here, so your next File Locator run with a moved
-  Sieve is its test.
+Not done: nothing yet opens `.simage` files with the viewer by a double-click. The right-click menu
+(`context\install_context.bat`) could register it, if you'd like.
