@@ -2743,22 +2743,38 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
     // to 5.71 whole) 1.23 to 3.71 there, in 0.2 to 7 s against 6 to 168 s for the whole
     // (results/rope-probe-2026-11-02.md). At 1.1 or more, neither the rope's search nor the pieces
     // are tried, as for a text above.
+    // Where the start says no but only just (under 1.2), 256 KiB from the file's middle is asked
+    // too, and the search made where the rope wins there (under 1.0) (3 November 2026). Silesia's mr,
+    // a scan whose first 256 KiB are its header and first slice, came to 1.09 at its start (by `sieve
+    // rope` against xz's preset 9e) and 0.92 in its middle, and the rope carried it whole at 0.85
+    // (2,314,195 bytes against LZMA2's 2,735,555). Asking the middle wherever the start said no cost
+    // Silesia 238 s for nothing more: samba (1.46, then 0.84) and sao (1.11, then 1.07) were searched
+    // and LZMA2 carried them still. Every file the rope lost on in the measurement above came to 1.23
+    // or more at its start.
     if (rope_newest >= 5 && !asked_every && bytes.size() > (size_t(512) << 10) && !text_like(std::span<const uint8_t>(bytes.data(), size_t(256) << 10)))
     {
-        const std::span<const uint8_t> start(bytes.data(), size_t(256) << 10);
-        const RopeSearch probe = [&] {
-            const timings::Scope t("pack.rope.probe");
-            return rope_search(start, rope_seconds, rope_newest);
-        }();
-        const uint64_t by_rope = rope_code(start, probe.best).size();
-        const uint64_t by_lzma2 = estimate(std::vector<uint8_t>(start.begin(), start.end()));
-        if (by_rope * 10 >= by_lzma2 * 11 && !force_requested())
+        size_t tried = 0;
+        auto ratio_at = [&](size_t from) {
+            const std::span<const uint8_t> part(bytes.data() + from, size_t(256) << 10);
+            const RopeSearch probe = [&] {
+                const timings::Scope t("pack.rope.probe");
+                return rope_search(part, rope_seconds, rope_newest);
+            }();
+            tried += probe.tried;
+            const uint64_t by_rope = rope_code(part, probe.best).size();
+            const uint64_t by_lzma2 = estimate(std::vector<uint8_t>(part.begin(), part.end()));
+            return double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1));
+        };
+        const double at_start = ratio_at(0);
+        const double at_middle = at_start >= 1.1 && at_start < 1.2 ? ratio_at(bytes.size() / 2) : 0;
+        if (at_start >= 1.1 && (at_start >= 1.2 || at_middle >= 1.0) && !force_requested())
         {
-            char ratio[32];
-            std::snprintf(ratio, sizeof ratio, "%.2f", double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1)));
+            char ratio[96];
+            if (at_middle > 0) std::snprintf(ratio, sizeof ratio, "%.2f (and 256 KiB from its middle %.2f)", at_start, at_middle);
+            else std::snprintf(ratio, sizeof ratio, "%.2f", at_start);
             w.rope_said = std::string("not searched: its first 256 KiB the rope's search makes ") + ratio + " times LZMA2's";
             progress(w.rope_said);
-            w.tried += probe.tried;
+            w.tried += tried;
             w.lzma2 = whole_estimate(bytes);
             w.rope_bytes = UINT64_MAX;
             w.pieces_said = "not cut: the rope does not win this file";
@@ -3118,7 +3134,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
         // and shape, so the answer is kept, by thread, for the second.)
         uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
-                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58;
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58 ^
+                       uint64_t(f.size() > (size_t(4) << 20)) << 59;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
         thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
         if (const auto hit = weighed.find(key); hit != weighed.end())
@@ -3137,6 +3154,21 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             if (k == 2) t.recover = true, t.min_match = 4;
             if (const uint64_t n = mix4_code(start, t, words).size(); n < least)
                 least = n, best = mp, best.candidates = 2, best.recover = t.recover, best.min_match = t.min_match;
+        }
+        // All three, chosen on the start of a file over 4 MiB, weighed again against C2 alone on its
+        // first 4 MiB (3 November 2026). R1 and M4's cost shows only once a file runs to some MiB:
+        // on Silesia's samba the first 256 KiB and 1 MiB came out smaller with all three and the
+        // first 4 MiB 5.3% larger, and whole, all three made 3,342,227 bytes against C2's 3,277,334;
+        // enwik8 21,870,393 against 21,431,822. On the five Silesia files over 4 MiB where all three
+        // win whole (mozilla, osdb, x-ray, sao, ooffice), the first 4 MiB said so too.
+        if (best.recover && f.size() > (size_t(4) << 20) && !stop_requested())
+        {
+            const size_t more = size_t(4) << 20;
+            const std::span<const uint8_t> first = f.first(mp.palette ? more - more % mp.channels : more);
+            Mix4Params c2 = mp, all = best;
+            c2.table_bits = all.table_bits = Mix4Params::for_size(first.size()).table_bits;
+            c2.candidates = 2;
+            if (mix4_code(first, c2, words).size() <= mix4_code(first, all, words).size()) best.recover = false, best.min_match = 6;
         }
         weighed[key] = {best.recover, best.min_match, best.candidates};
         return best;

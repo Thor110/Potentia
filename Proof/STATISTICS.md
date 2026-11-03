@@ -4,7 +4,8 @@ What Sieve's `.sieve` files have come to, file by file, against 7-Zip on the sam
 these were measured on Edward's machine (Windows) at earlier versions of the `.sieve` format, as
 each was built; the version is given where it is known. Sizes are in bytes. "On disk" is the space
 Windows gives a file, in whole clusters of 4,096 bytes. The ratios and percentages are worked out
-from the sizes given.
+from the sizes given. The `sieve-manifest-v33` figures (3 November 2026) were made on a Linux
+machine of 4 logical processors: the sizes are the same on any machine, the times are not.
 
 ## Contents
 
@@ -30,17 +31,17 @@ from the sizes given.
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | [Sieve's own release](#the-application-itself) | 45,967,736 | 8,235,077 | 6,470,236 | 7.10:1 | −21.43% |
 | [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
-| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,547,893 | 4.64:1 | −17.38% |
+| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,431,896 | 4.67:1 | −17.82% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% |
-| [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 42,091,120 | 5.04:1 | −13.13% |
+| [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 41,710,177 | 5.08:1 | −13.92% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
 | [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
-| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 524,389 | 4.56:1 | −23.56% |
+| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 523,367 | 4.57:1 | −23.71% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,425,909 | 1.04:1 | −3.26% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% |
-| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,865 | 1,694:1 | −65.75% |
+| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,686 | 1,733:1 | −66.53% |
 
 "Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
 
@@ -122,8 +123,16 @@ the word list counted by use (`F80`).
 | Sieve v31, prioritised for decoding | 24,768,410 | 4.04:1 | 24.77% | −5.03% | 630.0 s | 1.241 s, then checked and written in 0.495 s |
 | Sieve v32, prioritised for decoding | 24,768,406 | 4.04:1 | 24.77% | −5.03% | 612.3 s | 1.270 s, then checked and written in 0.494 s |
 | Sieve v31, optimised for size | 21,675,870 | 4.61:1 | 21.68% | −16.89% | 691.4 s | 119.643 s, then checked and written in 0.518 s |
-| **Sieve v32** (`.sieve`), optimised for size | **21,547,893** | **4.64:1** | **21.55%** | **−17.38%** | 664.3 s | 112.563 s, then checked and written in 0.527 s |
+| Sieve v32, optimised for size | 21,547,893 | 4.64:1 | 21.55% | −17.38% | 664.3 s | 112.563 s, then checked and written in 0.527 s |
+| **Sieve v33** (`.sieve`), optimised for size | **21,431,896** | **4.67:1** | **21.43%** | **−17.82%** | | 145.085 s, then checked and written in 0.427 s (on the Linux machine) |
 | PPMd var. J (`enwik8.pmd`), as published | 21,388,296 | 4.68:1 | 21.39% | −17.99% | | |
+
+**At `sieve-manifest-v33` (3 November 2026, the Linux machine, Try every way):** 21,431,896 bytes,
+115,997 (0.54%) under v32 and 43,600 (0.20%) over PPMd: mixed with the word list and the match
+model's second candidate (`mix4 B22 F80 C2`). The first v33 run chose all three of the match
+model's ways on the file's first 256 KiB and made 21,870,393, larger than v32; the packer now
+weighs them again on the first 4 MiB of a file over 4 MiB (results/v33-measured-2026-11-03.md).
+Prioritised for decoding it is 24,768,406, as at v32. The making time was not measured alone.
 
 Optimised for size, Sieve v32 unpacks it at about 0.89 MB a second: mixing decodes as slowly as it
 codes. v32's word list counted by use took 127,977 bytes off v31's (0.59%). Prioritised for
@@ -295,6 +304,35 @@ it), not 7-Zip's own.
   the x86 filter, but nothing here measures how much that would save.
 - **For decoding speed:** Try every way made no difference to any file.
 
+**At `sieve-manifest-v33` (3 November 2026, the Linux machine, by `tools/bench/bench_files.py`,
+for size with Try every way and for decoding without it; every `.sieve` installed again and
+checked).** All twelve came to **41,710,177 bytes for size** (5.08:1, 13.92% under 7z, 380,943
+under v32) and 47,262,336 for decoding (v32's bytes, made in 565.4 s and installed in 5.6 s in
+all here):
+
+| File | 7z (9e) | v33, for size, Try every way | Against v32 | v33, for decoding | Against 7z, for size | Ways (for size) |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| mozilla | 13,376,180 | **13,318,582** | −57,657 | 13,376,239 | −0.43% | `mix4 B22 R1 M4 C2` |
+| webster | 8,368,609 | **6,226,845** | −19,880 | 8,355,800 | −25.59% | `mix4 B22 F80 C2` |
+| nci | 1,449,209 | **1,281,583** | −12,070 | 1,440,114 | −11.57% | `mix4 B22 C2` |
+| samba | 3,739,464 | **3,277,403** | −10,592 | 3,728,015 | −12.36% | `mix4 B22 C2` |
+| dickens | 2,831,149 | **2,205,961** | −4,481 | 2,825,117 | −22.08% | `mix4 B22 F80 C2` |
+| osdb | 2,844,493 | **2,364,331** | −25,563 | 2,835,826 | −16.88% | `mix4 B22 R1 M4 C2` |
+| mr | 2,751,831 | **1,967,650** | 0 | 2,314,195 | −28.50% | `mix4 B22 I512x2` |
+| x-ray | 4,491,203 | **3,614,947** | −7,736 | 4,146,903 | −19.51% | `mix4 B22 I1901x2 R1 M4 C2` |
+| sao | 4,425,604 | **4,149,429** | −21,165 | 4,413,371 | −6.24% | `mix4 B22 I12264x1 R1 M4 C2` |
+| reymont | 1,315,531 | **1,089,497** | −3,553 | 1,313,857 | −17.18% | `mix4 B22 C2` |
+| ooffice | 2,427,163 | **1,864,843** | −214,185 | 2,079,028 | −23.17% | `mix4 B22 R1 M4 C2 X` |
+| xml | 434,830 | **349,106** | −4,061 | 433,871 | −19.71% | `mix4 B22 F80 C2` |
+| **all twelve** | **48,455,266** | **41,710,177** | **−380,943** | **47,262,336** | **−13.92%** | |
+
+- **v33's ways:** the match model's (`R1 M4 C2`, or `C2` alone) on every file mixed but `mr`, and
+  the x86 filter on `ooffice`, a program, 10.3% smaller than v32 made it (in the x86 stream).
+- **Two faults found by this run and fixed (no change to the format):** `samba` and enwik8 had all
+  three match ways chosen on their first 256 KiB and came out larger than at v32 (samba 3,342,302);
+  and the rope's test on a file's start (2 November) left `mr` to LZMA2 for decoding (2,735,609).
+  Both are in results/v33-measured-2026-11-03.md.
+
 ## A game archive: MAPS.WoW
 
 A file from Jeff Wayne's *The War of the Worlds* (1998, PC), in the game's own `.WoW` archive format.
@@ -440,7 +478,8 @@ smaller the `.sieve` is than `pi6.7z` (512,745 bytes).
 | pg996.txt | 2,391,678 | 2,392,064 | | |
 | pg996.7z | 686,020 | 688,128 | 3.49:1 | |
 | pg996.txt.sieve, v31 | 533,148 | | 4.49:1 | −22.28% |
-| **pg996.txt.sieve, v32** | **524,389** | | **4.56:1** | **−23.56%** |
+| pg996.txt.sieve, v32 | 524,389 | | 4.56:1 | −23.56% |
+| **pg996.txt.sieve, v33** | **523,367** | | **4.57:1** | **−23.71%** |
 
 The `.sieve` was measured again on 30 October 2026, at `sieve-manifest-v31` (mixed, with the word
 list), with Sieve 0.13.77's `sieve locate pg996.txt --installer` at its defaults: 533,148 bytes,
@@ -451,6 +490,10 @@ and 5.3 s to install; its size on disk was not measured.
 Made again at `sieve-manifest-v32` on 31 October 2026, on Edward's machine with Try every way: **524,389
 bytes**, 8,759 (1.64%) under v31's, mixed with v32's word list counted by use (`mix4 B22 F80`, 524,319
 of it the file). It took 21.8 s to make and 2.9 s to install.
+
+At `sieve-manifest-v33` (3 November 2026, the Linux machine, Try every way): **523,367 bytes**, 1,022
+(0.19%) under v32's, mixed with the word list and the match model's second candidate (`mix4 B22 F80
+C2`), made in 25.2 s and installed in 4.2 s here.
 
 ## Photographs (JPEG)
 
@@ -529,10 +572,11 @@ All four take one cluster on disk, 4,096 bytes.
 
 `degrees.sieve` (in this folder) holds 3,960 files: an item of every dimension at every whole degree
 from 0 to 359. Each is an item of one of Sieve's lines, so the `.sieve` carries only its place on its
-line, and Sieve makes it again on installing. 13,321,756 bytes come to **7,865** (1,694:1; v32,
-made again 31 October 2026: 7,887 as v20), where a 7z of the same folder is 22,961 (the File
-Locator's own LZMA2 at preset 9e, one stream, makes 9,226). Made in 149.3 s with Try every way.
-Installed on Edward's machine: 3,960 files, every one checked against its SHA-256, decoded in 0.356
+line, and Sieve makes it again on installing. 13,321,756 bytes come to **7,686** (1,733:1; v33,
+made again 3 November 2026 on the Linux machine with Try every way, in 5.8 s, and installed there
+the same, 3,960 files checked; 7,865 as v32, 7,887 as v20), where a 7z of the same folder is 22,961 (the File
+Locator's own LZMA2 at preset 9e, one stream, makes 9,226). At v32 it was made in 149.3 s with Try every way, on Edward's machine.
+Installed there: 3,960 files, every one checked against its SHA-256, decoded in 0.356
 s, checked and written in 1.428 s.
 
 This works only for files that are Sieve's own items, made from their places; a file from anywhere

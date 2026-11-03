@@ -129,9 +129,12 @@ many as the threads and memory allow, and the result is the same at any thread c
      where that comes to 1.1 times LZMA2's estimate of the same or more, neither the rope nor the
      pieces are tried. Where the rope won whole (pictures, a sound) the test came to 0.69 to 0.94;
      where it lost (programs, a map, mozilla's tar, screenshots) 1.23 to 3.71; the map packed in 42
-     s where it took 166, to the same bytes (results/rope-probe-2026-11-02.md). Not with Try every
-     way ticked itself. Log: `rope not searched: its first 256 KiB the rope's search makes R times
-     LZMA2's`.
+     s where it took 166, to the same bytes (results/rope-probe-2026-11-02.md). Where the start comes to
+     1.1 but under 1.2, 256 KiB from the file's middle is asked too, and the rope searched where it
+     wins there (under 1.0) (3 November 2026): Silesia's `mr`, a scan, came to 1.09 at its start and
+     0.92 in its middle, and the rope carries it whole in 2,314,195 bytes against LZMA2's 2,735,555.
+     Not with Try every way ticked itself. Log: `rope not searched: its first 256 KiB the rope's
+     search makes R times LZMA2's`, with the middle's after it where it was asked.
    - Not searched either for a repeating byte or pattern (found before anything else): LZMA2, the
      rope's wave of differences and (from v33) the segments are weighed, with no search.
 3. **Pieces**: the file cut into 4 KiB blocks, each weighed by LZMA2 against the rope. Runs of
@@ -157,7 +160,13 @@ many as the threads and memory allow, and the result is the same at any thread c
        on their start the same way (results/web-dictionary-2026-11-03.md).
    - From v33 (frozen 3 November 2026; `--v32` makes none), each of those codes also weighs the match model's ways on
      the same start: none, `C2`, or `R1 M4 C2`, the smallest kept (programs: Silesia's mozilla 3.3%
-     smaller mixed whole, under LZMA2; SPECIFICATIONS, v33).
+     smaller mixed whole, under LZMA2; SPECIFICATIONS, v33). Where all three win there and the file
+     is over 4 MiB, they are weighed again against `C2` alone on its first 4 MiB (3 November 2026):
+     `R1` and `M4` cost more as a file runs on, so enwik8 came out 1.5% larger with them whole
+     (21,870,393 bytes against `C2`'s 21,431,822) and samba 2.0% (3,342,227 against 3,277,334),
+     though their first 256 KiB said otherwise; on the five Silesia files where all three win whole,
+     the first 4 MiB said so too. It costs two codes of 4 MiB (samba: 256.9 s to make, from 231.7)
+     (results/v33-measured-2026-11-03.md).
    - A shape guessed from the bytes alone (not the rope's, not a PNG's own) is taken only where it
      wins the start by 2% (2 November 2026: a near tie is no guide to the whole; Silesia's mozilla).
    - It is then mixed whole only where that start came out at least 3% under LZMA2's; and mixed whole,

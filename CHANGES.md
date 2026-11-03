@@ -1,62 +1,70 @@
-# v33 reopened: web pages mixed with the MDN dictionary (3 November 2026)
+# v33 measured, two packer faults fixed, installing quicker (3 November 2026)
 
-This zip also holds the earlier web dictionary measurement (results and script), in case you haven't
-applied that one yet. Every file is relative to your current main.
+Copy `Proof/` and `Sieve/` over the repository's. No change to the `.sieve` format: every reader
+reads what this build makes, and what it read before. Full figures and method:
+`Sieve/results/v33-measured-2026-11-03.md`.
 
-## What's new
+## Measurements at v33 (Linux, 4 processors; sizes the same on any machine)
 
-- **`W1`, a new setting for mixing.** Before mixing a web text (HTML, CSS, JavaScript), the model
-  first reads `data/dictionaries/web-mdn-2026-11-03-64k.bin`, so the page starts with what it
-  learnt. The dictionary is 65,536 bytes, learnt from MDN's CC0 example repositories. Its SHA-256
-  is part of the format, so it can never change. It is tried on single files, groups of files mixed
-  together, and the mixed stream, and kept only where it is smaller.
-- **Small pages.** Web texts from 128 bytes to 4 KiB are now mixed too. Before, mixing skipped
-  anything under 4 KiB.
-- **Which files count as web text.** A file needs tags at least every 256 bytes, or braces with
-  statements at least every 512 bytes, and no `#include`. Without that density rule, nine of the
-  repository's Markdown files were tried with the dictionary for nothing, and docs/ took 4.6 s
-  longer for the same bytes.
-- **Who can read it.** Sieve, sieve-install, the hallway and the Python decoder (oracle) all read
-  it, and refuse it if the dictionary is missing or differs. `--v32` makes exactly what v32 made.
-- **A bug found and fixed while building it.** Two pages that v32 mixed as one group came out
-  larger at first, 710 bytes against 692. One page primed alone had beaten the unprimed group.
-  Groups and the stream are primed too now, which brings it to 509.
+| | v32 | v33 |
+| :--- | ---: | ---: |
+| enwik8, for size | 21,547,893 | **21,431,896** (43,600 over PPMd) |
+| Silesia, all twelve, for size | 42,091,120 | **41,710,177** (−13.92% against 7z) |
+| Silesia, for decoding | 47,262,336 | 47,262,336 |
+| Don Quixote | 524,389 | **523,367** |
+| control.py | 591 | 591 |
+| degrees.sieve | 7,865 | **7,686** |
+| welcome to the sieve.sieve | 158 | 158 |
 
-## Measured
+Every `.sieve` was installed again and checked. `Proof/STATISTICS.md` has the v33 rows (At a
+glance, enwik8, Silesia file by file, Don Quixote, degrees). `Proof/degrees.sieve` is the v33 one.
+`PROOF.md`'s size line now says 7,686. Its installation line ("on my computer ... 0.356s") is about
+the v32 file, so you may want to install the new one and update it.
 
-Each page's whole `.sieve` against brotli at quality 11. None of these pages were learnt from.
+## Two faults the run found, both fixed (`tools/cli/pack.cpp`)
 
-| Pages | brotli | Sieve before | Sieve now | Smaller than brotli (before → now) |
-|---|---|---|---|---|
-| 258 from 2014 | 4,194,084 | 3,955,146 | 3,826,134 (−8.8%) | 221 → 253 |
-| Your 11 | 32,518 | 33,911 | 29,171 (−10.3%) | 2 → 11 |
-| MDN learning-area, 154 | 71,656 | 100,888 | 66,148 (−7.7%) | 2 → 113 |
+- **The match ways chosen on too short a start.** On enwik8 and samba, all three ways (`R1 M4 C2`)
+  won the first 256 KiB and lost whole. enwik8 came to 21,870,393 bytes, larger than v32. `R1` and
+  `M4` cost more as a file runs on. Where all three win the first 256 KiB of a file over 4 MiB,
+  they are now weighed again against `C2` alone on its first 4 MiB. That 4 MiB choice matched the
+  whole file on all seven files tested. Results:
+  - enwik8: 21,431,896;
+  - samba: 3,277,403;
+  - mozilla, osdb, x-ray, sao and ooffice: the same bytes as before.
 
-- No page came out larger than before.
-- Your site packed as one folder: 20,192 bytes at v32, 19,421 now.
-- The cost: about 0.1 s for each file or group mixed this way, both when packing and when
-  installing.
+  Cost: two 4 MiB codes, only on those files (samba took 256.9 s to make, from 231.7 s).
+- **The rope's probe (2 November) left `mr`, a scan, to LZMA2 for decoding** (2,735,609 bytes
+  against v32's 2,314,195). Its start comes to 1.09 to 1.1, but its middle is 0.92. Where the start
+  is from 1.1 up to 1.2, the file's middle is now asked too, and the rope is searched where the
+  middle shows it winning. mr is 2,314,195 again, and Silesia's making time is as before (565.4 s).
+  Asking the middle on every file cost 238 s and gained nothing more.
 
-## Files
+## Installing made quicker (`tools/cli/locate.cpp`, `core/src/mix.cpp`)
 
-- **Core:** `core/include/sieve/mix.hpp` and `core/src/mix.cpp` (the `W1` setting and priming).
-- **Sieve:**
-  - `tools/cli/items.cpp` and `.hpp` (loading the dictionary and checking it);
-  - `tools/cli/pack.cpp` (weighing it);
-  - `locate.cpp`, `help.cpp` and `sieve_cli.cpp` (messages).
-- **Python decoder:** `reference/sieve_ref.py`.
-- **Tests:**
-  - `tests/test_core.cpp`. Unit suite: 154,308 checks, 0 failures.
-  - `ci/steps/11-oracle.sh`: a new check of a test-site page on its own and with a second page,
-    each smaller than at v32 and installed exactly by Sieve, sieve-install and the oracle. It passes
-    when run on its own; the full CI hasn't been run on this build.
-- **The dictionary:** `data/dictionaries/web-mdn-2026-11-03-64k.bin`, and its README section (where
-  it came from: the MDN repositories and commits).
-- **Docs:**
-  - SPECIFICATIONS §12.2 v33, SIEVE-FORMAT.md, METHODS.md, FEATURES.md, NEXT-VERSION.md, HANDOFF.md;
-  - `results/web-dictionary-2026-11-03.md` and `tools/measure_web_dictionary.py`.
+1. **Files made again from a recipe now use every core.** These are PNGs re-saved, JPEGs from
+   brunsli and archives; until now they were made one at a time. On the repository's 95 pictures
+   packed with Compressed formats (temporary), installing took **6.2 to 6.5 s, down from 12.9 to
+   13.9 s**, with every file the same on all ten installs.
+2. **Mixing's large tables on huge pages (Linux only).** Decoding 16 MB of enwik8 took a median
+   **25.27 s against 26.16 s** (seven runs each; about 3%). The codes are unchanged.
+3. **The x86 stream is decoded beside a mixed lzma2 stream.** Checked with Sieve, sieve-install and
+   the oracle, which all give the files back. Not timed: the x86 stream takes under a second.
 
-## Still to do
+Looked at and left (reasons in the results file):
+- overlapping the mixed lzma2 stream with the other files;
+- keeping a primed model between files;
+- the rope's decoder;
+- mixing in independent blocks (a new format).
 
-- Your full CI on Windows, Linux and macOS.
-- (3) STATISTICS.md and the Proof samples measured again at v33.
+## Checks run here
+
+- Unit suite: 154,308 checks, 0 failures.
+- CI step 11's rope-probe block: passes, unchanged.
+- Your full CI is still to run. Its archive and picture blocks go through the parallel remakes.
+  No CI block makes a mixed lzma2 stream beside programs, so the x86 thread was checked by hand
+  only (v29, five texts and a program).
+
+## Still yours to run at v33
+
+The photos, pi6, MAPS.WoW, WoWRevived, ALTEngine and the release. STATISTICS still gives those at
+v32.

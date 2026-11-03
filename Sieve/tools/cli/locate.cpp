@@ -21,6 +21,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <cstdio>
@@ -279,9 +280,41 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     if (!m.lzma2.mixed.empty() && !m.v32 && Mix4Params::parse(m.lzma2.mixed).by_use)
         throw std::runtime_error("manifest: its lzma2 stream mixed with a word list counted by use (F80), which is sieve-manifest-v32's");
     if (!m.lzma2.mixed.empty() && !m.v33 && match_ways(Mix4Params::parse(m.lzma2.mixed)))
-        throw std::runtime_error("manifest: its lzma2 stream mixed with the match model's ways (R1, M4, C2), the x86 filter (X) or the palette (P), which are sieve-manifest-v33's");
-    std::vector<uint8_t> x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
-    std::vector<uint8_t> plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
+        throw std::runtime_error("manifest: its lzma2 stream mixed with the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) or a primer (W), which are sieve-manifest-v33's");
+    // The two streams from their own bytes. Where the lzma2 stream is mixed (as slow to decode as
+    // to code) and the x86 stream holds programs, the x86 stream is decoded on a thread of its own
+    // meanwhile, so its time is no longer added to the mixing's.
+    std::vector<uint8_t> x86, plain;
+    if (!m.lzma2.mixed.empty() && m.x86.packed > 0 && pack_threads() > 1)
+    {
+        std::exception_ptr fault;
+        std::thread beside([&] {
+            try
+            {
+                x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+            }
+            catch (...)
+            {
+                fault = std::current_exception();
+            }
+        });
+        try
+        {
+            plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
+        }
+        catch (...)
+        {
+            beside.join();
+            throw;
+        }
+        beside.join();
+        if (fault) std::rethrow_exception(fault);
+    }
+    else
+    {
+        x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+        plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
+    }
     std::vector<ManifestEntry*> files;
     for (ManifestEntry& e : m.entries)
         if (!e.dir) files.push_back(&e);
@@ -293,6 +326,34 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     size_t xa = 0, pa = 0, ra = 0;
     std::vector<Deferred> deferred; // the rope's and mixing's files, decoded at once after the listing is read
     std::vector<char> late(files.size(), 0); // files whose bytes come after the listing is read (remade after, too)
+    // A file made again from a recipe (an archive, a JPEG from its brunsli form, a PNG), as a job for
+    // decode_deferred's pool: from its own bytes alone, so the files are made on every core at once
+    // (3 November 2026: they were made one at a time). A recipe's fault is said as before, without
+    // the pool's "manifest:" before it.
+    auto remake_job = [](size_t i, const ManifestEntry& e, std::vector<uint8_t> in) {
+        auto own = std::make_shared<const std::vector<uint8_t>>(std::move(in));
+        const std::string recipe = e.remake;
+        const uint64_t memory = 2 * (uint64_t(own->size()) + e.size);
+        return Deferred{i, e.path,
+                        [own, recipe] {
+                            try
+                            {
+                                return remaker()(recipe, *own);
+                            }
+                            catch (const std::invalid_argument& x)
+                            {
+                                throw std::runtime_error(x.what());
+                            }
+                        },
+                        memory};
+    };
+    std::vector<size_t> remade; // (in the listing's order)
+    auto remade_as_listed = [&](const std::vector<size_t>& which) {
+        for (const size_t i : which)
+            if (bytes[i].size() != files[i]->size)
+                throw std::runtime_error(files[i]->path + " was not remade as it was (" + std::to_string(bytes[i].size()) + " bytes, not " +
+                                         std::to_string(files[i]->size) + "): this Sieve's compressor writes differently from the one that made the instructions");
+    };
     // v30: groups of files mixed together, each decoded as one ("mixt <parameters> T<bytes>" opens
     // one, its code next in the rope stream; "mixn" is the next of the open group's files), then cut.
     struct Group
@@ -658,16 +719,17 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             if (!remaker())
                 throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
                                          "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
-            bytes[i] = remaker()(e.remake, bytes[i]);
-            if (bytes[i].size() != files[i]->size)
-                throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[i].size()) + " bytes, not " +
-                                         std::to_string(files[i]->size) + "): this Sieve's compressor writes differently from the one that made the instructions");
+            // (Made with the deferred files, on every core: each from its own bytes alone. It was one
+            // at a time here; checked below in the listing's order.)
+            deferred.push_back(remake_job(i, e, std::move(bytes[i])));
+            remade.push_back(i);
         }
     }
     if (ra != m.rope_carried.size()) throw std::runtime_error("manifest: its rope stream holds more than its files");
     // The deferred files decoded, at once; then those remade from them, in order.
     group_done("with the listing");
     decode_deferred(deferred, bytes);
+    remade_as_listed(remade);
     // v30: each group cut into its files.
     for (const Slice& c : slices)
     {
@@ -675,6 +737,9 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         bytes[c.i].assign(g.begin() + std::ptrdiff_t(c.at), g.begin() + std::ptrdiff_t(c.at + c.size));
     }
     groups.clear();
+    // Those whose own bytes were decoded above, made again from them, on every core as well.
+    std::vector<Deferred> late_remakes;
+    std::vector<size_t> late_remade;
     for (size_t d = 0; d < files.size(); ++d)
     {
         if (!late[d]) continue;
@@ -683,11 +748,11 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         if (!remaker())
             throw std::runtime_error("these Sieve instructions remake an archive from what it holds (" + e.path +
                                      "): open them with Sieve (sieve install, or the hallway's File Locator), which remakes it");
-        bytes[d] = remaker()(e.remake, bytes[d]);
-        if (bytes[d].size() != e.size)
-            throw std::runtime_error(e.path + " was not remade as it was (" + std::to_string(bytes[d].size()) + " bytes, not " +
-                                     std::to_string(e.size) + "): this Sieve's compressor writes differently from the one that made the instructions");
+        late_remakes.push_back(remake_job(d, e, std::move(bytes[d])));
+        late_remade.push_back(d);
     }
+    decode_deferred(late_remakes, bytes);
+    remade_as_listed(late_remade);
     for (size_t i = 0; i < files.size(); ++i)
     {
         const ManifestEntry& e = *files[i];

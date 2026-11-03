@@ -17,6 +17,12 @@ MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was ou
   were weighed primed for nothing (docs/ 4.6 s slower, the same bytes), so a web text now needs its
   tags or braces at a page's density.
 - **Measured:** results/web-dictionary-2026-11-03.md.
+- **Measured again at v33 (3 November 2026, results/v33-measured-2026-11-03.md):** enwik8 and Silesia
+  showed two packer faults, both fixed with no change to the format. All three match ways were
+  chosen on a file's first 256 KiB where whole they cost: enwik8 21,870,393 bytes against v32's
+  21,547,893, now 21,431,896 (`C2` alone, weighed again on the first 4 MiB). And the rope's probe (2
+  November) left `mr` to LZMA2 for decoding (2,735,609 against v32's 2,314,195); a start near the
+  line now asks the file's middle too, and it is 2,314,195 again.
 
 **v33, frozen 3 November 2026** (Edward: "round off v33 while we are here").
 - **What changed:** `kNewestRope` is 16 and `kDraftVersion` 34, so every instructions-maker makes
