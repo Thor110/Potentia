@@ -29,7 +29,9 @@ Then there is an auditable logger that details the exact formulae or recipe used
 
 	Statistics
 
-So far, most tests are outperforming 7zip, jpeg, png and in a number of instances brotli - update with other formats when ready to post NOTE
+So far, most tests are outperforming 7zip and repacking JPEG and PNG files smaller than they started.
+
+Sieve beats brotli on folders and large files, but not yet on small web pages.
 
 PROOF.md - https://github.com/Thor110/Potentia/blob/main/Proof/PROOF.md
 

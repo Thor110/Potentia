@@ -6026,3 +6026,18 @@ first):
 7. *Melodies* (key, melody-*): a MIDI model; tiny files, negligible.
 The filters' exact counters as coders: NearRanker (3 above) is the one that would serve; the Mobius
 counts add nothing over `runs`, the palette and composition rankers nothing over mixing and rANS.
+
+**19.115 Files routed through the decoder to other programs (Edward, 3 November 2026: "In future
+perhaps we can route filetypes through the decoder to other applications that can be listed by data
+type or extension in an .ini").** Not built. Today a `.sieve` is installed into a folder and the
+viewer shows only pictures. The idea: opening a `.sieve` (or a `.simage` and its kin) decodes it as
+now, checked against its SHA-256, and hands each file to the program named for its kind in an
+`.ini`, as `[open]` lines by extension or by data type (`.pdf = C:\...\reader.exe`, `text =
+notepad.exe`, `picture = sieve-view`), so a `.sieve` opens the way its files would. Questions for
+when it is taken up: where the decoded files live while the other program has them (a folder of
+the user's, removed after, as the viewer's is); a `.sieve` of many files (each opened, or a list to
+choose from); what the data type is where the extension is missing or wrong (the File Locator's
+kind detection already names pictures, sound, text and programs); and the same refusals the viewer
+makes before decoding (the listing read first, sizes against memory), since any program it hands
+to sees what the file claims to be.
+
