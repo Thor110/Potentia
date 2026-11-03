@@ -1044,6 +1044,9 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v32", "As sieve-manifest-v32 at newest: none of v33's ways (mixing's match ways, the x86\n"
+                    "filter in mixing, repeating patterns and ramps, copies, binary written as text decoded,\n"
+                    "a picture's palette), byte for byte as v32 made it."},
           {"--v31", "As sieve-manifest-v31 at newest: no file carried as its differences from another, no JPEG\n"
                     "as its brunsli form, no PNG re-saved or its rows carried unfiltered, mixing's word list\n"
                     "not counted by use, and v31's head (v32)."},
@@ -1109,13 +1112,11 @@ const std::vector<Page>& pages()
           {"--optimise-search", "Optimise Search (the File Locator's box): Try every way chosen for each file by its kind, from\n"
                                 "what was measured, in place of --search-every-wave: off for every file with --prioritise-decoding\n"
                                 "(it changed nothing so); else on for a JPEG, a file over 16 MiB or under 4 KiB, off between."},
-          {"--v32-draft", "(v32 is the newest now; kept so older command lines work: it changes nothing.)"},
+          {"--v32-draft", "(v32 was frozen 31 October 2026; kept so older command lines work: it changes nothing.)"},
+          {"--v33-draft", "(v33 is the newest now, frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"
                           "not be read by a later Sieve; the File Locator's [locator] " + draft_ini_key() + "): its ways are in docs/NEXT-VERSION.md\n"
-                          "(v33: mixing's match model with its ways, R1, M4, C2, weighed on each mixed file's start; and a program\n"
-                          "mixed whole through the x86 filter, X, where that is smaller than the x86 stream; and a file of a repeating byte\n"
-                          "or pattern carried as its segments, each its count, pattern length and pattern; a copy of another file carried\n"
-                          "as one)."},
+                          "(none yet: begun empty when v33 was frozen, so for now it makes what the newest does)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

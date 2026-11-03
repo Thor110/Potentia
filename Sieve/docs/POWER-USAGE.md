@@ -67,9 +67,9 @@ A fetch gains where the bytes saved are many for each second of installing they 
 elsewhere that may do so, each to be put through the bench:
 - **JPEGs as their brunsli form**: 15% to 22% smaller than the JPEG itself (10 originals,
   NEXT-VERSION §4a); its decoding time against reading the JPEG to be measured.
-- **Repeating bytes and patterns** (the v33 draft's `runs`): up to 535 times smaller than v32 made
+- **Repeating bytes and patterns** (v33's `runs`): up to 535 times smaller than v32 made
   them (a 16-bit counter over 8 MiB, 83 bytes against 44,470), and installed by copying.
-- **Programs through the x86 filter and mixing** (the v33 draft's `X`): 3% to 15% under LZMA2, but
+- **Programs through the x86 filter and mixing** (v33's `X`): 3% to 15% under LZMA2, but
   decoded by mixing, so likely a loss as enwik8 mixed is.
 - **Files alike as deltas** (v32): a copy of most of a large file for a few bytes.
 

@@ -27,17 +27,21 @@ It also checks file contents for base64 representations of files to ensure they 
 
 Then there is an auditable logger that details the exact formulae or recipe used for the files it compresses.
 
+All compression done by this application is lossless and the data is reproduced byte for byte, except when using the permanent option for repacking compressed formats: there the content is kept exactly (a JPEG’s picture, a PNG’s pixels, an archive’s files) but the container is repacked for a smaller result, so that file’s own bytes differ.
+
+Files can be optimised for decoding speed or filesize, as well as a number of other parameters that allow for more exhaustive searches if desired.
+
 	Statistics
 
 So far, most tests are outperforming 7zip and repacking JPEG and PNG files smaller than they started.
 
-Sieve beats brotli on folders and large files, but not yet on small web pages.
+Sieve beats brotli on folders and large files, but not yet on small web pages. NOTE : Web Dictionary being updated and brotli tests rerun before v33 release.
 
 PROOF.md - https://github.com/Thor110/Potentia/blob/main/Proof/PROOF.md
 
 The written proof describes the basic functionality of the state space which theoretically allows for maximum compression under perfect circumstances.
 
-Those circumstances would be finding the perfect balance through a filter applied to the state space which would shift the file you are searching for to an exact integer interval rotation in the state space.
+Those circumstances would be finding the perfect balance through a filter applied to the state space which would shift the file you are searching for to an exact integer interval rotation within the relevant state space.
 
 No method can shrink every file, so the counting argument holds.
 

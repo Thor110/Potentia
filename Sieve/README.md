@@ -156,6 +156,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
 | [docs/SIEVE-INSTALL-USAGE.md](docs/SIEVE-INSTALL-USAGE.md) | Making installers, installing, making a release |
 | [web/README.md](web/README.md), [context/README.md](context/README.md) | The browser extension and site builder; the right-click menu |
 | [docs/SIEVE-FORMAT.md](docs/SIEVE-FORMAT.md) | The `.sieve` format on one page, for writing a decoder of your own |
+| [docs/FEATURES.md](docs/FEATURES.md) | What Sieve does, feature by feature, each with what was measured and where |
 | [docs/METHODS.md](docs/METHODS.md) | Every way Sieve tries a file, in order, and the log line each one writes |
 | [docs/NEXT-VERSION.md](docs/NEXT-VERSION.md) | The plan for the next format version, `sieve-manifest-v32` |
 | [docs/SPECIFICATIONS.md](docs/SPECIFICATIONS.md) | The specification |

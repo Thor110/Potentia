@@ -1,6 +1,47 @@
 # The next manifest version: a plan for `sieve-manifest-v32`
 
-**v33, a draft held open (Edward, 2 November 2026: "lets stay locked at manifest v33 draft for a
+**v34, a draft begun empty (3 November 2026).** Nothing is behind `--v34-draft` yet; with it on,
+Sieve makes what the newest makes. Candidates: the web dictionary (IDEAS §19.92), once Edward has
+chosen the pages it is learnt from; scattered substitutions (IDEAS §19.114, 3), on real pairs.
+
+**v33, frozen 3 November 2026** (Edward: "round off v33 while we are here").
+- **What changed:** `kNewestRope` is 16 and `kDraftVersion` 34, so every instructions-maker makes
+  v33 at its newest, and a `.sieve` is v33 only where one of its ways is used (else v32, as
+  before). `--v32` makes v32 byte for byte as before the freeze, and `--v33-draft` is still accepted
+  but does nothing (checked on five folders, with and without the Compressed formats boxes: the
+  frozen default the same bytes as the draft, and `--v32` the same as the old default).
+- **What v33 holds:** the six pieces below: mixing's match ways (`R1`, `M4`, `C2`), programs mixed
+  through the x86 filter (`X`), repeating patterns and ramps (`runs`), copies (`copy K`), binary
+  written as text decoded (`spn`), and a picture's palette (`P`).
+- **The review before it (3 November 2026):** the six pieces together (a folder with copies of a
+  text holding spans, a program and a palette picture inside base64, runs inside a zip's members,
+  a C array and a decimal list) given back by Sieve, sieve-install and the oracle; 600 damaged v33
+  files refused cleanly. It found two things, both fixed: binary written as text was decoded only
+  with a Compressed formats box ticked (so not by the File Locator's default), and the report
+  counted a text's spans as an archive's members.
+- **CI steps 10 and 11 on the frozen build (3 November 2026)** found two things in the packer, both
+  fixed, and checks that expected v32 where v33 is now made, brought up to date:
+  - a copy of one of Sieve's items (the hallway's degree sample holds MIDI items with the same
+    bytes) was carried as a copy, which a reader refuses, as an item's size is listed as made: such
+    a file is now weighed as itself;
+  - with `--v5` (and the other listings written as text), copies and spans were still tried, which
+    a text listing cannot hold: they are now tried only where the newest instructions are made in
+    bytes, as the rope's own newer versions already were;
+  - the hallway screenshot's check now expects v33's way, its palette with the match ways (9,674
+    bytes, against v32's 12,761), and v32's under `--v32`; and the installer line names v33;
+  - with `--v31`, that screenshot is now mixed at a shape guessed from its bytes (13,990 bytes, a
+    v28 listing), where it was carried as it was: the rope's probe (2 November) skips the rope's
+    search on it, its start 1.74 times LZMA2's, and mixing then wins. A packer change, read by
+    every reader since v26; the check expects it and installs it;
+  - two texts mixed as a group now take the match model's ways (`mixt B16 F80 C2`): the word list's
+    v32 check is made with `--v32`, and a v33 group is checked beside it, given back by Sieve,
+    sieve-install and the oracle.
+- **The documents:** SPECIFICATIONS §12.2's v33 paragraph and SIEVE-FORMAT.md describe it;
+  FEATURES.md lists what Sieve does, each with its measurement.
+- **Still to do:** Edward's CI on Windows, Linux and macOS; the Proof samples and STATISTICS.md
+  measured again at v33.
+
+**v33, as it was while a draft (Edward, 2 November 2026: "lets stay locked at manifest v33 draft for a
 while again until we get all the new systems and ideas implemented").** Every piece that needs a new
 format waits behind a `--v33-draft` switch (to be built, as v32's was, with the first such piece),
 and nothing makes v33 by default until Edward freezes it. Packer changes needing no new format still

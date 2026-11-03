@@ -262,7 +262,7 @@ rm -rf old_in
 $S install old.sieve --to old_in > /dev/null
 cmp old_in/a.txt $F/a.txt
 # Maps are made as the newest instructions are (27 October 2026): two held texts of 9,000 bytes
-# are mixed together in one group (sieve-manifest-v30's groups; v32 at the newest), as the report says, and read back by Sieve
+# are mixed together in one group (sieve-manifest-v30's groups; v33 at the newest, its match ways weighed), as the report says, and read back by Sieve
 # and the oracle. (The same holds for sites, training runs and the hallway's saves: one helper,
 # add_packed_newest, makes them all; a site's page is checked below.)
 head -c 9000 ../README.md > mt1.md
@@ -270,7 +270,7 @@ head -c 9000 ../docs/GAME.md > mt2.md
 $S map --new t --out mt.sieve 2> /dev/null
 $S map mt.sieve --add mt1.md --out mt.sieve 2> /dev/null
 $S map mt.sieve --add mt2.md --out mt.sieve > mt.txt 2>&1
-grep -c "^wrote     mt.sieve: Sieve instructions (sieve-manifest-v32), " mt.txt > /dev/null
+grep -c "^wrote     mt.sieve: Sieve instructions (sieve-manifest-v33), " mt.txt > /dev/null
 rm -rf mt_in mt_oracle
 $S install mt.sieve --to mt_in > /dev/null
 cmp mt_in/mt1.md mt1.md
@@ -550,7 +550,7 @@ cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ..
 # (Prioritise Decoding Speed: what the archives hold, 1.4 MB, is otherwise mixed as one group, which
 # the oracle took 726 s to decode in Python; groups are checked on their own below, v29 and v30.)
 SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --prioritise-decoding --manifest a21.manifest | tr -d '\r' > a21.txt
-grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[0-2]\))$" a21.txt > /dev/null
+grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[0-3]\))$" a21.txt > /dev/null
 python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 32, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
@@ -593,7 +593,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/
   cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[0-2]\)" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[0-3]\)" > /dev/null
   rm -rf r22f_inst
   SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
@@ -657,7 +657,7 @@ cmp dq.txt dq_oracle/dq.txt
 rm -rf png25
 mkdir png25
 cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives --prioritise-decoding 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-2]\))$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives --prioritise-decoding 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-3]\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
@@ -884,11 +884,12 @@ $SI ws32.sieve --to ws32_si --yes > /dev/null
 diff -r ws32 ws32_si
 python sieve_ref.py unpack ws32.sieve --to ws32_oracle > /dev/null
 diff -r ws32 ws32_oracle
-# The v33 draft (2 November 2026, --v33-draft only): mix-v4's match model with its ways (R1: a match
-# goes on past one wrong byte; M4: taken after 4 bytes; C2: two places a context was seen). Mixing's
-# code with them made by Sieve and read by the oracle; then a slice of the Sieve just built (a
-# program, where they pay) made with --v33-draft and Try every way: v33 where it is smaller, never
-# larger than v32, and given back by Sieve, sieve-install and the oracle; without the switch, v32.
+# v33 (2 November 2026; the draft's first piece, frozen 3 November 2026): mix-v4's match model with its
+# ways (R1: a match goes on past one wrong byte; M4: taken after 4 bytes; C2: two places a context
+# was seen). Mixing's code with them made by Sieve and read by the oracle; then a slice of the Sieve
+# just built (a program, where they pay) made with Try every way: v33 where it is smaller, never
+# larger than v32, and given back by Sieve, sieve-install and the oracle; with --v32, v32. (The
+# blocks below were the v33 draft's too: each now makes v33 by default and v32 with --v32.)
 head -c 24576 ../data/anchors/public-domain/pg996.txt > m33.txt
 $S mix m33.txt --params "B16 R1 M4 C2" --out m33.mix | tr -d '\r' | grep -q "read back and checked"
 python sieve_ref.py mix-unpack m33.mix --v4 --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null
@@ -897,8 +898,8 @@ if python sieve_ref.py mix-unpack m33.mix --params "B16 R1 M4 C2" --size 24576 -
 rm -rf m33
 mkdir m33
 head -c 1114112 "$S" | tail -c 65536 > m33/code.bin
-$S locate m33 --installer m33-32.sieve --search-per-file 1 --search-every-wave 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
-$S locate m33 --installer m33-33.sieve --search-per-file 1 --search-every-wave --v33-draft 2>&1 | tr -d '\r' > m33.txt
+$S locate m33 --installer m33-32.sieve --search-per-file 1 --search-every-wave --v32 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
+$S locate m33 --installer m33-33.sieve --search-per-file 1 --search-every-wave 2>&1 | tr -d '\r' > m33.txt
 if grep -q "^manifest  sieve-manifest-v33" m33.txt; then
     python ../tools/sieve_read.py m33-33.sieve | grep -q "mix4 B[0-9]* .*\(R1\|M4\|C2\)"
 fi
@@ -935,8 +936,8 @@ while len(b) < 48000:
         b += bytes([0xC3, 0x90, 0x55])
 open("x33/prog", "wb").write(bytes(b))
 PY
-$S locate x33 --installer x33-32.sieve --items 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
-$S locate x33 --installer x33-33.sieve --items --v33-draft 2>&1 | tr -d '\r' > x33.txt
+$S locate x33 --installer x33-32.sieve --items --v32 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
+$S locate x33 --installer x33-33.sieve --items 2>&1 | tr -d '\r' > x33.txt
 grep -q "^manifest  sieve-manifest-v33" x33.txt
 [ "$(wc -c < x33-33.sieve)" -lt "$(wc -c < x33-32.sieve)" ]
 rm -rf x33_inst x33_si x33_oracle
@@ -1008,10 +1009,10 @@ open('runs/two.bin', 'wb').write(bytes(4 << 20) + b'\xff' * (4 << 20))
 open('runs/beef.bin', 'wb').write(b'\xde\xad\xbe\xef' * (4 << 20))
 open('runs/count16.bin', 'wb').write(b''.join((k & 0xFFFF).to_bytes(2, 'little') for k in range(1 << 20)))
 "
-$S locate runs --installer runs32.sieve --progress 2>&1 | tr -d '\r' > runs32.txt
+$S locate runs --installer runs32.sieve --progress --v32 2>&1 | tr -d '\r' > runs32.txt
 grep -q "2 segment(s) of a repeating byte or pattern, LZMA2 about [0-9]*, rope [0-9]* (L8 W1 S1 P1 K0, not searched)" runs32.txt
 grep -q "1 segment(s) of a repeating byte or pattern, LZMA2 about" runs32.txt
-$S locate runs --installer runs33.sieve --v33-draft 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v33"
+$S locate runs --installer runs33.sieve 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v33"
 [ "$(wc -c < runs33.sieve)" -lt 200 ]
 [ "$(wc -c < runs33.sieve)" -lt "$(wc -c < runs32.sieve)" ]
 rm -rf runs_inst runs_si runs_oracle
@@ -1058,10 +1059,10 @@ for y in range(h):
         px[y][x] = px[y][x - 1] if r < 0.7 and x else px[y - 1][x] if r < 0.93 and y else random.randrange(6)
 open('pal/picture.rgb', 'wb').write(bytes(c for row in px for i in row for c in cols[i]))
 "
-$S locate pal --installer pal-33.sieve --v33-draft --progress 2>&1 | tr -d '\r' > pal-33.txt
+$S locate pal --installer pal-33.sieve --progress 2>&1 | tr -d '\r' > pal-33.txt
 grep -q "as a palette of 6 colours" pal-33.txt
 grep -q "mix4 B[0-9]* I[0-9]*x3 P6" pal-33.txt
-$S locate pal --installer pal-32.sieve 2>&1 | tr -d '\r' > pal-32.txt
+$S locate pal --installer pal-32.sieve --v32 2>&1 | tr -d '\r' > pal-32.txt
 [ "$(wc -c < pal-33.sieve)" -lt "$(wc -c < pal-32.sieve)" ]
 rm -rf pal_inst pal_si pal_oracle
 $S install pal-33.sieve --to pal_inst > /dev/null
@@ -1080,10 +1081,10 @@ head -c 3000 ../docs/GAME.md > cp33/t.txt
 cp ../web/test-site/src/pictures/door.jpg cp33/door.jpg
 python -c "import random; random.seed(33); open('cp33/noise.bin', 'wb').write(bytes(random.getrandbits(8) for _ in range(40000)))"
 cp cp33/t.txt cp33/door.jpg cp33/noise.bin cp33/sub/
-$S locate cp33 --installer cp33-33.sieve --compressed-temporary --v33-draft 2>&1 | tr -d '\r' > cp33.txt
+$S locate cp33 --installer cp33-33.sieve --compressed-temporary 2>&1 | tr -d '\r' > cp33.txt
 grep -q "^copies    3 file(s) carried as copies of another with the same bytes" cp33.txt
 grep -q "^manifest  sieve-manifest-v33" cp33.txt
-$S locate cp33 --installer cp33-32.sieve --compressed-temporary 2>&1 | tr -d '\r' > cp32.txt
+$S locate cp33 --installer cp33-32.sieve --compressed-temporary --v32 2>&1 | tr -d '\r' > cp32.txt
 if grep -q "^copies " cp32.txt; then exit 1; fi
 rm -rf cp33_inst cp33_si cp33_oracle
 $S install cp33-33.sieve --to cp33_inst > /dev/null
@@ -1109,10 +1110,10 @@ python -c "import base64, random; random.seed(64); t = base64.b64encode(open('..
 python -c "b = open('../docs/METHODS.md', 'rb').read()[:12000]; rows = [', '.join('0x%02x' % x for x in b[i:i + 12]) for i in range(0, len(b), 12)]; open('b64/methods.h', 'w', newline='').write('unsigned char methods[] = {\n  ' + ',\n  '.join(rows) + '\n};\nunsigned int methods_len = %d;\n' % len(b))"
 python -c "import json; open('b64/list.json', 'w', newline='').write(json.dumps({'bytes': list(open('../docs/MANUAL.md', 'rb').read()[:8000])}) + '\n')"
 head -c 6000 ../docs/METHODS.md > b64/plain.txt
-$S locate b64 --installer b64-33.sieve --compressed-temporary --v33-draft 2>&1 | tr -d '\r' > b64-33.txt
+$S locate b64 --installer b64-33.sieve --compressed-temporary 2>&1 | tr -d '\r' > b64-33.txt
 grep -q "^spans     4 text(s) carried with the binary they write out decoded" b64-33.txt
 grep -q "^manifest  sieve-manifest-v33" b64-33.txt
-$S locate b64 --installer b64-32.sieve --compressed-temporary 2>&1 | tr -d '\r' > b64-32.txt
+$S locate b64 --installer b64-32.sieve --compressed-temporary --v32 2>&1 | tr -d '\r' > b64-32.txt
 if grep -q "^spans " b64-32.txt; then exit 1; fi
 [ "$(wc -c < b64-33.sieve)" -lt "$(wc -c < b64-32.sieve)" ]
 rm -rf b64_inst b64_si b64_oracle
@@ -1268,11 +1269,19 @@ if grep -q "sieve-manifest-v32\|	skr " r32v31.txt; then exit 1; fi
 rm -rf s32
 mkdir s32
 cp ../docs/images/hallway-compact.png s32/
-$S locate s32 --installer s32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
+# (From v33, its palette with the match model's ways: 9,674 bytes, against v32's 12,761.)
+$S locate s32 --installer s32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3 P4 R1 M4 C2	hallway-compact.png"
+$S locate s32 --v32 --installer s32v32.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I1280x3	hallway-compact.png"
 rm -rf s32_inst
 $S install s32.sieve --to s32_inst > /dev/null
 diff -r s32 s32_inst
-$S locate s32 --v31 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 raw	hallway-compact.png"
+# Without v32, not the shape its recipe gives: since the rope's probe (2 November 2026), whose
+# search is not run on these pixels (its start 1.74 times LZMA2's), mixed at a shape guessed from
+# its bytes, 3840 by 1 (v26's parameters), where it was carried as it was; installed the same.
+$S locate s32 --v31 --installer s32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' | grep -q "	stb 8 -1 1280 720 3 2764800 mix4 B22 I3840x1	hallway-compact.png"
+rm -rf s32v31_inst
+$S install s32v31.sieve --to s32v31_inst > /dev/null
+diff -r s32 s32v31_inst
 # v32, too: its head read by its version byte (SPECIFICATIONS v32), made for every .sieve in bytes
 # at the newest: each stream's dictionary left out where its size gives it, a stream
 # of one LZMA2 chunk carried as the chunk's data alone, the last part's size left out, a recipe's
@@ -1300,16 +1309,21 @@ $S mix dq.txt --words 80 --by-use --out dqf.mix | tr -d '\r' | grep -c "^mix    
 python sieve_ref.py mix-unpack dqf.mix --v4 --params "B17 F80" --size 40000 --out dqf.back > /dev/null
 cmp dq.txt dqf.back
 [ "$(wc -c < dqf.mix)" -lt "$(wc -c < dq4.mix)" ]
-rm -rf f32 f32g
+rm -rf f32 f32g f33g
 mkdir f32 f32g
 head -c 9000 ../docs/METHODS.md > f32/methods.md
 head -c 9000 ../docs/METHODS.md > f32g/methods.md
 head -c 7000 ../docs/FORMATS.md > f32g/formats.md
-$S locate f32 --installer f32.sieve --items 2>&1 | tr -d '\r' > f32.txt
+$S locate f32 --v32 --installer f32.sieve --items 2>&1 | tr -d '\r' > f32.txt
 grep -c "^mix       1 file(s) carried by mixing, mix-v4, 1 with a word list (1 counted by use) ([0-9]* bytes, carried in [0-9]*; sieve-manifest-v32)" f32.txt > /dev/null
-$S locate f32g --installer f32g.sieve --items 2>&1 | tr -d '\r' > f32g.txt
+$S locate f32g --v32 --installer f32g.sieve --items 2>&1 | tr -d '\r' > f32g.txt
 grep -c "	mixt B[0-9]* F80 T" f32g.txt > /dev/null
-for d in f32 f32g; do
+# (From v33, the group with the match model's ways too: "mixt B16 F80 C2 T...", 3 November 2026.)
+mkdir -p f33g
+cp f32g/* f33g/
+$S locate f33g --installer f33g.sieve --items 2>&1 | tr -d '\r' > f33g.txt
+grep -c "	mixt B[0-9]* F80 C2 T" f33g.txt > /dev/null
+for d in f32 f32g f33g; do
     rm -rf ${d}_inst ${d}_si ${d}_oracle
     $S install $d.sieve --to ${d}_inst > /dev/null
     diff -r $d ${d}_inst

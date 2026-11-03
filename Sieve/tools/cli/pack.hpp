@@ -83,8 +83,8 @@ struct PackReport
     size_t mixed_together = 0;           // v29: files that would be mixed one by one, mixed together in it instead
     bool v30 = false;                    // v30: files mixed together in groups
     bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
-    bool v32 = false;                    // v32 (draft): some file carried as its differences from another
-    bool v33 = false;                    // v33 (draft): some mixing with the match model's ways
+    bool v32 = false;                    // v32: some file carried as its differences from another
+    bool v33 = false;                    // v33: as the manifest's (locate.hpp)
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes
@@ -107,7 +107,7 @@ struct PackReport
     size_t unmixed = 0;                  // files mixed carried as they are instead, smaller in the stream they share (no new format)
     uint64_t unmixed_mixed = 0, unmixed_stream = 0; // what they and the stream came to mixed, and all in the stream (LZMA2's estimates)
     size_t mixed4 = 0, mixed4_pictures = 0, mixed4_words = 0; // v28: files carried by mix-v4, as pictures, with a word list
-    size_t mixed4_by_use = 0;            // v32 (draft): of those with a word list, counted by use (F80)
+    size_t mixed4_by_use = 0;            // v32: of those with a word list, counted by use (F80)
     size_t mixed2 = 0;                   // v26: files carried by mix-v2 (of `mixed`), as pictures
     size_t mixed2_pictures = 0;
     size_t decoding_first = 0;           // files mixing was not tried on: Prioritise Decoding Speed
@@ -154,10 +154,12 @@ struct SampleAsWhole
 };
 
 // The newest level of the packer's ways (the rope's waves, mixing, groups, archives' members, files
-// alike, JPEGs and PNGs recoded, mixing's word list counted by use, the smaller head): 15,
-// sieve-manifest-v32 (frozen 31 October 2026); 14 is v31's.
+// alike, JPEGs and PNGs recoded, mixing's word list counted by use, the smaller head; and v33's:
+// mixing's match ways, programs mixed through the x86 filter, repeating patterns and ramps,
+// copies, binary written as text, a picture's palette): 16, sieve-manifest-v33 (frozen 3 November
+// 2026); 15 is v32's, 14 v31's.
 // Everything that makes instructions passes it unless an older version is asked for by name.
-inline constexpr uint32_t kNewestRope = 15;
+inline constexpr uint32_t kNewestRope = 16;
 // The draft's (draft.hpp, kDraftVersion): what an instructions-maker asked for the newest makes
 // while the draft switch is on.
 inline constexpr uint32_t kDraftRope = kNewestRope + 1;

@@ -321,8 +321,8 @@ struct Manifest
     bool v29 = false; // v29: the lzma2 stream is mixed (v28 is set too)
     bool v30 = false; // v30: files mixed together in groups (v29 is set too)
     bool v31 = false; // v31: archives made again from their skeleton and their files apart (v30 is set too)
-    bool v32 = false; // v32 (draft): some file carried as its differences from another, "delta" (v31 is set too)
-    bool v33 = false; // v33 (draft): some mixing names the match model's ways (v32 is set too)
+    bool v32 = false; // v32: some file carried as its differences from another, "delta" (v31 is set too)
+    bool v33 = false; // v33: some file a copy, runs, spans, or mixing with the palette, the x86 filter or the match model's ways (v32 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the
     // folder (or file) its contents are in.

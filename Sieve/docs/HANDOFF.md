@@ -40,12 +40,13 @@ These are not preferences. Work that breaks one of them is wrong.
   saving to be had by splitting an address into room and item, or by any other re-coordinating.
   Only a genuinely guided ordering is smaller, because a guided ordering *is* a compressor.
   §0 of `docs/IDEAS.md` sets this out; a proposal that forgets it is the commonest mistake.
-- **The `.sieve` format is frozen at `sieve-manifest-v32`** (Edward, 31 October 2026: "Yes, freeze
-  v32"). It was built as one version gathered, behind a draft switch, from v31's freeze (Edward, 27
-  October 2026: "Yes, it is time I stopped pushing more manifest versions, that was just caused by a
-  succession of ideas for filters that cascaded into many manifest versions"). Packer improvements
-  that need no new format are free to land. Anything that would need v33 is gathered the same way,
-  behind a draft switch, and goes in as one version (NEXT-VERSION.md's way).
+- **The `.sieve` format is frozen at `sieve-manifest-v33`** (3 November 2026, Edward: "round off
+  v33"; v32 was frozen 31 October 2026: "Yes, freeze v32"). Each was built as one version gathered,
+  behind a draft switch, from the freeze before (Edward, 27 October 2026: "Yes, it is time I stopped
+  pushing more manifest versions, that was just caused by a succession of ideas for filters that
+  cascaded into many manifest versions"). Packer improvements that need no new format are free to
+  land. Anything that would need v34 is gathered the same way, behind `--v34-draft`, and goes in as
+  one version (NEXT-VERSION.md's way).
 - **Purely functional.** Nothing is stored. The engine sieves the state space; it does not keep a
   database of what it found.
 

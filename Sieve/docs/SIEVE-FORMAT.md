@@ -1,7 +1,8 @@
 # The `.sieve` format, on one page
 
-What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v32` (the format rests
-there, frozen 31 October 2026: HANDOFF's standing rules). It is for anyone writing a decoder of their own. The rules in full
+What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v33` (the format rests
+there, frozen 3 November 2026; v32 was frozen 31 October 2026: HANDOFF's standing rules). v33's head
+is v32's, read by its version byte, 33; what v33 adds is in section 4. It is for anyone writing a decoder of their own. The rules in full
 are in [SPECIFICATIONS §12.2](SPECIFICATIONS.md), written as each version's changes to the one
 before; this page puts the newest together in one place and says where each part's rules are.
 
@@ -116,7 +117,7 @@ other way, as text.
 
 A **format** is a varint: 1 `xz`, 2 `gz`, 3 `bz2`, 4 `zst`, 5 `lz4`, 6 `br`, 7 `lzma`, 8 `lz`, 9 `7z`,
 10 `zip`, 11 `rar`, 12 `cab`, 13 `iso`, 14 `lha`, 15 `cpio`, 16 `ar`, 17 `warc`, 18 `sk`, 19 `stb`,
-20 `skm`, 21 `jbr`, 22 `pngr`, 23 `skr` (only ever added to); in a record 4, 0 then the name as text for one not listed.
+20 `skm`, 21 `jbr`, 22 `pngr`, 23 `skr`, 24 `spn` (v33) (only ever added to); in a record 4, 0 then the name as text for one not listed.
 
 The `line` lines come first; a reader puts the tree's line after them. A tab or line feed where the
 record allows none is refused, as is a record, way or format the reader does not know. (Oracle:
@@ -137,10 +138,13 @@ stream its way names:
 | `item K` (an `i` line) | its place, next in the items stream: `width` bytes big-endian, or with `digit-histogram-v1` a varint length and a code; made again as an item of line K | §12.2 v5 to v7 |
 | `rope <parameters>` | a varint length and a code, next in the rope stream; `rope-wave-v1` to `v6` by its parameters | §12.2 `rope-wave-v1` to `v6` |
 | `pieces z<n> r<n> ... rope <parameters>` | its z pieces next in the lzma2 stream; its r pieces joined, coded as one rope code, next in the rope stream; laid out in order | §12.2 v13 |
-| `mix4 <parameters>` | a varint length and a code, next in the rope stream, decoded by mix-v4 (`B<bits>`, a picture's ` I<w>x<c>`, a text's ` D<n>` word list, or ` F80`, scowl-en-80 with each word counted 4,096, 64 or 1 by whether scowl-en-35 or only scowl-en-60 holds it) | §12.2 `mix-v4`, v28, v32 |
+| `mix4 <parameters>` | a varint length and a code, next in the rope stream, decoded by mix-v4 (`B<bits>`, a picture's ` I<w>x<c>`, a text's ` D<n>` word list, or ` F80`, scowl-en-80 with each word counted 4,096, 64 or 1 by whether scowl-en-35 or only scowl-en-60 holds it; v33: after a picture's shape ` P<n>`, its pixels mixed as one-byte indices into a palette of n colours, then the palette; then the match model's ways ` R1`, ` M4`, ` C2`; and last, for a file's own `mix4` with no picture or word list, ` X`, its bytes through the x86 filter) | §12.2 `mix-v4`, v28, v32, v33 |
+| `runs` (v33) | a varint length and a code, next in the rope stream: segments, each a varint count and a varint pattern length and the pattern, repeated count times; or a ramp, count, a pattern length of 0, a byte of width and order, the first value and the step | §12.2 v33 |
+| `copy K` (v33) | nothing: once every other file is made, file K's bytes (K before it, carried as itself, not a member, its size) | §12.2 v33 |
 | `mixt <parameters> T<total>` and `mixn` | a group of files mixed together: the first file's way holds the group's code (next in the rope stream) and its total size, and the file is the group's first bytes; each `mixn` file after it (its own size in its record) is the group's next bytes. The group is used up exactly, before the next group and at the end; files of other ways may come between its files | §12.2 v30 |
 | `mix`, `mix2`, `mix3` | as `mix4`, by mix-v1, v2 and v3 (read; no longer written) | §12.2 v24, v26, v27 |
 | an archive made again: `xz`, `gz`, `bz2`, `zst`, `lz4`, `br`, `lzma`, `sk`, `stb`, each `<recipe> <inner size> <inner way>` (for `stb`, the inner bytes are the pixels); `skm <members> <skeleton size> <inner way>` | the inner bytes by the inner way (`raw`, `rope`, `pieces`, a mix way, `mixt` or `mixn`: never `x86`, nor another recipe), then the archive made from them by the named compressor and recipe; for `skm`, the inner bytes are its skeleton, and its data the members below | §12.2 v14, v17, v19 to v21, v25, v31 |
+| a text with binary written as text (v33): `spn <members> <skeleton size> <inner way>` | the inner bytes are its skeleton: a varint of its spans; for each, a varint of the text before it, a byte of how it is written (base64, hex, or a list of byte values, and their details), a varint of its width, and for a list its prefix, separator and line break; then the text. Its spans' bytes, decoded, are the next `<members>` files, `<text>/<n>`, each its own way (one recipe allowed among them: `jbr`); each written again and put back | §12.2 v33 (`tools/cli/text_spans.hpp`) |
 | a JPEG or PNG made again (v32): `jbr <form size>`, `pngr <filter> <strategy> <split> <head size> <inner size>`, `skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>`, each then its inner way | `jbr`: the JPEG's brunsli form, made into the JPEG by brunsli; `pngr`: the PNG without its IDATs, then its rows unfiltered, the PNG re-saved by zlib at level 9 (each row by `filter`, or 5 each its own, at `strategy`), one IDAT put in at `split`; `skr`: the rows unfiltered, their filter bytes, then a v21 skeleton, the rows filtered again by their bytes and the PNG made as `sk` makes it | §12.2 v32 |
 
 A stream left over, or one that runs out, is refused. The x86 and lzma2 streams are raw LZMA2 at the
@@ -182,6 +186,8 @@ understanding.
 | `item` | the line's items made again from their places: Sieve's lines (pages, image, video, audio, AI), with `digit-histogram-v1` for coded places | §§3 to 12 and 12.2 v5 to v7; oracle `v7_item` (pages; PNG and MIDI items from a folder) |
 | `F80` | the registered `scowl-en-35`, `-60` and `-80` (each checked by its SHA-256) | §12.2 v32; oracle `mix_word_list` |
 | `delta` | nothing but file K's bytes | §12.2 v32 |
+| `runs`, `copy`, `spn` | nothing more (base64, hex and decimal written again) | §12.2 v33; oracle `spans_made` |
+| `P`, `X` in mixing | the palette's indices made back into pixels; the x86 filter | §12.2 v33; oracle `mix4_file`, `x86_filter` |
 | archives made again | the very compressor named, at the version named: zlib (`gz`, `pngr`), liblzma (`xz`, `lzma`), libbzip2 1.0.8, libzstd 1.5.7, liblz4 1.10.0, brotli 1.2.1, preflate and the LZMA SDK's encoder (`sk`, `skm`, `skr`), stb_image_write (`stb`), brunsli at the commit pinned in CMakeLists.txt (`jbr`) | §12.2 v14 to v32 |
 
 A decoder for most files needs only the first four rows. Where it meets what it cannot make (an

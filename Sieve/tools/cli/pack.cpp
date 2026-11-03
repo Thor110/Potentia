@@ -3001,10 +3001,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // searched, not packed, wherever in the folder its first is and whatever way that is carried.
     // (Without it, 100 copies of a 1.2 MB JPEG came to the size of one only because they lay
     // within LZMA2's window of each other, after LZMA2 had packed all 118 MB of their forms.)
-    const bool copy_way_on = rope_newest >= 16;
+    // (Only where the newest instructions are made, in bytes, as the rope's own versions below: a
+    // listing written as text, --v5 and the like, holds no copies or spans. Found by CI step 10 at
+    // v33's freeze.)
+    const bool newest_made = binary && gzip && v20_on && v21_on && v22_on && m.compact;
+    const bool copy_way_on = rope_newest >= 16 && newest_made;
     std::mutex words_missing_mx; // (why mixing's word list could not be had, the first time: the report says so)
     std::string words_missing;
-    const bool spans_on = rope_newest >= 16; // v33 draft: binary a text writes out carried decoded (spans-v1)
+    const bool spans_on = rope_newest >= 16 && newest_made; // v33 draft: binary a text writes out carried decoded (spans-v1)
     std::unordered_map<std::string, std::vector<uint8_t>> brunsli_kept; // a JPEG found written in a text: its brunsli form, by its SHA-256
     size_t spans_files = 0;
     uint64_t spans_bytes = 0;
@@ -3157,7 +3161,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool archives_always = always_env && std::string(always_env) == "1";
     // v31: made again exactly (temporary), carried as what it holds (permanent), or either.
     const bool temporary_ok = compressed_temporary(), permanent_ok = compressed_permanent();
-    if (optimise_archives && m.compact)
+    if ((optimise_archives || spans_on) && m.compact)
     {
         std::unordered_set<std::string> taken;
         for (const ManifestEntry& e : m.entries) taken.insert(e.dir && !e.path.empty() && e.path.back() == '/' ? e.path.substr(0, e.path.size() - 1) : e.path);
@@ -3204,10 +3208,6 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 add_file(e, std::move(b), {}, e.sha256); // (a copy: carried as its first, below)
                 continue;
             }
-            // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
-            // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
-            // remembered, so packing it later does not search again), its names and recipe counted.
-            const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
             // v31: what mixing makes of what it holds, timed on 1 MiB in 8 stretches evenly across it
             // (LZMA2's estimate understates what Sieve does with a folder of text: the source's 7z,
             // made by 7-Zip at its strongest, was left as it was by LZMA2's measure, though mixed
@@ -3226,6 +3226,77 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
                 return uint64_t(double(estimate(inner)) * std::min(1.0, code / lz));
             };
+            // v33 draft: a text holding binary written as text (base64, hex, lists of byte values;
+            // spans-v1, text_spans.hpp), carried as an archive made again from its skeleton is: its
+            // entry the text with each span taken out ("spn <members> <skeleton size>"), each span
+            // decoded after it as a member, "<file>/<n>", carried its own way. Each span checked to
+            // give its characters back when written again; the whole checked to give the file back.
+            // Where LZMA2's estimate of the skeleton and the members together comes out clearly
+            // smaller than the file's. With or without an archives box (it always gives the file
+            // back as it was), so first, where no box is ticked, and nothing else of this step.
+            auto try_spans = [&]() -> bool {
+                if (spans_on && b.size() >= 256)
+                {
+                    std::vector<spans::Span> found = spans::spans_of(b, 48);
+                    if (!found.empty())
+                    {
+                        std::vector<uint8_t> sk = spans::skeleton_of(b, found);
+                        std::vector<uint8_t> joined = sk;
+                        std::vector<std::span<const uint8_t>> parts;
+                        uint64_t jpegs = 0; // what the JPEGs among them come to as their brunsli forms (below)
+                        for (const spans::Span& x : found)
+                        {
+                            parts.emplace_back(x.bytes);
+                            // A JPEG reaches brunsli below, as a file does: its form made now, for the
+                            // weighing, and kept for the JPEG step by its SHA-256.
+                            // (Only with an archives box, where the JPEG step runs.)
+                            if (jpeg_on && optimise_archives && x.bytes.size() >= 1024 && is_jpeg(x.bytes))
+                                if (auto form = jpeg_to_brunsli(x.bytes); form && form->size() < x.bytes.size())
+                                {
+                                    jpegs += form->size();
+                                    brunsli_kept.emplace(sha256_hex(x.bytes), std::move(*form));
+                                    continue;
+                                }
+                            joined.insert(joined.end(), x.bytes.begin(), x.bytes.end());
+                        }
+                        // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
+                        // of the file as it is and of the skeleton and its members.
+                        const uint64_t whole = std::min(std::min<uint64_t>(b.size(), estimate(b)), mixed_estimate(b));
+                        const uint64_t apart = std::min(estimate(joined), mixed_estimate(joined)) + jpegs + 8 * found.size();
+                        if (apart + 64 + whole / 200 < whole && spans::made_from(sk, parts) == b)
+                        {
+                            progress(e.path + ", " + std::to_string(b.size()) + " bytes holding " + std::to_string(found.size()) + " span(s) of binary written as text: carried decoded (about " +
+                                     std::to_string(apart) + " bytes packed, against " + std::to_string(whole) + ")");
+                            ++spans_files;
+                            ManifestEntry r = e;
+                            r.remake = "spn " + std::to_string(found.size()) + " " + std::to_string(sk.size());
+                            add_file(r, std::move(sk), std::move(b), e.sha256);
+                            const size_t digits = std::to_string(found.size()).size();
+                            for (size_t k = 0; k < found.size(); ++k)
+                            {
+                                std::string n = std::to_string(k + 1);
+                                n.insert(0, digits - n.size(), '0');
+                                ManifestEntry me;
+                                me.path = e.path + "/" + n;
+                                me.member = true;
+                                spans_bytes += found[k].bytes.size();
+                                add_file(me, std::move(found[k].bytes), {});
+                            }
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            if (!optimise_archives)
+            {
+                if (!try_spans()) add_file(e, std::move(b), {}, e.sha256);
+                continue;
+            }
+            // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
+            // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
+            // remembered, so packing it later does not search again), its names and recipe counted.
+            const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
             auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
                 if (archives_always) return true; // SIEVE_ARCHIVES_ALWAYS: every archive read, for testing the readers
                 uint64_t cost = std::min(estimate(inner), mixed_estimate(inner));
@@ -3716,63 +3787,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
-            // v33 draft: a text holding binary written as text (base64, hex, lists of byte values;
-            // spans-v1, text_spans.hpp), carried as an archive made again from its skeleton is: its
-            // entry the text with each span taken out ("spn <members> <skeleton size>"), each span
-            // decoded after it as a member, "<file>/<n>", carried its own way. Each span checked to
-            // give its characters back when written again; the whole checked to give the file back.
-            // Where LZMA2's estimate of the skeleton and the members together comes out clearly
-            // smaller than the file's.
-            if (spans_on && b.size() >= 256)
-            {
-                std::vector<spans::Span> found = spans::spans_of(b, 48);
-                if (!found.empty())
-                {
-                    std::vector<uint8_t> sk = spans::skeleton_of(b, found);
-                    std::vector<uint8_t> joined = sk;
-                    std::vector<std::span<const uint8_t>> parts;
-                    uint64_t jpegs = 0; // what the JPEGs among them come to as their brunsli forms (below)
-                    for (const spans::Span& x : found)
-                    {
-                        parts.emplace_back(x.bytes);
-                        // A JPEG reaches brunsli below, as a file does: its form made now, for the
-                        // weighing, and kept for the JPEG step by its SHA-256.
-                        if (jpeg_on && x.bytes.size() >= 1024 && is_jpeg(x.bytes))
-                            if (auto form = jpeg_to_brunsli(x.bytes); form && form->size() < x.bytes.size())
-                            {
-                                jpegs += form->size();
-                                brunsli_kept.emplace(sha256_hex(x.bytes), std::move(*form));
-                                continue;
-                            }
-                        joined.insert(joined.end(), x.bytes.begin(), x.bytes.end());
-                    }
-                    // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
-                    // of the file as it is and of the skeleton and its members.
-                    const uint64_t whole = std::min(as_is, mixed_estimate(b));
-                    const uint64_t apart = std::min(estimate(joined), mixed_estimate(joined)) + jpegs + 8 * found.size();
-                    if (apart + 64 + whole / 200 < whole && spans::made_from(sk, parts) == b)
-                    {
-                        progress(e.path + ", " + std::to_string(b.size()) + " bytes holding " + std::to_string(found.size()) + " span(s) of binary written as text: carried decoded (about " +
-                                 std::to_string(apart) + " bytes packed, against " + std::to_string(whole) + ")");
-                        ++spans_files;
-                        ManifestEntry r = e;
-                        r.remake = "spn " + std::to_string(found.size()) + " " + std::to_string(sk.size());
-                        add_file(r, std::move(sk), std::move(b), e.sha256);
-                        const size_t digits = std::to_string(found.size()).size();
-                        for (size_t k = 0; k < found.size(); ++k)
-                        {
-                            std::string n = std::to_string(k + 1);
-                            n.insert(0, digits - n.size(), '0');
-                            ManifestEntry me;
-                            me.path = e.path + "/" + n;
-                            me.member = true;
-                            spans_bytes += found[k].bytes.size();
-                            add_file(me, std::move(found[k].bytes), {});
-                        }
-                        continue;
-                    }
-                }
-            }
+            if (try_spans()) continue;
             add_file(e, std::move(b), {}, e.sha256);
         }
         if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
@@ -3943,8 +3958,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     std::vector<size_t> used_lines;
     for (size_t i = 0; i < files.size(); ++i)
     {
+        // (Not a copy of an item of Sieve's lines, whose size is listed as made, not as a number: a
+        // reader checks a copy's size against its first's. Such a file is weighed as itself, an
+        // item too where it is one. Found by CI step 10 at v33's freeze, 3 November 2026: the
+        // hallway's degree sample holds MIDI items with the same bytes.)
         if (const auto c = copy_of.find(files[i]->path); c != copy_of.end())
-            if (const auto k = file_index.find(c->second); k != file_index.end() && k->second < i)
+            if (const auto k = file_index.find(c->second); k != file_index.end() && k->second < i && files[k->second]->way.rfind("item ", 0) != 0)
             {
                 files[i]->way = "copy " + std::to_string(k->second);
                 ++copies_made;
@@ -5356,11 +5375,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v31 = m.v31;
     r.v32 = m.v32;
     r.v33 = m.v33;
+    // (An archive's members only: a text's spans are members too, said on their own line.)
+    std::unordered_set<std::string> archives_made;
     for (const ManifestEntry& x : m.entries)
-    {
-        r.member_archives += x.remake.rfind("skm ", 0) == 0;
-        r.members += x.member;
-    }
+        if (x.remake.rfind("skm ", 0) == 0) archives_made.insert(x.path);
+    r.member_archives = archives_made.size();
+    for (const ManifestEntry& x : m.entries)
+        if (x.member)
+            if (const size_t slash = x.path.rfind('/'); slash != std::string::npos && archives_made.count(x.path.substr(0, slash))) ++r.members;
     r.rope_v6 = rope_triangle;
     r.rar_said = rar_said;
     for (const auto& u : m.unpacked) r.rar_remade += !u.program.empty();
