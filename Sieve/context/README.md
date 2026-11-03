@@ -18,6 +18,14 @@ written. If it cannot (files already there, say), the window stays open and says
 returns to its first screen, where you can tick Replace or choose another folder and Install
 again; Cancel part way removes what was written.
 
+## Pictures (3 November 2026)
+
+Where `sieve-view.exe` is beside `sieve-install.exe` (a release's `tools\`, or the build folder),
+a `.simage` or `.isieve` (Sieve instructions holding pictures) opens in the picture viewer on a
+double-click, and the Sieve submenu of `.sieve`, `.simage` and `.isieve` files has **View
+pictures** too (a `.sieve` holding anything but pictures is refused by the viewer, which says
+why). Windows may keep showing the old icon for these files until Explorer is restarted.
+
 ## Setting it up
 
 ```bat
@@ -34,7 +42,9 @@ A release carries this folder beside the programs. There, `install_context.bat` 
 `tools\sieve-install.exe` in the installation by itself; in the repository, the Release build's.
 
 It is for your user only (`HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\Sieve`, one
-for `.sieve` and one for each kind of archive);
+for `.sieve`, `.simage`, `.isieve` and each kind of archive; and for the viewer
+`HKCU\Software\Classes\Sieve.Picture`, `.simage` and `.isieve`, which `uninstall_context.bat`
+removes whole, these being Sieve's own kinds of file);
 nothing else on the machine is changed. On Windows 11 the entry is under **Show more options**
 (or Shift+right-click).
 

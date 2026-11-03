@@ -9,7 +9,7 @@ For a number of years now I have been conceptualising a compression engine which
 
 	Compression
 
-The system utilises various compression methods for comparitive analysis throughout the encoding process.
+The system utilises various compression methods for comparative analysis throughout the encoding process.
 
 Coupled with a final pass of custom search methods that improve the results, as well as breaking data down into chunks to test against various methods.
 
@@ -17,7 +17,7 @@ It includes a file delta scanner which optimises files when they contain much of
 
 Example : WoWRevived which is a restoration project of mine for an old video game (Jeff Wayne's 'The War of the Worlds' the 1998 RTS PC game) contains two nearly identical files that it swaps between, one containing the regular minimaps and the other containing higher resolution minimaps.
 
-The two files are scanned, the ~96% similarity is noted and the ~160mb file which is reduced to ~52mbs, becomes a ~2mb script that lifts the data from the other file as it is unpacked.
+The two files are scanned, the 98.7% similarity is noted and the ~160mb file which is reduced to ~52mbs, becomes a ~2mb script that lifts the data from the other file as it is unpacked.
 
 Alongside that it checks file hashes and trims exact duplicates to be a single file that gets unpacked accordingly.
 
@@ -45,7 +45,7 @@ Here you can find statistics and comparisons to other compression methods.
 
 As well as information recorded throughout various benchmarks of the system.
 
-So as to not make this post any longer than it already is I will only include the pi6.txt values here along with a few other noteworthy tests, but you can find enwik8, enwik8, silesia and more through the link.
+So as to not make this post any longer than it already is I will only include the pi6.txt values here along with a few other noteworthy tests, but you can find enwik8, enwik9, silesia and more through the link.
 
 pi6.txt stress test, file sourced from : https://www.exeter.ac.uk/v8media/facultysites/ese/physics/pi6.txt
 
@@ -55,14 +55,15 @@ pi6.txt.sieve : 417,049 bytes (417,792 bytes on disk)	: 0.43540979816540276%				
 
 now 1,808 bytes away from the theoretical limit
 
-The theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.43% of it.
+The theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.44% of it.
 
 3653x5480 resolution sourced from : https://www.spitogatos.gr/blog/static/media/1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg
 
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg :             3,844,213 bytes ( 3,846,144 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z :          3,843,942 bytes ( 3,846,144 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve :    3,829,436 bytes ( 3,829,760 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk )
+1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk ) - permanent archive or compressed format off
+1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,085,301 bytes ( 3,088,384 bytes on disk ) - permanent archive or compressed format on
 
 AI generated control script : https://github.com/Thor110/Potentia/blob/main/Sieve/data/anchors/ai-generated-content/gemini/control.py
 
@@ -97,7 +98,7 @@ The program is 'sieve.exe' which is a command line application, I also include a
 
 It can create self extracting installers and there is a context menu function that is capable of extracting various compressed formats, including but not limited to:
 
-- supported compressed format list
+.7z .zip .zipx .xz .txz .gz .tgz .bz2 .tbz2 .tbz .zst .tzst .lz4 .tlz4 .lz .tlz .lzma .br .rar .cab .iso .lzh .lha .cpio .ar .deb .warc .tar
 
 Formats can be added and dynamically accessed through this context menu.
 
@@ -123,7 +124,7 @@ By enforcing strict integer-only arithmetic throughout the training loop—where
 
 	The Sieve AI Model
 
-Trained on just The Universal Library 'universalbibliothek' the German story which amongst other influences, inspired the Library of Babel by Jorge Luis Borges.
+Trained on just The Universal Library 'Kurd Laßwitz’s 1904 short story Die Universalbibliothek' which amongst other influences, inspired the Library of Babel by Jorge Luis Borges.
 
 sieve-ai-16432c2a3953.safetensors : 34,072 bytes : 0.462 s to encode to .sieve
 sieve-ai-16432c2a3953.safetensors.sieve : 4,180 bytes : 0.042 s to decode from .sieve
@@ -147,7 +148,7 @@ YouTube Video Tutorial on Using The Sieve of Potentia - not yet created - NOTE
 https://github.com/Thor110/Potentia
 https://thor110.github.io/Potentia/index.html
 
-Build with Claude Opus 5.5 after years of conceptual planning, initially I wanted to build this in pure assembly with an actual team but no one believed in the idea.
+Built with Claude Opus 5.5 after years of conceptual planning, initially I wanted to build this in pure assembly with an actual team but no one believed in the idea.
 
 Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose. Transparency fosters trust.
 ( My AI Disclosure Policy which originates from : https://thor110.github.io/Potentia/Pages/audio.html )

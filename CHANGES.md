@@ -1,19 +1,23 @@
-# The picture viewer in the release (3 November 2026)
+# .simage and .isieve open in the picture viewer (3 November 2026)
 
-Unzip this over the repository root, on top of your commit f4e8200 ("sieve planned post
-adjustments"). One local commit, not pushed: 1157ab0. The hallway and sieve-view build here; I
-couldn't run make_release.py here (it needs 7-Zip and a Windows Release build), so your next
-release is its test.
+Unzip this over the repository root, on top of your commit 12bc15e ("sieve post details"). One
+local commit, not pushed: ca0cd1b. The .bat files keep their CRLF line endings. I couldn't run the
+scripts here (no Windows), so running `context\install_context.bat` is their test.
 
-- **`tools/make_release.py`:** `sieve-view` joins the programs a release carries, in `tools\`
-  beside `sieve` and `sieve-install`, so its Sieve button finds the `sieve` beside it. It's
-  required like the others: a release stops if the build has no `sieve-view.exe` (it's built with
-  the client, as `sieve-install` is).
-- **The tools' `README.txt`** says what it is: the picture viewer for PNG, JPEG, BMP, GIF, TGA and
-  Sieve instructions holding only pictures (.simage, .isieve), its Sieve button, and
-  `sieve-view --help` for its keys.
-- **The hallway's "This installation" map** lists it.
-- **`docs/SIEVE-INSTALL-USAGE.md`** names it among the release's tools.
+**`context\install_context.bat`** now also:
+- sets `.simage` and `.isieve` to open in `sieve-view` on a double-click (a `Sieve.Picture` file
+  type for your user, with the viewer's icon);
+- gives `.simage` and `.isieve` the same Sieve submenu as `.sieve` (Extract here, Extract to a
+  folder of its name);
+- adds **View pictures** to the Sieve submenu of `.sieve`, `.simage` and `.isieve` files. The
+  viewer refuses a `.sieve` holding anything but pictures, and says why.
 
-Not done: nothing yet opens `.simage` files with the viewer by a double-click. The right-click menu
-(`context\install_context.bat`) could register it, if you'd like.
+It looks for `sieve-view.exe` beside `sieve-install.exe` (a release's `tools\`, or the build
+folder). Without it, everything works as before and it says the viewer wasn't found.
+
+**`context\uninstall_context.bat`** takes all of it away, including the `.simage` and `.isieve`
+keys whole (they're Sieve's own kinds of file).
+
+Windows may keep the old icon on existing `.simage` files until Explorer is restarted.
+
+`context\README.md` and the release notes draft (`tools\make_release.py`) describe it.
