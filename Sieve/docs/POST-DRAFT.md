@@ -85,7 +85,7 @@ Failure Tracking & Edge Case Analysis
 
 	Security
 
-All sieve files contain SHA-256 hashes of the files they contain and are checked when decoding and not written if the hashes don't match.
+All sieve files contain SHA-256 hashes of the file tree they contain and are checked when decoding and not written if the hashes don't match.
 
 	Applications
 
@@ -128,7 +128,7 @@ Trained on just The Universal Library 'universalbibliothek' the German story whi
 sieve-ai-16432c2a3953.safetensors : 34,072 bytes : 0.462 s to encode to .sieve
 sieve-ai-16432c2a3953.safetensors.sieve : 4,180 bytes : 0.042 s to decode from .sieve
 
-An 8192 token weight model reduced to less bytes than it has tokens.
+An 8192 token weight model reduced to less bytes than it has weights.
 
 The model isn't capable and it isn't supposed to be, it is just a proof of concept.
 
