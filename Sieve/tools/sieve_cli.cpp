@@ -3182,6 +3182,10 @@ int main(int argc, char** argv)
             _setmode(_fileno(stdout), _O_BINARY);
 #endif
             std::ios::sync_with_stdio(false);
+            // What installing has: archives remade, and mixing's word lists and primers (3 November
+            // 2026: since v33's W1 mixes web pages under 4 KiB too, with the word list, the host
+            // refused a page of the test site's directory.sieve without them).
+            use_item_maker();
             return run_web_host(std::cin, std::cout, SIEVE_VERSION);
         }
         if (first == "help" || first == "--help" || first == "-h")

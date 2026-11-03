@@ -58,8 +58,14 @@ MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was ou
     sieve-install and the oracle.
 - **The documents:** SPECIFICATIONS §12.2's v33 paragraph and SIEVE-FORMAT.md describe it;
   FEATURES.md lists what Sieve does, each with its measurement.
-- **Still to do:** Edward's CI on Windows, Linux and macOS; the Proof samples and STATISTICS.md
-  measured again at v33.
+- **Done since:** Edward's CI on Windows, Linux and macOS, and the public files, STATISTICS.md and
+  degrees.sieve measured again at v33 (results/v33-measured-2026-11-03.md).
+- **Damaged files with `W1` (3 November 2026, results/damaged-v33-2026-11-03.md):** 3,160 damaged
+  copies of files using `W1` and v33's other ways, given to sieve, sieve-install, the oracle and a
+  sanitizer build: every one refused or installed the same. Found beside it: the web extension's
+  host had no word lists or primers, so it refused a small page mixed with them; it has them now.
+- **Still to do for v33:** Edward's own files measured at v33 (the photos, pi6 and ALTEngine done;
+  MAPS.WoW, WoWRevived and the release to come).
 
 **v33, as it was while a draft (Edward, 2 November 2026: "lets stay locked at manifest v33 draft for a
 while again until we get all the new systems and ideas implemented").** Every piece that needs a new

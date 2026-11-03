@@ -36,10 +36,10 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 | [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 41,710,177 | 5.08:1 | −13.92% |
 | [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
-| [ALTEngine](#a-game-engine-altengine), a game engine's release | 25,396,730 | 7,664,970 | 7,546,366 | 3.37:1 | −1.55% |
+| [ALTEngine](#a-game-engine-altengine), a game engine's release (v0.9.4) | 25,694,035 | 7,712,804 | 7,345,022 | 3.50:1 | −4.77% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 523,367 | 4.57:1 | −23.71% |
-| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,425,909 | 1.04:1 | −3.26% |
+| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,424,154 | 1.04:1 | −3.30% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,686 | 1,733:1 | −66.53% |
 
@@ -263,6 +263,12 @@ What it shows:
 
 The full tables, with each way's making, decoding and checking times, are in the run's results.md.
 
+**At `sieve-manifest-v33` (3 November 2026, Edward's machine, the same four ways):** the three
+photographs come to 3,715,757, 3,978,510 and 4,424,154 for size with Try every way (each 986 to
+1,913 bytes under v32) and to v32's bytes otherwise; Don Quixote 523,367 for size (with Try every
+way or without), 683,194 for decoding; pi6.txt 417,049 and control.py 591 and 722, as at v32. Every
+`.sieve` installed again the same.
+
 ## Silesia: the standard corpus of mixed files
 
 The [Silesia corpus](https://sun.aei.polsl.pl/~sdeor/index.php?page=silesia): twelve files of
@@ -427,6 +433,27 @@ installed in 3.7 s (decoded in 3.587 s, checked and written in 0.143 s).
   `LightManifestExample.json` (2,408,120 bytes), mixed alone came to 286,875.
 - **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,893,553, and Edward's 7z 7,664,970.
 
+**ALTEngine v0.9.4 at `sieve-manifest-v33` (3 November 2026, Edward's machine, the File Locator with
+Keep a log; Try every way off and Optimise Search on, Prioritise Decoding Speed off, compressed
+formats as they are).** 46 files. It took 109.1 s to make and installed in 14.8 s (decoded in
+14.630 s, checked and written in 0.144 s), every file checked against its SHA-256.
+
+| | Bytes | Ratio | Of the folder | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| The folder | 25,694,035 | | | |
+| `ALTEngine-v0.9.4.zip` | 10,075,403 | 2.55:1 | 39.21% | +30.63% |
+| `ALTEngine-v0.9.4.7z` | 7,712,804 | 3.33:1 | 30.02% | |
+| **`.sieve`** | **7,345,022** | **3.50:1** | **28.59%** | **−4.77%** |
+
+- **The programs, mixed through the x86 filter (v33's `X`):** six of the seven, 22,151,168 bytes,
+  came to 6,953,189 mixed (`mix4 ... R1 M4 C2 X`), against LZMA2 with the x86 filter's estimate of
+  7,329,091 for the same six. The smallest, `swresample-6.dll` (124,416 bytes), stayed in the x86
+  stream, which was smaller for it. The largest, `avcodec-62.dll` (13,606,400 bytes), kept all
+  three match ways after v33's check on its first 4 MiB: 4,387,190 against 4,560,553.
+- **The cost:** installing takes longer, since mixed programs decode as slowly as they were coded:
+  14.8 s here, where v32's `.sieve` of v0.9.2, carried by LZMA2, installed in 3.7 s.
+- **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,943,117; the `.sieve` is 7.53% under it.
+
 ## A million digits of pi
 
 `pi6.txt`, a million digits of pi, from
@@ -521,6 +548,22 @@ was mixed as a picture of the shape its bytes suggest, 3% to 4% under the origin
 | 20240407_153939.jpg | 4,587,473 | 4,425,909 | −3.26% | 60 s | 5.0 s |
 
 With the temporary box ticked, v32 carries each as its brunsli form (the table below: about 20% off).
+
+**At `sieve-manifest-v33`, 3 November 2026,** on Edward's machine by `tools/bench_files.bat`, Try
+every way, the Compressed formats boxes off. Each is mixed, one now with the match model's second
+candidate (`C2`); every one installed again the same:
+
+| | Original | `.jpg.sieve`, v33 | Against v32 | Against 7z | Made in | Decoded in |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A picture at 3653×5480 | 3,844,213 | 3,715,757 (`mix4 B22`) | −986 | −3.33% | 56.6 s | 4.9 s |
+| 20230830_163945.jpg | 4,139,682 | 3,978,510 (`mix4 B22 C2`) | −1,913 | −3.61% | 55.1 s | 5.2 s |
+| 20240407_153939.jpg | 4,587,473 | 4,424,154 (`mix4 B22`) | −1,755 | −3.30% | 62.0 s | 5.6 s |
+
+With a Compressed formats box ticked, each is its brunsli form: 3,085,301, 3,284,965 and 3,660,094
+bytes with temporary (19.74%, 20.65% and 20.22% under the original), made in about 5 s and decoded
+in about 0.4 s; with permanent the same but for the two photographs' 78 and 85 bytes more
+(3,285,043 and 3,660,179); those two installed as what permanent allows, not byte for byte (Sieve
+checked what it wrote), the picture at 3653×5480 byte for byte.
 
 **What a JPEG recompressor takes off (now v32's `jbr`; NEXT-VERSION §4a).** The same three files,
 the same day, each given back byte for byte:

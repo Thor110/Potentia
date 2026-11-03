@@ -1,70 +1,48 @@
-# v33 measured, two packer faults fixed, installing quicker (3 November 2026)
+# The web host fixed; damaged v33 files tested; STATISTICS at v33 (3 November 2026)
 
-Copy `Proof/` and `Sieve/` over the repository's. No change to the `.sieve` format: every reader
-reads what this build makes, and what it read before. Full figures and method:
-`Sieve/results/v33-measured-2026-11-03.md`.
+Copy `Proof/` and `Sieve/` over the repository's.
 
-## Measurements at v33 (Linux, 4 processors; sizes the same on any machine)
+## Your CI failure (step 11, line 322): fixed
 
-| | v32 | v33 |
-| :--- | ---: | ---: |
-| enwik8, for size | 21,547,893 | **21,431,896** (43,600 over PPMd) |
-| Silesia, all twelve, for size | 42,091,120 | **41,710,177** (−13.92% against 7z) |
-| Silesia, for decoding | 47,262,336 | 47,262,336 |
-| Don Quixote | 524,389 | **523,367** |
-| control.py | 591 | 591 |
-| degrees.sieve | 7,865 | **7,686** |
-| welcome to the sieve.sieve | 158 | 158 |
+`sieve web-host`, which the browser extension starts, was never given the word lists or the
+primers. Since `W1`, web pages under 4 KiB are mixed too, with the word list, so the host refused
+the test site's `directory.sieve` (its `index.html`). The host now has what installing has
+(`tools/sieve_cli.cpp`, one call before `run_web_host`). Step 11 then passed in full here (1,782 s),
+and the unit suite passes (154,308 checks, 0 failures).
 
-Every `.sieve` was installed again and checked. `Proof/STATISTICS.md` has the v33 rows (At a
-glance, enwik8, Silesia file by file, Don Quixote, degrees). `Proof/degrees.sieve` is the v33 one.
-`PROOF.md`'s size line now says 7,686. Its installation line ("on my computer ... 0.356s") is about
-the v32 file, so you may want to install the new one and update it.
+## The damaged-file test (`Sieve/results/damaged-v33-2026-11-03.md`)
 
-## Two faults the run found, both fixed (`tools/cli/pack.cpp`)
+3,160 damaged copies of `.sieve` files using `W1` in each place it can be (a page alone, a group,
+the lzma2 stream), plus the earlier review's samples of v33's other ways. They went through
+`sieve install`, `sieve-install`, the oracle, and a build with AddressSanitizer and
+UndefinedBehaviourSanitizer. Every one was refused or installed the original files: none
+different, none hung, and no memory error. The sanitizer build's only report is a deliberate
+unaligned read inside 7-Zip's own x86 filter (`Bra86.c`), which the undamaged file reports too.
+The script is kept as `Sieve/tools/damage_test.py`.
 
-- **The match ways chosen on too short a start.** On enwik8 and samba, all three ways (`R1 M4 C2`)
-  won the first 256 KiB and lost whole. enwik8 came to 21,870,393 bytes, larger than v32. `R1` and
-  `M4` cost more as a file runs on. Where all three win the first 256 KiB of a file over 4 MiB,
-  they are now weighed again against `C2` alone on its first 4 MiB. That 4 MiB choice matched the
-  whole file on all seven files tested. Results:
-  - enwik8: 21,431,896;
-  - samba: 3,277,403;
-  - mozilla, osdb, x-ray, sao and ooffice: the same bytes as before.
+## STATISTICS
 
-  Cost: two 4 MiB codes, only on those files (samba took 256.9 s to make, from 231.7 s).
-- **The rope's probe (2 November) left `mr`, a scan, to LZMA2 for decoding** (2,735,609 bytes
-  against v32's 2,314,195). Its start comes to 1.09 to 1.1, but its middle is 0.92. Where the start
-  is from 1.1 up to 1.2, the file's middle is now asked too, and the rope is searched where the
-  middle shows it winning. mr is 2,314,195 again, and Silesia's making time is as before (565.4 s).
-  Asking the middle on every file cost 238 s and gained nothing more.
+- Your bench at v33: the three photographs (3,715,757, 3,978,510 and 4,424,154; each a little under
+  v32), and the brunsli figures; pi6, Don Quixote and control.py as before.
+- ALTEngine v0.9.4 from your logs: **7,345,022 bytes, 4.77% under your 7z** (7,712,804), made in
+  109.1 s, installed in 14.8 s. Six of its seven programs are mixed through the x86 filter. They
+  install slower than LZMA2 (v0.9.2 at v32 installed in 3.7 s). Your hostname and paths are left out.
 
-## Installing made quicker (`tools/cli/locate.cpp`, `core/src/mix.cpp`)
+## POST-DRAFT.md
 
-1. **Files made again from a recipe now use every core.** These are PNGs re-saved, JPEGs from
-   brunsli and archives; until now they were made one at a time. On the repository's 95 pictures
-   packed with Compressed formats (temporary), installing took **6.2 to 6.5 s, down from 12.9 to
-   13.9 s**, with every file the same on all ten installs.
-2. **Mixing's large tables on huge pages (Linux only).** Decoding 16 MB of enwik8 took a median
-   **25.27 s against 26.16 s** (seven runs each; about 3%). The codes are unchanged.
-3. **The x86 stream is decoded beside a mixed lzma2 stream.** Checked with Sieve, sieve-install and
-   the oracle, which all give the files back. Not timed: the x86 stream takes under a second.
+Unchanged: every number in it is already at v33. The photograph's 3,715,757 and 3,085,301, with
+their on-disk sizes, are right; so are pi's 417,049, 1,808 and 0.44%, and control.py's 591. The AI
+model's 4,180 is an item of the AI line, carried as its place, which v33's ways don't touch.
 
-Looked at and left (reasons in the results file):
-- overlapping the mixed lzma2 stream with the other files;
-- keeping a primed model between files;
-- the rope's decoder;
-- mixing in independent blocks (a new format).
+## The release script
 
-## Checks run here
+On Linux, `make_release.py` ran every step and made everything: `sieve-setup`, `sieve.sieve`,
+`sieve-source.7z`, `source.sieve`, `metrics.txt`, `SHA256SUMS.txt` and the notes. Each installer
+installed back to the release folder, and `source.sieve` to the source. So I can't reproduce the
+fault here. The script stops at the first command that fails, and it printed
+`make_release: ... failed (N)` just before the window's "Press any key". Could you send that window's
+last 30 lines or so? On your machine the release folder was made, so it failed at step 5 (packing
+the folder) or later.
 
-- Unit suite: 154,308 checks, 0 failures.
-- CI step 11's rope-probe block: passes, unchanged.
-- Your full CI is still to run. Its archive and picture blocks go through the parallel remakes.
-  No CI block makes a mixed lzma2 stream beside programs, so the x86 thread was checked by hand
-  only (v29, five texts and a program).
-
-## Still yours to run at v33
-
-The photos, pi6, MAPS.WoW, WoWRevived, ALTEngine and the release. STATISTICS still gives those at
-v32.
+Also: the source 7z here is 49.5 MB. Most of that is the anchors folder, which is in the
+repository's tree.
