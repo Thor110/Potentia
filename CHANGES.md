@@ -1,28 +1,48 @@
-# make_release fixed: "cannot read .../sieve-install.exe/1" (4 November 2026)
+# Manual Navigation: opening a file fixed; the byte sheet and an example to drive (4 November 2026)
 
-Copy `Sieve/` over the repository's. Two files: `tools/sieve_cli.cpp` and `ci/steps/11-oracle.sh`.
-(The Manual Navigation log zip from earlier is separate; apply both.)
+Copy `Sieve/` over the repository's. The two pictures beside this file are only to look at: the
+2 by 2 example after a few turns, and control.py as a sheet 16 bytes wide.
 
-## What went wrong
+## Why opening a file did nothing
 
-The release's step 5 packs the release folder with `sieve locate ... --compare`. The packer found
-spans of text-encoded binary inside `sieve-install.exe` and carried them decoded, v33's `spn` way
-(as it did in ALTEngine's `data/Patches.json`). It lists such spans as members of their file:
-`tools/sieve-install.exe/1`. `--compare` then went through the listing and read every entry from
-the disk, the members included, but a member isn't a file on the disk. `sieve` failed there, and
-the release script stopped after making the folder.
+The screen named itself as the owner of its file windows but never registered as one, so the
+dialog code dropped every answer: Load File, Load Log and Save Steps all did nothing. My earlier
+checks loaded files from the command line, which never goes through a window, so they missed it.
 
-It reproduces on any folder with such a text, with `--compare`. The Linux release passed only
-because Linux's `sieve-install` has no such spans.
+It registers now. `--manual-pick FILE` hands a file over the way the window does, through the same
+check, and CI step 10 uses it. Built without the fix, that check fails, so it would have caught this.
+(The other screens that open windows are all parts of the hallway, which registers.)
 
-## The fix
+## What the screen does now
 
-The comparison skips members. Their bytes are already counted in the file they're part of, so the
-"original" is the folder's own size, as before.
+- **It opens on an example:** a square of random bytes, 2 by 2 to begin with, so there's always
+  something to drive. Load File puts a file in its place.
+- **WIDTH (W; Shift+W back): 2 to 16.**
+  - For the example, it is the side of the square: 3 by 3, and on up to 16 by 16 (256 bytes).
+  - For a file, it is the number of bytes on each row of the sheet.
+- **FRESH RANDOM BYTES (F, or its box; on by default):** when the width changes, the example is made
+  of new random bytes. Unticked, it keeps the bytes it has, adds random ones or cuts the end. It does
+  nothing while a real file is loaded. The name is mine, as your message was cut off at "call it";
+  it is one string to change.
+- **A file is shown whole** as a sheet, with each row's first offset at its left.
+  - It scrolls with the wheel, PgUp/PgDn and Home/End; a bar beside it shows where you are.
+  - Choose a byte with Left/Right, Ctrl+Up/Down for the row above or below, or a click.
+  - Only the chosen byte has arrows, at its top and bottom. Turn it with them, with Up/Down (Shift:
+    16), with Shift+wheel, or by typing hex.
+  - Bytes that differ from the file as loaded are drawn in the accent colour.
+- **Logs of the example** record its bytes in the log's head (`# example,`), so Load Log makes the
+  same example again with no file.
+- **A log now begins at the first step,** so just opening the screen leaves no empty logs.
+- **Remembered:** the width and FRESH RANDOM BYTES are kept in the settings file under `[manual]`,
+  beside Keep a log and the undo depth.
+- **Also fixed:** W only worked once a file was loaded.
 
 ## Checks
 
-- A folder with base64 spans now packs with `--compare` (and `--items`), and installs the same.
-- CI step 11 has a new line: `--compare` on its spans folder, checking that the original is the
-  five files' own bytes. That block passes here.
-- Your make_release should now get past step 5. Do run it again.
+- CI step 10 now covers:
+  - the window path;
+  - the example from a fixed seed (the same bytes on every system), its log and its replay;
+  - widening with FRESH RANDOM BYTES on (nine new bytes) and off (the first four kept, five added).
+- Step 10 passes here, and the unit suite passes (154,314 checks, 0 failures).
+- I can't click here, so the mouse wants a try in the hallway itself: the arrows, clicking a byte,
+  the wheel and Shift+wheel, and the buttons.

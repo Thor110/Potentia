@@ -129,6 +129,8 @@ struct AppSettings
     // lands; on unless unticked) and the undo depth (0: all, the default).
     bool manual_log = true;
     int manual_undo = 0;
+    bool manual_fresh = true; // FRESH RANDOM BYTES: a new example each time the width changes
+    int manual_width = 2;     // bytes a row, and the example's side: 2 to 16
     // "Optimise Compressed Formats" ([locator] optimise_archives, the key's old name kept): off unless
     // ticked; read, both halves below ticked (written: either is).
     bool locator_archives = false;

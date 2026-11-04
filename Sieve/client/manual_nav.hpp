@@ -3,8 +3,13 @@
 //
 // The binary line to begin with: a file of n bytes is a unit of the loop of every file of 0 to n
 // bytes (binary-v1, SPECIFICATIONS §12.1), its rotation the bearing the navigator gives it. Every
-// byte is a wheel; a window of 4 of them (8 or 16: W) is shown at a time, each turned with the
-// arrows above and below it (or Up/Down, Shift for 16), or set by typing hex.
+// byte is a wheel. With no file loaded, an example: a square of random bytes, its side the width
+// (W: 2 to 16, so 4 to 256 bytes), made afresh when the width changes where FRESH RANDOM BYTES is
+// ticked (F; on by default), else kept, random bytes added or the end cut (Edward, 4 November
+// 2026: "4 random bytes as the default loaded example 'file' [...] where we would learn to drive
+// a 'file'"). A file loaded is laid out whole, as a sheet of that many bytes a row, scrolling. The
+// byte chosen is turned with the arrows at its top and bottom (or Up/Down, Shift for 16), or set
+// by typing hex; bytes no longer as loaded are marked.
 //
 // The circle at the right: the dot's angle is the file's rotation (0 at the top, clockwise, as on
 // the compass); its distance from the centre is how far that rotation is from landing exactly on a
@@ -33,6 +38,8 @@
 
 #include <SDL3/SDL.h>
 
+#include "dialogs.hpp" // DialogOwner
+
 #include <atomic>
 #include <cstdint>
 #include <deque>
@@ -41,6 +48,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <string>
 #include <thread>
 #include <vector>
@@ -60,7 +68,16 @@ public:
 
     // Keep a log and the Undo depth (0: all) as the settings have them, the logs folder, and who to
     // tell when either is changed here ([manual] in the settings).
-    static void remember(bool keep_log, int undo_depth, std::filesystem::path folder, std::function<void(bool, int)> changed);
+    struct Kept
+    {
+        bool keep_log = true;
+        int undo_depth = 0; // 0: all
+        bool fresh = true;  // FRESH RANDOM BYTES
+        int width = 2;      // bytes a row, and the example's side
+    };
+    static void remember(Kept kept, std::filesystem::path folder, std::function<void(const Kept&)> changed);
+    // Scripting: the example made again from this seed (its bytes the same every run).
+    void seed(uint32_t s);
 
     // A file's bytes to steer (Ctrl+O's, or --manual-nav FILE in scripted runs); false, with the
     // status saying why, where it cannot be taken.
@@ -78,11 +95,15 @@ public:
     bool load_log(const std::string& path);
     const std::string& log_path() const { return log_path_; } // the log being written ("" for none)
     const std::string& status() const { return status_; }
+    bool loaded() const { return !bytes_.empty() && !example_; } // a file's bytes to turn (not the example)
     // The readout above the circle, as text (for scripted runs).
     std::string readout() const;
     // From the file windows' callbacks, on any thread: applied on the main thread. `what`: 0 a file to
     // load, 1 where to save the walk, 2 a log to load.
     void file_chosen(const std::string& path, int what);
+    // Scripting: `path` given as a file window would give it (0 load, 1 save the walk, 2 a log), through
+    // the same answer as the window's (its owner checked), then taken as the next frame takes it.
+    void answer_as_window(const std::string& path, int what);
 
 private:
     // Where a file lands: its rotation, how far from landing exactly, and its route.
@@ -149,6 +170,12 @@ private:
     void open_log(bool append);           // the log begun (or carried on), as Keep a log says
     void write_landed(const Step& s);     // a step's line, once it has landed
     void replay(const std::vector<Logged>& lines);
+    // New bytes to turn (a file read, an example made, an example read back from a log): the steps,
+    // marks and log of the last let go.
+    void take(std::vector<uint8_t> bytes, std::string name, std::string path, bool example);
+    void make_example(bool keep); // a width-by-width square of random bytes (keep: the last one's, resized)
+    void keep_in_view();          // the sheet scrolled to the byte chosen
+    void tell_kept();             // the settings told what is kept
 
     SDL_Window* window_;
     SDL_Renderer* r_;
@@ -157,11 +184,15 @@ private:
     int decimals_ = 1;
 
     std::vector<uint8_t> bytes_; // the file, once
+    std::vector<uint8_t> loaded_; // as loaded, to mark the bytes changed since
     std::string name_;
     std::string path_;   // its whole path, as loaded
     std::string sha_;    // its SHA-256 as loaded (hex)
     bool keep_log_ = true;
     int undo_depth_ = 0; // 0: all
+    bool fresh_ = true;   // FRESH RANDOM BYTES
+    bool example_ = false; // the bytes an example made here, not a file
+    std::mt19937 rng_;
     std::ofstream log_out_;
     std::string log_path_;
     uint64_t steps_made_ = 0;  // every step's number so far (turns, undos and redos)
@@ -171,9 +202,10 @@ private:
     std::string waiting_log_path_; // (where that log is, to carry on writing to it)
     bool from_log_ = false;        // load() called by load_log(): the file the log names
     size_t original_address_bytes_ = 0; // the file's own address as loaded, as raw bytes
-    uint64_t at_ = 0;     // the window's first byte
-    int span_ = 4;        // the bytes shown: 4, 8 or 16
-    int chosen_ = 0;      // the byte chosen in the window
+    uint64_t sel_ = 0;    // the byte chosen
+    uint64_t top_ = 0;    // the sheet's first row shown
+    int width_ = 2;       // bytes a row, and the example's side: 2 to 16
+    int rows_shown_ = 8;  // rows the sheet has room for (as last drawn)
     int pending_hi_ = -1; // a first hex digit typed into the chosen byte, waiting for its second
 
     std::vector<Step> active_; // the steps from the file as loaded to the bytes now (each a turn)
@@ -193,9 +225,12 @@ private:
 
     std::string status_;
     std::optional<std::pair<std::string, int>> chosen_file_; // (mx_)
-    std::vector<std::pair<SDL_FRect, int>> cells_;            // a byte's box, its index in the window
-    std::vector<std::pair<SDL_FRect, int>> arrows_;           // index * 2 (+1 for down)
+    std::vector<std::pair<SDL_FRect, uint64_t>> cells_;       // a byte's box, its offset
+    std::vector<std::pair<SDL_FRect, int>> arrows_;           // the chosen byte's: 0 up, 1 down
     std::vector<std::pair<SDL_FRect, int>> buttons_;
+    // Last, so the first let go: while it lives, the file windows' answers reach this screen; without
+    // it they were dropped (4 November 2026, Edward: "Opening a file seems to do nothing").
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

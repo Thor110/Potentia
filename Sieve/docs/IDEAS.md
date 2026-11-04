@@ -6133,8 +6133,10 @@ and 16 bytes etc."
   the main menu, "Manual Navigation", on the binary line to begin with (other dimensions later, as a
   `<Dimension>` value to turn). It loads any file as it is, with no sieving; a `.sieve` is loaded to
   steer one.
-  - *Left:* a window of the file's bytes (4 to begin with, then 8 and 16) at an offset chosen, each
-    with the navigator's arrows (`<00>`) and hex typed in.
+  - *Left:* the bytes as a sheet, 2 to 16 a row (Edward, 4 November 2026: "2 then increments of 1 up
+    to 16"); a file whole, scrolling. With no file, an example to learn on: a square of random bytes,
+    its side the width, made afresh when it changes where FRESH RANDOM BYTES is ticked. The byte chosen
+    has the navigator's arrows, or hex typed in.
   - *Right:* a circle. The dot's angle is the file's rotation on its line, and its distance from the
     centre is how far that rotation lies from the nearest bearing at the Angle Precision. The centre
     is kept for an exact hit. The first dot is in the line's colour (its primary and secondary

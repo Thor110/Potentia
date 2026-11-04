@@ -973,6 +973,27 @@ q "^# file,.*mnav-moved.bin$" "$mlog"
 mv mnav-moved.bin mnav.bin
 printf '\001\377\377\000' > mnav-other.bin
 $H --manual-log "$mlog" --manual-nav mnav-other.bin --screenshot mnav-other.png | tr -d '\r' | q "Not the file the log was made on"
+# Load File's window: a file given as the window gives it, through the same answer (its owner
+# checked; 4 November 2026, Edward: "Opening a file seems to do nothing", every answer dropped).
+$H --manual-pick mnav.bin --screenshot mnav-pick.png | tr -d '\r' | q "^manual navigation: mnav.bin, 4 bytes"
+# The example it opens on with no file loaded (Edward, 4 November 2026): 2 by 2 random bytes
+# (--manual-seed: the same bytes every run, on every system), its log carrying its bytes, replayed
+# from them alone. W widens it: with FRESH RANDOM BYTES (the default) to 3 by 3 new bytes; unticked
+# (F), the first 4 kept and 5 added.
+rm -rf mnav-ex
+$H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "Up" --screenshot mnav-ex.png | tr -d '\r' > mnav-ex.txt
+q "^manual navigation: An example: 4 random bytes, 2 a row" mnav-ex.txt
+exlog=$(sed -n 's/^  log: //p' mnav-ex.txt)
+q "^# example,133AC751$" "$exlog"
+$H --manual-log "$exlog" --screenshot mnav-ex-replay.png | tr -d '\r' > mnav-ex-replay.txt
+q "1 step(s) replayed from the log" mnav-ex-replay.txt
+[ "$(sed -n 2p mnav-ex.txt)" = "$(sed -n 2p mnav-ex-replay.txt)" ]
+rm -rf mnav-ex
+$H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "W,Up" --screenshot mnav-ex-w.png > /dev/null
+q "^# example,70FAB974FA4E894380$" mnav-ex/*.csv
+rm -rf mnav-ex
+$H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "F,W,Up" --screenshot mnav-ex-kept.png > /dev/null
+q "^# example,133AC75170FAB974FA$" mnav-ex/*.csv
 # Undo as deep as the steps go (the default): 15 turns, 15 undos, the file as loaded; at a depth of
 # 10 (U), 5 turns are left.
 ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))

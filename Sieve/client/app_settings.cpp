@@ -248,6 +248,12 @@ AppSettings AppSettings::load(const fs::path& path)
                 const int d = std::atoi(value.c_str());
                 if (d == 0 || d == 10 || d == 100 || d == 1000) s.manual_undo = d;
             }
+            else if (key == "fresh_random") s.manual_fresh = value == "1";
+            else if (key == "width")
+            {
+                const int w = std::atoi(value.c_str());
+                if (w >= 2 && w <= 16) s.manual_width = w;
+            }
         }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
@@ -323,6 +329,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
     };
     r.push_back({"manual", "keep_log", manual_log ? "1" : "0", "1: Manual Navigation's Keep a log ticked (the default): every step written to a CSV in the logs folder beside these settings as it lands, its head naming the file (its path, size and SHA-256), so Load Log can replay it; 0: off"});
     r.push_back({"manual", "undo_depth", std::to_string(manual_undo), "Manual Navigation's undo depth: 0 for all the steps (the default), or 10, 100, 1000"});
+    r.push_back({"manual", "fresh_random", manual_fresh ? "1" : "0", "1: FRESH RANDOM BYTES ticked (the default): with no file loaded, a new example of random bytes each time the width changes; 0: the example keeps its bytes, random ones added or the end cut"});
+    r.push_back({"manual", "width", std::to_string(manual_width), "Manual Navigation's width: bytes a row, and the example's side (2 to 16; 2 by default, an example of 4 bytes)"});
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
     r.push_back({"language", "language", language, "the language file's name in data/lang (en: English)"});

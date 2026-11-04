@@ -137,7 +137,9 @@ const char* kUsage =
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
     "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
-    "                      keeps a log there (none otherwise); --manual-log LOG (in place of FILE) replays a log\n"
+    "                      keeps a log there (none otherwise); --manual-log LOG (in place of FILE) replays a log;\n"
+    "                      --manual-pick FILE (in place of both) gives FILE as Load File's window would;\n"
+    "                      --manual-example (none of those) the example, --manual-seed N its bytes\n"
     "                      runs keys and typed text (=text types into the row chosen), as --designer's does;\n"
     "                      --cipher-in FILE takes a file's bytes as the input, --cipher-out FILE saves the output\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
@@ -916,19 +918,29 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
-    if (shot && (a.has("manual-nav") || a.has("manual-log")))
+    if (shot && (a.has("manual-nav") || a.has("manual-log") || a.has("manual-pick") || a.has("manual-example")))
     {
         // A picture of Manual Navigation (for documentation and testing): --manual-nav FILE loads
         // it; --script runs keys and hex typed into the byte chosen ("Up,Up,Right,=4f"); each
         // step's landing is worked out before the next is taken, so every mark is drawn;
         // --manual-steps FILE saves the steps as CSV, as Ctrl+S does.
         // (a log kept only where --manual-logs names a folder: a scripted run leaves nothing behind otherwise)
-        ManualNav::remember(a.has("manual-logs"), 0, a.has("manual-logs") ? std::filesystem::path(a.get("manual-logs")) : std::filesystem::path(), {});
+        ManualNav::Kept kept;
+        kept.keep_log = a.has("manual-logs");
+        ManualNav::remember(kept, a.has("manual-logs") ? std::filesystem::path(a.get("manual-logs")) : std::filesystem::path(), {});
         ManualNav nav(window, renderer, a.has("angle-decimals") ? std::stoi(a.get("angle-decimals")) : app.angle_decimals);
+        if (a.has("manual-seed")) nav.seed(uint32_t(std::stoul(a.get("manual-seed"))));
         // (--manual-log and --manual-nav both: the log first, and where its file was not found, or has
         // changed, FILE loaded as Ctrl+O would load it, the log replayed if it is the same bytes)
         bool loaded = a.has("manual-log") && nav.load_log(a.get("manual-log"));
         if (!loaded && a.has("manual-nav")) loaded = nav.load(a.get("manual-nav"));
+        if (!loaded && a.has("manual-pick"))
+        {
+            // (as Load File's window answers: through the same owner check, which once dropped it)
+            nav.answer_as_window(a.get("manual-pick"), 0);
+            loaded = nav.loaded();
+        }
+        if (!loaded && a.has("manual-example") && !a.has("manual-nav") && !a.has("manual-log") && !a.has("manual-pick")) loaded = true; // (the example it opens on)
         if (!loaded) throw std::runtime_error(nav.status());
         nav.wait();
         if (a.has("script"))
@@ -1301,11 +1313,14 @@ int run(const Args& a)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
                 // as the settings have them ([manual]), saved when changed there.
-                ManualNav::remember(app.manual_log, app.manual_undo, app_path.parent_path() / "logs", [&app, app_path](bool log, int depth) {
-                    app.manual_log = log;
-                    app.manual_undo = depth;
-                    app.save(app_path);
-                });
+                ManualNav::remember({app.manual_log, app.manual_undo, app.manual_fresh, app.manual_width}, app_path.parent_path() / "logs",
+                                    [&app, app_path](const ManualNav::Kept& k) {
+                                        app.manual_log = k.keep_log;
+                                        app.manual_undo = k.undo_depth;
+                                        app.manual_fresh = k.fresh;
+                                        app.manual_width = k.width;
+                                        app.save(app_path);
+                                    });
                 ManualNav nav(window, renderer, app.angle_decimals);
                 if (nav.run() == ManualNav::Result::Quit) break;
                 continue;

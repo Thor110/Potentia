@@ -105,10 +105,9 @@ void SDLCALL log_chosen(void* user, const char* const* files, int)
 // Keep a log and the Undo depth as the settings have them, the logs folder, and who to tell.
 struct Remembered
 {
-    bool keep_log = true;
-    int undo_depth = 0;
+    ManualNav::Kept kept;
     std::filesystem::path folder;
-    std::function<void(bool, int)> changed;
+    std::function<void(const ManualNav::Kept&)> changed;
 };
 Remembered& remembered()
 {
@@ -140,10 +139,19 @@ std::string u8(const std::filesystem::path& p)
 
 // The head every log and every walk saved begins with: what it was made on, so Load Log can open the
 // file again and know it is the same bytes.
-void write_head(std::ostream& o, const char* what, const std::string& path, size_t bytes, const std::string& sha, int decimals)
+void write_head(std::ostream& o, const char* what, const std::string& path, size_t bytes, const std::string& sha, int decimals,
+                const std::vector<uint8_t>* example)
 {
-    o << "# Sieve " SIEVE_VERSION " Manual Navigation " << what << ", " << local_time("%Y-%m-%d %H:%M:%S") << "\n"
-      << "# file," << path << "\n"
+    o << "# Sieve " SIEVE_VERSION " Manual Navigation " << what << ", " << local_time("%Y-%m-%d %H:%M:%S") << "\n";
+    // (a file by where it is; an example, made here and nowhere on the disk, by its bytes as made)
+    if (example)
+    {
+        o << "# example,";
+        for (const uint8_t b : *example) o << hex2(b);
+        o << "\n";
+    }
+    else o << "# file," << path << "\n";
+    o
       << "# bytes," << bytes << "\n"
       << "# sha256," << sha << "\n"
       << "# precision," << decimals << "\n"
@@ -175,14 +183,86 @@ void box(SDL_Renderer* r, const SDL_FRect& b, SDL_Color fill, SDL_Color line)
 ManualNav::ManualNav(SDL_Window* window, SDL_Renderer* renderer, int angle_decimals)
     : window_(window), r_(renderer), decimals_(std::clamp(angle_decimals, 0, 20))
 {
-    status_ = tr("mnav.status.empty");
-    keep_log_ = remembered().keep_log;
-    undo_depth_ = remembered().undo_depth;
+    const Kept& k = remembered().kept;
+    keep_log_ = k.keep_log;
+    undo_depth_ = k.undo_depth;
+    fresh_ = k.fresh;
+    width_ = std::clamp(k.width, 2, 16);
+    rng_.seed(std::random_device{}());
+    make_example(false); // (something to drive from the start: Load File puts a file in its place)
 }
 
-void ManualNav::remember(bool keep_log, int undo_depth, std::filesystem::path folder, std::function<void(bool, int)> changed)
+void ManualNav::remember(Kept kept, std::filesystem::path folder, std::function<void(const Kept&)> changed)
 {
-    remembered() = {keep_log, undo_depth, std::move(folder), std::move(changed)};
+    remembered() = {kept, std::move(folder), std::move(changed)};
+}
+
+void ManualNav::tell_kept()
+{
+    remembered().kept = {keep_log_, undo_depth_, fresh_, width_};
+    if (remembered().changed) remembered().changed(remembered().kept);
+}
+
+void ManualNav::seed(uint32_t s)
+{
+    rng_.seed(s);
+    if (example_) make_example(false);
+}
+
+void ManualNav::take(std::vector<uint8_t> bytes, std::string name, std::string path, bool example)
+{
+    if (worker_.joinable()) worker_.join();
+    collect_reading(); // (the last bytes' steps written, before their log is let go)
+    if (log_out_.is_open()) log_out_.close();
+    log_path_.clear(); // (a log begins with the first step: none for bytes only looked at)
+    bytes_ = std::move(bytes);
+    loaded_ = bytes_;
+    name_ = std::move(name);
+    path_ = std::move(path);
+    example_ = example;
+    sha_ = sieve::Sha256::hex(sieve::Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes_.data()), bytes_.size())));
+    steps_made_ = 0;
+    unlogged_.clear();
+    sel_ = top_ = 0;
+    pending_hi_ = -1;
+    active_.clear();
+    redo_.clear();
+    undoable_ = 0;
+    marks_.clear();
+    have_reading_ = false;
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        answers_.clear();
+    }
+    original_address_bytes_ = 0;
+    ++gen_;
+    start_reading();
+}
+
+void ManualNav::make_example(bool keep)
+{
+    // (each byte the top 8 of the generator's 32 bits: mt19937's numbers are the same on every
+    // system for a seed, where a distribution's need not be)
+    const size_t n = size_t(width_) * size_t(width_);
+    std::vector<uint8_t> b;
+    if (keep && example_) b = bytes_;
+    while (b.size() < n) b.push_back(uint8_t(rng_() >> 24));
+    b.resize(n);
+    const std::string w = std::to_string(width_);
+    take(std::move(b), trf("mnav.example_name", {w}), std::string(), true);
+    status_ = trf(keep ? "mnav.status.example_kept" : "mnav.status.example", {std::to_string(n), w});
+}
+
+void ManualNav::keep_in_view()
+{
+    const uint64_t n = bytes_.size();
+    if (n == 0) return;
+    if (sel_ >= n) sel_ = n - 1;
+    const uint64_t row = sel_ / uint64_t(width_), rows = uint64_t(std::max(1, rows_shown_));
+    if (row < top_) top_ = row;
+    if (row >= top_ + rows) top_ = row - rows + 1;
+    const uint64_t last = (n - 1) / uint64_t(width_);
+    if (top_ > last) top_ = last;
 }
 
 int ManualNav::depth() const { return replaying_ || undo_depth_ <= 0 ? std::numeric_limits<int>::max() : undo_depth_; }
@@ -212,7 +292,7 @@ void ManualNav::open_log(bool append)
     }
     // (begun part-way, Keep a log ticked after some turns: the walk so far first, so the log still
     // replays to the bytes now)
-    write_head(log_out_, "log", path_, bytes_.size(), sha_, decimals_);
+    write_head(log_out_, "log", path_, bytes_.size(), sha_, decimals_, example_ ? &loaded_ : nullptr);
     if (!active_.empty()) log_out_ << "# the walk so far, before this log began\n";
     for (const Step& s : active_)
         log_out_ << s.number << ",turn," << s.offset << ',' << hex2(s.from) << ',' << hex2(s.to) << ',' << s.bearing_before << ','
@@ -291,34 +371,11 @@ bool ManualNav::load(const std::string& path)
             status_ = trf("mnav.status.too_large", {std::to_string(b.size())});
             return false;
         }
-        if (worker_.joinable()) worker_.join();
-        collect_reading(); // (the last file's steps written, before its log is let go)
-        if (log_out_.is_open()) log_out_.close();
-        bytes_ = std::move(b);
-        const std::u8string fn = from_u8(path).filename().u8string();
-        name_ = std::string(fn.begin(), fn.end());
         std::error_code ec;
         const std::filesystem::path whole = std::filesystem::absolute(from_u8(path), ec);
-        path_ = ec ? path : u8(whole);
-        sha_ = sieve::Sha256::hex(sieve::Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes_.data()), bytes_.size())));
-        steps_made_ = 0;
-        unlogged_.clear();
-        at_ = 0;
-        chosen_ = 0;
-        pending_hi_ = -1;
-        active_.clear();
-        redo_.clear();
-        undoable_ = 0;
-        marks_.clear();
-        have_reading_ = false;
-        {
-            std::lock_guard<std::mutex> lock(mx_);
-            answers_.clear();
-        }
-        original_address_bytes_ = 0;
-        ++gen_;
+        const std::u8string fn = from_u8(path).filename().u8string();
+        take(std::move(b), std::string(fn.begin(), fn.end()), ec ? path : u8(whole), false);
         status_ = trf("mnav.status.loaded", {name_, std::to_string(bytes_.size())});
-        start_reading();
         if (waiting_log_)
         {
             // A log waiting for its file: replayed where this is the same bytes.
@@ -328,7 +385,6 @@ bool ManualNav::load(const std::string& path)
                 // right file. A file chosen by hand that is not it lets the log go.
                 status_ = trf(from_log_ ? "mnav.status.log_changed" : "mnav.status.log_not_same", {path_});
                 if (!from_log_) waiting_log_.reset();
-                open_log(false);
                 return true;
             }
             auto w = std::move(*waiting_log_);
@@ -341,7 +397,6 @@ bool ManualNav::load(const std::string& path)
             if (!from_log_ && log_out_.is_open()) log_out_ << "# file," << path_ << "\n", log_out_.flush();
             return true;
         }
-        if (!replaying_) open_log(false);
         return true;
     }
     catch (const std::exception& e)
@@ -457,6 +512,8 @@ void ManualNav::wait()
 void ManualNav::set_byte(uint64_t at, uint8_t value, const char* kind)
 {
     if (at >= bytes_.size() || bytes_[at] == value) return;
+    // (the log begun with the first step: none is left for bytes only looked at)
+    if (keep_log_ && !replaying_ && !log_out_.is_open()) open_log(false);
     Step s;
     s.kind = kind;
     s.offset = at;
@@ -522,7 +579,7 @@ bool ManualNav::save_steps(const std::string& path)
         return false;
     }
     // (the same head as a log's, so Load Log replays a walk too)
-    write_head(o, "walk", path_, bytes_.size(), sha_, decimals_);
+    write_head(o, "walk", path_, bytes_.size(), sha_, decimals_, example_ ? &loaded_ : nullptr);
     for (size_t i = 0; i < active_.size(); ++i)
     {
         const Step& s = active_[i];
@@ -547,6 +604,15 @@ std::string ManualNav::readout() const
                               fixed(steps, 0), (net >= 0 ? "+" : "") + fixed(net, 1)});
 }
 
+void ManualNav::answer_as_window(const std::string& path, int what)
+{
+    SDL_DialogFileCallback cb = what == 0 ? load_chosen : what == 1 ? steps_chosen : log_chosen;
+    const char* files[] = {path.c_str(), nullptr};
+    detail::dialog_closed(new detail::DialogCall{cb, this, nullptr, false, this}, files, 0);
+    poll_chosen();
+    wait();
+}
+
 void ManualNav::file_chosen(const std::string& path, int what)
 {
     std::lock_guard<std::mutex> lock(mx_);
@@ -561,7 +627,7 @@ bool ManualNav::load_log(const std::string& path)
         status_ = trf("mnav.status.log_bad", {path});
         return false;
     }
-    std::string file, sha, line;
+    std::string file, sha, line, example;
     size_t bytes = 0;
     bool head = false;
     std::vector<Logged> lines;
@@ -574,6 +640,7 @@ bool ManualNav::load_log(const std::string& path)
             return line.substr(k.size());
         };
         if (auto v = field("file")) file = *v, head = true; // (a path may hold commas: the rest of the line; the last such line wins, where the file was last found)
+        else if (auto v = field("example")) example = *v, head = true; // (an example's bytes as made, in hex)
         else if (auto v = field("bytes")) bytes = size_t(std::strtoull(v->c_str(), nullptr, 10));
         else if (auto v = field("sha256")) sha = *v;
         else if (auto v = field("precision"))
@@ -609,6 +676,29 @@ bool ManualNav::load_log(const std::string& path)
         return false;
     }
     (void)bytes; // (the SHA-256 says it; the size is for whoever reads the log)
+    if (file.empty() && !example.empty())
+    {
+        // An example: its bytes from the log itself, checked by their SHA-256, then replayed.
+        std::vector<uint8_t> b;
+        for (size_t i = 0; i + 1 < example.size(); i += 2)
+        {
+            const int hi = hex_digit(example[i]), lo = hex_digit(example[i + 1]);
+            if (hi < 0 || lo < 0) break;
+            b.push_back(uint8_t(hi << 4 | lo));
+        }
+        const std::string got = sieve::Sha256::hex(sieve::Sha256::hash(std::string_view(reinterpret_cast<const char*>(b.data()), b.size())));
+        if (b.empty() || got != sha)
+        {
+            status_ = trf("mnav.status.log_bad", {path});
+            return false;
+        }
+        const std::string side = std::to_string(int(std::lround(std::sqrt(double(b.size())))));
+        take(std::move(b), trf("mnav.example_name", {side}), std::string(), true);
+        replay(lines);
+        log_path_ = path;
+        open_log(true);
+        return true;
+    }
     // The file it was made on, from where it was: replayed where it is the same bytes; asked for
     // where it is not there, or not the same.
     waiting_log_ = std::make_pair(sha, std::move(lines));
@@ -706,22 +796,21 @@ void ManualNav::press(SDL_Keycode k, SDL_Keymod mod) { key(k, mod); }
 
 void ManualNav::type(const std::string& utf8)
 {
-    // Hex typed into the byte chosen: the high digit, then the low, then on to the next byte.
+    // Hex typed into the byte chosen: the high digit (it waits, shown in the box, for the second, so
+    // a byte typed is one step), then the low, then on to the next byte.
     for (const char c : utf8)
     {
         const int d = hex_digit(c);
-        if (d < 0 || bytes_.empty()) continue;
-        const uint64_t at = at_ + uint64_t(chosen_);
-        if (at >= bytes_.size()) continue;
-        // The first digit waits for the second (shown in the box), so a byte typed is one step.
+        if (d < 0 || sel_ >= bytes_.size()) continue;
         if (pending_hi_ < 0)
         {
             pending_hi_ = d;
             continue;
         }
-        set_byte(at, uint8_t((pending_hi_ << 4) | d), "turn");
+        set_byte(sel_, uint8_t((pending_hi_ << 4) | d), "turn");
         pending_hi_ = -1;
-        if (chosen_ + 1 < span_ && at + 1 < bytes_.size()) ++chosen_;
+        if (sel_ + 1 < bytes_.size()) ++sel_;
+        keep_in_view();
     }
 }
 
@@ -729,11 +818,6 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
 {
     const bool ctrl = (mod & SDL_KMOD_CTRL) != 0, shift = (mod & SDL_KMOD_SHIFT) != 0;
     const uint64_t n = bytes_.size();
-    auto clamp_window = [&] {
-        if (n == 0) return;
-        if (at_ >= n) at_ = (n - 1) / uint64_t(span_) * uint64_t(span_);
-        chosen_ = std::clamp(chosen_, 0, int(std::min<uint64_t>(uint64_t(span_), n - at_)) - 1);
-    };
     if (k == SDLK_ESCAPE)
     {
         done_ = true;
@@ -754,7 +838,7 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
     {
         // Keep a log, on or off (remembered): on, a log begun with the walk so far.
         keep_log_ = !keep_log_;
-        if (remembered().changed) remembered().changed(keep_log_, undo_depth_);
+        tell_kept();
         if (keep_log_)
         {
             wait();
@@ -774,7 +858,7 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
         // The undo depth: all, 10, 100, 1,000 (remembered).
         undo_depth_ = undo_depth_ == 0 ? 10 : undo_depth_ >= 1000 ? 0 : undo_depth_ * 10;
         undoable_ = std::min(undoable_, depth());
-        if (remembered().changed) remembered().changed(keep_log_, undo_depth_);
+        tell_kept();
         status_ = trf("mnav.status.depth", {undo_depth_ == 0 ? tr("mnav.depth.all") : std::to_string(undo_depth_)});
         return;
     }
@@ -799,38 +883,54 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
         start_reading();
         return;
     }
+    if (k == SDLK_W && !ctrl)
+    {
+        // The width: bytes a row, 2 to 16 (Shift: one fewer). The example is made again at its new
+        // side: fresh random bytes where FRESH RANDOM BYTES is ticked, else its own, random bytes
+        // added or its end cut.
+        pending_hi_ = -1;
+        width_ = shift ? (width_ <= 2 ? 16 : width_ - 1) : (width_ >= 16 ? 2 : width_ + 1);
+        tell_kept();
+        if (example_) make_example(!fresh_);
+        else status_ = trf("mnav.status.width", {std::to_string(width_)});
+        keep_in_view();
+        return;
+    }
+    if (k == SDLK_F && !ctrl)
+    {
+        // FRESH RANDOM BYTES, on or off (remembered): for the example only, a file being its own bytes.
+        fresh_ = !fresh_;
+        tell_kept();
+        status_ = tr(fresh_ ? "mnav.status.fresh_on" : "mnav.status.fresh_off");
+        return;
+    }
     if (n == 0) return;
     pending_hi_ = -1; // (a first digit typed and then anything else: let go)
+    const uint64_t w = uint64_t(width_), page = w * uint64_t(std::max(1, rows_shown_));
     switch (k)
     {
     case SDLK_LEFT:
-        if (chosen_ > 0) --chosen_;
-        else if (at_ > 0) at_ -= uint64_t(span_), chosen_ = span_ - 1;
+        if (sel_ > 0) --sel_;
         break;
     case SDLK_RIGHT:
-        if (chosen_ + 1 < span_ && at_ + uint64_t(chosen_) + 1 < n) ++chosen_;
-        else if (at_ + uint64_t(span_) < n) at_ += uint64_t(span_), chosen_ = 0;
+        if (sel_ + 1 < n) ++sel_;
         break;
     case SDLK_UP:
     case SDLK_DOWN:
-    {
-        const uint64_t at = at_ + uint64_t(chosen_);
-        if (at < n) set_byte(at, uint8_t(bytes_[at] + (k == SDLK_UP ? 1 : -1) * (shift ? 16 : 1)), "turn");
+        if (ctrl) // (Ctrl: the row above or below, the byte left as it is)
+        {
+            if (k == SDLK_UP) sel_ = sel_ >= w ? sel_ - w : sel_;
+            else if (sel_ + w < n) sel_ += w;
+        }
+        else set_byte(sel_, uint8_t(bytes_[sel_] + (k == SDLK_UP ? 1 : -1) * (shift ? 16 : 1)), "turn");
         break;
-    }
-    case SDLK_PAGEUP: at_ = at_ >= uint64_t(span_) ? at_ - uint64_t(span_) : 0; break;
-    case SDLK_PAGEDOWN:
-        if (at_ + uint64_t(span_) < n) at_ += uint64_t(span_);
-        break;
-    case SDLK_HOME: at_ = 0, chosen_ = 0; break;
-    case SDLK_END: at_ = (n - 1) / uint64_t(span_) * uint64_t(span_); break;
-    case SDLK_W:
-        span_ = span_ == 4 ? 8 : span_ == 8 ? 16 : 4;
-        at_ = at_ / uint64_t(span_) * uint64_t(span_);
-        break;
+    case SDLK_PAGEUP: sel_ = sel_ >= page ? sel_ - page : sel_ % w; break;
+    case SDLK_PAGEDOWN: sel_ = std::min(n - 1, sel_ + page); break;
+    case SDLK_HOME: sel_ = 0; break;
+    case SDLK_END: sel_ = n - 1; break;
     default: break;
     }
-    clamp_window();
+    keep_in_view();
 }
 
 void ManualNav::handle(const SDL_Event& event)
@@ -845,29 +945,37 @@ void ManualNav::handle(const SDL_Event& event)
     else if (e.type == SDL_EVENT_TEXT_INPUT) type(e.text.text);
     else if (e.type == SDL_EVENT_KEY_DOWN) key(e.key.key, e.key.mod);
     else if (e.type == SDL_EVENT_MOUSE_WHEEL && !bytes_.empty())
-        key(e.wheel.y > 0 ? SDLK_UP : SDLK_DOWN, SDL_KMOD_NONE);
+    {
+        // The wheel scrolls the sheet; with Shift, it turns the byte chosen.
+        if (SDL_GetModState() & SDL_KMOD_SHIFT) key(e.wheel.y > 0 ? SDLK_UP : SDLK_DOWN, SDL_KMOD_NONE);
+        else
+        {
+            const uint64_t last = (bytes_.size() - 1) / uint64_t(width_);
+            if (e.wheel.y > 0) top_ = top_ >= 3 ? top_ - 3 : 0;
+            else if (e.wheel.y < 0) top_ = std::min(last, top_ + 3);
+        }
+    }
     else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
     {
         for (const auto& [rect, id] : buttons_)
             if (inside(rect, e.button.x, e.button.y))
             {
-                const SDL_Keycode keys[] = {SDLK_O, SDLK_Z, SDLK_Y, SDLK_S, SDLK_W, SDLK_L, SDLK_L, SDLK_U};
-                const bool with_ctrl[] = {true, true, true, true, false, true, false, false};
+                const SDL_Keycode keys[] = {SDLK_O, SDLK_Z, SDLK_Y, SDLK_S, SDLK_W, SDLK_L, SDLK_L, SDLK_U, SDLK_F};
+                const bool with_ctrl[] = {true, true, true, true, false, true, false, false, false};
                 key(keys[id], with_ctrl[id] ? SDL_KMOD_CTRL : SDL_KMOD_NONE);
                 return;
             }
         for (const auto& [rect, id] : arrows_)
             if (inside(rect, e.button.x, e.button.y))
             {
-                chosen_ = id / 2;
                 pending_hi_ = -1;
-                key(id % 2 ? SDLK_DOWN : SDLK_UP, SDL_KMOD_NONE);
+                key(id ? SDLK_DOWN : SDLK_UP, SDL_KMOD_NONE);
                 return;
             }
-        for (const auto& [rect, id] : cells_)
+        for (const auto& [rect, at] : cells_)
             if (inside(rect, e.button.x, e.button.y))
             {
-                chosen_ = id;
+                sel_ = at;
                 pending_hi_ = -1;
                 return;
             }
@@ -893,10 +1001,25 @@ void ManualNav::render()
     const size_t cols = size_t(std::max(20.0f, (W - 48) / 8));
 
     txt(r_, 24, 16, tr("mnav.title"), kWhite, 2.5f);
-    // Under the title: the rotation, then the route and what the steps cost.
+    // The circle's place, at the right (the sheet stops short of it).
+    const float cx = W * 0.72f, cy = 116 + (H - 116 - 90) / 2;
+    const float rad = std::max(60.0f, std::min(W * 0.22f, (H - 116 - 110) / 2));
+    const uint64_t n = bytes_.size(), ww = uint64_t(width_);
+
+    // The sheet's measure (its rows first: the heading says which bytes they show).
+    const float label_w = 8 * 8, sheet_left = 24 + label_w, top = 116;
+    const float avail = std::max(160.0f, cx - rad - 40 - sheet_left);
+    const float cw = std::min(96.0f, std::floor(avail / float(width_)));
+    const float scale = std::clamp(std::floor((cw - 10) / 16), 1.0f, 4.0f); // (two hex digits, 8 a digit at scale 1)
+    const float ch = 8 * scale + 26; // (room above and below the digits for the chosen byte's arrows)
+    const float bottom = H - 92 - 34 * 2 - 16;
+    rows_shown_ = std::max(1, int((bottom - top) / ch));
+
+    // Under the title: what is shown, the rotation, then the route and what the steps cost.
     if (!bytes_.empty())
     {
-        txt(r_, 24, 46, fit_cells(trf("mnav.file", {name_, std::to_string(bytes_.size()), std::to_string(at_), std::to_string(std::min<uint64_t>(bytes_.size(), at_ + uint64_t(span_)) - 1)}), cols), kGrey);
+        const uint64_t first = std::min(n - 1, top_ * ww), last = std::min(n, (top_ + uint64_t(std::max(1, rows_shown_))) * ww) - 1;
+        txt(r_, 24, 46, fit_cells(trf("mnav.file", {name_, std::to_string(n), std::to_string(width_), std::to_string(first), std::to_string(last)}), cols), kGrey);
         const std::string ro = readout();
         const size_t semi = ro.find("; ");
         txt(r_, 24, 62, fit_cells(ro.substr(0, semi), cols), now_.exact && have_reading_ ? kGood : kWhite);
@@ -905,38 +1028,51 @@ void ManualNav::render()
     }
     else txt(r_, 24, 46, tr("mnav.subtitle"), kGrey);
 
-    // The bytes, at the left: 2 a row for 4, 4 a row for 8 and 16.
+    // The sheet, at the left: every byte, width_ a row, from row top_ down as far as there is room;
+    // each row's first offset at its left. The byte chosen has its arrows at its top and bottom
+    // (clicked, they turn it); a byte no longer as loaded is in the accent colour.
     cells_.clear();
     arrows_.clear();
-    const int per_row = span_ == 4 ? 2 : 4;
-    const float cw = 96, ch = 132, left = 40, top = 116;
-    for (int i = 0; i < span_; ++i)
+    const uint64_t rows_all = n == 0 ? 0 : (n - 1) / ww + 1;
+    for (int r = 0; r < rows_shown_; ++r)
     {
-        const uint64_t at = at_ + uint64_t(i);
-        const float x = left + cw * float(i % per_row), y = top + ch * float(i / per_row);
-        const SDL_FRect cell{x, y + 24, cw - 16, 56};
-        const bool real = at < bytes_.size();
-        const bool chosen = real && i == chosen_;
-        box(r_, cell, chosen ? SDL_Color{40, 60, 90, 255} : SDL_Color{15, 15, 15, 255}, chosen ? kAccent : kDim);
-        if (!real) continue;
-        cells_.emplace_back(cell, i);
-        const SDL_FRect up{x + 20, y, cw - 56, 20}, down{x + 20, y + 84, cw - 56, 20};
-        arrows_.emplace_back(up, i * 2);
-        arrows_.emplace_back(down, i * 2 + 1);
-        txt(r_, up.x + up.w / 2 - 8, up.y + 2, "/\\", chosen ? kWhite : kGrey, 1);
-        txt(r_, down.x + down.w / 2 - 8, down.y + 2, "\\/", chosen ? kWhite : kGrey, 1);
-        bool changed = false;
-        for (const Step& s : active_)
-            if (s.offset == at) changed = true;
-        if (chosen && pending_hi_ >= 0) // (a first digit typed, the second awaited)
-            txt(r_, cell.x + (cell.w - 64) / 2, cell.y + 12, std::string(1, "0123456789ABCDEF"[pending_hi_]) + "_", kAccent, 4);
-        else txt(r_, cell.x + (cell.w - 64) / 2, cell.y + 12, hex2(bytes_[at]), changed ? kAccent : kWhite, 4);
-        txt(r_, x, y + 108, "+" + std::to_string(at), kDim);
+        const uint64_t row = top_ + uint64_t(r);
+        if (row >= rows_all) break;
+        const float y = top + ch * float(r);
+        txt(r_, 24, y + ch / 2 - 6, std::to_string(row * ww), kDim);
+        for (uint64_t c = 0; c < ww; ++c)
+        {
+            const uint64_t at = row * ww + c;
+            if (at >= n) break;
+            const SDL_FRect cell{sheet_left + cw * float(c), y, cw - 6, ch - 6};
+            const bool chosen = at == sel_;
+            const bool changed = at < loaded_.size() && bytes_[at] != loaded_[at];
+            box(r_, cell, chosen ? SDL_Color{40, 60, 90, 255} : SDL_Color{15, 15, 15, 255}, chosen ? kAccent : kDim);
+            cells_.emplace_back(cell, at);
+            const float tx = cell.x + (cell.w - 16 * scale) / 2, ty = cell.y + (cell.h - 8 * scale) / 2;
+            if (chosen && pending_hi_ >= 0) // (a first digit typed, the second awaited)
+                txt(r_, tx, ty, std::string(1, "0123456789ABCDEF"[pending_hi_]) + "_", kAccent, scale);
+            else txt(r_, tx, ty, hex2(bytes_[at]), changed ? kAccent : kWhite, scale);
+            if (chosen)
+            {
+                const SDL_FRect up{cell.x, cell.y, cell.w, 9}, down{cell.x, cell.y + cell.h - 9, cell.w, 9};
+                arrows_.emplace_back(up, 0);
+                arrows_.emplace_back(down, 1);
+                txt(r_, cell.x + cell.w / 2 - 4, cell.y + 1, "^", kWhite, 1);
+                txt(r_, cell.x + cell.w / 2 - 4, cell.y + cell.h - 9, "v", kWhite, 1);
+            }
+        }
+    }
+    if (rows_all > uint64_t(rows_shown_))
+    {
+        // Where the rows shown lie in the whole: a bar beside the sheet.
+        const float x = sheet_left + cw * float(width_) + 4, hgt = ch * float(rows_shown_);
+        box(r_, SDL_FRect{x, top, 4, hgt}, SDL_Color{20, 20, 20, 255}, kDim);
+        const float a0 = hgt * float(double(top_) / double(rows_all)), a1 = hgt * float(double(top_ + uint64_t(rows_shown_)) / double(rows_all));
+        box(r_, SDL_FRect{x, top + a0, 4, std::max(4.0f, a1 - a0)}, kGrey, kGrey);
     }
 
     // The circle, at the right.
-    const float cx = W * 0.72f, cy = 116 + (H - 116 - 90) / 2;
-    const float rad = std::max(60.0f, std::min(W * 0.22f, (H - 116 - 110) / 2));
     circle(r_, cx, cy, rad, kDim);
     circle(r_, cx, cy, 3, kGrey); // the centre: a bearing landed on exactly
     txt(r_, cx - 4, cy - rad - 16, "0", kGrey);
@@ -966,11 +1102,12 @@ void ManualNav::render()
     // The buttons, and what the keys do.
     buttons_.clear();
     const char* labels[] = {"mnav.button.load", "mnav.button.undo", "mnav.button.redo", "mnav.button.save", "mnav.button.window",
-                            "mnav.button.load_log", "mnav.button.keep_log", "mnav.button.depth"};
+                            "mnav.button.load_log", "mnav.button.keep_log", "mnav.button.depth", "mnav.button.fresh"};
     // (in rows that stop short of the circle, the last row lowest)
     std::vector<std::string> names;
-    for (int i = 0; i < 8; ++i)
-        names.push_back(i == 4   ? trf(labels[i], {std::to_string(span_)})
+    for (int i = 0; i < 9; ++i)
+        names.push_back(i == 4   ? trf(labels[i], {std::to_string(width_)})
+                        : i == 8 ? trf(labels[i], {fresh_ ? "X" : " "})
                         : i == 6 ? trf(labels[i], {keep_log_ ? "X" : " "})
                         : i == 7 ? trf(labels[i], {undo_depth_ == 0 ? tr("mnav.depth.all") : std::to_string(undo_depth_)})
                                  : tr(labels[i]));
