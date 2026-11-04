@@ -126,9 +126,9 @@ The data and the order in which it is ingested fundamentally alter the course of
 
 Traditional AI training records model weights and checkpoints, but subtle hardware-level variations, thread scheduling differences, and floating-point round-off drift mean that reproducing a model bit-for-bit from scratch is notoriously difficult.
 
-By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture. ( Windows / Mac / Linux tested )
-
 Floating point is used in models for its range and speed, what it costs is reproducibility.
+
+By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture. ( Windows / Mac / Linux tested )
 
 Every number is a signed 64 bit integer, so values are fixed-point, this means it is bounded by max/min values.
 
