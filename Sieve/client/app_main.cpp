@@ -7,6 +7,7 @@
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
 #include "cipher_screen.hpp"
+#include "manual_nav.hpp"
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
@@ -134,6 +135,8 @@ const char* kUsage =
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
+    "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
+    "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the steps\n"
     "                      runs keys and typed text (=text types into the row chosen), as --designer's does;\n"
     "                      --cipher-in FILE takes a file's bytes as the input, --cipher-out FILE saves the output\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
@@ -912,6 +915,39 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
+    if (shot && a.has("manual-nav"))
+    {
+        // A picture of Manual Navigation (for documentation and testing): --manual-nav FILE loads
+        // it; --script runs keys and hex typed into the byte chosen ("Up,Up,Right,=4f"); each
+        // step's landing is worked out before the next is taken, so every mark is drawn;
+        // --manual-steps FILE saves the steps as CSV, as Ctrl+S does.
+        ManualNav nav(window, renderer, a.has("angle-decimals") ? std::stoi(a.get("angle-decimals")) : app.angle_decimals);
+        if (!nav.load(a.get("manual-nav"))) throw std::runtime_error(nav.status());
+        nav.wait();
+        if (a.has("script"))
+        {
+            const std::string script = a.get("script");
+            size_t at = 0;
+            while (at <= script.size())
+            {
+                const size_t comma = script.find(',', at);
+                const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+                if (!item.empty() && item[0] == '=') nav.type(item.substr(1));
+                else if (!item.empty())
+                    for (const auto& [key, mod] : parse_presses(item)) nav.press(key, mod);
+                nav.wait();
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+        if (a.has("manual-steps") && !nav.save_steps(a.get("manual-steps"))) throw std::runtime_error(nav.status());
+        nav.render();
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "manual navigation: " << nav.status() << "\n";
+        std::cout << "  " << nav.readout() << "\n";
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("designer"))
     {
         // A picture of the filter designer (for documentation and testing): --design FILE opens a
@@ -1252,6 +1288,13 @@ int run(const Args& a)
                 pending_file = LocatedGo{engine.go_bytes(), engine.go_name(), engine.go_bytes().size() > settings.binary_bytes};
                 settings_chosen = true;
                 skip_setup = true;
+            }
+            if (r == MainMenu::Result::ManualNav)
+            {
+                // Manual Navigation, and back to the main menu from it.
+                ManualNav nav(window, renderer, app.angle_decimals);
+                if (nav.run() == ManualNav::Result::Quit) break;
+                continue;
             }
             if (r == MainMenu::Result::Designer)
             {

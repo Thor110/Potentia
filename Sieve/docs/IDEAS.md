@@ -6120,7 +6120,16 @@ and 16 bytes etc."
   with 64 wheels), where the rope with its neighbours makes 44,729. The line's wheels are the wrong
   car; wheels that touch every value's prediction (the neighbours' weights, a bias for each region)
   are the next to measure, with the same script.
-- *Manual Navigation (agreed with Edward, 3 November 2026; to be built).* A screen of its own from
+- *The second car, measured (4 November 2026, the same results file, `tools/measure_prediction_wheels.py`).*
+  Each value predicted as a weighted sum of three neighbours plus a bias, every weight a wheel, then
+  a bias for each 4,096 values. Steering turned the weights to the rope's own fixed predictions (the
+  value to the left on the sound and x-ray, the gradient on mr) and found no better one: 72 bytes on
+  the sound (0.05%) at most, and on the picture a valley above the triangle (45,422 against 44,887).
+  The region biases stayed at 0. On a program and text it found no prediction best. Edward: "The
+  ropes bytes are indeed the wrong thing to steer. Instead all bytes would be steerable during the
+  manual search": steering is kept for Manual Navigation, where every byte is a wheel.
+- *Manual Navigation (agreed with Edward, 3 November 2026; built 4 November: `client/manual_nav.cpp`,
+  docs/MANUAL.md).* A screen of its own from
   the main menu, "Manual Navigation", on the binary line to begin with (other dimensions later, as a
   `<Dimension>` value to turn). It loads any file as it is, with no sieving; a `.sieve` is loaded to
   steer one.

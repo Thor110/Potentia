@@ -934,6 +934,21 @@ build/sieve cipher --encrypt --in tests/manifest_fixture/a.txt --recipe "vigener
 cmp engine.enc cli.enc
 $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
+# Manual Navigation (IDEAS §19.117): Edward's four bytes turned by hand. A byte typed is one step
+# (its two digits), undo and redo give the same bytes back, and every step saved starts where the
+# one before it landed. Reached from the main menu, the row above Exit.
+printf '\000\377\377\000' > mnav.bin
+$H --manual-nav mnav.bin --script "Up,Right,Down,Right,Right,=7f,Ctrl+Z,Ctrl+Y" --manual-steps mnav.csv --screenshot mnav.png | tr -d '\r' | q "^manual navigation: 5 step(s) saved"
+q "^3,turn,3,00,7F," mnav.csv
+q "^4,undo,3,7F,00," mnav.csv
+python -c "
+import csv
+rows = [r for r in csv.reader(open('mnav.csv')) if r and r[0].isdigit()]
+assert len(rows) == 5, rows
+for a, b in zip(rows, rows[1:]):
+    assert a[6] == b[5] and a[8] == b[7], (a, b) # each starts where the last landed
+"
+$H --main-menu --press "Down,Down,Down,Down,Down,Down,Down" --screenshot main-mnav.png | q "saved main-mnav.png"
 $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
 # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.

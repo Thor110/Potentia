@@ -60,8 +60,9 @@ std::vector<MainMenu::Item> MainMenu::items() const
     // The same systems as the pause menu, in the same order (IDEAS §19.18), less what needs a
     // hallway already walked (the node graph, the navigator).
     case Screen::Main:
+        // (Manual Navigation after the rest, before Exit: the CI's walks through this menu count rows.)
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "exit"}};
+                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "exit"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
                 {Kind::Action, "back"}};
@@ -224,6 +225,7 @@ void MainMenu::change(int dir)
         else if (it.id == "harness") { result_ = Result::Harness; done_ = true; }
         else if (it.id == "media") { result_ = Result::Media; done_ = true; }
         else if (it.id == "cipher") { result_ = Result::Cipher; done_ = true; }
+        else if (it.id == "manual_nav") { result_ = Result::ManualNav; done_ = true; }
         else if (it.id == "exit") { result_ = Result::Quit; done_ = true; }
         else if (it.id == "settings") { screen_ = Screen::Settings; row_ = 0; }
         else if (it.id == "graphics") { screen_ = Screen::Graphics; row_ = 0; }

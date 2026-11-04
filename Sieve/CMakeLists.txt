@@ -550,6 +550,7 @@ if(SIEVE_BUILD_CLIENT)
         client/binary_edge.cpp
         client/designer.cpp
         client/cipher_screen.cpp
+        client/manual_nav.cpp
         client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp

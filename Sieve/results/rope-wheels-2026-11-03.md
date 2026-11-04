@@ -94,3 +94,44 @@ its byte, and at 64 to 256 wheels the line is about as good as no line.
   the next measurement, with the same script and a different car.
 - **This is the rope without propagation (P0).** With propagation (P1 to P4), the line is used only
   where a value has no neighbour before it, so the kept bytes matter less still.
+
+## The second car: wheels on every value's prediction (4 November 2026)
+
+Edward: "The ropes bytes are indeed the wrong thing to steer [...] Measure the wheels first, then
+build Manual Navigation." `tools/measure_prediction_wheels.py`: each value predicted as a weighted
+sum of three neighbours plus a bias (for a picture: left, above, above-left; for a file of one
+dimension: the three values before it), each weight a byte (in 32nds, −4 to +4), the bias a byte;
+then a bias for each 4,096 values (16 to 64 more wheels). Counted as above, against the rope's own
+fixed predictions counted the same way (no wheels paid for). The same six files; the pictures at
+their shape (Vitruvian 256 wide; x-ray 2 bytes a pixel, 3,802 a row; mr 2 and 1,024).
+
+| File | Plain | Left | Gradient | Triangle | Best steered (weights, bias) | With region biases | Random, as many tries |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Vitruvian picture | 51,544 | 48,944 | 46,409 | **44,887** | 45,422 (25, 16, −16; 83) | 45,426 | 49,714 |
+| sound | 255,815 | 144,200 | 152,309 | 144,601 | **144,127** (32, 0, 0; −20) | 144,191 | 205,918 |
+| x-ray | 212,686 | **160,734** | 169,495 | 162,704 | 160,736 (32, 0, 0; 1) | 160,800 | 183,404 |
+| mr | 129,010 | 97,970 | **87,601** | 87,660 | 87,605 (32, 32, −32; 0) | 87,662 | 112,813 |
+| program | **214,172** | 243,913 | 246,562 | 250,225 | 214,176 (no prediction) | 214,240 | 214,176 |
+| text | **147,960** | 207,235 | 246,587 | 222,779 | 147,964 (no prediction) | 148,028 | 147,964 |
+
+- **Steering finds the right fixed prediction, and no better one.** On the sound, x-ray and mr it
+  turned the wheels to "the value to the left" or "the gradient", which the rope already tries (its
+  P1 to P4); the best it found past them is 72 bytes on the sound (0.05%). On the picture it stopped
+  in a valley above the triangle (45,422 against 44,887), which no straight weighting can make. On
+  a program and text it found that no prediction is best.
+- **The region biases found nothing:** steering left almost all of them at 0, and each costs its
+  byte.
+- **Steering still beats guessing**, by 9% on the picture and 30% on the sound. Where it starts still
+  matters: from the gradient, the sound stayed at 151,956.
+
+## What the two cars say
+
+Turning a few fixed numbers for a whole file finds what the rope's search already finds, because
+the rope's search is itself a walk over a few such numbers (its waves, phases and kept points), and
+it measures the real cost of each where this counts order-0 entropy. Each steered prediction above
+also came out larger than the rope's own code of the same file (the picture 44,729, the sound
+130,094, by `sieve rope`). What can do better is a prediction that changes as the file goes: mixing
+weighs its inputs afresh at every bit, and makes the picture 42,488 bytes at its shape (`sieve mix
+--picture 256x1`, B16), 5% under the rope; on the made-up sound it makes 146,396, and the rope stays
+smaller. Steering stays useful as a way to search by hand: the Manual Navigation screen, where every
+byte of the file is a wheel.
