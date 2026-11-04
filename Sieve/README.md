@@ -81,7 +81,7 @@ checked. The hallway's File Locator does the same with a window.
 `sieve site build` turns a website into `.sieve` files, every link stating the SHA-256 of the file
 it names, with one table of every file's hash. Sieve's browser extension shows each file only when
 it is exactly that file, and holds a remembered site's pages to its table.
-[web/README.md](web/README.md), and the live [Sieve Secure](../Pages/secure.html) test site.
+[web/README.md](web/README.md), and the live [Sieve Secure](https://thor110.github.io/Potentia/Pages/secure.html) test site.
 
 ### Training anyone can repeat, to the bit
 

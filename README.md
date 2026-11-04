@@ -16,7 +16,7 @@ picture and melody as a place with an address.
 | **Pack a folder smaller than 7-Zip, and get it back exactly** | Sieve's own release, 45,967,736 bytes of programs and data, packs to a 6,470,236-byte `.sieve` (7.10:1), and installs back byte for byte. [How it compares](Sieve/README.md#smaller-archives-that-come-back-exactly) |
 | **Extract almost any archive from the right-click menu** | `.zip`, `.7z`, `.rar`, `.tar`, `.gz`, `.xz`, `.bz2`, `.zst`, `.cab`, `.iso` and more, on Windows, with every file of a `.sieve` checked before it is written. |
 | **Install only what was meant** | Every file is checked against its SHA-256 before anything is written, so a damaged or incomplete download changes nothing on your disk. |
-| **Publish web pages that prove themselves** | A browser extension shows a site's files only when each is exactly the file its link vouches for. [Sieve Secure](Pages/secure.html) |
+| **Publish web pages that prove themselves** | A browser extension shows a site's files only when each is exactly the file its link vouches for. [Sieve Secure](https://thor110.github.io/Potentia/Pages/secure.html) |
 | **Train a model that anyone can train again, to the bit** | A small language model trained in pinned integer arithmetic, with a record of everything it read and in what order: retraining it on any machine gives the same model. |
 | **Walk the hallways of the Gallery of Babel** | Every possible page, picture, melody, film, 3D model and file, each at exactly one address, laid out as a corridor you can walk and search with filters. |
 
@@ -72,7 +72,7 @@ and Silesia, in [Proof/STATISTICS.md](Proof/STATISTICS.md)).
 - **[Sieve's README](Sieve/README.md)**: what Sieve does, with commands and measurements.
 - **[VISION.md](VISION.md)**: why Potentia exists and what it is meant to become.
 - **[Proof/STATISTICS.md](Proof/STATISTICS.md)**: what Sieve's files have come to, file by file, against 7-Zip.
-- **[Sieve Secure](Pages/secure.html)**: the web extension, with a live test site.
+- **[Sieve Secure](https://thor110.github.io/Potentia/Pages/secure.html)**: the web extension, with a live test site.
 - **[Previous](Previous/)**: earlier versions of these documents.
 - A controlled study of how and why language models invent things that do not exist:
   [Non-Existent-Data-LLM-Stress-Testing](https://github.com/thor110/Non-Existent-Data-LLM-Stress-Testing).
