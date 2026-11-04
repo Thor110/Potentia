@@ -126,7 +126,19 @@ You can read part of the thesis here : https://github.com/Thor110/Potentia/tree/
 
 In short, just as with human beings we can not guarantee alignment, neither can we with AI systems, that is to say it is intractable but trackable with recorded ordering of training data.
 
-Comparable to allowing an AI model to walk the Library of Babel to train on the data as it goes, inevitably, probability distribution becomes chaotic, messy and requires constant upkeep while making it impossible for models alone to overcome token weight conflicts.
+
+
+
+NOTE : claim : impossible for models alone to overcome token weight conflicts.
+
+
+
+Think of a model walking the Library of Babel as it trains, what it becomes depends on which books it reads and in what order, and that route can’t be read back out of the model afterwards.
+
+The data and the order in which it is ingested fundamentally alter the course of alignment and the model’s probability distribution.
+
+Recording the route is what makes it possible to check, rerun and compare.
+
 
 Traditional AI training records model weights and checkpoints, but subtle hardware-level variations, thread scheduling differences, and floating-point round-off drift mean that reproducing a model bit-for-bit from scratch is notoriously difficult.
 
