@@ -6072,3 +6072,81 @@ taken up:
 - **To measure first (cheap):** the packets of WoWRevived's films hashed, to count how many bytes are
   packets seen before in the same or another film. That says whether the packet route is worth
   building, before any encoder is involved.
+
+**19.117 Steering the rope's locked bytes (Edward, 3 November 2026; nothing built or measured).**
+Edward: "Part of the way I also envisioned the rope filter is that the 1/3 and 2/3 bytes on their
+own fluctuate their values before trying noise wave gradients and other methods. What I am thinking
+is, what if we generate / walk the state space of 16 bytes, which is 256^16 [...] But perhaps we can
+learn to steer from the locked bytes by adjusting their value. Where we know everything is a forward
+walk, technically we know exactly the ramp/direction to get where we are going. And what we are
+looking for is a step along that road that puts the file at a completely different rotation but is
+closer to an exact integer interval rotation. [...] Perhaps imagine a car made of just four bytes,
+where each byte is a wheel. If we learn to steer from 4 bytes first, maybe we can then try 8 bytes
+and 16 bytes etc."
+- *What it adds to §19.110.* Real-rope's locks fluctuate; this asks how to find good values without
+  walking all of them. With k free bytes there are 256^k settings (4 bytes: 4.3 billion; 16:
+  3.4 × 10^38), so walking them is out past 3 or 4. Steering is a search that follows the
+  landscape: turn one wheel a step, see whether the result got smaller, keep turning the way that
+  helps (hill climbing, or a gradient where the size can be read as a smooth function of the bytes).
+- *What steering can and cannot buy.* It makes finding a good setting cheap; it does not change what
+  a setting is worth. Whatever setting is found is written in the `.sieve` (k bytes), and the most
+  any choice among 256^k settings can save is those same k bytes (§19.110's counting). So for a
+  file the rope cannot describe, steering finds nothing worth its bytes, however well it steers.
+  Where the rope already describes a file well (pictures, sound, tables of digits), there are
+  settings that beat the default by far more than their own bytes, and steering is a way to reach
+  them in seconds rather than by walking.
+- *The question that decides it: is the landscape smooth?* Steering works where turning a wheel by
+  one changes the size by a little and in a direction that stays the same for a while (a valley to
+  roll down). It fails where neighbouring values give unrelated sizes (a hash's landscape): then
+  steering is no better than trying settings at random. The rope's prediction is arithmetic on the
+  bytes (sums, differences, a wave), so some smoothness is plausible, but it has to be measured.
+- *A first measurement (the car of one wheel, then two).* On files the rope wins (the Vitruvian
+  picture's pixels, the synthetic sound) and loses (a program): take the kept byte at the third,
+  set it to each of its 256 values, and code the file each time; then the third and the two-thirds
+  together over a coarse grid (16 by 16, then finer where it dips). Plot size against value. Smooth,
+  with one or few valleys: steering works, and 4, 8, 16 wheels follow, each turned in turn. Jagged:
+  the wheels are not a car, and the search space is better spent on other rules. This needs
+  real-rope's kept bytes to be free values (today they are the file's own), so a throwaway switch
+  first, as §19.110's measurements used.
+- *How it would be seen.* The landscape of one wheel is a line graph (size against 0 to 255); of two,
+  a height map, which the hallway could show as terrain the car drives over: low ground is a
+  smaller file. Steering is the car rolling downhill.
+- *Measured (3 November 2026, results/rope-wheels-2026-11-03.md, `tools/measure_rope_wheels.py`).*
+  The rope at P0 with its kept bytes free, on a picture, a sound, x-ray, mr, text and a program.
+  **The landscape is smooth on pictures and sound** (one wheel: 1 and 7 dips in 256 values, each
+  step like the last at 0.99 and 0.98) and noise on a program (25 dips, 0.08). **Steering beats
+  guessing** with as many tries on every file, by 1.6% to 44%. **But the valleys lead nowhere:** at
+  best the steered line costs what the bytes cost coded plainly (the picture 51,531 against 51,544
+  with 64 wheels), where the rope with its neighbours makes 44,729. The line's wheels are the wrong
+  car; wheels that touch every value's prediction (the neighbours' weights, a bias for each region)
+  are the next to measure, with the same script.
+- *Manual Navigation (agreed with Edward, 3 November 2026; to be built).* A screen of its own from
+  the main menu, "Manual Navigation", on the binary line to begin with (other dimensions later, as a
+  `<Dimension>` value to turn). It loads any file as it is, with no sieving; a `.sieve` is loaded to
+  steer one.
+  - *Left:* a window of the file's bytes (4 to begin with, then 8 and 16) at an offset chosen, each
+    with the navigator's arrows (`<00>`) and hex typed in.
+  - *Right:* a circle. The dot's angle is the file's rotation on its line, and its distance from the
+    centre is how far that rotation lies from the nearest bearing at the Angle Precision. The centre
+    is kept for an exact hit. The first dot is in the line's colour (its primary and secondary
+    state-space colours); each change leaves a mark, green where it moved in towards the centre and
+    red where it moved out.
+  - *Top, under the title:* the rotation and the length of its route, the edits' cost so far
+    ("edits: N bytes") and the net (the route saved less the edits).
+  - *Steps:* the file is held once; each step is kept as offset, old byte and new byte. Undo and redo
+    go ten deep, as the music keeps ten tracks. Every step is kept besides, with its bearing before
+    and after, and can be saved (a CSV): the steps are the walk back to the file.
+  - *On the binary line it is clockwork:* each byte is a hand of a clock (the first moves the dot
+    1/256 of a turn, the next 1/65,536), so which way each wheel steers is known. On a line with
+    filters, the clock is scrambled, and the landscape above is what is being explored.
+
+**19.118 The rope's probe on Edward's map at v33 (3 November 2026).** MAPS.WoW (160,890,897 bytes)
+at v33 took 2,684.8 s to read: the rope's search on the whole file took about 1,020 s, and the
+weighing repeated it (987 s), to 127,663,746 bytes against mixing's 52,897,658 and LZMA2's
+60,130,073. The probe (2 November, results/rope-probe-2026-11-02.md) did not leave the search out: the rope's newer ways
+made the first 256 KiB 105,459 bytes (`L32 W1 S1 P2 K0`), under the 1.1 line, while the whole file
+came to 2.12 times LZMA2. On 2 November the first 16 MiB of the map came to 1.75 at their start. To see what the
+probe sees across the file: `python tools/rope_probe.py SIEVE MAPS.WoW` (the rope against LZMA2 on
+256 KiB at the start, a quarter, the middle and three quarters). If the other places say no where
+the start says yes, asking a second place before a file of 64 MiB or more is searched whole would
+save most of that time.

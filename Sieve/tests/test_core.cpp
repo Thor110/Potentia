@@ -47,6 +47,7 @@
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -6264,6 +6265,25 @@ void test_mix4()
     CHECK(primed_back);
     CHECK(mix4_code(page, Mix4Params::parse("B16 W1")).size() * 2 < mix4_code(page, Mix4Params::parse("B16")).size());
     set_mix_primer(nullptr);
+    {
+        // An install's Cancel (DecodeCancelScope): a mixing decode stops with DecodeCancelled once
+        // the flag is set, and decodes as before while it is not, or with no scope at all.
+        std::vector<uint8_t> big(200000);
+        for (size_t i = 0; i < big.size(); ++i) big[i] = uint8_t(i * 7 % 251);
+        const Mix4Params bp = Mix4Params::parse("B16");
+        const std::vector<uint8_t> code = mix4_code(big, bp, nullptr);
+        std::atomic<bool> flag{false};
+        {
+            const DecodeCancelScope scope(&flag);
+            CHECK(mix4_file(code, bp, nullptr, big.size()) == big);
+            flag = true;
+            bool cancelled = false;
+            try { (void)mix4_file(code, bp, nullptr, big.size()); }
+            catch (const DecodeCancelled&) { cancelled = true; }
+            CHECK(cancelled);
+        }
+        CHECK(!decoding_cancelled() && mix4_file(code, bp, nullptr, big.size()) == big);
+    }
 }
 
 void test_rope_wave()

@@ -180,6 +180,9 @@ private:
     // Stop pressed: once (sieve::kStop), the job ends with the best it has, the pass under way
     // finished; twice (kForce), the pass under way abandoned too, the last finished kept.
     std::atomic<int> stop_{0};
+    // An install under way (3 November 2026, Edward): its Stop cancels it, the decoding included
+    // (sieve::DecodeCancelScope), and nothing is left written (install_tree takes back what it wrote).
+    std::atomic<bool> installing_{false}, cancel_install_{false};
     std::string progress_;          // what the job is doing now, and the best so far (under mx_)
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;

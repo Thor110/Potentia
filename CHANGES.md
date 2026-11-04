@@ -1,10 +1,21 @@
-# ALTEngine at v0.9.4 only; IDEAS §19.116 restored (3 November 2026)
+# The rope's wheels measured; Manual Navigation's design recorded (3 November 2026)
 
-Copy `Proof/` and `Sieve/` over the repository's. Documents only.
+Copy `Sieve/` over the repository's. No change to Sieve itself: a measurement and documents.
 
-- `Proof/STATISTICS.md`: the ALTEngine section now covers v0.9.4 alone (7,345,022 bytes, 4.77%
-  under your 7z). The v0.9.2 figures and the comparison with its install time are gone. The At a
-  glance row was already v0.9.4.
-- `Sieve/docs/IDEAS.md`: §19.116 (video frames as deltas, your idea) put back. It was in the
-  earlier documents zip but missing from the repository after your last update.
-- `Sieve/docs/NEXT-VERSION.md`: what is left for v33 is MAPS.WoW and WoWRevived measured at v33.
+- `results/rope-wheels-2026-11-03.md`: the landscape measurement from our discussion. The rope's
+  kept bytes, as free "wheels", were turned on six files: a picture, a sound, x-ray, mr, text and a
+  program.
+  - **Smooth on pictures and sound:** one wheel gives one valley on the picture, and 7 small dips
+    on the sound. On a program it is noise.
+  - **Steering beats guessing on every file,** by 1.6% to 44% for the same number of tries.
+  - **But the valleys lead nowhere** for the rope's straight line. At best the steered line costs
+    what the bytes cost coded plainly (the picture 51,531 against 51,544, even with 64 wheels),
+    where the rope with its neighbours makes 44,729. The line's wheels are the wrong car. Wheels
+    that touch every value's prediction (the neighbours' weights, a bias per region) are the next
+    to measure, with the same script.
+- `tools/measure_rope_wheels.py`: the script, to run again on any file.
+- `docs/IDEAS.md` §19.117: the measurement, and Manual Navigation's design as agreed. It is on the
+  binary line first, with bytes on the left and the circle on the right. The dot's angle is the
+  rotation and its distance from the centre how far it is from landing; the centre is kept for an
+  exact hit. The first dot is in the line's colours, then green and red marks. Undo goes ten steps,
+  and the whole list of steps is kept as the walk back to the file.

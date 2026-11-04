@@ -60,6 +60,33 @@ inline std::set<const void*>& owners()
     return s;
 }
 
+// The screens (or, with no owner, the windows) with a dialog open: one at a time each (3 November
+// 2026, Edward: a button pressed again while its dialog was slow to appear opened a second folder
+// browser, and a third). Taken when a dialog opens, given back as it answers, before its callback,
+// so a dialog that leads into another can open the next.
+inline std::mutex& open_mx()
+{
+    static std::mutex m;
+    return m;
+}
+inline std::set<const void*>& open_now()
+{
+    static std::set<const void*> s;
+    return s;
+}
+inline const void* key_of(const void* owner, SDL_Window* window) { return owner ? owner : static_cast<const void*>(window); }
+// True where none was open for this key (and it is now taken); false where one is open already.
+inline bool take_dialog(const void* key)
+{
+    std::lock_guard<std::mutex> lock(open_mx());
+    return open_now().insert(key).second;
+}
+inline void give_back_dialog(const void* key)
+{
+    std::lock_guard<std::mutex> lock(open_mx());
+    open_now().erase(key);
+}
+
 // The exclusive fullscreen mode a window had before a dialog opened (one window has dialogs).
 inline std::optional<SDL_DisplayMode>& exclusive_mode()
 {
@@ -94,6 +121,7 @@ inline void SDLCALL dialog_closed(void* call, const char* const* files, int filt
 {
     const DialogCall c = *static_cast<DialogCall*>(call);
     delete static_cast<DialogCall*>(call);
+    give_back_dialog(key_of(c.owner, c.window));
     if (!c.owner) c.callback(c.userdata, files, filter);
     else
     {
@@ -140,6 +168,7 @@ private:
 inline void open_file_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const SDL_DialogFileFilter* filters,
                              int nfilters, const char* default_location, bool allow_many, bool then_another = false, const void* owner = nullptr)
 {
+    if (!detail::take_dialog(detail::key_of(owner, window))) return; // (one is open already)
     detail::before_dialog(window);
     SDL_ShowOpenFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, then_another, owner}, window, filters, nfilters,
                            default_location, allow_many);
@@ -148,6 +177,7 @@ inline void open_file_dialog(SDL_DialogFileCallback callback, void* userdata, SD
 inline void save_file_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const SDL_DialogFileFilter* filters,
                              int nfilters, const char* default_location, const void* owner = nullptr)
 {
+    if (!detail::take_dialog(detail::key_of(owner, window))) return; // (one is open already)
     detail::before_dialog(window);
     SDL_ShowSaveFileDialog(detail::dialog_closed, new detail::DialogCall{callback, userdata, window, false, owner}, window, filters, nfilters,
                            default_location);
@@ -156,6 +186,7 @@ inline void save_file_dialog(SDL_DialogFileCallback callback, void* userdata, SD
 inline void open_folder_dialog(SDL_DialogFileCallback callback, void* userdata, SDL_Window* window, const char* default_location,
                                bool allow_many, const void* owner = nullptr)
 {
+    if (!detail::take_dialog(detail::key_of(owner, window))) return; // (one is open already)
     detail::before_dialog(window);
     auto* call = new detail::DialogCall{callback, userdata, window, false, owner};
     if (!allow_many && detail::native_folder_dialog(detail::dialog_closed, call, window, default_location)) return;

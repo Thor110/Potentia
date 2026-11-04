@@ -17,11 +17,13 @@
 // 7z stream) 685,794: 17.5% smaller; about 0.4 MB/s, coding and decoding alike.
 #pragma once
 
+#include <atomic>
 #include <bit>
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -214,6 +216,25 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
 // of the other ways, the smallest. For the whole run.
 void set_prioritise_decoding(bool on);
 bool prioritise_decoding();
+
+// An install cancelled while mixing decodes (3 November 2026, Edward: the File Locator's Stop while
+// installing). Mixing decodes at 0.3 to 1 MB/s, so a large file can take minutes; for the length of
+// a DecodeCancelScope, every mixing decode, on any thread, looks at the flag about every 64 KiB it
+// makes and throws DecodeCancelled once it is set. One install at a time sets it (the hallway's);
+// nothing else does, so packing's own decoding (its read-back) never sees it.
+struct DecodeCancelled : std::runtime_error
+{
+    DecodeCancelled() : std::runtime_error("cancelled") {}
+};
+class DecodeCancelScope
+{
+public:
+    explicit DecodeCancelScope(const std::atomic<bool>* flag);
+    ~DecodeCancelScope();
+    DecodeCancelScope(const DecodeCancelScope&) = delete;
+    DecodeCancelScope& operator=(const DecodeCancelScope&) = delete;
+};
+bool decoding_cancelled();
 
 std::vector<uint8_t> mix2_code(std::span<const uint8_t> file, const Mix2Params& p);
 std::vector<uint8_t> mix2_file(std::span<const uint8_t> code, const Mix2Params& p, uint64_t size);

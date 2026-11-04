@@ -275,6 +275,7 @@ std::vector<uint8_t> mix_file(std::span<const uint8_t> code, const MixParams& p,
         }
         out[i] = uint8_t(c);
         if (at > code.size() + 4) bad("a code that ends before the file does");
+        if ((i & 0xFFFF) == 0xFFFF && decoding_cancelled()) throw DecodeCancelled(); // (an install's Cancel)
     }
     // Every byte of the code read: the reader takes four ahead, so it has gone at most four past it.
     if (at < code.size()) bad("a code with bytes past the file's end");
@@ -871,6 +872,7 @@ std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t
         }
         out[i] = uint8_t(c);
         if (at > code.size() + 4) bad("a code that ends before the file does");
+        if ((i & 0xFFFF) == 0xFFFF && decoding_cancelled()) throw DecodeCancelled(); // (an install's Cancel)
     }
     if (at < code.size()) bad("a code with bytes past the file's end");
     return out;
@@ -1389,5 +1391,17 @@ std::atomic<bool> g_prioritise_decoding{false};
 
 void set_prioritise_decoding(bool on) { g_prioritise_decoding = on; }
 bool prioritise_decoding() { return g_prioritise_decoding.load(std::memory_order_relaxed); }
+
+namespace {
+std::atomic<const std::atomic<bool>*> g_decode_cancel{nullptr};
+}
+
+DecodeCancelScope::DecodeCancelScope(const std::atomic<bool>* flag) { g_decode_cancel = flag; }
+DecodeCancelScope::~DecodeCancelScope() { g_decode_cancel = nullptr; }
+bool decoding_cancelled()
+{
+    const std::atomic<bool>* f = g_decode_cancel.load(std::memory_order_relaxed);
+    return f && f->load(std::memory_order_relaxed);
+}
 
 } // namespace sieve

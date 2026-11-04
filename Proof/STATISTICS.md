@@ -34,7 +34,7 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 | [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,431,896 | 4.67:1 | −17.82% |
 | [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% |
 | [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 41,710,177 | 5.08:1 | −13.92% |
-| [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,996,145 | 3.04:1 | −12.82% |
+| [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,897,726 | 3.04:1 | −12.99% |
 | [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
 | [ALTEngine](#a-game-engine-altengine), a game engine's release (v0.9.4) | 25,694,035 | 7,712,804 | 7,345,022 | 3.50:1 | −4.77% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
@@ -354,11 +354,20 @@ Since v28, two ways of making it, against 7-Zip:
 | | Size | Making it | Unpacking it |
 | :--- | ---: | ---: | ---: |
 | 7-Zip | 60,791,826 | about 18 s | about 1 s |
-| Sieve, optimised for size | **52,996,145** | 350.1 s | 202.769 s, then checked and written in 0.918 s |
+| Sieve, optimised for size | 52,996,145 | 350.1 s | 202.769 s, then checked and written in 0.918 s |
+| **Sieve v33, optimised for size** | **52,897,726** | 2,684.8 s | 166.710 s, then checked and written in 1.137 s |
 | Sieve, optimised for decoding | 60,130,138 | 349.5 s | 4.563 s, then checked and written in 0.928 s |
 
 Optimised for size, it is 12.82% smaller than 7-Zip's and takes about three and a half minutes to
 unpack; optimised for decoding, 1.09% smaller and about five and a half seconds in all.
+
+**At `sieve-manifest-v33` (3 November 2026, Edward's machine, the File Locator with Keep a log;
+Optimise Search on, which turns Try every way on for a file over 16 MiB):** 52,897,726 bytes (3.04:1),
+98,419 under v32's and 12.99% under 7-Zip's, mixed whole with the match model's second candidate
+(`mix4 B22 C2`); installed in 167.8 s, checked against its SHA-256. Making it took 44 min 45 s, most
+of it the rope: its search on the whole file took about 1,020 s, and the weighing's repeated it (987
+s), to 127,663,746 bytes, though LZMA2 makes 60,130,073 and mixing 52,897,658. The rope's test on
+the file's start did not leave it out this time (IDEAS §19.118).
 
 The potential utility line: at 100 MB or more, the search's time begins to tell.
 

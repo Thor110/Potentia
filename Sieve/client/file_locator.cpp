@@ -612,6 +612,8 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
     if (busy_) return;
     if (worker_.joinable()) worker_.join();
     busy_ = true;
+    installing_ = true;
+    cancel_install_ = false;
     status_ = trf("loc.installing", {to});
     start_job(true); // (the graph cleared: what it showed was the last reading's)
     auto job = [this, from, to] {
@@ -625,18 +627,20 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
         try
         {
             using clock = std::chrono::steady_clock;
+            const sieve::DecodeCancelScope cancellable(&cancel_install_); // (Stop: the decoding stops too)
             const auto t0 = clock::now();
             const cli::Manifest m = cli::installable_manifest(from_u8(from), false);
             const auto t1 = clock::now();
             std::vector<cli::InstallNote> notes;
-            cli::install_tree(
+            const bool whole = cli::install_tree(
                 m, from_u8(to), false,
                 [this](int phase, size_t d, size_t t, const std::string& path) {
                     std::lock_guard<std::mutex> lock(mx_);
                     status_ = trf(phase == 0 ? "loc.install.checking" : "loc.install.writing", {std::to_string(d), std::to_string(t), path});
                 },
-                nullptr, &notes);
+                &cancel_install_, &notes);
             const auto t2 = clock::now();
+            if (!whole) throw sieve::DecodeCancelled(); // (cancelled while checking or writing: what it wrote taken back)
             done = (m.files == 1 ? trf("loc.installed.one", {to}) : trf("loc.installed", {std::to_string(m.files), to})) + "; " +
                    cli::install_times_text(std::chrono::duration<double>(t1 - t0).count(), std::chrono::duration<double>(t2 - t1).count());
             // What the install had to say, as every program that installs shows it; a warning pops up too.
@@ -652,14 +656,20 @@ void FileLocator::install(const std::string& from, const std::string& to, bool s
                 pending_warning_ = warn;
             }
         }
+        catch (const sieve::DecodeCancelled&)
+        {
+            done = tr("loc.install.cancelled");
+        }
         catch (const std::exception& e)
         {
-            done = trf("loc.install_failed", {e.what()});
+            // (a cancel can also reach a decoder that reports it as a fault of its own)
+            done = cancel_install_ ? tr("loc.install.cancelled") : trf("loc.install_failed", {e.what()});
         }
         std::lock_guard<std::mutex> lock(mx_);
         (void)finish_job(); // (its time, under the graph and in the log)
         status_ = done;
         close_log("");
+        installing_ = false;
         busy_ = false;
     };
     if (sync) job();
@@ -1158,7 +1168,17 @@ void FileLocator::event(const SDL_Event& e)
     }
     if (pressed.empty() || (busy_ && pressed != "close" && pressed != "stop")) return;
     if (pressed != "go") go_armed_ = false; // "again" means the very next press
-    if (pressed == "stop")
+    if (pressed == "stop" && installing_)
+    {
+        // An install: cancelled, nothing left written.
+        if (!cancel_install_)
+        {
+            cancel_install_ = true;
+            std::lock_guard<std::mutex> lock(mx_);
+            status_ = tr("loc.install.cancelling");
+        }
+    }
+    else if (pressed == "stop")
     {
         // Once: stop, the pass under way finished. Again: force, that pass abandoned too.
         if (busy_ && stop_ < kForce)
@@ -1355,7 +1375,8 @@ void FileLocator::draw(float W, float H)
         // Stop, on a row of its own under the others (greyed while it works), so it always fits.
         bx = 20;
         row += 40; // (its own row)
-        button("stop", tr(stop_ == 0 ? "loc.stop" : stop_ == kStop ? "loc.force" : "loc.stop.pressed"), 76, stop_ < kForce); // the best so far kept
+        if (installing_) button("stop", tr(cancel_install_ ? "loc.stop.pressed" : "loc.cancel_install"), 76, !cancel_install_); // nothing left written
+        else button("stop", tr(stop_ == 0 ? "loc.stop" : stop_ == kStop ? "loc.force" : "loc.stop.pressed"), 76, stop_ < kForce); // the best so far kept
         row -= 40; // (as before: the text starts below it, at 126)
     }
     float y = 126 + row;
