@@ -132,17 +132,19 @@ Traditional AI training records model weights and checkpoints, but subtle hardwa
 
 By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture. ( Windows / Mac / Linux tested )
 
-Hence the use of floating point arithmetic in models to begin with.
+Floating point is used in models for its range and speed, what it costs is reproducibility.
 
 Every number is a signed 64 bit integer, so values are a fixed point, this means it is bounded by max/min values.
 
-Analysis of Sieve trained models shows that no value ever hits the min or max, however these models are tiny so precision and scale still needs further analysis.
+Initial analysis of Sieve trained models shows that no value ever hits the min or max on the shipped models, however these models are tiny so precision and scale still needs further analysis. On a larger test model a small share did.
 
-On the shipped model no value ever reached a bound on a larger test model a small share did.
+Probabilities are fixed point too, so a model can give a byte exactly 0%, and sometimes that byte comes next.
 
-As no one can ever say with absolute certainty that something is 0% or 100% unlikely to follow something else, depending on the pre-requisite context of course.
+No one can say with absolute certainty that something has no chance of following something else, depending on the pre-requisite context of course.
 
-For example : the word 'waffle' might be very unlikely to follow the word 'quantised' but that doesn't stop me typing quantised waffle.
+For example : ‘waffle’ may be very unlikely after ‘quantised’, but that doesn’t stop me typing ‘quantised waffle’.
+
+So a model used to compress needs a minimum chance for every byte, this is planned for the next training version.
 
 	The Sieve AI Model
 
@@ -151,7 +153,9 @@ Trained on just The Universal Library 'Kurd Laßwitz’s 1904 short story Die Un
 sieve-ai-16432c2a3953.safetensors : 34,072 bytes : 0.462 s to encode to .sieve
 sieve-ai-16432c2a3953.safetensors.sieve : 4,180 bytes : 0.042 s to decode from .sieve
 
-An 8192 weight model reduced to less bytes than it has weights.
+An 8192 weight model reduced to fewer bytes than it has weights.
+
+The model is 34,072 bytes as .safetensors, which stores each 4-bit weight as a 32-bit float, reduced to 4,180 bytes as a .sieve, that is the 8,192 weights own 4,096 bytes, plus 84 bytes of name, hash and overhead.
 
 The model isn't capable and it isn't supposed to be, it is just a proof of concept.
 

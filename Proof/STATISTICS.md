@@ -600,7 +600,9 @@ listing (with mixing's parameters, longer than `raw`) and the code's length.
 | control.py.sieve, v20 | 731 | −11.07% |
 | **control.py.sieve, v32** | **591** | **−28.10%** |
 
-All four take one cluster on disk, 4,096 bytes.
+The script, the 7z and the 7z's `.sieve` take one cluster on disk, 4,096 bytes. The v32
+`control.py.sieve`, 591 bytes, shows 0 bytes on disk on Edward's Windows machine: NTFS keeps a file
+this small inside its Master File Table, with no cluster of its own.
 
 ## Files that are items of Sieve's own lines
 

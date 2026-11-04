@@ -1,5 +1,5 @@
-# IDEAS §19.119 (4 November 2026)
+# STATISTICS: 0 bytes on disk (4 November 2026)
 
-Commit 7b863a0 (local, not pushed), on top of your 460470b.
+Commit 9cb9db1 (local, not pushed), on top of your bdd4063.
 
-- Sieve/docs/IDEAS.md, section 19.119: QK-norm and a floor under every probability, as candidates for the next training version, with the measurements behind them.
+- Proof/STATISTICS.md, A small script: the v32 control.py.sieve (591 bytes) now shows 0 bytes on disk on Windows, as you saw. NTFS keeps a file that small inside its Master File Table. The other three still take 4,096 bytes.
