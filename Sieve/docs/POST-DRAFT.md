@@ -33,7 +33,9 @@ Files can be optimised for decoding speed or filesize, as well as a number of ot
 
 So far, most tests are outperforming 7zip and repacking JPEG and PNG files smaller than they started.
 
-Sieve beats brotli on folders and large files, as well as small web pages since the latest v33 manifest.
+Sieve beats brotli on folders and large files, as well as most small web pages since the latest v33 manifest.
+
+Results can be found here : https://github.com/Thor110/Potentia/tree/main/Sieve/results
 
 PROOF.md - https://github.com/Thor110/Potentia/blob/main/Proof/PROOF.md
 
