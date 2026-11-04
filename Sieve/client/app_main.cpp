@@ -136,7 +136,8 @@ const char* kUsage =
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
-    "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the steps\n"
+    "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
+    "                      keeps a log there (none otherwise); --manual-log LOG (in place of FILE) replays a log\n"
     "                      runs keys and typed text (=text types into the row chosen), as --designer's does;\n"
     "                      --cipher-in FILE takes a file's bytes as the input, --cipher-out FILE saves the output\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
@@ -915,14 +916,20 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
-    if (shot && a.has("manual-nav"))
+    if (shot && (a.has("manual-nav") || a.has("manual-log")))
     {
         // A picture of Manual Navigation (for documentation and testing): --manual-nav FILE loads
         // it; --script runs keys and hex typed into the byte chosen ("Up,Up,Right,=4f"); each
         // step's landing is worked out before the next is taken, so every mark is drawn;
         // --manual-steps FILE saves the steps as CSV, as Ctrl+S does.
+        // (a log kept only where --manual-logs names a folder: a scripted run leaves nothing behind otherwise)
+        ManualNav::remember(a.has("manual-logs"), 0, a.has("manual-logs") ? std::filesystem::path(a.get("manual-logs")) : std::filesystem::path(), {});
         ManualNav nav(window, renderer, a.has("angle-decimals") ? std::stoi(a.get("angle-decimals")) : app.angle_decimals);
-        if (!nav.load(a.get("manual-nav"))) throw std::runtime_error(nav.status());
+        // (--manual-log and --manual-nav both: the log first, and where its file was not found, or has
+        // changed, FILE loaded as Ctrl+O would load it, the log replayed if it is the same bytes)
+        bool loaded = a.has("manual-log") && nav.load_log(a.get("manual-log"));
+        if (!loaded && a.has("manual-nav")) loaded = nav.load(a.get("manual-nav"));
+        if (!loaded) throw std::runtime_error(nav.status());
         nav.wait();
         if (a.has("script"))
         {
@@ -945,6 +952,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "manual navigation: " << nav.status() << "\n";
         std::cout << "  " << nav.readout() << "\n";
+        if (!nav.log_path().empty()) std::cout << "  log: " << nav.log_path() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
@@ -1291,7 +1299,13 @@ int run(const Args& a)
             }
             if (r == MainMenu::Result::ManualNav)
             {
-                // Manual Navigation, and back to the main menu from it.
+                // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
+                // as the settings have them ([manual]), saved when changed there.
+                ManualNav::remember(app.manual_log, app.manual_undo, app_path.parent_path() / "logs", [&app, app_path](bool log, int depth) {
+                    app.manual_log = log;
+                    app.manual_undo = depth;
+                    app.save(app_path);
+                });
                 ManualNav nav(window, renderer, app.angle_decimals);
                 if (nav.run() == ManualNav::Result::Quit) break;
                 continue;

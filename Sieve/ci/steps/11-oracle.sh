@@ -1151,6 +1151,12 @@ cmp b64/mail.txt b64_oracle/mail.txt
 cmp b64/methods.h b64_oracle/methods.h
 cmp b64/list.json b64_oracle/list.json
 cmp b64/plain.txt b64_oracle/plain.txt
+# The comparison (--compare, as tools/make_release.py asks for it) over the same folder: its texts'
+# spans are listed as members after packing, and are not files on the disk to be read (4 November
+# 2026: "cannot read .../sieve-install.exe/1" stopped the release); the original counted as the
+# folder's five files.
+$S locate b64 --installer b64-cmp.sieve --compressed-temporary --compare 2>&1 | tr -d '\r' > b64-cmp.txt
+grep -q "^  original  *$(cat b64/* | wc -c) bytes" b64-cmp.txt
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
 # macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds

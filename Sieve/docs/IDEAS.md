@@ -6143,8 +6143,12 @@ and 16 bytes etc."
   - *Top, under the title:* the rotation and the length of its route, the edits' cost so far
     ("edits: N bytes") and the net (the route saved less the edits).
   - *Steps:* the file is held once; each step is kept as offset, old byte and new byte. Undo and redo
-    go ten deep, as the music keeps ten tracks. Every step is kept besides, with its bearing before
-    and after, and can be saved (a CSV): the steps are the walk back to the file.
+    go back through every step (Edward, 4 November 2026: "unlimited undo by default"), or 10, 100
+    or 1,000 as set. Keep a log (on by default) writes every step as it lands, with its bearing
+    before and after, to a CSV whose head names the file by its whole path and SHA-256, so Load Log
+    opens it again and replays every step, undos and redos too ("replayable without having to
+    pinpoint the file again"); Save Steps writes just the walk. The steps are the walk back to the
+    file.
   - *On the binary line it is clockwork:* each byte is a hand of a clock (the first moves the dot
     1/256 of a turn, the next 1/65,536), so which way each wheel steers is known. On a line with
     filters, the clock is scrambled, and the landscape above is what is being explored.

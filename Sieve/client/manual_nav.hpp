@@ -17,9 +17,14 @@
 // less the route and the steps: the steps are the walk back from where the route lands to the file,
 // so a net above 0 would be a file written shorter than itself.
 //
-// The file is held once. Each step is kept as its offset and the byte before and after; undo and
-// redo go 10 steps deep (Ctrl+Z, Ctrl+Y), and every step, undone ones included, is kept in the log
-// with the bearings before and after, which can be saved as CSV (Ctrl+S). Where each step lands is
+// The file is held once. Each step is kept as its offset and the byte before and after. Undo and
+// redo (Ctrl+Z, Ctrl+Y) go back as far as the Undo depth says (U: all, the default, or 10, 100,
+// 1,000). Keep a log (L, on by default; Edward, 4 November 2026) writes every step, undone ones
+// included, to a CSV in the logs folder beside the settings as each lands, with its bearings before
+// and after; its head names the file (its whole path, size and SHA-256) and the precision, so Load
+// Log (Ctrl+L) can open the file again and replay it, undos and redos included, and carry on
+// writing to it. Save Steps (Ctrl+S) writes just the walk: the steps from the file as loaded to the
+// bytes now, to a place chosen. Where each step lands is
 // worked out on a worker (a file of 64 KiB is a number of half a million bits), so the screen never
 // waits. Every step is worked out, in order (the worker keeps its own copy of the bytes and takes
 // each step to it), so each has its own before and after and its own mark, however fast the keys
@@ -31,6 +36,9 @@
 #include <atomic>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
+#include <fstream>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -50,6 +58,10 @@ public:
     enum class Result { Back, Quit };
     Result run();
 
+    // Keep a log and the Undo depth (0: all) as the settings have them, the logs folder, and who to
+    // tell when either is changed here ([manual] in the settings).
+    static void remember(bool keep_log, int undo_depth, std::filesystem::path folder, std::function<void(bool, int)> changed);
+
     // A file's bytes to steer (Ctrl+O's, or --manual-nav FILE in scripted runs); false, with the
     // status saying why, where it cannot be taken.
     bool load(const std::string& path);
@@ -57,13 +69,20 @@ public:
     void type(const std::string& utf8);          // scripting: hex typed into the byte chosen
     void render();
     void wait(); // scripting: until the worker has worked out the last step
-    // Every step so far as CSV (Ctrl+S's, or --manual-steps FILE); false, the status saying why.
+    // The walk as CSV: the steps from the file as loaded to the bytes now (Ctrl+S's, or --manual-steps
+    // FILE); false, the status saying why.
     bool save_steps(const std::string& path);
+    // A log opened: its file loaded from the path it names (asked for where it is not there, or not
+    // the same bytes) and every step replayed (Ctrl+L's, or --manual-log FILE); false, the status
+    // saying why.
+    bool load_log(const std::string& path);
+    const std::string& log_path() const { return log_path_; } // the log being written ("" for none)
     const std::string& status() const { return status_; }
     // The readout above the circle, as text (for scripted runs).
     std::string readout() const;
-    // From the file windows' callbacks, on any thread: applied on the main thread.
-    void file_chosen(const std::string& path, bool for_load);
+    // From the file windows' callbacks, on any thread: applied on the main thread. `what`: 0 a file to
+    // load, 1 where to save the walk, 2 a log to load.
+    void file_chosen(const std::string& path, int what);
 
 private:
     // Where a file lands: its rotation, how far from landing exactly, and its route.
@@ -89,6 +108,15 @@ private:
         double off_before = 1, off_after = 1;
         bool pending = true; // where it lands not worked out yet
         uint64_t gen = 0;    // the bytes' generation it makes (its reading answers for it)
+        uint64_t number = 0; // its number in the log (1, 2, ...)
+    };
+    // A log's line, read back: a step (turn, undo, redo) or the precision changed.
+    struct Logged
+    {
+        std::string kind;
+        uint64_t offset = 0;
+        uint8_t from = 0, to = 0;
+        int decimals = 0; // ("precision")
     };
     // The worker's work, in order: the bytes as they are (a file loaded, the precision changed),
     // or one step taken to its own copy.
@@ -117,6 +145,10 @@ private:
     void collect_reading();  // its answers taken, in order
     static Reading read(const std::vector<uint8_t>& bytes, int decimals, uint64_t gen);
     void poll_chosen();
+    int depth() const;                    // the undo depth now (a large number for all)
+    void open_log(bool append);           // the log begun (or carried on), as Keep a log says
+    void write_landed(const Step& s);     // a step's line, once it has landed
+    void replay(const std::vector<Logged>& lines);
 
     SDL_Window* window_;
     SDL_Renderer* r_;
@@ -126,6 +158,18 @@ private:
 
     std::vector<uint8_t> bytes_; // the file, once
     std::string name_;
+    std::string path_;   // its whole path, as loaded
+    std::string sha_;    // its SHA-256 as loaded (hex)
+    bool keep_log_ = true;
+    int undo_depth_ = 0; // 0: all
+    std::ofstream log_out_;
+    std::string log_path_;
+    uint64_t steps_made_ = 0;  // every step's number so far (turns, undos and redos)
+    std::deque<Step> unlogged_; // steps made and not yet landed, to be written as they land
+    bool replaying_ = false;
+    std::optional<std::pair<std::string, std::vector<Logged>>> waiting_log_; // a log whose file is to be found (its SHA-256)
+    std::string waiting_log_path_; // (where that log is, to carry on writing to it)
+    bool from_log_ = false;        // load() called by load_log(): the file the log names
     size_t original_address_bytes_ = 0; // the file's own address as loaded, as raw bytes
     uint64_t at_ = 0;     // the window's first byte
     int span_ = 4;        // the bytes shown: 4, 8 or 16
@@ -134,8 +178,7 @@ private:
 
     std::vector<Step> active_; // the steps from the file as loaded to the bytes now (each a turn)
     std::vector<Step> redo_;   // undone, for redo
-    int undoable_ = 0;         // how many of active_'s last steps undo may take back (10 at most)
-    std::vector<Step> log_;    // every step, undo and redo included
+    int undoable_ = 0;         // how many of active_'s last steps undo may take back (the depth at most)
     std::vector<Mark> marks_;
 
     Reading now_;               // the latest reading taken
@@ -149,7 +192,7 @@ private:
     uint64_t gen_ = 0;              // the bytes' generation: one more at every step
 
     std::string status_;
-    std::optional<std::pair<std::string, bool>> chosen_file_; // (mx_)
+    std::optional<std::pair<std::string, int>> chosen_file_; // (mx_)
     std::vector<std::pair<SDL_FRect, int>> cells_;            // a byte's box, its index in the window
     std::vector<std::pair<SDL_FRect, int>> arrows_;           // index * 2 (+1 for down)
     std::vector<std::pair<SDL_FRect, int>> buttons_;

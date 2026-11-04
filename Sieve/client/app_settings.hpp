@@ -125,6 +125,10 @@ struct AppSettings
     bool locator_optimise = true;    // Optimise Search: Try every way chosen for each file by its kind (ticked unless unticked)
     bool locator_draft = false;      // the next version's draft (cli/draft.hpp; [locator] v33_draft, its name from the version)
     bool locator_log = false;        // Keep a log: each run's reports and times written to a text file
+    // Manual Navigation ([manual]): Keep a log (every step written to a CSV in the logs folder as it
+    // lands; on unless unticked) and the undo depth (0: all, the default).
+    bool manual_log = true;
+    int manual_undo = 0;
     // "Optimise Compressed Formats" ([locator] optimise_archives, the key's old name kept): off unless
     // ticked; read, both halves below ticked (written: either is).
     bool locator_archives = false;

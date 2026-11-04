@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -239,6 +240,15 @@ AppSettings AppSettings::load(const fs::path& path)
                 }
             }
         }
+        else if (section == "manual")
+        {
+            if (key == "keep_log") s.manual_log = value == "1";
+            else if (key == "undo_depth")
+            {
+                const int d = std::atoi(value.c_str());
+                if (d == 0 || d == 10 || d == 100 || d == 1000) s.manual_undo = d;
+            }
+        }
         else if (section == "setup") s.setup.set_entry(key, value); // a value it cannot have is left out
         else if (section == "paths")
         {
@@ -311,6 +321,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "search_share_packing", share_text(locator_share_packing), "learned: the share of the search's time packing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
         {"locator", "search_share_weighing", share_text(locator_share_weighing), "learned: the share of the search's time weighing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
     };
+    r.push_back({"manual", "keep_log", manual_log ? "1" : "0", "1: Manual Navigation's Keep a log ticked (the default): every step written to a CSV in the logs folder beside these settings as it lands, its head naming the file (its path, size and SHA-256), so Load Log can replay it; 0: off"});
+    r.push_back({"manual", "undo_depth", std::to_string(manual_undo), "Manual Navigation's undo depth: 0 for all the steps (the default), or 10, 100, 1000"});
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
     r.push_back({"language", "language", language, "the language file's name in data/lang (en: English)"});

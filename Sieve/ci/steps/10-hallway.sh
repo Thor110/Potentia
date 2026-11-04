@@ -935,19 +935,49 @@ cmp engine.enc cli.enc
 $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
 # Manual Navigation (IDEAS §19.117): Edward's four bytes turned by hand. A byte typed is one step
-# (its two digits), undo and redo give the same bytes back, and every step saved starts where the
-# one before it landed. Reached from the main menu, the row above Exit.
+# (its two digits); the log (--manual-logs: Keep a log's folder) holds every step, undos and redos
+# included, each starting where the one before it landed, and the precision changed between them;
+# Save Steps (--manual-steps) just the walk, the turns from the file as loaded to the bytes now.
+rm -rf mnav-logs
 printf '\000\377\377\000' > mnav.bin
-$H --manual-nav mnav.bin --script "Up,Right,Down,Right,Right,=7f,Ctrl+Z,Ctrl+Y" --manual-steps mnav.csv --screenshot mnav.png | tr -d '\r' | q "^manual navigation: 5 step(s) saved"
+$H --manual-nav mnav.bin --manual-logs mnav-logs --script "Up,Right,Down,],Right,Right,=7f,Ctrl+Z,Ctrl+Y" --manual-steps mnav.csv --screenshot mnav.png | tr -d '\r' > mnav.txt
+q "^manual navigation: The walk, 3 step(s) from the file as loaded, saved" mnav.txt
 q "^3,turn,3,00,7F," mnav.csv
-q "^4,undo,3,7F,00," mnav.csv
+mlog=$(sed -n 's/^  log: //p' mnav.txt)
+q "^# sha256,10db5223d19bd1d58c2b8eb3c723b0ba104cf17564f9434e53e1b9e642fb3b37$" "$mlog"
+q "^# precision,2$" "$mlog"
+q "^4,undo,3,7F,00," "$mlog"
+q "^5,redo,3,00,7F," "$mlog"
 python -c "
-import csv
-rows = [r for r in csv.reader(open('mnav.csv')) if r and r[0].isdigit()]
+import csv, sys
+rows = [r for r in csv.reader(open(sys.argv[1])) if r and r[0].isdigit()]
 assert len(rows) == 5, rows
 for a, b in zip(rows, rows[1:]):
-    assert a[6] == b[5] and a[8] == b[7], (a, b) # each starts where the last landed
-"
+    # each starts where the last landed (but across the precision changed, after step 2, where the
+    # same place is written to more places and lies a different distance from landing)
+    if a[0] != '2': assert a[6] == b[5] and a[8] == b[7], (a, b)
+" "$mlog"
+# Load Log: the file opened from the path the log names, every step replayed (undos and redos
+# too), to the same place; the log carried on, not begun again.
+$H --manual-log "$mlog" --manual-logs mnav-logs --script "Up" --screenshot mnav-replay.png | tr -d '\r' > mnav-replay.txt
+q "5 step(s) replayed from the log" mnav-replay.txt
+q "^6,turn,0,01,02," "$mlog"
+[ "$(ls mnav-logs | wc -l)" -eq 1 ]
+# Moved: not found where the log says; found by hand (as Ctrl+O would), it is replayed, and the log
+# notes where it now is. Another file with other bytes is not taken for it.
+mv mnav.bin mnav-moved.bin
+if $H --manual-log "$mlog" --screenshot mnav-missing.png > mnav-missing.txt 2>&1; then exit 1; fi
+q "The log's file is not at" mnav-missing.txt
+$H --manual-log "$mlog" --manual-nav mnav-moved.bin --manual-logs mnav-logs --screenshot mnav-moved.png | tr -d '\r' | q "6 step(s) replayed from the log"
+q "^# file,.*mnav-moved.bin$" "$mlog"
+mv mnav-moved.bin mnav.bin
+printf '\001\377\377\000' > mnav-other.bin
+$H --manual-log "$mlog" --manual-nav mnav-other.bin --screenshot mnav-other.png | tr -d '\r' | q "Not the file the log was made on"
+# Undo as deep as the steps go (the default): 15 turns, 15 undos, the file as loaded; at a depth of
+# 10 (U), 5 turns are left.
+ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))
+$H --manual-nav mnav.bin --script "${ups}${zs%,}" --screenshot mnav-undo.png | tr -d '\r' | q "^  rotation 2.8 degrees"
+$H --manual-nav mnav.bin --script "U,${ups}${zs%,}" --screenshot mnav-undo10.png | tr -d '\r' | q "^  rotation 9.8 degrees"
 $H --main-menu --press "Down,Down,Down,Down,Down,Down,Down" --screenshot main-mnav.png | q "saved main-mnav.png"
 $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"

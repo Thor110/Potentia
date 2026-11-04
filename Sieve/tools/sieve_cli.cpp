@@ -2625,7 +2625,9 @@ int cmd_locate(const Args& a)
         const fs::path dir(std::u8string(d.begin(), d.end()));
         for (const auto& e : m.entries)
         {
-            if (e.dir) continue;
+            // (a member, a file's part the packer lists apart, such as the binary a text writes out:
+            // not a file on the disk, and its bytes counted already in the file it is part of)
+            if (e.dir || e.member) continue;
             const fs::path file = root / fs::path(std::u8string(e.path.begin(), e.path.end()));
             const auto bytes = read_file_bytes(file);
             const BigUint addr = binary_address(bytes);
