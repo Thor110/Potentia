@@ -30,7 +30,13 @@ std::vector<uint8_t> from_hex(const std::string& h)
 {
     if (h.size() % 2) throw std::invalid_argument("--in-hex needs whole bytes");
     std::vector<uint8_t> b;
-    for (size_t i = 0; i < h.size(); i += 2) b.push_back(uint8_t(std::stoi(h.substr(i, 2), nullptr, 16)));
+    auto digit = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        throw std::invalid_argument("--in-hex takes hex digits only (0-9, a-f)");
+    };
+    for (size_t i = 0; i < h.size(); i += 2) b.push_back(uint8_t(digit(h[i]) * 16 + digit(h[i + 1])));
     return b;
 }
 

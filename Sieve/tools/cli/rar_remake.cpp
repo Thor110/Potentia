@@ -3,6 +3,7 @@
 // only the headers, never the compressed data, which libarchive reads.
 
 #include "cli/rar_remake.hpp"
+#include "cli/dictionaries.hpp" // executable_dir
 
 #include <algorithm>
 #include <array>
@@ -362,18 +363,8 @@ int run(const std::vector<std::string>& args, const fs::path& cwd, std::string* 
     return status;
 }
 
-fs::path own_folder()
-{
-#ifdef _WIN32
-    wchar_t buf[32768];
-    const DWORD n = GetModuleFileNameW(nullptr, buf, 32768);
-    return n ? fs::path(std::wstring(buf, n)).parent_path() : fs::path();
-#else
-    std::error_code ec;
-    const fs::path p = fs::read_symlink("/proc/self/exe", ec);
-    return ec ? fs::path() : p.parent_path();
-#endif
-}
+// (The program's own folder, as the dictionaries find it: macOS too, where /proc is not.)
+fs::path own_folder() { return executable_dir(); }
 
 #ifdef _WIN32
 const char* kNames[] = {"rar.exe", "Rar.exe"};
@@ -480,7 +471,11 @@ bool set_times(const fs::path& folder, const std::vector<Member>& members, std::
         if (!ok) return (why = "cannot set the times of " + m->path, false);
 #else
         if (m->ctime) return (why = "it keeps creation times, which cannot be set here", false);
-        if (::chmod(u8(p).c_str(), mode_t(m->attributes & 07777)) != 0) return (why = "cannot set the mode of " + m->path, false);
+        // (Read, write and run for each, never setuid, setgid or sticky: the modes come from the
+        // instructions and are set before the RAR made again is checked, so they must be harmless
+        // whatever they say. A RAR that kept those bits is then not made again byte for byte, and
+        // its files are given as they are, as for any RAR that cannot be made again.)
+        if (::chmod(u8(p).c_str(), mode_t(m->attributes & 0777)) != 0) return (why = "cannot set the mode of " + m->path, false);
         struct timespec ts[2];
         ts[0].tv_nsec = UTIME_OMIT;
         ts[1].tv_nsec = UTIME_OMIT;

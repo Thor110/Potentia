@@ -39,10 +39,10 @@ a result surprises; close it with what explained it.
   - Mixing on its start guessed a shape, 48 bytes wide, which won the start by 0.56% and lost the
     whole (13,373,422 bytes as a picture). A guessed shape is now taken only where it wins its start
     by 2% (shapes that were pictures won by more: a designed diagonal 7.07%, a MIDI 4.41%).
-  - With both, `sieve locate mozilla --optimise-search --v33-draft` (Try every way chosen by
+  - With both, `sieve locate mozilla --optimise-search` (Try every way chosen by
     Optimise Search, the file being over 16 MiB) mixes it as bytes with the match model's ways,
     `mix4 B22 R1 M4 C2`: **13,318,582 bytes**, against LZMA2's 13,376,239 (−0.43%), installed back
-    byte for byte in 96 s (LZMA2's in about 3 s). With v32 alone it stays LZMA2.
+    byte for byte in 96 s (LZMA2's in about 3 s). With `--v32` it stays LZMA2.
 
 ### Try every way made five small JPEGs a little larger (Edward's pictures, 1 November 2026; fixed 2 November)
 - *Seen:* of 153 JPEGs (no box ticked), five of 58 KB to 176 KB came out 18 to 225 bytes larger

@@ -525,7 +525,7 @@ Examples:
 * Detect malformed multibyte sequences
 * Validate simple grammar graphs (with tolerances)
 
-**Built:** `clean-v1/v2` (no double spaces, at least one letter) and `max-run-v1` (no letter repeated more than three times in a row; English never does). The binary line recognises a file's kind from its first bytes; filtering on it is planned.
+**Built:** `clean-v1/v2` (no double spaces, at least one letter) and `max-run-v1` (no letter repeated more than three times in a row; English never does). The binary line recognises a file's kind from its first bytes, and filtering on it is built: `binary-kind-v1` (a file's kind is one of those chosen), `utf8-valid-v1` (the whole file is well-formed UTF-8) and, for the other lines, `not-a-file-v1` (a unit whose number, read as a place on the binary line, holds a file with a signature is set aside).
 
 If it cannot *possibly* represent any known human data structure → Layer 1.
 
@@ -547,7 +547,7 @@ For text pages:
 * Detect dictionary-word density
 * Check against probabilistic language models (purely statistical, e.g., n-gram or Markov models)
 
-**Built:** for text, `window-v1/v2` (a page that could be cut from running text, allowing words cut by its edges), `words-v1/v2` (every word in a pinned dictionary) and `title-v1`; for pictures, `neighbour-agreement-v1` (neighbouring pixels agree); for music, `key-v1` (every note in a chosen key). All of these can be counted and ranked exactly. **Planned:** binary format validators, word pairs, grammar patterns, duplicate words.
+**Built:** for text, `window-v1/v2` (a page that could be cut from running text, allowing words cut by its edges), `words-v1/v2` (every word in a pinned dictionary) and `title-v1`; for pictures, `neighbour-agreement-v1` (neighbouring pixels agree); for music, `key-v1` (every note in a chosen key); for grammar patterns, `moby-grammar-v1` and `moby-grammar-strict-v1` (English word order by part of speech). All of these can be counted and ranked exactly. **Planned:** binary format validators, word pairs, duplicate words.
 
 If it is syntactically structured but semantically empty → Layer 2.
 

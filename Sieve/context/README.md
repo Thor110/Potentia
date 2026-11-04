@@ -14,9 +14,10 @@ it may have, so `photos.zip` holding `photos\` does not give `photos\photos\`.
 
 Either starts at once, as an archiver's extract does: `sieve-install`'s window shows the
 progress and closes when it is done. Every file of a `.sieve` is checked against its SHA-256 before any is
-written. If it cannot (files already there, say), the window stays open and says why: **Back**
-returns to its first screen, where you can tick Replace or choose another folder and Install
-again; Cancel part way removes what was written.
+written. Where files are already there, it asks about each before writing anything, as other
+extractors do: **Yes**, **No**, **Yes to all**, **No to all** or **Cancel** (a file answered No is
+left as it was; Cancel writes nothing and closes the window). If it cannot install for another
+reason, the window stays open and says why. Cancel part way removes what was written.
 
 ## Pictures (3 November 2026)
 

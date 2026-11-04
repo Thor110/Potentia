@@ -54,6 +54,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <random>
@@ -290,12 +291,19 @@ private:
     bool have_exact_ = false;
     bool exact_force_ = false;              // X pressed: the check for these bytes, however long
     std::vector<uint8_t> exact_bytes_;      // the bytes the check in hand (or working) is for
+    // What the check's thread and this screen share, held by both: a check let go (the bytes changed,
+    // or the screen closed) is left to finish on its own, so the screen never waits for one (parts of
+    // it cannot stop midway: a 1 MiB file's first reduction alone took 6.6 s).
+    struct ExactShared
+    {
+        std::atomic<uint64_t> want{0}; // the ticket wanted (0: none): the check stops when it is not its own
+        std::atomic<int> pct{0};
+        std::mutex mx;
+        std::optional<Exact> done;     // (mx)
+    };
+    std::shared_ptr<ExactShared> exact_shared_ = std::make_shared<ExactShared>();
     std::thread exact_thread_;
-    std::atomic<uint64_t> exact_want_{0};   // the ticket wanted (0: none): the check stops when it is not its own
-    std::atomic<int> exact_pct_{0};
     uint64_t exact_ticket_ = 0;
-    std::mutex exact_mx_;
-    std::optional<Exact> exact_done_;       // (exact_mx_)
 
     Reading now_;               // the latest reading taken
     bool have_reading_ = false;

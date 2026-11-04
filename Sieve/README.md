@@ -3,7 +3,7 @@
 *Packs, checks and unpacks files exactly; and gives every possible text, picture, melody and file an exact address.*
 
 Sieve is the working part of [Potentia](../README.md). It is one command-line tool (`sieve`), a
-small installer (`sieve-install`), a right-click menu, a browser extension, and the **hallway**, a
+small installer (`sieve-install`), a picture viewer (`sieve-view`), a right-click menu, a browser extension, and the **hallway**, a
 3D walk through the Gallery of Babel. Everything it does is exact and checked: it either gives you
 back precisely what went in, or refuses and says why.
 
@@ -26,7 +26,8 @@ sieve install MyFolder.sieve --to D:\Restored                # unpack, every fil
 
 A `.sieve` holds a folder as instructions for making it again. Each file is packed whichever way
 comes out smallest: LZMA2 (7-Zip's method), *mixing* (several models predicting every bit, mixed,
-with an English word list for text), an x86 filter for programs, and archives inside the folder
+with an English word list for text, and for web text a dictionary learnt from MDN's examples that
+primes the model first), an x86 filter for programs, and archives inside the folder
 opened and made again byte for byte. Before a `.sieve` is used it is read back and every file
 compared, so a fault in the packer can never hand you something else.
 
@@ -86,6 +87,12 @@ it is exactly that file, and holds a remembered site's pages to its table.
 
 ```sh
 sieve ai-train tests/training_run_v1      # trains it again, and says whether it came out the same
+```
+
+In an installed release (which has no `tests/` folder), from its `tools` folder:
+
+```sh
+sieve ai-train ../training/universalbibliothek.sieve   # the shipped run, trained again: "reproduced exactly"
 ```
 
 `sieve ai-train` trains a small language model in pinned integer arithmetic, recording everything

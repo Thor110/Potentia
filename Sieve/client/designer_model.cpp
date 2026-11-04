@@ -43,7 +43,7 @@ std::string clean(std::string s)
 
 std::string trim(const std::string& s)
 {
-    const size_t a = s.find_first_not_of(" \t"), b = s.find_last_not_of(" \t");
+    const size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r"); // (\r: a file saved with CRLF)
     return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
 }
 

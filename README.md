@@ -51,10 +51,10 @@ The full argument, the evidence behind it, and the design of the Gallery's filtr
 movies, 3D models, worlds, language models and files); a versioned filtration stack with exact
 survivor counts; maps of verified anchors; the walkable hallway; `.sieve` instructions and
 installers; the right-click menu; the web extension and site builder; training recorded so it can
-be replayed exactly.
+be replayed exactly; benchmarks against the usual compressors on public test data (enwik8, enwik9
+and Silesia, in [Proof/STATISTICS.md](Proof/STATISTICS.md)).
 
-**Next:** benchmarks against the usual compressors on public test data, and the persistent
-environment, the Museum and the reconstruction tools set out in the vision.
+**Next:** the persistent environment, the Museum and the reconstruction tools set out in the vision.
 
 **Roadmap:**
 1. ✅ The coordinate system (Sieve: exact addressing for every line).

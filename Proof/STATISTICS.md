@@ -150,7 +150,8 @@ rope search as found (the File Locator kept searches between readings then; it n
 PPMd's figure is not measured here: it is `enwik8.pmd`, which the benchmark offers as a download
 on its page about the test data (<https://mattmahoney.net/dc/textdata.html>, last updated 1
 September 2011), made by PPMd var. J at its strongest (`-m256 -o10 -r1`, 256 MB of memory). Sieve
-optimised for size is 159,597 bytes (0.75%) larger than it at v32 (287,574, 1.34%, at v31).
+optimised for size is 43,600 bytes (0.20%) larger than it at v33 (159,597, 0.75%, at v32; 287,574,
+1.34%, at v31).
 
 **Where that sits in the benchmark.** The [Large Text Compression
 Benchmark](https://mattmahoney.net/dc/text.html) (its table as updated 14 October 2026) ranks
@@ -170,7 +171,7 @@ published (sizes in bytes; its times are on other machines, so they are left out
 | bzip2 1.0.2 `-9` | 29,008,736 | 253,977,839 |
 | gzip 1.3.5 `-9` | 36,445,248 | 322,591,995 |
 
-On enwik8, Sieve optimised for size (21,547,893 at v32) falls between PPMd and xz at its strongest; the
+On enwik8, Sieve optimised for size (21,431,896 at v33) falls between PPMd and xz at its strongest; the
 context-mixing programs at the top, made for this kind of test and far slower, are about a third
 smaller. The table's leaders now (transformer models, about 92 MB on enwik9) give no enwik8 figure. For Sieve, the
 program that unpacks is `sieve-install`.

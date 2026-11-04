@@ -2766,7 +2766,9 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
             return double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1));
         };
         const double at_start = ratio_at(0);
-        const double at_middle = at_start >= 1.1 && at_start < 1.2 ? ratio_at(bytes.size() / 2) : 0;
+        // (The middle asked only where v33 is made: v32 and older make what they made, byte for byte,
+        // as NEXT-VERSION promises; 1.0 there stands for "no", as before the middle was asked.)
+        const double at_middle = at_start >= 1.1 && at_start < 1.2 ? (rope_newest >= 16 ? ratio_at(bytes.size() / 2) : 1.0) : 0;
         if (at_start >= 1.1 && (at_start >= 1.2 || at_middle >= 1.0) && !force_requested())
         {
             char ratio[96];
@@ -3126,7 +3128,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool palette_on = rope_newest >= 16; // v33 draft: a picture of 256 colours or fewer mixed as its palette (mix-v4's P)
     // v33 (reopened 3 November 2026): a web text mixed with the model primed on MDN's examples (W1).
     const bool primer_on = mix4_on && rope_newest >= 16;
-    auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words) {
+    // (code_out: where the trials mixed the whole file, at the very parameters returned (a file of 256
+    // KiB or less, its table the same size), the winning trial's code, which is the code mixing it
+    // whole would make: the same bytes, the same parameters, the same word list. 4 November 2026
+    // review: it was made a second time, a third of the calls on a folder of sources.)
+    auto with_ways = [&](Mix4Params mp, std::span<const uint8_t> f, const MixDictionary* words,
+                         std::shared_ptr<const std::vector<uint8_t>>* code_out = nullptr) {
         if (!match_ways_on || f.size() < 4096) return mp;
         // (Under a palette, whole pixels: P is only for them.)
         const size_t sample = std::min<size_t>(f.size(), size_t(256) << 10);
@@ -3137,23 +3144,39 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                        uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58 ^
                        uint64_t(f.size() > (size_t(4) << 20)) << 59;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
-        thread_local std::unordered_map<uint64_t, std::tuple<bool, uint32_t, uint32_t>> weighed;
+        struct Weighed
+        {
+            bool recover;
+            uint32_t min_match, candidates;
+            std::shared_ptr<const std::vector<uint8_t>> code; // (the whole file's, where the trials mixed it whole)
+        };
+        thread_local std::unordered_map<uint64_t, Weighed> weighed;
         if (const auto hit = weighed.find(key); hit != weighed.end())
         {
-            std::tie(mp.recover, mp.min_match, mp.candidates) = hit->second;
+            mp.recover = hit->second.recover, mp.min_match = hit->second.min_match, mp.candidates = hit->second.candidates;
+            // (Only for a file that is its start: a longer file beginning with the same 256 KiB has the
+            // same key and another code.)
+            if (code_out && start.size() == f.size()) *code_out = hit->second.code;
             return mp;
         }
         if (weighed.size() > 256) weighed.clear();
         Mix4Params best = mp, s = mp;
         s.table_bits = Mix4Params::for_size(start.size()).table_bits;
-        uint64_t least = mix4_code(start, s, words).size();
+        // (The whole file is its start, and the trials' table is the whole's: the winner's code kept.)
+        const bool whole = start.size() == f.size() && s.table_bits == mp.table_bits;
+        std::vector<uint8_t> least_code = mix4_code(start, s, words);
+        uint64_t least = least_code.size();
         for (const int k : {1, 2})
         {
             Mix4Params t = s;
             t.candidates = 2;
             if (k == 2) t.recover = true, t.min_match = 4;
-            if (const uint64_t n = mix4_code(start, t, words).size(); n < least)
+            std::vector<uint8_t> c = mix4_code(start, t, words);
+            if (const uint64_t n = c.size(); n < least)
+            {
                 least = n, best = mp, best.candidates = 2, best.recover = t.recover, best.min_match = t.min_match;
+                if (whole) least_code = std::move(c);
+            }
         }
         // All three, chosen on the start of a file over 4 MiB, weighed again against C2 alone on its
         // first 4 MiB (3 November 2026). R1 and M4's cost shows only once a file runs to some MiB:
@@ -3170,7 +3193,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             c2.candidates = 2;
             if (mix4_code(first, c2, words).size() <= mix4_code(first, all, words).size()) best.recover = false, best.min_match = 6;
         }
-        weighed[key] = {best.recover, best.min_match, best.candidates};
+        std::shared_ptr<const std::vector<uint8_t>> kept;
+        if (whole) kept = std::make_shared<const std::vector<uint8_t>>(std::move(least_code));
+        if (code_out) *code_out = kept;
+        weighed[key] = {best.recover, best.min_match, best.candidates, std::move(kept)};
         return best;
     };
     // v33 (reopened 3 November 2026, W1): files mixed together (a group, the mixed stream) primed on
@@ -3307,6 +3333,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
                 return uint64_t(double(estimate(inner)) * std::min(1.0, code / lz));
             };
+            // The same, in its two halves (the sample's ratio, -1 where mixing is not weighed; LZMA2's
+            // estimate of the whole apart), so that the spans' four can be worked out at once.
+            auto mixed_ratio = [&](const std::vector<uint8_t>& inner) -> double {
+                if (!members_on || prioritise_decoding() || inner.size() < (size_t(64) << 10)) return -1;
+                const size_t each = std::min<size_t>(inner.size(), size_t(1) << 20) / 8;
+                std::vector<uint8_t> s;
+                for (size_t k = 0; k < 8; ++k)
+                {
+                    const size_t at = (inner.size() - each) * k / 7;
+                    s.insert(s.end(), inner.begin() + std::ptrdiff_t(at), inner.begin() + std::ptrdiff_t(at + each));
+                }
+                const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
+                return std::min(1.0, code / lz);
+            };
             // v33 draft: a text holding binary written as text (base64, hex, lists of byte values;
             // spans-v1, text_spans.hpp), carried as an archive made again from its skeleton is: its
             // entry the text with each span taken out ("spn <members> <skeleton size>"), each span
@@ -3345,8 +3385,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         }
                         // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
                         // of the file as it is and of the skeleton and its members.
-                        const uint64_t whole = std::min(std::min<uint64_t>(b.size(), estimate(b)), mixed_estimate(b));
-                        const uint64_t apart = std::min(estimate(joined), mixed_estimate(joined)) + jpegs + 8 * found.size();
+                        // (The four at once, on the threads: each alone took seconds on a large text, one
+                        // after another; the same values, put together as mixed_estimate does.)
+                        uint64_t eb = 0, ej = 0;
+                        double rb = -1, rj = -1;
+                        for_each_index(4, pack_threads(), [&](size_t k) {
+                            if (k == 0) eb = estimate(b);
+                            else if (k == 1) ej = estimate(joined);
+                            else if (k == 2) rb = mixed_ratio(b);
+                            else rj = mixed_ratio(joined);
+                        });
+                        const uint64_t mb = rb < 0 ? ~uint64_t(0) : uint64_t(double(eb) * rb), mj = rj < 0 ? ~uint64_t(0) : uint64_t(double(ej) * rj);
+                        const uint64_t whole = std::min(std::min<uint64_t>(b.size(), eb), mb);
+                        const uint64_t apart = std::min(ej, mj) + jpegs + 8 * found.size();
                         if (apart + 64 + whole / 200 < whole && spans::made_from(sk, parts) == b)
                         {
                             progress(e.path + ", " + std::to_string(b.size()) + " bytes holding " + std::to_string(found.size()) + " span(s) of binary written as text: carried decoded (about " +
@@ -4534,8 +4585,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         base.x86 = program;
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
-                        const Mix4Params mp = with_ways(base, f, words);
+                        std::shared_ptr<const std::vector<uint8_t>> made;
+                        const Mix4Params mp = with_ways(base, f, words, &made);
                         way_text = "mix4 " + mp.text();
+                        if (made) return std::vector<uint8_t>(*made); // (the trial's own code: the same call, made once)
                         return mix4_code(f, mp, words);
                     }
                     if (words)

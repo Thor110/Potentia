@@ -140,10 +140,10 @@ thirty-two-column shelf is half of it; never larger than one.
 | `client/door_portal.cpp`, `client/binary_edge.cpp`, `client/item_faces.cpp` | The doorway noise; the rain and the drop; every item's face (pages, pictures, covers, crates, files) and their render workers. |
 | `client/app_main.cpp` | Options, the menus, the screenshot and scripting paths, the event loop, `main`. |
 | `client/menu.cpp` | The setup menu, `find_limits()`, the budget model. |
-| `tools/cli/pack.cpp`, `tools/cli/locate.cpp` | Installers: the manifest versions, packing (v4) and unpacking (the LZMA SDK), installing. |
+| `tools/cli/pack.cpp`, `tools/cli/locate.cpp` | Installers: the manifest versions, packing (v4 and every version since, to v33) and unpacking (the LZMA SDK), installing. |
 | `client/tailoring.cpp`, `tools/cli/tailor.cpp`, `tools/cli/weigh.cpp` | COST's K and Return, the search behind them and `sieve tailor` (a line's filters tailored to items, by their shortest routes), and files weighed against their own addresses (`sieve locate --weigh`, the File Locator). |
 | `client/mesh.cpp` | The software rasteriser behind Real Graphics. |
-| `core/src/aispace.cpp`, `core/src/llm.cpp`, `core/src/training.cpp` | The AI line (`aispace-v1`), the engine that runs its models, and `training-v1`, training them in pinned integer arithmetic. |
+| `core/src/aispace.cpp`, `core/src/llm.cpp`, `core/src/training.cpp` | The AI line (`aispace-v1`), the engine that runs its models, and `training-v1` and `training-v2` (new runs' version; `training-v1` runs still train), training them in pinned integer arithmetic. |
 | `client/harness.cpp`, `tools/cli/train.cpp`, `tools/cli/train_cmd.cpp` | The AI Training Harness (main menu), training runs (load, train, record, pack) and `sieve ai-train`. |
 | `tools/sieve_cli.cpp` | The `sieve` command. |
 | `reference/sieve_ref.py` | The independent oracle and the vector generator. |
@@ -238,8 +238,8 @@ units, the limits finder, `bytes256` end to end, the COST tab on the item page, 
 `BigUint` with Karatsuba multiplication, reciprocal division and conversion by halves,
 items-per-wall as a global setting, uniform shelf scaling, and the filters-overlay crash fix. The
 core suite was then 16,270 checks, 0 failures, run once with each SHA-256 implementation, and
-passes under `SIEVE_BIGUINT_PORTABLE` too. (It is 36,415 now; what came since is in the dated
-entries at the end.)
+passes under `SIEVE_BIGUINT_PORTABLE` too. (It is 77,158 now with each SHA-256 path, 154,318 in all, measured 4 November 2026; what came
+since is in the dated entries at the end.)
 
 `BigUint` at 152,000 bits (a pages-line address) now measures multiply 1.01 ms, divmod 4.80 ms,
 `to_digits(27)` 2.90 ms and `to_decimal` 3.31 ms; before-and-after figures are in
@@ -486,12 +486,9 @@ did. `draw_face_image` is shared by the binary edge and the crate faces and stay
 1. **Alphabet-relative entropy baselines** — §2.1 of `docs/IDEAS.md`. A latent correctness bug,
    not a cosmetic one. It changes what filters decide, so it is new filter ids, and the ids want
    agreeing before the work starts.
-2. **The node graph, as a SORT tab** beside ITEM and COST on the item page, and as its own
-   screen: the item highlighted in the graph. Edges come from verified anchors, the first being
-   the release manifest, which has to carry the keys of the template models anyway. SORT shows
-   the shortest route an item has: the nearest anchor and the offset from it, against the full
-   address, which is only shorter when the item is near an anchor. The graph is agreed to be a
-   separate system from the corridor, not a mode of it.
+2. ~~The node graph, as a SORT tab~~ — built: SORT beside ITEM and COST on the item page, and the
+   node graph as its own screen, with maps of verified anchors (`sieve map`; MANUAL.md, "SORT, and
+   maps").
 3. The colour-blindness pass over the line palettes.
 4. ~~Portal signage~~ — built: every doorway has a sign over it naming the line it leads to,
    in that line's colours (`draw_door_sign`, `client/door_portal.cpp`).

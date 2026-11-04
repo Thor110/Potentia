@@ -319,8 +319,13 @@ b=$($H --no-menu --title-length 0 --items-per-wall 256 --walk "0,0" --screenshot
 echo "$a"; echo "$b"
 echo "$a" | q "85.9326950016% along"
 echo "$b" | q "85.9326950016% along"
-# ...and it is the same book, with the same address, on both.
-test "$(echo "$a" | book)" = "$(echo "$b" | book)"
+# ...and each tile begins at a multiple of its size: its first book's address ends in 00 or 80 (hex)
+# at 128 a tile, and in 00 at 256. (Until 4 November 2026 this said "the same book on both", which
+# the tiles' first books are not, and `book` was undefined here, so both sides were empty and it
+# passed whatever they were.)
+book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
+echo "$a" | book | q "[08]0$"
+echo "$b" | book | q "00$"
 if [ "$(echo "$a" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" = "$(echo "$b" | sed -n 's/.*tile \([0-9.]*\).*/\1/p')" ]; then exit 1; fi
 # What stands in a slot is scaled to the slot, so twice as many to a tile is half-size
 # items rather than items running into each other: an item must be narrower than the

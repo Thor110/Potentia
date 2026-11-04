@@ -1033,7 +1033,7 @@ $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
 # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
 idle=$($H --designer --timings --screenshot designer-idle.png 2>&1) # (its own line: a crash fails the step)
-test "$(printf '%s\n' "$idle" | grep -c '^designer.test ')" = 0
+test "$(printf '%s\n' "$idle" | { grep -c '^designer.test ' || true; })" = 0
 $H --designer --design tests/plugins/toy-grammar-v1.sfilter --design-out tests/plugins/roundtrip-v1.sfilter --screenshot designer2.png | q "designer: toy-grammar-v1"
 build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | grep -v "^sha256" > rt.a
 build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b

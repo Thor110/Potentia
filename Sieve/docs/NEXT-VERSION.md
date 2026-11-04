@@ -1,8 +1,8 @@
 # The next manifest version: v34 begun, and the plans v32 and v33 were built from
 
 **v34, a draft begun empty (3 November 2026).** Nothing is behind `--v34-draft` yet; with it on,
-Sieve makes what the newest makes. Candidates: the web dictionary (IDEAS §19.92), once Edward has
-chosen the pages it is learnt from; scattered substitutions (IDEAS §19.114, 3), on real pairs.
+Sieve makes what the newest makes. Candidate: scattered substitutions (IDEAS §19.114, 3), on real
+pairs. (The web dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
 
 **v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
 MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).
@@ -137,7 +137,7 @@ statistics").
   - the Proof samples made again, and Proof/STATISTICS.md and PROOF.md measured again (WoWRevived's
     two runs among them, §4a, 1).
 
-## 1. Where things stand
+## 1. Where things stand (history: written at v31, from 27 October 2026; v32 and v33 have been frozen since)
 
 **The freeze.** The format has rested at `sieve-manifest-v31` since 27 October 2026 (HANDOFF §"The
 standing rules"). Edward: "it is time I stopped pushing more manifest versions, that was just

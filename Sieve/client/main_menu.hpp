@@ -10,6 +10,7 @@
 
 #include "app_settings.hpp"
 #include "strings.hpp"
+#include "dialogs.hpp" // DialogOwner
 
 #include <SDL3/SDL.h>
 
@@ -89,6 +90,8 @@ private:
     std::string ffmpeg_version_, ffmpeg_where_; // its version ("" if none) and the line under it
     std::mutex chosen_mx_;
     std::optional<std::string> ffmpeg_chosen_; // a file the window gave, for the main thread to apply
+    // Last, so the first let go: the file window's answer reaches this menu only while it lives.
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

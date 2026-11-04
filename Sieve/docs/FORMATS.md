@@ -59,11 +59,12 @@ every installed file is checked against its SHA-256 before anything is written.
 
 ## Decided and built (31 October 2026, v32)
 
-Edward confirmed the design ("go ahead with the png/jpeg design yes"); built behind `--v32-draft`:
+Edward confirmed the design ("go ahead with the png/jpeg design yes"); built behind `--v32-draft`,
+and since v32 was frozen (31 October 2026) the default:
 
 - **PNG under permanent** no longer installs as its headerless pixel rows, a file no viewer opens
   (v31: `tests/example_book_cover.png`, 859 bytes, as `cover`, 76,800 bytes). It installs as the
-  same picture re-saved by Sieve at its smallest (`pngr`), under its own name. Without the draft,
+  same picture re-saved by Sieve at its smallest (`pngr`), under its own name. With `--v31`,
   v31's packer is unchanged, the flaw with it.
 - **JPEG under the boxes:** normal as it is; temporary its brunsli form, made again exactly;
   permanent the same coefficients with optimised tables, from its brunsli form.
@@ -115,7 +116,7 @@ Edward confirmed the design ("go ahead with the png/jpeg design yes"); built beh
       7,913, so it would have to be weighed. It needs a progressive JPEG writer of Sieve's own;
       not built.
 
-**A PNG's rows carried unfiltered, for temporary** (`skr`, 31 October 2026, the draft). Under
+**A PNG's rows carried unfiltered, for temporary** (`skr`, 31 October 2026, v32; the default since v32 was frozen). Under
 temporary, a PNG that preflate makes again (`sk`) carried its rows as PNG filtered them. Its rows
 are now carried unfiltered, with their filter bytes, and filtered again on installing. Each PNG
 filter is a sum or difference modulo 256, so the original comes back byte for byte, and preflate's
@@ -130,7 +131,7 @@ back byte for byte):
 | icon128 | 19,775 | 11,863 | −40.0% |
 | m1_sieve_scowl60 | 84,640 | 59,895 | −29.2% |
 
-PNGs that Sieve wrote (stb) are carried as their pixels already. With the draft, mixing now weighs
+PNGs that Sieve wrote (stb) are carried as their pixels already. Since v32, mixing weighs
 those pixels as the picture the recipe says they are, beside the shapes it guessed before.
 hallway-compact, whose pixels the rope had read as three bytes wide, went from 16,058 bytes to
 12,772 (−20.5%). The repository's 18 hallway screenshots (docs/images) as one `.sieve`: 245,100

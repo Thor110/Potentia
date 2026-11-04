@@ -26,8 +26,8 @@ figure measured for it and where the measurement is. How a file is weighed, step
 
 **Text.** Mixing, with an English word list whose words are counted by how common they are (2.6%
 smaller on Don Quixote's start than without the list). Texts that share words are mixed together
-in groups: Sieve's own docs folder, 5,740,563 bytes mixed one by one against 4,884,492 in groups
-(27 October 2026). The rope's search is skipped on a text whose start it cannot win: 12.9 MB of
+in groups: 34 MB of the repository's files that compress, 5,740,563 bytes mixed one by one against
+4,884,492 in groups of 8 MiB (27 October 2026; SPECIFICATIONS §12.2, v30). The rope's search is skipped on a text whose start it cannot win: 12.9 MB of
 the repository's texts packed in 43.2 s instead of 97.7 s, the same bytes
 (`results/weighing-order-2026-11-02.md`).
 
@@ -88,8 +88,8 @@ against 13,376,180 (`results/mixing-match-ways-2026-11-02.md`).
 ## Choosing how hard it works
 
 - **For size or for decoding speed** (Prioritise Decoding Speed): mixing decodes slowly, about as
-  slowly as it packs, so it can be left out. Edward's MAPS.WoW: 52,996,145 bytes unpacked in 202.8
-  s for size, 60,130,138 unpacked in 4.6 s for decoding speed (STATISTICS).
+  slowly as it packs, so it can be left out. Edward's MAPS.WoW: 52,897,726 bytes unpacked in 166.7
+  s for size (v33), 60,130,138 unpacked in 4.6 s for decoding speed (STATISTICS).
 - **Try every way:** the search's shortcuts off, every file mixed whatever its size.
 - **Optimise Search** (on unless unticked): Try every way chosen file by file, from what was
   measured on each kind of file.

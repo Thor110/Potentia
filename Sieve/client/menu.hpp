@@ -22,6 +22,7 @@
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp" // kDefaultExportFps
+#include "dialogs.hpp"     // DialogOwner
 
 #include <SDL3/SDL.h>
 
@@ -432,6 +433,9 @@ private:
     int list_row_shown_ = -1;    // the row last brought into view
     void step_panel();           // each frame: the calculating's part, and the slide
     void toggle_panel();         // Tab, or the tab clicked: by hand
+    // Last, so the first let go: while it lives, the folder window's answers reach this menu; once it
+    // has gone they are dropped, not given to a menu no longer there (4 November 2026 review).
+    hallway::DialogOwner dialog_owner_{this};
 };
 
 } // namespace hallway

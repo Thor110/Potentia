@@ -356,6 +356,10 @@ void ManualNav::open_log(bool append)
         log_out_ << s.number << ",turn," << s.offset << ',' << hex2(s.from) << ',' << hex2(s.to) << ',' << s.bearing_before << ','
                  << s.bearing_after << ',' << fixed(s.off_before, 6) << ',' << fixed(s.off_after, 6) << '\n';
     log_out_.flush();
+    // (Steps undone before the log began are not in it, so they are let go: a redo of one would be
+    // a line the log could not replay, 4 November 2026 review.)
+    redo_.clear();
+    redo_marks_.clear();
 }
 
 void ManualNav::write_landed(const Step& s)
@@ -1209,6 +1213,7 @@ bool ManualNav::exact_of(const std::vector<uint8_t>& bytes, Exact& out, const st
     for (const BigUint& p : pieces)
     {
         const double len = double(p.bit_length());
+        if (!go(done / total)) return false; // (between the parts too: a reduction cannot stop midway)
         BigUint g;
         const bool ok = BigUint::gcd(BigUint::mod(x, p), p, g, [&](size_t left) {
             const double l = double(left);
@@ -1218,7 +1223,9 @@ bool ManualNav::exact_of(const std::vector<uint8_t>& bytes, Exact& out, const st
         done += len * len;
         G = BigUint::mul(G, g);
     }
-    const BigUint g = BigUint::gcd(G, units);
+    BigUint g;
+    if (!go(0.99) || !BigUint::gcd(G, units, g, [&](size_t) { return go(0.99); })) return false;
+    if (!go(0.99)) return false;
     BigUint num, den, rest;
     BigUint::divmod(BigUint::mul(v, BigUint(360)), g, num, rest);
     BigUint::divmod(units, g, den, rest);
@@ -1276,22 +1283,25 @@ bool ManualNav::exact_of(const std::vector<uint8_t>& bytes, Exact& out, const st
 
 void ManualNav::stop_exact()
 {
-    exact_want_ = 0;
-    if (exact_thread_.joinable()) exact_thread_.join();
+    // (Let go, not waited for: it finishes on its own, holding the shared part, and its answer,
+    // another ticket's, is never taken.)
+    exact_shared_->want = 0;
+    if (exact_thread_.joinable()) exact_thread_.detach();
 }
 
 void ManualNav::ask_exact()
 {
+    ExactShared& sh = *exact_shared_;
     {
-        std::lock_guard<std::mutex> lock(exact_mx_);
-        if (exact_done_)
+        std::lock_guard<std::mutex> lock(sh.mx);
+        if (sh.done)
         {
-            if (exact_done_->ticket == exact_want_.load())
+            if (sh.done->ticket == sh.want.load())
             {
-                exact_ = std::move(*exact_done_);
+                exact_ = std::move(*sh.done);
                 have_exact_ = true;
             }
-            exact_done_.reset();
+            sh.done.reset();
         }
     }
     if (bytes_.empty() || exact_bytes_ == bytes_) return; // (asked for these bytes: working, or done)
@@ -1303,18 +1313,18 @@ void ManualNav::ask_exact()
     exact_force_ = false;
     exact_bytes_ = bytes_;
     const uint64_t ticket = ++exact_ticket_;
-    exact_want_ = ticket;
-    exact_pct_ = 0;
-    exact_thread_ = std::thread([this, b = bytes_, ticket] {
+    sh.want = ticket;
+    sh.pct = 0;
+    exact_thread_ = std::thread([shared = exact_shared_, b = bytes_, ticket] {
         Exact e;
         e.ticket = ticket;
-        const bool ok = exact_of(b, e, [this, ticket](double f) {
-            exact_pct_ = int(std::clamp(f, 0.0, 0.99) * 100);
-            return exact_want_.load() == ticket;
+        const bool ok = exact_of(b, e, [&shared, ticket](double f) {
+            shared->pct = int(std::clamp(f, 0.0, 0.99) * 100);
+            return shared->want.load() == ticket;
         });
         if (!ok) return;
-        std::lock_guard<std::mutex> lock(exact_mx_);
-        exact_done_ = std::move(e);
+        std::lock_guard<std::mutex> lock(shared->mx);
+        shared->done = std::move(e);
     });
 }
 
@@ -1331,7 +1341,7 @@ std::pair<std::string, std::string> ManualNav::exact_lines(bool* shorter) const
     if (bytes_.empty()) return {};
     if (!have_exact_)
     {
-        if (exact_bytes_ == bytes_) return {trf("mnav.exact.working", {std::to_string(exact_pct_.load())}), ""};
+        if (exact_bytes_ == bytes_) return {trf("mnav.exact.working", {std::to_string(exact_shared_->pct.load())}), ""};
         return {tr("mnav.exact.ask"), ""};
     }
     auto show = [](const Number& m) { return m.dec.empty() ? trf("mnav.exact.bits", {std::to_string(m.bits)}) : m.dec; };

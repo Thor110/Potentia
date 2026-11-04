@@ -1095,7 +1095,9 @@ for d in w33a w33b; do
     diff -r $d ${d}_oracle
 done
 grep -q "	mix4 B16 F80 W1	about.html" w33a.txt
-grep -q "	mixt B16 F80 W1 T1536	about.html" w33b.txt
+# (The group's total, T, is the two pages' bytes, 1,536 with LF line endings: a Windows checkout
+# gives them CRLF, so any total is taken; 4 November 2026, Windows CI.)
+grep -q -E "	mixt B16 F80 W1 T[0-9]+	about.html" w33b.txt
 # Copies (the v33 draft, 2 November 2026, Edward: "a folder with 100 of the same images in"): a text,
 # a JPEG and 40,000 random bytes, each with a copy in a folder of its own. With the draft each copy
 # is carried as "copy K", decided before anything else (the JPEG not recoded twice), and given back
@@ -1170,6 +1172,37 @@ grep -q "^spans     1 text(s) carried with the binary they write out decoded" b6
 grep -q "door.jpg: lines of page.html/1" b64dup.txt
 $S install b64dup.sieve --to b64dup_inst > /dev/null
 diff -r b64dup b64dup_inst
+# A reader given instructions that claim far more than they hold refuses before making it (4
+# November 2026 review): an LZMA2 stream declaring 6 GB in 30 KB of junk (its chunks' headers are
+# read first, and do not make that size), and 145 bytes of runs declaring an 8 EB file (more than
+# twice the memory available; where that cannot be known, the making fails as it begins). Nothing is
+# written either way.
+python -c "
+import hashlib
+def tree(fs):
+    h = hashlib.sha256()
+    for p, b in fs: h.update((p + '\n' + hashlib.sha256(b).hexdigest() + '\n').encode())
+    return h.hexdigest()
+def v33(stream, listing, streams):
+    return ('sieve-manifest-v33\n' + stream + '\ntree ' + tree([('f.bin', b'x')]) + '\n' + listing + '\nend\n').encode() + streams
+def vi(n):
+    o = b''
+    while True:
+        b, n = n & 127, n >> 7
+        if not n: return o + bytes([b])
+        o += bytes([b | 128])
+junk = bytes((i * 7919) % 251 for i in range(30000))
+open('forged.sieve', 'wb').write(v33('stream lzma2 30000 6000000000 1048576', 'f\t6000000000\traw\tf.bin', junk))
+code = vi(8 << 60) + vi(1) + b'A'
+rope = vi(len(code)) + code
+open('claims.sieve', 'wb').write(v33('stream rope %d %d 0' % (len(rope), len(rope)), 'f\t%d\truns\tf.bin' % (8 << 60), rope))
+"
+rm -rf forged_in claims_in
+if $S install forged.sieve --to forged_in > forged.txt 2>&1; then exit 1; fi
+grep -c "chunks do not make the size it declares" forged.txt > /dev/null
+[ ! -e forged_in/f.bin ]
+if $S install claims.sieve --to claims_in > claims.txt 2>&1; then exit 1; fi
+[ ! -e claims_in/f.bin ]
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
 # macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds

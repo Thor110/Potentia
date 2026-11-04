@@ -22,25 +22,26 @@ aside. Look for the italic notes at the end of an entry (*Built*, *Measured*, *S
 - **The current plan** is not here: HANDOFF's plans (24 and 27 October 2026) supersede the older
   orderings in this file (§19.53). How Sieve is to be shown: SHOWCASE-PLAN.md.
 
-**Waiting for the next format version.** The `.sieve` format rests at `sieve-manifest-v31` (Edward,
-27 October 2026: let it sit before pressing on). These ideas would each need a new manifest version
+**Waiting for the next format version.** The `.sieve` format rested at `sieve-manifest-v31` (Edward,
+27 October 2026: let it sit before pressing on); it rests now at `sieve-manifest-v33` (frozen 3
+November 2026), and five of the ideas below are built since, each marked. These ideas would each need a new manifest version
 and so wait; most are small, and are best gathered into one version when the pause ends:
 - an archive's format as a number rather than text, with its recipe (§19.88, "The format as a
-  number");
+  number"); *built since, in v32*;
 - headers modelled rather than kept as they are (§19.88, "Headers kept as they are");
 - a shared web dictionary for pages (§19.92, measured: level with brotli on pages of 20 KB or
-  more, behind on small ones);
+  more, behind on small ones); *built since, as v33's `W1` (NEXT-VERSION.md)*;
 - the rope's next contexts (the byte 21 lines above, more phases: §19.87, at most 0.3% on one file);
-- a word list with how often each word is used, for mixing (§19.102, *Next*);
+- a word list with how often each word is used, for mixing (§19.102, *Next*); *built since, as v32's `F80`*;
 - BCJ2 for programs, where 7-Zip still leads on small folders of programs (§19.95; measure first);
 - each piece of a file its own rope wave, and mixing as a third kind of piece (§19.103: the
   packer-only first step was measured and gains nothing, as mixing the whole file beats every cut);
 - the overhead on a small file packed tighter (Edward, 28 October 2026: `control.py`'s `.sieve` was 10
   bytes over its 7z; measured again on 30 October it is 731 bytes, 91 under the 7z's 822, since v16
-  and v20 wrote the head and listing in bytes; about 11 bytes more could go: NEXT-VERSION §4a);
+  and v20 wrote the head and listing in bytes; about 11 bytes more could go: NEXT-VERSION §4a); *built since, as v32's smaller head*;
 - the other lines' places coded by the rope (§19.87, *Not yet*);
 - a file carried as its differences from another file in the folder (§19.106: MAPS.WoW and
-  MAPS-Larger.WoW).
+  MAPS-Larger.WoW); *built since, as v32's `delta`*.
 
 A plan for gathering these into `sieve-manifest-v32`, with what each has measured and what to
 measure first, is [NEXT-VERSION.md](NEXT-VERSION.md) (30 October 2026).
@@ -4392,7 +4393,7 @@ should stay dynamic.
 - *A side note:* XOR with noise that only one side can make is a one-time pad, so the same idea is
   the Encryption Engine's rather than compression's when the seed is kept secret.
 
-**19.92 Sieve for websites (Edward, 21 October 2026; an idea, nothing built).** His thought: a
+**19.92 Sieve for websites (Edward, 21 October 2026; an idea, nothing built; built since: the web extension, the site builder (`sieve site`) and the web dictionary, v33's `W1`).** His thought: a
 quick browser plugin that hands the `.sieve` files it finds online to `sieve.exe` (through an input
 folder) and shows the HTML they unpack to, as a first test where the result is known to be HTML.
 - *The bar is brotli, not the raw page:* web servers already send pages compressed (gzip or
@@ -5329,7 +5330,7 @@ a folder made like it (377 MB: three 125 MB files of noise and this repository's
   incompressible one (112 s of 139 on a 125 MB file, at about 1.1 MB/s); and where WoWRevived's
   0.20% against 7z is, file by file.
 
-**19.106 Files that hold much of the same (Edward, 29 October 2026; waits for the next version).**
+**19.106 Files that hold much of the same (Edward, 29 October 2026; waits for the next version; built since, as v32's `delta`).**
 In WoWRevived's release, `MAPS.WoW` and `MAPS-Larger.WoW` hold mostly the same content and differ in
 a small number of files (the larger minimaps). Sieve carries each file on its own: LZMA2's
 dictionary can find the second's matches in the first only where both go into the lzma2 stream
@@ -5888,7 +5889,7 @@ weighing each route by everything the installer needs against the file and the o
 - *The next version's draft, made one number (2 November 2026):* see NEXT-VERSION.md.
 - *Game of Life:* its findings and what is still to try are gathered in [GAME-OF-LIFE.md](GAME-OF-LIFE.md).
 
-**19.112 Ideas for the next pass (gathered the night of 2 to 3 November 2026; none built).** From
+**19.112 Ideas for the next pass (gathered the night of 2 to 3 November 2026; none built; built since: programs mixed through the x86 filter, v33's `X`).** From
 the day's measurements and review, roughly in the order they would pay:
 - *Programs and the 3% test.* With the v33 draft's match ways, programs mix about 1% under xz (2 MiB
   of mozilla's 2.4% under v32's mixing), but a file is mixed whole only where its start is 3% under
@@ -6082,7 +6083,7 @@ taken up:
   packets seen before in the same or another film. That says whether the packet route is worth
   building, before any encoder is involved.
 
-**19.117 Steering the rope's locked bytes (Edward, 3 November 2026; nothing built or measured).**
+**19.117 Steering the rope's locked bytes (Edward, 3 November 2026; nothing built or measured; measured since, `results/rope-wheels-2026-11-03.md`, and Manual Navigation built 4 November).**
 Edward: "Part of the way I also envisioned the rope filter is that the 1/3 and 2/3 bytes on their
 own fluctuate their values before trying noise wave gradients and other methods. What I am thinking
 is, what if we generate / walk the state space of 16 bytes, which is 256^16 [...] But perhaps we can
@@ -6262,3 +6263,35 @@ beside the old, so every run recorded so far trains as it did.
   byte at least 1/65,536, as an arithmetic coder does. The softmax would give each byte
   `1 + (e_j (2^16 - 256)) div Σe`, so no byte is 0 and they still add to at most 2^16; the gradient
   then follows that softmax.
+
+**19.120 After the v33 release: what the pre-release review left (4 November 2026; found and
+measured, nothing built).** Six reviews ran before the release (the changes since the freeze, the
+reader against hostile files, duplicated code, speed, outdated documents, what to do first). What
+was fixed then is in the commit of that day; these were left, each larger or riskier than a release
+should take on:
+- *Speed, packing:* (a) a single file's LZMA2 first pass (preset 9e) runs alone before its mixing
+  is weighed, though nothing reads it until mixing's last comparison: made on a thread of its own
+  and taken when needed, dickens 49.4 s to 36.5 s in a prototype, every `.sieve` the same bytes; it
+  wants FileWays to hold the figure still to come, and weigh.cpp to wait for it. (b) The start
+  test's cache keyed on "over 4 MiB", so a file over 4 MiB mixes its first 256 KiB three ways
+  twice; keyed without it, two files with the same first 256 KiB would share the 4 MiB decision,
+  valid but not the bytes made before, so it waits for a format's turn. (c) Archives' and spans'
+  weighings run file by file; per file on the threads, a folder of pages would gain about the
+  cores' number on that step (estimated).
+- *Speed, installing:* every file's SHA-256 and the vault's chunk scan run on one core (about 4 s a
+  GB measured on their parts); on the threads, reporting the first failure in listing order as
+  decode_deferred does.
+- *Names on Windows and macOS:* case is folded for A to Z only, so É.txt and é.txt (or a name in
+  its NFC and NFD forms on macOS) are written one over the other there, the install saying it
+  succeeded; Windows' reserved names (CON, NUL, COM1, aux.txt) and names ending in a dot or a space
+  are not refused. Unicode simple case folding with NFC, or refusing such names, in the packer's
+  warning and the installer's refusal alike.
+- *A RAR made again* sets each member's mode before the RAR is checked; the modes are now masked
+  to 0777, but the members could be held to the files this install wrote, and the modes set only
+  once the RAR matches.
+- *Duplicated code worth one copy each:* varint readers (most accept a tenth byte's high bits
+  silently; one shared, canonical reader), the eight text-vault decoders written twice (written.cpp
+  and vault_decode.cpp, which already differ on UTF-8), u8/from_u8 (37 copies), reading a file (15),
+  hex (12), trim/lower/floor division, removing an archive's one top folder (4), the program's
+  folder (3), the Llama config parser (2, one lacking three checks), and `--script`'s runner in
+  app_main.cpp (4). The oracle stays apart from all of them, as it must.

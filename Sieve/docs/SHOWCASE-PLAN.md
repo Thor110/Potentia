@@ -10,7 +10,8 @@ should have a number behind it and a way to reproduce it.
 
 ## 1. Settle what is shown (first)
 
-- **The format is frozen at `sieve-manifest-v31`** (Edward, 27 October 2026: "Yes, it is time I
+- **The format is frozen at `sieve-manifest-v33`** (frozen 3 November 2026, and reopened that day
+  for the web dictionary; first frozen at v31 by Edward, 27 October 2026: "Yes, it is time I
   stopped pushing more manifest versions"). Nothing new goes into `.sieve` until a change is worth a
   version on its own; packer improvements that need no new format are still free to land. Others
   can only build on a format that holds still.
@@ -30,19 +31,21 @@ size, ratio, time to make, time to unpack, and a check that each gives the folde
 Sieve beside 7z at each size, to show where Sieve starts to win for each kind of file.
 
 **Corpora, in this order:**
-1. **Sieve's own release folder** (Edward's machine, Windows, with the real 7-Zip): the 7.06:1
+1. **Sieve's own release folder** (Edward's machine, Windows, with the real 7-Zip): the 7.10:1
    against the others on the same folder.
 2. **This repository's `Sieve` source tree** (done 27 October 2026, in `Sieve/README.md`), which
    anyone can check out and repeat.
 3. **Public test data**, so the results sit beside published tables: the Silesia corpus (211 MB of
    mixed files) and enwik8 (the first 100 MB of English Wikipedia, used by the Large Text
    Compression Benchmark). *enwik8 done 28 October 2026* (Proof/STATISTICS.md: 21,675,870 bytes,
-   7z 26,080,445; v32, 21,547,893). *enwik9 and Silesia done at v32, 1 November 2026*:
-   185,105,231, and 42,091,120 for Silesia's twelve files, 13.13% under LZMA2 9e. The comparison
+   7z 26,080,445; v32, 21,547,893; v33, 21,431,896). *enwik9 and Silesia done at v32, 1 November 2026*:
+   185,105,231, and 42,091,120 for Silesia's twelve files, 13.13% under LZMA2 9e; Silesia at v33
+   (3 November 2026), 41,710,177, 13.92% under 7z. The comparison
    with 7-Zip itself, xz, zstd, brotli and paq8px on Silesia (`tools/bench/compare.py`) is still to
    run.
 4. **Folders people recognise:** a game's install folder, a program's folder, a photo folder (expect
-   little: JPEGs are already compressed until step 3 of the plan in `HANDOFF.md`), a large source
+   less: JPEGs are already compressed, though with a Compressed formats box brunsli recodes them
+   losslessly, 15.25% to 21.91% smaller on ten original photos: FEATURES.md), a large source
    tree.
 
 **Against:** 7-Zip at `-mx9`, xz `-9e`, zstd 19 and 22 with a long window, brotli 11, zip, and, for
@@ -134,7 +137,7 @@ what it names), since that is the first thing a reader there will test.
 
 ## 7. Order
 
-1. The format frozen; `lt/` removed; the `.sieve` v31 specification written (all three done).
+1. The format frozen (now at v33); `lt/` removed; the `.sieve` specification written (all three done; it describes v33).
 2. The benchmark on the release folder and on Silesia and enwik8 (Windows, with the real 7-Zip).
 3. The ISO test set, and the recordings of the demonstrations.
 4. The training write-up, run on two machines.

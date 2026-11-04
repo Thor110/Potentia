@@ -219,6 +219,11 @@ def source_7z(dest, sz, work):
             (tree_dir / "Sieve" / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(p, tree_dir / "Sieve" / rel)
         print("   (not a Git repository: the folder's files, less the build folders)")
+    # The licence (the repository's, beside the Sieve folder) goes in with the source it covers
+    # (4 November 2026 review: the source archive carried none).
+    licence = ROOT.parent / "LICENSE"
+    if licence.is_file() and not (tree_dir / "Sieve" / "LICENSE").exists():
+        shutil.copy2(licence, tree_dir / "Sieve" / "LICENSE")
     seven_zip(sz, dest, ["Sieve"], cwd=tree_dir)
     print(f"   {dest.name}: {dest.stat().st_size:,} bytes")
     return tree_dir / "Sieve"

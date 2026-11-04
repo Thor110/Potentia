@@ -270,9 +270,9 @@ void MainMenu::change(int dir)
         {
 #ifdef _WIN32
             static const SDL_DialogFileFilter programs[] = {{"Programs", "exe"}, {"All files", "*"}};
-            open_file_dialog(ffmpeg_file_chosen, this, window_, programs, 2, nullptr, false);
+            open_file_dialog(ffmpeg_file_chosen, this, window_, programs, 2, nullptr, false, false, this);
 #else
-            open_file_dialog(ffmpeg_file_chosen, this, window_, nullptr, 0, nullptr, false);
+            open_file_dialog(ffmpeg_file_chosen, this, window_, nullptr, 0, nullptr, false, false, this);
 #endif
             return;
         }

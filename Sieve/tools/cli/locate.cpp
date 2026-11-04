@@ -74,9 +74,65 @@ void within_decode_limit(uint64_t bytes, const char* what)
                                  std::to_string(g_decode_limit) + " allowed here");
 }
 
+// Memory that can be had for installing, or 0 where it cannot be known: on Linux the kernel's
+// MemAvailable (free memory and the cache it can give back; memory_free counts only the free, which
+// on a busy machine can be a small part of it), elsewhere memory_free.
+static uint64_t memory_available()
+{
+#if defined(__linux__)
+    if (std::ifstream mi("/proc/meminfo"); mi)
+        for (std::string line; std::getline(mi, line);)
+            if (line.rfind("MemAvailable:", 0) == 0)
+            {
+                const unsigned long long kb = std::strtoull(line.c_str() + 13, nullptr, 10);
+                if (kb) return uint64_t(kb) << 10;
+            }
+#endif
+    return memory_free();
+}
+
+// What a raw LZMA2 stream makes, from its chunks' headers alone (each says how many bytes it makes):
+// the size is read before anything that size is made, so a stream cannot claim gigabytes it does not
+// hold (4 November 2026: a 30 KB file declaring 6 GB had the reader make 6 GB of zeros before the
+// decoder found it short). Control byte 0 ends it; 1 and 2 are a stored chunk (2 bytes: size - 1);
+// 0x80 and over an LZMA chunk (its size's top 5 bits in the control byte, then 2 bytes: size - 1;
+// 2 bytes: packed size - 1; then a properties byte where the control byte is 0xC0 or over). Anything
+// else, or a chunk running past the end, is no LZMA2 stream: nullopt.
+static std::optional<uint64_t> lzma2_made(std::span<const uint8_t> packed)
+{
+    uint64_t made = 0;
+    size_t at = 0;
+    while (at < packed.size())
+    {
+        const uint8_t c = packed[at];
+        if (c == 0) return at + 1 == packed.size() ? std::optional<uint64_t>(made) : std::nullopt;
+        if (c == 1 || c == 2)
+        {
+            if (packed.size() - at < 3) return std::nullopt;
+            const uint64_t n = ((uint64_t(packed[at + 1]) << 8) | packed[at + 2]) + 1;
+            if (packed.size() - at - 3 < n) return std::nullopt;
+            made += n;
+            at += 3 + size_t(n);
+            continue;
+        }
+        if (c < 0x80) return std::nullopt;
+        const size_t head = c >= 0xC0 ? 6 : 5;
+        if (packed.size() - at < head) return std::nullopt;
+        const uint64_t n = ((uint64_t(c & 0x1F) << 16) | (uint64_t(packed[at + 1]) << 8) | packed[at + 2]) + 1;
+        const uint64_t p = ((uint64_t(packed[at + 3]) << 8) | packed[at + 4]) + 1;
+        if (packed.size() - at - head < p) return std::nullopt;
+        made += n;
+        at += head + size_t(p);
+    }
+    return made; // (no end marker: the decoder judges that)
+}
+
 // unpack_stream's streams that are not mixed: carried as they are, or LZMA2 (their size checked).
 static std::vector<uint8_t> unpack_stream_plain(std::span<const uint8_t> packed, const PackedStream& s, bool x86)
 {
+    if (s.dictionary != 0)
+        if (const std::optional<uint64_t> made = lzma2_made(packed); !made || *made != s.bytes)
+            throw std::runtime_error("the installer's packed files are damaged (a stream's chunks do not make the size it declares)");
     std::vector<uint8_t> out(size_t(s.bytes));
     if (s.dictionary == 0)
     {
@@ -259,7 +315,6 @@ namespace {
 
 std::vector<uint8_t> unpack_v4(Manifest& m)
 {
-    if (g_decode_limit)
     {
         // Every file's bytes as declared, and what each archive made again is made from, before any
         // of them is made (an item's size is what it is made, from a place no longer than its line's).
@@ -274,6 +329,14 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             if (!inner.empty() && inner.size() <= 19 && inner.find_first_not_of("0123456789") == std::string::npos) add(std::stoull(inner));
         }
         within_decode_limit(declared, "files");
+        // Every file is held in memory until all are checked, and at the peak each is held twice (as
+        // made, and in the folder's bytes), so a total past half the memory available is refused
+        // before any is made (4 November 2026: 171 bytes of runs declaring a 3 GB file were installed
+        // with 5.7 GB in use; a real folder that large would not fit either). Where what is available
+        // cannot be known, nothing is refused here.
+        if (const uint64_t free = memory_available(); free && declared > free / 2)
+            throw std::runtime_error("these Sieve instructions make " + std::to_string(declared >> 20) + " MiB of files, and making them takes about twice that in memory: more than the " +
+                                     std::to_string(free >> 20) + " MiB available");
     }
     if (m.x86.packed > m.streams.size() || m.streams.size() - m.x86.packed != m.lzma2.packed) throw std::runtime_error("manifest: its streams are not the size its lines say");
     const std::span<const uint8_t> all(m.streams);
@@ -333,7 +396,15 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     auto remake_job = [](size_t i, const ManifestEntry& e, std::vector<uint8_t> in) {
         auto own = std::make_shared<const std::vector<uint8_t>>(std::move(in));
         const std::string recipe = e.remake;
-        const uint64_t memory = 2 * (uint64_t(own->size()) + e.size);
+        // Its bytes in and out, and what its compressor takes to work, whatever the file's size (4
+        // November 2026 review: xz at -9 takes about 674 MiB, so a dozen small .xz files remade on
+        // every core at once could ask for gigabytes the budget never saw): xz, lzma and lzip about
+        // 700 MiB; zstd and brotli at their strongest a few hundred; the rest a few MiB.
+        const std::string kind = recipe.substr(0, recipe.find(' '));
+        const uint64_t working = kind == "xz" || kind == "lzma" || kind == "lz" ? uint64_t(700) << 20
+                                 : kind == "zst" || kind == "br"                 ? uint64_t(400) << 20
+                                                                                 : uint64_t(16) << 20;
+        const uint64_t memory = 2 * (uint64_t(own->size()) + e.size) + working;
         return Deferred{i, e.path,
                         [own, recipe] {
                             try

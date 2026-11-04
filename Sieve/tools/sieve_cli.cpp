@@ -368,7 +368,7 @@ int cmd_info_composed(const Args& a)
 {
     const Composed c = make_composed(a);
     print_composed_header(c);
-    std::cout << c.kind << std::string(13 - c.kind.size(), ' ') << "~10^" << std::floor(c.space->size().log10_approx() * 100) / 100 << "\n"
+    std::cout << c.kind << std::string(13 - std::min<size_t>(13, c.kind.size()), ' ') << "~10^" << std::floor(c.space->size().log10_approx() * 100) / 100 << "\n"
               << "address      " << c.space->size().bit_length() << " bits, " << c.space->hex_width() << " hex digits\n";
     if (c.space->size().log10_approx() < 60) std::cout << "exact        " << c.space->size().to_decimal() << "\n";
     return 0;
@@ -500,7 +500,7 @@ int cmd_bind_composed(const Args& a)
     }
     const Book b = composed_record(c, p, mode);
     write_record(b, a.get("out"));
-    std::cout << c.kind.substr(0, c.kind.size() - 1) << std::string(13 - c.kind.size() + 1, ' ') << b.id << "\n"
+    std::cout << c.kind.substr(0, c.kind.size() - 1) << std::string(14 - std::min<size_t>(14, c.kind.size()), ' ') << b.id << "\n"
               << "address      " << c.space->hex_of(c.space->index_of(p, address_mode_from_string(mode))) << "  (" << mode << ")\n"
               << "record       " << serialise_book(b).size() << " bytes -> " << a.get("out") << "\n";
     return 0;
@@ -532,7 +532,7 @@ int cmd_filters_composed(const Args& a)
     const char* names[4] = {"cover", "title", "units", "joined"};
     const FilterStack* parts[4] = {&f->stacks.cover, &f->stacks.title, &f->stacks.units, &f->stacks.joined};
     for (int i = 0; i < 4; ++i)
-        std::cout << names[i] << std::string(13 - std::string(names[i]).size(), ' ')
+        std::cout << names[i] << std::string(13 - std::min<size_t>(13, std::string(names[i]).size()), ' ')
                   << (parts[i]->empty() ? std::string("(none ticked)") : parts[i]->id().substr(0, 16) + "...  " + parts[i]->provenance()) << "\n";
     if (f->sieve->empty()) return 0;
     if (f->sieve->can_rank()) std::cout << "survivors    " << f->sieve->count().to_decimal() << " " << c.kind << " (exact; compact mode available)\n";
@@ -996,7 +996,7 @@ int cmd_version()
     std::cout << "\n  other lines             " << kCompositionVersion << " (tracks, movies), " << kBookSpaceVersion << " (books), " << kBinarySpaceVersion
               << " (binary)\n                          " << kModelSpaceVersion << " (models), " << kWorldSpaceVersion << " (worlds), " << kAiSpaceVersion << " (ai, "
               << kCanonicalModelVersion << ")\n"
-              << "  instructions (.sieve)   " << kSkeletonMembersManifestVersion << " newest (installers, maps, sites, training runs); each made\n"
+              << "  instructions (.sieve)   " << kMatchWaysManifestVersion << " newest (installers, maps, sites, training runs); each made\n"
               << "                          only as new as what it holds needs (" << kBinaryManifestVersion << " at the least, " << kGraphManifestVersion << " for an old map)\n"
               << "  packing                 " << kRopeWaveAboveVersion << " (the tightened rope), " << kDigitHistogramVersion << ", " << kFileKindsVersion << "\n"
               << "  records                 " << kBookFormat2 << " (books), " << kMapVersion2 << " (maps, read)\n"
@@ -2258,7 +2258,7 @@ void print_book_stacks(const BookStacks& st, const BookSieve& sieve)
     for (int i = 0; i < 3; ++i)
     {
         const FilterStack& s = *parts[i];
-        std::cout << names[i] << std::string(13 - std::string(names[i]).size(), ' ')
+        std::cout << names[i] << std::string(13 - std::min<size_t>(13, std::string(names[i]).size()), ' ')
                   << (s.empty() ? std::string("(none ticked)") : s.id().substr(0, 16) + "...  " + s.provenance()) << "\n";
     }
     if (sieve.empty()) return;

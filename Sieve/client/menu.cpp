@@ -952,7 +952,7 @@ std::string Menu::picture_model_value() const
 void Menu::choose_model_folder(int which)
 {
     if (!app_) return;
-    open_folder_dialog(which == 0 ? text_model_chosen : picture_model_chosen, this, window_, nullptr, false);
+    open_folder_dialog(which == 0 ? text_model_chosen : picture_model_chosen, this, window_, nullptr, false, this);
 }
 
 void Menu::model_folder_picked(int which, const std::string& path)

@@ -201,7 +201,7 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
         const std::string addr = t->address();
         const std::string name = (t->units ? "sieve-tracks-" + addr.substr(addr.size() - std::min<size_t>(12, addr.size())) : "sieve-audio-" + addr.substr(0, 12)) + ".mid";
         const std::string start = docs ? std::string(docs) + name : name;
-        save_file_dialog(media_save_chosen, this, window_, nullptr, 0, start.c_str());
+        save_file_dialog(media_save_chosen, this, window_, nullptr, 0, start.c_str(), this);
         break;
     }
     case K::Favourite:

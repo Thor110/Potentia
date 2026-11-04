@@ -31,7 +31,8 @@ If only seven things were done next, in this order:
 5. **Names equal but for case, refused before installing** (D.3). *Built 31 October.* Edward's
    Windows run of step 11 checks the refusal.
 6. **The Silesia benchmark** (C.4). *Measured 1 November (Edward, `tools/bench_files.bat`):*
-   42,091,120 bytes for the twelve files, 13.13% under 7z's LZMA2 9e. Still to set beside it: 7-Zip
+   42,091,120 bytes for the twelve files, 13.13% under 7z's LZMA2 9e; at v33 (3 November),
+   41,710,177, 13.92% under. Still to set beside it: 7-Zip
    itself, xz, zstd, brotli and paq8px (`tools/bench/compare.py`).
 7. **Word frequencies on enwik8 and enwik9** (C.1): built; only the large measurement is left.
 
@@ -46,7 +47,7 @@ If only seven things were done next, in this order:
 
 ## B. Finishing v32
 
-v32 is built behind `--v32-draft`. These are its ways so far:
+v32 was built behind `--v32-draft`, and frozen 31 October (B.6). These are its ways:
 - **`delta`:** a 160 MB pair went from 22,537,063 bytes to 17,947,687, 20.36% smaller.
 - **`jbr`:** JPEGs 15.25% to 21.91% smaller, given back byte for byte.
 - **`pngr`, and JPEG tables under permanent:** every PNG measured was installed smaller, with the
@@ -95,8 +96,10 @@ the reason to look at; if not, BCJ2 can be dropped.
 **C.4 Silesia** (SHOWCASE-PLAN §2): 211 MB of mixed files, run by `tools/bench/compare.py` against
 7-Zip, xz, zstd and brotli, and paq8px for honesty. *Sieve's side measured 1 November 2026*
 (Proof/STATISTICS.md): 42,091,120 bytes for size, 47,262,336 for decoding speed. `mozilla`, a tar of
-programs, is the one file where Sieve does no better than LZMA2. A tar read as its members, its
-programs through the x86 filter, is the lead there; it's not measured.
+programs, was then the one file where Sieve did no better than LZMA2. A tar read as its members, its
+programs through the x86 filter, was the lead there. *At v33 (3 November 2026):* 41,710,177 bytes
+for size, 47,262,336 for decoding; `mozilla` 13,318,582, 0.43% under 7z, mixed with the match
+model's ways.
 
 **C.4a A tar carried as its members** (found on Silesia's `mozilla`, 1 November 2026). A tar is no
 compressed format, so neither Compressed formats box touches it (the packer reads one only to
@@ -106,7 +109,7 @@ would be its headers and padding, each member's data a file, so each program wou
 x86 filter. That's the packer only, not a new version. *Built 1 November 2026:* a test tar of
 two programs and three texts (9,584,640 bytes) went from 3,287,224 to 3,069,619 under temporary
 (−6.6%), given back byte for byte, and 3,069,430 under permanent. The boxes are now "Archive and
-compressed formats". Silesia's `mozilla` is for Edward's next run.
+compressed formats". Silesia's `mozilla` was run again at v33 (C.4): 13,318,582 bytes, 0.43% under 7z.
 
 **C.5 Mixing as a kind of piece** (IDEAS §19.103): a picture and text in one file (a tar), each
 mixed as what it is. Not measured.
@@ -235,7 +238,7 @@ finding it would make routine.
 | A file's opposite found in noise, or seeds | A short seed names too few noises to save anything on almost every file | IDEAS §19.91 |
 | Headers modelled | The headers are small, and LZMA2 already packs their repeats | IDEAS §19.88 |
 | The rope's next contexts | At most 0.3%, on one file | IDEAS §19.87 |
-| A shared web dictionary | 0.5% under brotli on 102 unseen pages, 6.6% over on Edward's 7 | IDEAS §19.92 |
+| A shared web dictionary | 0.5% under brotli on 102 unseen pages, 6.6% over on Edward's 7. *Built since, as v33's `W1` (3 November 2026):* a 64 KiB dictionary learnt from MDN's examples, 8.8% under brotli on 258 unseen pages, 10.3% under on Edward's site's 11 (FEATURES.md) | IDEAS §19.92 |
 | Pieces weighed with mixing | Nothing gained: mixing the whole file beat every cut | IDEAS §19.103 |
 | Parts of speech, LOCO-I bias, larger tables | 0.15% to 0.55%, 0.4%, under 1% at twice the memory | NEXT-VERSION §3b |
 | Packing the mixer's inputs once a bit | Cost more instructions than it saved | E |
@@ -257,10 +260,5 @@ one.
 
 ## Waiting on Edward
 
-- The group question (B.2): (a) or (b).
-- WoWRevived with the draft and Keep a log (A.3).
 - The File Locator's figure beside 7z's 3,289,322 (A.4).
-- enwik8 and enwik9 with F80 (C.1).
 - Whether to write FILTERS.md.
-- Which of D.1 to D.3 to build first; the plan's order is D.1 (inside v32), then D.2 and D.3
-  (neither needs a version).
