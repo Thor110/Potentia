@@ -60,12 +60,10 @@ So as to not make this post any longer than it already is I will only include th
 pi6.txt stress test, file sourced from : https://www.exeter.ac.uk/v8media/facultysites/ese/physics/pi6.txt
 
 1 Million Digits of Pi									Theoretical floor distance remaining
-														Increase								Decrease
+														Increase from							Decrease from
 pi6.txt.sieve : 417,049 bytes (417,792 bytes on disk)	: 0.43540979816540276%					: -0.4335222000292531%
 
-now 1,808 bytes away from the theoretical limit
-
-The theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.44% of it.
+It is just 1,808 bytes away from the theoretical limit, the theoretical floor for a million digits treated as random is ~415,241 bytes, so this is within 0.44% of it.
 
 3653x5480 resolution sourced from : https://www.spitogatos.gr/blog/static/media/1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg
 
@@ -88,8 +86,6 @@ POWER-USAGE.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/POWER-
 
 Savings on server bandwidth and an increase in client side processing.
 
-It’s a bandwidth for processing trade-off, smaller downloads, but more work to unpack.
-
 ODDITIES.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/ODDITIES.md
 
 Failure Tracking & Edge Case Analysis
@@ -101,8 +97,6 @@ All sieve files contain SHA-256 hashes of the file tree they contain and are che
 	Applications
 
 The program is 'sieve.exe' which is a command line application, I also include a fun 'front-end' 3D n-dimensional state space explorer called 'hallway.exe' that comes packed with a number of tools and utilities.
-
-- Program Details and Statistics Excerpt on the current version zip/7z/sieve sizes, decoding times etc
 
 	Tools & Integration
 
@@ -128,8 +122,6 @@ In short, just as with human beings we can not guarantee alignment, neither can 
 
 Comparable to allowing an AI model to walk the Library of Babel to train on the data as it goes, inevitably, its probability distribution becomes chaotic, messy and requires constant upkeep to prevent model collapse, while making it impossible for models alone to overcome token weight conflicts without heuristics or harnesses.
 
-Think of a model walking the Library of Babel as it trains, what it becomes depends on which books it reads and in what order, and that route can’t be read back out of the model afterwards.
-
 The data and the order in which it is ingested fundamentally alter the course of alignment and the model’s probability distribution, recording the route is what makes it possible to check, rerun and compare.
 
 Traditional AI training records model weights and checkpoints, but subtle hardware-level variations, thread scheduling differences, and floating-point round-off drift mean that reproducing a model bit-for-bit from scratch is notoriously difficult.
@@ -138,9 +130,9 @@ By enforcing strict integer-only arithmetic throughout the training loop—where
 
 Floating point is used in models for its range and speed, what it costs is reproducibility.
 
-Every number is a signed 64 bit integer, so values are a fixed point, this means it is bounded by max/min values.
+Every number is a signed 64 bit integer, so values are fixed-point, this means it is bounded by max/min values.
 
-Initial analysis of Sieve trained models shows that no value ever hits the min or max on the shipped models, however these models are tiny so precision and scale still needs further analysis. On a larger test model a small share did.
+Initial analysis of Sieve trained models shows that no value ever hits the min or max on the shipped models, however these models are tiny so precision and scale still need further analysis. On a larger test model a small share did.
 
 Probabilities are fixed point too, so a model can give a byte exactly 0%, and sometimes that byte comes next.
 
