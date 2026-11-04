@@ -278,13 +278,14 @@ cmp mt_in/mt2.md mt2.md
 python sieve_ref.py unpack mt.sieve --to mt_oracle | grep -c "^mixt " > /dev/null
 cmp mt_oracle/mt2.md mt2.md
 # A site's page of 9,000 bytes made into a .sieve is mixed (mix-v4, with the word list: at the
-# newest, v32's, counted by use).
+# newest, v32's, counted by use), with or without the match model's ways after it (4 November 2026:
+# the README's text changed and C2 was weighed in, "mix4 B16 F80 C2").
 rm -rf mts mts_out mts_oracle
 mkdir mts
 printf '<html><body><a href="long.html">long</a></body></html>\n' > mts/index.html
 (printf '<html><body><pre>\n'; head -c 9000 ../README.md; printf '</pre></body></html>\n') > mts/long.html
 $S site build mts --out mts_out --sieve-pages > /dev/null 2>&1
-python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c "^mix4 B[0-9]* F80	" > /dev/null
+python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c -E "^mix4 B[0-9]+ F80( [A-Z][0-9]+)*	" > /dev/null
 cmp mts_oracle/long.html mts/long.html
 # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
 # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
