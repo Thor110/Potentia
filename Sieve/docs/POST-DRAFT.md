@@ -72,8 +72,8 @@ It is just 1,808 bytes away from the theoretical limit, the theoretical floor fo
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg :             3,844,213 bytes ( 3,846,144 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z :          3,843,942 bytes ( 3,846,144 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve :    3,829,453 bytes ( 3,829,760 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk ) - permanent archive or compressed format off
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,085,301 bytes ( 3,088,384 bytes on disk ) - permanent archive or compressed format on
+1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk ) - repack archive and compressed formats off
+1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,085,301 bytes ( 3,088,384 bytes on disk ) - repack archive and compressed formats on
 
 AI generated control script : https://github.com/Thor110/Potentia/blob/main/Sieve/data/anchors/ai-generated-content/gemini/control.py
 
@@ -82,7 +82,7 @@ control.7z					: 822 bytes			(4,096 bytes on disk)
 control.7z.sieve			: 959 bytes			(4,096 bytes on disk)
 control.py.sieve			: 591 bytes			(0 bytes on disk)
 
-As a .sieve file it is so small that it fits within the Master File Table and takes up 0 bytes on disk.
+As a .sieve file it is so small that it fits within the Windows Master File Table and takes 0 bytes to store on disk.
 
 POWER-USAGE.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/POWER-USAGE.md
 
