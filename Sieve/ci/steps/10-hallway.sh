@@ -994,6 +994,21 @@ q "^# example,70FAB974FA4E894380$" mnav-ex/*.csv
 rm -rf mnav-ex
 $H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "F,W,Up" --screenshot mnav-ex-kept.png > /dev/null
 q "^# example,133AC75170FAB974FA$" mnav-ex/*.csv
+# The marks follow the walk (4 November 2026, Edward: undoing and redoing turned a green step red):
+# three turns leave the start and red, green, red; two undos take the last two away; two redos put
+# them back as they were, the green still green.
+$H --manual-example --manual-seed 7 --script "Up,Down,Up" --screenshot mnav-marks.png | tr -d '\r' | q "^  marks: SRGR$"
+$H --manual-example --manual-seed 7 --script "Up,Down,Up,Ctrl+Z,Ctrl+Z" --screenshot mnav-marks-u.png | tr -d '\r' | q "^  marks: SR$"
+$H --manual-example --manual-seed 7 --script "Up,Down,Up,Ctrl+Z,Ctrl+Z,Ctrl+Y,Ctrl+Y" --screenshot mnav-marks-r.png | tr -d '\r' | q "^  marks: SRGR$"
+# Steering (Edward, 4 November 2026): his walk, the first byte from C0 with 25 F7 63 after it. One
+# turn moves the file 14.0076 gaps between bearings; 54 turns up, at F6, is nearest the centre
+# (0.0034 from landing); there, the byte is as near as it can be.
+printf '\300\045\367\143' > mnav-c0.bin
+$H --manual-nav mnav-c0.bin --screenshot mnav-steer.png | tr -d '\r' | q "^  steering byte 0: one turn moves 14.0076 gaps; nearest the centre 54 turn(s) up, at F6 (about 0.0034 from landing)$"
+ups=$(printf 'Up,%.0s' $(seq 54))
+$H --manual-nav mnav-c0.bin --script "${ups%,}" --screenshot mnav-steered.png | tr -d '\r' > mnav-steered.txt
+q "0.0034 from landing" mnav-steered.txt
+q "^  steering byte 0: one turn moves 14.0076 gaps; this value is already its nearest to the centre$" mnav-steered.txt
 # Undo as deep as the steps go (the default): 15 turns, 15 undos, the file as loaded; at a depth of
 # 10 (U), 5 turns are left.
 ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))

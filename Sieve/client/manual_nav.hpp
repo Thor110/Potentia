@@ -22,6 +22,14 @@
 // less the route and the steps: the steps are the walk back from where the route lands to the file,
 // so a net above 0 would be a file written shorter than itself.
 //
+// Steering (Edward, 4 November 2026: "add the steering readout"): for the byte chosen, how far one
+// turn of it moves the file, in gaps between bearings, and which value of it puts the dot nearest
+// the centre, how many turns up or down, shown as a hollow mark on the circle. A turn of a byte moves
+// the file by a fixed amount, its place's weight (256 to the power of the bytes after it), whatever
+// the bytes are; so that move, one division the size of the file, is worked out on the worker only
+// when another byte is chosen, the precision changes or a file is loaded, and the nearest value is
+// then found among the byte's 256 at once. A step does not ask for it again.
+//
 // The file is held once. Each step is kept as its offset and the byte before and after. Undo and
 // redo (Ctrl+Z, Ctrl+Y) go back as far as the Undo depth says (U: all, the default, or 10, 100,
 // 1,000). Keep a log (L, on by default; Edward, 4 November 2026) writes every step, undone ones
@@ -98,6 +106,10 @@ public:
     bool loaded() const { return !bytes_.empty() && !example_; } // a file's bytes to turn (not the example)
     // The readout above the circle, as text (for scripted runs).
     std::string readout() const;
+    // The circle's marks in order, a letter each (for scripted runs): S the start, G in (green), R out
+    // (red), X an exact landing.
+    std::string marks_text() const;
+    std::string steering() const { return steer_text(); } // the steering line, as text (for scripted runs)
     // From the file windows' callbacks, on any thread: applied on the main thread. `what`: 0 a file to
     // load, 1 where to save the walk, 2 a log to load.
     void file_chosen(const std::string& path, int what);
@@ -111,6 +123,11 @@ private:
     {
         uint64_t gen = 0;
         int decimals = 0;         // the precision it was worked out at
+        char kind = 0;            // what it answers for: 't' a turn, 'u' an undo, 'r' a redo, 's' steering only, 0 the bytes whole
+        double pos = 0;           // where in the gap between two bearings the file lies (0 to 1)
+        // ('s': one turn of byte `sel`, in gaps between bearings, its whole and its share of a turn)
+        uint64_t sel = 0;
+        double gaps = 0, turn_step = 0;
         std::string bearing;      // at the precision asked
         double turn = 0;          // the rotation as a fraction of a turn (for drawing)
         double off = 1;           // 0: lands exactly on a bearing; 1: halfway between two
@@ -146,6 +163,8 @@ private:
         uint64_t gen = 0;
         int decimals = 0;
         bool whole = false;
+        char kind = 0; // ('t', 'u', 'r': the step's; 's' steering for byte `sel`; 0 for the bytes whole)
+        uint64_t sel = 0;
         std::vector<uint8_t> bytes; // (whole)
         uint64_t at = 0;
         uint8_t value = 0;
@@ -211,7 +230,33 @@ private:
     std::vector<Step> active_; // the steps from the file as loaded to the bytes now (each a turn)
     std::vector<Step> redo_;   // undone, for redo
     int undoable_ = 0;         // how many of active_'s last steps undo may take back (the depth at most)
-    std::vector<Mark> marks_;
+    std::vector<Mark> marks_;      // the walk's marks: the start, then one for each step it holds
+    std::vector<Mark> redo_marks_; // marks undone, put back by redo as they were
+    // Steering for the byte chosen: one turn of it, in gaps between bearings (as worked out for this
+    // byte, precision and length); asked for once each, an earlier ask still queued let go.
+    struct Steer
+    {
+        bool valid = false;
+        uint64_t sel = 0;
+        int decimals = -1;
+        size_t length = 0;
+        double gaps = 0, turn_step = 0;
+        double frac = 0; // what a turn moves past whole gaps (0 to 1)
+    };
+    Steer steer_;
+    uint64_t steer_asked_sel_ = UINT64_MAX;
+    int steer_asked_dec_ = -1;
+    size_t steer_asked_len_ = 0;
+    void ask_steer(); // a steering job queued where the byte chosen (or the precision, or the length) changed
+    // The nearest value of the byte chosen: its change in turns (0: as near as it can be), where the
+    // dot would be (its share of a turn, and its distance from landing).
+    struct Target
+    {
+        int turns = 0;
+        double turn = 0, off = 1;
+    };
+    std::optional<Target> target() const;
+    std::string steer_text() const;
 
     Reading now_;               // the latest reading taken
     bool have_reading_ = false;

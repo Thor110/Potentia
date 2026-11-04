@@ -965,6 +965,8 @@ int run(const Args& a)
         std::cout << "manual navigation: " << nav.status() << "\n";
         std::cout << "  " << nav.readout() << "\n";
         if (!nav.log_path().empty()) std::cout << "  log: " << nav.log_path() << "\n";
+        std::cout << "  marks: " << nav.marks_text() << "\n";
+        std::cout << "  " << nav.steering() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }

@@ -229,14 +229,71 @@ void ManualNav::take(std::vector<uint8_t> bytes, std::string name, std::string p
     redo_.clear();
     undoable_ = 0;
     marks_.clear();
+    redo_marks_.clear();
     have_reading_ = false;
     {
         std::lock_guard<std::mutex> lock(mx_);
         answers_.clear();
     }
     original_address_bytes_ = 0;
+    steer_ = {};
+    steer_asked_sel_ = UINT64_MAX;
     ++gen_;
     start_reading();
+}
+
+void ManualNav::ask_steer()
+{
+    if (bytes_.empty() || sel_ >= bytes_.size()) return;
+    if (sel_ == steer_asked_sel_ && decimals_ == steer_asked_dec_ && bytes_.size() == steer_asked_len_) return;
+    steer_asked_sel_ = sel_;
+    steer_asked_dec_ = decimals_;
+    steer_asked_len_ = bytes_.size();
+    steer_.valid = false;
+    Job j;
+    j.kind = 's';
+    j.sel = sel_;
+    j.decimals = decimals_;
+    queue(std::move(j));
+}
+
+std::optional<ManualNav::Target> ManualNav::target() const
+{
+    // The byte's 256 values, each where it would put the dot (where the file lies in its gap, moved by
+    // the turns times what one turn moves past whole gaps), the nearest to a bearing kept; the fewest
+    // turns where two are as near. Its distance is the one these give, close to the readout's own.
+    if (!steer_.valid || steer_.sel != sel_ || steer_.decimals != decimals_ || steer_.length != bytes_.size() || !have_reading_ ||
+        now_.decimals != decimals_ || sel_ >= bytes_.size())
+        return std::nullopt;
+    const int b = bytes_[sel_];
+    auto off_at = [&](int t) {
+        double p = now_.pos + double(t) * steer_.frac;
+        p -= std::floor(p);
+        return 2 * std::min(p, 1 - p);
+    };
+    Target best;
+    best.turns = 0;
+    best.off = off_at(0);
+    for (int t = -b; t <= 255 - b; ++t)
+    {
+        if (t == 0) continue;
+        const double o = off_at(t);
+        if (o < best.off - 1e-12 || (std::abs(o - best.off) <= 1e-12 && best.turns != 0 && std::abs(t) < std::abs(best.turns))) best.off = o, best.turns = t;
+    }
+    double turn = now_.turn + double(best.turns) * steer_.turn_step;
+    best.turn = turn - std::floor(turn);
+    return best;
+}
+
+std::string ManualNav::steer_text() const
+{
+    if (bytes_.empty()) return std::string();
+    const std::optional<Target> t = target();
+    if (!t) return tr("mnav.steer.working");
+    const std::string gaps = steer_.gaps < 1e-4 ? tr("mnav.steer.tiny") : steer_.gaps < 1e6 ? fixed(steer_.gaps, 4) : fixed(steer_.gaps, 0);
+    if (t->turns == 0) return trf("mnav.steer.here", {std::to_string(sel_), gaps});
+    return trf("mnav.steer", {std::to_string(sel_), gaps, std::to_string(std::abs(t->turns)), tr(t->turns > 0 ? "mnav.steer.up" : "mnav.steer.down"),
+                              hex2(uint8_t(int(bytes_[sel_]) + t->turns)), fixed(t->off, 4)});
 }
 
 void ManualNav::make_example(bool keep)
@@ -340,6 +397,7 @@ ManualNav::Reading ManualNav::read(const std::vector<uint8_t>& bytes, int decima
     up -= v;
     gap -= lo;
     out.exact = down.is_zero();
+    out.pos = ratio(rest, units);
     out.off = out.exact || gap.is_zero() ? 0 : std::clamp(2 * ratio(down < up ? down : up, gap), 0.0, 1.0);
     if (bytes.size() <= kRouteBytes)
     {
@@ -422,6 +480,10 @@ void ManualNav::queue(Job j)
     bool start = false;
     {
         std::lock_guard<std::mutex> lock(mx_);
+        // (a steering ask still waiting is for a byte no longer chosen: only the last is worked out)
+        if (j.kind == 's')
+            for (auto it = jobs_.begin(); it != jobs_.end();)
+                it = it->kind == 's' ? jobs_.erase(it) : it + 1;
         jobs_.push_back(std::move(j));
         start = !busy_;
         if (start) busy_ = true;
@@ -442,6 +504,41 @@ void ManualNav::queue(Job j)
                 j = std::move(jobs_.front());
                 jobs_.pop_front();
             }
+            if (j.kind == 's')
+            {
+                // Steering: one turn of byte `sel` moves the file by its place's weight, 256 to the
+                // power of the bytes after it; in gaps between bearings, that times 360 * 10^d over the
+                // loop's units (its whole, and what it moves past whole gaps).
+                Reading r;
+                r.kind = 's';
+                r.sel = j.sel;
+                r.decimals = j.decimals;
+                try
+                {
+                    const size_t n = wbytes_.size();
+                    if (n > 0 && j.sel < n)
+                    {
+                        using sieve::BigUint;
+                        const BigUint units = sieve::BinarySpace::count_shorter(uint64_t(n) + 1);
+                        const BigUint step = BigUint::pow(256, uint64_t(n - 1 - j.sel));
+                        BigUint k = BigUint::pow(10, uint64_t(j.decimals));
+                        k.mul_small(360);
+                        const BigUint moved = BigUint::mul(step, k);
+                        BigUint whole, rest;
+                        BigUint::divmod(moved, units, whole, rest);
+                        r.turn_step = ratio(step, units);
+                        r.gaps = ratio(moved, units);
+                        r.pos = ratio(rest, units);
+                    }
+                }
+                catch (const std::exception&)
+                {
+                    r.gaps = -1; // (none: the readout says nothing of steering)
+                }
+                std::lock_guard<std::mutex> lock(mx_);
+                answers_.push_back(std::move(r));
+                continue;
+            }
             if (j.whole) wbytes_ = std::move(j.bytes);
             else if (j.at < wbytes_.size()) wbytes_[j.at] = j.value;
             Reading r;
@@ -455,6 +552,7 @@ void ManualNav::queue(Job j)
                 r.bearing = e.what();
             }
             r.decimals = j.decimals;
+            r.kind = j.kind;
             std::lock_guard<std::mutex> lock(mx_);
             answers_.push_back(std::move(r));
         }
@@ -470,6 +568,21 @@ void ManualNav::collect_reading()
     }
     for (Reading& r : got)
     {
+        if (r.kind == 's')
+        {
+            // Steering for the byte asked for (kept only while it is still the one asked for).
+            if (r.sel == steer_asked_sel_ && r.decimals == steer_asked_dec_ && r.gaps >= 0)
+            {
+                steer_.valid = true;
+                steer_.sel = r.sel;
+                steer_.decimals = r.decimals;
+                steer_.length = steer_asked_len_;
+                steer_.gaps = r.gaps;
+                steer_.turn_step = r.turn_step;
+                steer_.frac = r.pos;
+            }
+            continue;
+        }
         const bool first = marks_.empty();
         const Reading before = now_;
         const bool had = have_reading_;
@@ -494,6 +607,22 @@ void ManualNav::collect_reading()
             unlogged_.pop_front();
         }
         if (now_.decimals != decimals_) continue; // (worked out at a precision since changed: no mark)
+        // The marks follow the walk (4 November 2026, Edward: undoing and redoing turned a green step
+        // red): an undo takes the last step's mark away, kept aside; a redo puts it back as it was.
+        // Only a turn makes a new mark, coloured by whether it moved in or out.
+        if (now_.kind == 'u' && marks_.size() > 1)
+        {
+            redo_marks_.push_back(marks_.back());
+            marks_.pop_back();
+            continue;
+        }
+        if (now_.kind == 'r' && !redo_marks_.empty())
+        {
+            marks_.push_back(redo_marks_.back());
+            redo_marks_.pop_back();
+            continue;
+        }
+        if (now_.kind == 't') redo_marks_.clear(); // (a new turn: what was undone can no longer be redone)
         Mark m;
         m.turn = now_.turn;
         m.off = now_.off;
@@ -505,6 +634,7 @@ void ManualNav::collect_reading()
 void ManualNav::wait()
 {
     // (The worker ends once the queue is empty; a step queued meanwhile starts it again.)
+    ask_steer();
     if (worker_.joinable()) worker_.join();
     collect_reading();
 }
@@ -534,6 +664,7 @@ void ManualNav::set_byte(uint64_t at, uint8_t value, const char* kind)
     j.decimals = decimals_;
     j.at = at;
     j.value = value;
+    j.kind = kind[0]; // ('t'urn, 'u'ndo, 'r'edo)
     queue(std::move(j));
 }
 
@@ -602,6 +733,13 @@ std::string ManualNav::readout() const
     return t + "; " +
            trf("mnav.route", {now_.route, fixed(now_.route_bits / 8, 1), std::to_string(original_address_bytes_), std::to_string(active_.size()),
                               fixed(steps, 0), (net >= 0 ? "+" : "") + fixed(net, 1)});
+}
+
+std::string ManualNav::marks_text() const
+{
+    std::string t;
+    for (const Mark& m : marks_) t += "SGRX"[std::clamp(m.kind, 0, 3)];
+    return t;
 }
 
 void ManualNav::answer_as_window(const std::string& path, int what)
@@ -730,6 +868,7 @@ void ManualNav::replay(const std::vector<Logged>& lines)
                 wait();
                 decimals_ = l.decimals;
                 marks_.clear();
+                redo_marks_.clear();
                 have_reading_ = false;
                 ++gen_;
                 start_reading();
@@ -878,6 +1017,7 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
         decimals_ = std::clamp(decimals_ + (k == SDLK_RIGHTBRACKET ? 1 : -1), 0, 20);
         if (log_out_.is_open()) log_out_ << "# precision," << decimals_ << "\n", log_out_.flush();
         marks_.clear();
+        redo_marks_.clear();
         have_reading_ = false;
         ++gen_;
         start_reading();
@@ -1024,6 +1164,8 @@ void ManualNav::render()
         const size_t semi = ro.find("; ");
         txt(r_, 24, 62, fit_cells(ro.substr(0, semi), cols), now_.exact && have_reading_ ? kGood : kWhite);
         if (semi != std::string::npos) txt(r_, 24, 78, fit_cells(ro.substr(semi + 2), cols), kAccent);
+        ask_steer(); // (the byte chosen may have changed since: its steering asked for, once)
+        txt(r_, 24, 94, fit_cells(steer_text(), cols), kGood);
         if (busy_) txt(r_, W - 24 - 8 * float(tr("mnav.working").size()), 46, tr("mnav.working"), kDim);
     }
     else txt(r_, 24, 46, tr("mnav.subtitle"), kGrey);
@@ -1089,6 +1231,17 @@ void ManualNav::render()
         const SDL_FRect b{p.x - s, p.y - s, 2 * s, 2 * s};
         if (m.kind == 0) box(r_, b, line.bg, line.edge);
         else box(r_, b, m.kind == 1 ? kGood : m.kind == 2 ? kBad : kWhite, last ? kWhite : (m.kind == 1 ? kGood : m.kind == 2 ? kBad : kWhite));
+    }
+    if (const std::optional<Target> t = target(); t && t->turns != 0)
+    {
+        // Where the steering's value would put the dot: a hollow mark, to drive to.
+        Mark m;
+        m.turn = t->turn;
+        m.off = t->off;
+        const SDL_FPoint p = at_of(m);
+        SDL_SetRenderDrawColor(r_, kAccent.r, kAccent.g, kAccent.b, 255);
+        const SDL_FRect b{p.x - 6, p.y - 6, 12, 12};
+        SDL_RenderRect(r_, &b);
     }
     {
         // (under the circle, from its left edge to the window's: on two lines where it needs them)

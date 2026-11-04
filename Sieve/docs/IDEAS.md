@@ -6151,6 +6151,13 @@ and 16 bytes etc."
     opens it again and replays every step, undos and redos too ("replayable without having to
     pinpoint the file again"); Save Steps writes just the walk. The steps are the walk back to the
     file.
+  - *Steering (built 4 November 2026):* the curve Edward saw, a 4-byte example's first byte turned
+    52 times, is a beat: one turn moves the file 14.0076 gaps between bearings at one decimal place,
+    so the dot creeps 0.0076 of a gap a turn, a slow Archimedean spiral in towards the nearest
+    bearing and out again (two more turns, F6, came 0.0034 from landing). Each byte is a gear of its
+    own (the second 0.0547 of a gap a turn, the third 0.0002), and each precision another; base 256
+    against base 10 never meets evenly, so the same kinds of spiral and zigzag recur at every scale.
+    The screen now says, for the byte chosen, what one turn moves and which value lands nearest.
   - *On the binary line it is clockwork:* each byte is a hand of a clock (the first moves the dot
     1/256 of a turn, the next 1/65,536), so which way each wheel steers is known. On a line with
     filters, the clock is scrambled, and the landscape above is what is being explored.

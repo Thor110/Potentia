@@ -1,48 +1,37 @@
-# Manual Navigation: opening a file fixed; the byte sheet and an example to drive (4 November 2026)
+# Manual Navigation: the steering readout (4 November 2026)
 
-Copy `Sieve/` over the repository's. The two pictures beside this file are only to look at: the
-2 by 2 example after a few turns, and control.py as a sheet 16 bytes wide.
+Copy `Sieve/` over the repository's. This zip also holds the undo/redo marks fix from the last one,
+so it's fine whichever you apply. `manual-navigation-steering.png` beside this file is only to look
+at: your walk's start, C0 25 F7 63, with the steering line and the hollow target mark.
 
-## Why opening a file did nothing
+## What it shows
 
-The screen named itself as the owner of its file windows but never registered as one, so the
-dialog code dropped every answer: Load File, Load Log and Save Steps all did nothing. My earlier
-checks loaded files from the command line, which never goes through a window, so they missed it.
+A fourth line under the readout, for the byte you've chosen, always there (not a hover):
 
-It registers now. `--manual-pick FILE` hands a file over the way the window does, through the same
-check, and CI step 10 uses it. Built without the fix, that check fails, so it would have caught this.
-(The other screens that open windows are all parts of the hallway, which registers.)
+> steering byte 0: one turn moves 14.0076 gaps; nearest the centre 54 turn(s) up, at F6 (about 0.0034 from landing)
 
-## What the screen does now
+- **One turn moves N gaps:** how far a turn of this byte moves the file, counted in the gaps between
+  bearings. The whole gaps leave the dot where it was; only what's left over (here 0.0076) moves
+  it. That's your curve: a beat, so the dot spirals slowly in towards a bearing and then out again.
+- **Nearest the centre:** which of this byte's 256 values puts the dot nearest the centre, and how
+  many turns up or down from where it is.
+- **A hollow mark on the circle** shows where that value would put the dot, so you can drive to it.
+- When the byte is already at its best, the line says so.
 
-- **It opens on an example:** a square of random bytes, 2 by 2 to begin with, so there's always
-  something to drive. Load File puts a file in its place.
-- **WIDTH (W; Shift+W back): 2 to 16.**
-  - For the example, it is the side of the square: 3 by 3, and on up to 16 by 16 (256 bytes).
-  - For a file, it is the number of bytes on each row of the sheet.
-- **FRESH RANDOM BYTES (F, or its box; on by default):** when the width changes, the example is made
-  of new random bytes. Unticked, it keeps the bytes it has, adds random ones or cuts the end. It does
-  nothing while a real file is loaded. The name is mine, as your message was cut off at "call it";
-  it is one string to change.
-- **A file is shown whole** as a sheet, with each row's first offset at its left.
-  - It scrolls with the wheel, PgUp/PgDn and Home/End; a bar beside it shows where you are.
-  - Choose a byte with Left/Right, Ctrl+Up/Down for the row above or below, or a click.
-  - Only the chosen byte has arrows, at its top and bottom. Turn it with them, with Up/Down (Shift:
-    16), with Shift+wheel, or by typing hex.
-  - Bytes that differ from the file as loaded are drawn in the accent colour.
-- **Logs of the example** record its bytes in the log's head (`# example,`), so Load Log makes the
-  same example again with no file.
-- **A log now begins at the first step,** so just opening the screen leaves no empty logs.
-- **Remembered:** the width and FRESH RANDOM BYTES are kept in the settings file under `[manual]`,
-  beside Keep a log and the undo depth.
-- **Also fixed:** W only worked once a file was loaded.
+Each byte is a gear of its own. On your file the second byte moves 0.0547 of a gap a turn, and the
+third 0.0002; far into a big file a turn moves too little to show, and the line says "under 0.0001".
+
+## Large files
+
+How far a turn moves depends only on which byte it is, the file's length and the precision, not on
+the bytes. So it's worked out once each time you choose another byte, not on every turn, and the
+best value is then picked from 256 at once. It runs on the worker, so the screen never waits; moving
+quickly along the bytes works out only the last one you stop on. On a 1 MiB file, a whole run (load
+it, choose a byte, steer, draw) took 0.13 s here.
 
 ## Checks
 
-- CI step 10 now covers:
-  - the window path;
-  - the example from a fixed seed (the same bytes on every system), its log and its replay;
-  - widening with FRESH RANDOM BYTES on (nine new bytes) and off (the first four kept, five added).
-- Step 10 passes here, and the unit suite passes (154,314 checks, 0 failures).
-- I can't click here, so the mouse wants a try in the hallway itself: the arrows, clicking a byte,
-  the wheel and Shift+wheel, and the buttons.
+- CI step 10 replays your walk: from C0 it says 54 turns up, at F6, 0.0034. After driving those 54
+  turns, the readout shows 0.0034 and the line says the byte is at its best. The Manual Navigation
+  block passes here.
+- As before, the mouse wants a try in the hallway itself.
