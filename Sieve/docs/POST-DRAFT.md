@@ -132,6 +132,23 @@ Traditional AI training records model weights and checkpoints, but subtle hardwa
 
 By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture.
 
+Every number is a signed 64 bit integer, so values are a fixed point, this means it is bounded by max/min values.
+
+
+
+
+
+Hence the use of floating point arithmetic in models to begin with.
+
+
+
+
+Analysis of Sieve trained models shows that no value ever hits the min or max, these models are small so precision and scale still needs further analysis though.
+
+As no one can ever say with absolute certainty that something is 0% or 100% unlikely to follow something else, depending on the pre-requisite context of course.
+
+For example : the word 'waffle' might be very unlikely to follow the word 'quantised' but that doesn't stop me typing quantised waffle.
+
 	The Sieve AI Model
 
 Trained on just The Universal Library 'Kurd Laßwitz’s 1904 short story Die Universalbibliothek' which amongst other influences, inspired the Library of Babel by Jorge Luis Borges.
@@ -162,7 +179,5 @@ Built with Claude Opus 5.5 after years of conceptual planning, initially I wante
 
 Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose. Transparency fosters trust.
 ( My AI Disclosure Policy which originates from : https://thor110.github.io/Potentia/Pages/audio.html )
-
-P.S. For context and reference I have also been building computers and programming since I was 8 years old, I am 34 now so I would like to believe I have some idea of what I am talking about...
 
 Thor110

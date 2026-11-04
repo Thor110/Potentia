@@ -122,6 +122,11 @@ python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1
 # (It exits with an error, as it should; the step's shell fails a pipe on any error.)
 { $exe ai-train tiny-run --quiet || true; } | tr -d '\r' | q "^NOT reproduced"
 $exe ai-train tests/training_run_v1 --quiet | tr -d '\r' | q "^reproduced exactly"
+# --limits counts the arithmetic's limits met, and changes nothing: the run is still reproduced.
+$exe ai-train tests/training_run_v1 --quiet --limits | tr -d '\r' > limits.txt
+q "^reproduced exactly" limits.txt
+q "^limits met: 0 of [0-9]* activations held at +-128 (0.000000%), 0 of [0-9]* gradients flowing back" limits.txt
+q "^probabilities (in 65,536ths): of [0-9]* predictions, the right byte given 0 in " limits.txt
 python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
 $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
 # training-v2: a loss scale of 2^5, the oracle training it again to the same result.

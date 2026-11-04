@@ -127,6 +127,27 @@ struct Score
 // as a language model must; otherwise to every position (a denoiser, which sees the whole picture).
 // A window of text is the example of its bytes but the last, each targeting the byte after it,
 // causal (Trainer::step on windows makes exactly these).
+// How often training met its arithmetic's limits (Edward, 4 November 2026: does a value ever reach
+// the floor or the ceiling?). Counted as it runs, for measurement only: nothing here changes a
+// number. `held` of `holds` were values held at ±2^23 (±128 in Q16); of `updates` (a weight moved
+// once a step; the holds of the backward pass counted apart), `grad_zero` had a gradient of exactly 0, `grad_clamped` and `velocity_clamped`
+// reached their limits, and `master_clamped` met an end of the weight's range ([-S, S]), where
+// `master_at_end` weights sat after the last step. Counted over every Trainer since the last reset,
+// while count_limits(true).
+struct LimitCounts
+{
+    uint64_t holds = 0, held = 0;           // the forward pass: activations
+    uint64_t holds_back = 0, held_back = 0; // the backward pass: gradients flowing back
+    uint64_t updates = 0, grad_zero = 0, grad_clamped = 0, velocity_clamped = 0, master_clamped = 0;
+    uint64_t weights = 0, master_at_end = 0, master_at_low = 0; // (at_low: of those at an end, the low one, -S)
+    // The probabilities (Q16, so a byte's can round to exactly 0): predictions made, the right byte
+    // given 0, a prediction giving one byte all of it, and bytes given 0 (of 256 a prediction).
+    uint64_t predictions = 0, right_zero = 0, certain = 0, zero_probs = 0;
+};
+LimitCounts limit_counts();
+void reset_limit_counts();
+void count_limits(bool on); // off by default: counting slows training (sieve ai-train --limits)
+
 struct Example
 {
     std::span<const uint8_t> input;

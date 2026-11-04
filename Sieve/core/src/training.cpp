@@ -9,9 +9,12 @@
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <initializer_list>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define SIEVE_TRAIN_X86 1
@@ -742,7 +745,55 @@ using I32 = int32_t; // every stored value is held to ±2^23, so it fits; produc
 
 constexpr uint64_t kShareWork = uint64_t(1) << 15; // below this many products, one thread does it
 
-inline I32 hold(int64_t v) { return I32(std::clamp(v, -kLimit, kLimit)); }
+// Each thread's count of holds and of values held (LimitCounts): kept per thread so counting costs
+// a plain increment, each count a relaxed atomic so that reading them from another thread is safe.
+struct HoldTally
+{
+    std::atomic<uint64_t> holds{0}, held{0};           // the forward pass (activations)
+    std::atomic<uint64_t> holds_back{0}, held_back{0}; // the backward pass (gradients)
+    // the probabilities: predictions, the right byte given 0, a byte given all of it (65536), and
+    // every byte's probability that came to 0 (of 256 a prediction)
+    std::atomic<uint64_t> predictions{0}, right_zero{0}, certain{0}, zero_probs{0};
+};
+std::mutex g_tallies_mx;
+std::vector<std::unique_ptr<HoldTally>> g_tallies; // (g_tallies_mx) every thread's, kept for good
+std::atomic<uint64_t> g_updates{0}, g_grad_zero{0}, g_grad_clamped{0}, g_velocity_clamped{0}, g_master_clamped{0}, g_weights{0},
+    g_master_at_end{0}, g_master_at_low{0};
+
+HoldTally& tally()
+{
+    thread_local HoldTally* t = [] {
+        auto p = std::make_unique<HoldTally>();
+        HoldTally* raw = p.get();
+        std::lock_guard<std::mutex> lock(g_tallies_mx);
+        g_tallies.push_back(std::move(p));
+        return raw;
+    }();
+    return *t;
+}
+
+inline void bump(std::atomic<uint64_t>& a, uint64_t by = 1) { a.store(a.load(std::memory_order_relaxed) + by, std::memory_order_relaxed); }
+
+// Counting only when asked (count_limits): counting every hold cost the shipped run a fifth of its
+// time (4.6 s to 5.5 s), and a flag read is next to free.
+std::atomic<bool> g_counting{false};
+
+template <bool Back>
+I32 hold_counted(int64_t v)
+{
+    HoldTally& t = tally();
+    bump(Back ? t.holds_back : t.holds);
+    if (v > kLimit || v < -kLimit) bump(Back ? t.held_back : t.held);
+    return I32(std::clamp(v, -kLimit, kLimit));
+}
+
+// hold<true>: the same, counted as the backward pass's.
+template <bool Back = false>
+inline I32 hold(int64_t v)
+{
+    if (g_counting.load(std::memory_order_relaxed)) return hold_counted<Back>(v);
+    return I32(std::clamp(v, -kLimit, kLimit));
+}
 
 // f over [0, n), shared out when the work (about `work` products) is worth it.
 void share(Pool* pool, size_t n, uint64_t work, const std::function<void(size_t, size_t)>& f)
@@ -810,7 +861,7 @@ void rmsnorm_back(const I32* dy, const I32* y, int64_t r, uint32_t n, I32* dx)
     int64_t s = 0;
     for (uint32_t i = 0; i < n; ++i) s += int64_t(dy[i]) * y[i];
     const int64_t c = fdiv(s, int64_t(n) << 16);
-    for (uint32_t i = 0; i < n; ++i) dx[i] = hold(dx[i] + hold((r * hold(dy[i] - ((y[i] * c) >> 16))) >> 16));
+    for (uint32_t i = 0; i < n; ++i) dx[i] = hold<true>(dx[i] + hold<true>((r * hold<true>(dy[i] - ((y[i] * c) >> 16))) >> 16));
 }
 
 void softmax(const int64_t* z, size_t n, int64_t* p)
@@ -844,8 +895,9 @@ struct Rope
                 I32& x = v[a * D + i];
                 I32& y = v[a * D + i + half];
                 const int64_t c = cos[size_t(p) * half + i], s = sign * sin[size_t(p) * half + i];
-                const I32 nx = hold(((x * c) >> 16) - ((y * s) >> 16));
-                const I32 ny = hold(((y * c) >> 16) + ((x * s) >> 16));
+                const int64_t a0 = ((x * c) >> 16) - ((y * s) >> 16), b0 = ((y * c) >> 16) + ((x * s) >> 16);
+                const I32 nx = sign > 0 ? hold(a0) : hold<true>(a0); // (turned back: the backward pass's)
+                const I32 ny = sign > 0 ? hold(b0) : hold<true>(b0);
                 x = nx;
                 y = ny;
             }
@@ -969,8 +1021,23 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         score.prob_sum += uint64_t(probs[target]);
         score.predictions += 1;
         score.bits += -std::log2(double(std::max<int64_t>(probs[target], 1)) / 65536.0);
+        if (g_counting.load(std::memory_order_relaxed))
+        {
+            HoldTally& t = tally();
+            bump(t.predictions);
+            if (probs[target] == 0) bump(t.right_zero);
+            uint64_t zeros = 0;
+            bool all = false;
+            for (uint32_t b = 0; b < 256; ++b)
+            {
+                zeros += probs[b] == 0;
+                all = all || probs[b] == kOne;
+            }
+            bump(t.zero_probs, zeros);
+            if (all) bump(t.certain);
+        }
         if (grad)
-            for (uint32_t t = 0; t < 256; ++t) dlog[p * 256 + t] = hold((probs[t] - (t == target ? kOne : 0)) * (int64_t(1) << net.shift));
+            for (uint32_t t = 0; t < 256; ++t) dlog[p * 256 + t] = hold<true>((probs[t] - (t == target ? kOne : 0)) * (int64_t(1) << net.shift));
     }
     if (!grad) return;
     std::vector<I32> dx(T * H, 0);
@@ -981,7 +1048,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         std::vector<I32> dhf(H);
         for (size_t p = 0; p < T; ++p)
         {
-            for (uint32_t i = 0; i < H; ++i) dhf[i] = hold(acc[p * H + i] >> 16);
+            for (uint32_t i = 0; i < H; ++i) dhf[i] = hold<true>(acc[p * H + i] >> 16);
             rmsnorm_back(dhf.data(), &hf[p * H], rf[p], H, &dx[p * H]);
         }
     }
@@ -998,12 +1065,12 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         std::vector<I32> dg(T * F), du(T * F);
         for (size_t at = 0; at < T * F; ++at)
         {
-            const int64_t da = hold(accF[at] >> 16);
-            const int64_t dsl = hold((da * c.u[at]) >> 16);
-            du[at] = hold((da * c.sl[at]) >> 16);
+            const int64_t da = hold<true>(accF[at] >> 16);
+            const int64_t dsl = hold<true>((da * c.u[at]) >> 16);
+            du[at] = hold<true>((da * c.sl[at]) >> 16);
             const int64_t sg = c.sg[at];
-            const int64_t dsilu = hold(sg + ((((int64_t(c.g[at]) * sg) >> 16) * (kOne - sg)) >> 16));
-            dg[at] = hold((dsl * dsilu) >> 16);
+            const int64_t dsilu = hold<true>(sg + ((((int64_t(c.g[at]) * sg) >> 16) * (kOne - sg)) >> 16));
+            dg[at] = hold<true>((dsl * dsilu) >> 16);
         }
         gradient(pool, grad, L.gate, dg.data(), c.h2.data(), T);
         gradient(pool, grad, L.up, du.data(), c.h2.data(), T);
@@ -1013,7 +1080,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         std::vector<I32> dh(H);
         for (size_t p = 0; p < T; ++p)
         {
-            for (uint32_t i = 0; i < H; ++i) dh[i] = hold(accH[p * H + i] >> 16);
+            for (uint32_t i = 0; i < H; ++i) dh[i] = hold<true>(accH[p * H + i] >> 16);
             rmsnorm_back(dh.data(), &c.h2[p * H], c.r2[p], H, &dx1[p * H]);
         }
         // Attention: x1 = x + o_proj(attention).
@@ -1022,7 +1089,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         backward(pool, w, L.o, dx1.data(), T, accH.data());
         gradient(pool, grad, L.o, dx1.data(), c.o.data(), T);
         std::vector<I32> dO(T * H);
-        for (size_t i = 0; i < T * H; ++i) dO[i] = hold(accH[i] >> 16);
+        for (size_t i = 0; i < T * H; ++i) dO[i] = hold<true>(accH[i] >> 16);
         // First each query's part (dq, and the scores' gradient, kept), then each key's and value's,
         // so that no two threads add to one place.
         std::vector<I32> dq(T * H), dk(T * H), dv(T * H), dd(size_t(A) * T * T, 0);
@@ -1039,20 +1106,20 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
                 {
                     int64_t s = 0;
                     for (uint32_t d = 0; d < D; ++d) s += int64_t(dO[p * H + a * D + d]) * c.v[u * H + a * D + d];
-                    dP[u] = hold(s >> 16);
+                    dP[u] = hold<true>(s >> 16);
                     cp += P[u] * dP[u];
                 }
                 cp >>= 16;
                 for (size_t u = 0; u < n; ++u)
                 {
-                    const int64_t ds = hold((int64_t(P[u]) * hold(dP[u] - cp)) >> 16);
-                    ddp[u] = hold((ds * net.isd) >> 16);
+                    const int64_t ds = hold<true>((int64_t(P[u]) * hold<true>(dP[u] - cp)) >> 16);
+                    ddp[u] = hold<true>((ds * net.isd) >> 16);
                 }
                 for (uint32_t d = 0; d < D; ++d)
                 {
                     int64_t s = 0;
                     for (size_t u = 0; u < n; ++u) s += int64_t(ddp[u]) * c.k[u * H + a * D + d];
-                    dq[p * H + a * D + d] = hold(s >> 16);
+                    dq[p * H + a * D + d] = hold<true>(s >> 16);
                 }
             }
         });
@@ -1068,8 +1135,8 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
                         sk += int64_t(dd[(a * T + p) * T + u]) * c.q[p * H + a * D + d];
                         sv += int64_t(c.att[(a * T + p) * T + u]) * dO[p * H + a * D + d];
                     }
-                    dk[u * H + a * D + d] = hold(sk >> 16);
-                    dv[u * H + a * D + d] = hold(sv >> 16);
+                    dk[u * H + a * D + d] = hold<true>(sk >> 16);
+                    dv[u * H + a * D + d] = hold<true>(sv >> 16);
                 }
             }
         });
@@ -1087,7 +1154,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         backward(pool, w, L.v, dv.data(), T, accH.data());
         for (size_t p = 0; p < T; ++p)
         {
-            for (uint32_t i = 0; i < H; ++i) dh[i] = hold(accH[p * H + i] >> 16);
+            for (uint32_t i = 0; i < H; ++i) dh[i] = hold<true>(accH[p * H + i] >> 16);
             rmsnorm_back(dh.data(), &c.h1[p * H], c.r1[p], H, &dxo[p * H]);
         }
         dx = std::move(dxo);
@@ -1230,6 +1297,7 @@ void Trainer::apply(const std::vector<int64_t>& grad)
 {
     const int64_t m = (int64_t(1) << space_.shape().bits) - 1;
     const std::vector<AiSpace::Tensor>& ts = space_.tensors();
+    uint64_t n = 0, zero = 0, gc = 0, vc = 0, mc = 0, ends = 0, low = 0; // (counted only: LimitCounts)
     for (size_t ti = 0; ti < ts.size(); ++ti)
     {
         const int64_t S = scale_[ti];
@@ -1239,12 +1307,35 @@ void Trainer::apply(const std::vector<int64_t>& grad)
             // (v1 is v2 with no shift: the limits and the shifts below come to v1's then.)
             const int64_t gl = kGradLimit << shift_, vl = kVelocityLimit << shift_;
             const int64_t g = std::clamp(grad[at], -gl, gl);
-            velocity_[at] = std::clamp(mul_shift(velocity_[at], momentum_, 16) + g, -vl, vl);
+            const int64_t v = mul_shift(velocity_[at], momentum_, 16) + g;
+            velocity_[at] = std::clamp(v, -vl, vl);
             // The rate is held to 16 + k bits and the gradient carries 2^k: both come off here.
-            master_[at] = std::clamp(master_[at] - mul_shift(velocity_[at], lr_, 16 + 2 * shift_), -S, S);
+            const int64_t moved = master_[at] - mul_shift(velocity_[at], lr_, 16 + 2 * shift_);
+            master_[at] = std::clamp(moved, -S, S);
             digits_[at] = uint8_t(std::clamp<int64_t>(fdiv((master_[at] + S) * m + S, 2 * S), 0, m));
+            // (counted only: LimitCounts)
+            zero += grad[at] == 0;
+            gc += g != grad[at];
+            vc += velocity_[at] != v;
+            mc += master_[at] != moved;
+            ends += master_[at] == S || master_[at] == -S;
+            low += master_[at] == -S;
+            ++n;
         }
     }
+    if (!g_counting.load(std::memory_order_relaxed))
+    {
+        refresh_values();
+        return;
+    }
+    bump(g_updates, n);
+    bump(g_grad_zero, zero);
+    bump(g_grad_clamped, gc);
+    bump(g_velocity_clamped, vc);
+    bump(g_master_clamped, mc);
+    g_weights.store(n, std::memory_order_relaxed);
+    g_master_at_end.store(ends, std::memory_order_relaxed);
+    g_master_at_low.store(low, std::memory_order_relaxed);
     refresh_values();
 }
 
@@ -1322,6 +1413,54 @@ std::vector<int32_t> model_logits(const AiSpace& space, const AiSpace::Digits& d
     std::vector<int32_t> logits;
     run_window(net, values.data(), ex, nullptr, score, nullptr, &logits);
     return logits;
+}
+
+LimitCounts limit_counts()
+{
+    LimitCounts c;
+    {
+        std::lock_guard<std::mutex> lock(g_tallies_mx);
+        for (const auto& t : g_tallies)
+        {
+            c.holds += t->holds.load(std::memory_order_relaxed);
+            c.held += t->held.load(std::memory_order_relaxed);
+            c.holds_back += t->holds_back.load(std::memory_order_relaxed);
+            c.held_back += t->held_back.load(std::memory_order_relaxed);
+            c.predictions += t->predictions.load(std::memory_order_relaxed);
+            c.right_zero += t->right_zero.load(std::memory_order_relaxed);
+            c.certain += t->certain.load(std::memory_order_relaxed);
+            c.zero_probs += t->zero_probs.load(std::memory_order_relaxed);
+        }
+    }
+    c.updates = g_updates.load();
+    c.grad_zero = g_grad_zero.load();
+    c.grad_clamped = g_grad_clamped.load();
+    c.velocity_clamped = g_velocity_clamped.load();
+    c.master_clamped = g_master_clamped.load();
+    c.weights = g_weights.load();
+    c.master_at_end = g_master_at_end.load();
+    c.master_at_low = g_master_at_low.load();
+    return c;
+}
+
+void count_limits(bool on) { g_counting.store(on); }
+
+void reset_limit_counts()
+{
+    {
+        std::lock_guard<std::mutex> lock(g_tallies_mx);
+        for (const auto& t : g_tallies)
+        {
+            t->holds.store(0);
+            t->held.store(0);
+            t->holds_back.store(0);
+            t->held_back.store(0);
+            for (std::atomic<uint64_t>* a : {&t->predictions, &t->right_zero, &t->certain, &t->zero_probs})
+                a->store(0);
+        }
+    }
+    for (std::atomic<uint64_t>* a : {&g_updates, &g_grad_zero, &g_grad_clamped, &g_velocity_clamped, &g_master_clamped, &g_weights, &g_master_at_end, &g_master_at_low})
+        a->store(0);
 }
 
 } // namespace sieve::training

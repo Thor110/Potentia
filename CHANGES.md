@@ -1,40 +1,35 @@
-# Try every way's duplicate-span fix, and ways_tally.bat (4 November 2026)
+# ai-train --limits, part 2: the probabilities, and why the attention grew (4 November 2026)
 
-Commit 32a6bfb (local, not pushed), on top of 3342b46.
+Commit a6df054 (local, not pushed), on top of the first --limits commit, which is also in this zip. This zip holds both commits' files.
 
-## The fix: Sieve/tools/cli/pack.cpp
+## Added to --limits
 
-**The case.** A page holding a picture written in base64, beside the same picture as its own file.
-- **Prioritised for decoding:** the page was decoded and the picture carried once.
-- **Try every way:** the page was mixed whole as text. Mixing makes base64 nearly as small as the picture inside it, so taking the page apart looked no better.
+- **The probabilities** (in 65,536ths): how often the right byte was given exactly 0, how often one byte was given all of it, and how many bytes' probabilities were 0.
+- **Which end** of their range the weights sit at.
+- **Running totals at each checkpoint** when checkpoints are shown, so you can see when the limits start being met.
 
-**The cause.** The packer's estimate didn't know that the decoded picture was the same bytes as a file already in the folder.
+## Measured (Sieve/results/training-limits-2026-11-04.md)
 
-**The fix.** A decoded span whose SHA-256 matches a file in the folder is now weighed as the copy it will be.
+**The shipped run:**
+- The right byte was given exactly 0 in 316 of 632,490 predictions (0.05%).
+- 44% of bytes' probabilities are 0 at any one prediction.
 
-| Test | Before | After |
-| :--- | ---: | ---: |
-| The test folder, Try every way | 419,182 | **353,014** |
-| The test folder, fastest decoding | 375,365 | 375,365 |
-| The page and door.jpg, Try every way | 127,034 | **63,976** |
+**The larger model:**
+- The right byte was given 0 about 1.27% of the time.
+- 36 to 43% of bytes' probabilities are 0.
 
-Both install back identical. The format is unchanged: only the packer's weighing changed.
+**Why the unscaled run's activations grew:**
+- All 16.55 million held values were attention scores (query against key).
+- None were held up to step 200; holding started after that.
+- The weights at their range's ends sit on both sides about equally, so it isn't a drift one way.
+- This resembles the attention growth that float training meets in large models; the usual cure there is QK-norm.
 
-## CI
-
-`Sieve/ci/steps/11-oracle.sh` has a new check after the base64 block: the page plus door.jpg, made with Try every way. It checks that the page is decoded, that door.jpg is carried as the lines of the page's member, and that the folder installs identical. I confirmed the old build fails it (mixed whole, 127,034 bytes).
-
-## Sieve/tools/ways_tally.bat
-
-It runs `ways_tally.py` the way the bench scripts run theirs:
-- Double-click it, or give it a folder (or one .sieve) and optionally another sieve.exe first.
-- It uses the Release sieve.exe to compare each file against LZMA2. Without one, it tallies the listings alone.
-- The tables are written beside the folder as `<name>-ways-<date and time>.md` and `.tsv`.
-- Line endings are CRLF.
-
-`Proof/STATISTICS.md` now mentions it.
+**Two ideas for a future training version.** Neither is built.
+- QK-norm.
+- A floor of 1/65,536 on every probability, needed before a model could be used to compress.
 
 ## Tested
 
+- Every run reproduces its result.txt byte for byte with --limits.
 - Unit suite: 154,318 checks, 0 failures.
-- The base64 block of CI step 11, with the new check: passes, the oracle's lines included.
+- The CI lines (step 4): pass.

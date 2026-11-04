@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 namespace fs = std::filesystem;
 
@@ -139,13 +140,25 @@ int cmd_ai_train(const Args& a)
     const uint64_t stop_after = a.has("stop-after") ? a.get_positive("stop-after", 1) : 0;
     if (!state.empty())
         if (const auto step = saved_step(run, state)) std::cout << "carrying on from step " << *step << ", saved in " << state.string() << "\n";
+    const bool limits = a.has("limits");
+    training::count_limits(limits);
+    training::reset_limit_counts();
     const TrainingOutcome out = train_run(run, threads, [&](uint64_t k, uint64_t n, const training::Score& recent) {
         if (!quiet && (k % run.recipe.checkpoint_every == 0 || k == n))
         {
             char line[160];
             std::snprintf(line, sizeof line, "step %llu of %llu: %.3f bits a byte, the right byte given %.1f%%\n", (unsigned long long)k,
                           (unsigned long long)n, recent.bits_per_byte(), 100.0 * recent.mean_probability());
-            std::cout << line << std::flush;
+            std::cout << line;
+            if (limits)
+            {
+                // (so far: when the limits begin to be met)
+                const training::LimitCounts c = training::limit_counts();
+                std::snprintf(line, sizeof line, "  so far: %llu activations and %llu gradients held; the right byte given 0 %llu times; %llu weights at an end\n",
+                              (unsigned long long)c.held, (unsigned long long)c.held_back, (unsigned long long)c.right_zero, (unsigned long long)c.master_at_end);
+                std::cout << line;
+            }
+            std::cout << std::flush;
         }
     }, nullptr, state, stop_after);
     if (out.cancelled)
@@ -158,6 +171,26 @@ int cmd_ai_train(const Args& a)
     char took[64];
     std::snprintf(took, sizeof took, "%.1f s", secs);
     std::cout << "trained in " << took << "; model " << out.result.model_sha256 << "\n";
+    if (limits)
+    {
+        // How often the arithmetic's limits were met (counted only; nothing here changes the model).
+        const training::LimitCounts c = training::limit_counts();
+        auto share = [](uint64_t a, uint64_t b) {
+            char t[48];
+            std::snprintf(t, sizeof t, "%.6f%%", b ? 100.0 * double(a) / double(b) : 0.0);
+            return std::string(t);
+        };
+        std::cout << "limits met: " << c.held << " of " << c.holds << " activations held at +-128 (" << share(c.held, c.holds) << "), "
+                  << c.held_back << " of " << c.holds_back << " gradients flowing back (" << share(c.held_back, c.holds_back) << "); of "
+                  << c.updates << " weight updates, " << c.grad_zero << " with a gradient of 0 (" << share(c.grad_zero, c.updates) << "), "
+                  << c.grad_clamped << " gradients and " << c.velocity_clamped << " momenta at their limits, " << c.master_clamped
+                  << " weights stopped at an end of their range; after the last step " << c.master_at_end << " of " << c.weights
+                  << " weights at an end (" << share(c.master_at_end, c.weights) << "; " << c.master_at_low << " at the low end)\n";
+        std::cout << "probabilities (in 65,536ths): of " << c.predictions << " predictions, the right byte given 0 in " << c.right_zero << " ("
+                  << share(c.right_zero, c.predictions) << "), one byte given all of it in " << c.certain << " (" << share(c.certain, c.predictions)
+                  << "); " << c.zero_probs << " of " << c.predictions * 256 << " bytes' probabilities were 0 (" << share(c.zero_probs, c.predictions * 256)
+                  << ")\n";
+    }
 
     const AiSpace space(run.recipe.shape, run.recipe.key);
     {

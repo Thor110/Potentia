@@ -546,7 +546,7 @@ const std::vector<Page>& pages()
          "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--loss-scale-bits K] [--batch N] [--window N] [--epochs N] [--seed S]\n"
          "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]\n"
          "  [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
-         "  sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--quiet]",
+         "  sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--limits] [--quiet]",
          "A run (training-v1, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
          "one: training.ini (the model's shape, where it starts on the AI line, how it learns, and how it\n"
          "reads its files: the order of every window of bytes it learns from is made from these lines by\n"
@@ -592,6 +592,9 @@ const std::vector<Page>& pages()
                        "if it is there: a long run stopped (closed, or cut off) goes on from where it was,\n"
                        "exactly as if it had not stopped. The file goes once the run is done."},
           {"--stop-after N", "Stop after N steps, keeping the state (as --resume does): for scripts and tests."},
+          {"--limits", "Also count how often the arithmetic's limits were met: values held at +-128 (Q16),\n"
+                       "gradients of 0, gradients and momenta at their limits, and weights at an end of their\n"
+                       "range (during the run and after it). The model is the same; training is slower."},
           {"--quiet", "Only the summary, not every checkpoint."}},
          {{"sieve ai-train --record texts --out ub --sieve ub.sieve", "record a run from a folder, train it, pack it"},
           {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
