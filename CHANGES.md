@@ -1,29 +1,40 @@
-# Ways tally, PROOF.md links, docs pass (4 November 2026)
+# Try every way's duplicate-span fix, and ways_tally.bat (4 November 2026)
 
-Commit 3342b46 (local, not pushed), on top of your 898169f.
+Commit 32a6bfb (local, not pushed), on top of 3342b46.
 
-## The tally: Sieve/tools/ways_tally.py
+## The fix: Sieve/tools/cli/pack.cpp
 
-    python tools/ways_tally.py FOLDER_OR_SIEVES... --sieve sieve.exe --md out.md --tsv out.tsv
+**The case.** A page holding a picture written in base64, beside the same picture as its own file.
+- **Prioritised for decoding:** the page was decoded and the picture carried once.
+- **Try every way:** the page was mixed whole as text. Mixing makes base64 nearly as small as the picture inside it, so taking the page apart looked no better.
 
-- **What it reads:** which way carried each file, straight from each `.sieve`'s listing. That covers Sieve's own ways, LZMA2, and files made again around an inner way (brunsli, archives, PNGs, base64 decoded). Each way is labelled with whose it is.
-- **Its own check:** every code of a file's own is checked to add up to the rope stream exactly.
-- **With `--sieve`:** each file with a code of its own is set against LZMA2 alone on the same bytes. A mixed group is set against LZMA2 on its files joined.
-- **Run here, all with Try every way:** the twelve Silesia files, Sieve's docs folder and the web test site. Mixing carried all twelve Silesia files: 41,710,177 bytes against LZMA2's 48,455,266 on the same files (−13.92%).
-- **Where the figures went:**
-  - `Proof/STATISTICS.md` has a new section, **What carried each file**: who owns each way, the Silesia table, and your bench's results by setting.
-  - `Sieve/results/ways-tally-2026-11-04.md` has the full output.
-- **Run it on your own `.sieve` files** (MAPS, ALTEngine, WoWRevived, your bench) to add them.
+**The cause.** The packer's estimate didn't know that the decoded picture was the same bytes as a file already in the folder.
 
-## PROOF.md
+**The fix.** A decoded span whose SHA-256 matches a file in the folder is now weighed as the copy it will be.
 
-A `# Specifications` section at the end, with links to SIEVE-FORMAT, METHODS, SPECIFICATIONS, FILTER-PLUGINS, STATISTICS and the oracle. Your proof above it is unchanged.
+| Test | Before | After |
+| :--- | ---: | ---: |
+| The test folder, Try every way | 419,182 | **353,014** |
+| The test folder, fastest decoding | 375,365 | 375,365 |
+| The page and door.jpg, Try every way | 127,034 | **63,976** |
 
-## Docs pass
+Both install back identical. The format is unchanged: only the packer's weighing changed.
 
-- **SPECIFICATIONS.md:** retitled "Sieve Specifications". Its first line now says Sieve builds and walks the Gallery of Babel, the space, rather than naming Sieve as the Gallery.
-- **"Gallery of Babel" elsewhere:** the READMEs and VISION.md already use the name for the space, so they are unchanged.
-- **The format now named as v33:** in Sieve/README.md and SIEVE-INSTALL-USAGE.md.
-- **NEXT-VERSION.md:** its title, and its line in the README's table, now cover v34 begun and the plans for v32 and v33.
-- **Release figures:** both READMEs now use v32's measured release (6,470,236 of 45,967,736 bytes, 7.10:1) in place of v31's. STATISTICS' table now says which row the READMEs use.
-- **STATISTICS:** the pi6 row is labelled "v32 (v33 the same)".
+## CI
+
+`Sieve/ci/steps/11-oracle.sh` has a new check after the base64 block: the page plus door.jpg, made with Try every way. It checks that the page is decoded, that door.jpg is carried as the lines of the page's member, and that the folder installs identical. I confirmed the old build fails it (mixed whole, 127,034 bytes).
+
+## Sieve/tools/ways_tally.bat
+
+It runs `ways_tally.py` the way the bench scripts run theirs:
+- Double-click it, or give it a folder (or one .sieve) and optionally another sieve.exe first.
+- It uses the Release sieve.exe to compare each file against LZMA2. Without one, it tallies the listings alone.
+- The tables are written beside the folder as `<name>-ways-<date and time>.md` and `.tsv`.
+- Line endings are CRLF.
+
+`Proof/STATISTICS.md` now mentions it.
+
+## Tested
+
+- Unit suite: 154,318 checks, 0 failures.
+- The base64 block of CI step 11, with the new check: passes, the oracle's lines included.

@@ -666,5 +666,5 @@ compressed formats were kept as they are, as it decodes quickly.
 
 So where the smallest file is wanted, Sieve's own ways carried nearly every byte measured here; where
 fast decoding is wanted, LZMA2 takes over what mixing carried, on purpose, and the rope keeps its
-files. `python tools/ways_tally.py FOLDER --sieve SIEVE` gives the same tables for any `.sieve`
-files.
+files. `python tools/ways_tally.py FOLDER --sieve SIEVE` (or `tools\ways_tally.bat`, which asks
+for the folder) gives the same tables for any `.sieve` files.

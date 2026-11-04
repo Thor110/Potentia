@@ -3267,6 +3267,13 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         auto add_dirs = [&](const std::string& path) { // every folder above path
             for (size_t at = path.find('/'); at != std::string::npos; at = path.find('/', at + 1)) add_dir(path.substr(0, at + 1));
         };
+        // Every file's SHA-256, so a span decoded below that is the same bytes as a file of the
+        // folder is weighed as the copy it will be carried as (4 November 2026: a page holding a
+        // picture in base64 beside the same picture as a file, mixed whole under Try every way, was
+        // 43,817 bytes larger than the same folder prioritised for decoding, where it was decoded).
+        std::unordered_set<std::string> folder_shas;
+        for (const ManifestEntry& e : m.entries)
+            if (!e.dir) folder_shas.insert(e.sha256);
         for (ManifestEntry& e : m.entries)
         {
             if (e.dir)
@@ -3321,6 +3328,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         for (const spans::Span& x : found)
                         {
                             parts.emplace_back(x.bytes);
+                            // The same bytes as a file of the folder: carried as the other's (a copy, or
+                            // its lines), so it costs next to nothing; the 8 bytes below are its share.
+                            if (folder_shas.count(sha256_hex(x.bytes))) continue;
                             // A JPEG reaches brunsli below, as a file does: its form made now, for the
                             // weighing, and kept for the JPEG step by its SHA-256.
                             // (Only with an archives box, where the JPEG step runs.)

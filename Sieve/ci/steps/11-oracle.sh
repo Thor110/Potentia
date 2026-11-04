@@ -1157,6 +1157,18 @@ cmp b64/plain.txt b64_oracle/plain.txt
 # folder's five files.
 $S locate b64 --installer b64-cmp.sieve --compressed-temporary --compare 2>&1 | tr -d '\r' > b64-cmp.txt
 grep -q "^  original  *$(cat b64/* | wc -c) bytes" b64-cmp.txt
+# A span that is the same bytes as a file of the folder is weighed as the copy it will be (4 November
+# 2026: with Try every way, a page holding a picture in base64 beside the same picture as a file was
+# mixed whole, larger than the same folder prioritised for decoding; here, 127,034 bytes before and
+# 63,976 after): the page decoded, and the picture carried once.
+rm -rf b64dup b64dup_inst
+mkdir b64dup
+cp b64/page.html ../web/test-site/src/pictures/door.jpg b64dup/
+$S locate b64dup --installer b64dup.sieve --search-per-file 0 --search-every-wave 2>&1 | tr -d '\r' > b64dup.txt
+grep -q "^spans     1 text(s) carried with the binary they write out decoded" b64dup.txt
+grep -q "door.jpg: lines of page.html/1" b64dup.txt
+$S install b64dup.sieve --to b64dup_inst > /dev/null
+diff -r b64dup b64dup_inst
 # Two names that are one where case is ignored (A.txt and a.txt, made on Linux:
 # tests/case_pair.sieve, and a zip of the same made here): where this folder ignores case (Windows,
 # macOS), Sieve and sieve-install refuse them before writing anything, naming the pair; where it heeds
