@@ -1,4 +1,4 @@
-# The next manifest version: a plan for `sieve-manifest-v32`
+# The next manifest version: v34 begun, and the plans v32 and v33 were built from
 
 **v34, a draft begun empty (3 November 2026).** Nothing is behind `--v34-draft` yet; with it on,
 Sieve makes what the newest makes. Candidates: the web dictionary (IDEAS §19.92), once Edward has

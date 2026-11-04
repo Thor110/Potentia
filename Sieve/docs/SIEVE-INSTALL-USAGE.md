@@ -3,8 +3,8 @@
 This page covers making an installer for a folder, handing it to someone, and installing from it.
 Installers **pack their files themselves**, so there is no separate compressing step. The plain
 installer is `sieve-manifest-v4` (`--v4`), described first below; the hallway's File Locator and
-`sieve locate --installer` make the newest (`sieve-manifest-v32`), which also mixes, pulls files
-tight with the rope, cuts them into pieces, and carries items of Sieve's lines by their places
+`sieve locate --installer` make the newest (`sieve-manifest-v33`), which also mixes, pulls files
+tight with the rope, cuts them into pieces, carries copies, runs and binary written as text, and carries items of Sieve's lines by their places
 (*The formats, as they grew*, below; every version in full: SPECIFICATIONS §12.2). Every
 option: `sieve help locate`, `sieve help install`, `sieve-install --help`.
 

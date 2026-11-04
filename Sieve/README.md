@@ -30,8 +30,8 @@ with an English word list for text), an x86 filter for programs, and archives in
 opened and made again byte for byte. Before a `.sieve` is used it is read back and every file
 compared, so a fault in the packer can never hand you something else.
 
-Sieve's own release, 44,647,549 bytes of programs and data, is a 6,319,561-byte `.sieve`
-(**7.06:1**). On a folder anyone can check, this repository's own `Sieve` source tree:
+Sieve's own release, 45,967,736 bytes of programs and data, is a 6,470,236-byte `.sieve`
+(**7.10:1**, at v32). On a folder anyone can check, this repository's own `Sieve` source tree:
 
 | Method | Bytes | Ratio | Of the folder | Make | Unpack |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -145,7 +145,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
   addresses.
 - **Versioned rules.** A filter, alphabet or format that changes is a new version beside the old,
   so an address or a `.sieve` written today still reads tomorrow. The `.sieve` format is
-  `sieve-manifest-v32`, and every older version is still read.
+  `sieve-manifest-v33`, and every older version is still read.
 
 ## Documentation
 
@@ -158,7 +158,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
 | [docs/SIEVE-FORMAT.md](docs/SIEVE-FORMAT.md) | The `.sieve` format on one page, for writing a decoder of your own |
 | [docs/FEATURES.md](docs/FEATURES.md) | What Sieve does, feature by feature, each with what was measured and where |
 | [docs/METHODS.md](docs/METHODS.md) | Every way Sieve tries a file, in order, and the log line each one writes |
-| [docs/NEXT-VERSION.md](docs/NEXT-VERSION.md) | The plan for the next format version, `sieve-manifest-v32` |
+| [docs/NEXT-VERSION.md](docs/NEXT-VERSION.md) | The plans for each format version: v32 and v33 as built, v34 begun |
 | [docs/SPECIFICATIONS.md](docs/SPECIFICATIONS.md) | The specification |
 | [docs/IDEAS.md](docs/IDEAS.md) | What is not built yet, and what was set aside and why |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | The briefing for picking the work up cold |

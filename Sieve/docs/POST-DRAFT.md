@@ -35,7 +35,7 @@ Files can be optimised for decoding speed or filesize, as well as a number of ot
 
 So far, most tests are outperforming 7zip and repacking JPEG and PNG files smaller than they started.
 
-Sieve beats brotli on folders and large files, but not yet on small web pages. NOTE : Web Dictionary being updated and brotli tests rerun before v33 release.
+Sieve beats brotli on folders and large files, as well as small web pages since the latest v33 manifest.
 
 PROOF.md - https://github.com/Thor110/Potentia/blob/main/Proof/PROOF.md
 
@@ -162,5 +162,7 @@ Built with Claude Opus 5.5 after years of conceptual planning, initially I wante
 
 Disclosure ensures honesty; those happy to consume AI content won't mind, and those who prefer human-made works deserve the right to choose. Transparency fosters trust.
 ( My AI Disclosure Policy which originates from : https://thor110.github.io/Potentia/Pages/audio.html )
+
+P.S. For context and reference I have also been building computers and programming since I was 8 years old, I am 34 now so I would like to believe I have some idea of what I am talking about...
 
 Thor110

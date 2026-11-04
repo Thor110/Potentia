@@ -39,3 +39,14 @@ welcome to the sieve.sieve the starting page (32 bytes) -> 158 bytes
 The overhead also includes a file hash for verification.
 
 A test installation of degrees.sieve on my computer installed 3960 files, every one checked against its SHA-256, decoded in 0.356s, checked and written in 1.461s.
+
+# Specifications
+
+The four values above are the idea at its simplest. What a `.sieve` file holds in practice, and every way a file is tried, is set out here:
+
+- [The .sieve format, on one page](../Sieve/docs/SIEVE-FORMAT.md): the head, the listing, the streams and each file's way, as Sieve writes them today.
+- [Every way Sieve tries a file](../Sieve/docs/METHODS.md): in the order it happens, and how the smallest is chosen.
+- [The full specifications](../Sieve/docs/SPECIFICATIONS.md): the lines, addresses and filters, and every version of the format (§12.2).
+- [Filters as data](../Sieve/docs/FILTER-PLUGINS.md): how a filter is written, counted and ranked.
+- [Statistics](STATISTICS.md): every figure measured, and what carried each file.
+- [The oracle](../Sieve/reference/sieve_ref.py): a second decoder in Python, written from the specifications and sharing no code with Sieve.

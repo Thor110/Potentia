@@ -13,7 +13,7 @@ picture and melody as a place with an address.
 
 | | |
 | :--- | :--- |
-| **Pack a folder smaller than 7-Zip, and get it back exactly** | Sieve's own release, 44,647,549 bytes of programs and data, packs to a 6,319,561-byte `.sieve` (7.06:1), and installs back byte for byte. [How it compares](Sieve/README.md#smaller-archives-that-come-back-exactly) |
+| **Pack a folder smaller than 7-Zip, and get it back exactly** | Sieve's own release, 45,967,736 bytes of programs and data, packs to a 6,470,236-byte `.sieve` (7.10:1), and installs back byte for byte. [How it compares](Sieve/README.md#smaller-archives-that-come-back-exactly) |
 | **Extract almost any archive from the right-click menu** | `.zip`, `.7z`, `.rar`, `.tar`, `.gz`, `.xz`, `.bz2`, `.zst`, `.cab`, `.iso` and more, on Windows, with every file of a `.sieve` checked before it is written. |
 | **Install only what was meant** | Every file is checked against its SHA-256 before anything is written, so a damaged or incomplete download changes nothing on your disk. |
 | **Publish web pages that prove themselves** | A browser extension shows a site's files only when each is exactly the file its link vouches for. [Sieve Secure](Pages/secure.html) |

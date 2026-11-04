@@ -24,6 +24,7 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 - [Photographs (JPEG)](#photographs-jpeg)
 - [A small script](#a-small-script)
 - [Files that are items of Sieve's own lines](#files-that-are-items-of-sieves-own-lines)
+- [What carried each file](#what-carried-each-file)
 
 ## At a glance
 
@@ -55,8 +56,8 @@ Sieve's release folder (the programs and their data) as a `.sieve`, version by v
 | v29 | 6,312,557 | 44,542,021 | 7.06:1 | 14.17% |
 | v30 | 6,311,463 | 44,582,469 | 7.06:1 | 14.16% |
 | v31 | 6,318,477 | 44,621,183 | 7.06:1 | 14.16% |
-| v31, the release in the READMEs | 6,319,561 | 44,647,549 | 7.06:1 | 14.15% |
-| **v32** (1 November 2026) | **6,470,236** | **45,967,736** | **7.10:1** | **14.08%** |
+| v31, the release | 6,319,561 | 44,647,549 | 7.06:1 | 14.15% |
+| **v32** (1 November 2026; the figure in the READMEs) | **6,470,236** | **45,967,736** | **7.10:1** | **14.08%** |
 
 The same folder at v30 as a 7z: **7,774,880** bytes (5.73:1), which the `.sieve` beat by 18.82%.
 
@@ -454,7 +455,7 @@ stress test, since digits of pi are as close to random as text gets.
 | :--- | ---: | ---: |
 | pi6.txt, the original | 1,111,103 | 1,114,112 |
 | pi6.7z | 512,745 | 516,096 |
-| pi6.txt.sieve, the latest (v32) | **417,049** | |
+| pi6.txt.sieve, v32 (v33 the same) | **417,049** | |
 
 **The floor.** A million digits treated as random hold 1,000,000 × log₂10 ÷ 8 = **415,241** bytes of
 information, and no file of them can be smaller on average. The latest `.sieve` is **1,808 bytes**
@@ -615,3 +616,55 @@ s, checked and written in 1.428 s.
 This works only for files that are Sieve's own items, made from their places; a file from anywhere
 else is carried as itself. [PROOF.md](PROOF.md) has the sample, and `welcome to the sieve.sieve`
 (the starting page: 32 bytes as 158; 159 as v20), where the overhead is more than the file.
+
+## What carried each file
+
+Sieve tries a file every way it has and keeps the smallest, so a `.sieve` is not "LZMA2 with extras":
+which way carried each file is written in its listing, and `tools/ways_tally.py` reads it back from
+any number of `.sieve` files, with each file that has a code of its own set against LZMA2 (xz -9e,
+raw, as 7-Zip makes it) on the same bytes.
+
+**Whose each way is.** Sieve's own: the rope, mixing (Sieve's models and code; context mixing as a
+method is an established one, the PAQ family's), runs and ramps, copies, the lines of another file,
+deltas, binary written as text decoded, archives and PNGs made again, and items of Sieve's lines.
+Borrowed: LZMA2 and the x86 filter (7-Zip's), and brunsli for JPEGs (Google's). Each `.sieve` is
+read back and checked against every file's SHA-256 before it is used, whatever carried it.
+
+**Silesia, Try every way (4 November 2026, Sieve 0.13.77 at v33, on the Linux machine; each file
+alone):** mixing carried all twelve. Against LZMA2 on the same files:
+
+| File | Bytes | `.sieve` | LZMA2 alone | Against LZMA2 |
+| :--- | ---: | ---: | ---: | ---: |
+| dickens | 10,192,446 | 2,205,961 | 2,831,149 | −22.08% |
+| mozilla | 51,220,480 | 13,318,582 | 13,376,180 | −0.43% |
+| mr | 9,970,564 | 1,967,650 | 2,751,831 | −28.50% |
+| nci | 33,553,445 | 1,281,583 | 1,449,209 | −11.57% |
+| ooffice | 6,152,192 | 1,864,843 | 2,427,163 | −23.17% |
+| osdb | 10,085,684 | 2,364,331 | 2,844,493 | −16.88% |
+| reymont | 6,627,202 | 1,089,497 | 1,315,531 | −17.18% |
+| samba | 21,606,400 | 3,277,403 | 3,739,464 | −12.36% |
+| sao | 7,251,944 | 4,149,429 | 4,425,604 | −6.24% |
+| webster | 41,458,703 | 6,226,845 | 8,368,609 | −25.59% |
+| x-ray | 8,474,240 | 3,614,947 | 4,491,203 | −19.51% |
+| xml | 5,345,280 | 349,106 | 434,830 | −19.71% |
+| **All twelve** | **211,938,580** | **41,710,177** | **48,455,266** | **−13.92%** |
+
+**Elsewhere, the same day and the same way:** Sieve's `docs` folder (42 files, 2,689,351 bytes)
+mixed as one group: 1,088,596 bytes against LZMA2's 1,222,601 on the same files joined (−10.96%).
+The web test site (11 files, 478,405 bytes, most of it JPEG and PNG pictures, which LZMA2 carried in
+the shared stream): its pages mixed, 2,823 bytes against 4,915.
+
+**From Edward's own benchmark (3 November 2026, his machine, v33):** optimised for size, the rope
+carried `pi6.txt` (416,970 bytes, under mixing's 418,822 and LZMA2's 507,033); mixing carried Don
+Quixote (523,291) and, with Try every way, the small script (520; without it, LZMA2's 670). The
+three photographs: with compressed formats as they are, mixing with Try every way and the rope cut
+into pieces without it; with JPEGs made again (permanent or temporary), brunsli's form inside the
+LZMA2 stream, the smallest of all.
+Optimised for decoding, mixing is left out (it decodes far more slowly): LZMA2 then carried the book
+(683,133) and the script (670), and the rope still carried `pi6.txt`, and the photographs where
+compressed formats were kept as they are, as it decodes quickly.
+
+So where the smallest file is wanted, Sieve's own ways carried nearly every byte measured here; where
+fast decoding is wanted, LZMA2 takes over what mixing carried, on purpose, and the rope keeps its
+files. `python tools/ways_tally.py FOLDER --sieve SIEVE` gives the same tables for any `.sieve`
+files.

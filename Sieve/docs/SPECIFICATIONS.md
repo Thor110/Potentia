@@ -1,6 +1,6 @@
-# Sieve — Gallery of Babel Specifications
+# Sieve Specifications
 
-*Version 2.0. Concrete design for the search-space engine and its navigable view. Supersedes the search-space sections of the Potentia README and Specifications v1.0. Sieve is the Gallery of Babel part of Potentia; the alignment thesis stays with Potentia.*
+*Version 2.0. Concrete design for the search-space engine and its navigable view. Supersedes the search-space sections of the Potentia README and Specifications v1.0. Sieve is the working part of Potentia: it packs, checks and unpacks files exactly, and builds and walks the Gallery of Babel, the space of every possible work; the alignment thesis stays with Potentia.*
 
 **Concept and architecture by Edward James Gordon.**
 
