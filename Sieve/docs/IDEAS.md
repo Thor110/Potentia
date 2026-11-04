@@ -6182,6 +6182,40 @@ and 16 bytes etc."
     for 416,970 (pi6.txt.sieve's length), 45.8 s for 1 MiB; Python's own (math.gcd, without the
     split) took 89.2 s for 1 MiB. A faster divisor (half-gcd, near-linear) is the next step if
     longer files are wanted.
+  - *A sphere and a cube grid (Edward, 4 November 2026; noted, nothing built):* the bytes as a
+    cube (width by width by width) instead of a flat sheet, and the dot on a sphere instead of a
+    circle. The address is one number, so a sphere needs a rule for its third coordinate: the
+    distance from a bearing at the next precision would show two precisions at once. A cube suits
+    data with three dimensions of its own (voxels, the models line), where a byte's neighbours are
+    its neighbours in space. It adds a view, not information; the hallway's renderer could draw it.
+  - *Skip tables and seeded noise aimed at roundings (Edward, 4 November 2026; measured, nothing
+    built):* a byte to choose a lookup table and a byte for one of its 256 entries, each entry a
+    fraction to skip by; then the entries as noise from seeds (a table of 64-bit seeds, say),
+    subtracted from the rotation so that what is left lands on a clear rounding, the address being
+    the rounding and the seed.
+    - *Skips to repeating patterns:* a file that is one block of L bytes repeated sits at a
+      fraction with 256^L - 1 below the line, so such a table is easy to make. On the binary line a
+      landing point helps only while the file matches it from its first byte. Measured on 500
+      pieces of 4 KiB from each of ten Silesia files, jumping to a file repeating a block of up to
+      64 bytes, the block and 2 bytes paid for: on average 0.2 bytes saved on dickens, 17.5 on
+      samba, 51.6 on mozilla, 77.9 on mr, 7.7 on nci and 11.2 on xml, almost all from blank pieces;
+      LZMA2 saves 2,055 to 3,520 on the same pieces, using repeats wherever they are.
+    - *Seeded noise:* seeds tried in turn (splitmix64) until the file less the noise lands exactly
+      on a bearing, every seed paid for by its chance of being the one (the reader must know where
+      the seed's number ends). 200 random files each: 2 bytes at one place, 17.14 bits against the
+      file's 16.01; 3 bytes at one place 25.38, at two places 25.64, against 24.01. The noise
+      constrained to the file's length (Edward): 25.28 and 25.20 bits wrapping round the loop,
+      25.45 and 25.48 for noise a byte shorter, 28.06 and 28.48 where it may not wrap (most seeds
+      then cannot be used). The seed has to say which of the tries between two bearings landed,
+      so it carries what the bearing does not, whatever the noise's length. A table of 64-bit
+      seeds covers at most 8 bytes; on a longer file an approximate landing leaves the gap to be
+      written. The noise that pays is the noise the reader makes from what it has unpacked
+      (§19.91): the rope's prediction, and mixing's.
+    - *A file split into two seeds (his thought, like the factors of a product):* two seeds
+      together are as long as the file they make, as a product's two factors are as long as the
+      product, so finding them, however hard, saves nothing. Noise waves added together stay
+      noise unless they are made alike; real data has patterns or nothing, compressed data is
+      noise, and a compressed file is found from noise only by a seed as long as itself.
   - *The length as its own value (discussed 4 November 2026; nothing to add):* Edward asked whether
     a fifth value, the length, should join settings, dimension, rotation and item. It is in the
     dimension already (a line's shape: on the binary line, how many bytes), and the rotation cannot
