@@ -143,7 +143,7 @@ Hence the use of floating point arithmetic in models to begin with.
 
 
 
-Analysis of Sieve trained models shows that no value ever hits the min or max, these models are small so precision and scale still needs further analysis though.
+Analysis of Sieve trained models shows that no value ever hits the min or max, however these models are tiny so precision and scale still needs further analysis though.
 
 As no one can ever say with absolute certainty that something is 0% or 100% unlikely to follow something else, depending on the pre-requisite context of course.
 
