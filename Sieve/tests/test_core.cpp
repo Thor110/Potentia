@@ -176,6 +176,31 @@ void test_biguint()
         BigUint q, r;
         BigUint::divmod(BigUint::pow(27, 100), BigUint::pow(27, 60), q, r);
         CHECK(q == BigUint::pow(27, 40) && r.is_zero());
+        // gcd (Lehmer's, used by Manual Navigation's exact check): the same as Euclid's by long
+        // division, for numbers sharing a factor of many sizes, edge limbs, 0 and equal operands.
+        auto euclid = [](BigUint a, BigUint b) {
+            while (!b.is_zero())
+            {
+                BigUint t = BigUint::mod(a, b);
+                a = std::move(b);
+                b = std::move(t);
+            }
+            return a;
+        };
+        bool same = true;
+        for (int t = 0; t < 600; ++t)
+        {
+            const bool edge = t % 2;
+            const BigUint f = rnd(1 + rng() % 6, edge);
+            const BigUint a = BigUint::mul(rnd(1 + rng() % 40, edge), f), b = BigUint::mul(rnd(1 + rng() % 40, edge), f);
+            same = same && BigUint::gcd(a, b) == euclid(a, b) && BigUint::gcd(b, a) == euclid(a, b);
+        }
+        same = same && BigUint::gcd(BigUint(), BigUint()).is_zero() && BigUint::gcd(x, BigUint()) == x && BigUint::gcd(x, x) == x;
+        same = same && BigUint::gcd(BigUint::pow(6, 300), BigUint::pow(10, 200)) == BigUint::pow(2, 200);
+        CHECK(same);
+        // Stopped when asked: false, the answer untouched.
+        BigUint g(5);
+        CHECK(!BigUint::gcd(BigUint::pow(3, 5000), BigUint::pow(7, 3000), g, [](size_t) { return false; }) && g == BigUint(5));
     }
 
     // Fast paths agree with the generic ones: power-of-two bases (bits placed directly), pow by

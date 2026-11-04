@@ -992,7 +992,7 @@ rm -rf mnav-ex
 $H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "W,Up" --screenshot mnav-ex-w.png > /dev/null
 q "^# example,70FAB974FA4E894380$" mnav-ex/*.csv
 rm -rf mnav-ex
-$H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "F,W,Up" --screenshot mnav-ex-kept.png > /dev/null
+$H --manual-example --manual-seed 7 --manual-logs mnav-ex --script "R,W,Up" --screenshot mnav-ex-kept.png > /dev/null
 q "^# example,133AC75170FAB974FA$" mnav-ex/*.csv
 # The marks follow the walk (4 November 2026, Edward: undoing and redoing turned a green step red):
 # three turns leave the start and red, green, red; two undos take the last two away; two redos put
@@ -1009,6 +1009,20 @@ ups=$(printf 'Up,%.0s' $(seq 54))
 $H --manual-nav mnav-c0.bin --script "${ups%,}" --screenshot mnav-steered.png | tr -d '\r' > mnav-steered.txt
 q "0.0034 from landing" mnav-steered.txt
 q "^  steering byte 0: one turn moves 14.0076 gaps; this value is already its nearest to the centre$" mnav-steered.txt
+# The exact check (Edward, 4 November 2026): the rotation as a fraction in its lowest terms. C0 25 F7
+# 63 is 360 x 3240556644 / 4311810305 = 233320078368 / 862362061 (as Python's fractions make it),
+# whose decimals repeat every 30840 digits; 54 AA lands on 120 degrees exactly. A file over 64 KiB
+# waits for X.
+$H --manual-nav mnav-c0.bin --screenshot mnav-exact.png | tr -d '\r' > mnav-exact.txt
+q "^  exact: 360 x 3240556644 / 4311810305 = 233320078368 / 862362061$" mnav-exact.txt
+q "^  recurs: repeats every 30840 digits; as the fraction, 9 bytes; the file's own address 4: no shorter address, 5 bytes over$" mnav-exact.txt
+printf '\124\252' > mnav-120.bin
+$H --manual-nav mnav-120.bin --screenshot mnav-120.png | tr -d '\r' > mnav-120.txt
+q "^  exact: 360 x 21931 / 65793 = 120 / 1$" mnav-120.txt
+q "^  a whole number of degrees: written exactly, 2 bytes" mnav-120.txt
+head -c 70000 /dev/zero > mnav-long.bin
+$H --manual-nav mnav-long.bin --screenshot mnav-long.png | tr -d '\r' | q "^  X (or EXACT): the rotation exactly"
+$H --manual-nav mnav-long.bin --script X --screenshot mnav-long-x.png | tr -d '\r' | q "^  exact: 360 x ([0-9]* bits) / ([0-9]* bits) = "
 # Undo as deep as the steps go (the default): 15 turns, 15 undos, the file as loaded; at a depth of
 # 10 (U), 5 turns are left.
 ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))

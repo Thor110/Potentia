@@ -5112,6 +5112,15 @@ measured on this repository's own files.
   found from the bytes alone: of every width from 2 to 2,048 the true one (949) cost about 10% less
   than any other. Where noise outweighs edges the plain average (`P2`) still wins; the search weighs
   them all. (`sieve-manifest-v23`.)
+  *The triangle as Edward designed it (recalled 4 November 2026):* "similar to the rope wave where it
+  would lock in three bytes and maybe even propagate noise along the connections between vertices".
+  What was built predicts each value from three neighbours (the byte before, the one above, the
+  corner), the median edge detector above, which is what won on pictures. The design as meant, a
+  triangle's three vertices kept and its edges and inside drawn from them, with noise carried along
+  the edges, is a shape with its vertices kept, as §17.4 measured for squares and circles (on real
+  pictures, a lattice of kept corners lost to predicting from neighbours; "Pythagoras be damned, the
+  triangle would be the best"). The triangle among those shapes is not recorded as measured; §17.4's
+  prototype would take it as one more shape, beside real-rope's moving locks (§19.110).
 - **Mixing (Claude's): built, mix-v1.** Every predictor at once, bit by bit: orders 0 to 6 and the
   word so far, their predictions mixed by weights that learn as the file goes, coded exactly by an
   arithmetic coder, in integers only (the same code on every machine; CI pins one). Don Quixote
@@ -6158,6 +6167,30 @@ and 16 bytes etc."
     own (the second 0.0547 of a gap a turn, the third 0.0002), and each precision another; base 256
     against base 10 never meets evenly, so the same kinds of spiral and zigzag recur at every scale.
     The screen now says, for the byte chosen, what one turn moves and which value lands nearest.
+  - *The exact check (built 4 November 2026; Edward: "calculate the rest of the decimal places and
+    determine if a shorter address has actually been found or not", and the fraction shown, "red if
+    it is odd and green if it is even"):* the rotation 360 v / units in its lowest terms, from a
+    greatest common divisor (Lehmer's, added to BigUint). Whether its decimals end, after how many
+    places, or how long their repeat is, and what it costs written exactly against the file's own
+    address. The loop of every file of 0 to n bytes holds an odd number of them, so the denominator
+    is always odd (red), and the decimals end only where it is a power of 5: two bytes 54 AA land
+    on 120 degrees exactly, 360 x 21931 / 65793 = 120 / 1, two bytes written either way. On random
+    bytes the fraction is about twice the file (a 4-byte file: 9 bytes against 4, the decimals
+    repeating every 30,840 digits). The divisor is the slow part, quadratic in the length: units
+    times 255 is 2^(8(n+1)) - 1, which splits into four numbers sharing no factor, the longest half
+    the length, so it is found a quarter at a time. Measured here: 0.5 s for 100,000 bytes, 6.5 s
+    for 416,970 (pi6.txt.sieve's length), 45.8 s for 1 MiB; Python's own (math.gcd, without the
+    split) took 89.2 s for 1 MiB. A faster divisor (half-gcd, near-linear) is the next step if
+    longer files are wanted.
+  - *The length as its own value (discussed 4 November 2026; nothing to add):* Edward asked whether
+    a fifth value, the length, should join settings, dimension, rotation and item. It is in the
+    dimension already (a line's shape: on the binary line, how many bytes), and the rotation cannot
+    be read without it. A loop of files of exactly n bytes (256^n, a power of 2) would make every
+    rotation's decimals end, but then the rotation is the file's bytes as a base-256 fraction, no
+    shorter. Sieve run again on its own output came out larger (degrees.sieve 7,686 to 7,749,
+    samba.sieve 3,277,403 to 3,277,467, site.sieve 19,422 to 19,483), as 7z of a .sieve does in
+    Edward's logs: a hand search of a .sieve on this screen is open to try, and the exact check is
+    what would recognise a find.
   - *On the binary line it is clockwork:* each byte is a hand of a clock (the first moves the dot
     1/256 of a turn, the next 1/65,536), so which way each wheel steers is known. On a line with
     filters, the clock is scrambled, and the landscape above is what is being explored.

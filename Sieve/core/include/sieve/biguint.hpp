@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -83,6 +84,13 @@ public:
     // choice gives the same exact answer. q or r may be the same object as a or b.
     static BigUint mul(const BigUint& a, const BigUint& b);
     static void divmod(const BigUint& a, const BigUint& b, BigUint& q, BigUint& r);
+    // The greatest common divisor (0 with 0 is 0), by Lehmer's algorithm (Knuth 4.5.2, algorithm L):
+    // the quotients worked out on the leading 62 bits, and the long numbers updated once for a run
+    // of them. Quadratic in the length, as Euclid's is, but a pass over the limbs for every 30 bits
+    // or so rather than for every quotient. The second form asks `go` now and then, with the bits
+    // left in the smaller number, and gives up (false, `out` untouched) when it says false.
+    static BigUint gcd(const BigUint& a, const BigUint& b);
+    static bool gcd(const BigUint& a, const BigUint& b, BigUint& out, const std::function<bool(size_t)>& go);
 
     friend int compare(const BigUint& a, const BigUint& b);
     friend bool operator<(const BigUint& a, const BigUint& b) { return compare(a, b) < 0; }

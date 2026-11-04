@@ -59,6 +59,7 @@
 #include <random>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace hallway {
@@ -110,6 +111,10 @@ public:
     // (red), X an exact landing.
     std::string marks_text() const;
     std::string steering() const { return steer_text(); } // the steering line, as text (for scripted runs)
+    // The exact check's two lines, as text (for scripted runs): the rotation as a fraction, then
+    // whether its decimals end and what it costs written exactly.
+    std::string exact_text() const;
+    void wait_exact(); // scripting: until the exact check asked for (if any) is done
     // From the file windows' callbacks, on any thread: applied on the main thread. `what`: 0 a file to
     // load, 1 where to save the walk, 2 a log to load.
     void file_chosen(const std::string& path, int what);
@@ -257,6 +262,40 @@ private:
     };
     std::optional<Target> target() const;
     std::string steer_text() const;
+
+    // The exact check (X; by itself for files up to 64 KiB): the rotation 360 v / units as a fraction
+    // in its lowest terms, worked out on a thread of its own (a greatest common divisor, which for a
+    // file of 1 MiB takes many seconds), let go when the bytes change.
+    struct Number
+    {
+        std::string dec; // in decimal ("" where it is too long to show: then its bits)
+        size_t bits = 0;
+        bool odd = true;
+    };
+    struct Exact
+    {
+        uint64_t ticket = 0;
+        Number v, units, num, den;
+        int ends = -1;             // the decimal places after which it ends (0: a whole number of degrees); -1: it recurs
+        size_t pre = 0;            // (recurring) the digits before the repeat begins
+        uint64_t period = 0;       // (recurring) the repeat's length
+        bool period_exact = false; // (else at least `period`)
+        size_t form_bytes = 0, address_bytes = 0; // the rotation written exactly, and the file's own address
+    };
+    static bool exact_of(const std::vector<uint8_t>& bytes, Exact& out, const std::function<bool(double)>& go);
+    void ask_exact();  // each frame: a result taken, a check let go or begun as the bytes say
+    void stop_exact(); // the check working let go
+    std::pair<std::string, std::string> exact_lines(bool* shorter) const;
+    Exact exact_;
+    bool have_exact_ = false;
+    bool exact_force_ = false;              // X pressed: the check for these bytes, however long
+    std::vector<uint8_t> exact_bytes_;      // the bytes the check in hand (or working) is for
+    std::thread exact_thread_;
+    std::atomic<uint64_t> exact_want_{0};   // the ticket wanted (0: none): the check stops when it is not its own
+    std::atomic<int> exact_pct_{0};
+    uint64_t exact_ticket_ = 0;
+    std::mutex exact_mx_;
+    std::optional<Exact> exact_done_;       // (exact_mx_)
 
     Reading now_;               // the latest reading taken
     bool have_reading_ = false;

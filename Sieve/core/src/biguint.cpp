@@ -1287,4 +1287,120 @@ int compare(const BigUint& a, const BigUint& b)
     return 0;
 }
 
+// ---------------------------------------------------------------- greatest common divisor
+
+namespace {
+
+// Bits [at, at + 64) of a value's limbs (zeros past its end).
+uint64_t bits_from(const std::vector<uint64_t>& l, size_t at)
+{
+    const size_t i = at / 64, o = at % 64;
+    if (i >= l.size()) return 0;
+    uint64_t v = l[i] >> o;
+    if (o && i + 1 < l.size()) v |= l[i + 1] << (64 - o);
+    return v;
+}
+
+// The step's two new values in one pass over the limbs: na = |A| a - |B| b or |B| b - |A| a, as
+// the signs say (one of each pair is not positive, so neither result is negative), and nb from C
+// and D the same way.
+void lehmer_update(std::vector<uint64_t>& na, std::vector<uint64_t>& nb, const std::vector<uint64_t>& a,
+                   const std::vector<uint64_t>& b, int64_t A, int64_t B, int64_t C, int64_t D)
+{
+    const size_t n = a.size(); // a >= b, so b has no more limbs
+    na.assign(n + 1, 0);
+    nb.assign(n + 1, 0);
+    const bool na_a = B <= 0, nb_a = D <= 0; // which term is added (a's or b's)
+    const uint64_t ua = uint64_t(A < 0 ? -A : A), ub = uint64_t(B < 0 ? -B : B);
+    const uint64_t uc = uint64_t(C < 0 ? -C : C), ud = uint64_t(D < 0 ? -D : D);
+    uint64_t c1 = 0, c2 = 0, c3 = 0, c4 = 0, br1 = 0, br2 = 0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const uint64_t ai = a[i], bi = i < b.size() ? b[i] : 0;
+        const Wide p1 = mul_add2(ua, ai, c1, 0), p2 = mul_add2(ub, bi, c2, 0);
+        const Wide p3 = mul_add2(uc, ai, c3, 0), p4 = mul_add2(ud, bi, c4, 0);
+        c1 = p1.hi;
+        c2 = p2.hi;
+        c3 = p3.hi;
+        c4 = p4.hi;
+        uint64_t x = na_a ? p1.lo : p2.lo, y = na_a ? p2.lo : p1.lo;
+        uint64_t d = x - y, b1 = x < y;
+        na[i] = d - br1;
+        br1 = b1 | (d < br1);
+        x = nb_a ? p3.lo : p4.lo;
+        y = nb_a ? p4.lo : p3.lo;
+        d = x - y;
+        b1 = x < y;
+        nb[i] = d - br2;
+        br2 = b1 | (d < br2);
+    }
+    na[n] = (na_a ? c1 - c2 : c2 - c1) - br1;
+    nb[n] = (nb_a ? c3 - c4 : c4 - c3) - br2;
+}
+
+} // namespace
+
+BigUint BigUint::gcd(const BigUint& a, const BigUint& b)
+{
+    BigUint out;
+    gcd(a, b, out, {});
+    return out;
+}
+
+bool BigUint::gcd(const BigUint& a0, const BigUint& b0, BigUint& out, const std::function<bool(size_t)>& go)
+{
+    BigUint a = a0, b = b0, t, na, nb; // (na and nb: the next pair, their memory kept between steps)
+    if (a < b) std::swap(a, b);
+    uint64_t rounds = 0;
+    while (!b.is_zero())
+    {
+        if (go && (++rounds & 63) == 0 && !go(b.bit_length())) return false;
+        const size_t abits = a.bit_length();
+        if (b.limbs_.size() <= 2 || abits - b.bit_length() >= 31)
+        {
+            // Short, or a quotient too large for the leading bits to carry: one step of Euclid's.
+            t = mod(a, b);
+            a = std::move(b);
+            b = std::move(t);
+            continue;
+        }
+        // The leading 62 bits of a, and of b at the same place (Knuth's x-hat and y-hat).
+        const size_t sh = abits - 62;
+        int64_t x = int64_t(bits_from(a.limbs_, sh) & ((uint64_t(1) << 62) - 1));
+        int64_t y = int64_t(bits_from(b.limbs_, sh) & ((uint64_t(1) << 62) - 1));
+        int64_t A = 1, B = 0, C = 0, D = 1;
+        // (Knuth has y + C and y + D never below 0; a guard, since C++ division truncates.)
+        while (y + C > 0 && y + D > 0)
+        {
+            const int64_t q = (x + A) / (y + C);
+            if (q != (x + B) / (y + D)) break;
+            int64_t s = A - q * C;
+            A = C;
+            C = s;
+            s = B - q * D;
+            B = D;
+            D = s;
+            s = x - q * y;
+            x = y;
+            y = s;
+        }
+        if (B == 0)
+        {
+            t = mod(a, b);
+            a = std::move(b);
+            b = std::move(t);
+            continue;
+        }
+        // (a, b) <- (A a + B b, C a + D b): in each pair one cofactor is positive, the other not.
+        lehmer_update(na.limbs_, nb.limbs_, a.limbs_, b.limbs_, A, B, C, D);
+        na.trim();
+        nb.trim();
+        std::swap(a, na);
+        std::swap(b, nb);
+        if (a < b) std::swap(a, b);
+    }
+    out = std::move(a);
+    return true;
+}
+
 } // namespace sieve

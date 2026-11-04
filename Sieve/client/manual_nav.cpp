@@ -22,6 +22,7 @@
 #include <ctime>
 #include <deque>
 #include <limits>
+#include <numeric>
 #include <sstream>
 #include <filesystem>
 #include <fstream>
@@ -367,6 +368,7 @@ void ManualNav::write_landed(const Step& s)
 
 ManualNav::~ManualNav()
 {
+    stop_exact();
     if (worker_.joinable()) worker_.join();
     collect_reading(); // (the steps still in hand written to the log: Esc straight after a turn loses none)
 }
@@ -1036,9 +1038,16 @@ void ManualNav::key(SDL_Keycode k, SDL_Keymod mod)
         keep_in_view();
         return;
     }
-    if (k == SDLK_F && !ctrl)
+    if (k == SDLK_X && !ctrl)
     {
-        // FRESH RANDOM BYTES, on or off (remembered): for the example only, a file being its own bytes.
+        // The exact check for these bytes, however long it takes (by itself up to 64 KiB).
+        if (exact_bytes_ != bytes_) exact_force_ = true;
+        ask_exact();
+        return;
+    }
+    if (k == SDLK_R && !ctrl)
+    {
+        // FRESH RANDOM BYTES (R: A to F are hex digits, typed into the byte chosen), on or off (remembered): for the example only, a file being its own bytes.
         fresh_ = !fresh_;
         tell_kept();
         status_ = tr(fresh_ ? "mnav.status.fresh_on" : "mnav.status.fresh_off");
@@ -1100,8 +1109,8 @@ void ManualNav::handle(const SDL_Event& event)
         for (const auto& [rect, id] : buttons_)
             if (inside(rect, e.button.x, e.button.y))
             {
-                const SDL_Keycode keys[] = {SDLK_O, SDLK_Z, SDLK_Y, SDLK_S, SDLK_W, SDLK_L, SDLK_L, SDLK_U, SDLK_F};
-                const bool with_ctrl[] = {true, true, true, true, false, true, false, false, false};
+                const SDL_Keycode keys[] = {SDLK_O, SDLK_Z, SDLK_Y, SDLK_S, SDLK_W, SDLK_L, SDLK_L, SDLK_U, SDLK_R, SDLK_X};
+                const bool with_ctrl[] = {true, true, true, true, false, true, false, false, false, false};
                 key(keys[id], with_ctrl[id] ? SDL_KMOD_CTRL : SDL_KMOD_NONE);
                 return;
             }
@@ -1120,6 +1129,245 @@ void ManualNav::handle(const SDL_Event& event)
                 return;
             }
     }
+}
+
+namespace {
+
+// The order of 10 modulo d (d odd, not a multiple of 5, under 2^32): the length of the repeat in
+// 1/d's decimals. From d's factors: the order divides lambda(d), and is lambda(d) less each prime
+// factor it can lose.
+uint64_t order_of_ten(uint64_t d)
+{
+    if (d == 1) return 1;
+    auto factors = [](uint64_t x) {
+        std::vector<std::pair<uint64_t, int>> f;
+        for (uint64_t p = 2; p * p <= x; ++p)
+            if (x % p == 0)
+            {
+                int k = 0;
+                while (x % p == 0) x /= p, ++k;
+                f.emplace_back(p, k);
+            }
+        if (x > 1) f.emplace_back(x, 1);
+        return f;
+    };
+    auto powmod = [d](uint64_t b, uint64_t e) {
+        uint64_t r = 1 % d;
+        b %= d;
+        for (; e; e >>= 1, b = b * b % d)
+            if (e & 1) r = r * b % d;
+        return r;
+    };
+    uint64_t lambda = 1;
+    for (const auto& [p, k] : factors(d))
+    {
+        uint64_t phi = p - 1;
+        for (int i = 1; i < k; ++i) phi *= p;
+        lambda = lambda / std::gcd(lambda, phi) * phi;
+    }
+    uint64_t o = lambda;
+    for (const auto& [q, k] : factors(lambda))
+        while (o % q == 0 && powmod(10, o / q) == 1) o /= q;
+    return o;
+}
+
+} // namespace
+
+bool ManualNav::exact_of(const std::vector<uint8_t>& bytes, Exact& out, const std::function<bool(double)>& go)
+{
+    using sieve::BigUint;
+    // The rotation is 360 v / units (binary-v1: the loop of every file of 0 to n bytes). Its lowest
+    // terms need g = gcd(360 v, units); units is odd, so that is gcd(45 v, units). units times 255 is
+    // 2^(8(n+1)) - 1, which is (2^a - 1)(2^a + 1)(2^2a + 1)(2^4a + 1) with a = n + 1, four numbers no
+    // two of which share a factor: the divisor is found in each (the longest half the length) and
+    // the four multiplied, a quarter of the work of finding it in the whole.
+    const size_t n = bytes.size();
+    const BigUint units = sieve::BinarySpace::count_shorter(uint64_t(n) + 1);
+    const BigUint v = sieve::cli::binary_address(bytes);
+    BigUint x = v;
+    x.mul_small(45);
+    const uint64_t a = uint64_t(n) + 1;
+    std::vector<BigUint> pieces(4);
+    pieces[0] = BigUint::pow(2, a);
+    pieces[0] -= BigUint(1);
+    pieces[1] = BigUint::pow(2, a);
+    pieces[1].add_small(1);
+    pieces[2] = BigUint::pow(2, 2 * a);
+    pieces[2].add_small(1);
+    pieces[3] = BigUint::pow(2, 4 * a);
+    pieces[3].add_small(1);
+    {
+        // (checked, so a change to the loop's count can never make a wrong answer: the whole instead)
+        BigUint whole = BigUint::pow(2, 8 * a), u255 = BigUint::mul(units, BigUint(255));
+        whole -= BigUint(1);
+        if (!(whole == u255)) pieces.assign(1, units);
+    }
+    // (progress: the work left in a piece taken as its length squared)
+    double total = 0, done = 0;
+    for (const BigUint& p : pieces) total += double(p.bit_length()) * double(p.bit_length());
+    BigUint G(1);
+    for (const BigUint& p : pieces)
+    {
+        const double len = double(p.bit_length());
+        BigUint g;
+        const bool ok = BigUint::gcd(BigUint::mod(x, p), p, g, [&](size_t left) {
+            const double l = double(left);
+            return go((done + len * len - l * l) / total);
+        });
+        if (!ok) return false;
+        done += len * len;
+        G = BigUint::mul(G, g);
+    }
+    const BigUint g = BigUint::gcd(G, units);
+    BigUint num, den, rest;
+    BigUint::divmod(BigUint::mul(v, BigUint(360)), g, num, rest);
+    BigUint::divmod(units, g, den, rest);
+
+    auto number = [](const BigUint& b) {
+        Number m;
+        m.bits = b.bit_length();
+        m.odd = b.bit(0);
+        if (m.bits <= 96) m.dec = b.to_decimal();
+        return m;
+    };
+    out.v = number(v);
+    out.units = number(units);
+    out.num = number(num);
+    out.den = number(den);
+    out.address_bytes = (v.bit_length() + 7) / 8;
+    // Its decimals end where the denominator (odd, the count of files being odd) is a power of 5,
+    // after as many places as its 5s; otherwise they recur, after those places, with the repeat of
+    // the denominator's other part.
+    BigUint d = den;
+    size_t fives = 0;
+    while (!d.is_zero() && d.mod_small(5) == 0)
+    {
+        d.divmod_small(5);
+        ++fives;
+    }
+    if (d == BigUint(1))
+    {
+        out.ends = int(fives);
+        // (written exactly: the rotation times 10^k, num times 2^k, an integer under 360 x 10^k, and a
+        // byte for k)
+        out.form_bytes = (num.bit_length() + fives + 7) / 8 + 1;
+    }
+    else
+    {
+        out.ends = -1;
+        out.pre = fives;
+        if (d.bit_length() <= 32)
+        {
+            uint64_t dv = 0;
+            for (size_t i = d.bit_length(); i-- > 0;) dv = (dv << 1) | uint64_t(d.bit(i));
+            out.period = order_of_ten(dv);
+            out.period_exact = true;
+        }
+        else
+        {
+            // (10^p - 1 is a multiple of d, so 10^p > d >= 2^(bits - 1): p is more than (bits - 1) log10 2)
+            out.period = uint64_t(std::floor(double(d.bit_length() - 1) * 0.30102999566398120 - 1e-9)) + 1;
+            out.period_exact = false;
+        }
+        out.form_bytes = (num.bit_length() + 7) / 8 + (den.bit_length() + 7) / 8;
+    }
+    return true;
+}
+
+void ManualNav::stop_exact()
+{
+    exact_want_ = 0;
+    if (exact_thread_.joinable()) exact_thread_.join();
+}
+
+void ManualNav::ask_exact()
+{
+    {
+        std::lock_guard<std::mutex> lock(exact_mx_);
+        if (exact_done_)
+        {
+            if (exact_done_->ticket == exact_want_.load())
+            {
+                exact_ = std::move(*exact_done_);
+                have_exact_ = true;
+            }
+            exact_done_.reset();
+        }
+    }
+    if (bytes_.empty() || exact_bytes_ == bytes_) return; // (asked for these bytes: working, or done)
+    // Other bytes: the check in hand is for bytes no longer here.
+    stop_exact();
+    have_exact_ = false;
+    exact_bytes_.clear();
+    if (bytes_.size() > kRouteBytes && !exact_force_) return; // (a long file: when X asks)
+    exact_force_ = false;
+    exact_bytes_ = bytes_;
+    const uint64_t ticket = ++exact_ticket_;
+    exact_want_ = ticket;
+    exact_pct_ = 0;
+    exact_thread_ = std::thread([this, b = bytes_, ticket] {
+        Exact e;
+        e.ticket = ticket;
+        const bool ok = exact_of(b, e, [this, ticket](double f) {
+            exact_pct_ = int(std::clamp(f, 0.0, 0.99) * 100);
+            return exact_want_.load() == ticket;
+        });
+        if (!ok) return;
+        std::lock_guard<std::mutex> lock(exact_mx_);
+        exact_done_ = std::move(e);
+    });
+}
+
+void ManualNav::wait_exact()
+{
+    ask_exact();
+    if (exact_thread_.joinable()) exact_thread_.join();
+    ask_exact();
+}
+
+std::pair<std::string, std::string> ManualNav::exact_lines(bool* shorter) const
+{
+    if (shorter) *shorter = false;
+    if (bytes_.empty()) return {};
+    if (!have_exact_)
+    {
+        if (exact_bytes_ == bytes_) return {trf("mnav.exact.working", {std::to_string(exact_pct_.load())}), ""};
+        return {tr("mnav.exact.ask"), ""};
+    }
+    auto show = [](const Number& m) { return m.dec.empty() ? trf("mnav.exact.bits", {std::to_string(m.bits)}) : m.dec; };
+    std::string eq = trf("mnav.exact.eq", {show(exact_.v), show(exact_.units)}) + " " + show(exact_.num) + " / " + show(exact_.den);
+    std::string cmp;
+    if (exact_.form_bytes < exact_.address_bytes)
+    {
+        cmp = trf("mnav.exact.shorter", {std::to_string(exact_.address_bytes - exact_.form_bytes)});
+        if (shorter) *shorter = true;
+    }
+    else if (exact_.form_bytes > exact_.address_bytes) cmp = trf("mnav.exact.longer", {std::to_string(exact_.form_bytes - exact_.address_bytes)});
+    else cmp = tr("mnav.exact.same");
+    const std::vector<std::string> args{std::to_string(exact_.form_bytes), std::to_string(exact_.address_bytes), cmp};
+    std::string verdict;
+    if (exact_.ends == 0) verdict = trf("mnav.exact.whole", args);
+    else if (exact_.ends > 0)
+    {
+        auto a = args;
+        a.push_back(std::to_string(exact_.ends));
+        verdict = trf("mnav.exact.ends", a);
+    }
+    else
+    {
+        auto a = args;
+        a.push_back(exact_.pre ? trf("mnav.exact.after", {std::to_string(exact_.pre)}) : std::string());
+        a.push_back(std::to_string(exact_.period));
+        a.push_back(exact_.period_exact ? std::string() : tr("mnav.exact.at_least"));
+        verdict = trf("mnav.exact.recurs", a);
+    }
+    return {eq, verdict};
+}
+
+std::string ManualNav::exact_text() const
+{
+    const auto [eq, verdict] = exact_lines(nullptr);
+    return verdict.empty() ? eq : eq + "\n  " + verdict;
 }
 
 void ManualNav::render()
@@ -1142,12 +1390,13 @@ void ManualNav::render()
 
     txt(r_, 24, 16, tr("mnav.title"), kWhite, 2.5f);
     // The circle's place, at the right (the sheet stops short of it).
-    const float cx = W * 0.72f, cy = 116 + (H - 116 - 90) / 2;
-    const float rad = std::max(60.0f, std::min(W * 0.22f, (H - 116 - 110) / 2));
+    constexpr float kTop = 148; // (under the heading's six lines)
+    const float cx = W * 0.72f, cy = kTop + (H - kTop - 90) / 2;
+    const float rad = std::max(60.0f, std::min(W * 0.22f, (H - kTop - 110) / 2));
     const uint64_t n = bytes_.size(), ww = uint64_t(width_);
 
     // The sheet's measure (its rows first: the heading says which bytes they show).
-    const float label_w = 8 * 8, sheet_left = 24 + label_w, top = 116;
+    const float label_w = 8 * 8, sheet_left = 24 + label_w, top = kTop;
     const float avail = std::max(160.0f, cx - rad - 40 - sheet_left);
     const float cw = std::min(96.0f, std::floor(avail / float(width_)));
     const float scale = std::clamp(std::floor((cw - 10) / 16), 1.0f, 4.0f); // (two hex digits, 8 a digit at scale 1)
@@ -1166,6 +1415,32 @@ void ManualNav::render()
         if (semi != std::string::npos) txt(r_, 24, 78, fit_cells(ro.substr(semi + 2), cols), kAccent);
         ask_steer(); // (the byte chosen may have changed since: its steering asked for, once)
         txt(r_, 24, 94, fit_cells(steer_text(), cols), kGood);
+        // The exact check: the rotation as a fraction in its lowest terms, its numerator and
+        // denominator green where even and red where odd; then what it is written exactly.
+        ask_exact();
+        bool shorter = false;
+        const auto [eq, verdict] = exact_lines(&shorter);
+        if (have_exact_)
+        {
+            const std::string head = trf("mnav.exact.eq", {exact_.v.dec.empty() ? trf("mnav.exact.bits", {std::to_string(exact_.v.bits)}) : exact_.v.dec,
+                                                           exact_.units.dec.empty() ? trf("mnav.exact.bits", {std::to_string(exact_.units.bits)}) : exact_.units.dec}) + " ";
+            auto show = [](const Number& m) { return m.dec.empty() ? trf("mnav.exact.bits", {std::to_string(m.bits)}) : m.dec; };
+            float x = 24;
+            const float right = 24 + 8 * float(cols);
+            auto piece = [&](const std::string& t, SDL_Color c) {
+                const size_t room = x < right ? size_t((right - x) / 8) : 0;
+                if (room == 0) return;
+                const std::string f = fit_cells(t, room);
+                txt(r_, x, 110, f, c);
+                x += 8 * float(f.size());
+            };
+            piece(head, kGrey);
+            piece(show(exact_.num), exact_.num.odd ? kBad : kGood);
+            piece(" / ", kGrey);
+            piece(show(exact_.den), exact_.den.odd ? kBad : kGood);
+            txt(r_, 24, 126, fit_cells(verdict, cols), shorter ? kGood : kGrey);
+        }
+        else txt(r_, 24, 110, fit_cells(eq, cols), kDim);
         if (busy_) txt(r_, W - 24 - 8 * float(tr("mnav.working").size()), 46, tr("mnav.working"), kDim);
     }
     else txt(r_, 24, 46, tr("mnav.subtitle"), kGrey);
@@ -1255,10 +1530,10 @@ void ManualNav::render()
     // The buttons, and what the keys do.
     buttons_.clear();
     const char* labels[] = {"mnav.button.load", "mnav.button.undo", "mnav.button.redo", "mnav.button.save", "mnav.button.window",
-                            "mnav.button.load_log", "mnav.button.keep_log", "mnav.button.depth", "mnav.button.fresh"};
+                            "mnav.button.load_log", "mnav.button.keep_log", "mnav.button.depth", "mnav.button.fresh", "mnav.button.exact"};
     // (in rows that stop short of the circle, the last row lowest)
     std::vector<std::string> names;
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 10; ++i)
         names.push_back(i == 4   ? trf(labels[i], {std::to_string(width_)})
                         : i == 8 ? trf(labels[i], {fresh_ ? "X" : " "})
                         : i == 6 ? trf(labels[i], {keep_log_ ? "X" : " "})

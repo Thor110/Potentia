@@ -960,6 +960,7 @@ int run(const Args& a)
             }
         }
         if (a.has("manual-steps") && !nav.save_steps(a.get("manual-steps"))) throw std::runtime_error(nav.status());
+        nav.wait_exact(); // (the exact check, where it was asked for or is made by itself, done before the picture)
         nav.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "manual navigation: " << nav.status() << "\n";
@@ -967,6 +968,7 @@ int run(const Args& a)
         if (!nav.log_path().empty()) std::cout << "  log: " << nav.log_path() << "\n";
         std::cout << "  marks: " << nav.marks_text() << "\n";
         std::cout << "  " << nav.steering() << "\n";
+        std::cout << "  " << nav.exact_text() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
     }
