@@ -9,15 +9,13 @@ For a number of years now I have been conceptualising a compression engine which
 
 	Compression
 
-The system utilises various compression methods for comparative analysis throughout the encoding process.
-
-Coupled with a final pass of custom search methods that improve the results, as well as breaking data down into chunks to test against various methods.
+The system utilises various compression methods for comparative analysis throughout the encoding process, coupled with a final pass of custom search methods that improve the results, as well as breaking data down into chunks to test against various methods.
 
 It includes a file delta scanner which optimises files when they contain much of the same data.
 
 Example : WoWRevived which is a restoration project of mine for an old video game (Jeff Wayne's 'The War of the Worlds' the 1998 RTS PC game) contains two nearly identical files that it swaps between, one containing the regular minimaps and the other containing higher resolution minimaps.
 
-The two files are scanned, the 98.7% similarity is noted and the ~160mb file which is reduced to ~52mbs, becomes a ~2mb script that lifts the data from the other file as it is unpacked.
+The two files are scanned, the 98.7% similarity is noted and the ~160mb file which otherwise would have been reduced to ~52mbs, becomes a ~2mb script that lifts the data from the near identical file as it is decoded.
 
 Alongside that it checks file hashes and trims exact duplicates to be a single file that gets unpacked accordingly.
 
@@ -42,6 +40,8 @@ PROOF.md - https://github.com/Thor110/Potentia/blob/main/Proof/PROOF.md
 The written proof describes the basic functionality of the state space which theoretically allows for maximum compression under perfect circumstances.
 
 Those circumstances would be finding the perfect balance through a filter applied to the state space which would shift the file you are searching for to an exact integer interval rotation within the relevant state space.
+
+A filter made for one file costs about as much to describe as it saves.
 
 No method can shrink every file, so the counting argument holds.
 
@@ -71,7 +71,7 @@ The theoretical floor for a million digits treated as random is ~415,241 bytes, 
 
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg :             3,844,213 bytes ( 3,846,144 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z :          3,843,942 bytes ( 3,846,144 bytes on disk )
-1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve :    3,829,436 bytes ( 3,829,760 bytes on disk )
+1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.7z.sieve :    3,829,453 bytes ( 3,829,760 bytes on disk )
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,715,757 bytes ( 3,719,168 bytes on disk ) - permanent archive or compressed format off
 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg.sieve :       3,085,301 bytes ( 3,088,384 bytes on disk ) - permanent archive or compressed format on
 
@@ -88,7 +88,7 @@ POWER-USAGE.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/POWER-
 
 Savings on server bandwidth and an increase in client side processing.
 
-A classic thermodynamic trade-off as one would expect.
+It’s a bandwidth for processing trade-off, smaller downloads, but more work to unpack.
 
 ODDITIES.md - https://github.com/Thor110/Potentia/blob/main/Sieve/docs/ODDITIES.md
 
@@ -130,20 +130,15 @@ Comparable to allowing an AI model to walk the Library of Babel to train on the 
 
 Traditional AI training records model weights and checkpoints, but subtle hardware-level variations, thread scheduling differences, and floating-point round-off drift mean that reproducing a model bit-for-bit from scratch is notoriously difficult.
 
-By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture.
-
-Every number is a signed 64 bit integer, so values are a fixed point, this means it is bounded by max/min values.
-
-
-
-
+By enforcing strict integer-only arithmetic throughout the training loop—where every activation, gradient, and weight update is explicitly bounded, shifted, and quantized, Sieve ensures absolute, deterministic bit-reproducibility across any machine architecture. ( Windows / Mac / Linux tested )
 
 Hence the use of floating point arithmetic in models to begin with.
 
+Every number is a signed 64 bit integer, so values are a fixed point, this means it is bounded by max/min values.
 
+Analysis of Sieve trained models shows that no value ever hits the min or max, however these models are tiny so precision and scale still needs further analysis.
 
-
-Analysis of Sieve trained models shows that no value ever hits the min or max, however these models are tiny so precision and scale still needs further analysis though.
+On the shipped model no value ever reached a bound on a larger test model a small share did.
 
 As no one can ever say with absolute certainty that something is 0% or 100% unlikely to follow something else, depending on the pre-requisite context of course.
 
@@ -156,7 +151,7 @@ Trained on just The Universal Library 'Kurd Laßwitz’s 1904 short story Die Un
 sieve-ai-16432c2a3953.safetensors : 34,072 bytes : 0.462 s to encode to .sieve
 sieve-ai-16432c2a3953.safetensors.sieve : 4,180 bytes : 0.042 s to decode from .sieve
 
-An 8192 token weight model reduced to less bytes than it has weights.
+An 8192 weight model reduced to less bytes than it has weights.
 
 The model isn't capable and it isn't supposed to be, it is just a proof of concept.
 

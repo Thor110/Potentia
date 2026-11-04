@@ -6239,3 +6239,26 @@ probe sees across the file: `python tools/rope_probe.py SIEVE MAPS.WoW` (the rop
 256 KiB at the start, a quarter, the middle and three quarters). If the other places say no where
 the start says yes, asking a second place before a file of 64 MiB or more is searched whole would
 save most of that time.
+
+**19.119 The next training version: QK-norm, and a floor under every probability (Edward, 4 November
+2026; measured, nothing built).** `sieve ai-train --limits` (results/training-limits-2026-11-04.md)
+found two things a training version after `training-v2` could change; each would be a new version
+beside the old, so every run recorded so far trains as it did.
+- *QK-norm.* A model of 4 layers and width 64 trained without a loss scale held 1.62% of its
+  activations at ±128, every one an attention score (a query against a key), none up to step 200
+  of 469 and 16,551,930 by the end; it learnt least of the four loss scales tried (the right byte
+  given 15.58%, against 17.99% to 19.33%). Float training meets attention scores that grow without
+  bound in large models, and normalises the queries and keys before they meet (QK-norm) to stop it.
+  Here it would be the same norm the layers use (§12.0e), on each head's q and k before the rotary
+  turn, perhaps with a learnt scale. Worth measuring on the same runs: whether the scores then stay
+  inside, and whether the unscaled run learns as the scaled ones do.
+- *A floor under every probability.* Probabilities are Q16, so one under half of 1/65,536 is 0: in
+  the shipped run 44% of the bytes' probabilities at any one prediction are 0, and the right byte was
+  one of them in 316 of 632,490 predictions (0.05%); in the larger model, about 1 in 80. Edward: "no
+  one can ever say with absolute certainty that something is 0% or 100% unlikely to follow something
+  else ... the word 'waffle' might be very unlikely to follow the word 'quantised' but that doesn't
+  stop me typing quantised waffle." Training is not harmed (the right byte's gradient is its full
+  -1), but a model used to compress (mixing, or a model on the AI line packing text) must give every
+  byte at least 1/65,536, as an arithmetic coder does. The softmax would give each byte
+  `1 + (e_j (2^16 - 256)) div Σe`, so no byte is 0 and they still add to at most 2^16; the gradient
+  then follows that softmax.
