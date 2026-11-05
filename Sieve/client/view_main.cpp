@@ -339,7 +339,20 @@ std::pair<bool, std::string> make_simage(const fs::path& sieve, const fs::path& 
 {
     const std::string s = u8(sieve), p = u8(picture), o = u8(out);
     const char* args[] = {s.c_str(), "locate", p.c_str(), "--installer", o.c_str(), "--prioritise-decoding", nullptr};
-    SDL_Process* proc = SDL_CreateProcess(args, true);
+    // Its output and its errors in one pipe, its input none, and in the background (5 November 2026,
+    // Edward on Windows: "could not run sieve: DuplicateHandle(): The handle is invalid"). The viewer
+    // is a windowed program with no console, so there was no error stream of its own to hand on; and
+    // in the background no console window opens for `sieve`. A background process's exit code is not
+    // kept (SDL gives 0), so whether it worked is read from what it said: its "installer" line, which
+    // it writes only once the file is made, and no error.
+    const SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, const_cast<char**>(args));
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDIN_NUMBER, SDL_PROCESS_STDIO_NULL);
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_APP);
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_TO_STDOUT_BOOLEAN, true);
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+    SDL_Process* proc = SDL_CreateProcessWithProperties(props);
+    SDL_DestroyProperties(props);
     if (!proc) return {false, std::string("could not run sieve: ") + SDL_GetError()};
     size_t got = 0;
     int code = -1;
@@ -348,15 +361,19 @@ std::pair<bool, std::string> make_simage(const fs::path& sieve, const fs::path& 
     SDL_free(said);
     SDL_DestroyProcess(proc);
     std::string last;
+    bool made = false, failed = false;
     for (size_t at = 0; at < all.size();)
     {
         const size_t nl = all.find('\n', at);
-        const std::string line = all.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
-        if (line.rfind("installer ", 0) == 0 || line.rfind("error", 0) == 0 || line.rfind("sieve:", 0) == 0) last = line;
+        std::string line = all.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.rfind("installer ", 0) == 0) made = true, last = line;
+        else if (line.rfind("error", 0) == 0 || line.rfind("sieve:", 0) == 0) failed = true, last = line;
         if (nl == std::string::npos) break;
         at = nl + 1;
     }
-    return {code == 0, last};
+    std::error_code ec;
+    return {made && !failed && fs::is_regular_file(out, ec), last};
 }
 
 const char* const kUsage =

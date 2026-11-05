@@ -1,20 +1,26 @@
-# Sieve Secure link and the root tidied (4 November 2026)
+# sieve-view: export as .simage on Windows (5 November 2026)
 
-Commit bb07a3a (local, not pushed), on top of your 963d70a.
+Commit 02a152c (local, not pushed), on top of your 3ae909c.
 
-## Changed
+## The error
 
-- **README.md and Sieve/README.md:** Sieve Secure now links the live page, https://thor110.github.io/Potentia/Pages/secure.html, instead of Pages/secure.html, which GitHub shows as raw HTML. This session could not reach github.io, so please click it once to confirm.
-- **The two sample files** moved from the repository root to Sieve/results/, with their date:
-  - diffusion-samples.txt is now diffusion-samples-2026-10-22.txt;
-  - metrics-example.txt is now metrics-example-2026-10-22.txt.
+"not made: could not run sieve: DuplicateHandle(): The handle is invalid."
 
-  Nothing refers to either file. Metrics are now written for every build in Sieve/metrics/builds/.
+## The cause
 
-## Delete these by hand when you sync
+- sieve-view is a windowed program, so on Windows it has no console and no error stream.
+- To make the .simage it starts sieve, and SDL tried to hand sieve the viewer's own error stream. Windows had none to hand on.
 
-The two files at the repository root (they now live in Sieve/results/):
-- diffusion-samples.txt
-- metrics-example.txt
+## The fix (Sieve/client/view_main.cpp, make_simage)
 
-CHANGES.md stays at the root.
+- sieve now runs with its error output sent into the same pipe as its normal output, and no input.
+- It runs in the background, so no console window flashes up for it either.
+- In the background SDL does not keep the exit code. So the export counts as made when all three hold:
+  - sieve printed its "installer ..." line;
+  - it printed no error;
+  - the file is there.
+
+## Tested
+
+- On Linux: CI step 10's viewer lines make view_pic.simage and read it back as one 1280 by 720 picture.
+- The Windows case itself needs your machine: export a PNG as .simage from the viewer.
