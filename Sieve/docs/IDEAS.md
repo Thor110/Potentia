@@ -6295,3 +6295,87 @@ should take on:
   hex (12), trim/lower/floor division, removing an archive's one top folder (4), the program's
   folder (3), the Llama config parser (2, one lacking three checks), and `--script`'s runner in
   app_main.cpp (4). The oracle stays apart from all of them, as it must.
+
+**19.121 Four ideas after the release build (Edward, 5 November 2026; evaluated, nothing built).**
+- **An installer program's own default folder.** Today `sieve-install` offers `Documents\` and the
+  folder's name (`where_in`, from `SDL_GetUserFolder`), and the person can change it before
+  Install. The idea: when an installer is made (`sieve locate --program`, the File Locator), the
+  maker names the folder it should offer, sanitised, and the program offers that. *Where it goes:*
+  not in the instructions, whose bytes are their address and so cannot change without changing
+  what they are, but beside them in the program, as the dictionaries now are (SPECIFICATIONS §12.2's
+  `sieve-carried-d1`): a third small block, read only by `sieve-install`. A `.sieve` handed over on
+  its own would offer `Documents\` as now, unless a later manifest version carries it. *Sanitising*
+  matters more than it looks, as the program comes from someone else: the folder written relative
+  to a known place (Documents, Desktop, the person's own programs folder, `%LOCALAPPDATA%\Programs`
+  on Windows), never an absolute path or a drive root; no `..`, no names Windows reserves (CON,
+  NUL, COM1 and the rest, §19.120), no name ending in a dot or space; and never a system folder
+  (Windows, Program Files, which also needs administrator rights) or another program's. The folder
+  is still only offered: it is shown, and Install still asks. *Verdict:* small and worthwhile; the
+  block is the work, the rules the care.
+- **The viewer's icon on a `.simage`'s thumbnail.** Explorer marks the thumbnail of a file whose
+  kind has a program of its own with that program's icon, in its bottom right corner. Windows reads
+  a value of the file kind's class for this, `TypeOverlay`: set to an empty string under
+  `Sieve.Picture`, no icon is drawn (written from what Windows documents; not yet tried here). One
+  more `reg add` in `install_context.bat`, taken away again by `uninstall_context.bat` with the
+  class. *Verdict:* a line each; worth trying first on Edward's machine, as it is a matter of
+  taste (the icon says which program opens it; photos show none).
+- **More archive and compression formats in the File Locator's readouts, behind a box.** It
+  compares a file or folder with zip (deflate, level 9) and 7z (LZMA2, preset 9e) only. Sieve
+  already links what more would take: gzip and zlib, bzip2, xz, zstd, lz4 and brotli (each used to
+  make archives again exactly), and libarchive. Each could be a row at its strongest setting, each
+  file alone and the folder as one stream where the format does that (zstd's and brotli's long
+  windows; tar then gzip, bzip2 or xz, as people make them). *Time is the cost Edward names:*
+  brotli at quality 11 and zstd at level 22 are among the slowest compressors there are, so the
+  rows go behind a box ("Compare with more formats", unticked), each row shown as it finishes,
+  and each stopped within a MiB when asked (`kNotMeasured`, as the two rows are now). *Verdict:*
+  worthwhile and plain; the figures it gives are what people ask first ("better than zstd?"), and
+  measured on their own files.
+- **AI models as filters: the state space a model can make.** A model that makes something from an
+  input (a diffusion model from a prompt and its noise, a text model from a prompt, greedily or
+  from a seed) is a function, and its outputs are a set: on the binary line, the items it can make
+  from every input it takes. Kept as a filter, it keeps only those, as the lines keep what they
+  can name, and it can be narrowed through windows (a text's length, a picture's size, a video's
+  frames, one prompt's family). *What holds:* (a) it is a filter in the Sieve sense, and the
+  counting is the same as for every other (§1): a model can make at most as many outputs as it
+  takes inputs, so naming an output by its input is shorter only where the input is shorter than
+  the output, and almost every file is in no such set. (b) Where the input is known, it is the
+  strongest name there is: a picture made from (model, prompt, seed, steps, sampler) is those
+  values, a few hundred bytes for megabytes, checked by making it again and comparing SHA-256s.
+  That is §19.2's "the noise is an address", from the other side. (c) It needs the model to make
+  the same bytes everywhere: floating point on graphics cards does not, from one card or driver to
+  the next, so a model kept as a filter must run in pinned integer arithmetic, as Sieve's own
+  training does (training-v1), or the name names nothing. *What does not:* finding the input for
+  an output (inverting the model) is a search with no known short cut; the inversions there are
+  for diffusion give a near noise, not the exact one, and a near input names a different file. So
+  it works forward (made by Sieve, or by someone who kept the recipe), not on files found in the
+  wild. *Its soft form is already in Sieve:* mixing is a model used as a filter that keeps every
+  file, the ones the model expects cheap and the rest dear; the hard filter is that model's
+  probability floor taken to zero, which §19.119 argued against for compression ("quantised
+  waffle": nothing can be ruled out). *Verdict:* worth having as a recipe way for things made by a
+  model Sieve can run exactly (the AI line's integer models first, §19.2's small diffusion model
+  next), and as a view in the hallway (the line filtered to what one model can make); not as a way
+  to find files in general.
+- **Making them deterministic: restricted temperatures, pre-seeded (Edward, the same evening).**
+  A model's output is random in two places, and the idea settles the first. (a) *The choice:*
+  sampling at a temperature draws from the model's probabilities; with the temperature one of a
+  few fixed values the recipe can name exactly (0, greedy, taking the likeliest each time; or a
+  small fraction such as 1/2), and the draws from a pseudo-random generator seeded from the recipe,
+  the same inputs make the same choices. (b) *The arithmetic under it:* the choices are made by
+  comparing the probabilities with each other or with the draw, and a probability that differs in
+  its last bit between two machines flips a near tie, after which the two outputs part for good.
+  Greedy is not spared: two likeliest bytes within a rounding of each other are a tie. So the
+  temperature and the seed make it deterministic only on top of a model whose probabilities are
+  the same bits everywhere: integer weights and integer arithmetic (training-v1), the softmax in
+  integers with §19.119's floor, the draw an integer compared with integer cumulative counts, as
+  mixing's coder already is. With both, the filter is exact on any machine.
+  *What this opens, for text:* a seeded draw from integer cumulative counts is exactly what an
+  arithmetic decoder does with its input bits. Take the seed not as a fixed 64-bit number but as
+  the decoder's whole input, and the model makes a given text from the bits an arithmetic coder
+  writes for that text under the same model: the way back that §19.121 found missing is there,
+  and it is compression with the model, which mixing does now. A fixed-width seed reaches only as
+  many texts as it has values (2^64 for 64 bits) and finding one is a search; a seed as long as
+  it needs reaches every text, likely ones with short seeds. So for text the filter and Sieve's
+  mixing are one thing seen from two sides; what the restricted temperature adds is a recipe a
+  person can read (this model, this prompt, greedy) for the texts it makes. *For pictures by
+  diffusion* the steps are not a choice among counted symbols but noise added and taken away, so
+  (a) and (b) give an exact maker, while the way back stays a search.
