@@ -6379,3 +6379,13 @@ should take on:
   person can read (this model, this prompt, greedy) for the texts it makes. *For pictures by
   diffusion* the steps are not a choice among counted symbols but noise added and taken away, so
   (a) and (b) give an exact maker, while the way back stays a search.
+  *The seeds from a state space (Edward):* any line could give them, as every line orders the same
+  byte strings, each its own way; the binary line is the right one, and for a reason that can be
+  stated. A seed as long as it needs is the coder's output, and a good coder's output is as near
+  to random as it can make it (were it not, it could be coded smaller). For bytes with no pattern
+  no ordering puts them earlier than another does on average, and the binary line's address of a
+  string is the string itself (its hex plus the 0101... mark, §1), so it adds nothing to undo;
+  another line would make some seeds shorter only by making as many others longer. So the model
+  is a jump from the binary line to the line of what it makes (§19.2's J): the seed is the point
+  on the binary line, the output the point it lands on, and the short seeds, early on the line,
+  land on what the model expects most.
