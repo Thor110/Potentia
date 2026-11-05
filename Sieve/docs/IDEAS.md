@@ -6389,3 +6389,35 @@ should take on:
   is a jump from the binary line to the line of what it makes (§19.2's J): the seed is the point
   on the binary line, the output the point it lands on, and the short seeds, early on the line,
   land on what the model expects most.
+- **Without integer arithmetic: near the same (Edward).** A model in floating point on another card
+  makes nearly the same output: a picture a person could not tell apart, a text that parts from
+  the other only after a near tie. That is enough wherever the output is only looked at: the
+  hallway's view of what a model makes, a preview, a thumbnail, a model's babble on the shelves.
+  It is not enough for a name, and not for a file made again: near is another file, with another
+  SHA-256. Nor can a correction stored beside it (the output's differences from the file, as the
+  delta way carries one file against another) rescue it, since the installer would apply the
+  differences to its own, slightly other, output. So: float where a person looks, integers where
+  Sieve names or makes a file again.
+
+**19.122 A much larger, capable model (Edward, 5 November 2026; noted, nothing built).** The models
+trained so far are small (§19.119 measured one of 4 layers and width 64): enough to show that
+training on the AI line works and is recorded exactly, not enough to write or draw usefully. At
+some point Sieve should train a much larger one that is actually capable, for the AI line itself,
+for mixing (a better model of text is smaller code for text, §19.121), and for the filters of
+§19.121. What it needs first:
+- *The training version's two changes (§19.119)*, QK-norm and the floor under every probability:
+  both problems grow with the model (the right byte at a probability of 0 was about 1 in 80
+  predictions in the larger of the two models measured, against 0.05% in the smaller).
+- *A decision on exactness.* Training in integers keeps the training itself reproducible bit for
+  bit, which is what lets a run be recorded and checked; a capable model may be far cheaper to
+  train in floating point on graphics cards. What names need is exact *use*, not exact training:
+  a model trained in float and then fixed in integers (its weights rounded once, and every use
+  after in integer arithmetic) is exact wherever it runs from then on. The cost is the run's
+  reproducibility; the record would then hold the weights' SHA-256 rather than a run that
+  replays.
+- *The data*, with its licences recorded as the dictionaries' and the Gutenberg model's are, and
+  its size chosen from a measured curve (how the loss falls as the model and data grow, from the
+  sizes already trained upward) rather than a guess.
+- *Where it runs:* the AI line, mixing and the filters all read it, and an installer would need
+  it to make again any file mixed with it, as it now needs the dictionaries (it would be carried,
+  or the instructions would name it and refuse without it).

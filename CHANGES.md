@@ -1,10 +1,19 @@
-# IDEAS §19.121: seeds from the binary line (5 November 2026)
+# IDEAS: floating point near the same; §19.122, a larger model (5 November 2026)
 
-This zip's commit sits on top of 56a4426 (the temperature zip), and so includes b22a620 and 56a4426 too. All three are local and not pushed.
+This commit sits on top of bf4a79d (the seeds zip). It and the three IDEAS commits before it are local and not pushed.
 
-**One paragraph added under the temperature bullet: why binary is the right state space for the seeds.**
+## §19.121, a new bullet: without integer arithmetic
 
-- **The seeds look random.** A seed as long as it needs is a coder's output, and a good coder's output is as close to random as it can make. If it weren't, it could be coded smaller.
-- **No ordering helps on average.** For bytes with no pattern, no line puts them earlier on average than any other line does. Making some seeds shorter makes as many others longer.
-- **The binary line adds nothing to undo.** Its address for a string is the string itself.
-- **The model is a jump.** It goes from a point on the binary line (the seed) to a point on the line of what it makes (§19.2's J). The short seeds, early on the line, land on what the model expects most.
+- **Near the same is enough where a person only looks:** the hallway's view, previews, thumbnails, the shelves.
+- **It is not enough to name a file or to make one again.** Near is another file, with another SHA-256.
+- **A stored correction can't rescue it.** The installer would apply the correction to its own, slightly different, output.
+- **So:** floating point where a person looks, integers where Sieve names or makes a file again.
+
+## §19.122: a much larger, capable model
+
+What it needs first:
+
+- **§19.119's two changes** (QK-norm and the probability floor). Both problems grow with the model.
+- **A decision on exactness.** Names need exact use, not exact training. A model trained in floating point, then fixed once in integers, is exact wherever it runs from then on. The cost is that the training run can no longer be replayed, so the record would hold the weights' SHA-256 instead.
+- **Data** with its licences recorded, and a size chosen from a measured curve rather than a guess.
+- **Installers would need it** for any file mixed with it, as they now need the dictionaries.
