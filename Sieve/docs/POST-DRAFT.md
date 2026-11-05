@@ -167,10 +167,10 @@ I view the Sieve method as a Kolmogorov complexity limit searcher in essence.
 
 	Links
 
-Current Release : Planned for Manifest v33 - release link - NOTE
-YouTube Video Tutorial on Using The Sieve of Potentia - not yet created - NOTE
-https://github.com/Thor110/Potentia
-https://thor110.github.io/Potentia/index.html
+Current Release : https://github.com/Thor110/Potentia/releases/tag/gallery
+YouTube Video Tutorial on Using The Sieve of Potentia : WIP
+GitHub Repository : https://github.com/Thor110/Potentia
+GitHub Pages : https://thor110.github.io/Potentia/index.html
 
 Built with Claude Opus 5.5 after years of conceptual planning, initially I wanted to build this in pure assembly with an actual team but no one believed in the idea.
 
