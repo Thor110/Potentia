@@ -718,10 +718,10 @@ if(SIEVE_BUILD_CLIENT)
     # code (a .sieve's pictures installed into a folder of its own and shown) and stb_image's
     # decoders. Like sieve-install it needs no data files; it is linked with the hallway's SDL. Its
     # "Sieve" button runs the sieve program beside it.
-    add_executable(sieve-view WIN32 client/view_main.cpp client/picture_source.cpp client/window_front.cpp client/win_console.cpp ${SIEVE_ICON_RC})
+    add_executable(sieve-view WIN32 client/view_main.cpp client/picture_source.cpp client/thumbs_check.cpp client/window_front.cpp client/win_console.cpp ${SIEVE_ICON_RC})
     target_link_libraries(sieve-view PRIVATE sieve_lzma sieve_lines sieve_compare sieve_locate sieve_image_io SDL3::SDL3)
     if(WIN32)
-        target_link_libraries(sieve-view PRIVATE ole32 shell32 uuid)
+        target_link_libraries(sieve-view PRIVATE ole32 shell32 shlwapi uuid)
         target_sources(sieve-view PRIVATE tools/utf8.manifest)
         # sieve-thumbs.dll (5 November 2026): a .simage's picture as its thumbnail in Explorer, read
         # as sieve-view reads it (client/picture_source.cpp). No SDL, no window: Explorer loads it in

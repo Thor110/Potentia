@@ -648,7 +648,13 @@ Explorer a `.simage`'s first picture as its thumbnail, in place of the viewer's 
 file exactly as the viewer does (the same code, `client/picture_source.cpp`: the listing first, the
 files checked against their SHA-256, each limit before anything is decoded), in a process of
 Windows' own, so a file it refuses only keeps its icon. `context\install_context.bat` registers
-it for your user. `sieve-view --thumbnail SIDE OUT.png FILE` writes the same thumbnail as a PNG. `tests/example_book_v1.book` is a committed book record: the CI
+it for your user. `sieve-view --thumbnail SIDE OUT.png FILE` writes the same thumbnail as a PNG. Where
+Explorer still shows the icon, `sieve-view --thumbnail-check FILE` takes each step Explorer takes
+(the handler registered, its DLL, the DLL loaded and asked, Windows' shell asked) and says which
+one fails, and the DLL notes each thumbnail it was asked for, given or refused and why, in
+`%TEMP%\sieve-thumbs.log`.
+
+`tests/example_book_v1.book` is a committed book record: the CI
 unbinds it, binds its source again to the identical record, and has the Python oracle read it
 to the same id and text.
 

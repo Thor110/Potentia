@@ -36,6 +36,7 @@
 // --budget BYTES takes that as the memory free (to try the limits on small pictures).
 
 #include "picture_source.hpp"
+#include "thumbs_check.hpp"
 #include "cli/image_io.hpp"
 #include "cli/items.hpp"
 #include "cli/locate.hpp"
@@ -214,7 +215,9 @@ const char* const kUsage =
     "  --make-simage        make NAME.simage beside the picture and exit (0 on success)\n"
     "  --thumbnail SIDE OUT.png  write the picture as Explorer's thumbnail shows it (its longer\n"
     "                       side at most SIDE; sieve-thumbs.dll) and exit (0 on success)\n"
-    "  --zoom Z             start at this zoom (1 is one to one) rather than fitted\n"
+    "  --thumbnail-check    on Windows, each step Explorer takes for the file's thumbnail, and\n"
+    "                       which one fails (0 when sieve-thumbs.dll gave one)\n"
+    "  --zoom Z            start at this zoom (1 is one to one) rather than fitted\n"
     "  --budget BYTES       take this as the memory it may use, not half of what is free\n"
     "  --screenshot FILE    write the window once the picture is shown, as a BMP, and exit\n"
     "  --help               this text\n";
@@ -224,7 +227,7 @@ const char* const kUsage =
 int main(int argc, char** argv)
 {
     std::string file_arg, shot;
-    bool check = false, make = false;
+    bool check = false, make = false, thumb_check = false;
     uint32_t thumb_side = 0; // (--thumbnail SIDE OUT.png)
     std::string thumb_out;
     double start_zoom = 0;
@@ -243,6 +246,7 @@ int main(int argc, char** argv)
         else if (a == "--budget" && i + 1 < argc) set_memory_budget(std::strtoull(argv[++i], nullptr, 10));
         else if (a == "--check") check = true;
         else if (a == "--make-simage") make = true;
+        else if (a == "--thumbnail-check") thumb_check = true;
         else if (a == "--thumbnail" && i + 2 < argc) thumb_side = uint32_t(std::strtoul(argv[++i], nullptr, 10)), thumb_out = argv[++i];
         else file_arg = a;
     }
@@ -266,7 +270,7 @@ int main(int argc, char** argv)
         return out;
     };
 
-    if (check || make || thumb_side)
+    if (check || make || thumb_side || thumb_check)
     {
         hallway::attach_parent_console();
         if (file_arg.empty())
@@ -275,6 +279,7 @@ int main(int argc, char** argv)
             return 2;
         }
         const fs::path f = from_u8(file_arg);
+        if (thumb_check) return thumbnail_check(f);
         if (make)
         {
             const auto sieve = sieve_program(argc > 0 ? argv[0] : nullptr);

@@ -26,8 +26,10 @@ a `.simage` (Sieve instructions holding pictures) opens in the picture viewer on
 double-click, and the Sieve submenu of `.sieve` and `.simage` files has **View
 pictures** too (a `.sieve` holding anything but pictures is refused by the viewer, which says
 why). Where `sieve-thumbs.dll` is beside the viewer too (5 November 2026), Explorer shows a
-`.simage`'s picture as its thumbnail. Windows may keep showing the old icons for these files until
-a folder is opened again or Explorer is restarted; Disk Cleanup's "Thumbnails" clears them all.
+`.simage`'s picture as its thumbnail. Both scripts tell Explorer the kinds of file changed, so it
+takes the change up at once (before that was added, the thumbnails showed only once Explorer was
+restarted); a file it already showed with the icon may keep it, and Disk Cleanup's "Thumbnails"
+clears those.
 
 ## Setting it up
 

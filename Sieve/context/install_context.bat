@@ -50,8 +50,8 @@ reg add "%CLASSES%\CLSID\%CLSID%\InprocServer32" /v ThreadingModel /t REG_SZ /d 
 reg add "%CLASSES%\.simage\ShellEx\{e357fccd-a995-4576-b01f-234630154e96}" /ve /t REG_SZ /d "%CLSID%" /f > nul
 echo and show their pictures as thumbnails, by
 echo   %THUMBS%
-echo (A folder Explorer already showed keeps its old icons until it is opened again; Disk Cleanup's
-echo "Thumbnails" clears them all.)
+echo (A file Explorer already showed with the icon may keep it; Disk Cleanup's "Thumbnails"
+echo clears those.)
 goto done
 :nothumbs
 echo (No sieve-thumbs.dll beside it, so .simage files show the viewer's icon, not their pictures.)
@@ -59,6 +59,11 @@ goto done
 :noviewer
 echo (No sieve-view.exe beside it, so .simage files are not set to open in the picture viewer.)
 :done
+rem Explorer told the kinds of file changed (SHChangeNotify, SHCNE_ASSOCCHANGED), as installers
+rem tell it, so it takes up the handlers now rather than when it next starts (Edward, 5 November
+rem 2026: the thumbnails showed only once Explorer was restarted). By PowerShell, which every
+rem Windows 10 and 11 has; where it fails, signing out and in again does the same.
+powershell -NoProfile -NonInteractive -Command "Add-Type -Namespace SieveShell -Name Notify -MemberDefinition '[DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int e, uint f, System.IntPtr a, System.IntPtr b);'; [SieveShell.Notify]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)" > nul 2>&1
 echo (On Windows 11 the menu is under "Show more options", or Shift+right-click.)
 exit /b 0
 :add

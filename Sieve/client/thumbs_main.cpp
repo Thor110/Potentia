@@ -29,6 +29,7 @@
 #include "cli/items.hpp"        // use_item_maker
 
 #include <algorithm>
+#include <cstdio>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -61,6 +62,26 @@ fs::path own_folder()
     if (n == 0 || n >= buf.size()) return {};
     buf.resize(n);
     return fs::path(buf).parent_path();
+}
+
+// A line in %TEMP%\sieve-thumbs.log for each thumbnail asked for: given, or why not (Edward, 5
+// November 2026: only the icon showed, and nothing said why). Explorer shows nothing of a
+// handler's failures, so this is the one place they are seen; past 64 KiB it starts again.
+void note(const std::string& line)
+{
+    static std::mutex m;
+    const std::lock_guard<std::mutex> hold(m);
+    wchar_t dir[MAX_PATH + 1] = {};
+    if (!GetTempPathW(MAX_PATH, dir)) return;
+    const fs::path log = fs::path(dir) / L"sieve-thumbs.log";
+    std::error_code ec;
+    const auto size = fs::file_size(log, ec);
+    std::ofstream f(log, std::ios::binary | (!ec && size > (64u << 10) ? std::ios::trunc : std::ios::app));
+    SYSTEMTIME t{};
+    GetLocalTime(&t);
+    char when[32];
+    std::snprintf(when, sizeof when, "%04u-%02u-%02u %02u:%02u:%02u ", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+    f << when << line << "\r\n";
 }
 
 // The stream's bytes, no more than `most` (a .simage larger than the memory budget is not read).
@@ -168,7 +189,11 @@ public:
                 sieve::view::set_memory_budget(std::min<uint64_t>(sieve::view::memory_budget(), uint64_t(1) << 30));
             });
             std::vector<uint8_t> bytes;
-            if (!read_stream(stream_, sieve::view::memory_budget(), bytes)) return E_FAIL;
+            if (!read_stream(stream_, sieve::view::memory_budget(), bytes))
+            {
+                note("not read: the file is empty, unreadable, or over " + sieve::view::human_bytes(sieve::view::memory_budget()));
+                return E_FAIL;
+            }
             wchar_t dir[MAX_PATH + 1] = {};
             if (!GetTempPathW(MAX_PATH, dir)) return E_FAIL;
             static std::atomic<unsigned> serial{0};
@@ -183,17 +208,38 @@ public:
             std::error_code ec;
             fs::remove(temp, ec);
             temp.clear();
-            if (pictures.empty()) return E_FAIL;
+            if (pictures.empty())
+            {
+                note("no pictures in it (" + sieve::view::human_bytes(bytes.size()) + ")");
+                return E_FAIL;
+            }
             sieve::view::make_pixels(pictures.front());
             HBITMAP bmp = thumbnail_of(pictures.front().pixels, cx ? cx : 256);
-            if (!bmp) return E_FAIL;
+            if (!bmp)
+            {
+                note("no bitmap made for " + pictures.front().name);
+                return E_FAIL;
+            }
+            note("given: " + pictures.front().name + ", " + std::to_string(pictures.front().width) + " by " + std::to_string(pictures.front().height) +
+                 ", at " + std::to_string(cx ? cx : 256) + " (from " + sieve::view::u8(own_folder()) + ")");
             *phbmp = bmp;
             *alpha = WTSAT_ARGB;
             return S_OK;
         }
+        catch (const std::exception& x)
+        {
+            note(std::string("refused: ") + x.what());
+            if (!temp.empty())
+            {
+                std::error_code ec;
+                fs::remove(temp, ec);
+            }
+            return E_FAIL;
+        }
         catch (...)
         {
             // (not a picture, refused by a limit, damaged: no thumbnail, and the file's icon shows)
+            note("refused");
             if (!temp.empty())
             {
                 std::error_code ec;
@@ -263,8 +309,17 @@ extern "C" HRESULT __stdcall SieveThumbsGetClassObject(REFCLSID clsid, REFIID ri
 {
     if (!ppv) return E_POINTER;
     *ppv = nullptr;
-    if (clsid != kClsid) return CLASS_E_CLASSNOTAVAILABLE;
-    return g_factory.QueryInterface(riid, ppv);
+    // (each ask noted, so the log shows whether Windows reached the DLL at all)
+    if (clsid != kClsid)
+    {
+        wchar_t s[64] = {};
+        StringFromGUID2(clsid, s, 64);
+        note("asked for a class not its own: " + sieve::view::u8(fs::path(s)));
+        return CLASS_E_CLASSNOTAVAILABLE;
+    }
+    const HRESULT hr = g_factory.QueryInterface(riid, ppv);
+    note(SUCCEEDED(hr) ? "loaded and asked for its class" : "asked for its class by an interface it has not");
+    return hr;
 }
 
 extern "C" HRESULT __stdcall SieveThumbsCanUnloadNow() { return g_objects == 0 && g_locks == 0 ? S_OK : S_FALSE; }
