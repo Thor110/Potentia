@@ -694,7 +694,7 @@ void FileLocator::program_from(const std::string& sieve_file, const std::string&
             else raw = cli::read_file_bytes(from_u8(sieve_file));
             // Sieve instructions' raw bytes begin as "sieve" does with every byte one higher (SIEVE-FORMAT §1).
             if (raw.size() < 5 || std::memcmp(raw.data(), "tjfwf", 5) != 0) throw std::runtime_error(tr("loc.program_from.not_sieve"));
-            cli::write_installer_program(*stub, raw, from_u8(out));
+            cli::write_installer_program(*stub, raw, from_u8(out), cli::carried_dictionaries_block()); // (the dictionaries too: run on its own, it has them)
             done = trf("loc.program_from.done", {out});
         }
         catch (const std::exception& e)
@@ -1085,7 +1085,7 @@ void FileLocator::save(const std::string& to)
                     const char* base = SDL_GetBasePath();
                     const auto stub = cli::installer_program_beside(base ? from_u8(base) : fs::current_path());
                     if (!stub) throw std::runtime_error(tr("loc.no_installer_program"));
-                    cli::write_installer_program(*stub, raw, out);
+                    cli::write_installer_program(*stub, raw, out, cli::carried_dictionaries_block()); // (the dictionaries too)
                     done = trf("loc.saved.program", {to});
                 }
             }

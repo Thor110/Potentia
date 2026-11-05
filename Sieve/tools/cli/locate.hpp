@@ -77,6 +77,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -451,9 +452,28 @@ std::filesystem::path own_executable(const char* argv0);
 // The sieve-install program beside `dir`, or in the tools folder in it (an installation, where
 // sieve and sieve-install sit in tools\ below the hallway), if there is one.
 std::optional<std::filesystem::path> installer_program_beside(const std::filesystem::path& dir);
-// Writes `program` (sieve-install) with `address` attached as `out`, marked runnable.
-void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out);
-void write_installer_program(const std::filesystem::path& program, const std::vector<uint8_t>& raw, const std::filesystem::path& out);
+// Writes `program` (sieve-install) with `address` attached as `out`, marked runnable; with
+// `dictionaries` (carried_dictionaries_block, pack.hpp) carried before it where given:
+//
+//     <sieve-install> <dictionaries> <their length: 8 bytes> "sieve-carried-d1" <the installer>
+//     <its length: 8 bytes> "sieve-attached-1"
+//
+// (5 November 2026: an installer program whose files were mixed with a word list or primer could
+// not install them where no dictionaries folder was to be found: one downloaded, run on its own.)
+void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out,
+                             const std::vector<uint8_t>& dictionaries = {});
+void write_installer_program(const std::filesystem::path& program, const std::vector<uint8_t>& raw, const std::filesystem::path& out,
+                             const std::vector<uint8_t>& dictionaries = {});
+inline constexpr char kCarriedDictionariesMagic[] = "sieve-carried-d1"; // 16 bytes, no terminator used
+// A file of the dictionaries folder an installer program carries, checked against its SHA-256.
+struct CarriedFile
+{
+    std::string name, sha256;
+    std::vector<uint8_t> bytes;
+};
+// The dictionaries `program` carries (none: empty), each checked; and a block of them unpacked.
+std::vector<CarriedFile> carried_dictionaries(const std::filesystem::path& program);
+std::vector<CarriedFile> unpack_dictionaries(std::span<const uint8_t> block);
 // The address attached to a program, if it has one; its raw bytes; and only whether it has one,
 // read from its last 24 bytes alone.
 std::optional<BigUint> attached_address(const std::filesystem::path& program);

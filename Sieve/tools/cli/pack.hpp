@@ -274,4 +274,10 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
                     const std::function<void(size_t done, size_t total, const std::string& path)>& progress,
                     const std::atomic<bool>* cancel = nullptr, const std::set<std::string>* keep = nullptr);
 
+// The dictionaries folder (every file of it), packed for an installer program to carry
+// (write_installer_program, locate.hpp), so that one run on its own, where no dictionaries are
+// to be found, still has the word lists and primers its files were mixed with (5 November 2026).
+// Empty where there is no dictionaries folder; `said`, if given, says what was carried or why not.
+std::vector<uint8_t> carried_dictionaries_block(std::string* said = nullptr);
+
 } // namespace sieve::cli

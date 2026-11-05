@@ -16,6 +16,7 @@
 #include "unpack_7z.hpp"
 #include "cli/image_io.hpp"
 #include "cli/vault.hpp"
+#include "cli/dictionaries.hpp" // load_registry: the folder an installer program carries
 
 // bzlib.h includes <windows.h> on Windows: without these first, its min and max macros break
 // std::min and std::max throughout this file.
@@ -5970,6 +5971,54 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
         throw;
     }
     return true;
+}
+
+std::vector<uint8_t> carried_dictionaries_block(std::string* said)
+{
+    // Every file of the dictionaries folder (where dictionaries.tsv is found), in name order, as
+    // unpack_dictionaries (locate.cpp) reads them: the word lists mixing takes, the primers, the
+    // registry and its notes. Measured, 5 November 2026: the folder's 12 MB, 853,840 bytes by xz
+    // -9e (726,396 for the four files mixing reads alone: the near-copies cost little).
+    fs::path folder;
+    try
+    {
+        folder = load_registry().folder;
+    }
+    catch (const std::exception& x)
+    {
+        if (said) *said = std::string("no dictionaries carried: ") + x.what();
+        return {};
+    }
+    std::vector<fs::path> files;
+    for (const auto& e : fs::directory_iterator(folder))
+    {
+        const std::string name = e.path().filename().string();
+        if (!e.is_regular_file() || name.empty() || name[0] == '.' ||
+            name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos)
+            continue;
+        files.push_back(e.path());
+    }
+    std::sort(files.begin(), files.end());
+    std::string listing;
+    std::vector<uint8_t> bytes;
+    for (const fs::path& f : files)
+    {
+        const std::vector<uint8_t> b = read_file_bytes(f);
+        listing += f.filename().string() + "\t" + std::to_string(b.size()) + "\t" + sha256_hex(b) + "\n";
+        bytes.insert(bytes.end(), b.begin(), b.end());
+    }
+    listing += "\n";
+    std::vector<uint8_t> all(listing.begin(), listing.end());
+    all.insert(all.end(), bytes.begin(), bytes.end());
+    const uint32_t dict = dictionary_for(all.size());
+    const std::vector<uint8_t> packed = encode_lzma2(all, dict, false, 9 | LZMA_PRESET_EXTREME, -1, 0, false);
+    const std::string head = "sieve-dicts-v1 " + std::to_string(all.size()) + " " + std::to_string(dict) + "\n";
+    std::vector<uint8_t> out(head.begin(), head.end());
+    out.insert(out.end(), packed.begin(), packed.end());
+    if (said)
+        *said = std::to_string(files.size()) + " files of " + folder.string() + " (" + std::to_string(all.size()) + " bytes), carried in " +
+                std::to_string(out.size()) + " bytes";
+    return out;
 }
 
 } // namespace sieve::cli

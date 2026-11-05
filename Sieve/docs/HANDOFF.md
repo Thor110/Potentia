@@ -368,8 +368,10 @@ included (`install_tree` in `tools/cli/locate.cpp`, shared with `sieve install`)
 
 **Installer programs** (one file to hand to someone): `sieve locate FOLDER --program OUT`, or the
 locator's "Make an installer..." when the name is not `.sieve`, copies the `sieve-install` beside
-the tool and attaches the installer to its end: `<program> <installer, raw> <length, 8 bytes LE>
-"sieve-attached-1"`. Systems run a program from its start and ignore what follows it, so it runs
+the tool and attaches the installer to its end: `<program> <dictionaries> <length, 8 bytes LE>
+"sieve-carried-d1" <installer, raw> <length, 8 bytes LE> "sieve-attached-1"` (the dictionaries
+folder carried since 5 November 2026, for one run on its own: `carried_dictionaries_block`,
+`carried_dictionaries`, used by sieve-install only where it finds no dictionaries folder). Systems run a program from its start and ignore what follows it, so it runs
 as sieve-install, which first looks at its own end (`own_executable`, `attached_address`), then
 at its command line, then beside itself. A program that already has one attached has it
 replaced. `sieve install` reads programs too.

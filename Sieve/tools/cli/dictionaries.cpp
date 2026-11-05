@@ -29,6 +29,16 @@ fs::path& executable_dir_given()
 
 void set_executable_dir(const fs::path& folder) { executable_dir_given() = folder; }
 
+namespace {
+fs::path& dictionaries_given()
+{
+    static fs::path given; // (set_dictionaries_folder; empty: none)
+    return given;
+}
+} // namespace
+
+void set_dictionaries_folder(const fs::path& folder) { dictionaries_given() = folder; }
+
 fs::path executable_dir()
 {
     if (!executable_dir_given().empty()) return executable_dir_given();
@@ -80,7 +90,9 @@ const DictionaryEntry* Registry::find(const std::string& id) const
 
 Registry load_registry()
 {
-    std::vector<fs::path> folders = {fs::path("data") / "dictionaries"};
+    std::vector<fs::path> folders;
+    if (!dictionaries_given().empty()) folders.push_back(dictionaries_given());
+    folders.push_back(fs::path("data") / "dictionaries");
     if (const fs::path exe = install_dir(); !exe.empty()) folders.push_back(exe / "dictionaries");
 
     for (const auto& folder : folders)

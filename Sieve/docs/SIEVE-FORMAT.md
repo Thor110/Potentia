@@ -29,9 +29,10 @@ where the carry ran past the first byte. (Oracle: `instructions_bytes`. Specific
 the binary line, §12.2 "Installer files".)
 
 An **installer program** is `sieve-install` with a `.sieve` attached: the program's bytes, the
-`.sieve`'s bytes, their count as 8 bytes (least significant first), then the 16 bytes
-`sieve-attached-1` (§12.2, "Installer programs"). (The oracle reads `.sieve` files, not installer
-programs: take the `.sieve` off the end first.)
+dictionaries folder it carries (since 5 November 2026) and their count as 8 bytes (least
+significant first) and the 16 bytes `sieve-carried-d1`, then the `.sieve`'s bytes, their count as
+8 bytes, then the 16 bytes `sieve-attached-1` (§12.2, "Installer programs"). (The oracle reads
+`.sieve` files, not installer programs: take the `.sieve` off the end first.)
 
 ## 2. The head
 

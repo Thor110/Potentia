@@ -43,6 +43,10 @@ ResolvedDictionary resolve_dictionary(const std::string& value);
 std::filesystem::path executable_dir();
 void set_executable_dir(const std::filesystem::path& folder);
 
+// The dictionaries an installer program carries (unpacked by use_carried_dictionaries into a
+// folder of their own): looked for there first, before data/dictionaries and the installation's.
+void set_dictionaries_folder(const std::filesystem::path& folder);
+
 // The installation's own folder, where its data folders are: the program's folder, or the one
 // above it when the program is in the installation's tools folder (a release puts sieve and
 // sieve-install in tools\, so that hallway is the one program at the top). Found by the name

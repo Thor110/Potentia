@@ -146,8 +146,9 @@ rm -rf fx_layout
 ./layout-installer --to fx_layout --yes
 diff -r tests/manifest_fixture fx_layout
 # An installer program: sieve-install with the installer attached, run on its own, and
-# read by sieve install; exactly the program, the installer and a 24-byte trailer; and
-# made from a program that already has one attached, the old one replaced, not added to.
+# read by sieve install; exactly the program, the dictionaries folder it carries and their
+# 24-byte trailer, the installer and its 24-byte trailer; and made from a program that already
+# has one attached, the old one replaced, not added to.
 build/sieve locate tests/manifest_fixture --program fx-installer --v4 > /dev/null
 rm -rf fx_prog fx_prog2
 ./fx-installer --to fx_prog --yes
@@ -164,7 +165,23 @@ mkdir ilog
 $H --no-menu --settings ilog/s.ini --locate-log --install fx.sieve --install-to fx_gui_log --screenshot ilog.png | q "saved ilog.png"
 grep -q "decoded in .*, checked and written in" ilog/logs/locate-*-fx.sieve.txt
 grep -q "^took .* s in all" ilog/logs/locate-*-fx.sieve.txt
-test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + $(wc -c < fx.sieve) + 24 ))"
+grep -q "sieve-carried-d1" fx-installer
+carried=$(python3 -I -c "import sys; f=open(sys.argv[1],'rb').read(); n=int.from_bytes(f[-24:-16],'little'); e=len(f)-24-n; print(int.from_bytes(f[e-24:e-16],'little'))" fx-installer)
+test "$(wc -c < fx-installer)" -eq "$(( $(wc -c < build/sieve-install) + carried + 24 + $(wc -c < fx.sieve) + 24 ))"
+tail -c "$(( $(wc -c < fx.sieve) + 24 ))" fx-installer | head -c "$(wc -c < fx.sieve)" | cmp - fx.sieve
+# (5 November 2026, the release's sieve.exe: files mixed with a word list, the program run on its
+# own in a folder with no dictionaries anywhere near: it installs them from the ones it carries,
+# and leaves nothing of them behind; without them, it could not.)
+rm -rf alone
+mkdir -p alone/src alone/run
+head -c 8192 docs/MANUAL.md > alone/src/text.md
+(cd alone && ../build/sieve locate src --installer words.sieve --program words-setup --items > made.txt 2>&1)
+grep -q "with a word list" alone/made.txt
+grep -q "^          dictionaries: [0-9]* files of " alone/made.txt
+cp alone/words-setup alone/run/
+(cd alone/run && TMPDIR="$PWD/tmp" && mkdir tmp && export TMPDIR && ./words-setup --to out --yes)
+diff -r alone/src alone/run/out
+test -z "$(ls alone/run/tmp)"
 rm -rf again
 mkdir again
 cp build/sieve again/

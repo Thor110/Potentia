@@ -104,6 +104,8 @@ they need no path given; in the repository they find the Release build.
 
 `sieve` in `tools\` finds the dictionaries and models in the folder above; the hallway finds `sieve-install` in `tools\`. A build folder keeps all three programs together, and they work either way.
 
+**An installer program carries the dictionaries folder too** (5 November 2026): handed to someone and run on its own, it has no dictionaries beside it, and files mixed with a word list or a primer need them to be made again. Packed, the folder adds 855,664 bytes (its 12 MB, measured here); the installer checks each file against its SHA-256 and uses them only where it finds no dictionaries folder of its own, from a temporary folder it removes when it ends.
+
 **Continuous integration:** `.github/workflows/build.yml`, at the repository's root (GitHub reads workflows only there), builds and tests on Windows, Linux and macOS, every step in this folder (`PROJECT_DIR: Sieve`). It checks that every platform produces the same addresses, and that the Python oracle reproduces the committed vectors.
 
 ## Key terms

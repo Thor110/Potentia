@@ -32,6 +32,7 @@
 
 #include "dialogs.hpp"
 #include "cli/locate.hpp"
+#include "cli/dictionaries.hpp" // the dictionaries an installer program carries
 #include "cli/items.hpp"
 #include "cli/pack.hpp"
 #include "unpack_7z.hpp"
@@ -45,6 +46,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cctype>
 #include <cmath>
 #include <filesystem>
@@ -53,8 +55,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <set>
+#include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -569,6 +574,54 @@ const char* kInstallerUsage =
     "  --screenshot FILE    write the window, as it stands just before exiting, as a BMP\n"
     "  --help               this text\n";
 
+
+// The dictionaries an installer program carries (sieve locate --program, the File Locator),
+// used where no dictionaries folder is to be found: one downloaded and run on its own (Edward, 5
+// November 2026: the release's sieve.exe said "Nothing to install yet." and could not find
+// dictionaries.tsv, as its files were mixed with the word lists). Unpacked, each checked against
+// its SHA-256, into a folder of their own in the temporary folder, removed when the installer ends.
+struct CarriedDictionaries
+{
+    fs::path folder;
+    ~CarriedDictionaries()
+    {
+        std::error_code ec;
+        if (!folder.empty()) fs::remove_all(folder, ec);
+    }
+    void use(const fs::path& program)
+    {
+        try
+        {
+            sieve::cli::load_registry();
+            return; // (a dictionaries folder is there: the installation's, or one where it was run)
+        }
+        catch (const std::exception&)
+        {
+        }
+        try
+        {
+            const std::vector<sieve::cli::CarriedFile> files = sieve::cli::carried_dictionaries(program);
+            if (files.empty()) return;
+            fs::path dir = fs::temp_directory_path() / ("sieve-dictionaries-" + std::to_string(std::random_device{}()) + "-" +
+                                                        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            fs::create_directories(dir);
+            folder = dir;
+            for (const sieve::cli::CarriedFile& f : files)
+            {
+                std::ofstream o(dir / f.name, std::ios::binary);
+                o.write(reinterpret_cast<const char*>(f.bytes.data()), std::streamsize(f.bytes.size()));
+                if (!o) throw std::runtime_error("cannot write " + (dir / f.name).string());
+            }
+            sieve::cli::set_dictionaries_folder(dir);
+        }
+        catch (const std::exception& e)
+        {
+            // (said, and the install goes on: only files mixed with them need them, and those say so)
+            std::fprintf(stderr, "sieve-install: %s\n", e.what());
+        }
+    }
+};
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -648,8 +701,19 @@ int main(int argc, char** argv)
     {
         in.error = e.what();
     }
-    if (!file_arg.empty()) in.open(from_u8(file_arg));
-    else if (mine) in.open(self);
+    CarriedDictionaries carried;
+    if (!file_arg.empty())
+    {
+        const fs::path f = from_u8(file_arg);
+        std::error_code ec;
+        if (fs::is_regular_file(f, ec) && has_attached(f)) carried.use(f); // (another installer program)
+        in.open(f);
+    }
+    else if (mine)
+    {
+        carried.use(self);
+        in.open(self);
+    }
     else if (!in.error.empty()) {}
     else if (auto beside = installer_beside_me()) in.open(*beside);
     else in.error = "no installer: drop a .sieve file on this window, or open one with this program";

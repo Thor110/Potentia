@@ -2761,25 +2761,66 @@ std::optional<fs::path> installer_program_beside(const fs::path& dir)
 namespace {
 
 constexpr size_t kMagic = sizeof(kAttachedMagic) - 1, kTrailer = 8 + kMagic;
+constexpr size_t kDictMagic = sizeof(kCarriedDictionariesMagic) - 1, kDictTrailer = 8 + kDictMagic;
+
+// Where each part of a program lies: the program itself [0, program_end), the dictionaries it
+// carries [dicts_at, dicts_at + dicts_size) (none: size 0), and the installer [installer_at,
+// installer_at + installer_size) (none: program_end is the file's whole length).
+struct Parts
+{
+    uint64_t program_end = 0, dicts_at = 0, dicts_size = 0, installer_at = 0, installer_size = 0;
+};
+
+uint64_t length_before(const std::vector<uint8_t>& f, uint64_t end, size_t magic_size, const char* magic, uint64_t* n)
+{
+    // (the 8-byte length and the mark that end at `end`, if they are there: the length, else none)
+    *n = 0;
+    if (end < 8 + magic_size || std::memcmp(f.data() + end - magic_size, magic, magic_size) != 0) return end;
+    for (int i = 7; i >= 0; --i) *n = *n << 8 | f[size_t(end - magic_size - 8) + size_t(i)];
+    if (*n > end - 8 - magic_size) throw std::runtime_error("the installer attached to the program is damaged (its length is wrong)");
+    return end - 8 - magic_size - *n;
+}
+
+Parts parts_of(const std::vector<uint8_t>& f)
+{
+    Parts p;
+    p.installer_at = length_before(f, f.size(), kMagic, kAttachedMagic, &p.installer_size);
+    p.program_end = p.installer_at;
+    if (p.installer_size == 0 && p.installer_at == f.size()) return p; // (nothing attached)
+    p.dicts_at = length_before(f, p.installer_at, kDictMagic, kCarriedDictionariesMagic, &p.dicts_size);
+    p.program_end = p.dicts_at;
+    return p;
+}
 
 // Where the program itself ends: its whole length, or where what is attached to it begins.
-uint64_t program_length(const std::vector<uint8_t>& f, uint64_t* attached = nullptr)
+uint64_t program_length(const std::vector<uint8_t>& f) { return parts_of(f).program_end; }
+
+void write_program(const fs::path& program, std::span<const uint8_t> raw, const std::vector<uint8_t>& dictionaries, const fs::path& out)
 {
-    if (attached) *attached = 0;
-    if (f.size() < kTrailer || std::memcmp(f.data() + f.size() - kMagic, kAttachedMagic, kMagic) != 0) return f.size();
-    uint64_t n = 0;
-    for (int i = 7; i >= 0; --i) n = n << 8 | f[f.size() - kTrailer + size_t(i)];
-    if (n > f.size() - kTrailer) throw std::runtime_error("the installer attached to the program is damaged (its length is wrong)");
-    if (attached) *attached = n;
-    return f.size() - kTrailer - n;
+    const auto p = read_file_bytes(program);
+    const uint64_t length = program_length(p);
+    {
+        std::ofstream o(out, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(p.data()), std::streamsize(length));
+        auto with_length = [&](std::span<const uint8_t> part, const char* magic, size_t magic_size) {
+            o.write(reinterpret_cast<const char*>(part.data()), std::streamsize(part.size()));
+            uint64_t n = part.size();
+            for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
+            o.write(magic, std::streamsize(magic_size));
+        };
+        if (!dictionaries.empty()) with_length(dictionaries, kCarriedDictionariesMagic, kDictMagic);
+        with_length(raw, kAttachedMagic, kMagic);
+        finish_writing(o, out);
+    }
+    // Runnable where that is a permission (it is not on Windows, where .exe says so).
+    std::error_code ec;
+    fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
 }
 
 } // namespace
 
-void write_installer_program(const fs::path& program, const BigUint& address, const fs::path& out)
+void write_installer_program(const fs::path& program, const BigUint& address, const fs::path& out, const std::vector<uint8_t>& dictionaries)
 {
-    const auto p = read_file_bytes(program);
-    const uint64_t length = program_length(p);
     std::vector<uint8_t> raw;
     if (!address.is_zero())
     {
@@ -2789,37 +2830,14 @@ void write_installer_program(const fs::path& program, const BigUint& address, co
         raw.resize(h.size() / 2);
         for (size_t i = 0; i < raw.size(); ++i) raw[i] = uint8_t(nib(h[2 * i]) << 4 | nib(h[2 * i + 1]));
     }
-    {
-        std::ofstream o(out, std::ios::binary);
-        o.write(reinterpret_cast<const char*>(p.data()), std::streamsize(length));
-        o.write(reinterpret_cast<const char*>(raw.data()), std::streamsize(raw.size()));
-        uint64_t n = raw.size();
-        for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
-        o.write(kAttachedMagic, std::streamsize(kMagic));
-        finish_writing(o, out);
-    }
-    // Runnable where that is a permission (it is not on Windows, where .exe says so).
-    std::error_code ec;
-    fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+    write_program(program, raw, dictionaries, out);
 }
 
-void write_installer_program(const fs::path& program, const std::vector<uint8_t>& raw_in, const fs::path& out)
+void write_installer_program(const fs::path& program, const std::vector<uint8_t>& raw_in, const fs::path& out, const std::vector<uint8_t>& dictionaries)
 {
-    const auto p = read_file_bytes(program);
-    const uint64_t length = program_length(p);
     size_t lead = 0; // (as the number's bytes: no leading zero bytes)
     while (lead < raw_in.size() && raw_in[lead] == 0) ++lead;
-    {
-        std::ofstream o(out, std::ios::binary);
-        o.write(reinterpret_cast<const char*>(p.data()), std::streamsize(length));
-        o.write(reinterpret_cast<const char*>(raw_in.data() + lead), std::streamsize(raw_in.size() - lead));
-        uint64_t n = raw_in.size() - lead;
-        for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
-        o.write(kAttachedMagic, std::streamsize(kMagic));
-        finish_writing(o, out);
-    }
-    std::error_code ec;
-    fs::permissions(out, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+    write_program(program, std::span<const uint8_t>(raw_in).subspan(lead), dictionaries, out);
 }
 
 std::optional<std::vector<uint8_t>> attached_raw(const fs::path& program)
@@ -2827,11 +2845,10 @@ std::optional<std::vector<uint8_t>> attached_raw(const fs::path& program)
     std::error_code ec;
     if (!fs::is_regular_file(program, ec) || !has_attached(program)) return std::nullopt;
     auto f = read_file_bytes(program);
-    uint64_t n = 0;
-    const uint64_t at = program_length(f, &n);
-    if (at == f.size()) return std::nullopt;
-    f.resize(size_t(at + n)); // (the trailer off the end, then the program off the front)
-    f.erase(f.begin(), f.begin() + std::ptrdiff_t(at));
+    const Parts p = parts_of(f);
+    if (p.installer_at == f.size()) return std::nullopt;
+    f.resize(size_t(p.installer_at + p.installer_size)); // (the trailer off the end, then the program off the front)
+    f.erase(f.begin(), f.begin() + std::ptrdiff_t(p.installer_at));
     return f;
 }
 
@@ -2852,10 +2869,83 @@ std::optional<BigUint> attached_address(const fs::path& program)
     std::error_code ec;
     if (!fs::is_regular_file(program, ec)) return std::nullopt;
     const auto f = read_file_bytes(program);
-    uint64_t n = 0;
-    const uint64_t at = program_length(f, &n);
-    if (at == f.size()) return std::nullopt; // nothing attached
-    return address_of_raw(std::vector<uint8_t>(f.begin() + std::ptrdiff_t(at), f.begin() + std::ptrdiff_t(at + n)));
+    const Parts p = parts_of(f);
+    if (p.installer_at == f.size()) return std::nullopt; // nothing attached
+    return address_of_raw(std::vector<uint8_t>(f.begin() + std::ptrdiff_t(p.installer_at), f.begin() + std::ptrdiff_t(p.installer_at + p.installer_size)));
+}
+
+std::vector<CarriedFile> carried_dictionaries(const fs::path& program)
+{
+    std::error_code ec;
+    if (!fs::is_regular_file(program, ec) || !has_attached(program)) return {};
+    const auto f = read_file_bytes(program);
+    const Parts p = parts_of(f);
+    if (p.dicts_size == 0) return {};
+    return unpack_dictionaries(std::span<const uint8_t>(f).subspan(size_t(p.dicts_at), size_t(p.dicts_size)));
+}
+
+std::vector<CarriedFile> unpack_dictionaries(std::span<const uint8_t> block)
+{
+    // "sieve-dicts-v1 U D\n" (U the bytes it makes, D LZMA2's dictionary size), then LZMA2 of: a
+    // line per file, "name<TAB>size<TAB>sha256", an empty line, then the files' bytes in that
+    // order. Every size is checked before anything is decoded, and every file against its SHA-256
+    // after.
+    auto bad = [](const std::string& why) { return std::runtime_error("the dictionaries this installer program carries are damaged (" + why + ")"); };
+    const auto nl = std::find(block.begin(), block.end(), uint8_t('\n'));
+    if (nl == block.end()) throw bad("no head");
+    const std::string head(block.begin(), nl);
+    if (head.rfind("sieve-dicts-v1 ", 0) != 0) throw bad("not sieve-dicts-v1");
+    const std::string sizes = head.substr(15);
+    const size_t sp = sizes.find(' ');
+    const std::string u = sizes.substr(0, sp), d = sp == std::string::npos ? "" : sizes.substr(sp + 1);
+    for (const std::string* n : {&u, &d})
+        if (n->empty() || n->size() > 10 || n->find_first_not_of("0123456789") != std::string::npos) throw bad("its sizes");
+    const uint64_t unpacked = std::stoull(u), dictionary = std::stoull(d);
+    if (dictionary < 4096 || dictionary > (uint64_t(64) << 20)) throw bad("its LZMA2 dictionary size");
+    constexpr uint64_t kMost = uint64_t(256) << 20; // (the folder is 12 MB; a quarter of a GiB is past any)
+    if (unpacked == 0 || unpacked > kMost) throw bad("a size past " + std::to_string(kMost) + " bytes");
+    const std::span<const uint8_t> packed(block.begin() + (nl - block.begin()) + 1, block.end());
+    if (const std::optional<uint64_t> made = lzma2_made(packed); !made || *made != unpacked) throw bad("its chunks do not make its size");
+    std::vector<uint8_t> all(static_cast<size_t>(unpacked));
+    SizeT out_len = all.size(), in_len = packed.size();
+    ELzmaStatus status;
+    const SRes r = Lzma2Decode(all.data(), &out_len, packed.data(), &in_len, lzma2_property(uint32_t(dictionary)), LZMA_FINISH_END, &status, &kLzmaAlloc);
+    if (r != SZ_OK || out_len != all.size() || in_len != packed.size()) throw bad("LZMA2");
+    std::vector<CarriedFile> out;
+    size_t at = 0;
+    uint64_t total = 0;
+    for (;;)
+    {
+        const auto e = std::find(all.begin() + std::ptrdiff_t(at), all.end(), uint8_t('\n'));
+        if (e == all.end()) throw bad("its listing does not end");
+        const std::string line(all.begin() + std::ptrdiff_t(at), e);
+        at = size_t(e - all.begin()) + 1;
+        if (line.empty()) break;
+        const size_t t1 = line.find('\t'), t2 = line.find('\t', t1 == std::string::npos ? t1 : t1 + 1);
+        if (t1 == std::string::npos || t2 == std::string::npos) throw bad("a listing line");
+        CarriedFile c;
+        c.name = line.substr(0, t1);
+        const std::string size = line.substr(t1 + 1, t2 - t1 - 1);
+        c.sha256 = line.substr(t2 + 1);
+        // (a plain name: no folders, nothing hidden or reaching above)
+        if (c.name.empty() || c.name.size() > 128 || c.name[0] == '.' ||
+            c.name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos)
+            throw bad("a name");
+        if (size.empty() || size.size() > 10 || size.find_first_not_of("0123456789") != std::string::npos) throw bad("a size");
+        if (c.sha256.size() != 64) throw bad("a SHA-256");
+        c.bytes.resize(size_t(std::stoull(size)));
+        total += c.bytes.size();
+        if (total > unpacked || out.size() >= 256) throw bad("more than it holds");
+        out.push_back(std::move(c));
+    }
+    if (at + total != all.size()) throw bad("its files do not fill it");
+    for (CarriedFile& c : out)
+    {
+        std::copy(all.begin() + std::ptrdiff_t(at), all.begin() + std::ptrdiff_t(at + c.bytes.size()), c.bytes.begin());
+        at += c.bytes.size();
+        if (sha256_hex(c.bytes) != c.sha256) throw bad(c.name + "'s SHA-256 differs");
+    }
+    return out;
 }
 
 void write_address_file(const fs::path& file, const BigUint& address, bool hex)

@@ -2539,8 +2539,10 @@ int cmd_locate(const Args& a)
                 const std::string o = a.get("program");
                 const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
                 if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
-                write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())));
+                std::string carried;
+                write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried));
                 std::cout << "program   " << o << ": sieve-install with the instructions attached; run it to install\n";
+                std::cout << "          dictionaries: " << carried << "\n";
             }
             if (a.has("compare"))
             {
@@ -2661,9 +2663,11 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("program");
         const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
         if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
-        write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())));
+        std::string carried;
+        write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried));
         *info << "program   " << o << ": sieve-install with the installer attached (" << fs::file_size(fs::path(std::u8string(o.begin(), o.end())))
               << " bytes); run it to install\n";
+        *info << "          dictionaries: " << carried << "\n";
         std::error_code ec;
         if (fs::exists(stub->parent_path() / "SDL3.dll", ec))
             *info << "          note: this sieve-install uses SDL3.dll, so the program needs SDL3.dll beside it too;\n"

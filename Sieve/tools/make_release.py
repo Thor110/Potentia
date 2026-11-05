@@ -27,8 +27,9 @@ order matters and is easy to get wrong by hand:
      (sieve locate --items), installing as the Sieve folder (27 October 2026, Edward: a plain
      .sieve of the source folder; it was a sealed map holding the 7z before, so no smaller than it).
   8. Checks: each installer installed into a scratch folder and compared with the release folder
-     (or, with --seven-zip, the archive), byte for byte, and source.sieve installed back to the
-     source tree.
+     (or, with --seven-zip, the archive), byte for byte; the installer program run itself, alone
+     in an empty folder, as someone given it runs it (5 November 2026); and source.sieve installed
+     back to the source tree.
   8b. metrics.txt: how much of each line the reference filters remove (data/metrics/
      reference-filters.ini), as the setup menu counts it, by the build's hallway (--metrics).
   8c. The build's record (IDEAS §19.50, §19.71): the build's unit suite run and timed, then
@@ -375,6 +376,29 @@ def main():
                 if not got.exists() or sha256(got) != sha256(archive):
                     fail(f"{f.name} did not install {archive.name} byte for byte")
             print(f"   {f.name}: installs back to what it carries, checked")
+        # The installer program as someone given it runs it (5 November 2026: the release's
+        # sieve.exe could not, its files mixed with the word lists and no dictionaries beside it):
+        # alone in an empty folder, run there, with the temporary folder inside it so that what it
+        # leaves behind is seen; it installs from the dictionaries it carries, and leaves none.
+        alone = Path(tmp) / "alone"
+        (alone / "tmp").mkdir(parents=True)
+        lone = alone / program.name
+        shutil.copy2(program, lone)
+        env = dict(os.environ, TMP=str(alone / "tmp"), TEMP=str(alone / "tmp"), TMPDIR=str(alone / "tmp"))
+        if os.name != "nt" and not env.get("SDL_VIDEO_DRIVER"):
+            env["SDL_VIDEO_DRIVER"] = "dummy" if sys.platform == "darwin" else "offscreen"
+        dest = alone / "installed"
+        ran = subprocess.run([str(lone), "--to", str(dest), "--yes"], cwd=alone, env=env, capture_output=True, text=True, errors="replace")
+        if ran.returncode != 0:
+            fail(f"{program.name}, run on its own in an empty folder, did not install:\n{ran.stdout}{ran.stderr}")
+        if not a.seven_zip:
+            if not same_tree(stage, dest):
+                fail(f"{program.name}, run on its own, did not install the release folder as it is")
+        elif sha256(dest / archive.name) != sha256(archive):
+            fail(f"{program.name}, run on its own, did not install {archive.name} byte for byte")
+        if any((alone / "tmp").iterdir()):
+            fail(f"{program.name}, run on its own, left files in the temporary folder: {sorted(p.name for p in (alone / 'tmp').iterdir())}")
+        print(f"   {program.name}: run on its own in an empty folder, installs it, from the dictionaries it carries")
     # The layout: sieve in tools/ finds the installation's data folders in the folder above. Run
     # from tools/ itself, which has no data/ folder (one where it is run is looked at first), so a
     # registry found at all is the one above; the path itself is not compared, since Windows may
