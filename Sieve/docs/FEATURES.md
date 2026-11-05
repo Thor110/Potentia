@@ -120,7 +120,8 @@ against 13,376,180 (`results/mixing-match-ways-2026-11-02.md`).
 - **`sieve-install`**, the installer: run on a `.sieve`, or copied with one into a single program
   that installs itself (SIEVE-INSTALL-USAGE.md).
 - **`sieve-view`**, the picture viewer, for pictures, `.simage` files (Sieve instructions holding
-  pictures) and `.sieve` files holding only pictures (MANUAL.md).
+  pictures) and `.sieve` files holding only pictures (MANUAL.md); on Windows, `sieve-thumbs.dll`
+  shows a `.simage`'s picture as its thumbnail in Explorer.
 - **The right-click menu** (Windows): Extract here and Extract to a folder for `.sieve` files and
   archives by 28 file extensions (`.zip`, `.7z`, `.rar`, `.tar.gz` and the rest), and `.simage` files opening in the viewer (`context/README.md`).
 - **The web extension** (Chrome and Edge): shows the `.sieve` files a page links to, each checked

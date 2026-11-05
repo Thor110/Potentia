@@ -641,7 +641,14 @@ stb_image decodes: a JPEG's under 2 GB, a PNG's to 1 GiB). A JPEG too large for 
 an eighth, from its blocks' averages alone (a sixty-fourth of the memory: a 380 MB JPEG of 30,000
 by 20,000 opened in 7.7 s, at most 517 MiB, here); any other is refused, with why. A `.sieve`'s
 pictures are made one at a time, as each is shown. `sieve-view --help` gives the keys and the
-options for testing (`--check`, `--make-simage`, `--budget`, `--screenshot`). `tests/example_book_v1.book` is a committed book record: the CI
+options for testing (`--check`, `--make-simage`, `--thumbnail`, `--budget`, `--screenshot`).
+
+**Thumbnails in Explorer** (Windows, 5 November 2026): `sieve-thumbs.dll`, beside `sieve-view`, gives
+Explorer a `.simage`'s first picture as its thumbnail, in place of the viewer's icon. It reads the
+file exactly as the viewer does (the same code, `client/picture_source.cpp`: the listing first, the
+files checked against their SHA-256, each limit before anything is decoded), in a process of
+Windows' own, so a file it refuses only keeps its icon. `context\install_context.bat` registers
+it for your user. `sieve-view --thumbnail SIDE OUT.png FILE` writes the same thumbnail as a PNG. `tests/example_book_v1.book` is a committed book record: the CI
 unbinds it, binds its source again to the identical record, and has the Python oracle read it
 to the same id and text.
 

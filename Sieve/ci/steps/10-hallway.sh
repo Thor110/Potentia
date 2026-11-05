@@ -108,6 +108,10 @@ rm -f view_pic.simage
 build/sieve-view --check view_pic.png | tr -d '\r' | grep -q "^view_pic.png: 1280 by 720 pixels"
 build/sieve-view --make-simage view_pic.png > /dev/null
 test -s view_pic.simage
+# Its thumbnail as Explorer is given it (sieve-thumbs.dll, 5 November 2026: the same code, shared):
+# the first picture, its longer side 64.
+build/sieve-view --thumbnail 64 view_thumb.png view_pic.simage | tr -d '\r' | q "^thumbnail: 64 by 36 pixels, of view_pic.png (1280 by 720)"
+test -s view_thumb.png
 build/sieve-view --check view_pic.simage | tr -d '\r' > view.txt
 grep -q "^listing: 1 picture" view.txt
 grep -q "^view_pic.png: 1280 by 720 pixels" view.txt

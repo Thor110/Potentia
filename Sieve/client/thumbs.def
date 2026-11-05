@@ -1,0 +1,4 @@
+LIBRARY sieve-thumbs
+EXPORTS
+    DllGetClassObject = SieveThumbsGetClassObject PRIVATE
+    DllCanUnloadNow = SieveThumbsCanUnloadNow PRIVATE

@@ -17,7 +17,7 @@ Example : WoWRevived which is a restoration project of mine for an old video gam
 
 The two files are scanned, the 98.7% similarity is noted and the ~160mb file which otherwise would have been reduced to ~52mbs, becomes a ~2mb script that lifts the data from the near identical file as it is decoded.
 
-Alongside that it checks file hashes and trims exact duplicates to be a single file that gets unpacked accordingly.
+Alongside that it checks file hashes and trims exact duplicates to be a single file that all get unpacked accordingly.
 
 As well as pattern matching that turns repeating byte patterns into instruction sets for procedurally regenerating those blocks of the data.
 

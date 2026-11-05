@@ -9,4 +9,6 @@ for /f "delims=" %%K in ('reg query "%BASE%" 2^>nul') do reg delete "%%K\shell\S
 reg delete "HKCU\Software\Classes\Sieve.Picture" /f > nul 2>&1
 reg delete "HKCU\Software\Classes\.simage" /f > nul 2>&1
 reg delete "HKCU\Software\Classes\.isieve" /f > nul 2>&1
-echo Sieve is no longer in the right-click menu, and .simage files no longer open in sieve-view.
+rem The thumbnail handler (sieve-thumbs.dll) as install_context.bat registered it.
+reg delete "HKCU\Software\Classes\CLSID\{DEA4E1A4-F2CC-427D-BD89-4A2E0231EB4B}" /f > nul 2>&1
+echo Sieve is no longer in the right-click menu, and .simage files no longer open in sieve-view or show their pictures.

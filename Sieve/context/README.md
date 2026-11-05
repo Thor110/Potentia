@@ -25,7 +25,9 @@ Where `sieve-view.exe` is beside `sieve-install.exe` (a release's `tools\`, or t
 a `.simage` (Sieve instructions holding pictures) opens in the picture viewer on a
 double-click, and the Sieve submenu of `.sieve` and `.simage` files has **View
 pictures** too (a `.sieve` holding anything but pictures is refused by the viewer, which says
-why). Windows may keep showing the old icon for these files until Explorer is restarted.
+why). Where `sieve-thumbs.dll` is beside the viewer too (5 November 2026), Explorer shows a
+`.simage`'s picture as its thumbnail. Windows may keep showing the old icons for these files until
+a folder is opened again or Explorer is restarted; Disk Cleanup's "Thumbnails" clears them all.
 
 ## Setting it up
 
@@ -43,9 +45,10 @@ A release carries this folder beside the programs. There, `install_context.bat` 
 `tools\sieve-install.exe` in the installation by itself; in the repository, the Release build's.
 
 It is for your user only (`HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\Sieve`, one
-for `.sieve`, `.simage` and each kind of archive; and for the viewer
+for `.sieve`, `.simage` and each kind of archive; for the viewer
 `HKCU\Software\Classes\Sieve.Picture` and `.simage`, which `uninstall_context.bat` removes whole,
-`.simage` being Sieve's own kind of file);
+`.simage` being Sieve's own kind of file; and for the thumbnails
+`HKCU\Software\Classes\CLSID\{DEA4E1A4-F2CC-427D-BD89-4A2E0231EB4B}`, removed too);
 nothing else on the machine is changed. On Windows 11 the entry is under **Show more options**
 (or Shift+right-click).
 

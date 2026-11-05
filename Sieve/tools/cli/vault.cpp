@@ -7,6 +7,7 @@
 // but will not parse fails the vault closed.
 
 #include "cli/vault.hpp"
+#include "cli/dictionaries.hpp" // executable_dir
 
 #include "cli/image_io.hpp"
 #include "cli/locate.hpp"
@@ -52,28 +53,9 @@ const char* const kBuiltinPdq[] = {
 // that, reading it would take more memory than a check should. Its exact hash is still checked.
 constexpr uint64_t kMaxPicturePixels = uint64_t(8192) * 8192;
 
-fs::path program_folder()
-{
-#ifdef _WIN32
-    std::wstring buf(32768, L'\0');
-    const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
-    if (n == 0 || n >= buf.size()) return {};
-    buf.resize(n);
-    return fs::path(buf).parent_path();
-#elif defined(__APPLE__)
-    uint32_t size = 0;
-    _NSGetExecutablePath(nullptr, &size);
-    std::string buf(size, '\0');
-    if (_NSGetExecutablePath(buf.data(), &size) != 0) return {};
-    std::error_code ec;
-    const fs::path p = fs::weakly_canonical(fs::path(buf.c_str()), ec);
-    return ec ? fs::path(buf.c_str()).parent_path() : p.parent_path();
-#else
-    std::error_code ec;
-    const fs::path p = fs::read_symlink("/proc/self/exe", ec);
-    return ec ? fs::path() : p.parent_path();
-#endif
-}
+// The program's folder, as the dictionaries find it (the same function: a thumbnail handler sets it
+// to its own once, for both).
+fs::path program_folder() { return executable_dir(); }
 
 bool is_hex64(const std::string& s)
 {

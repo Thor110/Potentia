@@ -35,6 +35,7 @@
 // --check says what it would show (each picture's name and size, or why it is refused) and exits;
 // --budget BYTES takes that as the memory free (to try the limits on small pictures).
 
+#include "picture_source.hpp"
 #include "cli/image_io.hpp"
 #include "cli/items.hpp"
 #include "cli/locate.hpp"
@@ -74,191 +75,7 @@ namespace {
 namespace fs = std::filesystem;
 using namespace sieve;
 using namespace sieve::cli;
-
-// The limits a .sieve's listing and a picture's header are held to before anything is decoded:
-// a count of files, and memory, half of what is free when it is asked (or where that cannot be
-// had, 2 GiB; --budget gives it instead).
-constexpr size_t kMaxFiles = 4096;
-constexpr uint32_t kMaxSide = uint32_t(1) << 24; // pixels a side (stb_image's own limit)
-uint64_t g_budget = 0;                           // (--budget)
-
-uint64_t memory_budget()
-{
-    if (g_budget) return g_budget;
-    const uint64_t free_now = memory_free();
-    return free_now ? free_now / 2 : uint64_t(2) << 30;
-}
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
-std::string human_bytes(uint64_t n)
-{
-    char b[48];
-    if (n < 1024) std::snprintf(b, sizeof b, "%llu bytes", (unsigned long long)n);
-    else if (n < 1048576) std::snprintf(b, sizeof b, "%.1f KB", double(n) / 1024.0);
-    else if (n < 1073741824ull) std::snprintf(b, sizeof b, "%.1f MB", double(n) / 1048576.0);
-    else std::snprintf(b, sizeof b, "%.2f GB", double(n) / 1073741824.0);
-    return b;
-}
-
-bool picture_name(const std::string& name)
-{
-    const std::string e = lower(fs::path(from_u8(name)).extension().string());
-    return e == ".png" || e == ".jpg" || e == ".jpeg" || e == ".jpe" || e == ".jfif" || e == ".bmp" || e == ".gif" || e == ".tga";
-}
-
-bool sieve_name(const std::string& name)
-{
-    const std::string e = lower(fs::path(from_u8(name)).extension().string());
-    return e == ".simage" || e == ".sieve";
-}
-
-// A recipe that says the file is a picture made again: a JPEG from its brunsli form, a PNG by
-// stb_image_write, from its rows unfiltered, or re-saved.
-bool picture_recipe(const std::string& recipe)
-{
-    for (const char* k : {"jbr ", "stb ", "skr ", "pngr "})
-        if (recipe.rfind(k, 0) == 0) return true;
-    return false;
-}
-
-std::vector<uint8_t> read_all(const fs::path& p)
-{
-    std::ifstream f(p, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot open " + u8(p));
-    return std::vector<uint8_t>((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-}
-
-// A picture to show: where it came from, its own file's bytes, and its pixels once made.
-struct Picture
-{
-    std::string name;          // its name (in a .sieve, its path there)
-    std::vector<uint8_t> file; // the picture file's own bytes
-    uint32_t width = 0, height = 0; // its own size
-    uint32_t scale = 1;             // 1: its pixels; 8: an eighth of them (too large to decode whole)
-    std::string reduced;            // where reduced, why
-    bool made = false;
-    RgbaImage pixels;
-};
-
-bool is_jpeg_bytes(const std::vector<uint8_t>& b) { return b.size() >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF; }
-
-// A PNG's size from its header (IHDR), for one stb_image will not read for its size.
-std::optional<std::pair<uint32_t, uint32_t>> png_size(const std::vector<uint8_t>& b)
-{
-    if (b.size() < 24 || std::memcmp(b.data(), "\x89PNG\r\n\x1a\n", 8) != 0 || std::memcmp(b.data() + 12, "IHDR", 4) != 0) return std::nullopt;
-    auto be32 = [&](size_t at) { return uint32_t(b[at]) << 24 | uint32_t(b[at + 1]) << 16 | uint32_t(b[at + 2]) << 8 | b[at + 3]; };
-    return std::make_pair(be32(16), be32(20));
-}
-
-// The header checked, then the pixels made: the first frame (a GIF's others are not shown); a JPEG
-// too large for that, an eighth from its blocks' averages; else refused, with why.
-void make_pixels(Picture& p)
-{
-    if (p.made) return;
-    uint32_t w = 0, h = 0;
-    const bool jpeg = is_jpeg_bytes(p.file);
-    const bool info = image_info(p.file.data(), p.file.size(), w, h);
-    if (!info)
-    {
-        const auto size = jpeg ? jpeg_size(p.file) : png_size(p.file);
-        if (!size) throw std::runtime_error(p.name + ": not a picture this viewer reads");
-        std::tie(w, h) = *size;
-    }
-    if (w == 0 || h == 0 || w > kMaxSide || h > kMaxSide)
-        throw std::runtime_error(p.name + ": " + std::to_string(w) + " by " + std::to_string(h) + " pixels, over " + std::to_string(kMaxSide) + " a side");
-    p.width = w, p.height = h;
-    // (stb_image's pixels and the viewer's RGBA of them, 4 bytes a pixel each at most; stb_image
-    // itself decodes a JPEG's of under 2 GB and a PNG's of 1 GiB at most)
-    const uint64_t pixels = uint64_t(w) * h, need = pixels * 8, budget = memory_budget();
-    const bool stb_can = info && pixels * 4 < (uint64_t(1) << 31);
-    if (stb_can && need <= budget)
-    {
-        std::vector<RgbaImage> frames = decode_image_frames(p.file.data(), p.file.size(), p.name);
-        if (frames.empty()) throw std::runtime_error(p.name + ": no picture in it");
-        p.pixels = std::move(frames.front());
-        p.scale = 1;
-    }
-    else
-    {
-        const std::string why = need > budget ? "its pixels need about " + human_bytes(need) + " to decode whole, more than half the memory free (" + human_bytes(budget) + ")"
-                                              : "too large for stb_image to decode whole";
-        if (!jpeg) throw std::runtime_error(p.name + ": " + std::to_string(w) + " by " + std::to_string(h) + " pixels: " + why + " (only a JPEG is shown reduced)");
-        if (pixels / 64 * 8 > budget) throw std::runtime_error(p.name + ": " + std::to_string(w) + " by " + std::to_string(h) + " pixels: even its eighth needs more than half the memory free");
-        auto eighth = jpeg_eighth(p.file);
-        if (!eighth) throw std::runtime_error(p.name + ": " + why + ", and its eighth could not be read (a baseline or progressive JPEG, grey or YCbCr, is)");
-        p.pixels.width = eighth->eighth_w;
-        p.pixels.height = eighth->eighth_h;
-        p.pixels.rgba = std::move(eighth->rgba);
-        p.scale = 8;
-        p.reduced = why;
-    }
-    p.made = true;
-}
-
-// What a .sieve holds, read from its listing alone, and refused there if it is not pictures within
-// the limits; else installed into a folder of its own and each picture's file read back.
-std::vector<Picture> pictures_of_sieve(const fs::path& file, std::string* listing_said = nullptr)
-{
-    // (its listing alone first, nothing decoded: cli/locate.hpp listing_of_installer)
-    const Manifest listed = listing_of_installer(file);
-    size_t n = 0;
-    uint64_t all = 0;
-    for (const ManifestEntry& e : listed.entries)
-    {
-        if (e.dir || e.member) continue;
-        if (++n > kMaxFiles) throw std::runtime_error("more than " + std::to_string(kMaxFiles) + " files: not a .sieve of pictures this viewer opens");
-        const std::string name = e.path;
-        if (!picture_recipe(e.remake) && !picture_name(name))
-            throw std::runtime_error(name + ": not a picture (by its recipe and its name), so the .sieve is not opened");
-        if (e.size == kSizeAsMade) throw std::runtime_error(name + ": its size not said");
-        all += e.size;
-        // (every file is held at once while it is installed: half the memory free for them all)
-        if (all > memory_budget())
-            throw std::runtime_error("its pictures come to more than half the memory free (" + human_bytes(memory_budget()) + "), by its listing" +
-                                     (e.size > memory_budget() ? " (" + name + " alone " + human_bytes(e.size) + ")" : std::string()));
-    }
-    if (n == 0) throw std::runtime_error("no files in it");
-    if (listing_said) *listing_said = std::to_string(n) + (n == 1 ? " picture, " : " pictures, ") + human_bytes(all);
-    // (then read again to install: each file decoded, stopping at its declared size)
-    const Manifest m = installable_manifest(file, false);
-    // (A folder of its own, removed after: installing checks each file's size and SHA-256 first.)
-    std::error_code ec;
-    static std::atomic<unsigned> serial{0};
-    const fs::path dest = fs::temp_directory_path(ec) / ("sieve-view-" + std::to_string(SDL_GetTicksNS()) + "-" + std::to_string(serial++));
-    struct Gone
-    {
-        fs::path p;
-        ~Gone()
-        {
-            std::error_code e;
-            fs::remove_all(p, e);
-        }
-    } gone{dest};
-    install_tree(m, dest, false, nullptr);
-    std::vector<Picture> out;
-    for (const ManifestEntry& e : m.entries)
-    {
-        if (e.dir || e.member) continue;
-        Picture p;
-        p.name = e.path;
-        p.file = read_all(dest / from_u8(e.path));
-        out.push_back(std::move(p));
-    }
-    return out;
-}
+using namespace sieve::view;
 
 // One place in the folder: a picture file, or a .sieve (its pictures read when it is reached).
 struct Place
@@ -395,6 +212,8 @@ const char* const kUsage =
     "Options (for testing):\n"
     "  --check              say what it would show (each picture, or why it is refused), and exit\n"
     "  --make-simage        make NAME.simage beside the picture and exit (0 on success)\n"
+    "  --thumbnail SIDE OUT.png  write the picture as Explorer's thumbnail shows it (its longer\n"
+    "                       side at most SIDE; sieve-thumbs.dll) and exit (0 on success)\n"
     "  --zoom Z             start at this zoom (1 is one to one) rather than fitted\n"
     "  --budget BYTES       take this as the memory it may use, not half of what is free\n"
     "  --screenshot FILE    write the window once the picture is shown, as a BMP, and exit\n"
@@ -406,6 +225,8 @@ int main(int argc, char** argv)
 {
     std::string file_arg, shot;
     bool check = false, make = false;
+    uint32_t thumb_side = 0; // (--thumbnail SIDE OUT.png)
+    std::string thumb_out;
     double start_zoom = 0;
     for (int i = 1; i < argc; ++i)
     {
@@ -419,9 +240,10 @@ int main(int argc, char** argv)
         }
         if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
         else if (a == "--zoom" && i + 1 < argc) start_zoom = std::atof(argv[++i]);
-        else if (a == "--budget" && i + 1 < argc) g_budget = std::strtoull(argv[++i], nullptr, 10);
+        else if (a == "--budget" && i + 1 < argc) set_memory_budget(std::strtoull(argv[++i], nullptr, 10));
         else if (a == "--check") check = true;
         else if (a == "--make-simage") make = true;
+        else if (a == "--thumbnail" && i + 2 < argc) thumb_side = uint32_t(std::strtoul(argv[++i], nullptr, 10)), thumb_out = argv[++i];
         else file_arg = a;
     }
     // Every file Sieve's instructions can carry made again (a JPEG from its brunsli form, a PNG by
@@ -444,7 +266,7 @@ int main(int argc, char** argv)
         return out;
     };
 
-    if (check || make)
+    if (check || make || thumb_side)
     {
         hallway::attach_parent_console();
         if (file_arg.empty())
@@ -466,6 +288,28 @@ int main(int argc, char** argv)
             const auto [ok, said] = make_simage(*sieve, f, out);
             std::printf("%s\n", said.c_str());
             return ok ? 0 : 1;
+        }
+        if (thumb_side)
+        {
+            // The thumbnail Explorer is given (sieve-thumbs.dll), as a PNG: the first picture, its
+            // longer side at most SIDE (shrink_to; the DLL then hands Windows the same pixels).
+            try
+            {
+                std::string said;
+                std::vector<Picture> got = load(Place{f, sieve_name(u8(f.filename()))}, said, false);
+                const RgbaImage t = shrink_to(got.front().pixels, thumb_side);
+                const std::string png = stb_png(t.rgba, int(t.width), int(t.height), 4, 8, -1);
+                std::ofstream o(from_u8(thumb_out), std::ios::binary);
+                o.write(png.data(), std::streamsize(png.size()));
+                if (!o) throw std::runtime_error("cannot write " + thumb_out);
+                std::printf("thumbnail: %u by %u pixels, of %s (%u by %u)\n", t.width, t.height, got.front().name.c_str(), got.front().width, got.front().height);
+                return 0;
+            }
+            catch (const std::exception& x)
+            {
+                std::printf("refused: %s\n", x.what());
+                return 1;
+            }
         }
         try
         {

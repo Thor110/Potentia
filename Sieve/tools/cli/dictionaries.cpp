@@ -19,8 +19,19 @@ namespace sieve::cli {
 
 namespace fs = std::filesystem;
 
+namespace {
+fs::path& executable_dir_given()
+{
+    static fs::path given; // (set_executable_dir; empty: the running program's)
+    return given;
+}
+} // namespace
+
+void set_executable_dir(const fs::path& folder) { executable_dir_given() = folder; }
+
 fs::path executable_dir()
 {
+    if (!executable_dir_given().empty()) return executable_dir_given();
 #ifdef _WIN32
     std::wstring buf(32768, L'\0');
     const DWORD n = GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));

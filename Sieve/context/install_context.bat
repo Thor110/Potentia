@@ -39,6 +39,22 @@ reg add "%CLASSES%\.simage" /ve /t REG_SZ /d "Sieve.Picture" /f > nul
 reg add "%CLASSES%\.simage\OpenWithProgids" /v Sieve.Picture /t REG_NONE /f > nul
 echo .simage files open in
 echo   %VIEWER%
+rem And their thumbnails in Explorer are their pictures (5 November 2026): sieve-thumbs.dll beside
+rem sieve-view, a thumbnail handler (the class below), named in .simage's ShellEx for thumbnails.
+for %%F in ("%VIEWER%") do set "THUMBS=%%~dpFsieve-thumbs.dll"
+if not exist "%THUMBS%" goto nothumbs
+set "CLSID={DEA4E1A4-F2CC-427D-BD89-4A2E0231EB4B}"
+reg add "%CLASSES%\CLSID\%CLSID%" /ve /t REG_SZ /d "Sieve picture thumbnails" /f > nul
+reg add "%CLASSES%\CLSID\%CLSID%\InprocServer32" /ve /t REG_SZ /d "%THUMBS%" /f > nul
+reg add "%CLASSES%\CLSID\%CLSID%\InprocServer32" /v ThreadingModel /t REG_SZ /d "Apartment" /f > nul
+reg add "%CLASSES%\.simage\ShellEx\{e357fccd-a995-4576-b01f-234630154e96}" /ve /t REG_SZ /d "%CLSID%" /f > nul
+echo and show their pictures as thumbnails, by
+echo   %THUMBS%
+echo (A folder Explorer already showed keeps its old icons until it is opened again; Disk Cleanup's
+echo "Thumbnails" clears them all.)
+goto done
+:nothumbs
+echo (No sieve-thumbs.dll beside it, so .simage files show the viewer's icon, not their pictures.)
 goto done
 :noviewer
 echo (No sieve-view.exe beside it, so .simage files are not set to open in the picture viewer.)

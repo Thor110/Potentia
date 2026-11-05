@@ -38,7 +38,10 @@ struct ResolvedDictionary
 // separator or ending in .txt is used as a file path directly.
 ResolvedDictionary resolve_dictionary(const std::string& value);
 
+// The program's own folder. A library loaded into another program (the thumbnail handler, in
+// Windows' dllhost) names its own with set_executable_dir, so its data folders are found beside it.
 std::filesystem::path executable_dir();
+void set_executable_dir(const std::filesystem::path& folder);
 
 // The installation's own folder, where its data folders are: the program's folder, or the one
 // above it when the program is in the installation's tools folder (a release puts sieve and

@@ -92,6 +92,8 @@ These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folde
                       instructions holding only pictures (.simage, or such a .sieve),
                       opened or dropped on it. Its Sieve button makes the picture shown a .simage
                       by the sieve beside it. sieve-view --help gives its keys.
+  sieve-thumbs.dll    (Windows) a .simage's picture as its thumbnail in Explorer, read as
+                      sieve-view reads it; context\\install_context.bat registers it for you.
 
 sieve and sieve-install find the installation's data folders (dictionaries, models) in the folder
 above; sieve-view needs none.
@@ -305,6 +307,12 @@ def main():
     (stage / "tools").mkdir()
     for p in PROGRAMS:
         shutil.copy2(build / f"{p}{EXE}", stage / "tools" if p in TOOLS else stage)
+    # (Windows: the thumbnail handler beside sieve-view, registered by context\install_context.bat)
+    if os.name == "nt":
+        thumbs = build / "sieve-thumbs.dll"
+        if not thumbs.exists():
+            fail(f"sieve-thumbs.dll is not in {build}: build the client (SIEVE_BUILD_CLIENT) in Release")
+        shutil.copy2(thumbs, stage / "tools")
     note = TOOLS_NOTE.format(exe=EXE)
     (stage / "tools" / "README.txt").write_bytes((note.replace("\n", "\r\n") if os.name == "nt" else note).encode("utf-8"))
     for d in FOLDERS:
