@@ -12,6 +12,22 @@ a result surprises; close it with what explained it.
 - *Next:* Edward is to run his pictures again under the new JPEG and PNG ways (v32's `jbr`, `skr`,
   `pngr`), and the entry is to be filled in or closed from what comes back.
 
+### figures-2x32 trained in the hallway once said NOT REPRODUCED (5 November 2026)
+- *Seen:* Edward, filming the tutorial on Windows, trained the shipped picture model
+  (`data/training/figures-2x32`) in the AI Training Harness: "NOT REPRODUCED: training again gave a
+  different result.txt". The new result was not kept.
+- *Known:* the `result.txt` it compared with was the committed one, byte for byte. On the same
+  machine, `sieve diffuse data\training\figures-2x32` reproduced it exactly, and so did the
+  hallway when he trained it again. Here (Linux): exactly, with 4, 12 and 1 threads, in the
+  harness itself, and 40 times of 40 on a shorter run with 5 to 29 threads; valgrind finds no
+  memory read before it is written. Nothing changed in training's arithmetic since the result
+  was recorded, and the harness takes no key but Esc while a model trains. So it is a fault that
+  shows rarely, on that machine (a race not yet found, or the machine itself, busy recording), and
+  not a step that differs.
+- *Next:* `sieve diffuse` and the harness now write the new result beside the recorded one
+  (`result-again.txt`), and `sieve diffuse` names the line where the two part: checkpoint 0 is the
+  start, before any step; a later checkpoint, a step. If it is seen again, that file says where.
+
 ## Resolved
 
 ### Silesia's mozilla was not made smaller than LZMA2 makes it (overcome 2 November 2026, with the v33 draft)

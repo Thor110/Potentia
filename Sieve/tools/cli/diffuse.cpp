@@ -277,7 +277,28 @@ int cmd_diffuse(const Args& a)
         std::cout << "reproduced exactly: every checkpoint and the final model are the run's result.txt, byte for byte\n";
         return 0;
     }
-    std::cout << "NOT reproduced: training again gave a different result.txt\n";
+    // (where they part: the first line that differs, so a run that parts at checkpoint 0 (the start,
+    // before any step) is told from one that parts later; and the new result written beside the
+    // old, result-again.txt, to compare line by line. Edward, 5 November 2026: figures-2x32 trained
+    // in the hallway on Windows was not reproduced, and said no more.)
+    std::istringstream was(want), now(res);
+    std::string la, lb;
+    size_t line = 0;
+    for (;;)
+    {
+        ++line;
+        const bool ga = bool(std::getline(was, la)), gb = bool(std::getline(now, lb));
+        if (!ga && !gb) break;
+        if (!ga || !gb || la != lb)
+        {
+            std::cout << "NOT reproduced: training again gave a different result.txt, from its line " << line << "\n"
+                      << "  recorded: " << (ga ? la : std::string("(nothing: it ends)")) << "\n"
+                      << "  now:      " << (gb ? lb : std::string("(nothing: it ends)")) << "\n";
+            break;
+        }
+    }
+    write_text(rp.parent_path() / "result-again.txt", res);
+    std::cout << "  the result now is written beside it: " << (rp.parent_path() / "result-again.txt").string() << "\n";
     return 1;
 }
 

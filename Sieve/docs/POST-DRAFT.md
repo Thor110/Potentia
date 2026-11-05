@@ -57,7 +57,7 @@ Here you can find statistics and comparisons to other compression methods.
 
 As well as information recorded throughout various benchmarks of the system.
 
-So as to not make this post any longer than it already is I will only include the pi6.txt values here along with a few other noteworthy tests, but you can find enwik8, enwik9, silesia and more through the link.
+So as to not make this post any longer than it already is I will only include the pi6.txt values here along with a few other noteworthy tests, but you can find enwik8, enwik9, silesia and more results through the linked markdown file.
 
 pi6.txt stress test, file sourced from : https://www.exeter.ac.uk/v8media/facultysites/ese/physics/pi6.txt
 
@@ -161,14 +161,14 @@ The model isn't capable and it isn't supposed to be, it is just a proof of conce
 
 As I started working on this compression engine I titled it Sieve and put it alongside Potentia, thus it became named 'The Sieve of Potentia' and I included it due to the origins of the idea all being bound in the same space.
 
-Those origins being The Library of Babel, which was the inspiration for the project as a whole.
+Those origins being The Library of Babel, which was one of many inspirations for the project as a whole.
 
 I view the Sieve method as a Kolmogorov complexity limit searcher in essence.
 
 	Links
 
 Current Release : https://github.com/Thor110/Potentia/releases/tag/gallery
-YouTube Video Tutorial on Using The Sieve of Potentia : WIP
+Usage Tutorial : https://www.youtube.com/watch?v=WlqOxxvMWAM
 GitHub Repository : https://github.com/Thor110/Potentia
 GitHub Pages : https://thor110.github.io/Potentia/index.html
 

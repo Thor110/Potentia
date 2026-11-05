@@ -991,6 +991,21 @@ void Harness::poll_pictures()
         {
             const bool same = *drun_->result == out.text;
             verdict_ = tr(same ? "harness.verdict.same" : "harness.pictures.differs");
+            if (!same)
+            {
+                // (the result now beside the recorded one, to compare: sieve diffuse says where they part)
+                std::FILE* g = nullptr;
+#ifdef _WIN32
+                _wfopen_s(&g, (drun_->path / "result-again.txt").wstring().c_str(), L"wb");
+#else
+                g = std::fopen((drun_->path / "result-again.txt").string().c_str(), "wb");
+#endif
+                if (g)
+                {
+                    std::fwrite(out.text.data(), 1, out.text.size(), g);
+                    std::fclose(g);
+                }
+            }
             verdict_colour_ = same ? kGood : kBad;
         }
         else
