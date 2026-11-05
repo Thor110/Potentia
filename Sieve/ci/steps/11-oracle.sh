@@ -1192,7 +1192,10 @@ def vi(n):
         if not n: return o + bytes([b])
         o += bytes([b | 128])
 junk = bytes((i * 7919) % 251 for i in range(30000))
-open('forged.sieve', 'wb').write(v33('stream lzma2 30000 6000000000 1048576', 'f\t6000000000\traw\tf.bin', junk))
+# (60 MB declared: past what 30 KB of chunks can make, and under half the memory free on any
+# machine that runs this, so the chunks are what refuse it; 6 GB was refused before them where
+# less than 12 GB was free, Edward's run of 5 November 2026)
+open('forged.sieve', 'wb').write(v33('stream lzma2 30000 60000000 1048576', 'f\t60000000\traw\tf.bin', junk))
 code = vi(8 << 60) + vi(1) + b'A'
 rope = vi(len(code)) + code
 open('claims.sieve', 'wb').write(v33('stream rope %d %d 0' % (len(rope), len(rope)), 'f\t%d\truns\tf.bin' % (8 << 60), rope))
