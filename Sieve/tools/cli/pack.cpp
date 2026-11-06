@@ -4958,11 +4958,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // (1.5% and 6%). Not where Try every way was asked for itself: size, at any cost.)
                     if (bytes[i].size() > (size_t(16) << 20) && !(rope_search_every_wave() && !optimise_search()))
                         margin = std::max<uint64_t>(margin, uint64_t(double(best) * (0.01 + 0.005 * double(bytes[i].size()) / 1e8)));
-                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, margin) : best;
-                    if (way.empty() && margin > 64 + best / 400 && mc.size() + vl < best - std::min<uint64_t>(best, 64 + best / 400) && mc.size() + vl >= need)
+                    // (The rising bar against whatever is best before mixing, not only LZMA2: a FLAC,
+                    // which LZMA2 cannot shrink, had the rope as its best, and was mixed for 0.56% at
+                    // 52 MB, slow to install; 6 November 2026.)
+                    const bool barred = margin > 64 + best / 400;
+                    const uint64_t need = way.empty() || barred ? best - std::min<uint64_t>(best, margin) : best;
+                    if (barred && mc.size() + vl < (way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best) && mc.size() + vl >= need)
                     {
                         char bar[128];
-                        std::snprintf(bar, sizeof bar, " (under LZMA2's, but not by the bar for a file this size, %.2f%%: kept quick to install)",
+                        std::snprintf(bar, sizeof bar, " (smaller, but not by the bar for a file this size, %.2f%%: kept quick to install)",
                                       100.0 * double(margin) / double(std::max<uint64_t>(best, 1)));
                         mixed_said += bar;
                     }

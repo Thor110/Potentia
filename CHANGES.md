@@ -1,23 +1,40 @@
-# The roof, 1 MiB to 1 GB (6 November 2026)
+# The FLAC, HX, and the bar against every way (6 November 2026)
 
-One commit on top of the last zip (f091783). The last of the six.
+One commit on top of the last zip (4320887).
 
-enwik9 (954 MiB), and its first 1 to 256 MiB, made with the command line's default and installed
-again. Every size came back the same.
+## Statistics
 
-| Size | `.sieve` | Made in | Making's peak memory | Installed in | Installing's peak |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 64 MiB | 16,855,762 | 234.9 s | 2,664 MiB | 1.2 s | 208 MiB |
-| 256 MiB | 64,357,882 | 1,017.6 s | 4,950 MiB | 5.2 s | 772 MiB |
-| 954 MiB | 211,195,707 | 3,395.3 s | 12,950 MiB | 16.6 s | 2,728 MiB |
+Proof/STATISTICS.md has a new "Music (FLAC)" section, and a line in "At a glance", with your zip, 7z
+and `.sieve` figures for Symphony No. 6 and the ones measured here.
 
-- **The roof is making's memory.** From 64 MiB it is about 2 GB plus 11.5 MiB for every MiB read. The
-  whole of enwik9 took 12.95 GB of this machine's 16. Installing stays small and fast.
-- **With Optimise Search** (the File Locator's default) at 64 and 256 MiB: 14% and 13% smaller (it
-  mixes them), at 1,597 and 3,038 MiB at the most.
-- **The File Locator's memory estimate:** it held with Optimise Search ticked. With it unticked it
-  said 9.2 GB for the whole, where it took 12.95. Unticked and from 64 MiB, it now says 2,000 MiB and
-  11.5 times what is read, within 3% of all three runs.
+## Their repository (CombaryMaker/Harringtons_Insights, cloned at ff6585f)
 
-results/roof-enwik9-2026-11-06.md has the full table. The whole came to 11 bytes more than your
-machine's LZMA2 figure for enwik9.
+- **A, anything lifted from Sieve: nothing.**
+  - **Code:** every line of 45 characters or more in their sources (13,272) was searched for in Sieve's.
+    Four matched, all ordinary Python boilerplate.
+  - **Words and names:** none of Sieve's own terms appear.
+  - **hs_sieve:** the only part that touches Sieve. It runs your `sieve` program and uses none of its
+    source.
+- **B, the FLAC:** every result below was decoded and checked byte for byte.
+
+| | Bytes | Off the FLAC | Decoded in |
+| :--- | ---: | ---: | ---: |
+| 7z / zip (yours) | 51,944,928 / 51,942,347 | 0.10% / 0.11% | |
+| HX Fast | 51,934,580 | 0.12% | 0.15 s |
+| HX `--complete`, its best | 51,893,617 | 0.20% | 9.35 s |
+| hs_sieve | 51,784,112 | 0.41% | 0.52 s |
+| Sieve now (default and Optimise Search) | 51,783,003 | 0.41% | 1.3 s |
+| Sieve, mixed whole (your 51,708,015) | 51,707,991 | 0.56% | 65.9 s |
+
+HX's best takes 0.20% off; Sieve takes twice that while installing in 1.3 s, and 2.8 times that mixed.
+hs_sieve is Sieve in blocks: 1,109 bytes bigger than Sieve alone, and faster on four cores.
+
+## A fix this found
+
+Your `.sieve` mixed the whole 52 MB file for 0.56%, and that installs in 65.9 s. The rising bar
+(today's) had only been checked when LZMA2 was the alternative, and LZMA2 can't shrink a FLAC. It is
+now checked against whatever way is best. Here that means the rope's pieces: 75,012 bytes more, and
+it installs in 1.3 s. samba, nci, webster, mozilla and enwik8 were packed again with the fix and came
+to the same bytes.
+
+The full write-up is in results/flac-against-hx-2026-11-06.md.

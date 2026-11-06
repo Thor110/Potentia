@@ -22,6 +22,7 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
 - [Photographs (JPEG)](#photographs-jpeg)
+- [Music (FLAC)](#music-flac)
 - [A small script](#a-small-script)
 - [Files that are items of Sieve's own lines](#files-that-are-items-of-sieves-own-lines)
 - [What carried each file](#what-carried-each-file)
@@ -40,6 +41,7 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 | [ALTEngine](#a-game-engine-altengine), a game engine's release (v0.9.4) | 25,694,035 | 7,712,804 | 7,345,022 | 3.50:1 | −4.77% |
 | [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
 | [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 523,367 | 4.57:1 | −23.71% |
+| [Symphony No. 6, first movement](#music-flac), FLAC | 51,997,326 | 51,944,928 | 51,708,015 | 1.01:1 | −0.46% |
 | [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,424,154 | 1.04:1 | −3.30% |
 | [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% |
 | [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,686 | 1,733:1 | −66.53% |
@@ -576,6 +578,29 @@ On disk:
 | 1-amorgos.jpg.pagespeed.ce.Mgygi9l3S-.jpg | 3,846,144 | 3,846,144 | 3,829,760 | 3,829,760 |
 | 20230830_163945.jpg | 4,141,056 | 4,128,768 | 4,116,480 | 4,112,384 |
 | 20240407_153939.jpg | 4,587,520 | 4,575,232 | 4,562,944 | 4,558,848 |
+
+## Music (FLAC)
+
+`Symphony No.6 (1st movement).flac`, from filesamples.com's FLAC samples: 51,997,326 bytes (16-bit
+stereo at 44.1 kHz, SHA-256 `421dd83e…6707dd`). FLAC is compressed already, by a predictor made for
+sound, so what is left to take is small, and every compressor here takes under 0.6% of it.
+
+| | Bytes | Of the FLAC | Against 7z |
+| :--- | ---: | ---: | ---: |
+| The FLAC | 51,997,326 | | |
+| `.zip` (Edward's) | 51,942,347 | −0.11% | −0.005% |
+| `.7z` (Edward's) | 51,944,928 | −0.10% | |
+| `.sieve`, Edward's machine, 6 November 2026 | 51,708,015 | −0.56% | −0.46% |
+| `.sieve` here, as `sym6.flac`: the same packing (mixed) | 51,707,991 | −0.56% | −0.46% |
+| `.sieve` here, as `sym6.flac`: the rising bar asked against every way | 51,783,003 | −0.41% | −0.31% |
+
+Edward's `.sieve` (Optimise Search) mixed the whole file: 0.56% under it, but a 52 MB mixed stream
+installs slowly (65.9 s here, measured). The rising bar for mixing over 16 MiB (1%, and 0.5% more
+for each 100 MB) had been checked only against LZMA2; LZMA2 cannot shrink a FLAC, so the rope was
+best before mixing and the bar was not asked. Asked against every way, the file is cut into pieces
+and pulled tight by the rope instead: 75,012 bytes more, and it installs in 1.3 s. Both installed
+back the same. (Here the file was named `sym6.flac`, 24 characters shorter than its own name,
+which is the difference between Edward's `.sieve` and the first made here.)
 
 ## A small script
 

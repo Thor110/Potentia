@@ -26,3 +26,11 @@ Only mozilla changes (mixing was 0.43% under LZMA2, under its bar of 1.25%). Ins
 | LZMA2 (with it) | 13,376,239 | 1.0 s | 161 MiB | yes |
 
 57,657 bytes more, for an install about 50 times as fast.
+
+## Later the same day: the bar against every way
+
+The bar had been asked only where LZMA2 was the best before mixing. A FLAC (Symphony No. 6, 51,997,326
+bytes), which LZMA2 cannot shrink, had the rope as its best, and was mixed whole for 0.556%,
+installing in 65.9 s. Asked against whatever is best, it is cut into pieces and pulled tight by the
+rope: 51,783,003 bytes against 51,707,991, installing in 1.3 s. The five files above, packed again
+with it, came to the same bytes as in the table (results/flac-against-hx-2026-11-06.md).

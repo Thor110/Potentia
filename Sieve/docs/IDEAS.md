@@ -6058,6 +6058,9 @@ the day's measurements and review, roughly in the order they would pay:
   mozilla and enwik8 with Optimise Search, only mozilla changes: 13,318,582 bytes mixed to
   13,376,239 as LZMA2 (0.43% more), installing in 1.0 s instead of 49.5 s; the others are the same
   bytes as before.
+  The same day the bar was made to apply against whatever is best before mixing, not only LZMA2:
+  a FLAC (52 MB), which LZMA2 cannot shrink, had been mixed for 0.556% (65.9 s to install); now the
+  rope's pieces, 0.412% (1.3 s). The five above are unchanged.
 - *The stream weighing's cost on large folders.* It estimates the shared LZMA2 stream twice (with and
   without the mixed files); on a folder of hundreds of MB that is minutes. Where the mixed files are
   a small share of the stream (under 1%), or their codes already far under their bytes' share, it
