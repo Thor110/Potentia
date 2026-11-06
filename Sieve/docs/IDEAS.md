@@ -4947,6 +4947,10 @@ allotted time".
   0.65 to 1.04 GB at the most, on 4 threads), each within about a quarter; it puts Edward's 377 MB
   folder on 12 threads at 5.4 GB, where it took 4.1 (§19.105).
 
+- *The roof (6 November 2026, results/roof-enwik9-2026-11-06.md):* enwik9 whole made at 12,950 MiB
+  at the most with Optimise Search off, where the estimate said 9,236; unticked and from 64 MiB it
+  now says 2,000 MiB and 11.5 times what is read (within 3% of the three measured). Ticked, it held.
+
 **19.98 Recurring values, scale repeats and a randomly locked byte (Edward, 22 October 2026;
 measured or answered, nothing built).**
 - *Recurring values:* "a filter that keeps an eye out for when recurring values might be able to be

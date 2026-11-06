@@ -842,7 +842,14 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 // this says 5.4. Said beside the estimate, and where it is over the memory free, so.
                 {
                     const uint64_t threads = std::max(1u, std::thread::hardware_concurrency());
-                    const uint64_t need = (uint64_t(200) << 20) + (uint64_t(150) << 20) * std::min<uint64_t>(threads, std::max<uint64_t>(files, 3)) + 9 * bytes;
+                    uint64_t need = (uint64_t(200) << 20) + (uint64_t(150) << 20) * std::min<uint64_t>(threads, std::max<uint64_t>(files, 3)) + 9 * bytes;
+                    // With Optimise Search unticked, from 64 MiB, more (the roof, 6 November 2026,
+                    // enwik9's first 64 and 256 MiB and the whole: 2,664, 4,950 and 12,950 MiB at the
+                    // most, where the line above says 1,226, 2,954 and 9,236): 2,000 MiB and 11.5 times
+                    // what is read fits all three within 3%. Ticked, the line above held (1,597 and
+                    // 3,038 MiB measured at 64 and 256).
+                    if (!sieve::cli::optimise_search() && bytes >= (uint64_t(64) << 20))
+                        need = std::max(need, (uint64_t(2000) << 20) + bytes * 23 / 2);
                     const uint64_t free_now = cli::memory_free();
                     auto gb = [](uint64_t n) {
                         char b[32];
