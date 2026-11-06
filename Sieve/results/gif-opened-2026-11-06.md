@@ -34,3 +34,40 @@ exactly, so it is left aside.
 
 (Pillow is no way to read the indices: it gave later frames re-quantised, which a first run here
 took for their indices.)
+
+## Built: v34's `gif` (the same day)
+
+The route, behind `--v34-draft` (SPECIFICATIONS §12.2 v34, `tools/cli/gif_lzw.hpp`): each GIF
+carried as its frames' indices then its skeleton, the LZW coded again on installing. All six opened
+(0.13 to 0.19 s each) and installed byte for byte, each checked against its SHA-256. Made with
+`sieve locate src --installer ... --optimise-search --v34-draft`:
+
+| Settings | Size | Of the GIFs | Making | Installing |
+| :--- | ---: | ---: | ---: | ---: |
+| v33, Optimise Search | 8,377,298 | 87% | 25 s | |
+| v34, indices after the skeleton, shape guessed | 4,331,766 | 45.0% | 105 s | 29 s |
+| v34 as built: indices first, shape from the recipe | **4,150,626** | **43.2%** | 101 s | 27 s |
+| the same, Prioritise Decoding Speed (LZMA2) | 4,652,864 | 48.4% | 161 s | 3.3 s |
+
+Mixing beats xz -9e on the same indices (4,718,704, palettes apart) by 12%. With Prioritise
+Decoding Speed, 145 s of the 160 s making it went to LZMA2's three passes over the 119,811,620
+bytes of indices (`--timings`: the tuned pass 88 s, the first 65 s, 7-Zip's 60 s, some at once).
+
+Pillow 12's GIF writer codes as compress does too: an animated GIF it wrote (12 frames) opened and
+was given back exactly, so the route is not gifenc's alone.
+
+## Making faster: the stream's LZMA2 passes at once (the same day)
+
+The lzma2 stream's search (`pack_stream`, `tune`) had run the preset's pass alone beside the
+half-second settings trial, then the other three passes (the settings chosen, at the preset's
+match length and at 64; 7-Zip's encoder) together once it was done. Now the trial runs first and
+all four passes at once, as the memory allows (each about twelve times the dictionary: 4 at once
+here, with 15 GB and 4 cores). The same passes, compared in the same order.
+
+| The six GIFs, Prioritise Decoding Speed | Making | Size |
+| :--- | ---: | ---: |
+| before | 161 s | 4,652,864 |
+| the passes at once | **96 s** | 4,652,864, byte for byte the same `.sieve` |
+
+Which pass won (`SIEVE_PASS_SIZES=1`) on the 119,811,620 bytes of indices: the preset's 4,719,913;
+the settings chosen (lc2 lp0 pb0) 4,652,654, kept; at match length 64 5,110,752; 7-Zip's 4,678,648.

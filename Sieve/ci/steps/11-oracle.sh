@@ -1451,3 +1451,53 @@ $S install dqfast.sieve --to dqfast_inst > /dev/null
 cmp dq.txt dqfast_inst/dq.txt
 python sieve_ref.py unpack dqfast.sieve --to dqfast_oracle > /dev/null
 cmp dq.txt dqfast_oracle/dq.txt
+# The v34 draft's first piece (6 November 2026, Edward: "build the gif route for gifenc first"): a
+# GIF carried as its skeleton and its frames' colour indices, its LZW coded again on installing as
+# compress codes it ("gif <sub-block size> <skeleton size> <inner size>"). Two GIFs of ten frames,
+# 160 by 120 pixels of 16 colours, written here with the oracle's own LZW coder: one cut into
+# sub-blocks of 254 bytes as gifenc cuts them, carried so and given back byte for byte by Sieve,
+# sieve-install and the oracle; the other cut 100 bytes first and 254 after, which the rule does
+# not give back, so left as it is. Without the draft, neither opened.
+rm -rf g34
+mkdir g34
+python - g34 <<'PY'
+import os, sys
+sys.path.insert(0, ".")
+from sieve_ref import gif_lzw
+def gif(cuts):
+    o = bytearray(b"GIF89a" + (160).to_bytes(2, "little") + (120).to_bytes(2, "little") + bytes([0xF3, 0, 0]))
+    o += bytes(c for i in range(16) for c in (i * 16, 255 - i * 16, (i * 40) & 255))
+    o += b"\x21\xFF\x0BNETSCAPE2.0\x03\x01\x00\x00\x00"
+    for k in range(10):
+        o += b"\x21\xF9\x04\x04" + (8).to_bytes(2, "little") + b"\x00\x00"
+        o += b"\x2C\x00\x00\x00\x00" + (160).to_bytes(2, "little") + (120).to_bytes(2, "little") + b"\x00\x04"
+        px = bytes(((x + 3 * k) // 9 + (y * y) // 300 + (x * y) % 7 // 6) % 16 for y in range(120) for x in range(160))
+        lzw, at = gif_lzw(4, px), 0
+        for n in cuts(len(lzw)):
+            o += bytes([n]) + lzw[at:at + n]
+            at += n
+        o += b"\x00"
+    return bytes(o + b"\x3B")
+def even(total):
+    return [min(254, total - a) for a in range(0, total, 254)]
+def odd(total):
+    return [min(100, total)] + [min(254, total - a) for a in range(100, total, 254)]
+open(os.path.join(sys.argv[1], "even.gif"), "wb").write(gif(even))
+open(os.path.join(sys.argv[1], "odd.gif"), "wb").write(gif(odd))
+PY
+$S locate g34 --installer g34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > g34.txt
+grep -q "^gifs      1 GIF(s) carried as their frames' colour indices, 10 frames" g34.txt
+grep -q "^manifest  sieve-manifest-v34" g34.txt
+grep -q "	gif 254 [0-9]* 192[0-9]* .*even.gif$" g34.txt
+# (Mixed, where mixing carries them, as a picture as wide as the frames, from the recipe: I160x1.)
+if grep "	gif .*even.gif$" g34.txt | grep -q "	gif [0-9 ]* mix"; then grep -q "	gif [0-9 ]* mix4 .*I160x1.*even.gif$" g34.txt; fi
+if grep -q "	gif .*odd.gif$" g34.txt; then exit 1; fi
+rm -rf g34_inst g34_si g34_oracle
+$S install g34.sieve --to g34_inst > /dev/null
+diff -r g34 g34_inst
+$SI g34.sieve --to g34_si --yes > /dev/null
+diff -r g34 g34_si
+python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
+diff -r g34 g34_oracle
+$S locate g34 --installer g34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
+if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi

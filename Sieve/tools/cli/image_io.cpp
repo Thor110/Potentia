@@ -55,15 +55,16 @@ bool image_info(const uint8_t* data, size_t size, uint32_t& width, uint32_t& hei
     return true;
 }
 
-std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size, const std::string& path)
+std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size, const std::string& path, std::vector<int>* delays_ms, bool first_only)
 {
+    if (delays_ms) delays_ms->clear();
     if (size > 0x7FFFFFFFu) throw std::runtime_error("cannot decode '" + path + "': too large");
     const auto* data = reinterpret_cast<const stbi_uc*>(bytes_in);
     const int len = static_cast<int>(size);
     std::vector<RgbaImage> frames;
 
     const bool is_gif = size >= 6 && bytes_in[0] == 'G' && bytes_in[1] == 'I' && bytes_in[2] == 'F';
-    if (is_gif)
+    if (is_gif && !first_only)
     {
         int* delays = nullptr;
         int w = 0, h = 0, n = 0, comp = 0;
@@ -73,6 +74,7 @@ std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size,
         for (int i = 0; i < n; ++i)
             frames.push_back({uint32_t(w), uint32_t(h),
                               std::vector<uint8_t>(pixels + i * frame_bytes, pixels + (i + 1) * frame_bytes)});
+        if (delays_ms && delays && n > 1) delays_ms->assign(delays, delays + n);
         stbi_image_free(pixels);
         STBI_FREE(delays);
         return frames;

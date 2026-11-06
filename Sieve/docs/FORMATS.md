@@ -84,7 +84,7 @@ read goes to ffmpeg, where one is found.
 | :--- | :--- | :--- | :--- | :--- |
 | **PNG** | temporary: made again from its pixels or its skeleton, its rows carried unfiltered, its pixels mixed as a picture of its own shape, as its palette where it has 256 colours or fewer; permanent: the same picture re-saved at its smallest (`pngr`); no box: as it is | yes | yes; Export saves pictures as PNG | yes |
 | **JPEG** (`.jpg`, `.jpeg`, `.jpe`, `.jfif`) | temporary: its brunsli form, made again exactly (`jbr`, 1 KiB and over); permanent: the same coefficients with tables made for them; no box: as it is | yes, progressive too | yes; one too large for the memory free shown at an eighth, from its blocks' averages | yes |
-| **GIF** | as its bytes (its LZW is not undone) | every frame (more than one: the video line) | its first frame | every frame |
+| **GIF** | as its bytes; with the v34 draft (`--v34-draft`), temporary: its frames' colour indices, mixed as a picture as wide as its frames, made again exactly where its LZW was coded as compress codes it (gifenc's, Pillow's; `gif`), else as its bytes | every frame (more than one: the video line) | played, each frame for its own delay, where its frames fit in half the memory free (else its first, and why); P pauses, comma and full stop step; thumbnails its first frame | every frame |
 | **BMP** | as its bytes; uncompressed pixels may be mixed as a picture where a shape guessed from them is at least 2% smaller on the file's start | yes | yes | yes |
 | **TGA** | as BMP | yes | yes | yes |
 | **PNM** (`.ppm`, `.pgm`, `.pnm`) | as BMP | yes | not offered (by name; the viewer opens the six above) | yes |

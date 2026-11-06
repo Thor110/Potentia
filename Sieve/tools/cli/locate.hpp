@@ -217,6 +217,10 @@ inline constexpr const char* kDeltaManifestVersion = "sieve-manifest-v32";
 // made only with --v33-draft): v32 whose mixing may name the match model's ways (mix-v4's "R1",
 // "M4", "C2"). Its head is v32's, read by its version byte.
 inline constexpr const char* kMatchWaysManifestVersion = "sieve-manifest-v33";
+// v34 (the draft after v33, 6 November 2026; made only with --v34-draft): v33 with a GIF made again
+// exactly from its skeleton and its frames' colour indices ("gif <sub-block size> <skeleton size>
+// <inner size> <way>", gif_lzw.hpp). Its head is v32's, read by its version byte.
+inline constexpr const char* kGifManifestVersion = "sieve-manifest-v34";
 
 // The "u" lines' formats v20 adds (an archive carried as its contents).
 inline bool is_v20_format(const std::string& f)
@@ -323,6 +327,7 @@ struct Manifest
     bool v30 = false; // v30: files mixed together in groups (v29 is set too)
     bool v31 = false; // v31: archives made again from their skeleton and their files apart (v30 is set too)
     bool v32 = false; // v32: some file carried as its differences from another, "delta" (v31 is set too)
+    bool v34 = false; // v34 (draft): some GIF made again from its indices (v33 is set too)
     bool v33 = false; // v33: some file a copy, runs, spans, or mixing with the palette, the x86 filter or the match model's ways (v32 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the

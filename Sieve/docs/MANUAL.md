@@ -639,15 +639,21 @@ holding several shows each in turn, the wheel zooms about the pointer, 0 fits an
 **Export** writes the picture as a PNG; **Save file** writes a `.sieve`'s picture file as it was
 carried. Since a `.sieve` can hold anything under any name, its listing alone is read first,
 nothing decoded, and the whole refused where a file is not a picture by its recipe (`jbr`, `stb`,
-`skr`, `pngr`) or its name, where there are more than 4,096 files, or where its files come to more
+`skr`, `pngr`, and the v34 draft's `gif`) or its name, where there are more than 4,096 files, or where its files come to more
 than half the memory free; installing then stops at each file's declared size and checks its
 SHA-256 (in a folder of its own, removed after); and each picture's header is read before its
 pixels are made, which they are only where they fit in half the memory free (and in what
 stb_image decodes: a JPEG's under 2 GB, a PNG's to 1 GiB). A JPEG too large for that is shown at
 an eighth, from its blocks' averages alone (a sixty-fourth of the memory: a 380 MB JPEG of 30,000
 by 20,000 opened in 7.7 s, at most 517 MiB, here); any other is refused, with why. A `.sieve`'s
-pictures are made one at a time, as each is shown. `sieve-view --help` gives the keys and the
-options for testing (`--check`, `--make-simage`, `--thumbnail`, `--budget`, `--screenshot`).
+pictures are made one at a time, as each is shown. An animated GIF plays (6 November 2026), each
+frame for its own delay (under 20 ms taken as 100, as browsers take it): every frame is made
+first, at 8 bytes a pixel a frame, and only where they all fit in half the memory free, counted
+from the GIF's blocks before any is decoded (else its first frame is shown, and the foot says why).
+**Pause**/**Play** (P) stops it, comma and full stop step a frame back or on, and **Export** writes
+the frame shown; thumbnails are its first frame. `sieve-view --help` gives the keys and the
+options for testing (`--check`, `--make-simage`, `--thumbnail`, `--budget`, `--frame`,
+`--screenshot`).
 
 **Thumbnails in Explorer** (Windows, 5 November 2026): `sieve-thumbs.dll`, beside `sieve-view`, gives
 Explorer a `.simage`'s first picture as its thumbnail, in place of the viewer's icon, and (since

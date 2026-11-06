@@ -90,10 +90,10 @@ bool sieve_name(const std::string& name)
 namespace {
 
 // A recipe that says the file is a picture made again: a JPEG from its brunsli form, a PNG by
-// stb_image_write, from its rows unfiltered, or re-saved.
+// stb_image_write, from its rows unfiltered, or re-saved; (v34 draft) a GIF from its frames' indices.
 bool picture_recipe(const std::string& recipe)
 {
-    for (const char* k : {"jbr ", "stb ", "skr ", "pngr "})
+    for (const char* k : {"jbr ", "stb ", "skr ", "pngr ", "gif "})
         if (recipe.rfind(k, 0) == 0) return true;
     return false;
 }
@@ -122,11 +122,47 @@ std::optional<std::pair<uint32_t, uint32_t>> png_size(const std::vector<uint8_t>
 
 } // namespace
 
-// The header checked, then the pixels made: the first frame (a GIF's others are not shown); a JPEG
-// too large for that, an eighth from its blocks' averages; else refused, with why.
-void make_pixels(Picture& p)
+size_t gif_frame_count(const std::vector<uint8_t>& b)
 {
-    if (p.made) return;
+    if (b.size() < 13 || (std::memcmp(b.data(), "GIF87a", 6) != 0 && std::memcmp(b.data(), "GIF89a", 6) != 0)) return 0;
+    const size_t n = b.size();
+    size_t at = 13, frames = 0;
+    if (b[10] & 0x80) at += size_t(3) << ((b[10] & 7) + 1);
+    // (each block's sub-blocks skipped by their lengths: a few steps a frame, nothing decoded)
+    auto skip_sub_blocks = [&] {
+        while (at < n && b[at]) at += 1 + size_t(b[at]);
+        ++at;
+    };
+    while (at < n && b[at] != 0x3B)
+    {
+        if (b[at] == 0x21)
+        {
+            at += 2;
+            skip_sub_blocks();
+        }
+        else if (b[at] == 0x2C)
+        {
+            if (n - at < 11) break;
+            const uint8_t f = b[at + 9];
+            at += 10;
+            if (f & 0x80) at += size_t(3) << ((f & 7) + 1);
+            ++at; // (the LZW code size)
+            skip_sub_blocks();
+            ++frames;
+        }
+        else break;
+    }
+    return frames;
+}
+
+// The header checked, then the pixels made: the first frame (with all_frames, an animated GIF's every
+// frame where they fit); a JPEG too large for that, an eighth from its blocks' averages; else
+// refused, with why.
+void make_pixels(Picture& p, bool all_frames)
+{
+    // (made already: done, unless its other frames are asked for now and were not made then)
+    if (p.made && (!all_frames || p.frames <= 1 || !p.more.empty() || !p.one_frame.empty())) return;
+    p.made = false;
     uint32_t w = 0, h = 0;
     const bool jpeg = is_jpeg_bytes(p.file);
     const bool info = image_info(p.file.data(), p.file.size(), w, h);
@@ -145,9 +181,21 @@ void make_pixels(Picture& p)
     const bool stb_can = info && pixels * 4 < (uint64_t(1) << 31);
     if (stb_can && need <= budget)
     {
-        std::vector<RgbaImage> frames = decode_image_frames(p.file.data(), p.file.size(), p.name);
+        // (A GIF's frames, every one as large as its screen, held at once by stb_image and again
+        // here: each its 8 bytes a pixel, the lot within the budget, or the first alone.)
+        const size_t count = gif_frame_count(p.file);
+        p.frames = std::max<size_t>(count, 1);
+        const bool every = all_frames && count > 1 && need * count <= budget;
+        if (all_frames && count > 1 && !every)
+            p.one_frame = "its " + std::to_string(count) + " frames need about " + human_bytes(need * count) + " to play, more than half the memory free (" +
+                          human_bytes(budget) + ")";
+        std::vector<RgbaImage> frames = decode_image_frames(p.file.data(), p.file.size(), p.name, every ? &p.delays_ms : nullptr, !every);
         if (frames.empty()) throw std::runtime_error(p.name + ": no picture in it");
         p.pixels = std::move(frames.front());
+        p.more.clear();
+        for (size_t k = 1; k < frames.size(); ++k)
+            if (frames[k].width == p.pixels.width && frames[k].height == p.pixels.height) p.more.push_back(std::move(frames[k]));
+        if (p.more.size() + 1 != frames.size()) p.more.clear(), p.delays_ms.clear();
         p.scale = 1;
     }
     else

@@ -1,8 +1,20 @@
 # The next manifest version: v34 begun, and the plans v32 and v33 were built from
 
-**v34, a draft begun empty (3 November 2026).** Nothing is behind `--v34-draft` yet; with it on,
-Sieve makes what the newest makes. Candidate: scattered substitutions (IDEAS §19.114, 3), on real
-pairs. (The web dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
+**v34, a draft begun empty (3 November 2026).** Behind `--v34-draft`; with it off, Sieve makes v33
+as before. Candidate still: scattered substitutions (IDEAS §19.114, 3), on real pairs. (The web
+dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
+- **First piece, built 6 November 2026: `gif`** (Edward: "build the gif route for gifenc first"; IDEAS
+  §19.123). A GIF carried as its frames' colour indices then its skeleton, each frame's LZW coded
+  again on installing as compress codes it (gifenc's and Pillow's coder), in sub-blocks of the
+  recipe's size; kept only where that gives the GIF back exactly. Indices first, so mixing reads
+  them as a picture as wide as the frames (from the skeleton, where every frame is as wide).
+  `tools/cli/gif_lzw.hpp`; SPECIFICATIONS §12.2 v34; the oracle reads it; CI step 11 checks it
+  (a GIF cut as gifenc cuts it carried so by Sieve, sieve-install and the oracle; one cut otherwise
+  left as it is; none without the draft).
+- **Measured** (results/gif-opened-2026-11-06.md): six gifenc GIFs, 9,616,677 bytes; v33 with
+  Optimise Search 8,377,298 (87%); v34 4,150,626 (43.2%), installed in 27 s; with Prioritise
+  Decoding Speed 4,652,864 (48.4%), installed in 3 s. Making them took 101 s and 161 s, most of it
+  LZMA2's passes over 120 MB of indices (the speed work's first target).
 
 **v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
 MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).

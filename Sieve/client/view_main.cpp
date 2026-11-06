@@ -204,10 +204,13 @@ const char* const kUsage =
     "and before. A .sieve's listing is read first and refused where a file is not a picture by its\n"
     "recipe or name, or over the limits (4,096 files; half the memory free in all); each picture's\n"
     "header is read before its pixels are made, and they are made only where they fit in half the\n"
-    "memory free. A JPEG too large is shown at an eighth, from its blocks' averages alone.\n"
+    "memory free. A JPEG too large is shown at an eighth, from its blocks' averages alone. An\n"
+    "animated GIF plays, each frame for its own delay, where all its frames fit there (else its\n"
+    "first is shown, and why).\n"
     "\n"
     "Keys: Right/Left next and before, wheel or +/- zoom, 0 fit, 1 one to one, drag to move,\n"
-    "E export as PNG, S make NAME.simage beside it (sieve locate --prioritise-decoding),\n"
+    "E export as PNG (an animated GIF's frame shown), S make NAME.simage beside it (sieve locate\n"
+    "--prioritise-decoding), P pause or play a GIF, comma and full stop a frame back or on,\n"
     "F save the picture's own file from a .sieve, Esc or Q close.\n"
     "\n"
     "Options (for testing):\n"
@@ -218,6 +221,7 @@ const char* const kUsage =
     "  --thumbnail-check    on Windows, each step Explorer takes for the file's thumbnail, and\n"
     "                       which one fails (0 when sieve-thumbs.dll gave one)\n"
     "  --zoom Z            start at this zoom (1 is one to one) rather than fitted\n"
+    "  --frame K            an animated GIF paused at frame K (from 1), as for --screenshot\n"
     "  --budget BYTES       take this as the memory it may use, not half of what is free\n"
     "  --screenshot FILE    write the window once the picture is shown, as a BMP, and exit\n"
     "  --help               this text\n";
@@ -231,6 +235,7 @@ int main(int argc, char** argv)
     uint32_t thumb_side = 0; // (--thumbnail SIDE OUT.png)
     std::string thumb_out;
     double start_zoom = 0;
+    long start_frame = 0; // (--frame K: an animated GIF paused at frame K, from 1)
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
@@ -243,6 +248,7 @@ int main(int argc, char** argv)
         }
         if (a == "--screenshot" && i + 1 < argc) shot = argv[++i];
         else if (a == "--zoom" && i + 1 < argc) start_zoom = std::atof(argv[++i]);
+        else if (a == "--frame" && i + 1 < argc) start_frame = std::max(1L, std::strtol(argv[++i], nullptr, 10));
         else if (a == "--budget" && i + 1 < argc) set_memory_budget(std::strtoull(argv[++i], nullptr, 10));
         else if (a == "--check") check = true;
         else if (a == "--make-simage") make = true;
@@ -323,10 +329,20 @@ int main(int argc, char** argv)
             if (!said.empty()) std::printf("listing: %s\n", said.c_str());
             for (Picture& p : got)
             {
-                make_pixels(p); // (one at a time, each let go before the next)
-                std::printf("%s: %u by %u pixels, %s%s\n", p.name.c_str(), p.width, p.height, human_bytes(p.file.size()).c_str(),
-                            p.scale == 8 ? (", shown at an eighth (" + std::to_string(p.pixels.width) + " by " + std::to_string(p.pixels.height) + "): " + p.reduced).c_str() : "");
+                make_pixels(p, true); // (one at a time, each let go before the next)
+                std::string frames;
+                if (!p.more.empty())
+                {
+                    uint64_t ms = 0;
+                    for (const int d : p.delays_ms) ms += uint64_t(d < 20 ? 100 : d);
+                    frames = ", " + std::to_string(p.more.size() + 1) + " frames played, " + std::to_string(ms) + " ms in all";
+                }
+                else if (!p.one_frame.empty()) frames = ", its first frame of " + std::to_string(p.frames) + " shown: " + p.one_frame;
+                std::printf("%s: %u by %u pixels, %s%s%s\n", p.name.c_str(), p.width, p.height, human_bytes(p.file.size()).c_str(),
+                            p.scale == 8 ? (", shown at an eighth (" + std::to_string(p.pixels.width) + " by " + std::to_string(p.pixels.height) + "): " + p.reduced).c_str() : "",
+                            frames.c_str());
                 p.pixels = RgbaImage{};
+                p.more.clear();
                 p.made = false;
             }
             return 0;
@@ -364,6 +380,18 @@ int main(int argc, char** argv)
     int tex_w = 0, tex_h = 0, tex_step = 1; // (a picture larger than a texture is shown at 1/step)
     double zoom = 1, cx = 0, cy = 0;          // zoom (screen pixels a picture pixel), the picture's point at the view's centre
     bool fitted = true;
+    // (An animated GIF played: the frame shown, whether it plays, and when the next is due, by
+    // SDL's clock in milliseconds.)
+    size_t frame = 0;
+    bool playing = true;
+    uint64_t next_frame_at = 0;
+    auto animated = [&] { return !pics.empty() && pics[shown].made && !pics[shown].more.empty(); };
+    // (A frame's delay as the GIF gives it; under 20 ms, which browsers too take as unmeant, 100.)
+    auto delay_of = [&](size_t k) {
+        const std::vector<int>& d = pics[shown].delays_ms;
+        const int ms = k < d.size() ? d[k] : 0;
+        return uint64_t(ms < 20 ? 100 : ms);
+    };
 
     // (Loading on a thread of its own, so a large .sieve does not stop the window.)
     struct Loading
@@ -410,15 +438,10 @@ int main(int argc, char** argv)
         cx = pic.width / 2.0, cy = pic.height / 2.0;
         fitted = true;
     };
-    auto upload = [&] {
-        if (tex) SDL_DestroyTexture(tex), tex = nullptr;
-        if (pics.empty() || !pics[shown].made) return;
-        const RgbaImage& im = pics[shown].pixels;
-        tex_step = 1;
-        while ((int(im.width) + tex_step - 1) / tex_step > max_texture || (int(im.height) + tex_step - 1) / tex_step > max_texture) ++tex_step;
-        tex_w = int((im.width + tex_step - 1) / tex_step), tex_h = int((im.height + tex_step - 1) / tex_step);
-        tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex_w, tex_h);
+    // (the frame shown put into the texture, which is already its size)
+    auto fill = [&] {
         if (!tex) return;
+        const RgbaImage& im = pics[shown].frame(frame);
         if (tex_step == 1) SDL_UpdateTexture(tex, nullptr, im.rgba.data(), int(im.width) * 4);
         else
         {
@@ -429,15 +452,33 @@ int main(int argc, char** argv)
                     std::copy_n(&im.rgba[(size_t(y) * tex_step * im.width + size_t(x) * tex_step) * 4], 4, &small[(size_t(y) * tex_w + x) * 4]);
             SDL_UpdateTexture(tex, nullptr, small.data(), tex_w * 4);
         }
+    };
+    auto upload = [&] {
+        if (tex) SDL_DestroyTexture(tex), tex = nullptr;
+        if (pics.empty() || !pics[shown].made) return;
+        const RgbaImage& im = pics[shown].pixels;
+        tex_step = 1;
+        while ((int(im.width) + tex_step - 1) / tex_step > max_texture || (int(im.height) + tex_step - 1) / tex_step > max_texture) ++tex_step;
+        tex_w = int((im.width + tex_step - 1) / tex_step), tex_h = int((im.height + tex_step - 1) / tex_step);
+        tex = SDL_CreateTexture(r, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, tex_w, tex_h);
+        if (!tex) return;
+        fill();
         SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    };
+    // (to frame k of an animated GIF: shown at once, the next due after its delay)
+    auto to_frame = [&](size_t k) {
+        if (!animated()) return;
+        frame = k % (pics[shown].more.size() + 1);
+        fill();
+        next_frame_at = SDL_GetTicks() + delay_of(frame);
     };
     auto show = [&](size_t k) {
         // (one picture's pixels held at a time: the others let go, this one made if it is not)
         for (size_t j = 0; j < pics.size(); ++j)
-            if (j != k && pics[j].made) pics[j].pixels = RgbaImage{}, pics[j].made = false;
+            if (j != k && pics[j].made) pics[j].pixels = RgbaImage{}, pics[j].more.clear(), pics[j].made = false;
         try
         {
-            make_pixels(pics[k]);
+            make_pixels(pics[k], true);
         }
         catch (const std::exception& e)
         {
@@ -448,7 +489,9 @@ int main(int argc, char** argv)
         }
         shown = k;
         message.clear();
+        frame = 0, playing = true;
         upload();
+        if (animated()) next_frame_at = SDL_GetTicks() + delay_of(0);
         if (start_zoom > 0 && fitted)
         {
             zoom = start_zoom, fitted = false;
@@ -487,11 +530,13 @@ int main(int argc, char** argv)
         start_loading(dir > 0 ? (place + 1) % n : (place + n - 1) % n, dir < 0);
     };
     auto export_png = [&](const fs::path& to) {
-        const RgbaImage& im = pics[shown].pixels;
+        const RgbaImage& im = pics[shown].frame(frame); // (an animated GIF's: the frame shown)
         const std::string png = stb_png(im.rgba, int(im.width), int(im.height), 4, 8, -1);
         std::ofstream o(to, std::ios::binary);
         o.write(png.data(), std::streamsize(png.size()));
-        message = o ? "exported " + u8(to) + " (" + human_bytes(png.size()) + (pics[shown].scale == 8 ? ", the eighth shown" : "") + ")" : "could not write " + u8(to);
+        message = o ? "exported " + u8(to) + " (" + human_bytes(png.size()) + (pics[shown].scale == 8 ? ", the eighth shown" : "") +
+                          (animated() ? ", frame " + std::to_string(frame + 1) + " of " + std::to_string(pics[shown].more.size() + 1) : std::string()) + ")"
+                    : "could not write " + u8(to);
         message_bad = !o;
     };
     auto save_file = [&](const fs::path& to) {
@@ -548,6 +593,12 @@ int main(int argc, char** argv)
                 listing_said = loading->said;
                 message.clear();
                 show(loading->backwards ? pics.size() - 1 : 0);
+                if (start_frame > 0 && animated())
+                {
+                    playing = false;
+                    to_frame(size_t(start_frame - 1));
+                    start_frame = 0;
+                }
             }
             else
             {
@@ -585,6 +636,7 @@ int main(int argc, char** argv)
             add("Save file", 'f', !pics.empty() && !places.empty() && places[place].sieve);
             const bool shown_made = !pics.empty() && pics[shown].made;
             add("Export", 'e', shown_made);
+            add(playing ? "Pause" : "Play", 'p', animated());
             add("1:1", '1', shown_made);
             add("Fit", '0', shown_made);
             add("Next >", '>', places.size() > 1 || pics.size() > 1);
@@ -602,6 +654,22 @@ int main(int argc, char** argv)
             case 'e': ask_where(1); break;
             case 'f': ask_where(2); break;
             case 's': make_here(); break;
+            case 'p':
+                if (animated())
+                {
+                    playing = !playing;
+                    if (playing) next_frame_at = SDL_GetTicks() + delay_of(frame);
+                }
+                break;
+            case ',': // (a frame back or on, paused)
+            case '.':
+                if (animated())
+                {
+                    playing = false;
+                    const size_t n = pics[shown].more.size() + 1;
+                    to_frame(key == '.' ? frame + 1 : frame + n - 1);
+                }
+                break;
             default: break;
             }
         };
@@ -644,6 +712,9 @@ int main(int argc, char** argv)
                 else if (k == SDLK_E) press('e');
                 else if (k == SDLK_F) press('f');
                 else if (k == SDLK_S) press('s');
+                else if (k == SDLK_P) press('p');
+                else if (k == SDLK_COMMA) press(',');
+                else if (k == SDLK_PERIOD) press('.');
                 else if (shift && (k == SDLK_LEFT || k == SDLK_RIGHT || k == SDLK_UP || k == SDLK_DOWN))
                 {
                     const double d = 64 / zoom;
@@ -686,6 +757,15 @@ int main(int argc, char** argv)
                 break;
             default: break;
             }
+        }
+
+        // An animated GIF's next frame, once it is due (from when it was due, so the delays add up
+        // as the GIF gives them; from now, where the window fell behind by more than a second).
+        if (animated() && playing && !loading && SDL_GetTicks() >= next_frame_at)
+        {
+            const uint64_t due = next_frame_at;
+            to_frame(frame + 1);
+            if (SDL_GetTicks() < due + 1000) next_frame_at = due + delay_of(frame);
         }
 
         // The window: the picture on a chequer (so transparency shows), the bar above, the foot.
@@ -739,6 +819,9 @@ int main(int argc, char** argv)
             std::snprintf(z, sizeof z, "%.0f%%", zoom * 100);
             foot_text = std::to_string(pic.width) + " x " + std::to_string(pic.height) + ", " + human_bytes(pic.file.size()) + ", " + z;
             if (pic.scale == 8) foot_text += " (shown at an eighth: " + pic.reduced + ")";
+            if (!pic.more.empty())
+                foot_text += ", frame " + std::to_string(frame + 1) + " of " + std::to_string(pic.more.size() + 1) + (playing ? "" : " (paused: , and . step)");
+            else if (!pic.one_frame.empty()) foot_text += " (its first frame of " + std::to_string(pic.frames) + " shown: " + pic.one_frame + ")";
             if (pics.size() > 1) foot_text += ", picture " + std::to_string(shown + 1) + " of " + std::to_string(pics.size());
             if (places.size() > 1) foot_text += "; file " + std::to_string(place + 1) + " of " + std::to_string(places.size()) + " here";
             if (!listing_said.empty()) foot_text += "; its listing: " + listing_said;

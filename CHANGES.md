@@ -1,26 +1,39 @@
-# GIFs opened, measured (6 November 2026)
+# GIF route, GIF playback, and a faster stream search (6 November 2026)
 
-Commits c7a32e4 (the IDEAS note) and 278cd89 (the measurement), both on top of your 73c4868, local and not pushed.
+Three commits on top of 5505251 ("sieve gif plan measurements"):
 
-## What was measured
-The six demonstration GIFs from your InscribedSquareProblem repository, all written by gifenc 1.0.3. The repository clone was deleted afterwards; only the GIFs were kept, in a scratch folder.
+1. `0a205dd`: **v34 draft: GIFs made again exactly from their frames' colour indices**
+   - **What it does:** behind `--v34-draft`, under temporary or Optimise Search, a GIF is carried
+     as its frames' colour indices followed by its skeleton. Its LZW is coded again on installing,
+     as compress codes it (gifenc's coder; Pillow's too). The recipe is kept only where the GIF
+     comes back byte for byte.
+   - **Measured on your six demo GIFs** (9,616,677 bytes, 346 frames):
 
-**Made again exactly: yes.**
-- A compress-style LZW encoder gives back all 346 frames byte for byte.
-- gifenc's sub-blocks are always 254 bytes.
+     | Settings | Size | Of the GIFs | Installing |
+     | :--- | ---: | ---: | ---: |
+     | v33, Optimise Search | 8,377,298 | 87% | |
+     | v34 | 4,150,626 | 43.2% | 27 s |
+     | v34, Prioritise Decoding Speed | 4,652,864 | 48.4% | 3 s |
 
-So a gifenc GIF can be opened and made again by rule.
+   - **Also changed:**
+     - SPECIFICATIONS §12.2 v34; the oracle reads it;
+     - a new block at the end of CI step 11 (about 33 s here, mostly the oracle's Python);
+     - the reader refused 20,000 damaged inputs, with no crash under AddressSanitizer.
+2. `156dc3e`: **sieve-view plays animated GIFs**
+   - **Playback:** each frame plays for its own delay. **Pause/Play** (P), comma and full stop step a
+     frame, and Export writes the frame shown.
+   - **Memory:** all the frames are made only where they fit in half the memory free, counted from
+     the GIF's blocks first. Otherwise the first frame is shown, and the foot says why.
+   - **Thumbnails** stay the first frame. A .simage or .sieve of GIFs plays too.
+   - **New options:** `--check` counts the frames, and `--frame K` starts paused at frame K.
+3. `ad27940`: **Speed: the lzma2 stream's four LZMA2 passes at once**
+   - The settings trial (half a second) now runs first, then all four passes together, instead of
+     the preset's pass alone and then the other three.
+   - The six GIFs went from 161 s to 96 s to make, and the `.sieve` is byte for byte the same.
 
-**Size:**
+Unit suite: 154,318 checks, 0 failures. Tested here: the new CI block, the six GIFs both ways,
+and viewer screenshots of frames 1 and 30.
 
-| | Bytes | Of the GIFs |
-|---|---:|---:|
-| The six GIFs | 9,616,677 | 100% |
-| Sieve today (Optimise Search) | 8,377,298 | 87% |
-| **Opened (true indices + palettes, xz -9e)** | **4,718,704** | **49%** |
-
-That opened figure uses xz alone, before Sieve's rope, mixing, or using the frame before as context.
-
-## Files
-- **`results/gif-opened-2026-11-06.md`:** the table and how it was measured.
-- **`docs/IDEAS.md`:** §19.123 now carries the measurement.
+**To try:**
+- `sieve locate <folder of GIFs> --installer gifs.sieve --optimise-search --v34-draft`
+- `sieve-view some.gif`, or open the .sieve in the viewer.

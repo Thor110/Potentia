@@ -5,6 +5,7 @@
 #include "cli/delta.hpp"
 #include "cli/text_spans.hpp"
 #include "cli/jpeg_glue.hpp"
+#include "cli/gif_lzw.hpp"
 #include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
 
@@ -383,24 +384,18 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
     auto said = [&](const std::string& next) {
         progress(what + ": best so far " + std::to_string(best.size()) + " bytes; " + next, double(best.size()), double(data.size()));
     };
-    // The preset's own pass, and LZMA2's settings tried on the first MiB at preset 6, at once.
-    progress(what + ": packing it, and trying LZMA2's settings on its first MiB");
+    // LZMA2's settings tried on the first MiB at preset 6 (half a second on 120 MB of a GIF's
+    // indices); then the preset's own pass, the settings chosen at the preset's match length and at
+    // 64, and 7-Zip's own encoder (22 October 2026), all at once, as the memory allows. (Until 6
+    // November 2026 the preset's pass ran first, alone beside the trial, and the rest after it: on
+    // six GIFs' 120 MB of indices, 65 s, then 67 s. The same passes, compared in the same order, so
+    // the same bytes.)
+    progress(what + ": trying LZMA2's settings on its first MiB");
     constexpr size_t kSample = size_t(1) << 20;
     const std::vector<uint8_t> sample(data.begin(), data.begin() + std::ptrdiff_t(std::min(data.size(), kSample)));
     const uint32_t sample_dict = dictionary_for(sample.size());
     int chosen = 302;
-    for_each_index(2, passes_at_once(dict), [&](size_t task) {
-        if (task == 0)
-        {
-            if (std::vector<uint8_t> kept = take_first_pass(data, dict, x86, preset); !kept.empty())
-            {
-                best = std::move(kept); // (made as the file's estimate: the same bytes, the same pass)
-                return;
-            }
-            const timings::Scope t("pack.lzma2.first-pass");
-            best = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
-            return;
-        }
+    {
         const timings::Scope ts("pack.lzma2.settings-trial");
         const std::vector<int> tried = {302, 0, 400, 200, 22, 402, 111};
         std::vector<size_t> sizes(tried.size(), 0);
@@ -414,23 +409,29 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
                 chosen = tried[k];
                 chosen_size = sizes[k];
             }
-    });
-    if (best.empty() || stop_requested()) return best; // (empty: the first pass abandoned by a force stop)
-    // Then the stream at the settings chosen, at the preset's match length and at 64, and by
-    // 7-Zip's own encoder (22 October 2026), at once; each kept where it is smaller, in that order.
-    said("packing it at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" + std::to_string(chosen % 10) +
-         ", at two match lengths and with 7-Zip's encoder");
+    }
+    said("packing it at the preset, and at lc" + std::to_string(chosen / 100) + " lp" + std::to_string(chosen / 10 % 10) + " pb" +
+         std::to_string(chosen % 10) + " at two match lengths and with 7-Zip's encoder, at once");
     struct Pass
     {
         uint32_t nice;
         bool sdk;
+        bool preset; // the preset's own pass: the one every other must beat
     };
     std::vector<Pass> passes;
+    best = take_first_pass(data, dict, x86, preset); // (made as the file's estimate: the same bytes, the same pass)
+    if (best.empty()) passes.push_back({0, false, true});
     for (const uint32_t nice : {0u, 64u})
-        if (!(chosen == 302 && nice == 0)) passes.push_back({nice, false}); // the preset's own: already made
-    passes.push_back({0, true});
+        if (!(chosen == 302 && nice == 0)) passes.push_back({nice, false, false}); // (the preset's own, else)
+    passes.push_back({0, true, false});
     std::vector<std::vector<uint8_t>> made(passes.size());
     for_each_index(passes.size(), passes_at_once(dict), [&](size_t k) {
+        if (passes[k].preset)
+        {
+            const timings::Scope t("pack.lzma2.first-pass");
+            made[k] = encode_lzma2(data, dict, x86, preset, -1, 0, abortable);
+            return;
+        }
         if (stop_requested()) return;
         if (passes[k].sdk)
         {
@@ -443,6 +444,13 @@ std::vector<uint8_t> pack_stream(const std::vector<uint8_t>& data, uint32_t dict
             made[k] = encode_lzma2(data, dict, x86, preset, chosen, passes[k].nice); // (empty: abandoned)
         }
     });
+    if (!passes.empty() && passes[0].preset)
+    {
+        best = std::move(made[0]);
+        if (best.empty()) return best; // (the first pass abandoned by a force stop: the caller has a way round)
+        passes.erase(passes.begin());
+        made.erase(made.begin());
+    }
     // (SIEVE_PASS_SIZES=1 in the environment: each pass's size to standard error, for measuring
     // which passes pay: the preset's, the chosen settings at the preset's match length and at 64,
     // 7-Zip's encoder)
@@ -1991,6 +1999,17 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
             throw std::runtime_error("a JPEG's recipe this Sieve does not know: " + recipe);
         return brunsli_to_jpeg(inner);
     }
+    if (recipe.rfind("gif ", 0) == 0)
+    {
+        // "gif <sub-block size> <skeleton size> <inner size>" (v34 draft): a GIF made again from its
+        // skeleton and its frames' colour indices, each frame's LZW coded as compress codes it (gif_lzw.hpp).
+        unsigned long long block = 0, skeleton = 0, size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &size, &extra) != 3 || size != inner.size() || block < 1 || block > 255 ||
+            skeleton > size)
+            throw std::runtime_error("a GIF's recipe this Sieve does not know: " + recipe);
+        return gif_remake(inner, size_t(skeleton), size_t(block));
+    }
     if (recipe.rfind("pngr ", 0) == 0)
     {
         // "pngr <filter> <strategy> <split> <head size> <inner size>" (v32): a PNG
@@ -2400,9 +2419,12 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
 // A PNG's pixels' shape, from its recipe: its width and bytes a pixel, where they and the size agree
 // with the bytes carried; else nothing. Pixels as stb makes them again ("stb <level> <filter> <w>
 // <h> <c> <size>"), or a PNG's rows unfiltered ("skr <skeleton> <row bytes> <pixel bytes> <rows>
-// <inner size>", the rows first, then their filter bytes and the skeleton).
-static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::string& recipe, size_t size)
+// <inner size>", the rows first, then their filter bytes and the skeleton). (v34 draft) A GIF's
+// indices ("gif <sub-block size> <skeleton size> <inner size>", the indices first), one byte a
+// pixel, where every frame is as wide as the first.
+static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::string& recipe, const std::vector<uint8_t>& bytes)
 {
+    const size_t size = bytes.size();
     int level = 0, filter = 0;
     unsigned long long w = 0, h = 0, c = 0, n = 0, skeleton = 0;
     char extra = 0;
@@ -2419,6 +2441,9 @@ static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::stri
             return std::nullopt;
         return std::pair<uint32_t, uint32_t>{uint32_t(row / c), uint32_t(c)};
     }
+    unsigned long long block = 0;
+    if (recipe.rfind("gif ", 0) == 0 && std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &n, &extra) == 3 && n == size)
+        if (const auto w = gif_width(bytes, size_t(skeleton)); w && *w <= (1u << 24)) return std::pair<uint32_t, uint32_t>{*w, 1};
     return std::nullopt;
 }
 
@@ -3119,6 +3144,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool pngr_on = png_on && rope_newest >= 15;
     // v32: a PNG made again exactly with its rows carried unfiltered ("skr").
     const bool skr_on = png_on && rope_newest >= 15;
+    // v34 draft (6 November 2026): a GIF made again from its skeleton and its frames' colour indices,
+    // where compress-style LZW gives it back exactly (gif_lzw.hpp); temporary only, as "sk" is.
+    const bool gif_on = rope_newest >= 17 && v21 && newest_made;
     // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
     // rope_newest is held to the rope's own versions below).
     const bool v32_head_on = rope_newest >= 15;
@@ -3254,7 +3282,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
@@ -3609,6 +3637,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (made && entries.back().remake.rfind("pngr ", 0) != 0) png_made = true;
                 if (!made) add_file(e, std::move(b), {}, e.sha256);
                 continue;
+            }
+            if (gif_on && temporary_ok && is_gif(b))
+            {
+                std::optional<GifOpened> g;
+                {
+                    const timings::Scope t("pack.gif.open");
+                    g = gif_open(b);
+                }
+                if (g && worth(g->inner, 40))
+                {
+                    ++gifs_opened;
+                    gif_frames += g->frames;
+                    ManifestEntry r = e;
+                    r.remake = std::move(g->recipe);
+                    add_file(r, std::move(g->inner), std::move(b), e.sha256);
+                    continue;
+                }
             }
             // v25: a PNG made again exactly from its skeleton: its IDATs' deflate by preflate, their CRCs
             // worked out again; what it holds (its rows, as PNG filters them) carried as any file is.
@@ -4420,6 +4465,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.jpeg_was = jpeg_was;
     r.jpeg_now = jpeg_now;
     r.pngs_resaved = pngs_resaved;
+    r.gifs_opened = gifs_opened;
+    r.gif_frames = gif_frames;
     r.png_bytes = png_bytes;
     r.png_resaved_bytes = png_resaved_bytes;
     r.delta_bytes = delta_bytes;
@@ -4618,7 +4665,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // November 2026: six-colour drawings of 320 by 240 read by the rope as 3 wide.)
                 if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
-                const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i].size()) : std::nullopt;
+                const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
                                    uint32_t primer = 0) {
                     if (mix4_on)
@@ -5562,8 +5609,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
         return false;
     };
-    m.v33 = m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
-                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; }));
+    // v34 (draft): a GIF made again from its indices.
+    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("gif ", 0) == 0; });
+    m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
+                         std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
     m.v32 = m.v32 || m.v33;
     m.v31 = m.v32 || (m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("skm ", 0) == 0; }));
     m.v30 = r.mix_groups > 0 || m.v31;        // (groups only where the newest instructions are made: above)
@@ -5594,6 +5643,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     r.v31 = m.v31;
     r.v32 = m.v32;
     r.v33 = m.v33;
+    r.v34 = m.v34;
     // (An archive's members only: a text's spans are members too, said on their own line.)
     std::unordered_set<std::string> archives_made;
     for (const ManifestEntry& x : m.entries)
@@ -5685,7 +5735,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
     };
     if (r.compact)
     {
-        const char* version = r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
+        const char* version = r.v34 ? kGifManifestVersion : r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : r.more_archives ? kMoreArchivesManifestVersion : r.remake_gz ? kGzipManifestVersion : r.binary ? kBinaryManifestVersion : r.rope_above ? kRopeAboveManifestVersion : r.archives_made ? kArchivesManifestVersion : r.pieces_made ? kPiecesManifestVersion : r.trimmed ? kTrimmedManifestVersion : r.rope_groups ? kRopeGroupsManifestVersion : r.rope_lines ? kRopeLinesManifestVersion : r.rope_columns ? kRopeColumnsManifestVersion
                             : r.roped ? kRopeManifestVersion : kCompactManifestVersion;
         if (r.items)
         {
@@ -5698,7 +5748,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         else o << "items     none; " << version << "\n";
         if (r.listing_carried) o << "listing   " << r.listing << " bytes, carried as LZMA2 in " << r.listing_carried << "\n";
         if (r.binary)
-            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
+            o << "head      " << r.head_bytes << " bytes in bytes, the listing " << r.head_text << " as text (" << (r.v34 ? kGifManifestVersion : r.v33 ? kMatchWaysManifestVersion : r.v32 ? kDeltaManifestVersion : r.v31 ? kSkeletonMembersManifestVersion : r.v30 ? kMixGroupsManifestVersion : r.v29 ? kMixedStreamManifestVersion : r.v28 ? kMix4ManifestVersion : r.v27 ? kMix3ManifestVersion : r.v26 ? kMix2ManifestVersion : r.v25 ? kPngManifestVersion : r.v24 ? kMixManifestVersion : r.v23 ? kRopeTriangleManifestVersion : r.v22 ? kRarManifestVersion : r.v21 ? kDeflateManifestVersion : r.v20 ? kNewestArchivesManifestVersion : kBinaryManifestVersion)
               << (r.v20 ? "; its body in bytes too" : "") << ")\n";
         if (r.remade) o << "remade    " << r.remade << " archive(s) carried as what they hold, remade exactly on installing (" << version << ")\n";
         if (r.jpegs)
@@ -5710,6 +5760,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
+        if (r.gifs_opened)
+            o << "gifs      " << r.gifs_opened << " GIF(s) carried as their frames' colour indices, " << r.gif_frames << " frames, made again exactly on installing ("
+              << kGifManifestVersion << ")\n";
         if (r.copies)
             o << "copies    " << r.copies << " file(s) carried as copies of another with the same bytes (" << r.copy_bytes << " bytes; " << kMatchWaysManifestVersion << ")\n";
         if (!r.word_list_missing.empty())

@@ -1018,7 +1018,7 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 
 const char* Manifest::version() const
 {
-    return v33 ? kMatchWaysManifestVersion : v32 ? kDeltaManifestVersion : v31 ? kSkeletonMembersManifestVersion : v30 ? kMixGroupsManifestVersion : v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
+    return v34 ? kGifManifestVersion : v33 ? kMatchWaysManifestVersion : v32 ? kDeltaManifestVersion : v31 ? kSkeletonMembersManifestVersion : v30 ? kMixGroupsManifestVersion : v29 ? kMixedStreamManifestVersion : v28 ? kMix4ManifestVersion : v27 ? kMix3ManifestVersion : v26 ? kMix2ManifestVersion : v25 ? kPngManifestVersion : v24 ? kMixManifestVersion : v23 ? kRopeTriangleManifestVersion : v22 ? kRarManifestVersion : v21 ? kDeflateManifestVersion : v20 ? kNewestArchivesManifestVersion : more_archives ? kMoreArchivesManifestVersion : !graph.empty() ? kGraphManifestVersion : remake_gz ? kGzipManifestVersion : binary ? kBinaryManifestVersion : rope_above ? kRopeAboveManifestVersion : archives ? kArchivesManifestVersion : pieces ? kPiecesManifestVersion : trimmed ? kTrimmedManifestVersion : rope_groups ? kRopeGroupsManifestVersion : rope_lines ? kRopeLinesManifestVersion : rope_columns ? kRopeColumnsManifestVersion : roped ? kRopeManifestVersion : compact ? kCompactManifestVersion : minimal ? kMinimalManifestVersion : items ? kItemsManifestVersion : packed ? kPackedManifestVersion
          : with_contents ? kInstallManifestVersion : with_addresses ? kAddressManifestVersion : kManifestVersion;
 }
 
@@ -1366,7 +1366,8 @@ static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst",
                                               "jbr", // (v32: 21, a JPEG made again from its brunsli form)
                                               "pngr", // (v32: 22, a PNG re-saved at its smallest from its head and rows)
                                               "skr", // (v32: 23, a PNG made again exactly, its rows carried unfiltered)
-                                              "spn"}; // (v33 draft: 24, a text with binary it writes out carried decoded, spans-v1)
+                                              "spn", // (v33 draft: 24, a text with binary it writes out carried decoded, spans-v1)
+                                              "gif"}; // (v34 draft: 25, a GIF made again from its skeleton and its frames' colour indices)
 
 int archive_format_number(const std::string& name)
 {
@@ -1385,7 +1386,7 @@ static int recipe_words(std::string_view way)
 {
     const std::string_view kind = way.substr(0, way.find(' '));
     return kind == "xz" ? 4 : kind == "gz" ? 5 : kind == "bz2" ? 3 : kind == "zst" ? 6 : kind == "lz4" ? 8 : kind == "br" ? 4 : kind == "lzma" ? 3 :
-           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : kind == "pngr" ? 6 : kind == "skr" ? 6 : kind == "spn" ? 3 : 0;
+           kind == "sk" ? 3 : kind == "stb" ? 7 : kind == "skm" ? 3 : kind == "jbr" ? 2 : kind == "pngr" ? 6 : kind == "skr" ? 6 : kind == "spn" ? 3 : kind == "gif" ? 4 : 0;
 }
 
 static void put_text(std::vector<uint8_t>& o, std::string_view t)
@@ -1615,7 +1616,7 @@ std::string listing_from_bytes(std::string_view b, bool v32)
 // its size, then it.
 static std::vector<uint8_t> binary_head(const Manifest& m)
 {
-    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v33 ? 33 : m.v32 ? 32 : m.v31 ? 31 : m.v30 ? 30 : m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
+    std::vector<uint8_t> o = {'s', 'i', 'e', 'v', 'e', uint8_t(m.v34 ? 34 : m.v33 ? 33 : m.v32 ? 32 : m.v31 ? 31 : m.v30 ? 30 : m.v29 ? 29 : m.v28 ? 28 : m.v27 ? 27 : m.v26 ? 26 : m.v25 ? 25 : m.v24 ? 24 : m.v23 ? 23 : m.v22 ? 22 : m.v21 ? 21 : m.v20 ? 20 : m.more_archives ? 19 : !m.graph.empty() ? 18 : m.remake_gz ? 17 : 16)};
     const bool root = !m.one_file_root(), items = !m.trimmed || m.item_stream.packed || m.item_stream.bytes;
     const bool body_packed = m.listing_stream.packed != 0;
     o.push_back(uint8_t((root ? 1 : 0) | (m.x86.packed ? 2 : 0) | (m.lzma2.packed ? 4 : 0) | (items ? 8 : 0) | (m.roped ? 16 : 0) |
@@ -1892,7 +1893,7 @@ Manifest Manifest::parse(std::string_view whole)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
-    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 33)
+    if (whole.size() >= 6 && whole.substr(0, 5) == "sieve" && uint8_t(whole[5]) >= 16 && uint8_t(whole[5]) <= 34)
     {
         const uint8_t v = uint8_t(whole[5]);
         size_t at = 6;
@@ -1903,7 +1904,7 @@ Manifest Manifest::parse(std::string_view whole)
         // (v17's text is v15's with gzip remade allowed, v18's with a graph part too, v19's with bzip2
         // and zstd as well: its first line says so.)
         std::string text =
-            std::string(v == 33 ? kMatchWaysManifestVersion : v == 32 ? kDeltaManifestVersion : v == 31 ? kSkeletonMembersManifestVersion : v == 30 ? kMixGroupsManifestVersion : v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
+            std::string(v == 34 ? kGifManifestVersion : v == 33 ? kMatchWaysManifestVersion : v == 32 ? kDeltaManifestVersion : v == 31 ? kSkeletonMembersManifestVersion : v == 30 ? kMixGroupsManifestVersion : v == 29 ? kMixedStreamManifestVersion : v == 28 ? kMix4ManifestVersion : v == 27 ? kMix3ManifestVersion : v == 26 ? kMix2ManifestVersion : v == 25 ? kPngManifestVersion : v == 24 ? kMixManifestVersion : v == 23 ? kRopeTriangleManifestVersion : v == 22 ? kRarManifestVersion : v == 21 ? kDeflateManifestVersion : v == 20 ? kNewestArchivesManifestVersion : v == 19 ? kMoreArchivesManifestVersion : v == 18 ? kGraphManifestVersion : v == 17 ? kGzipManifestVersion : kRopeAboveManifestVersion) + "\n";
         auto take = [&](uint64_t n) {
             if (n > whole.size() - at) throw std::runtime_error("manifest: its head ends early");
             const std::string_view v = whole.substr(at, size_t(n));
@@ -1959,7 +1960,7 @@ Manifest Manifest::parse(std::string_view whole)
             return p;
         };
         const int last32 = (flags & 16) ? 16 : (flags & 8) ? 8 : (flags & 4) ? 4 : (flags & 2) ? 2 : 0;
-        if (v >= 32) // (v33's head is v32's)
+        if (v >= 32) // (v33's and v34's heads are v32's)
         {
             if (flags & 2) parts.push_back(stream32("x86", last32 == 2));
             if (flags & 4) parts.push_back(stream32("lzma2", last32 == 4));
@@ -2147,8 +2148,8 @@ Manifest Manifest::parse(std::string_view whole)
     else if (lines[0] == kRopeGroupsManifestVersion)
         m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact = m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kGzipManifestVersion || lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion ||
-             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion || lines[0] == kDeltaManifestVersion || lines[0] == kMatchWaysManifestVersion)
-        m.v33 = lines[0] == kMatchWaysManifestVersion, m.v32 = lines[0] == kDeltaManifestVersion || m.v33, m.v31 = lines[0] == kSkeletonMembersManifestVersion || m.v32, m.v30 = lines[0] == kMixGroupsManifestVersion || m.v31, m.v29 = lines[0] == kMixedStreamManifestVersion || m.v30, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
+             lines[0] == kNewestArchivesManifestVersion || lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion || lines[0] == kDeltaManifestVersion || lines[0] == kMatchWaysManifestVersion || lines[0] == kGifManifestVersion)
+        m.v34 = lines[0] == kGifManifestVersion, m.v33 = lines[0] == kMatchWaysManifestVersion || m.v34, m.v32 = lines[0] == kDeltaManifestVersion || m.v33, m.v31 = lines[0] == kSkeletonMembersManifestVersion || m.v32, m.v30 = lines[0] == kMixGroupsManifestVersion || m.v31, m.v29 = lines[0] == kMixedStreamManifestVersion || m.v30, m.v28 = lines[0] == kMix4ManifestVersion || m.v29, m.v27 = lines[0] == kMix3ManifestVersion || m.v28, m.v26 = lines[0] == kMix2ManifestVersion || m.v27, m.v25 = lines[0] == kPngManifestVersion || m.v26, m.v24 = lines[0] == kMixManifestVersion || m.v25, m.v23 = lines[0] == kRopeTriangleManifestVersion || m.v24, m.v22 = lines[0] == kRarManifestVersion || m.v23, m.v21 = lines[0] == kDeflateManifestVersion || m.v22, m.v20 = lines[0] == kNewestArchivesManifestVersion || m.v21,
         m.more_archives = lines[0] == kMoreArchivesManifestVersion || m.v20, m.remake_gz = m.binary = m.rope_above = m.archives = m.pieces = m.trimmed = m.rope_groups = m.rope_lines = m.rope_columns = m.roped = m.compact =
             m.minimal = m.items = m.packed = m.with_contents = true;
     else if (lines[0] == kRopeAboveManifestVersion)
@@ -2286,7 +2287,7 @@ Manifest Manifest::parse(std::string_view whole)
         if (m.items) m.tree = field(lines[first++], "tree");
     }
     const bool graph_allowed = lines[0] == kGraphManifestVersion || lines[0] == kMoreArchivesManifestVersion || lines[0] == kNewestArchivesManifestVersion ||
-                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion || lines[0] == kDeltaManifestVersion || lines[0] == kMatchWaysManifestVersion;
+                               lines[0] == kDeflateManifestVersion || lines[0] == kRarManifestVersion || lines[0] == kRopeTriangleManifestVersion || lines[0] == kMixManifestVersion || lines[0] == kPngManifestVersion || lines[0] == kMix2ManifestVersion || lines[0] == kMix3ManifestVersion || lines[0] == kMix4ManifestVersion || lines[0] == kMixedStreamManifestVersion || lines[0] == kMixGroupsManifestVersion || lines[0] == kSkeletonMembersManifestVersion || lines[0] == kDeltaManifestVersion || lines[0] == kMatchWaysManifestVersion || lines[0] == kGifManifestVersion;
     const bool graph_needed = lines[0] == kGraphManifestVersion; // (v19's is allowed, not needed)
     for (size_t i = first; i + 1 < lines.size(); ++i)
     {
@@ -2397,7 +2398,8 @@ Manifest Manifest::parse(std::string_view whole)
             const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32: "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
             const bool skr = m.v32 && e.way.rfind("skr ", 0) == 0; // v32: "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>"
             const bool spn = m.v33 && e.way.rfind("spn ", 0) == 0; // v33 draft: "spn <members> <skeleton size> <way>"
-            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr || spn)
+            const bool gif = m.v34 && e.way.rfind("gif ", 0) == 0; // v34 draft: "gif <sub-block size> <skeleton size> <inner size> <way>"
+            if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr || spn || gif)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
                 // <header> <inner size> <way>"; v19: "bz2 <block size> <inner size> <way>", "zst
@@ -2408,7 +2410,7 @@ Manifest Manifest::parse(std::string_view whole)
                 // <inner size> <way>".
                 // v21: "sk <skeleton size> <inner size> <way>". v25: "stb <level> <filter> <width>
                 // <height> <components> <inner size> <way>". v31: "skm <members> <skeleton size> <way>".
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : spn ? 3 : 4;
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : spn ? 3 : 4; // (4: xz's, and v34 draft gif's)
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");

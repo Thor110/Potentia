@@ -64,6 +64,7 @@ RECIPES = OrderedDict([
     ("sk", "a PNG from its skeleton"), ("stb", "a PNG stb_image_write made"),
     ("skm", "an archive (gzip, zip, 7z) from its skeleton and members"),
     ("spn", "a text with binary written in it (base64, hex), decoded"),
+    ("gif", "a GIF from its frames' colour indices (v34 draft)"),
     ("xz", "an xz file remade"), ("gz", "a gzip file remade"), ("bz2", "a bzip2 file remade"), ("zst", "a zstd file remade"),
     ("lz4", "an lz4 file remade"), ("br", "a brotli file remade"), ("lzma", "an lzma file remade"), ("lz", "an lzip file remade"),
 ])

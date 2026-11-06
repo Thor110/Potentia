@@ -6798,8 +6798,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4}
 
 
 def listing_from_bytes(b, v32=False):
@@ -6936,9 +6936,10 @@ def v16_text(data):
     the streams' sizes and dictionaries' bytes, the tree's SHA-256 as 32 bytes, the body, packed or
     not) read back into v15's text, followed by what follows it. Anything else is returned as it is."""
     import lzma
-    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 33):
+    if not (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 34):
         return data
-    v33 = data[5] == 33  # (the v33 draft) v32 whose mixing may name the match model's ways; its head is v32's
+    v34 = data[5] == 34  # (the v34 draft) v33 whose GIFs may be made again from their frames' indices; its head is v32's
+    v33 = data[5] == 33 or v34  # v32 whose mixing may name the match model's ways; its head is v32's
     v32 = data[5] == 32 or v33  # v31 whose files may be carried as their differences from another
     v31 = data[5] == 31 or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = data[5] == 30 or v31  # v29 whose files may be mixed together in groups
@@ -7036,7 +7037,7 @@ def v16_text(data):
         sys.exit("v16: flags this reader does not know")
     if v18 and not flags & 0x40:
         sys.exit("v18 without its graph part")
-    head = b"sieve-manifest-v33\n" if v33 else b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
+    head = b"sieve-manifest-v34\n" if v34 else b"sieve-manifest-v33\n" if v33 else b"sieve-manifest-v32\n" if v32 else b"sieve-manifest-v31\n" if v31 else b"sieve-manifest-v30\n" if v30 else b"sieve-manifest-v29\n" if v29 else b"sieve-manifest-v28\n" if v28 else b"sieve-manifest-v27\n" if v27 else b"sieve-manifest-v26\n" if v26 else b"sieve-manifest-v25\n" if v25 else b"sieve-manifest-v24\n" if v24 else b"sieve-manifest-v23\n" if v23 else b"sieve-manifest-v22\n" if v22 else b"sieve-manifest-v21\n" if v21 else b"sieve-manifest-v20\n" if v20 else b"sieve-manifest-v19\n" if v19 else b"sieve-manifest-v18\n" if v18 else b"sieve-manifest-v17\n" if v17 else b"sieve-manifest-v15\n"
     if flags & 1:
         head += b"root " + take(varint()) + b"\n"
     parts = []
@@ -7257,7 +7258,8 @@ def cmd_unpack_v7(args, data):
     # v11 with no line for an empty items or rope stream, and the lzma2 stream perhaps carried as it is
     # v13 with archives optimised: an xz file remade exactly from what it holds, or an archive carried
     # as its contents ("u" lines after the tree's)
-    v33 = lines[0] == "sieve-manifest-v33"  # (the v33 draft) v32 whose mixing may name the match model's ways
+    v34 = lines[0] == "sieve-manifest-v34"  # (the v34 draft) v33 whose GIFs may be made again from their frames' indices
+    v33 = lines[0] == "sieve-manifest-v33" or v34  # v32 whose mixing may name the match model's ways
     v32 = lines[0] == "sieve-manifest-v32" or v33  # v31 whose files may be carried as their differences from another
     v31 = lines[0] == "sieve-manifest-v31" or v32  # v30 whose archives may be made again from a skeleton and their files apart
     v30 = lines[0] == "sieve-manifest-v30" or v31  # v29 whose files may be mixed together in groups (mix-v4)
@@ -7476,6 +7478,15 @@ def cmd_unpack_v7(args, data):
                     not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a re-saved PNG's recipe Sieve does not write")
             remakes[i] = ("pngr", int(filt), int(strat), int(split), int(head), size)
+            size = int(n)
+        if v34 and way.startswith("gif "):
+            # "gif <sub-block size> <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft):
+            # a GIF made again from its skeleton and its frames' colour indices (gif_make).
+            _, blk, skel, n, way = way.split(" ", 4)
+            if not (all(x.isdigit() for x in (blk, skel, n)) and 1 <= int(blk) <= 255 and 13 <= int(skel) <= int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: a GIF's recipe Sieve does not write")
+            remakes[i] = ("gif", int(blk), int(skel), size)
             size = int(n)
         if v32 and way.startswith("skr "):
             # "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>" (SPECIFICATIONS
@@ -7788,6 +7799,9 @@ def cmd_unpack_v7(args, data):
         if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
+        if r[0] == "gif":  # v34 draft: each frame's indices coded as compress codes them
+            got[i] = gif_make(got[i], r[2], r[1], files[i][0])
+            continue
         if r[0] == "pngr":  # v32: the PNG re-saved, by zlib
             got[i] = pngr_make(got[i], r[1], r[2], r[3], r[4], files[i][0])
             continue
@@ -7956,6 +7970,108 @@ def skr_sk_inner(inner, skel, rb, pb, rows, path):
     return bytes(out)
 
 
+def gif_lzw(mcs, px):
+    """SPECIFICATIONS v34 (a draft): a frame's indices coded as compress codes them (Weiner's
+    LZWEncoder, as gifenc has it). Codes are written least significant bit first, mcs + 1 bits wide
+    to start; a clear code first; the longest string already in the table is taken each time and
+    its code written, then that string one index longer given the next free code while there are
+    fewer than 4,096; once there are 4,096, a clear code instead and a table afresh. The width grows
+    by a bit just after a code is written while the next free code is past the widest the width
+    holds (up to 12 bits), and goes back to mcs + 1 just after the clear code that emptied a full
+    table; the end code last, then the bits left over to a whole byte."""
+    init, clear = mcs + 1, 1 << mcs
+    eoi = clear + 1
+    out, acc, accbits = bytearray(), 0, 0
+    nbits, maxcode, free, clear_flg = init, (1 << init) - 1, clear + 2, False
+
+    def output(code):
+        nonlocal acc, accbits, nbits, maxcode, clear_flg
+        acc |= code << accbits
+        accbits += nbits
+        while accbits >= 8:
+            out.append(acc & 0xFF)
+            acc >>= 8
+            accbits -= 8
+        if free > maxcode or clear_flg:
+            if clear_flg:
+                nbits, maxcode, clear_flg = init, (1 << init) - 1, False
+            else:
+                nbits += 1
+                maxcode = 4096 if nbits == 12 else (1 << nbits) - 1
+        if code == eoi:
+            while accbits > 0:
+                out.append(acc & 0xFF)
+                acc >>= 8
+                accbits -= 8
+
+    table = {}
+    output(clear)
+    ent = px[0]
+    for c in px[1:]:
+        k = (ent << 8) | c
+        if k in table:
+            ent = table[k]
+            continue
+        output(ent)
+        ent = c
+        if free < 4096:
+            table[k] = free
+            free += 1
+        else:
+            table = {}
+            free, clear_flg = clear + 2, True
+            output(clear)
+    output(ent)
+    output(eoi)
+    return bytes(out)
+
+
+def gif_make(inner, skel, blk, path):
+    """SPECIFICATIONS v34 (a draft), "gif": a GIF made again from each frame's colour indices, a byte
+    each, width times height of them, and after them its skeleton (the GIF with each frame's LZW
+    sub-blocks and their closing empty block taken out). The skeleton walked as a GIF's blocks;
+    after each frame's LZW code size byte (2 to 8), its indices (each below 1 << that size) coded
+    by gif_lzw and cut into sub-blocks of blk bytes, the last shorter, then an empty one; the
+    trailer and anything after it as they are; every index used, no more."""
+    s, ends = inner[len(inner) - skel:], len(inner) - skel
+    if len(s) < 13 or s[:6] not in (b"GIF87a", b"GIF89a"):
+        sys.exit(f"{path}: a GIF's skeleton that is not a GIF's")
+    out, at, idx, copied = bytearray(), 13, 0, 0
+    if s[10] & 0x80:
+        at += 3 << ((s[10] & 7) + 1)
+    try:
+        while s[at] != 0x3B:
+            if s[at] == 0x21:
+                at += 2
+                while s[at]:
+                    at += 1 + s[at]
+                at += 1
+            elif s[at] == 0x2C:
+                w, h, f = s[at + 5] | s[at + 6] << 8, s[at + 7] | s[at + 8] << 8, s[at + 9]
+                at += 10
+                if f & 0x80:
+                    at += 3 << ((f & 7) + 1)
+                mcs = s[at]
+                at += 1
+                px = inner[idx:min(idx + w * h, ends)]
+                if not 2 <= mcs <= 8 or w * h == 0 or len(px) != w * h or max(px) >> mcs:
+                    sys.exit(f"{path}: a GIF's frame Sieve does not write")
+                out += s[copied:at]
+                copied, idx = at, idx + w * h
+                lzw = gif_lzw(mcs, px)
+                for k in range(0, len(lzw), blk):
+                    out.append(len(lzw[k:k + blk]))
+                    out += lzw[k:k + blk]
+                out.append(0)
+            else:
+                sys.exit(f"{path}: a GIF's skeleton with a block GIFs do not have")
+    except IndexError:
+        sys.exit(f"{path}: a GIF's skeleton that ends early")
+    if idx != ends:
+        sys.exit(f"{path}: a GIF's indices left over")
+    return bytes(out + s[copied:])
+
+
 def pngr_make(inner, filt, strat, split, head, path):
     """SPECIFICATIONS v32: a PNG re-saved from its head (the PNG without its IDATs) and its
     rows unfiltered. Filter 0 to 4 for every row, or 5 for each row the filter whose bytes, read as
@@ -8098,7 +8214,7 @@ def instructions_bytes(data):
     binary line as raw bytes (binary-v1, §12.1), read back here to the manifest (every shorter file
     first: the count of files shorter than L bytes is (256**L - 1) / 255)."""
     # (A head in bytes: "sieve" and its version's byte, 16 to 31.)
-    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 33):
+    if data.startswith(b"sieve-manifest-v") or (len(data) > 5 and data[:5] == b"sieve" and 16 <= data[5] <= 34):
         return data
     # (A number's bytes, most significant first: none of them a leading zero. SPECIFICATIONS: "exactly
     # as long as the manifest, or one byte longer".)
@@ -8133,7 +8249,7 @@ def cmd_unpack(args):
     if data.startswith((b"sieve-manifest-v7\n", b"sieve-manifest-v8\n", b"sieve-manifest-v9\n", b"sieve-manifest-v10\n",
                         b"sieve-manifest-v11\n", b"sieve-manifest-v12\n", b"sieve-manifest-v13\n", b"sieve-manifest-v14\n",
                         b"sieve-manifest-v15\n", b"sieve-manifest-v17\n", b"sieve-manifest-v18\n", b"sieve-manifest-v19\n",
-                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n", b"sieve-manifest-v33\n")):
+                                b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n", b"sieve-manifest-v33\n", b"sieve-manifest-v34\n")):
         return cmd_unpack_v7(args, data)
     end = data.index(b"\nend\n") + len(b"\nend\n")
     lines = data[:end].decode("utf-8").split("\n")[:-1]
@@ -8273,7 +8389,7 @@ def cmd_graph(args):
     """The graph part of Sieve instructions that are a map (sieve-manifest-v18, SPECIFICATIONS §12.3):
     the map's text, every line after its "g<TAB>", as it was written."""
     data = v16_text(instructions_bytes(open(args.file, "rb").read()))
-    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n", b"sieve-manifest-v33\n")) or b"\ng\t" not in data:
+    if not data.startswith((b"sieve-manifest-v18\n", b"sieve-manifest-v19\n", b"sieve-manifest-v20\n", b"sieve-manifest-v21\n", b"sieve-manifest-v22\n", b"sieve-manifest-v23\n", b"sieve-manifest-v24\n", b"sieve-manifest-v25\n", b"sieve-manifest-v26\n", b"sieve-manifest-v27\n", b"sieve-manifest-v28\n", b"sieve-manifest-v29\n", b"sieve-manifest-v30\n", b"sieve-manifest-v31\n", b"sieve-manifest-v32\n", b"sieve-manifest-v33\n", b"sieve-manifest-v34\n")) or b"\ng\t" not in data:
         sys.exit("not a map: no graph part")
     end = data.index(b"\nend\n") + 1
     out = b"".join(l[2:] + b"\n" for l in data[:end].split(b"\n") if l.startswith(b"g\t"))

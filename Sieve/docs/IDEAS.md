@@ -6450,3 +6450,9 @@ gifenc's sub-blocks are 254 bytes every one. What they come to: 9,616,677 bytes 
 to 60% a file), before the rope, mixing or the frame before as context. So it is worth building,
 for gifenc's GIFs first; other encoders (giflib, ImageMagick, gifsicle) to be measured as GIFs of
 theirs are found.
+*Built (6 November 2026, v34's first piece, `gif`; SPECIFICATIONS §12.2 v34):* the six to
+**4,150,626 bytes (43.2%)** mixed, installed in 27 s; 4,652,864 (48.4%) with Prioritise Decoding
+Speed, installed in 3 s; every GIF given back. Pillow 12's GIFs open too. Still to do: the frame
+before as context (the indices of one frame mean other colours in the next where the palette
+changes, so first measured, not assumed); the viewer playing GIFs; making faster (LZMA2's passes
+over the indices took most of the 101 to 161 s; with the stream's four passes run at once, 161 s became 96 s, the same bytes).

@@ -85,6 +85,7 @@ struct PackReport
     bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
     bool v32 = false;                    // v32: some file carried as its differences from another
     bool v33 = false;                    // v33: as the manifest's (locate.hpp)
+    bool v34 = false;                    // v34 (draft): as the manifest's
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes
@@ -98,6 +99,7 @@ struct PackReport
     uint64_t jpeg_bytes = 0, jpeg_forms = 0;
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
     uint64_t jpeg_was = 0, jpeg_now = 0;
+    size_t gifs_opened = 0, gif_frames = 0; // v34 draft: GIFs carried as their indices, and their frames
     size_t pngs_resaved = 0;             // v32: PNGs installed re-saved at their smallest (permanent), their bytes before and after
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     size_t member_archives = 0, members = 0; // v31: those archives, and their files

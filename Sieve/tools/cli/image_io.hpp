@@ -11,8 +11,11 @@ namespace sieve::cli {
 // Loads every frame of an image file (animated GIFs give several frames).
 std::vector<RgbaImage> load_image_frames(const std::string& path);
 
-// The same from bytes in memory. `what` names them in an error.
-std::vector<RgbaImage> decode_image_frames(const uint8_t* data, size_t size, const std::string& what);
+// The same from bytes in memory. `what` names them in an error. delays_ms, where given, is filled
+// with each frame's delay in milliseconds as the GIF gives it (0 where it gives none; nothing for a
+// picture of one frame); first_only decodes a GIF's first frame alone.
+std::vector<RgbaImage> decode_image_frames(const uint8_t* data, size_t size, const std::string& what, std::vector<int>* delays_ms = nullptr,
+                                           bool first_only = false);
 
 // Whether the bytes are a picture stb_image can read (by its header alone, without decoding), and
 // if so its size.
