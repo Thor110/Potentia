@@ -19,6 +19,31 @@ The File Locator's **Compressed formats** boxes (`--compressed-temporary`,
 Both boxes together: made again where Sieve can, else carried as what it holds. Whatever the method,
 every installed file is checked against its SHA-256 before anything is written.
 
+**Optimise Search routes temporary (0.13.78).** With Optimise Search ticked (the File Locator's
+default; `--optimise-search`), temporary is taken whether its box is ticked or not, and the box is
+shown greyed: every file above that Sieve can make again exactly is opened where that is clearly
+smaller (by 64 bytes and 0.5% on the estimate; a JPEG where its brunsli form is smaller), else left
+as it is, so nothing comes out larger, and everything installs byte for byte. Prioritise Decoding
+Speed forks it: with it, what an opened file holds is carried by LZMA2 or the rope, never mixed
+(quicker to make and to install; without it, a PNG's pixels are mixed as a picture, the smallest and
+the slowest). Never permanent, which changes what is installed; and never a RAR's remaking, which needs the installing machine's own `rar` at a
+version that gives it back: a RAR is opened only where the box is ticked.
+
+*Measured* (6 November 2026, this container, 4 threads; every `.sieve` installed back byte for
+byte; the search with no time limit, as the File Locator's default):
+
+| Folder | Optimise Search before 0.13.78 | Optimise Search now | with Prioritise Decoding Speed too |
+| :--- | ---: | ---: | ---: |
+| the repository's `Images` (67 PNGs, 25 WebP; 10 MB) | 8,884,242 bytes; made in 60 s, installed in 2 s | 5,574,710 (−37.3%); 349 s, 30 s | 6,367,562 (−28.3%); 309 s, 4 s |
+| the web test site (pages, pictures) | 451,120; 13 s | 382,940 (−15.1%); 1 s | 384,360; 1 s |
+
+A PNG opened is its pixels (a 1920 by 1080 screenshot about 6 MB), which packing takes far longer
+than the PNG itself: the making's cost, paid once. Two things made it slower than it need be and
+were mended on the way (the same bytes either way): the rope's whole search of the pixels to decide
+whether opening paid, where LZMA2's estimate already said so (21 s of one screenshot's 30), and
+each PNG decoded and encoded ten times to learn it was not stb_image_write's, where its first bytes
+say so.
+
 ## The formats
 
 | Format | Read by | temporary: made again by | permanent installs | Notes |

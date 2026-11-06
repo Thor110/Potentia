@@ -1187,7 +1187,7 @@ void FileLocator::event(const SDL_Event& e)
         // The search's time: [ and ] a file, with Shift the run.
         case SDLK_LEFTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_less" : "search_file_less"; break;
         case SDLK_RIGHTBRACKET: pressed = (e.key.mod & SDL_KMOD_SHIFT) ? "search_run_more" : "search_file_more"; break;
-        case SDLK_A: pressed = "temporary"; break; // Archive and compressed formats: temporary, on or off
+        case SDLK_A: pressed = sieve::cli::optimise_search() ? "" : "temporary"; break; // Archive and compressed formats: temporary, on or off (Optimise Search unticked)
         case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
@@ -1479,7 +1479,17 @@ void FileLocator::draw(float W, float H)
             }
             button(id, text, box_y);
         };
-        box("temporary", temporary_, tr("loc.temporary"));
+        // (temporary, while Optimise Search routes it (0.13.78, pack.cpp: every compressed file made
+        // again exactly where that is smaller), is shown ticked and greyed, as Try every way is; its own
+        // tick comes back when Optimise Search is unticked)
+        if (sieve::cli::optimise_search())
+        {
+            const std::string text = "[x] " + tr("loc.temporary") + " " + tr("loc.every.chosen");
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
+            draw_text(r_, bx + 12, box_y + 8, text, 2, grey);
+            bx += text_width(text, 2) + 24 + 12;
+        }
+        else box("temporary", temporary_, tr("loc.temporary"));
         box("permanent", permanent_, tr("loc.permanent"));
         // (Optimise Search, ticked unless unticked: Try every way chosen for each file by its kind,
         // so its own box is shown greyed and not pressed while it is)
@@ -1560,7 +1570,8 @@ void FileLocator::draw(float W, float H)
             for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.decoding", "loc.log", "loc.more"})
             {
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
-                const std::string label = tr(id) + (std::string(id) == "loc.every" && sieve::cli::optimise_search() ? " " + tr("loc.every.chosen") : std::string());
+                const bool chosen = sieve::cli::optimise_search() && (std::string(id) == "loc.every" || std::string(id) == "loc.temporary");
+                const std::string label = tr(id) + (chosen ? " " + tr("loc.every.chosen") : std::string());
                 const float w = text_width("[ ] " + label, 2) + 24;
                 if (x > 20 && x + w > W - 20) ++rows, x = 20;
                 x += w + 12;

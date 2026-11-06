@@ -2930,6 +2930,11 @@ namespace {
 // by preflate, where that gives the PNG back.
 std::optional<std::pair<std::vector<uint8_t>, std::string>> png_by_stb(const std::vector<uint8_t>& b)
 {
+    // stb_image_write lays every PNG out alike: the signature, IHDR, then one IDAT whose zlib stream
+    // begins 78 5E (its FLEVEL). A PNG laid out otherwise is none of its, so its pixels are not
+    // decoded and encoded again ten times to find that out (0.13.78: under Optimise Search a
+    // folder's PNGs are all tried, and Images' 67, mostly not stb's, spent about 20 s each so).
+    if (b.size() < 43 || std::memcmp(b.data() + 37, "IDAT", 4) != 0 || b[41] != 0x78 || b[42] != 0x5E) return std::nullopt;
     std::vector<uint8_t> px;
     int w = 0, h = 0, c = 0;
     if (!png_pixels(b.data(), b.size(), px, w, h, c)) return std::nullopt;
@@ -3232,7 +3237,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         const std::string key = std::to_string(maker) + sha;
         if (copied)
             if (auto it = png_made_by.find(key); it != png_made_by.end()) return it->second;
-        auto x = png_makers[maker](b);
+        std::optional<std::pair<std::vector<uint8_t>, std::string>> x;
+        {
+            const timings::Scope t(maker == 0 ? "pack.png.stb" : "pack.png.skeleton"); // (stb's encoder tried, or preflate)
+            x = png_makers[maker](b);
+        }
         if (copied) png_made_by.emplace(key, x);
         return x;
     };
@@ -3261,7 +3270,20 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const char* always_env = std::getenv("SIEVE_ARCHIVES_ALWAYS");
     const bool archives_always = always_env && std::string(always_env) == "1";
     // v31: made again exactly (temporary), carried as what it holds (permanent), or either.
-    const bool temporary_ok = compressed_temporary(), permanent_ok = compressed_permanent();
+    // Optimise Search (0.13.78, Edward: route the formats rather than hint at the box): temporary,
+    // which installs every file byte for byte, is taken for every compressed file Sieve can make
+    // again exactly, ticked or not; each is still opened only where that is clearly smaller (worth,
+    // below; a JPEG where its brunsli form is), so it is never larger. Prioritise Decoding Speed
+    // forks it (Edward): with it, what an opened file holds is carried by LZMA2 or the rope, never
+    // mixed, as every file is then. (Images, 6 November 2026: PNGs' pixels mixed as pictures made it
+    // 37% smaller, and twenty times slower to make and fifteen to install.) Never permanent, which
+    // changes what is installed: that stays the person's to tick. Nor a RAR: making one again needs
+    // the machine's own rar, at a version that gives it back, so another machine might not install it.
+    const bool asked = optimise_archives; // (a box ticked)
+    const bool routed = optimise_search();
+    if (routed) optimise_archives = true;
+    const bool temporary_ok = (asked && compressed_temporary()) || routed, permanent_ok = asked && compressed_permanent();
+    const bool rar_ok = asked && compressed_temporary();
     if ((optimise_archives || spans_on) && m.compact)
     {
         std::unordered_set<std::string> taken;
@@ -3435,8 +3457,25 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
             auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
                 if (archives_always) return true; // SIEVE_ARCHIVES_ALWAYS: every archive read, for testing the readers
-                uint64_t cost = std::min(estimate(inner), mixed_estimate(inner));
-                if (one_file && rope_seconds >= 0 && inner.size() >= 512) cost = std::min<uint64_t>(cost, uint64_t(rope_search(inner, rope_seconds, rope_newest).estimate));
+                uint64_t cost = 0;
+                {
+                    const timings::Scope t("pack.worth.lzma2");
+                    cost = estimate(inner);
+                }
+                // (Already clearly smaller by LZMA2's estimate: so it is, and neither mixing's estimate
+                // nor the rope's search is needed to say so. 0.13.78: the rope's search on a PNG's
+                // pixels, about 6 MB for a 1920 by 1080 screenshot, took 21 s of its 30, when Optimise
+                // Search opens every PNG. The packing that follows still searches what it carries.)
+                if (cost + extra + 64 + as_is / 200 < as_is) return true;
+                {
+                    const timings::Scope t("pack.worth.mixed");
+                    cost = std::min(cost, mixed_estimate(inner));
+                }
+                if (one_file && rope_seconds >= 0 && inner.size() >= 512)
+                {
+                    const timings::Scope t("pack.worth.rope");
+                    cost = std::min<uint64_t>(cost, uint64_t(rope_search(inner, rope_seconds, rope_newest).estimate));
+                }
                 // By a clear margin (64 bytes and 0.5%): the estimate is LZMA2 at preset 6, the stream
                 // preset 9, and a near thing is not worth giving up the archive as it was.
                 return cost + extra + 64 + as_is / 200 < as_is;
@@ -3727,7 +3766,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // v22: a RAR 5 made again by the machine's own rar, where it gives the archive back byte for
             // byte from its files with their times; carried as its contents, with the recipe. Else, as
             // before, its contents alone.
-            if (v22 && temporary_ok && b.size() >= 8 && std::memcmp(b.data(), "Rar!\x1A\x07\x01\x00", 8) == 0)
+            if (v22 && rar_ok && b.size() >= 8 && std::memcmp(b.data(), "Rar!\x1A\x07\x01\x00", 8) == 0)
             {
                 std::string why, version, how, switches;
                 std::optional<std::filesystem::path> program;

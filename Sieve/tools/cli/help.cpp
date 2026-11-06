@@ -1122,7 +1122,10 @@ const std::vector<Page>& pages()
                          "weighed and the one taken, as the File Locator's Keep a log writes them."},
           {"--optimise-search", "Optimise Search (the File Locator's box): Try every way chosen for each file by its kind, from\n"
                                 "what was measured, in place of --search-every-wave: off for every file with --prioritise-decoding\n"
-                                "(it changed nothing so); else on for a JPEG, a file over 16 MiB or under 4 KiB, off between."},
+                                "(it changed nothing so); else on for a JPEG, a file over 16 MiB or under 4 KiB, off between.\n"
+                                "And (0.13.78) --compressed-temporary for every format but RAR, each file opened only where\n"
+                                "that is smaller (with --prioritise-decoding, what it holds is not mixed; never\n"
+                                "--compressed-permanent)."},
           {"--v32-draft", "(v32 was frozen 31 October 2026; kept so older command lines work: it changes nothing.)"},
           {"--v33-draft", "(v33 is the newest now, frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"

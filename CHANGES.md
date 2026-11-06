@@ -1,32 +1,50 @@
-# Picture formats list, and the brotli oddity (6 November 2026)
+# Optimise Search routes the compressed formats (6 November 2026)
 
-Commit 1861a7f (local, not pushed), on top of your 5d5d687.
+Two commits on top of your 98872fc, both local and not pushed:
+- **1861a7f:** the picture formats list in FORMATS.md, and the ODDITIES entry on the zip.
+- **90d5330:** this change.
 
-## docs/FORMATS.md: "Pictures: every format, and what each part of Sieve does with it"
-One table, the same way as the compressed formats. For each format it says what happens in:
-- packing into a `.sieve`;
-- the image line;
-- the viewer and Explorer thumbnails;
-- the vault.
+## What changed
+- **Optimise Search on (the File Locator's default):**
+  - temporary is taken for every compressed file Sieve can make again exactly, whether or not its box is ticked;
+  - each file is opened only where that is clearly smaller (a JPEG where its brunsli form is), so nothing comes out larger, and everything installs byte for byte;
+  - the temporary box shows ticked and greyed, "(chosen file by file)", and A does nothing while Optimise Search is on.
+- **Prioritise Decoding Speed forks it.** With it, an opened file's contents go to LZMA2 or the rope, never to mixing, so installs stay fast.
+- **Never automatic:**
+  - permanent, because it changes what is installed;
+  - RAR, because remaking one needs the installing machine's own `rar` at the right version.
 
-The formats: PNG, JPEG, GIF, BMP, TGA, PNM, PSD/PIC, what ffmpeg reads (WebP, TIFF, AVIF...), and `.simage`.
+  A box you tick yourself still takes both.
 
-It is taken from the code:
-- stb_image is built with every format but HDR;
-- the viewer opens six formats by name;
-- mixing tries a picture shape guessed from the bytes, and takes it only where it is at least 2% smaller.
+## Measured here (4 threads; every .sieve installed back byte for byte)
 
-PNM on the image line was checked here.
+**The repository's `Images` folder** (67 PNGs, 25 WebP, 10 MB):
 
-## docs/ODDITIES.md: resolved
-**Your More formats test on `oddity-click.zip`** (5,312 bytes: two text files, already deflated):
+| Settings | Size | Making | Installing |
+|---|---:|---:|---:|
+| Before | 8,884,242 bytes | 60 s | 2 s |
+| Optimise Search | 5,574,710 (−37.3%) | 349 s | 30 s |
+| Optimise Search + Prioritise Decoding Speed | 6,367,562 (−28.3%) | 309 s | 4 s |
 
-| | Bytes |
-|---|---:|
-| zstd -19 | 4,905 |
-| brotli -q 11 | 4,915 |
-| Sieve, no box | 4,984 |
-| Sieve, Archive and compressed formats: temporary | **3,880** |
+**Other files:**
 
-- **Why Sieve lost:** on data that is already compressed, every coder ties within a few dozen bytes, and the `.sieve` also carries the file's name, size and SHA-256.
-- **With the box:** Sieve opens the zip, packs the text inside, and makes the zip again exactly. That is 21% under brotli, and it installs back byte for byte.
+| File | Before | After | Change |
+|---|---:|---:|---:|
+| The web test site | 451,120 bytes | 382,940 bytes | −15.1%; making went from 13 s to 1 s |
+| oddity-click.zip | 4,984 bytes | 3,880 bytes | |
+| icon16.png | 1,317 bytes | 994 bytes | |
+
+**Why making is slower:** an opened 1920×1080 screenshot is about 6 MB of pixels to pack. That is paid once, when making.
+
+## Two slow steps fixed on the way
+Neither changes any output:
+- **The rope's search in the opening check:** the whole search on the opened pixels was used only to decide whether opening paid. It now runs only when LZMA2's estimate doesn't already decide it. One screenshot went from 30 s to 9.5 s, with an identical .sieve.
+- **The stb check on PNGs:** a PNG not laid out as stb_image_write lays them out is no longer decoded and encoded ten times to find that out.
+
+## Tests
+- **CI step 10:** passes in full (874 s).
+- **Unit suite:** unchanged since the last run.
+
+## Docs
+- FORMATS.md has the table.
+- MANUAL and `sieve help locate` describe the routing.
