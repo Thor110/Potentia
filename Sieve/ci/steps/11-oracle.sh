@@ -580,6 +580,13 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22.sieve --items --optimise-archives | tr -d '\r' > r22.txt
   grep -c "^rar       made.rar: made again by RAR 0.01 sieve-stand-in (top, -m0 -qo-)" r22.txt > /dev/null
   test -s r22.sieve
+  # (0.13.78) Making it says so, as a warning (the File Locator in a box): only where the installing
+  # machine has that rar does it come back byte for byte. Under Optimise Search no RAR is made again
+  # (its box is greyed then), so there is nothing to warn of.
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22w.sieve --optimise-archives > /dev/null 2> r22w.txt
+  grep -q "^warning: A RAR here is carried as its files and made again on installing by rar: made.rar (RAR 0.01 sieve-stand-in)" r22w.txt
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22o.sieve --optimise-archives --optimise-search > /dev/null 2> r22o.txt
+  if grep -q "made again on installing by rar" r22o.txt; then exit 1; fi
   rm -rf r22_inst r22_none r22_oracle r22_si
   SIEVE_RAR="$RAR" $S install r22.sieve --to r22_inst | tr -d '\r' | grep -c "^note      made.rar made again by RAR 0.01 sieve-stand-in, checked against its SHA-256" > /dev/null
   cmp r22/made.rar r22_inst/made.rar

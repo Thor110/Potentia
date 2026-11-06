@@ -3283,7 +3283,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool routed = optimise_search();
     if (routed) optimise_archives = true;
     const bool temporary_ok = (asked && compressed_temporary()) || routed, permanent_ok = asked && compressed_permanent();
-    const bool rar_ok = asked && compressed_temporary();
+    // (and only with Optimise Search unticked: while it routes temporary, temporary's box is greyed,
+    // so a tick left from before could not be taken back, and a RAR made so warns the person to)
+    const bool rar_ok = asked && compressed_temporary() && !routed;
     if ((optimise_archives || spans_on) && m.compact)
     {
         std::unordered_set<std::string> taken;

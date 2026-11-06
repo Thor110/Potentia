@@ -482,6 +482,13 @@ std::optional<std::string> offered_folder_problem(const std::string& spec);
 // place, in lower case ("documents" ...), and the folders under it with '/' between them; nullopt
 // where it offers none, or one not allowed.
 std::optional<std::pair<std::string, std::string>> offered_folder(const std::filesystem::path& program);
+
+// What to tell the person making instructions that carry a RAR to be made again on installing
+// (Archive and compressed formats, temporary, v22), or "" where they carry none (0.13.78, Edward:
+// it was only in the documents, so no one making one learned it): each is made again only where
+// the installing machine has rar at the version that made it, and elsewhere its files are
+// installed in its place, with a warning then. Which RARs, and which rar.
+std::string rar_remake_warning(const Manifest& m);
 inline constexpr char kCarriedDictionariesMagic[] = "sieve-carried-d1"; // 16 bytes, no terminator used
 // A file of the dictionaries folder an installer program carries, checked against its SHA-256.
 struct CarriedFile

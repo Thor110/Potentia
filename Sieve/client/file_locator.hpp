@@ -178,6 +178,9 @@ private:
     // A warning an install gave (install_tree's notes: a RAR given as its contents only, its rar not
     // found), popped up in a box of its own on the next frame; under mx_.
     std::string pending_warning_;
+    // A RAR the instructions carry to be made again by rar on installing (cli::rar_remake_warning):
+    // said in a box (0.13.78), as an install's warning is; from the worker, so under mx_.
+    void warn_rars(const sieve::cli::Manifest& m);
     // The job under way (reading or saving): when it began, and its estimate (seconds; -1: none
     // yet, or too small to need one), with what the estimate is made of; under mx_.
     // Stop pressed: once (sieve::kStop), the job ends with the best it has, the pass under way

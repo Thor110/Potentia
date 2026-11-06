@@ -2904,6 +2904,23 @@ std::vector<CarriedFile> carried_dictionaries(const fs::path& program)
     return unpack_dictionaries(std::span<const uint8_t>(f).subspan(size_t(p.dicts_at), size_t(p.dicts_size)));
 }
 
+std::string rar_remake_warning(const Manifest& m)
+{
+    std::string which;
+    size_t n = 0;
+    for (const Manifest::UnpackedArchive& u : m.unpacked)
+        if (!u.program.empty())
+        {
+            if (n < 5) which += (which.empty() ? "" : ", ") + u.archive + " (" + u.program_version + ")";
+            ++n;
+        }
+    if (n == 0) return {};
+    if (n > 5) which += " and " + std::to_string(n - 5) + " more";
+    return std::string(n == 1 ? "A RAR here is" : std::to_string(n) + " RARs here are") + " carried as its files and made again on installing by rar: " + which +
+           ". It comes back byte for byte only where the installing machine has rar at that version; elsewhere its files are installed in its place, "
+           "and the install says so. Untick Archive and compressed formats: temporary to carry it as it is instead.";
+}
+
 std::optional<std::string> offered_folder_problem(const std::string& spec)
 {
     // A known place, then the folders under it: never a path of its own (C:\..., /...), never

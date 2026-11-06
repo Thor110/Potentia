@@ -882,6 +882,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 refine_estimate(4);
                 const T tc("locator.instructions-compared");
                 std::vector<uint8_t> mb = fi.file();
+                warn_rars(fi); // (a RAR to be made again by rar: said now, in a box, not only in the documents)
                 c.packed = fi.packed;
                 c.version = fi.version();
                 c.manifest = mb.size();
@@ -955,6 +956,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     r.pack_seconds = since(packing);
                 }
                 refine_estimate(4);
+                warn_rars(with);
                 c.packed = with.packed;
                 c.version = with.version();
                 std::vector<uint8_t> mb = with.file();
@@ -1096,6 +1098,7 @@ void FileLocator::save(const std::string& to)
                     const cli::Args items = host_.item_args ? host_.item_args() : cli::Args{};
                     cli::Manifest with = r.kind == Result::File ? file_instructions(from_u8(r.path), r.bytes, items, rope_seconds, archives) : r.manifest;
                     if (r.kind != Result::File) cli::add_packed_items(with, from_u8(r.path), items, nullptr, 8, false, rope_seconds, cli::kNewestRope, true, true, archives);
+                    warn_rars(with);
                     progress("the instructions' address");
                     fresh = cli::raw_of_file(with.file());
                 }
@@ -1651,6 +1654,14 @@ void FileLocator::draw(float W, float H)
     }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
     if (asking_folder_) draw_folder_prompt(W, H, ink, grey);
+}
+
+void FileLocator::warn_rars(const cli::Manifest& m)
+{
+    const std::string w = cli::rar_remake_warning(m);
+    if (w.empty()) return;
+    std::lock_guard<std::mutex> lock(mx_);
+    pending_warning_ = w;
 }
 
 void FileLocator::ask_folder(bool from_sieve, const std::string& out, const std::string& name)

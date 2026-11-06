@@ -2534,6 +2534,7 @@ int cmd_locate(const Args& a)
             if (a.has("v3")) add_contents(m, fs::absolute(target).parent_path());
             else pack_with_items(a, m, fs::absolute(target).parent_path(), rep);
             if ((a.has("installer") || a.has("program")) && m.packed) std::cout << pack_report_text(rep, m.bytes);
+            if (const std::string w = rar_remake_warning(m); !w.empty()) std::cerr << "warning: " << w << "\n";
             const std::vector<uint8_t> ibytes = m.file();
             const std::vector<uint8_t> iraw = raw_of_file(ibytes); // (its address's raw bytes, with no number made)
             if (a.has("installer"))
@@ -2670,6 +2671,7 @@ int cmd_locate(const Args& a)
     const std::vector<uint8_t> iraw_own = installer && !m.with_contents ? raw_of_file(ibytes) : std::vector<uint8_t>{};
     const std::vector<uint8_t>& iraw = m.with_contents ? mraw : iraw_own;
     if (installer && !a.has("v3")) *info << pack_report_text(rep, m.bytes);
+    if (const std::string w = rar_remake_warning(m.with_contents ? m : inst); !w.empty()) std::cerr << "warning: " << w << "\n";
     if (a.has("program"))
     {
         // The installer attached to a copy of sieve-install: one program to hand to someone.

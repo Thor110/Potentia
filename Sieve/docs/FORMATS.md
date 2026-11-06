@@ -27,7 +27,11 @@ as it is, so nothing comes out larger, and everything installs byte for byte. Pr
 Speed forks it: with it, what an opened file holds is carried by LZMA2 or the rope, never mixed
 (quicker to make and to install; without it, a PNG's pixels are mixed as a picture, the smallest and
 the slowest). Never permanent, which changes what is installed; and never a RAR's remaking, which needs the installing machine's own `rar` at a
-version that gives it back: a RAR is opened only where the box is ticked.
+version that gives it back: a RAR is opened only where the box is ticked with Optimise Search
+unticked, and then the File Locator says so in a box, and `sieve locate` in a warning, when it
+reads or saves (0.13.78: it was only here, so no one making one learned it), naming each RAR and
+the rar that made it: it comes back byte for byte only where the installing machine has that rar,
+and elsewhere its files are installed in its place, the install saying so.
 
 *Measured* (6 November 2026, this container, 4 threads; every `.sieve` installed back byte for
 byte; the search with no time limit, as the File Locator's default):

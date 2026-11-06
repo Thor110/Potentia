@@ -1,50 +1,21 @@
-# Optimise Search routes the compressed formats (6 November 2026)
+# The RAR warning (6 November 2026)
 
-Two commits on top of your 98872fc, both local and not pushed:
-- **1861a7f:** the picture formats list in FORMATS.md, and the ODDITIES entry on the zip.
-- **90d5330:** this change.
+Commit on top of your 9fda581 (local, not pushed).
 
-## What changed
-- **Optimise Search on (the File Locator's default):**
-  - temporary is taken for every compressed file Sieve can make again exactly, whether or not its box is ticked;
-  - each file is opened only where that is clearly smaller (a JPEG where its brunsli form is), so nothing comes out larger, and everything installs byte for byte;
-  - the temporary box shows ticked and greyed, "(chosen file by file)", and A does nothing while Optimise Search is on.
-- **Prioritise Decoding Speed forks it.** With it, an opened file's contents go to LZMA2 or the rope, never to mixing, so installs stay fast.
-- **Never automatic:**
-  - permanent, because it changes what is installed;
-  - RAR, because remaking one needs the installing machine's own `rar` at the right version.
+## When a RAR is made again on installing, Sieve now says so when making it
+- **`sieve locate`** prints a warning.
+- **The File Locator** shows it in a message box when it reads the folder and when it saves.
 
-  A box you tick yourself still takes both.
+The warning names each RAR and the rar version that made it. It says the RAR comes back byte for byte only where the installing machine has that version of rar. Elsewhere its files are installed in its place, and the install says so.
 
-## Measured here (4 threads; every .sieve installed back byte for byte)
+## Under Optimise Search, no RAR is made again at all
+This holds even with a temporary tick left over from before. While Optimise Search is on, temporary's box is greyed, so that tick couldn't be taken back, and the warning's advice ("untick temporary") couldn't be followed.
 
-**The repository's `Images` folder** (67 PNGs, 25 WebP, 10 MB):
+So a RAR is made again only with Optimise Search off and temporary ticked. That is exactly where the box can be changed.
 
-| Settings | Size | Making | Installing |
-|---|---:|---:|---:|
-| Before | 8,884,242 bytes | 60 s | 2 s |
-| Optimise Search | 5,574,710 (−37.3%) | 349 s | 30 s |
-| Optimise Search + Prioritise Decoding Speed | 6,367,562 (−28.3%) | 309 s | 4 s |
+## Tested
+With CI's stand-in rar:
+- `--optimise-archives` warns, naming `made.rar (RAR 0.01 sieve-stand-in)`.
+- With `--optimise-search` added, nothing is made again and nothing is warned.
 
-**Other files:**
-
-| File | Before | After | Change |
-|---|---:|---:|---:|
-| The web test site | 451,120 bytes | 382,940 bytes | −15.1%; making went from 13 s to 1 s |
-| oddity-click.zip | 4,984 bytes | 3,880 bytes | |
-| icon16.png | 1,317 bytes | 994 bytes | |
-
-**Why making is slower:** an opened 1920×1080 screenshot is about 6 MB of pixels to pack. That is paid once, when making.
-
-## Two slow steps fixed on the way
-Neither changes any output:
-- **The rope's search in the opening check:** the whole search on the opened pixels was used only to decide whether opening paid. It now runs only when LZMA2's estimate doesn't already decide it. One screenshot went from 30 s to 9.5 s, with an identical .sieve.
-- **The stb check on PNGs:** a PNG not laid out as stb_image_write lays them out is no longer decoded and encoded ten times to find that out.
-
-## Tests
-- **CI step 10:** passes in full (874 s).
-- **Unit suite:** unchanged since the last run.
-
-## Docs
-- FORMATS.md has the table.
-- MANUAL and `sieve help locate` describe the routing.
+CI step 11 now checks both. That block was run here.
