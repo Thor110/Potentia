@@ -55,7 +55,8 @@ needs, and whether known physics allows it.
 - **The expanding universe sets the final limit.** At 112 km/s the Earth can ever reach about
   0.9 Mpc: Andromeda (and it is coming to us anyway), but just 32 of 2MRS's 43,533 galaxies.
 
-Ideas, decisions and the running list of improvements are kept in **[OLAP.md](OLAP.md)**.
+**[OLAP.md](OLAP.md)** keeps the evolution of the idea: from the first framing (April 2025) through
+every change and its reason, where each idea stands, and what is open.
 
 ## Files
 
@@ -69,7 +70,7 @@ Ideas, decisions and the running list of improvements are kept in **[OLAP.md](OL
 | `views.js` | The four scales, drawn on a canvas. |
 | `app.js` | The settings, the timeline, the panels, the ledger, the charts and the tables. |
 | `data/manifest.js` | Written by the updater: each dataset's row count, SHA-256 and the date it last changed. |
-| `data/exoplanets.js`, `data/land.js` | Snapshots kept here (public data). |
+| `data/exoplanets.js`, `data/land.js`, `data/skin-*.js` | Snapshots kept here (public data). |
 | `tools/update_data.py` | Fetches every dataset again and rewrites the snapshots and the manifest. |
 | `tools/check.mjs` | Checks the physics against values known independently. |
 
@@ -84,6 +85,7 @@ folder (`file://`).
 | Local Group | McConnachie 2012, AJ 144, 4 (VizieR J/AJ/144/4) | Read live from VizieR. |
 | Exoplanets | NASA Exoplanet Archive, `pscomppars` | Snapshot (the archive cannot be read from a browser on another site). |
 | Land | Natural Earth v5.1.2, 1:110m (public domain) | Snapshot. |
+| Surface maps | The Moon: NASA SVS CGI Moon Kit (LRO). Mars: USGS Viking MDIM 2.1 colour mosaic. Ceres: NASA Dawn PIA19606 (coloured by height). All public domain. | Snapshots (`data/skin-*.js`), loaded only when that body is shown. The asteroid's surface is generated from a fixed seed. |
 
 Live tables are made canonical (the column-name line and the data lines, LF-terminated) and
 hashed in the browser; the page says whether what it read is exactly what the manifest records.

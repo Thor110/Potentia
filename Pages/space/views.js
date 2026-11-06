@@ -36,6 +36,42 @@
   // ---------------------------------------------------------------------------------------------
   const planet = {
     cam: { lat: 25, lon: 10, zoom: 1 },
+    skins: {},
+    // A surface map, read into memory once (an image drawn onto a canvas, then its pixels)
+    setSkin(bodyId, uri, frame) {
+      if (this.skins[bodyId]) return;
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas"); c.width = img.width; c.height = img.height;
+        const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+        this.skins[bodyId] = { w: c.width, h: c.height, px: g.getImageData(0, 0, c.width, c.height).data, frame };
+      };
+      img.src = uri;
+    },
+    // The asteroid's surface: made up, but the same every time (a seeded generator), with craters
+    makeAsteroidSkin() {
+      if (this.skins.asteroid) return;
+      const W = 512, H = 256, px = new Uint8ClampedArray(W * H * 4), rnd = P.rng(2025);
+      const craters = [];
+      for (let i = 0; i < 220; i++) {
+        const z = 2 * rnd() - 1, a = 2 * Math.PI * rnd(), q = Math.sqrt(1 - z * z);
+        craters.push({ v: [q * Math.cos(a), q * Math.sin(a), z], r: 0.02 + 0.25 * Math.pow(rnd(), 3) });
+      }
+      const waves = [0, 1, 2, 3, 4].map(() => [rnd() * 6 + 1, rnd() * 6 + 1, rnd() * 6, rnd() * 0.08]);
+      for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+        const lat = (90 - (j + 0.5) / H * 180) * D2R, lon = ((i + 0.5) / W * 360 - 180) * D2R;
+        const v = [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+        let g = 0.5;
+        for (const [fa, fb, ph, amp] of waves) g += amp * Math.sin(fa * lon + ph) * Math.cos(fb * lat);
+        for (const c of craters) {
+          const d = Math.acos(Math.max(-1, Math.min(1, P.dot(v, c.v)))) / c.r;
+          if (d < 1) g -= 0.18 * (1 - d * d); else if (d < 1.25) g += 0.12 * (1.25 - d) * 4 * 0.5;
+        }
+        const k = (j * W + i) * 4, t = Math.max(0, Math.min(1, g)) * 200 + 30;
+        px[k] = t * 0.95; px[k + 1] = t * 0.9; px[k + 2] = t * 0.84; px[k + 3] = 255;
+      }
+      this.skins.asteroid = { w: W, h: H, px, frame: { x0: 0, x1: 1, y0: 0, y1: 1, lonLeft: -180 } };
+    },
     mask: null, maskW: 720, maskH: 360,
     img: null,
     buildMask(geo) {
@@ -67,7 +103,8 @@
       const Rg = 0.4 * Math.min(w, h) * cam.zoom, cx = w / 2, cy = h / 2 + 8;
       const lat0 = cam.lat * D2R, lon0 = (cam.lon + (S.spin ? S.dayPhase * 180 / Math.PI : 0)) * D2R;
       // The globe, drawn pixel by pixel from the land mask (cheap enough at a modest resolution)
-      if (this.mask && S.R.fw.isEarth) {
+      const skin = this.skins[S.R.fw.body.id];
+      if ((this.mask && S.R.fw.isEarth) || skin) {
         const N = Math.max(80, Math.min(360, Math.round(2 * Rg / 2)));
         if (!this.img || this.img.width !== N) { this.cv = document.createElement("canvas"); this.cv.width = this.cv.height = N; this.img = this.cv.getContext("2d").createImageData(N, N); }
         const data = this.img.data, c0 = Math.cos(lat0), s0 = Math.sin(lat0);
@@ -77,12 +114,20 @@
           const z = Math.sqrt(1 - rr);
           const lat = Math.asin(y * c0 + z * s0);
           const lon = lon0 + Math.atan2(x, z * c0 - y * s0);
-          let mx = Math.floor(((lon / D2R + 540) % 360) / 360 * this.maskW), my = Math.floor((90 - lat / D2R) / 180 * this.maskH);
-          if (my >= this.maskH) my = this.maskH - 1;
-          const land = this.mask[my * this.maskW + mx];
           const shade = 0.55 + 0.45 * z;
-          if (land) { data[k] = 70 * shade; data[k + 1] = 78 * shade; data[k + 2] = 66 * shade; }
-          else { data[k] = 14 * shade; data[k + 1] = 26 * shade; data[k + 2] = 44 * shade; }
+          if (skin) {
+            const f = skin.frame, lonD = ((lon / D2R - f.lonLeft) % 360 + 720) % 360;
+            const sx = Math.min(skin.w - 1, Math.floor((f.x0 + (f.x1 - f.x0) * lonD / 360) * skin.w));
+            const sy = Math.min(skin.h - 1, Math.max(0, Math.floor((f.y0 + (f.y1 - f.y0) * (90 - lat / D2R) / 180) * skin.h)));
+            const q = (sy * skin.w + sx) * 4;
+            data[k] = skin.px[q] * shade; data[k + 1] = skin.px[q + 1] * shade; data[k + 2] = skin.px[q + 2] * shade;
+          } else {
+            let mx = Math.floor(((lon / D2R + 540) % 360) / 360 * this.maskW), my = Math.floor((90 - lat / D2R) / 180 * this.maskH);
+            if (my >= this.maskH) my = this.maskH - 1;
+            const land = this.mask[my * this.maskW + mx];
+            if (land) { data[k] = 70 * shade; data[k + 1] = 78 * shade; data[k + 2] = 66 * shade; }
+            else { data[k] = 14 * shade; data[k + 1] = 26 * shade; data[k + 2] = 44 * shade; }
+          }
           data[k + 3] = 255;
         }
         this.cv.getContext("2d").putImageData(this.img, 0, 0);
@@ -141,7 +186,7 @@
       ctx.strokeStyle = COL.amber; ctx.beginPath(); ctx.moveTo(lx, ly + 18); ctx.lineTo(lx + 22, ly + 18); ctx.stroke();
       text(ctx, "ring spun the other way", lx + 30, ly + 18, COL.ink2);
       dot(ctx, lx + 6, ly + 36, 4, COL.ink, COL.ink); dot(ctx, lx + 18, ly + 36, 4, "#050508", COL.ink);
-      text(ctx, "station on land / sea", lx + 30, ly + 36, COL.ink2);
+      text(ctx, S.R.fw.isEarth ? "station on land / sea" : "station", lx + 30, ly + 36, COL.ink2);
     },
     drag(dx, dy) { this.cam.lon -= dx * 0.3 / this.cam.zoom; this.cam.lat = Math.max(-90, Math.min(90, this.cam.lat + dy * 0.3 / this.cam.zoom)); },
     wheel(dz) { this.cam.zoom = Math.max(0.5, Math.min(4, this.cam.zoom * Math.exp(-dz * 0.001))); },

@@ -342,6 +342,35 @@
     return K.starDensity * Math.PI * d * d * focus * (vRel * K.year / K.pc);
   };
 
+  // ---------------------------------------------------------------------------------------------
+  // The energy budget: what each store holds (J), as upper bounds (all of it, used perfectly)
+  // ---------------------------------------------------------------------------------------------
+  P.energyStores = function (years) {
+    const sunlight = K.solarConst * Math.PI * K.Rearth ** 2;     // W reaching the Earth
+    const hMass = K.oceanMass * 2 / 18.015;                     // hydrogen in the oceans (kg)
+    const dMass = hMass * K.oceanDH * 2.014 / 1.008;            // of which deuterium (kg)
+    const crust = K.crustMass;
+    return {
+      sunlight: { J: sunlight * years * K.year, label: "All the sunlight reaching the Earth, until departure", renew: true },
+      deuterium: { J: dMass * K.ddEnergy, label: "Fusing all the deuterium in the oceans (" + Math.round(dMass / 1e15) + " trillion tonnes)" },
+      fission: { J: crust * (K.crustU + K.crustTh) * K.fissionEnergy, label: "Fissioning all the crust's uranium and thorium" },
+      heat: { J: K.geoHeat * years * K.year, label: "The Earth's internal heat, until departure", renew: true },
+      spin: { J: P.spinEnergy(), label: "The Earth's whole spin" },
+      jupiter: { J: K.GMsun * K.Mjupiter / (2 * K.aJupiter * K.AU), label: "Jupiter's orbital energy (reached only through gravity assists)" }
+    };
+  };
+  // Light as the only thing thrown away: all the sunlight reaching the Earth, beamed out behind it,
+  // pushes with P/c. The speed it gives the Earth over the years (m/s).
+  P.photonDv = (years) => K.solarConst * Math.PI * K.Rearth ** 2 / K.c / K.Mearth * years * K.year;
+  // Taking everyone by ship instead: energy to send people (with their ship's mass) from the
+  // Earth's surface out of the solar system with speed vinf left.
+  P.shipsForAll = function ({ people, kgPerPerson, vinf, launchPerYear }) {
+    const vOrbitEsc = P.escapeDvImpulse(1, vinf);                       // from Earth's orbit
+    const vSurface = Math.sqrt(K.vEscEarth ** 2 + vOrbitEsc ** 2);      // needed at the surface
+    const mass = people * kgPerPerson;
+    return { mass, vSurface, energy: 0.5 * mass * vSurface ** 2, years: mass / launchPerYear };
+  };
+
   // Leaving: distance against time on the way out, starting at aAU with speed sqrt(vinf^2 + 2mu/r)
   // (straight out; for distances far beyond the start the true hyperbola gives nearly the same).
   // Returns a table of [years, AU] from aAU out to rMaxAU.

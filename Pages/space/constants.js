@@ -121,6 +121,24 @@
   ], src: "NASA fact sheets (Earth, Mars, Moon); Park et al. 2016 (Ceres); the asteroid is illustrative (density 2,000 kg/m^3, 6 h day)" };
   C.starDensity = { v: 0.1, u: "stars per pc^3", src: "local stellar number density, order of magnitude" };
   C.maglevRecord = { v: 167.5, u: "m/s", src: "603 km/h, JR Central L0 series, 2015" };
+  // Train speeds to choose from: realistic first. Safety rises with every step up.
+  C.trainSpeeds = { v: [
+    { id: "record", name: "Today's record: 603 km/h (proven)", v: 167.5 },
+    { id: "tube", name: "1,000 km/h in a low-pressure tube (being developed)", v: 277.8 },
+    { id: "mach3", name: "3,600 km/h in a vacuum tube (speculative)", v: 1000 },
+    { id: "orbit", name: "Orbital speed for this body (the theoretical limit)", v: null },
+    { id: "custom", name: "Set my own", v: null }
+  ], src: "JR Central L0 (2015); low-pressure tube maglev targets (2020s); beyond that, speculative" };
+
+  // Energy: what there is to spend
+  C.oceanDH = { v: 155.76e-6, u: "D atoms per H atom", src: "VSMOW, IAEA reference water" };
+  C.ddEnergy = { v: 3.45e14, u: "J per kg of deuterium", src: "full D-D burn: 6 D -> 2 He-4 + 2 p + 2 n + 43.2 MeV" };
+  C.fissionEnergy = { v: 8.2e13, u: "J per kg fissioned", src: "about 200 MeV per fission of a heavy nucleus" };
+  C.crustU = { v: 1.3e-6, u: "mass fraction", src: "bulk continental crust, Rudnick & Gao 2014, Treatise on Geochemistry 4.1" };
+  C.crustTh = { v: 5.6e-6, u: "mass fraction", src: "bulk continental crust, Rudnick & Gao 2014" };
+  C.population = { v: 8.2e9, u: "people", src: "UN World Population Prospects 2024" };
+  C.launchPerYear = { v: 3e6, u: "kg to orbit per year", src: "order of magnitude, worldwide c. 2024" };
+  C.tntMegaton = { v: 4.184e15, u: "J", src: "definition" };
 
   root.OLAP = root.OLAP || {};
   root.OLAP.C = C;

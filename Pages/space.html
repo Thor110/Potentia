@@ -97,6 +97,9 @@
   .tbl-wrap{overflow-x:auto;}
   .verdict{white-space:nowrap;}
   .v-ok{color:#7fb4e6;} .v-big{color:#d9a24a;} .v-no{color:#e0809f;}
+  .bar{height:8px;background:var(--blue);border-radius:0 4px 4px 0;min-width:2px;}
+  .bar.store{background:var(--amber);}
+  td.barcell{width:34%;min-width:120px;vertical-align:middle;}
   details{margin-top:10px;} summary{cursor:pointer;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;}
 
   .nav-group{display:flex;flex-direction:column;gap:12px;width:100%;max-width:800px;}
@@ -118,7 +121,7 @@
 <body>
 
 <h1>Potentia // OLAP Sandbox</h1>
-<div class="sub">Orbital Launch Accelerator Platform · planning &amp; feasibility simulation (v0.3)</div>
+<div class="sub">Orbital Launch Accelerator Platform · planning &amp; feasibility simulation (v0.4)</div>
 
 <div class="disclosure">
   <div class="t">AI Disclosure</div>
@@ -187,6 +190,15 @@
   <div class="box-text">Each step of the route as it stands with the settings above: what it needs, what that compares with, and whether known physics allows it.</div>
   <div class="tbl-wrap"><table id="ledger"></table></div>
   <div class="note">✓ allowed by known physics at a scale people already work at or could plausibly reach · ◐ allowed by known physics, at a scale far beyond anything built · ✗ not possible this way</div>
+</div>
+
+<div class="box">
+  <div class="box-title">Energy Budget</div>
+  <div class="box-text">What each step needs, against everything the Earth could ever spend on it: each store taken whole and used perfectly, so these are upper bounds. The bars are on a logarithmic scale: each step along is ten times more.</div>
+  <div class="tbl-wrap"><table id="energy"></table></div>
+  <div class="box-title" style="margin-top:22px">Taking Everyone: The Planet or Ships?</div>
+  <div class="box-text">The aim is a way to take all of humanity, not some of it. Ships are the usual answer; this sets them beside the planet.</div>
+  <div class="panels" style="margin:0" ><div class="panel" id="energy-fields"></div><div class="panel"><div class="out" id="ships" style="border:0;margin:0;padding:0"></div></div></div>
 </div>
 
 <div class="box">

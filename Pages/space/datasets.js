@@ -112,6 +112,29 @@
         });
       }
     },
+    // Surface maps. frame: where the map itself sits in the image (fractions), and the longitude
+    // at its left edge; east increases to the right, north is at the top.
+    "skin-moon": {
+      title: "The Moon's surface (LRO colour mosaic)",
+      cite: "NASA Scientific Visualization Studio, CGI Moon Kit (LRO LROC), public domain",
+      terms: "Kept here as a snapshot (public domain); loaded when the Moon is shown.",
+      kind: "image", frame: { x0: 0, x1: 1, y0: 0, y1: 1, lonLeft: -180 },
+      parse: (text) => text
+    },
+    "skin-mars": {
+      title: "Mars's surface (Viking colour mosaic)",
+      cite: "USGS Astrogeology, Viking MDIM 2.1 colourised global mosaic, public domain (via Wikimedia Commons)",
+      terms: "Kept here as a snapshot (public domain); loaded when Mars is shown.",
+      kind: "image", frame: { x0: 0, x1: 1, y0: 0, y1: 1, lonLeft: -180 },
+      parse: (text) => text
+    },
+    "skin-ceres": {
+      title: "Ceres's surface (Dawn, coloured by height)",
+      cite: "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA, Dawn, PIA19606, public domain (via Wikimedia Commons)",
+      terms: "Kept here as a snapshot (public domain); coloured by height, not true colour. Its frame was measured from the map's grid lines.",
+      kind: "image", frame: { x0: 31 / 960, x1: 931 / 960, y0: 19 / 489, y1: 469 / 489, lonLeft: 0 },
+      parse: (text) => text
+    },
     land: {
       title: "Land outlines (1:110m)",
       cite: "Natural Earth v5.1.2, ne_110m_land (public domain)",
@@ -140,7 +163,16 @@
       set({ state: "loading" });
       try {
         let data;
-        if (d.kind === "snapshot") {
+        if (d.kind === "image") {
+          if (OLAP.snap == null || OLAP.snap[id] == null) await new Promise((ok, no) => {
+            const sc = document.createElement("script");
+            sc.src = "space/data/" + id + ".js"; sc.onload = ok; sc.onerror = () => no(new Error("map file missing"));
+            document.head.appendChild(sc);
+          });
+          const text = OLAP.snap[id];
+          data = d.parse(text);
+          set(Object.assign({ state: "ready", via: "this repository" }, verify(id, text, (OLAP.manifest.datasets[id] || {}).rows)));
+        } else if (d.kind === "snapshot") {
           const text = OLAP.snap && OLAP.snap[id];
           if (text == null) throw new Error("snapshot file missing");
           data = d.parse(text);

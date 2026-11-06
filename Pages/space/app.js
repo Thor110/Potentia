@@ -58,8 +58,8 @@
     { panel: "fw", key: "fwDay", label: "Change in the day", type: "log", min: 1e-6, max: 3600, def: 1, fmt: (v) => sci(v) + " s", show: (p) => p.fwGoal === "day" },
     { panel: "fw", key: "fwGeom", label: "What spins", type: "select", def: "ring",
       options: [["ring", "Trains circling each ring: the circle itself"], ["along", "Wheels all along the rings"], ["node", "Wheels at the 26 stations"]] },
-    { panel: "fw", key: "trainOrbit", label: "Trains at orbital speed for this body (the fastest without being held down)", type: "check", def: true, show: (p) => p.fwGeom === "ring" },
-    { panel: "fw", key: "trainV", label: "Train speed", type: "log", min: 1, max: 12000, def: 7900, fmt: (v) => grp(v) + " m/s (" + grp(v * 3.6) + " km/h)", show: (p) => p.fwGeom === "ring" && !p.trainOrbit },
+    { panel: "fw", key: "trainPreset", label: "Train speed", type: "select", def: "record", options: C.trainSpeeds.v.map(t => [t.id, t.name]), show: (p) => p.fwGeom === "ring" },
+    { panel: "fw", key: "trainV", label: "My train speed", type: "log", min: 1, max: 12000, def: 167.5, fmt: (v) => grp(v) + " m/s (" + grp(v * 3.6) + " km/h)", show: (p) => p.fwGeom === "ring" && p.trainPreset === "custom" },
     { panel: "fw", key: "trainsPerRing", label: "Trains per ring", type: "log", min: 1, max: 1e5, def: 1000, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "ring" },
     { panel: "fw", key: "fwPerRing", label: "Wheels per ring", type: "log", min: 1, max: 1e5, def: 100, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "along" },
     { panel: "fw", key: "fwPerNode", label: "Wheels per station", type: "log", min: 1, max: 1000, def: 1, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "node" },
@@ -98,6 +98,9 @@
     { panel: "gal", key: "H0", label: "Hubble constant", type: "select", def: String(K.H0),
       options: [[String(K.H0), K.H0 + " km/s/Mpc (Planck 2018)"], [String(K.H0local), K.H0local + " km/s/Mpc (SH0ES 2022)"]] },
 
+    { panel: "nrg", key: "people", label: "People to take", type: "log", min: 1e6, max: 2e10, def: K.population, fmt: (v) => sci(v) },
+    { panel: "nrg", key: "shipKg", label: "Ship mass per person (habitat, air, water, food, shielding)", type: "log", min: 1e3, max: 1e7, def: 1e5, fmt: (v) => grp(v / 1000) + " t" },
+    { panel: "nrg", key: "shipYears", label: "Time to launch everyone", type: "log", min: 1, max: 1e6, def: 100, fmt: (v) => years(v) },
     { panel: "col", key: "colV", label: "Colony ship speed", type: "log", min: 1e-4, max: 0.5, def: 0.01, fmt: (v) => sci(v * 100) + "% of light" }
   ];
   const DEF = {}; FIELDS.forEach(f => DEF[f.key] = f.def);
@@ -125,7 +128,8 @@
     const dL = isEarth ? P.momentumForGoal(goal) : P.momentumForGoal(goal, body);
     const mat = MAT.find(m => m.id === p.fwMaterial) || MAT[0];
     const geom = p.fwGeom, ring = geom === "ring";
-    const v = ring ? (p.trainOrbit ? P.surfaceOrbitSpeed(body) : p.trainV) : P.materialSpeed(mat);
+    const preset = C.trainSpeeds.v.find(t => t.id === p.trainPreset) || C.trainSpeeds.v[0];
+    const v = ring ? (preset.id === "orbit" ? P.surfaceOrbitSpeed(body) : preset.id === "custom" ? p.trainV : preset.v) : P.materialSpeed(mat);
     const rad = ring ? body.R - Math.min(2000, 0.02 * body.R) : p.fwRadius;   // trains run 2 km down (less in small bodies)
     const n = ring ? 9 : geom === "along" ? 9 * Math.round(p.fwPerRing) : 26 * Math.round(p.fwPerNode);
     r.fw = Object.assign(P.flywheels({ dL, r: rad, v, n, power: p.fwPowerTW * 1e12 }), { v, r: rad, n, ring, geom, mat, goal, body, isEarth, L: isEarth ? P.earthL() : P.bodyL(body) });
@@ -137,6 +141,12 @@
       fw.perMetre = fw.totalMass / (9 * fw.ringLen);
       fw.weight = P.trainWeight(body, v);
       fw.vOrb = P.surfaceOrbitSpeed(body);
+      fw.trainMt = 0.5 * fw.perTrain * v * v / K.tntMegaton;          // released if one train stopped at once
+    }
+    // Handing momentum between rings through the day (tilts): the motors' push per metre of track
+    if (goal.kind !== "day") {
+      r.fw.handForce = P.bodyOmega(body) * dL / rad;                    // N, all rings together (order of magnitude)
+      r.fw.handPerMetre = r.fw.handForce / (9 * 2 * Math.PI * rad);
     }
     r.proof = P.publishedProof();
     // Grid
@@ -200,6 +210,12 @@
     r.directMd = P.massDriver({ dv: r.gal.directDv * 1000, vLaunch: gv });
     r.mdDropRef = P.massDriver({ dv: r.gal.dvDrop * 1000, vLaunch: 0.1 * K.c });
     r.starRate = P.starPassRate(1, 30000);   // a star within 1 AU, at a typical 30 km/s
+    // Energy budget
+    r.burnE = 0.5 * K.Mearth * (((r.gal.vp + p.burnKms) * 1000) ** 2 - (r.gal.vp * 1000) ** 2);
+    r.stores = P.energyStores(tDep);
+    r.liveE = K.worldPower * tDep * K.year;
+    r.ships = P.shipsForAll({ people: p.people, kgPerPerson: p.shipKg, vinf: Math.max(vinf, 1), launchPerYear: K.launchPerYear });
+    r.shipsRate = r.ships.mass / p.shipYears;
     r.tooClose = p.rpAU < 2 * r.gal.rTidalAU;
     r.amongS = p.rpAU < 2000;
     // Destination
@@ -300,7 +316,7 @@
     }
     for (const f of FIELDS) {
       const pn = PANELS.find(q => q.id === f.panel);
-      const hostEl = pn ? pn.el.querySelector(".fields") : document.createElement("div"); // colony speed: moved into place later
+      const hostEl = pn ? pn.el.querySelector(".fields") : f.panel === "nrg" ? $("energy-fields") : document.createElement("div"); // colony speed: moved into place later
       const wrap = document.createElement("div"); wrap.className = "field" + (f.type === "check" ? " check" : "");
       const id = "f-" + f.key;
       if (f.type === "check") {
@@ -359,7 +375,9 @@
       `<p><b>Trains:</b> ${grp(fw.trains)} in all, ${grp(p.trainsPerRing)} on each ring, ${sci(fw.perTrain)} kg each, at ${grp(fw.v)} m/s; or ${sci(fw.perMetre)} kg on every metre of the ${grp(fw.ringLen / 1000)} km of each ring: as solid steel, a ring ${sci(Math.sqrt(fw.perMetre / 7850))} m square in cross-section</p>`,
       fw.weight >= 0 ? `<p><b>On the track:</b> at this speed a train weighs ${Math.round(fw.weight * 100)}% of its weight at rest: the faster it goes, the more it floats, and at ${grp(fw.vOrb)} m/s (orbital speed at the surface) it weighs nothing.</p>`
         : `<p class="v-big">▲ Faster than orbital speed at the surface (${grp(fw.vOrb)} m/s): the trains push outward with ${-fw.weight < 2 ? Math.round(-fw.weight * 100) + "% of" : sci(-fw.weight) + " times"} their weight, so the track must hold them in, as a hoop or under the rock above.</p>`,
-      `<p class="note">The fastest train yet ran at ${grp(K.maglevRecord * 3.6)} km/h (${grp(K.maglevRecord)} m/s). At that speed the same goal needs ${sci(fw.dL / (fw.r * K.maglevRecord))} kg.</p>`
+      `<p class="note">The fastest train yet ran at ${grp(K.maglevRecord * 3.6)} km/h (${grp(K.maglevRecord)} m/s). At that speed the same goal needs ${sci(fw.dL / (fw.r * K.maglevRecord))} kg.</p>`,
+      `<p><b>Safety, what can be counted:</b> each train carries ${sci(fw.trainMt)} megatonnes of TNT in motion, released if it stopped at once${fw.handPerMetre ? `; handing momentum between the rings through the day, the motors push on the track with about ${sci(fw.handPerMetre / 9.81 / 1000)} tonnes-force on every metre` : ""}. More trains split the first; the second depends only on the goal.</p>`,
+      `<p class="note"><b>Safety, what cannot yet be counted:</b> what the track, tunnel and rock can bear; how the trains are stopped safely in a fault; what the planet's crust and quakes do to rings running through it; heat, wear and maintenance; and how the system fails gracefully. Those need the engineering designed first, so the page leaves them open rather than guess.</p>`
     ] : [
       `<p class="note">How the mass is split does not change the total: ${what} held at one radius and rim speed need the same mass whether there are 26 or 26,000 of them. Only the radius and the speed reduce it, and nothing on a body has a larger radius than a ring round the whole of it. That is why the trains are the flywheel.</p>`
     ];
@@ -434,7 +452,7 @@
       tr.name === "Andromeda" ? `<p class="note">Andromeda is already falling towards us, at about 110 km/s. The two may merge within 10 billion years (an even chance, Sawala et al. 2025).</p>` : "",
       `<p><b>Reach, ever, at ${g.vinf > 0 ? kms(g.vinf * 1000) : "0 km/s"}:</b> ${r.reachMpc.toFixed(2)} Mpc, as the universe's expansion slows anything moving through it${r.reach2mrs ? `; ${grp(r.reach2mrs.inside)} of 2MRS's ${grp(r.reach2mrs.all)} galaxies (${(100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2)}%)` : ""}. Light sent today reaches ${r.lightReachGly.toFixed(2)} Gly.</p>`
     ].join("") : `<p>The Earth stays with the Sun's orbit round the Galaxy, a wandering planet among the stars.</p>`;
-    renderLedger(); renderColonies();
+    renderLedger(); renderColonies(); renderEnergy();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -453,6 +471,8 @@
     const engV = p.method === "flywheels" || p.method === "sun" ? NO : BIG;
     if (p.migrate) rows.push(["Engine", "Stay habitable until departure", "out to " + r.aDep.toFixed(3) + " AU; " + sci(r.migE) + " J", how(r.fbMigN, r.fbMigEvery, r.mdMig.fraction), engV]);
     rows.push(["Engine", "Escape the Sun", kms(r.escDv) + "; " + sci(r.escE) + " J", how(r.fbEscN, r.fbEscEvery, r.mdEsc.fraction), r.lateDeparture ? NO : engV]);
+    const leaveE = r.migE + r.escE, onEarth = Math.max(r.stores.deuterium.J, r.stores.fission.J);
+    rows.push(["Energy", "Pay for leaving the Sun", sci(leaveE) + " J", p.method === "flyby" ? "Jupiter's orbit gives it: " + sci(100 * leaveE / r.stores.jupiter.J, 2) + "% of its energy" : "the largest store on the Earth (fusing the oceans' deuterium) covers " + sci(100 * onEarth / leaveE, 2) + "%", p.method === "flyby" ? BIG : NO]);
     rows.push(["Route", "Reach 50,000 AU", years(r.t50k), "published: 7,961 years (needs " + kms(r.vinfForDoc) + ")", OK]);
     rows.push(["Route", "Cross the Oort cloud", sci(r.oort.lambda, 2) + " expected collisions", sci(r.oort.background, 2) + " ordinary 1 km impacts in the same time", OK]);
     rows.push(["Route", "Live without the Sun", "the surface near " + Math.round(r.tSurf) + " K", "heat from inside the Earth: " + sci(K.geoHeat / 1e12, 2) + " TW, " + (K.geoHeat / K.worldPower).toFixed(1) + "× today's world energy use", OK]);
@@ -463,6 +483,46 @@
     }
     $("ledger").innerHTML = "<tr><th>Role</th><th>Step</th><th>Needs</th><th>Compared with</th><th>Verdict</th></tr>" +
       rows.map(rw => "<tr>" + rw.map(c => "<td>" + c + "</td>").join("") + "</tr>").join("");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The energy budget
+  // ---------------------------------------------------------------------------------------------
+  function renderEnergy() {
+    const r = R, p = plan, st = r.stores;
+    const needs = [
+      ["Steering: energy held in the " + (r.fw.ring ? "trains" : "wheels"), r.fw.energy],
+      ["Living: humanity's energy use at today's rate until departure", r.liveE],
+      p.migrate ? ["Staying habitable: moving out to " + r.aDep.toFixed(3) + " AU", r.migE, true] : null,
+      ["Escaping the Sun", r.escE, true],
+      p.galOn ? ["Dropping to the Galactic Centre", r.dropE, true] : null,
+      p.galOn ? ["The push at closest approach to Sgr A*", r.burnE, true] : null
+    ].filter(Boolean);
+    const stores = Object.values(st);
+    const lo = 20, hi = 36, w = (J) => Math.max(0, Math.min(100, (Math.log10(J) - lo) / (hi - lo) * 100)) + "%";
+    const earthStores = ["sunlight", "deuterium", "fission", "heat", "spin"].map(k => st[k]);
+    const covers = (J, moves) => {
+      if (moves) return J <= st.jupiter.J
+        ? "<span class=\"v-big\">▲</span> a change of orbit: energy alone cannot do it without something to push against. Jupiter's orbit can, through gravity assists (" + sci(100 * J / st.jupiter.J, 2) + "% of it)"
+        : "<span class=\"v-no\">✗</span> a change of orbit, and more than Jupiter's whole orbital energy: no known way without throwing mass off";
+      const ok = earthStores.filter(x => x.J >= J).map(x => x.label.split(",")[0].replace(/^The /, "the ").replace(/^All /, "all ").replace(/^Fusing/, "fusing").replace(/^Fissioning/, "fissioning"));
+      return ok.length ? "<span class=\"v-ok\">✓</span> " + ok.length + " of the Earth's stores could pay it: " + ok.join("; ")
+        : J <= st.jupiter.J ? "<span class=\"v-big\">▲</span> nothing on the Earth holds enough; Jupiter's orbit does, through gravity assists (" + sci(100 * J / st.jupiter.J, 2) + "% of it)"
+        : "<span class=\"v-no\">✗</span> more than any store here";
+    };
+    $("energy").innerHTML = "<tr><th>Needs</th><th>Joules</th><th></th><th>Who could pay</th></tr>" +
+      needs.map(([l, J, m]) => `<tr><td>${l}</td><td>${sci(J)}</td><td class="barcell"><div class="bar" style="width:${w(J)}"></div></td><td>${covers(J, m)}</td></tr>`).join("") +
+      "<tr><th>Stores</th><th>Joules</th><th></th><th></th></tr>" +
+      stores.map(x => `<tr><td>${x.label}</td><td>${sci(x.J)}</td><td class="barcell"><div class="bar store" style="width:${w(x.J)}"></div></td><td>${x.renew ? "grows with time" : "spent once"}</td></tr>`).join("") +
+      `<tr><td colspan="4" class="note">Why the Earth's own stores cannot pay for a change of orbit: moving the planet needs something to push against. With no mass thrown off, the only thing left to throw is light, and beaming all the sunlight that reaches the Earth out behind it for ${years(p.depYr)} would change its speed by just ${sci(P.photonDv(p.depYr), 2)} m/s, against the ${grp(r.escDv)} m/s the escape needs. Energy from fusion, fission or sunlight can run the steering, the cities and the machines, but the orbit must be changed by something outside: a body that moves, such as Jupiter.</td></tr>`;
+    const sh = r.ships;
+    $("ships").innerHTML = [
+      `<p><b>Ships for everyone:</b> ${sci(p.people)} people at ${grp(p.shipKg / 1000)} t each is ${sci(sh.mass)} kg, launched at ${kms(sh.vSurface)} to leave the solar system at ${kms(Math.max(p.vinf * 1000, 1))}.</p>`,
+      `<p><b>Energy:</b> ${sci(sh.energy)} J <span class="cmp">${energyCmp(sh.energy)}</span>, ${sci(r.escE / sh.energy, 2)} times less than moving the planet.</p>`,
+      `<p><b>But the launching:</b> at today's ${sci(K.launchPerYear / 1000)} t a year it would take ${years(sh.years)}. To take everyone in ${years(p.shipYears)} needs ${sci(r.shipsRate / 1000)} t a year, ${sci(r.shipsRate / K.launchPerYear, 2)} times today's.</p>`,
+      `<p><b>And then the journey:</b> at that speed the nearest star is ${years(4.24 * K.ly / (Math.max(p.vinf, 0.001) * 1000) / K.year)} away, in a closed ship the whole time.</p>`,
+      `<p class="note"><b>The difference:</b> ships cost far less energy but must be built, launched and lived in by everyone at once, so in practice most people stay behind. The planet costs vastly more energy, but everyone goes, with the oceans, air, soil and every other living thing, and with time to adjust the course over millions of years. That is what the OLAP plan offers that ships cannot: no one has to be chosen.</p>`
+    ].join("");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -682,6 +742,7 @@
     return OLAP.data.load(id, () => renderDatasets()).then(() => {
       if (id === "localgroup") { fillOptions(ctrl.target.f, ctrl.target.input); syncControls(); }
       if (id === "land") { landRings = P.prepareLand(OLAP.data.loaded.land); V.planet.buildMask(OLAP.data.loaded.land); }
+      if (id.startsWith("skin-")) V.planet.setSkin(id.slice(5), OLAP.data.loaded[id], OLAP.data.D[id].frame);
       compute(); renderOutputs(); renderDatasets();
     }).catch(() => renderDatasets());
   }
@@ -715,8 +776,15 @@
       plan[k] = typeof d === "boolean" ? v === "true" : typeof d === "number" ? Number(v) : v;
     }
   }
+  // The surface of the body being steered
+  function ensureSkin() {
+    const b = plan.fwBody;
+    if (b === "asteroid") V.planet.makeAsteroidSkin();
+    else if (OLAP.data.D["skin-" + b]) loadData("skin-" + b);
+  }
   let hashTimer = null;
   function changed() {
+    ensureSkin();
     compute(); syncControls(); renderOutputs(); drawSunChart(); drawFwChart();
     clearTimeout(hashTimer); hashTimer = setTimeout(writeHash, 300);
   }
@@ -751,7 +819,7 @@
   setInterval(updateCosmicMetrics, 1000); updateCosmicMetrics();
   $("horizon-check").textContent = "Worked out here from the Planck 2018 cosmology, light sent today can reach " + P.MpcToGly(P.cosmo().reach(K.c)).toFixed(2) + " billion light years, ever (the counter uses " + K.REACH_GLY + ").";
   loadData("land"); loadData("exoplanets"); loadData("localgroup");
-  setView("planet"); setTime(0);
+  setView("planet"); setTime(0); ensureSkin();
 
   slider.addEventListener("input", () => { setTime(tOfX(slider.value / 100), true); drawSunChart(); drawFwChart(); });
   $("play-btn").addEventListener("click", () => { if (simT >= tOfX(XMAX) * 0.999) setTime(0); togglePlay(); });
