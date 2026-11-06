@@ -46,7 +46,10 @@
   .tab{flex:1;min-width:120px;background:transparent;border:1px solid var(--line);color:var(--muted);padding:10px 12px;font-family:inherit;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;}
   .tab:hover{border-color:#555;color:#ccc;background:#111;}
   .tab[aria-selected="true"]{border-color:var(--muted);color:var(--ink);background:#14141d;}
-  .sim-viewport{width:100%;height:min(62vh,620px);min-height:320px;background:var(--deep);border:1px solid var(--line);position:relative;overflow:hidden;touch-action:none;}
+  .sim-viewport{width:100%;height:min(62vh,620px);min-height:320px;background:var(--deep);border:1px solid var(--line);position:relative;overflow:hidden;}
+  /* Vertical swipes still scroll the page on a phone; sideways drags and pinches go to the view. */
+  .sim-viewport canvas{touch-action:pan-y;}
+  .sim-viewport canvas:focus-visible{outline:1px solid var(--muted);outline-offset:-2px;}
   .sim-viewport canvas{display:block;width:100%;height:100%;cursor:grab;}
   .hud{position:absolute;left:12px;top:12px;font-size:13px;line-height:1.5;color:var(--ink2);pointer-events:none;max-width:min(560px,calc(100% - 150px));text-shadow:0 0 4px #000,0 0 2px #000;}
   .hud b{color:var(--ink);font-weight:normal;letter-spacing:0.08em;text-transform:uppercase;}
@@ -158,13 +161,13 @@
 
 <div class="box" id="sim-container">
   <div class="tabs" role="tablist" aria-label="Scale">
-    <button class="tab" role="tab" data-view="planet" aria-selected="true">Earth &amp; Grid</button>
-    <button class="tab" role="tab" data-view="sun" aria-selected="false">Solar System</button>
-    <button class="tab" role="tab" data-view="galaxy" aria-selected="false">Milky Way</button>
-    <button class="tab" role="tab" data-view="universe" aria-selected="false">Local Universe (2MRS)</button>
+    <button class="tab" role="tab" data-view="planet" aria-controls="viewport" aria-selected="true">Earth &amp; Grid</button>
+    <button class="tab" role="tab" data-view="sun" aria-controls="viewport" aria-selected="false">Solar System</button>
+    <button class="tab" role="tab" data-view="galaxy" aria-controls="viewport" aria-selected="false">Milky Way</button>
+    <button class="tab" role="tab" data-view="universe" aria-controls="viewport" aria-selected="false">Local Universe (2MRS)</button>
   </div>
   <div class="sim-viewport" id="viewport">
-    <canvas id="view" aria-label="Simulation view"></canvas>
+    <canvas id="view" role="img" tabindex="0" aria-label="Simulation view. Arrow keys turn or move it; plus and minus zoom."></canvas>
     <div class="hud" id="hud"></div>
     <div class="hint" id="hint"></div>
     <button id="fs-btn" class="btn-action fs-toggle">[ ] Fullscreen</button>
@@ -178,7 +181,7 @@
     <div class="readout" id="time-readout">Today</div>
     <label class="readout" style="cursor:pointer"><input type="checkbox" id="follow" checked> follow the Earth between scales while playing</label>
   </div>
-  <canvas class="chart" id="chart-sun" aria-label="Sunlight on the Earth over time"></canvas>
+  <canvas class="chart" id="chart-sun" role="img" aria-label="Sunlight on the Earth over time, with and without the plan"></canvas>
   <div class="note" id="chart-sun-note"></div>
 </div>
 
@@ -204,6 +207,7 @@
 <div class="box">
   <div class="box-title">Colonies Along The Way</div>
   <div class="box-text" id="colony-intro"></div>
+  <div class="field" id="colony-fields" style="max-width:520px"></div>
   <div class="tbl-wrap"><table id="colonies"></table></div>
 </div>
 

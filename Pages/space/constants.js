@@ -74,8 +74,8 @@
     // A simple Milky Way potential (after Bovy 2015, ApJS 216, 29, "MWPotential2014"),
     // with the halo scaled so the circular speed at R0 is vcSun. See physics.js.
     mwDisk:   { v: { M: 6.8e10, a: 3000, b: 280 }, u: "Msun, pc", src: "Miyamoto-Nagai disc, Bovy 2015" },
-    mwBulge:  { v: { M: 0.9e10, a: 500 },          u: "Msun, pc", src: "Hernquist bulge (Bovy 2015 mass, Hernquist profile)" },
-    mwHalo:   { v: { rs: 16000 },                  u: "pc",       src: "NFW scale radius, Bovy 2015" },
+    mwBulge:  { v: { M: 0.5e10, a: 500 },          u: "Msun, pc", src: "Bovy 2015's bulge mass, as a Hernquist profile (Bovy uses a power law with a cut-off)" },
+    mwHalo:   { v: { rs: 16000 },                  u: "pc",       src: "NFW scale radius, Bovy 2015 (not truncated: the halo's pull reaches to infinity, so the speed left far away is a lower estimate)" },
     m31Merge: { v: 0.5,             u: "probability within 10 Gyr", src: "Sawala et al. 2025, Nature Astronomy" },
 
     // Cosmology (flat ΛCDM)
@@ -120,6 +120,7 @@
     { id: "asteroid", name: "A 10 km rocky asteroid", M: 1.047e15, R: 5000, k: 0.4, T: 21600 }
   ], src: "NASA fact sheets (Earth, Mars, Moon); Park et al. 2016 (Ceres); the asteroid is illustrative (density 2,000 kg/m^3, 6 h day)" };
   C.starDensity = { v: 0.1, u: "stars per pc^3", src: "local stellar number density, order of magnitude" };
+  C.typicalStarMass = { v: 0.5, u: "Msun", src: "most stars are red dwarfs; order of magnitude" };
   C.maglevRecord = { v: 167.5, u: "m/s", src: "603 km/h, JR Central L0 series, 2015" };
   // Train speeds to choose from: realistic first. Safety rises with every step up.
   C.trainSpeeds = { v: [
@@ -143,5 +144,5 @@
   root.OLAP = root.OLAP || {};
   root.OLAP.C = C;
   // Shorthand: K.x is C.x.v
-  root.OLAP.K = new Proxy(C, { get: (t, k) => (t[k] ? t[k].v : undefined) });
+  root.OLAP.K = Object.fromEntries(Object.entries(C).map(([k, o]) => [k, o.v]));
 })(typeof window !== "undefined" ? window : globalThis);

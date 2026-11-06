@@ -17,6 +17,8 @@
     const m = x / Math.pow(10, e);
     return (Math.round(m * 10 ** ((d || 3) - 1)) / 10 ** ((d || 3) - 1)) + "×10<sup>" + e + "</sup>";
   }
+  // Text from outside (catalogue names, a shared link) is escaped before it goes into HTML
+  const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
   const grp = (x) => Math.round(x).toLocaleString("en-GB");
   function years(y) {
     if (!isFinite(y)) return "never";
@@ -90,7 +92,7 @@
     { panel: "sun", key: "oortN", label: "Comets in the Oort cloud", type: "log", min: 1e10, max: 1e13, def: K.oortCount, fmt: (v) => sci(v) },
 
     { panel: "gal", key: "galOn", label: "Go on through the Galactic Centre", type: "check", def: true },
-    { panel: "gal", key: "rpAU", label: "Closest approach to Sgr A*", type: "log", min: 0.2, max: 1e5, def: 300, fmt: (v) => sci(v) + " AU", show: (p) => p.galOn },
+    { panel: "gal", key: "rpAU", label: "Closest approach to Sgr A*", type: "log", min: 1, max: 1e5, def: 300, fmt: (v) => sci(v) + " AU", show: (p) => p.galOn },
     { panel: "gal", key: "burnKms", label: "Push at closest approach", type: "log", min: 0.01, max: 3000, def: 30, fmt: (v) => sci(v) + " km/s", show: (p) => p.galOn },
     { panel: "gal", key: "galDrop", label: "How the drop and the push are made", type: "select", def: "open", options: [["open", "Not yet known: the open problem"], ["driver", "Throwing mass off the Earth (only if it becomes necessary)"]], show: (p) => p.galOn },
     { panel: "gal", key: "galVex", label: "Launch speed for the galactic pushes", type: "log", min: 30, max: 150000, def: 30000, fmt: (v) => kms(v * 1000), show: (p) => p.galOn && p.galDrop === "driver" },
@@ -118,6 +120,17 @@
   // ---------------------------------------------------------------------------------------------
   let landRings = null;
   // The speed from 1 AU that gives the published 7,961 years to 50,000 AU (it depends on nothing in the plan)
+  // Remember a calculation until its inputs change: settings often change one at a time, and
+  // most results depend on only a few of them.
+  const memoStore = {};
+  function memo(name, inputs, fn) {
+    const key = JSON.stringify(inputs), m = memoStore[name];
+    if (m && m.key === key) return m.value;
+    const value = fn();
+    memoStore[name] = { key, value };
+    return value;
+  }
+  let landRaster = null;
   const VINF_FOR_DOC = P.bisect((x) => P.timeToRadius(P.cruiseTable(1, x, 6e4), K.docExitAU) - K.docExitYears, 1000, 200000, 40);
   let R = {};
   function compute() {
@@ -151,7 +164,7 @@
     r.proof = P.publishedProof();
     // Grid
     r.gridR = P.gridRotation(p.gLat, p.gLon, p.gRoll);
-    r.gridInfo = landRings ? P.gridLand(landRings, r.gridR, 180) : { nodes: P.gridNodes.map(nd => { const [lat, lon] = P.toLatLon(P.mulMV(r.gridR, nd.p)); return { kind: nd.kind, lat, lon, land: false }; }), landNodes: 0, ringLandShare: 0 };
+    r.gridInfo = landRings ? memo("grid", [p.gLat, p.gLon, p.gRoll], () => P.gridLand(landRings, r.gridR, 180, landRaster)) : { nodes: P.gridNodes.map(nd => { const [lat, lon] = P.toLatLon(P.mulMV(r.gridR, nd.p)); return { kind: nd.kind, lat, lon, land: false }; }), landNodes: 0, ringLandShare: 0 };
     // The fixed vector the rings hold: across the axis for a tilt, along it for the day
     r.H = goal.kind === "day" ? [0, 0, dL] : [dL, 0, 0];
     // The Sun
@@ -189,17 +202,17 @@
     r.mdRate = r.mdEsc.massOut / p.olaPayload / (p.escDur * K.year) / (26 * K.docOLAperNode);
     r.escPower = r.escE / (p.escDur * K.year);
     // Leaving
-    r.cruise = P.cruiseTable(r.aDep, Math.max(vinf, 1), 3e5);
+    r.cruise = memo("cruise", [r.aDep, vinf], () => P.cruiseTable(r.aDep, Math.max(vinf, 1), 3e5));
     r.tHelio = P.timeToRadius(r.cruise, K.heliopause);
     r.t50k = P.timeToRadius(r.cruise, K.docExitAU);
     r.tOort = P.timeToRadius(r.cruise, K.oortOuter);
     r.vinfForDoc = VINF_FOR_DOC;
-    r.oort = P.oortHazard({ N: p.oortN, rInAU: K.oortInner, rOutAU: K.oortOuter, v: Math.max(vinf, 1) });
+    r.oort = P.oortHazard({ N: p.oortN, rInAU: K.oortInner, rOutAU: K.oortOuter, vinf });
     r.tSurf = Math.pow(K.geoHeat / (4 * Math.PI * K.Rearth ** 2) / K.sigmaSB, 0.25);
     // The Galaxy
     r.galOn = p.galOn;
-    r.gal = P.galRoute({ rpAU: p.rpAU, burnKms: p.burnKms });
-    r.galTab = P.galTables(r.gal, p.rpAU, p.burnKms);
+    r.gal = memo("gal", [p.rpAU, p.burnKms], () => P.galRoute({ rpAU: p.rpAU, burnKms: p.burnKms }));
+    r.galTab = memo("galTab", [p.rpAU, p.burnKms], () => P.galTables(r.gal));
     r.tLeave = tDep + p.escDur;   // the escape push runs from tDep to tLeave; the coast starts then
     r.tDrop = r.tLeave + (isFinite(r.tOort) ? r.tOort : 0);
     r.tGC = r.tDrop + r.galTab.fall[r.galTab.fall.length - 1][0];
@@ -225,11 +238,14 @@
     const tgc = [h[0] - K.R0, h[1], h[2]];
     r.targetDistPc = Math.hypot(...tgc);
     r.targetDir = tgc.map(x => x / r.targetDistPc);
-    r.tTravel = r.gal.vinf > 0 ? P.lookupTime(r.galTab.exit, r.targetDistPc) : Infinity;
+    // Reached if the Earth leaves the Galaxy, or if, still bound, it climbs out past the target
+    r.reachable = r.gal.vinf > 0 || r.gal.apoAfter >= r.targetDistPc;
+    r.tTravel = r.reachable ? P.lookupTime(r.galTab.exit, r.targetDistPc) : Infinity;
     r.tArrive = r.tGC + r.tTravel;
-    r.cosmo = P.cosmo(Number(p.H0), K.OmegaM);
-    r.reachMpc = r.cosmo.reach(r.gal.vinf * 1000);
-    r.lightReachGly = P.MpcToGly(r.cosmo.reach(K.c));
+    r.cosmo = memo("cosmo", [p.H0], () => P.cosmo(Number(p.H0), K.OmegaM));
+    // Still bound to the Milky Way: the farthest it climbs. Free of it: the expanding universe's limit.
+    r.reachMpc = r.gal.vinf > 0 ? memo("reach", [p.H0, r.gal.vinf], () => r.cosmo.reach(r.gal.vinf * 1000)) : r.gal.apoAfter / 1e6;
+    r.lightReachGly = memo("light", [p.H0], () => P.MpcToGly(r.cosmo.reach(K.c)));
     // Route drawn in the Galaxy's plane (pc)
     const sunAt = (t) => { const th = Math.PI - (K.vcSun * 1000 / (K.R0 * K.pc)) * t * K.year; return [K.R0 * Math.cos(th), K.R0 * Math.sin(th)]; };
     r.sunAt = sunAt;
@@ -238,15 +254,18 @@
     r.route = r.galOn ? {
       drop: sd, dropUnit: [sd[0] / sdl, sd[1] / sdl], outUnit: [dir2[0] / d2l, dir2[1] / d2l], proj: d2l,
       target: [tgc[0], tgc[1]], targetMpc: h.map(x => x / 1e6),
-      path: [sd, [0, 0], r.gal.vinf > 0 ? [tgc[0], tgc[1]] : [dir2[0] / d2l * r.gal.apoAfter * d2l, dir2[1] / d2l * r.gal.apoAfter * d2l]]
+      path: [sd, [0, 0], r.reachable ? [tgc[0], tgc[1]] : [dir2[0] / d2l * r.gal.apoAfter * d2l, dir2[1] / d2l * r.gal.apoAfter * d2l]]
     } : null;
     // 2MRS reach
     const g2 = OLAP.data.loaded["2mrs"];
     if (g2) {
-      let inside = 0;
-      const cz = r.reachMpc;
-      for (const q of g2) if (r.cosmo.dcFast(Math.max(q.cz, 0) / (K.c / 1000)) <= cz) inside++;
-      r.reach2mrs = { inside, all: g2.length };
+      // Each galaxy's distance depends only on the Hubble constant: work them out once, sorted,
+      // then count those within reach by binary search.
+      // Galaxies coming towards us (cz <= 0, the Local Group's own) have no distance from redshift: left out
+      const dists = memo("2mrsDist", [p.H0, g2.length], () => Float64Array.from(g2.filter(q => q.cz > 0), q => r.cosmo.dcFast(q.cz / (K.c / 1000))).sort());
+      let lo = 0, hi = dists.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (dists[mid] <= r.reachMpc) lo = mid + 1; else hi = mid; }
+      r.reach2mrs = { inside: lo, all: dists.length };
     }
     // Events on the timeline
     const ev = [
@@ -286,9 +305,9 @@
         out.phase = "Falling towards the Galactic Centre";
       } else {
         const d = P.lookup(r.galTab.exit, t - r.tGC);
-        const dd = Math.min(d, r.gal.vinf > 0 ? r.targetDistPc : Infinity);
+        const dd = Math.min(d, r.reachable ? r.targetDistPc : Infinity);
         out.gal = [r.route.outUnit[0] * dd * r.route.proj, r.route.outUnit[1] * dd * r.route.proj];
-        out.phase = t < r.tArrive ? (r.gal.vinf > 0 ? "Bound for " + r.targetObj.name : "Flung out, but still bound to the Milky Way") : "Arrived at " + r.targetObj.name;
+        out.phase = t < r.tArrive ? (r.reachable ? "Bound for " + r.targetObj.name : "Flung out, but still bound to the Milky Way") : "Arrived at " + r.targetObj.name;
         out.distPc = dd;
       }
     }
@@ -316,7 +335,7 @@
     }
     for (const f of FIELDS) {
       const pn = PANELS.find(q => q.id === f.panel);
-      const hostEl = pn ? pn.el.querySelector(".fields") : f.panel === "nrg" ? $("energy-fields") : document.createElement("div"); // colony speed: moved into place later
+      const hostEl = pn ? pn.el.querySelector(".fields") : $(f.panel === "nrg" ? "energy-fields" : "colony-fields");
       const wrap = document.createElement("div"); wrap.className = "field" + (f.type === "check" ? " check" : "");
       const id = "f-" + f.key;
       if (f.type === "check") {
@@ -351,7 +370,7 @@
   }
   function fillOptions(f, sel) {
     const opts = f.key === "target" ? targets().slice().sort((a, b) => a.D - b.D).map(g => [g.name, g.name + " (" + (g.D >= 1000 ? (g.D / 1000).toFixed(2) + " Mpc" : g.D + " kpc") + ")"]) : f.options;
-    sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+    sel.replaceChildren(...opts.map(([v, t]) => new Option(t, v)));
   }
   function syncControls() {
     for (const k in ctrl) {
@@ -361,7 +380,7 @@
       else if (f.type === "log") input.value = Math.round(LOGN * Math.log(v / f.min) / Math.log(f.max / f.min));
       else input.value = v;
       const lab = document.getElementById("f-" + k + "-v");
-      if (lab && f.fmt) lab.innerHTML = f.fmt(v);
+      if (lab && f.fmt) { lab.innerHTML = f.fmt(v); input.setAttribute("aria-valuetext", lab.textContent); }
       wrap.style.display = f.show && !f.show(plan) ? "none" : "";
     }
   }
@@ -445,12 +464,12 @@
       r.tooClose ? `<p class="v-no">✗ Too close: Sgr A*'s tides tear the Earth apart inside ${g.rTidalAU.toFixed(2)} AU.</p>` : "",
       r.amongS ? `<p class="v-big">▲ Among the S-stars: S2 itself comes within ${K.s2Peri} AU of Sgr A*.</p>` : "",
       g.vpOverC > 0.1 ? `<p class="note">At over a tenth of light speed relativity begins to matter; these figures are Newtonian.</p>` : "",
-      `<p><b>Push of ${sci(p.burnKms)} km/s at closest approach:</b> leaves the Galaxy at ${g.vinf > 0 ? kms(g.vinf * 1000) : "nothing: it stays bound, climbing back out to " + sci(g.apoAfter / 1000) + " kpc"} <span class="cmp">(the Oberth effect: the same push far from anything gives just ${sci(p.burnKms)} km/s)</span></p>`,
+      `<p><b>Push of ${sci(p.burnKms)} km/s at closest approach:</b> ${g.vinf > 0 ? "leaves the Galaxy at " + kms(g.vinf * 1000) : "the Earth stays bound to the Milky Way, climbing out to " + sci(g.apoAfter / 1000) + " kpc before it would fall back" + (r.reachable ? ", far enough to reach " + esc(r.targetObj.name) : "")} <span class="cmp">(the Oberth effect: the same push far from anything gives just ${sci(p.burnKms)} km/s)</span></p>`,
       p.galDrop === "driver" ? `<p><b>…costing</b> ${sci(r.mdBurn.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>` : `<p class="note">The push at closest approach needs an engine too: the same open problem, though far smaller than the drop.</p>`,
       `<p class="note">Without the slingshot the Earth would fall back out to where it began. Leaving the Galaxy directly from the Sun's orbit would take ${kms(g.directDv * 1000)}, ${sci(r.directMd.fraction * 100, 3)}% of the Earth at the same launch speed. Nature does it already: S5-HVS1 was flung from Sgr A* at ${grp(K.hvsPrecedent)} km/s.</p>`,
-      `<p><b>${tr.name}:</b> ${sci(r.targetDistPc / 1000)} kpc from the Galactic Centre; arrival ${isFinite(r.tTravel) ? years(r.tTravel) + " after the slingshot" : ": never, on this route"}</p>`,
+      `<p><b>${esc(tr.name)}:</b> ${sci(r.targetDistPc / 1000)} kpc from the Galactic Centre; arrival ${isFinite(r.tTravel) ? years(r.tTravel) + " after the slingshot" : ": never, on this route"}</p>`,
       tr.name === "Andromeda" ? `<p class="note">Andromeda is already falling towards us, at about 110 km/s. The two may merge within 10 billion years (an even chance, Sawala et al. 2025).</p>` : "",
-      `<p><b>Reach, ever, at ${g.vinf > 0 ? kms(g.vinf * 1000) : "0 km/s"}:</b> ${r.reachMpc.toFixed(2)} Mpc, as the universe's expansion slows anything moving through it${r.reach2mrs ? `; ${grp(r.reach2mrs.inside)} of 2MRS's ${grp(r.reach2mrs.all)} galaxies (${(100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2)}%)` : ""}. Light sent today reaches ${r.lightReachGly.toFixed(2)} Gly.</p>`
+      `<p><b>Reach, ever:</b> ${r.reachMpc.toFixed(2)} Mpc, ${g.vinf > 0 ? "at " + kms(g.vinf * 1000) + ", as the universe's expansion slows anything moving through it" : "the farthest the bound orbit climbs"}${r.reach2mrs ? `; ${grp(r.reach2mrs.inside)} of 2MRS's ${grp(r.reach2mrs.all)} galaxies (${(100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2)}%)` : ""}. Light sent today reaches ${r.lightReachGly.toFixed(2)} Gly.</p>`
     ].join("") : `<p>The Earth stays with the Sun's orbit round the Galaxy, a wandering planet among the stars.</p>`;
     renderLedger(); renderColonies(); renderEnergy();
   }
@@ -478,8 +497,8 @@
     rows.push(["Route", "Live without the Sun", "the surface near " + Math.round(r.tSurf) + " K", "heat from inside the Earth: " + sci(K.geoHeat / 1e12, 2) + " TW, " + (K.geoHeat / K.worldPower).toFixed(1) + "× today's world energy use", OK]);
     if (p.galOn) {
       rows.push(["Engine", "Drop to the Galactic Centre", kms(r.gal.dvDrop * 1000) + "; " + sci(r.dropE) + " J", p.galDrop === "driver" ? sci(r.mdDrop.fraction * 100, 3) + "% of the Earth at " + kms(p.galVex * 1000) : "no known way without an engine", p.galDrop === "driver" ? (r.mdDrop.fraction > 0.5 ? NO : BIG) : OPEN]);
-      rows.push(["Route", "Slingshot round Sgr A*", sci(p.rpAU) + " AU at " + (r.gal.vpOverC * 100).toFixed(1) + "% of light", r.tooClose ? "inside the tidal radius (" + r.gal.rTidalAU.toFixed(2) + " AU)" : r.gal.vinf > 0 ? "leaves at " + kms(r.gal.vinf * 1000) : "stays bound", r.tooClose ? NO : r.gal.vinf > 0 ? BIG : NO]);
-      rows.push(["Route", "Reach " + r.targetObj.name, isFinite(r.tTravel) ? years(r.tTravel) : "never", "reach ever: " + r.reachMpc.toFixed(2) + " Mpc", isFinite(r.tTravel) ? (p.galDrop === "driver" ? BIG : OPEN) : NO]);
+      rows.push(["Route", "Slingshot round Sgr A*", sci(p.rpAU) + " AU at " + (r.gal.vpOverC * 100).toFixed(1) + "% of light", r.tooClose ? "inside the tidal radius (" + r.gal.rTidalAU.toFixed(2) + " AU)" : r.gal.vinf > 0 ? "leaves at " + kms(r.gal.vinf * 1000) : "stays bound, out to " + sci(r.gal.apoAfter / 1000) + " kpc", r.tooClose ? NO : r.reachable ? BIG : NO]);
+      rows.push(["Route", "Reach " + esc(r.targetObj.name), isFinite(r.tTravel) ? years(r.tTravel) : "never", "reach ever: " + r.reachMpc.toFixed(2) + " Mpc", isFinite(r.tTravel) ? (p.galDrop === "driver" ? BIG : OPEN) : NO]);
     }
     $("ledger").innerHTML = "<tr><th>Role</th><th>Step</th><th>Needs</th><th>Compared with</th><th>Verdict</th></tr>" +
       rows.map(rw => "<tr>" + rw.map(c => "<td>" + c + "</td>").join("") + "</tr>").join("");
@@ -534,12 +553,11 @@
     const ok = ex.filter(q => q.pl_insol != null && q.pl_insol >= 0.25 && q.pl_insol <= 1.7 &&
       ((q.pl_rade != null && q.pl_rade <= 1.8) || (q.pl_rade == null && q.pl_bmasse != null && q.pl_bmasse <= 5)));
     const ly = K.pc / K.ly, v = plan.colV;
-    $("colony-intro").innerHTML = `The plan sends colonies ahead from the launch accelerators. Of the ${grp(ex.length)} confirmed planets with known distances (NASA Exoplanet Archive), ${ok.length} receive between a quarter and 1.7 times the Earth's sunlight and are probably rocky (under 1.8 Earth radii, or under 5 Earth masses where no radius is known). The nearest are below, with the travel time at the colony ships' speed. <span id="colony-fields"></span>`;
+    $("colony-intro").innerHTML = `The plan sends colonies ahead from the launch accelerators. Of the ${grp(ex.length)} confirmed planets with known distances (NASA Exoplanet Archive), ${ok.length} receive between a quarter and 1.7 times the Earth's sunlight and are probably rocky (under 1.8 Earth radii, or under 5 Earth masses where no radius is known). The nearest are below, with the travel time at the colony ships' speed.`;
     // Move the speed control into place
-    const holder = $("colony-fields"); if (holder && ctrl.colV) holder.appendChild(ctrl.colV.wrap);
     const rows = ok.slice(0, 15).map(q => {
       const dly = q.sy_dist * ly;
-      return `<tr><td>${q.pl_name}</td><td>${dly.toFixed(1)}</td><td>${q.pl_insol.toFixed(2)}</td><td>${q.pl_rade != null ? q.pl_rade.toFixed(2) : "—"}</td><td>${q.pl_eqt != null ? Math.round(q.pl_eqt) : "—"}</td><td>${years(dly / v)}</td><td>${q.disc_year}</td></tr>`;
+      return `<tr><td>${esc(q.pl_name)}</td><td>${dly.toFixed(1)}</td><td>${q.pl_insol.toFixed(2)}</td><td>${q.pl_rade != null ? q.pl_rade.toFixed(2) : "—"}</td><td>${q.pl_eqt != null ? Math.round(q.pl_eqt) : "—"}</td><td>${years(dly / v)}</td><td>${q.disc_year}</td></tr>`;
     });
     $("colonies").innerHTML = `<tr><th>Planet</th><th>Light years</th><th>Sunlight (Earth = 1)</th><th>Radius (Earths)</th><th>Temperature (K)</th><th>Travel at ${sci(v * 100)}% of light</th><th>Found</th></tr>` + rows.join("");
   }
@@ -551,8 +569,13 @@
     const st = OLAP.data.status, D = OLAP.data.D;
     $("datasets").innerHTML = "<tr><th>Dataset</th><th>Source</th><th>State</th><th>Checked</th></tr>" + Object.keys(D).map(id => {
       const d = D[id], s = st[id] || {}, m = (OLAP.manifest.datasets[id]) || {};
-      const state = s.state === "ready" ? grp(s.rows) + " rows, via " + s.via : s.state === "loading" ? "loading…" : s.state === "error" ? "could not load: " + s.message : (d.kind === "live" ? `<button class="btn-small" data-load="${id}">Load from VizieR</button>` : "not loaded");
-      const chk = s.state === "ready" ? (s.verified ? "✓ SHA-256 matches the record of " + m.retrieved : "✗ differs from the record of " + m.retrieved + " (" + grp(s.rows) + " rows against " + grp(m.rows) + "): the archive has changed; run update_data.py") : "recorded " + (m.retrieved || "—") + ", " + grp(m.rows || 0) + " rows";
+      const unit = d.kind === "image" ? " bytes" : " rows";
+      const state = s.state === "ready" ? grp(s.rows) + unit + ", via " + s.via : s.state === "loading" ? "loading…" : s.state === "error" ? "could not load: " + s.message : (d.kind === "live" ? `<button class="btn-small" data-load="${id}">Load from VizieR</button>` : "not loaded");
+      const recorded = m.rows != null ? m.rows : m.bytes;
+      const chk = s.state === "ready" ? (s.verified ? "✓ SHA-256 matches the record of " + m.retrieved
+        : "✗ differs from the record of " + m.retrieved + " (" + grp(s.rows) + unit + " against " + grp(recorded) + "): " +
+          (d.kind === "live" ? "the archive has changed; run update_data.py" : "this repository's copy differs from its record; run update_data.py --verify"))
+        : "recorded " + (m.retrieved || "—") + ", " + grp(recorded || 0) + unit;
       return `<tr><td>${d.title}</td><td>${d.cite}<br><span class="cmp">${d.terms}</span></td><td>${state}</td><td>${chk}</td></tr>`;
     }).join("");
     document.querySelectorAll("[data-load]").forEach(b => b.onclick = () => loadData(b.dataset.load));
@@ -573,8 +596,31 @@
   // ---------------------------------------------------------------------------------------------
   const XMAX = 10.5;
   const tOfX = (x) => Math.pow(10, x) - 1, xOfT = (t) => Math.log10(t + 1);
+  // Canvas sizes are watched rather than measured on every draw (measuring forces a page layout)
+  const sizes = new Map();
+  const watcher = typeof ResizeObserver === "function" ? new ResizeObserver((es) => {
+    for (const e of es) sizes.set(e.target, [e.contentRect.width, e.contentRect.height]);
+    scheduleCharts();
+  }) : null;
+  function sizeOf(cv) {
+    if (!sizes.has(cv)) { sizes.set(cv, [cv.clientWidth, cv.clientHeight]); if (watcher) watcher.observe(cv); }
+    return sizes.get(cv);
+  }
+  // Charts are redrawn at most once a frame, however many things asked
+  let chartsPending = null;
+  function scheduleCharts(which) {
+    chartsPending = chartsPending === null ? (which || "both") : (chartsPending === which ? which : "both");
+    if (scheduleCharts.queued) return;
+    scheduleCharts.queued = true;
+    requestAnimationFrame(() => {
+      scheduleCharts.queued = false;
+      const w = chartsPending; chartsPending = null;
+      if (w !== "fw") drawSunChart();
+      if (w !== "sun") drawFwChart();
+    });
+  }
   function setupCanvas(cv) {
-    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    const dpr = window.devicePixelRatio || 1, [w, h] = sizeOf(cv);
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
     return { ctx, w, h };
@@ -659,6 +705,7 @@
   // ---------------------------------------------------------------------------------------------
   // The simulation: time, views, playing
   // ---------------------------------------------------------------------------------------------
+  let lastHud = "";
   let simT = 0, playing = false, view = "planet", lastFrame = 0, resetState = 0;
   const slider = $("time-slider"), canvas = $("view");
   function setTime(t, fromSlider) {
@@ -695,10 +742,10 @@
     }
     if (view === "galaxy") {
       const gp = e.gal ? Math.hypot(e.gal[0], e.gal[1]) : K.R0;
-      return `<b>Milky Way</b><br>${e.phase}<br>From the Galactic Centre: ${sci(gp / 1000)} kpc<br>${r.galOn ? "Route: drop " + kms(r.gal.dvDrop * 1000) + " · fall " + years(r.tGC - r.tDrop) + " · leave at " + (r.gal.vinf > 0 ? kms(r.gal.vinf * 1000) : "— (bound)") : "No galactic route"}`;
+      return `<b>Milky Way</b><br>${e.phase}<br>From the Galactic Centre: ${sci(gp / 1000)} kpc<br>${r.galOn ? "Route: drop " + kms(r.gal.dvDrop * 1000) + " · fall " + years(r.tGC - r.tDrop) + (r.gal.vinf > 0 ? " · leave at " + kms(r.gal.vinf * 1000) : " · bound, out to " + sci(r.gal.apoAfter / 1000) + " kpc") : "No galactic route"}`;
     }
     const st = OLAP.data.status["2mrs"] || {};
-    return `<b>Local Universe</b><br>${st.state === "ready" ? grp(st.rows) + " 2MRS galaxies (" + (st.verified ? "✓ verified" : "✗ differs from the record") + "), " + grp(OLAP.data.loaded["2mrs"].length) + " with redshifts" : st.state === "error" ? "2MRS could not be read: " + st.message : "Reading 2MRS from VizieR…"}<br>Within the Earth's reach, ever: ${r.reach2mrs ? grp(r.reach2mrs.inside) + " (" + (100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2) + "%)" : "…"} · H0 ${plan.H0}<br>${e.phase}`;
+    return `<b>Local Universe</b><br>${st.state === "ready" ? grp(st.rows) + " 2MRS galaxies (" + (st.verified ? "✓ verified" : "✗ differs from the record") + "), " + grp(OLAP.data.loaded["2mrs"].length) + " with redshifts" : st.state === "error" ? "2MRS could not be read: " + st.message : "Reading 2MRS from VizieR…"}<br>Within the Earth's reach, ever: ${r.reach2mrs ? grp(r.reach2mrs.inside) + " (" + (100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2) + "%)" : "…"} · H0 ${esc(plan.H0)}<br>${e.phase}`;
   }
   function frame(now) {
     const dt = lastFrame ? Math.min(0.1, (now - lastFrame) / 1000) : 0; lastFrame = now;
@@ -710,8 +757,9 @@
         if (view === "galaxy") V.galaxy.follow(earthState(simT).gal);
       }
       if (x >= XMAX) togglePlay(false);
-      drawSunChart(); drawFwChart();
+      scheduleCharts();
     }
+    if (!simVisible) { requestAnimationFrame(frame); return; }
     const dayPhase = (now / 1000) * 2 * Math.PI / 24;   // one day every 24 seconds
     R.ringSharesNow = P.ringShares(R.gridR, R.H, dayPhase);
     const e = earthState(simT);
@@ -720,7 +768,8 @@
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
     const ctx = canvas.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
     V[view].draw(ctx, w, h, S);
-    $("hud").innerHTML = hudText(e);
+    const hud = hudText(Object.assign({}, e, { phase: esc(e.phase) }));
+    if (hud !== lastHud) { $("hud").innerHTML = hud; lastHud = hud; }
     requestAnimationFrame(frame);
   }
   function togglePlay(on) {
@@ -730,10 +779,41 @@
 
   // Pointer: drag and scroll on the view
   let drag = null;
-  canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
-  canvas.addEventListener("pointermove", (e) => { if (!drag) return; V[view].drag(e.clientX - drag.x, e.clientY - drag.y); drag = { x: e.clientX, y: e.clientY }; });
-  canvas.addEventListener("pointerup", () => { drag = null; });
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); V[view].wheel(e.deltaY); }, { passive: false });
+  // One finger or the mouse turns or moves the view; two fingers pinch to zoom.
+  const pointers = new Map();
+  let pinch = null;
+  canvas.addEventListener("pointerdown", (e) => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    canvas.setPointerCapture(e.pointerId);
+    if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY };
+    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); drag = null; }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2 && pinch) {
+      const [a, b] = [...pointers.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      V[view].wheel((pinch - d) * 3); pinch = d;
+    } else if (drag) {
+      // On touch screens only sideways drags turn the view; up and down scroll the page
+      const dy = e.pointerType === "touch" ? 0 : e.clientY - drag.y;
+      V[view].drag(e.clientX - drag.x, dy); drag = { x: e.clientX, y: e.clientY };
+    }
+  });
+  const release = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; if (pointers.size === 0) drag = null; };
+  for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) canvas.addEventListener(ev, release);
+  // The wheel zooms once the view has been clicked (or with Ctrl), so scrolling the page past it still works
+  canvas.addEventListener("wheel", (e) => {
+    if (document.activeElement !== canvas && !e.ctrlKey) return;
+    e.preventDefault(); V[view].wheel(e.deltaY);
+  }, { passive: false });
+  canvas.addEventListener("pointerdown", () => canvas.focus({ preventScroll: true }));
+  canvas.addEventListener("keydown", (e) => {
+    const k = { ArrowLeft: [-20, 0], ArrowRight: [20, 0], ArrowUp: [0, -20], ArrowDown: [0, 20] }[e.key];
+    if (k) { V[view].drag(k[0], k[1]); e.preventDefault(); }
+    else if (e.key === "+" || e.key === "=") { V[view].wheel(-200); e.preventDefault(); }
+    else if (e.key === "-" || e.key === "_") { V[view].wheel(200); e.preventDefault(); }
+  });
 
   // ---------------------------------------------------------------------------------------------
   // Data loading
@@ -741,22 +821,27 @@
   function loadData(id) {
     return OLAP.data.load(id, () => renderDatasets()).then(() => {
       if (id === "localgroup") { fillOptions(ctrl.target.f, ctrl.target.input); syncControls(); }
-      if (id === "land") { landRings = P.prepareLand(OLAP.data.loaded.land); V.planet.buildMask(OLAP.data.loaded.land); }
+      if (id === "land") { landRings = P.prepareLand(OLAP.data.loaded.land); landRaster = P.rasterLand(landRings); V.planet.buildMask(OLAP.data.loaded.land); }
       if (id.startsWith("skin-")) V.planet.setSkin(id.slice(5), OLAP.data.loaded[id], OLAP.data.D[id].frame);
       compute(); renderOutputs(); renderDatasets();
     }).catch(() => renderDatasets());
   }
 
+  let searching = false;
   function optimiseGrid() {
-    if (!landRings) return;
-    $("opt-status").textContent = " searching…";
-    setTimeout(() => {
-      const b = P.optimiseGrid(landRings, { tries: plan.poleQuad ? 900 : 4000, seed: 2025, poleQuad: plan.poleQuad });
+    if (!landRings || searching) return;
+    searching = true; $("opt-grid").disabled = true;
+    P.optimiseGrid(landRings, {
+      tries: plan.poleQuad ? 900 : 4000, seed: 2025, poleQuad: plan.poleQuad, raster: landRaster,
+      onProgress: (done, all) => { $("opt-status").textContent = " searching… " + Math.round(100 * done / all) + "%"; }
+    }).then((b) => {
       plan.gLat = Math.round(b.lat * 2) / 2; plan.gLon = Math.round(b.lon * 2) / 2; plan.gRoll = Math.round(b.roll * 2) / 2;
-      $("opt-status").textContent = " best found: " + b.landNodes + " stations on land (a seeded search, so the same every time)";
       V.planet.cam.lat = plan.gLat; V.planet.cam.lon = plan.gLon;
       changed();
-    }, 30);
+      // Report what the rounded settings actually give, checked against the exact coastlines
+      $("opt-status").textContent = " best found: " + R.gridInfo.landNodes + " stations on land (a seeded search, so the same every time)";
+      searching = false; $("opt-grid").disabled = false;
+    }).catch((e) => { $("opt-status").textContent = " the search failed: " + e.message; searching = false; $("opt-grid").disabled = false; });
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -768,24 +853,41 @@
     const s = q.toString();
     history.replaceState(null, "", s ? "#" + s : location.pathname + location.search);
   }
+  // A link's settings are checked one by one: unknown names, choices not on offer and numbers out
+  // of range are ignored (the default stays), so a bad or old link cannot break the plan.
   function readHash() {
     const q = new URLSearchParams(location.hash.slice(1));
+    const next = Object.assign({}, DEF);
     for (const [k, v] of q) {
-      if (!(k in DEF)) continue;
-      const d = DEF[k];
-      plan[k] = typeof d === "boolean" ? v === "true" : typeof d === "number" ? Number(v) : v;
+      if (!Object.prototype.hasOwnProperty.call(DEF, k)) continue;
+      const f = FIELDS.find(x => x.key === k);
+      if (f.type === "check") next[k] = v === "true" || v === "1";
+      else if (f.type === "select") {
+        // The destination's list comes from a catalogue that may not have loaded yet: kept, and
+        // checked when it is used (an unknown name falls back to Andromeda)
+        if (k === "target" ? v.length <= 60 : f.options.some(([o]) => o === v)) next[k] = v;
+      } else {
+        let x = Number(v);
+        if (!Number.isFinite(x)) continue;
+        x = Math.min(f.max, Math.max(f.min, x));
+        next[k] = f.int ? Math.round(x) : x;
+      }
     }
+    plan = next;
   }
   // The surface of the body being steered
+  const skinAsked = new Set();
   function ensureSkin() {
     const b = plan.fwBody;
+    if (skinAsked.has(b)) return;
+    skinAsked.add(b);
     if (b === "asteroid") V.planet.makeAsteroidSkin();
     else if (OLAP.data.D["skin-" + b]) loadData("skin-" + b);
   }
   let hashTimer = null;
   function changed() {
     ensureSkin();
-    compute(); syncControls(); renderOutputs(); drawSunChart(); drawFwChart();
+    compute(); syncControls(); renderOutputs(); scheduleCharts();
     clearTimeout(hashTimer); hashTimer = setTimeout(writeHash, 300);
   }
 
@@ -810,6 +912,7 @@
   // Start
   // ---------------------------------------------------------------------------------------------
   readHash();
+  writeHash();   // a link with bad or unknown settings is tidied to what was actually used
   buildPanels();
   renderConstants();
   compute();
@@ -821,31 +924,46 @@
   loadData("land"); loadData("exoplanets"); loadData("localgroup");
   setView("planet"); setTime(0); ensureSkin();
 
-  slider.addEventListener("input", () => { setTime(tOfX(slider.value / 100), true); drawSunChart(); drawFwChart(); });
+  slider.addEventListener("input", () => { setTime(tOfX(slider.value / 100), true); scheduleCharts(); });
   $("play-btn").addEventListener("click", () => { if (simT >= tOfX(XMAX) * 0.999) setTime(0); togglePlay(); });
   $("reset-btn").addEventListener("click", () => {
     if (resetState === 0) { resetState = 1; $("reset-btn").textContent = "Sure?"; $("reset-btn").classList.add("warning"); setTimeout(() => { resetState = 0; $("reset-btn").textContent = "Reset"; $("reset-btn").classList.remove("warning"); }, 3000); return; }
     resetState = 0; $("reset-btn").textContent = "Reset"; $("reset-btn").classList.remove("warning");
-    togglePlay(false); setTime(0); setView("planet"); drawSunChart(); drawFwChart(); $("play-btn").textContent = "Engage";
+    togglePlay(false); setTime(0); setView("planet"); scheduleCharts(); $("play-btn").textContent = "Engage";
   });
-  document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { setView(b.dataset.view); if (playing) $("follow").checked = false; }));
+  const tabs = [...document.querySelectorAll(".tab")];
+  tabs.forEach((b, i) => {
+    b.addEventListener("click", () => { setView(b.dataset.view); if (playing) $("follow").checked = false; });
+    b.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!d) return;
+      const t = tabs[(i + d + tabs.length) % tabs.length]; t.focus(); t.click(); e.preventDefault();
+    });
+  });
+  // A plan link opened in the same tab: read it again
+  window.addEventListener("hashchange", () => { readHash(); syncControls(); changed(); });
+  // Nothing is drawn while the simulation is scrolled out of sight
+  let simVisible = true;
+  if (typeof IntersectionObserver === "function")
+    new IntersectionObserver((es) => { simVisible = es[es.length - 1].isIntersecting; }).observe($("viewport"));
   for (const [id, set] of [["chart-sun", (x) => sunHover = x], ["chart-fw", (x) => fwHover = x]]) {
     const cv = $(id);
-    cv.addEventListener("pointermove", (e) => { set(e.clientX - cv.getBoundingClientRect().left); drawSunChart(); drawFwChart(); });
-    cv.addEventListener("pointerleave", () => { set(null); drawSunChart(); drawFwChart(); });
+    const which = id === "chart-sun" ? "sun" : "fw";
+    cv.addEventListener("pointermove", (e) => { set(e.offsetX); scheduleCharts(which); });
+    cv.addEventListener("pointerleave", () => { set(null); scheduleCharts(which); });
   }
   $("copy-link").addEventListener("click", () => {
     writeHash();
     (navigator.clipboard ? navigator.clipboard.writeText(location.href) : Promise.reject()).then(() => $("copy-status").textContent = " copied", () => $("copy-status").textContent = " copy this page's address");
   });
   $("defaults").addEventListener("click", () => { plan = Object.assign({}, DEF); changed(); });
-  window.addEventListener("resize", () => { drawSunChart(); drawFwChart(); });
+  window.addEventListener("resize", () => { scheduleCharts(); });
   const fsBtn = $("fs-btn"), simContainer = $("sim-container");
   fsBtn.addEventListener("click", () => {
     if (!document.fullscreenElement) simContainer.requestFullscreen().catch(err => console.error(`Fullscreen failed: ${err.message}`));
     else document.exitFullscreen();
   });
   document.addEventListener("fullscreenchange", () => { fsBtn.innerText = document.fullscreenElement ? "[X] Exit Fullscreen" : "[ ] Fullscreen"; });
-  drawSunChart(); drawFwChart();
+  scheduleCharts();
   requestAnimationFrame(frame);
 })();

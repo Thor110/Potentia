@@ -190,7 +190,7 @@
     },
     drag(dx, dy) { this.cam.lon -= dx * 0.3 / this.cam.zoom; this.cam.lat = Math.max(-90, Math.min(90, this.cam.lat + dy * 0.3 / this.cam.zoom)); },
     wheel(dz) { this.cam.zoom = Math.max(0.5, Math.min(4, this.cam.zoom * Math.exp(-dz * 0.001))); },
-    hint: "drag to turn the globe · scroll to zoom · line thickness: the momentum each ring holds now"
+    hint: "drag to turn the globe · click, then scroll or pinch to zoom · line thickness: the momentum each ring holds now"
   };
 
   // ---------------------------------------------------------------------------------------------
@@ -334,7 +334,7 @@
       const want = Math.max(20000, Math.hypot(earth[0], earth[1]) * 1.25) / 1000;
       if (want > this.cam.kpc) this.cam.kpc += (want - this.cam.kpc) * 0.2;
     },
-    hint: "drag to move · scroll to zoom · seen from the north: the Galaxy turns clockwise"
+    hint: "drag to move · click, then scroll or pinch to zoom · seen from the north: the Galaxy turns clockwise"
   };
 
   // ---------------------------------------------------------------------------------------------
@@ -355,7 +355,8 @@
       const cos = S.R.cosmo;
       this.xyz = new Float32Array(g.length * 3); this.dist = new Float32Array(g.length);
       g.forEach((q, i) => {
-        const d = cos.dcFast(Math.max(q.cz, 0) / (K.c / 1000));
+        // Coming towards us (cz <= 0): no distance from redshift; left out (the Local Group's own)
+        const d = q.cz > 0 ? cos.dcFast(q.cz / (K.c / 1000)) : NaN;
         const p = galXYZ(q.l, q.b, d); this.xyz.set(p, i * 3); this.dist[i] = d;
       });
       this.lm = LANDMARKS.map(([n, l, b, cz]) => [n, galXYZ(l, b, cos.dcFast(cz / (K.c / 1000)))]);
@@ -370,25 +371,42 @@
       if (!this.xyz) {
         text(ctx, S.data2mrsMsg || "Reading 2MRS from VizieR…", cx, cy, COL.muted, "center", 14);
       } else {
-        // Galaxies within reach in blue, the rest grey
+        // Galaxies within reach in blue, the rest grey. Drawn to a layer of their own and kept until
+        // the camera, the size or the reach changes, so a still view costs almost nothing.
+        const dpr = window.devicePixelRatio || 1;
+        const key = [cam.yaw, cam.pitch, cam.mpc, w, h, dpr, reach, this.cosmoKey].join("|");
+        if (this.layerKey !== key) {
+          this.layer = this.layer || document.createElement("canvas");
+          this.layer.width = Math.round(w * dpr); this.layer.height = Math.round(h * dpr);
+          const lc = this.layer.getContext("2d"); lc.setTransform(dpr, 0, 0, dpr, 0, 0);
+          this.drawPoints(lc, proj, reach);
+          this.layerKey = key;
+        }
+        ctx.drawImage(this.layer, 0, 0, w, h);
+      }
+      this.drawLabels(ctx, proj, S, reach, w, h, s, cx, cy);
+    },
+    drawPoints(ctx, proj, reach) {
         const n = this.dist.length;
         ctx.fillStyle = "rgba(136,136,136,0.55)";
         for (let i = 0; i < n; i++) {
-          if (this.dist[i] <= reach) continue;
+          if (!(this.dist[i] > reach)) continue;
           const p = proj(this.xyz[i * 3], this.xyz[i * 3 + 1], this.xyz[i * 3 + 2]);
           ctx.fillRect(p[0], p[1], 1.2, 1.2);
         }
         ctx.fillStyle = COL.blue;
         for (let i = 0; i < n; i++) {
-          if (this.dist[i] > reach) continue;
+          if (!(this.dist[i] <= reach)) continue;
           const p = proj(this.xyz[i * 3], this.xyz[i * 3 + 1], this.xyz[i * 3 + 2]);
           ctx.fillRect(p[0] - 1, p[1] - 1, 2.5, 2.5);
         }
-        for (const [name, v] of this.lm) {
-          const p = proj(...v);
-          circle(ctx, p[0], p[1], 6, COL.ink2);
-          text(ctx, name, p[0] + 10, p[1], COL.ink2, "left", 11);
-        }
+    },
+    drawLabels(ctx, proj, S, reach, w, h, s, cx, cy) {
+      const cam = this.cam;
+      if (this.lm) for (const [name, v] of this.lm) {
+        const p = proj(...v);
+        circle(ctx, p[0], p[1], 6, COL.ink2);
+        text(ctx, name, p[0] + 10, p[1], COL.ink2, "left", 11);
       }
       // The reach of the Earth after the Galactic Centre, and the plane of the Milky Way
       circle(ctx, cx, cy, reach * s, COL.blue, [4, 4], 1.5);
@@ -413,7 +431,7 @@
     },
     drag(dx, dy) { this.cam.yaw += dx * 0.006; this.cam.pitch = Math.max(-1.5, Math.min(1.5, this.cam.pitch + dy * 0.006)); },
     wheel(dz) { this.cam.mpc = Math.max(0.5, Math.min(600, this.cam.mpc * Math.exp(dz * 0.0012))); },
-    hint: "drag to turn · scroll to zoom · distances from redshift (unreliable within ~10 Mpc)"
+    hint: "drag to turn · click, then scroll or pinch to zoom · distances from redshift (unreliable within ~10 Mpc)"
   };
 
   OLAP.views = { planet, sun, galaxy, universe, galXYZ, COL };

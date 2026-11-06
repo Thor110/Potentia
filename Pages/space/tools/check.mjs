@@ -58,5 +58,22 @@ check("ring shares sum back to the vector", Math.hypot(back[0] - Hb[0], back[1] 
 // Escape energy from 1 AU with nothing to spare: G M m / 2a, 2.65e33 J.
 check("energy to leave the Sun from 1 AU (J)", P.escapeEnergy(1, 0), 2.65e33, 0.01);
 
+// The fall to the Galactic Centre: the table (3,000 steps) against a fine reference (200,000)
+const g = P.galRoute({ rpAU: 300, burnKms: 30 });
+const fine = P.orbitLeg(0.5 * g.vt * g.vt + P.galPhi(K.R0), K.R0 * g.vt, 300 * K.AU / K.pc, K.R0, 200000);
+check("fall time to Sgr A* (years), table against fine reference", g.fallYears, fine[fine.length - 1][0], 0.002);
+// A bound climb-out finds its true farthest point (it once returned the search's edge, 10^7 pc)
+const gb = P.galRoute({ rpAU: 300, burnKms: 25 });
+const fApo = 2 * (gb.Eafter - P.galPhi(gb.apoAfter)) - (gb.hAfter / gb.apoAfter) ** 2;
+check("bound after a small push: the farthest point is a true turning point", isFinite(gb.apoAfter) && Math.abs(fApo) < 1e-6 * Math.abs(gb.Eafter) ? 1 : 0, 1, 0);
+// The Oort cloud at the slowest exit (vinf = 0): the Earth still moves at sqrt(2 mu / r), so the
+// crossing takes about 2.4 million years and the expected collisions stay small
+const oz = P.oortHazard({ N: 1e12, rInAU: 2000, rOutAU: 1e5, vinf: 0 });
+check("Oort crossing time at vinf = 0 (years)", oz.years, 2.37e6, 0.03);
+check("Oort collisions at vinf = 0 stay below 10^-3", oz.lambda < 1e-3 ? 1 : 0, 1, 0);
+// Binary-search look-ups agree with the tables they read
+const tb = P.cruiseTable(1, 29600, 1e5);
+check("look-up: distance at the time a distance is reached", P.radiusAtTime(tb, P.timeToRadius(tb, 5e4)), 5e4, 1e-9);
+
 console.log(failed ? `\n${failed} check(s) failed` : "\nall checks passed");
 process.exit(failed ? 1 : 0);

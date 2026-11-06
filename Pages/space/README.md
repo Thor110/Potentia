@@ -49,11 +49,14 @@ needs, and whether known physics allows it.
   expected number of collisions on the way through is about 10⁻⁷: far less than the ordinary
   risk of a 1 km impact over the same years. This answers the addendum's main worry.
 - **The Galactic Centre slingshot works, through the Oberth effect.** Falling to Sgr A* takes
-  about 40 million years and needs 241 km/s of the Sun's orbital speed cancelled first. A push of
-  30 km/s at 300 AU from Sgr A* leaves the Galaxy at about 110 km/s. Nature already does it:
+  about 45 million years and needs 242 km/s of the Sun's orbital speed cancelled first. A push of
+  30 km/s at 300 AU from Sgr A* flings the Earth out to about 6.9 Mpc (still just bound to the
+  model Milky Way, whose halo reaches to infinity), past Andromeda; a push of 32 km/s frees it
+  entirely, leaving at about 130 km/s. Nature already does it:
   S5-HVS1 was flung out at 1,755 km/s.
-- **The expanding universe sets the final limit.** At 112 km/s the Earth can ever reach about
-  0.9 Mpc: Andromeda (and it is coming to us anyway), but just 32 of 2MRS's 43,533 galaxies.
+- **The expanding universe sets the final limit.** Within reach on the default route: about
+  78 of the 43,507 2MRS galaxies that are moving away from us (0.2%). Andromeda is in reach, and it
+  is coming to us anyway.
 
 **[OLAP.md](OLAP.md)** keeps the evolution of the idea: from the first framing (April 2025) through
 every change and its reason, where each idea stands, and what is open.
@@ -81,7 +84,7 @@ folder (`file://`).
 
 | Dataset | Source | Kept |
 |---|---|---|
-| 2MASS Redshift Survey | Huchra et al. 2012, ApJS 199, 26 (VizieR J/ApJS/199/26) | **Read live** from VizieR: the 2MRS team ask that their files not be redistributed. 44,599 galaxies, 43,533 with redshifts. |
+| 2MASS Redshift Survey | Huchra et al. 2012, ApJS 199, 26 (VizieR J/ApJS/199/26) | **Read live** from VizieR: the 2MRS team ask that their files not be redistributed. 44,599 galaxies, 43,533 with redshifts, 43,507 of them moving away from us (those coming towards us, the Local Group's own, have no distance from redshift and are left out). |
 | Local Group | McConnachie 2012, AJ 144, 4 (VizieR J/AJ/144/4) | Read live from VizieR. |
 | Exoplanets | NASA Exoplanet Archive, `pscomppars` | Snapshot (the archive cannot be read from a browser on another site). |
 | Land | Natural Earth v5.1.2, 1:110m (public domain) | Snapshot. |
@@ -89,16 +92,36 @@ folder (`file://`).
 
 Live tables are made canonical (the column-name line and the data lines, LF-terminated) and
 hashed in the browser; the page says whether what it read is exactly what the manifest records.
-It tries `vizier.cds.unistra.fr` first, then the mirror at `vizier.cfa.harvard.edu`.
+It tries `vizier.cds.unistra.fr` first, then the mirror at `vizier.cfa.harvard.edu`, using the
+exact query the manifest records (`query`).
+
+Surface maps carry a *frame* in `datasets.js`: where the map sits in its image and the longitude
+at its left edge. Ceres's frame was measured from the map's own grid lines (0° at x = 31, 360° at
+x = 931, 90°N at y = 19, 90°S at y = 469, in a 960 × 489 image). The updater refuses a map whose
+size has changed, so a frame is never silently wrong.
 
 ## Keeping it up to date
 
 - **Refresh the data:** `python3 Pages/space/tools/update_data.py` (Python 3.8+, standard library
-  only). `--check` fetches and compares without writing; it exits non-zero if anything changed.
+  only). It fetches and checks everything first, and writes nothing unless all of it passed; then
+  it writes each file whole (a temporary file, then a rename), the manifest last.
+  - `--check` fetches and compares without writing. `--verify` checks, offline, that the
+    snapshot files in this repository match the manifest.
+  - Exit codes: 0 all matches; 1 something changed (`--check`) or a snapshot differs
+    (`--verify`); 2 an error (a source unreachable, or what it sent failed a check).
+  - Checks: a VizieR table must have exactly the columns asked for (VizieR quietly drops an
+    unknown column); each dataset needs a minimum number of rows; an image must be a real JPEG or
+    PNG of the recorded size.
+  - Wikimedia limits how fast it is asked; the updater waits and retries, so an image can take a
+    few minutes.
+  - **When 2MRS's hash changes**, re-derive the figures quoted from it: the counts above, and the
+    "within reach" figures here and in OLAP.md.
 - **Change a constant:** edit `constants.js` (value and source), then run
-  `node Pages/space/tools/check.mjs`.
+  `node Pages/space/tools/check.mjs`. It checks the physics against values known independently,
+  and keeps regression checks for every bug the code reviews found.
 - **Add a dataset:** add it to `DATASETS` in `tools/update_data.py` and to `D` in `datasets.js`
-  (with its parser), run the updater, and for a snapshot add its `<script>` to `space.html`.
+  (with its parser), run the updater, and for a snapshot add its `<script>` to `space.html`
+  (an image is loaded on demand and needs no `<script>`).
   Candidates: Cosmicflows-4 distances (better than redshift within ~10 Mpc), Gaia's nearby stars
   for close stellar passes, a fuller Milky Way potential.
 - **Add a setting:** add an entry to `FIELDS` in `app.js` (its panel, default and control); it
@@ -116,7 +139,11 @@ Other pages quote the cosmic horizon counter's constants (`REACH_GLY`, `SEEN_GLY
 - Gravity assists use a simple flyby (the turn set by the closest approach) with a share of each
   kick along the Earth's path; the energy comes from Jupiter's orbit.
 - The Galaxy is a Miyamoto–Nagai disc, a Hernquist bulge, an NFW halo scaled to 229 km/s at the
-  Sun, and Sgr A*; the route lies in the plane. Near Sgr A* the figures are Newtonian.
+  Sun, and Sgr A*; the route lies in the plane. Its escape speed at the Sun comes out at 556 km/s
+  (measured: 528, +24/−25). The halo is not cut off, so its pull reaches to infinity: the speed
+  left far away is a lower estimate (cut off at 250 kpc, the default push would leave faster).
+- Near Sgr A* the figures are Newtonian; the closest approach is limited to 1 AU (about 29% of
+  light speed at closest approach), and the page warns above a tenth of light speed.
 - Distances in 2MRS come from redshift, which is poor within ~10 Mpc, where galaxies' own motions
   dominate. The Local Group is bound by gravity, so expansion does not apply inside it.
 - The spiral arms are drawn for orientation only.

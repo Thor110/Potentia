@@ -47,10 +47,17 @@
   }
 
   // A VizieR tab-separated table, made canonical as tools/update_data.py does.
+  // Exactly as tools/update_data.py: drop a leading BOM, trailing CRs, comment lines and lines of
+  // only spaces and tabs; then the names, (units, dashes,) and the rows.
   function vizierCanonical(text) {
-    const lines = text.split("\n").map(l => l.replace(/\r$/, "")).filter(l => l.trim() && !l.startsWith("#"));
+    const lines = text.replace(/^\uFEFF/, "").split("\n").map(l => l.replace(/\r+$/, "")).filter(l => !/^[ \t]*$/.test(l) && !l.startsWith("#"));
+    if (lines.length < 3) throw new Error("VizieR sent no table");
     const rows = lines.slice(3);
     return { canon: lines[0] + "\n" + rows.map(r => r + "\n").join(""), header: lines[0].split("\t"), rows };
+  }
+  // The column indexes a parser needs; a missing one is an error, not silently empty data
+  function columns(header, names) {
+    return names.map(n => { const i = header.indexOf(n); if (i < 0) throw new Error("column " + n + " is missing"); return i; });
   }
   const num = (s) => { const t = (s || "").trim(); return t === "" ? null : Number(t); };
 
@@ -80,8 +87,8 @@
       kind: "live",
       path: "/viz-bin/asu-tsv?-source=J/ApJS/199/26/table3&-out.max=unlimited&-out=ID,GLON,GLAT,Kcmag,cz",
       parse(t) {
-        const { header, rows } = t; const ix = (n) => header.indexOf(n);
-        const iI = ix("ID"), iL = ix("GLON"), iB = ix("GLAT"), iK = ix("Kcmag"), iC = ix("cz");
+        const { header, rows } = t;
+        const [iI, iL, iB, iK, iC] = columns(header, ["ID", "GLON", "GLAT", "Kcmag", "cz"]);
         return rows.map(r => r.split("\t")).map(f => ({ id: f[iI].trim(), l: num(f[iL]), b: num(f[iB]), k: num(f[iK]), cz: num(f[iC]) }))
           .filter(g => g.cz != null);
       }
@@ -93,10 +100,11 @@
       kind: "live",
       path: "/viz-bin/asu-tsv?-source=J/AJ/144/4/catalog&-out.max=unlimited&-out=Name,SubG,MType,GLON,GLAT,D,HRV,VMag",
       parse(t) {
-        const { header, rows } = t; const ix = (n) => header.indexOf(n);
+        const { header, rows } = t;
+        const [iN, iS, iT, iL, iB, iD, iH, iV] = columns(header, ["Name", "SubG", "MType", "GLON", "GLAT", "D", "HRV", "VMag"]);
         return rows.map(r => r.split("\t")).map(f => ({
-          name: f[ix("Name")].trim(), sub: f[ix("SubG")].trim(), type: f[ix("MType")].trim(),
-          l: num(f[ix("GLON")]), b: num(f[ix("GLAT")]), D: num(f[ix("D")]), hrv: num(f[ix("HRV")]), MV: num(f[ix("VMag")])
+          name: (f[iN] || "").trim(), sub: (f[iS] || "").trim(), type: (f[iT] || "").trim(),
+          l: num(f[iL]), b: num(f[iB]), D: num(f[iD]), hrv: num(f[iH]), MV: num(f[iV])
         })).filter(g => g.D != null);
       }
     },
@@ -151,7 +159,7 @@
   function verify(id, text, rows) {
     const m = (OLAP.manifest && OLAP.manifest.datasets[id]) || {};
     const h = sha256(text);
-    return { sha256: h, expected: m.sha256, verified: h === m.sha256, rows, expectedRows: m.rows, retrieved: m.retrieved };
+    return { sha256: h, expected: m.sha256, verified: h === m.sha256, rows, expectedRows: m.rows != null ? m.rows : m.bytes, retrieved: m.retrieved };
   }
 
   async function load(id, onChange) {
@@ -176,13 +184,14 @@
           const text = OLAP.snap && OLAP.snap[id];
           if (text == null) throw new Error("snapshot file missing");
           data = d.parse(text);
-          const rows = id === "land" ? data.features.length : text.split("\n").length - 2;
+          const rows = id === "land" ? data.features.length : data.length;   // parsed rows, as the updater counts them
           set(Object.assign({ state: "ready", via: "this repository" }, verify(id, text, rows)));
         } else {
           let text = null, via = null, err = null;
           for (const m of VIZIER) {
             try {
-              const r = await fetch(m + d.path);
+              // The query recorded in the manifest is the one whose hash was recorded
+              const r = await fetch(m + ((OLAP.manifest.datasets[id] || {}).query || d.path));
               if (!r.ok) throw new Error("HTTP " + r.status);
               text = await r.text(); via = m; break;
             } catch (e) { err = e; }

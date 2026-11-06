@@ -21,8 +21,10 @@
   };
 
   // Bisection for f(x) = 0 on [lo, hi], f(lo) and f(hi) of opposite sign.
+  // Returns NaN if f(lo) and f(hi) have the same sign (no root bracketed).
   P.bisect = function (f, lo, hi, iters) {
     let flo = f(lo);
+    if ((flo < 0) === (f(hi) < 0)) return NaN;
     for (let i = 0; i < (iters || 200); i++) {
       const mid = 0.5 * (lo + hi), fm = f(mid);
       if ((fm < 0) === (flo < 0)) { lo = mid; flo = fm; } else hi = mid;
@@ -219,12 +221,42 @@
     return inside;
   };
 
+  // The same land as a grid of cells (W x H, longitude -180..180, latitude 90..-90), filled by
+  // scanlines with the same even-odd rule, so a look-up costs nothing. Used where many points are
+  // tested (the rings, the search); the stations themselves use the exact polygons.
+  P.rasterLand = function (rings, W, H) {
+    W = W || 1440; H = H || 720;
+    const cells = new Uint8Array(W * H);
+    for (let j = 0; j < H; j++) {
+      const lat = 90 - (j + 0.5) * 180 / H, xs = [];
+      for (const r of rings) {
+        if (lat < r.y0 || lat > r.y1) continue;
+        const pts = r.ring;
+        for (let i = 0, k = pts.length - 1; i < pts.length; k = i++) {
+          const [xi, yi] = pts[i], [xk, yk] = pts[k];
+          if ((yi > lat) !== (yk > lat)) xs.push((xk - xi) * (lat - yi) / (yk - yi) + xi);
+        }
+      }
+      xs.sort((a, b) => a - b);
+      for (let m = 0; m + 1 < xs.length; m += 2) {
+        const a = Math.max(0, Math.ceil((xs[m] + 180) / 360 * W - 0.5)), b = Math.min(W - 1, Math.floor((xs[m + 1] + 180) / 360 * W - 0.5));
+        for (let i = a; i <= b; i++) cells[j * W + i] = 1;
+      }
+    }
+    return { W, H, cells, at(lat, lon) {
+      const i = Math.min(W - 1, Math.floor(((lon + 540) % 360) / 360 * W)), j = Math.min(H - 1, Math.max(0, Math.floor((90 - lat) / 180 * H)));
+      return cells[j * W + i] === 1;
+    } };
+  };
+
   // How a grid orientation sits on the land: nodes on land, and the share of ring length on land.
-  P.gridLand = function (rings, R, samples) {
+  // With a raster, the ring samples use it (fast); without, the polygons (exact, slow).
+  P.gridLand = function (rings, R, samples, raster, nodesFast) {
     samples = samples || 180;
+    const test = raster ? (lat, lon) => raster.at(lat, lon) : (lat, lon) => P.isLand(rings, lat, lon);
     const nodes = P.gridNodes.map(n => {
       const q = P.mulMV(R, n.p), [lat, lon] = P.toLatLon(q);
-      return { kind: n.kind, lat, lon, land: P.isLand(rings, lat, lon) };
+      return { kind: n.kind, lat, lon, land: nodesFast && raster ? raster.at(lat, lon) : P.isLand(rings, lat, lon) };
     });
     let landPts = 0, all = 0;
     for (const nrm of P.ringNormals) {
@@ -238,7 +270,7 @@
         const a = 2 * Math.PI * k / samples;
         const p = [0, 1, 2].map(i => Math.cos(a) * u[i] + Math.sin(a) * w[i]);
         const [lat, lon] = P.toLatLon(p);
-        if (P.isLand(rings, lat, lon)) landPts++;
+        if (test(lat, lon)) landPts++;
         all++;
       }
     }
@@ -247,19 +279,31 @@
 
   // Search orientations for the most nodes on land (then the most ring on land). Seeded, so the
   // same search gives the same answer. With poleQuad, a quad-station stays on the North Pole.
-  P.optimiseGrid = function (rings, { tries, seed, poleQuad }) {
-    const rnd = P.rng(seed || 1);
-    let best = null;
-    for (let i = 0; i < (tries || 3000); i++) {
-      const lat = poleQuad ? 90 : Math.asin(2 * rnd() - 1) * 180 / Math.PI;
-      const lon = poleQuad ? 0 : rnd() * 360 - 180;
-      const roll = rnd() * 90; // the grid repeats every 90 degrees about a quad-station
-      const R = P.gridRotation(lat, lon, roll);
-      const g = P.gridLand(rings, R, 60);
-      const score = g.landNodes * 1000 + g.ringLandShare * 999;
-      if (!best || score > best.score) best = { lat, lon, roll, score, landNodes: g.landNodes };
-    }
-    return best;
+  // The search runs over the raster (fast); the winner's stations are then checked exactly.
+  // onProgress(done, tries) is called between chunks when given; the result comes by promise then.
+  P.optimiseGrid = function (rings, { tries, seed, poleQuad, raster, onProgress }) {
+    const rnd = P.rng(seed || 1), N = tries || 3000;
+    raster = raster || P.rasterLand(rings);
+    let best = null, i = 0;
+    const step = (count) => {
+      for (const end = Math.min(N, i + count); i < end; i++) {
+        const lat = poleQuad ? 90 : Math.asin(2 * rnd() - 1) * 180 / Math.PI;
+        const lon = poleQuad ? 0 : rnd() * 360 - 180;
+        const roll = rnd() * 90; // the grid repeats every 90 degrees about a quad-station
+        const g = P.gridLand(rings, P.gridRotation(lat, lon, roll), 60, raster, true);
+        const score = g.landNodes * 1000 + g.ringLandShare * 999;
+        if (!best || score > best.score) best = { lat, lon, roll, score };
+      }
+    };
+    const finish = () => {
+      best.landNodes = P.gridLand(rings, P.gridRotation(best.lat, best.lon, best.roll), 180, raster).landNodes;
+      return best;
+    };
+    if (!onProgress) { step(N); return finish(); }
+    return new Promise((ok) => {
+      const run = () => { step(200); onProgress(i, N); if (i < N) setTimeout(run, 0); else ok(finish()); };
+      run();
+    });
   };
 
   // The momentum each ring holds, through the day, so that the network as a whole holds a fixed
@@ -337,8 +381,10 @@
   // Spin, used up entirely: how far the Earth's own spin energy goes towards a need (J)
   P.spinEnergy = () => 0.5 * P.earthI() * K.omegaEarth ** 2;
   // How often a star passes within d AU of the Earth, per year (n stars per pc^3, at v m/s)
-  P.starPassRate = function (dAU, vRel) {
-    const d = dAU * K.AU / K.pc, focus = 1 + (2 * K.GMsun / (dAU * K.AU)) / (vRel * vRel);
+  // The passing star's gravity widens the target (a typical star is about half the Sun's mass).
+  P.starPassRate = function (dAU, vRel, starMsun) {
+    const GM = K.GMsun * (starMsun || K.typicalStarMass);
+    const d = dAU * K.AU / K.pc, focus = 1 + (2 * GM / (dAU * K.AU)) / (vRel * vRel);
     return K.starDensity * Math.PI * d * d * focus * (vRel * K.year / K.pc);
   };
 
@@ -347,7 +393,7 @@
   // ---------------------------------------------------------------------------------------------
   P.energyStores = function (years) {
     const sunlight = K.solarConst * Math.PI * K.Rearth ** 2;     // W reaching the Earth
-    const hMass = K.oceanMass * 2 / 18.015;                     // hydrogen in the oceans (kg)
+    const hMass = K.oceanMass * 2.016 / 18.015;                     // hydrogen in the oceans (kg)
     const dMass = hMass * K.oceanDH * 2.014 / 1.008;            // of which deuterium (kg)
     const crust = K.crustMass;
     return {
@@ -388,30 +434,32 @@
     }
     return pts;
   };
-  P.timeToRadius = function (table, rAU) {
-    for (let i = 1; i < table.length; i++) if (table[i][1] >= rAU) {
-      const [t0, r0] = table[i - 1], [t1, r1] = table[i];
-      return t0 + (t1 - t0) * (rAU - r0) / (r1 - r0);
-    }
-    return Infinity;
+  // Tables of [time, distance], both increasing: interpolate one column from the other by binary
+  // search. Below the table: its first row; above: the last distance, or Infinity for a time.
+  P.interp = function (table, x, from, to, beyond) {
+    const n = table.length;
+    if (x <= table[0][from]) return table[0][to];
+    if (x > table[n - 1][from]) return beyond === undefined ? table[n - 1][to] : beyond;
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (table[mid][from] < x) lo = mid; else hi = mid; }
+    const a = table[lo], b = table[hi];
+    return a[to] + (b[to] - a[to]) * (x - a[from]) / (b[from] - a[from]);
   };
-  P.radiusAtTime = function (table, tYr) {
-    for (let i = 1; i < table.length; i++) if (table[i][0] >= tYr) {
-      const [t0, r0] = table[i - 1], [t1, r1] = table[i];
-      return r0 + (r1 - r0) * (tYr - t0) / (t1 - t0);
-    }
-    return table[table.length - 1][1];
-  };
+  P.timeToRadius = (table, rAU) => P.interp(table, rAU, 1, 0, Infinity);
+  P.radiusAtTime = (table, tYr) => P.interp(table, tYr, 0, 1);
 
   // Crossing the Oort cloud: the expected number of comets the Earth meets, taking the cloud as an
   // even spread of N comets between rIn and rOut (AU), crossed straight through at speed v (m/s).
   // The Earth's gravity widens its target: sigma = pi R^2 (1 + vesc^2 / v^2).
-  P.oortHazard = function ({ N, rInAU, rOutAU, v }) {
+  // The Earth's own speed there is sqrt(vinf^2 + 2 mu / r): slow when vinf is small, which both
+  // lengthens the crossing and widens the Earth's gravitational target, so both are integrated.
+  P.oortHazard = function ({ N, rInAU, rOutAU, vinf }) {
     const rin = rInAU * K.AU, rout = rOutAU * K.AU;
     const n = N / (4 / 3 * Math.PI * (rout ** 3 - rin ** 3));
-    const sigma = Math.PI * K.Rearth ** 2 * (1 + (K.vEscEarth / v) ** 2);
-    const lambda = n * sigma * (rout - rin);
-    const years = (rout - rin) / v / K.year;
+    const v = (r) => Math.sqrt(vinf * vinf + 2 * K.GMsun / r);
+    const sigma = (r) => Math.PI * K.Rearth ** 2 * (1 + (K.vEscEarth / v(r)) ** 2);
+    const lambda = n * P.simpson(sigma, rin, rout, 2000);
+    const years = P.simpson((r) => 1 / v(r), rin, rout, 2000) / K.year;
     return { lambda, pAny: 1 - Math.exp(-lambda), years, background: years / K.impactKm, density: n };
   };
 
@@ -458,78 +506,82 @@
   //      gives far more energy); 4. climb out of the Galaxy.
   P.galRoute = function ({ rpAU, burnKms }) {
     const R0 = K.R0, rp = rpAU * K.AU / K.pc;
-    const Vt = K.vcSun + K.vSunPec[1], U = K.vSunPec[0];
+    const Vt = K.vcSun + K.vSunPec[1], U = K.vSunPec[0], W = K.vSunPec[2];
     const phi0 = P.galPhi(R0);
     // Energy after the drop (per unit mass), with a small tangential speed vt kept
     const vpOf = (vt) => Math.sqrt(2 * (0.5 * vt * vt + phi0 - P.galPhi(rp)));
     // Angular momentum is kept: R0 vt = rp vp
     const vt = P.bisect((x) => R0 * x - rp * vpOf(x), 0, Vt, 200);
     const vp = vpOf(vt);
-    const dvDrop = Math.hypot(Vt - vt, U);
+    const dvDrop = Math.hypot(Vt - vt, U, W);
     const E = 0.5 * vt * vt + phi0, h = R0 * vt;
-    // Fall time: integrate dr / v_r from rp to R0 (in log r to resolve the deep well)
-    const fall = P.simpson((lr) => {
-      const r = Math.exp(lr);
-      const v2 = 2 * (E - P.galPhi(r)) - (h * h) / (r * r);
-      return v2 > 0 ? r / Math.sqrt(v2) : 0;
-    }, Math.log(rp * 1.0001), Math.log(R0 * 0.9999), 4000) * K.pc / 1000 / K.year;
+    // The fall, from R0 (where the Earth starts, at rest but for vt: its farthest point) to rp
+    const fallTable = P.orbitLeg(E, h, rp, R0);
     // The burn at closest approach, and what is left far away
-    const Eafter = 0.5 * (vp + burnKms) ** 2 + P.galPhi(rp);
-    const vinf = Eafter > 0 ? Math.sqrt(2 * Eafter) : 0;
-    // Without the burn: where it climbs back to (it stays bound)
-    const apoNoBurn = R0;
-    const apoAfter = Eafter > 0 ? Infinity : P.bisect((r) => P.galPhi(r) - Eafter, rp, 1e7, 200);
+    const Eafter = 0.5 * (vp + burnKms) ** 2 + P.galPhi(rp), hAfter = rp * (vp + burnKms);
+    // Where it climbs back to, if it stays bound (Infinity if it escapes)
+    const apoAfter = P.apocentre(Eafter, hAfter, rp);
+    const vinf = isFinite(apoAfter) && Eafter <= 0 ? 0 : Math.sqrt(Math.max(0, 2 * Eafter));
     // Safety: where the black hole would tear the Earth apart, and its event horizon
     const MbhKg = K.MsgrA * K.Msun;
     const rTidalAU = K.Rearth * Math.cbrt(MbhKg / K.Mearth) / K.AU;
     const rsAU = 2 * K.G * MbhKg / (K.c * K.c) / K.AU;
     // Leaving straight from here instead, without the Galactic Centre
-    const directDv = P.galVesc(R0) - Math.hypot(Vt, U);
-    return { vt, vp, dvDrop, fallYears: fall, Eafter, vinf, apoAfter, apoNoBurn, rTidalAU, rsAU,
-      vpOverC: vp * 1000 / K.c, directDv, vescR0: P.galVesc(R0), vcR0: P.galVc(R0) };
+    const directDv = P.galVesc(R0) - Math.hypot(Vt, U, W);
+    return { vt, vp, dvDrop, fallYears: fallTable[fallTable.length - 1][0], fallTable, Eafter, hAfter, vinf, apoAfter,
+      rTidalAU, rsAU, vpOverC: vp * 1000 / K.c, directDv, vescR0: P.galVesc(R0), vcR0: P.galVc(R0) };
+  };
+  // The farthest point of an orbit with energy E and angular momentum h, beyond r1 (pc), where
+  // 2 (E - phi) = h^2 / r^2. Infinity if it is not reached within 10^9 pc (it escapes).
+  P.apocentre = function (E, h, r1) {
+    const f = (r) => 2 * (E - P.galPhi(r)) - h * h / (r * r);
+    let hi = Math.max(r1 * 2, 1);
+    while (f(hi) > 0) { hi *= 2; if (hi > 1e9) return Infinity; }
+    return P.bisect(f, r1 * 1.000001, hi, 200);
+  };
+  // Time against distance along one leg of an orbit between r1 (closest) and r2 (farthest, or the
+  // end of the table), as [[years from r1, pc]...]. Both turning points make dt/dr infinite, so the
+  // substitution r = r1 + (r2 - r1)(1 - cos u)/2 is used: it makes the integrand finite.
+  P.orbitLeg = function (E, h, r1, r2, n) {
+    n = n || 3000;
+    const conv = K.pc / 1000 / K.year, half = (r2 - r1) / 2;
+    const vr = (r) => Math.sqrt(Math.max(1e-300, 2 * (E - P.galPhi(r)) - h * h / (r * r)));
+    const out = [[0, r1]];
+    let t = 0;
+    for (let i = 0; i < n; i++) {
+      const u = Math.PI * (i + 0.5) / n, r = r1 + half * (1 - Math.cos(u));
+      t += half * Math.sin(u) / vr(r) * (Math.PI / n) * conv;     // midpoint rule in u
+      out.push([t, r1 + half * (1 - Math.cos(Math.PI * (i + 1) / n))]);
+    }
+    return out;
   };
   // Distance against time for the route: the fall from R0 to the closest approach, then the climb
   // out after the burn. Returns { fall: [[years before closest approach, pc]...],
   // exit: [[years after, pc]...], exitBound }.
-  P.galTables = function (g, rpAU, burnKms) {
-    const rp = rpAU * K.AU / K.pc, R0 = K.R0, conv = K.pc / 1000 / K.year;
-    const E = 0.5 * g.vt * g.vt + P.galPhi(R0), h = R0 * g.vt;
-    const n = 300;
-    const fallF = (lr) => { const r = Math.exp(lr), v2 = 2 * (E - P.galPhi(r)) - h * h / (r * r); return v2 > 0 ? r / Math.sqrt(v2) : 0; };
-    const fall = [[0, rp]];
-    let t = 0, lo = Math.log(rp * 1.0001), hi = Math.log(R0);
-    for (let i = 1; i <= n; i++) {
-      const a = lo + (hi - lo) * (i - 1) / n, b = lo + (hi - lo) * i / n;
-      t += P.simpson(fallF, a, b, 6) * conv; fall.push([t, Math.exp(b)]);
+  P.galTables = function (g) {
+    const rp = g.fallTable[0][1];
+    const bound = isFinite(g.apoAfter);
+    let exit;
+    if (bound) exit = P.orbitLeg(g.Eafter, g.hAfter, rp, g.apoAfter);
+    else {
+      // Unbound: substitute r = rp + w^2 (removes the turning point at rp), out to 5 Mpc
+      const conv = K.pc / 1000 / K.year, n = 4000, wMax = Math.sqrt(5e6 - rp);
+      const vr = (r) => Math.sqrt(Math.max(1e-300, 2 * (g.Eafter - P.galPhi(r)) - g.hAfter * g.hAfter / (r * r)));
+      exit = [[0, rp]];
+      let t = 0;
+      for (let i = 0; i < n; i++) {
+        const w = wMax * (i + 0.5) / n;
+        t += 2 * w / vr(rp + w * w) * (wMax / n) * conv;
+        const wb = wMax * (i + 1) / n;
+        exit.push([t, rp + wb * wb]);
+      }
     }
-    const Ea = g.Eafter, ha = rp * (g.vp + burnKms);
-    const exitF = (lr) => { const r = Math.exp(lr), v2 = 2 * (Ea - P.galPhi(r)) - ha * ha / (r * r); return v2 > 0 ? r / Math.sqrt(v2) : 0; };
-    const rMax = Ea > 0 ? 5e6 : g.apoAfter * 0.9999;
-    const exit = [[0, rp]];
-    t = 0; hi = Math.log(rMax);
-    for (let i = 1; i <= n; i++) {
-      const a = lo + (hi - lo) * (i - 1) / n, b = lo + (hi - lo) * i / n;
-      t += P.simpson(exitF, a, b, 6) * conv; exit.push([t, Math.exp(b)]);
-    }
-    return { fall, exit, exitBound: Ea <= 0 };
+    return { fall: g.fallTable, exit, exitBound: bound };
   };
   // Look up a [time, distance] table at time t (linear between rows; the last row beyond).
-  P.lookup = function (table, t) {
-    if (t <= table[0][0]) return table[0][1];
-    for (let i = 1; i < table.length; i++) if (table[i][0] >= t) {
-      const [t0, r0] = table[i - 1], [t1, r1] = table[i];
-      return r0 + (r1 - r0) * (t - t0) / (t1 - t0);
-    }
-    return table[table.length - 1][1];
-  };
+  P.lookup = (table, t) => P.interp(table, t, 0, 1);
   // ... and the time at which a table reaches distance r.
-  P.lookupTime = function (table, r) {
-    for (let i = 1; i < table.length; i++) if (table[i][1] >= r) {
-      const [t0, r0] = table[i - 1], [t1, r1] = table[i];
-      return t0 + (t1 - t0) * (r - r0) / (r1 - r0);
-    }
-    return Infinity;
-  };
+  P.lookupTime = (table, r) => P.interp(table, r, 1, 0, Infinity);
 
   // A burn of dv at speed v deep in a well: the speed left far away, compared with the same burn
   // made far from anything (the Oberth gain).

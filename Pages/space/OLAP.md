@@ -16,7 +16,7 @@ simulation page works is in [README.md](README.md); the page is
 3. [The evolution, step by step](#3-the-evolution-step-by-step)
 4. [Where each idea stands](#4-where-each-idea-stands)
 5. [Findings, with numbers](#5-findings-with-numbers)
-6. [Open questions and next steps](#6-open-questions-and-next-steps)
+6. [Open questions and the plan forward](#6-open-questions-and-the-plan-forward)
 7. [How to use this record](#7-how-to-use-this-record)
 
 ---
@@ -130,8 +130,10 @@ land outlines, all checked by SHA-256; a Galaxy model; the expanding universe's 
 - **The Oort cloud** is about 10⁻⁷ expected collisions to cross: far below ordinary impact risk.
 - **The Galactic Centre slingshot works** once there (the Oberth effect: a 30 km/s push at 300 AU
   from Sgr A* leaves the Galaxy at about 110 km/s), but getting there means cancelling 241 km/s.
+  *(Revised in Step 9: about 45 million years to fall; a 30 km/s push now leaves the Earth just
+  bound, out to 6.9 Mpc, past Andromeda; 32 km/s frees it.)*
 - **The universe's expansion** limits the Earth, at that speed, to about 0.9 Mpc ever:
-  Andromeda, which is coming to us anyway.
+  Andromeda, which is coming to us anyway. *(Revised in Step 9.)*
 
 ### Step 6 — The steering wheel (Edward, 6 November 2026)
 
@@ -156,7 +158,8 @@ land outlines, all checked by SHA-256; a Galaxy model; the expanding universe's 
   Korycansky, Laughlin & Adams 2001). About 130,000 passes keep the Earth habitable to a billion
   years; escape needs millions more, with several asteroids in turn.
 - **The open problem:** the drop to the Galactic Centre. A star passes within 1 AU of the Earth
-  about once in 10¹² years, so stellar assists cannot do it.
+  about once in 10¹² years, so stellar assists cannot do it. *(Corrected in Step 9: about once in
+  2×10¹⁵ years; the conclusion is stronger.)*
 - **Small bodies:** a 1° tilt of a 10 km asteroid takes trains equal to a steel ring 5.5 m square
   at today's train record: buildable now.
 - Page v0.3: steering first; any body; gravity assists the default engine; the Galactic Centre
@@ -212,6 +215,34 @@ land outlines, all checked by SHA-256; a Galaxy model; the expanding universe's 
   figures; surface maps of the Moon (NASA LRO), Mars (USGS Viking), Ceres (NASA Dawn, coloured
   by height), and a seeded asteroid.
 
+### Step 9 — A full code review (Claude, 6 November 2026)
+
+Three independent reviews (the physics, the page, the data pipeline), then fixes. What changed in
+the findings:
+
+- **A mistake of mine, corrected:** a star passes within 1 AU of the Earth about once in
+  **2×10¹⁵ years**, not 10¹² (millions of years were taken for years). Stellar assists are even
+  less possible than stated; nothing else changes.
+- **The fall to the Galactic Centre takes about 45 million years**, not 41: the old integration
+  stumbled at the two turning points. Now checked against a fine reference.
+- **The Galaxy model's bulge mass** is now Bovy's (0.5×10¹⁰ suns, not 0.9×10¹⁰). With it, the
+  default 30 km/s push at Sgr A* leaves the Earth just bound, climbing to 6.9 Mpc (past
+  Andromeda, reached in about 3.9 billion years); 32 km/s frees it, at about 130 km/s. The
+  model's halo reaches to infinity, so these speeds are lower estimates.
+- **A bound orbit was wrongly reported as "never arrives"** even when it climbs past the target.
+- **The Oort cloud at the slowest exit** was badly overstated (17 expected collisions instead of
+  about 10⁻⁴), because the Earth's real speed there was ignored. At the default speed nothing
+  changed (about 10⁻⁷).
+- **2MRS:** galaxies coming towards us (the Local Group's own) have no distance from redshift and
+  were counted as within reach; they are now left out. Within reach on the default route: 78 of
+  43,507.
+- **The Sun's vertical motion** (7 km/s) is now part of the drop: 242 km/s, not 241.
+- **Safety and speed of the page itself:** a shared link could run code in the page (now
+  blocked: every link setting is checked, every outside name escaped); settings now apply in
+  about 5 ms instead of 60 to 80; the land search no longer freezes the page for two minutes.
+- **The data pipeline** now fetches and checks everything before writing anything, refuses
+  error pages and missing columns, and can verify the repository's copies offline.
+
 ---
 
 ## 4. Where each idea stands
@@ -233,7 +264,7 @@ land outlines, all checked by SHA-256; a Galaxy model; the expanding universe's 
 | Mass ejection to move the planet | Step 4 | superseded (Step 6) | not part of the plan; kept only as "if it becomes necessary" |
 | Nudges to take energy from the Sun | Step 6 | not possible | the Sun is the fixed centre; the pull varies too little |
 | Gravity assists drawing on Jupiter | Step 6 | current engine | no mass thrown off; 3% of Jupiter's orbital energy |
-| Slingshot round the Galactic Centre | Step 1 | open | works once there; the 241 km/s drop has no known way |
+| Slingshot round the Galactic Centre | Step 1 | open | works once there; the 242 km/s drop has no known way (Step 9) |
 | Steering smaller bodies; Dyson scale | Step 6 | open | small bodies look buildable |
 | Take everyone, not some | Step 7 | the aim | ships leave most behind |
 
@@ -258,9 +289,14 @@ At today's record (603 km/h) each needs about 47 times more: the published shift
 | Ceres (365 m/s) | 1.5×10¹⁸ kg | 2.7 km square |
 | A 10 km asteroid (at 603 km/h) | 6.5×10¹⁰ kg | 5.5 m square |
 
-## 6. Open questions and next steps
+## 6. Open questions and the plan forward
 
-- **The Galactic Centre drop** (241 km/s) without an engine: the largest open problem.
+*(Claude, 6 November 2026, after the code review in Step 9. Ordered by what most improves the
+answer to the aim, a way to take everyone. Each item says what it would settle.)*
+
+### Open questions
+
+- **The Galactic Centre drop** (242 km/s) without an engine: the largest open problem.
   Alternatives: stop at leaving the Sun; ride the Milky Way's meeting with Andromeda.
 - **The Moon:** does it come along? It steadies the Earth's tilt, could be steered itself, and
   stays bound in a slow escape.
@@ -269,13 +305,59 @@ At today's record (603 km/h) each needs about 47 times more: the published shift
 - **Steering in transit:** pointing a pole along the direction of travel as a shield (a 90° turn
   needs about two Moons of trains at orbital speed).
 - **Safety engineering:** the uncounted items in Step 8, once designs exist.
-- **Simulate the escape spiral** step by step, with sunlight falling as it goes.
-- **Audit the sources** against the original papers (some values were taken from memory when
-  the reference sites were blocked).
-- **More data:** Cosmicflows-4 distances; any 2MRS galaxy as a destination; Andromeda's motion;
-  close stellar passes from Gaia; a true-colour Ceres mosaic.
-- **Presets and reports:** "published", "conservative" and "optimistic" plans; a downloadable
-  report with the data hashes.
+
+### Phase 1: trust the numbers
+
+1. **Audit every source** in `constants.js` against the original paper, adding the table or page
+   number. Settles: whether any figure the plan rests on is wrong.
+2. **Show uncertainty.** Several inputs are known only to a factor (comets in the Oort cloud,
+   the Galaxy's halo, the Hubble constant, the edge of the habitable zone). Run each result at the
+   low and high ends and show a range, not one number. Settles: which conclusions are robust.
+3. **Simulate the escape properly,** step by step: the spiral out, sunlight falling as it goes,
+   the Moon's orbit through it. Replaces the current approximation (circular speed plus the
+   speed left over).
+4. **A better Milky Way:** a halo that ends, a choice of published models, and the route in
+   three dimensions; relativity near Sgr A*. Settles: whether the slingshot leaves the Earth bound
+   or free, which today depends on the model.
+
+### Phase 2: the engine, without throwing mass away
+
+5. **Model the asteroid-assist campaign in detail:** the asteroids' own orbits between Jupiter
+   and the Earth, how many are needed at once, timing each pass, and what Jupiter's slow inward
+   drift does to the other planets. This is where the steering earns its place: aligning the
+   planet for every pass.
+6. **Look for answers to the open problem:** the Andromeda meeting (when, and what it does to the
+   Sun's orbit); moving the whole solar system with the Earth in it (a star-driven engine, such
+   as a Shkadov thruster) instead of the Earth alone; anything else that keeps everyone together.
+   Settles: whether the Galactic Centre leg stays in the plan.
+
+### Phase 3: the steering, engineered
+
+7. **The train system in detail:** the number of trains, their spacing and speed, the power to
+   hand momentum between the rings through the day, and the loads on the track and the rock.
+8. **Safety, counted where it can be:** the energy in each train against what a tunnel can
+   contain; how many trains can fail at once; and what a change of tilt or day does to seasons,
+   tides and climate. The rest stays listed as open until designs exist.
+9. **Other bodies:** steering the Moon, Ceres and asteroids in detail, the first places the
+   system could actually be built and tested.
+
+### Phase 4: data
+
+10. **Cosmicflows-4 distances** for nearby galaxies (redshift is poor within ~10 Mpc).
+11. **Any 2MRS galaxy as a destination,** chosen by clicking it.
+12. **Close stellar passes** from a Gaia-based catalogue, for hazards and chances on the way out.
+13. **A true-colour Ceres map,** when one can be fetched.
+
+### Phase 5: using and keeping it
+
+14. **Presets:** "published", "conservative" and "optimistic" plans, one click each.
+15. **A downloadable report** of a plan: its settings, every result, and the hash of every
+    dataset used, so a plan can be archived and checked exactly, in the spirit of Sieve.
+16. **Automated checks:** a scheduled run of `check.mjs` and `update_data.py --check`, and a short
+    browser test of the page. This needs a workflow in `.github/`, outside the page: Edward's
+    decision.
+17. **Accessibility:** a text table for every chart and view, so the whole plan can be read
+    without a canvas.
 
 ## 7. How to use this record
 
@@ -284,4 +366,5 @@ At today's record (603 km/h) each needs about 47 times more: the published shift
 - **To walk an idea back,** find its step, read why it was revised, and add a new step reversing
   it, with the new reason.
 - **The page's settings** can recreate most steps: the link to a plan keeps them. Earlier
-  versions of the page are in git, and v0.1 is kept as `Previous/spacev1.html`.
+  versions of the page are in git, and v0.1 is kept in the repository as
+  [`Previous/spacev1.html`](../../Previous/spacev1.html).
