@@ -1,21 +1,26 @@
-# The RAR warning (6 November 2026)
+# GIFs opened, measured (6 November 2026)
 
-Commit on top of your 9fda581 (local, not pushed).
+Commits c7a32e4 (the IDEAS note) and 278cd89 (the measurement), both on top of your 73c4868, local and not pushed.
 
-## When a RAR is made again on installing, Sieve now says so when making it
-- **`sieve locate`** prints a warning.
-- **The File Locator** shows it in a message box when it reads the folder and when it saves.
+## What was measured
+The six demonstration GIFs from your InscribedSquareProblem repository, all written by gifenc 1.0.3. The repository clone was deleted afterwards; only the GIFs were kept, in a scratch folder.
 
-The warning names each RAR and the rar version that made it. It says the RAR comes back byte for byte only where the installing machine has that version of rar. Elsewhere its files are installed in its place, and the install says so.
+**Made again exactly: yes.**
+- A compress-style LZW encoder gives back all 346 frames byte for byte.
+- gifenc's sub-blocks are always 254 bytes.
 
-## Under Optimise Search, no RAR is made again at all
-This holds even with a temporary tick left over from before. While Optimise Search is on, temporary's box is greyed, so that tick couldn't be taken back, and the warning's advice ("untick temporary") couldn't be followed.
+So a gifenc GIF can be opened and made again by rule.
 
-So a RAR is made again only with Optimise Search off and temporary ticked. That is exactly where the box can be changed.
+**Size:**
 
-## Tested
-With CI's stand-in rar:
-- `--optimise-archives` warns, naming `made.rar (RAR 0.01 sieve-stand-in)`.
-- With `--optimise-search` added, nothing is made again and nothing is warned.
+| | Bytes | Of the GIFs |
+|---|---:|---:|
+| The six GIFs | 9,616,677 | 100% |
+| Sieve today (Optimise Search) | 8,377,298 | 87% |
+| **Opened (true indices + palettes, xz -9e)** | **4,718,704** | **49%** |
 
-CI step 11 now checks both. That block was run here.
+That opened figure uses xz alone, before Sieve's rope, mixing, or using the frame before as context.
+
+## Files
+- **`results/gif-opened-2026-11-06.md`:** the table and how it was measured.
+- **`docs/IDEAS.md`:** §19.123 now carries the measurement.

@@ -6421,3 +6421,32 @@ for mixing (a better model of text is smaller code for text, §19.121), and for 
 - *Where it runs:* the AI line, mixing and the filters all read it, and an installer would need
   it to make again any file mixed with it, as it now needs the dictionaries (it would be carried,
   or the instructions would name it and refuse without it).
+
+**19.123 GIFs opened: their frames carried as pictures, made again exactly (Edward, 6 November 2026;
+noted, nothing built or measured).** Edward's idea: sieve a GIF's frames, and their differences, as
+a `.simage` does pictures. *What a GIF does already:* each frame may cover a rectangle of the canvas
+only, and leave transparent the pixels that do not change, so an optimised GIF (gifsicle -O3, say)
+is in part its frames' differences already. But every frame is coded by LZW, far weaker than LZMA2
+or mixing, and Sieve today carries a GIF as its bytes (FORMATS.md, the pictures' table). *How:*
+- *Opened, under temporary (and so under Optimise Search):* each frame's LZW undone into its
+  palette indices; the GIF's skeleton (its headers, palettes, rectangles, delays, extensions)
+  carried apart; the indices packed as any file is.
+- *Made again exactly:* LZW's output depends on the encoder (when it clears its table, how its
+  code size grows). As preflate does for deflate, the common encoders' ways are tried and a recipe
+  kept only where one gives the GIF back byte for byte; else it is carried as it is, so nothing is
+  larger. This is the risk, and the work.
+- *The differences:* the frames' indices carried one after another, so an unchanging background
+  repeats and LZMA2 takes it as matches; better, mixing given the frame before as context (the true
+  delta), later, as it is the larger work.
+- *The viewer:* with the frames carried as pictures, `sieve-view` could play a GIF (it shows the
+  first frame now), and its thumbnail come from the frames already made.
+*Where it should pay:* screen recordings and animations over a still background; little on
+dithered photographs.
+*Measured (6 November 2026, results/gif-opened-2026-11-06.md):* the six demonstration GIFs of
+Edward's InscribedSquareProblem repository, all gifenc 1.0.3's (every frame whole, its own palette).
+Made again exactly: a compress-style LZW encoder gives back all 346 frames byte for byte, and
+gifenc's sub-blocks are 254 bytes every one. What they come to: 9,616,677 bytes as GIFs; 8,377,298
+(87%) by Sieve today; **4,718,704 (49%)** opened, their indices and palettes by xz -9e alone (32%
+to 60% a file), before the rope, mixing or the frame before as context. So it is worth building,
+for gifenc's GIFs first; other encoders (giflib, ImageMagick, gifsicle) to be measured as GIFs of
+theirs are found.
