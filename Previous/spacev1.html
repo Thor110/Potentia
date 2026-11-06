@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Potentia // OLAP Simulation</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:#0a0a0f;
+    color:#e0ddd8;
+    font-family:'Courier New',monospace;
+    font-size: 16px;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px;
+  }
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:#444;margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  
+  /* Counter block matching the audio archive aesthetic */
+  .counter-box {
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+  .counter-title {
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #666;
+    margin-bottom: 8px;
+    white-space: nowrap;
+  }
+  .counter-value {
+    font-size: 16px;
+    color: #e0ddd8;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    white-space: nowrap;
+    margin-bottom: 12px;
+  }
+  .counter-group {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #888;
+    text-align: left;
+    margin-top: 12px;
+    border-top: 1px solid #1a1a24;
+    padding-top: 12px;
+  }
+  .counter-group p {
+    margin-bottom: 8px;
+  }
+  .counter-group p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Star loss divider and standalone counter styling */
+  .star-loss-divider {
+    border: none;
+    border-top: 1px solid #2a2a3a;
+    margin: 16px 0;
+  }
+  .star-loss-value {
+    font-size: 16px;
+    color: #ffffff;
+    letter-spacing: 0.1em;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 8px;
+    white-space: nowrap;
+  }
+
+  .box {
+    width: 100%;
+    max-width: 800px;
+    border: 1px solid #2a2a3a;
+    background: #0d0d14;
+    padding: 24px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  
+  /* Simulation Viewport Container */
+  .sim-viewport {
+    width: 100%;
+    height: 400px;
+    background: #050508;
+    border: 1px solid #2a2a3a;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sim-overlay-text {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    transition: all 0.3s ease;
+  }
+
+  .slider-label {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #888;
+    text-align: center;
+  }
+
+  /* Custom Input Slider */
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    background: transparent;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 16px;
+    width: 16px;
+    background: #888;
+    cursor: pointer;
+    margin-top: -6px;
+    border-radius: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    cursor: pointer;
+    background: #2a2a3a;
+  }
+  input[type=range]:focus {
+    outline: none;
+  }
+
+  /* Base Action Button Styles */
+  .btn-action {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 16px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .btn-action:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  /* Specific Fullscreen Toggle Overlay Override */
+  .btn-action.fs-toggle {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: auto;
+    display: inline-block;
+    padding: 8px 14px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    background: rgba(13, 13, 20, 0.85);
+    z-index: 100;
+  }
+  .btn-action.fs-toggle:hover {
+    background: rgba(25, 25, 35, 0.95);
+  }
+  
+  /* Warning state for reset confirmation */
+  .btn-action.warning {
+    color: #a35d5d;
+    border-color: #a35d5d;
+  }
+  .btn-action.warning:hover {
+    background: #2a1515;
+  }
+
+  /* HUD Morphing for Fullscreen State */
+  #sim-container:fullscreen {
+    background: #050508;
+    border: none;
+    padding: 0;
+    max-width: 100%;
+  }
+  #sim-container:fullscreen .sim-viewport {
+    height: 100vh;
+    margin: 0;
+    border: none;
+  }
+  #sim-container:fullscreen .control-group {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 64px);
+    max-width: 800px;
+    background: rgba(13, 13, 20, 0.9);
+    padding: 24px;
+    border: 1px solid #2a2a3a;
+    z-index: 20;
+  }
+
+  .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 800px;
+  }
+
+  .btn-link {
+    display: block;
+    text-decoration: none;
+    background: transparent;
+    border: 1px solid #2a2a3a;
+    color: #888;
+    padding: 14px 20px;
+    font-family: 'Courier New',monospace;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    text-transform: uppercase;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .btn-link:hover {
+    border-color: #555;
+    color: #ccc;
+    background: #111;
+  }
+
+  .footer {
+    margin-top: 32px;
+    font-size: 16px;
+    color: #222;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* On a phone, long titles and figures wrap rather than push the page sideways. */
+  @media (max-width: 720px) {
+    h1, .sub, .section-label, .counter-title, .counter-value, .counter-group, .btn-link, .footer, #star-loss-ticker { white-space: normal; overflow-wrap: anywhere; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Potentia // OLAP Sandbox</h1>
+<div class="sub">
+  Planetary Departure & Trajectory Simulation (v0.1)
+</div>
+
+
+<div style="width:100%;max-width:700px;border:1px solid #2a2a3a;background:#0d0d14;padding:16px 20px;margin:8px 0 16px;color:#666;font-size:14px;line-height:1.6;text-align:center;letter-spacing:0.05em;">
+  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#555;margin-bottom:6px;">AI Disclosure</div>
+  Potentia is Edward's (Thor110's) work, grown from theory and ideas he has developed over the past few years. Google's Gemini has helped him theorise and conceptualise, and helped write parts of this website. Anthropic's Claude has written much of Sieve's code and documentation with him. Transparency fosters trust.
+</div>
+
+<!-- Live Calculation Counter Box -->
+<div class="counter-box">
+  <div class="counter-title">Cosmic Horizon & Reachability Metric</div>
+  <div class="counter-value" id="limitation-counter">95.4% Unreachable</div>
+  <div class="counter-group">
+    <p>95.4% of the observable universe is already out of reach forever.</p>
+    <p>Even a signal sent at the speed of light, today, could never get there: space is expanding faster and faster, and the gap grows faster than light can cross it.</p>
+    <p>We can still see those galaxies, by light they sent billions of years ago, but nothing we send will ever arrive.</p>
+    <p>And the reachable part keeps shrinking: every second, tens of thousands more stars slip past the edge.</p>
+    
+    <hr class="star-loss-divider">
+    
+    <div class="star-loss-value" id="star-loss-ticker">(~0 stars crossed permanently since epoch start)</div>
+  </div>
+</div>
+
+<div class="box" id="sim-container">
+  <div class="sim-viewport" id="viewport">
+    <button id="fs-btn" class="btn-action fs-toggle">[ ] Fullscreen</button>
+    <div id="viewport-status">[ PLANETARY DISPLAY ACTIVE ]</div>
+    <div class="sim-overlay-text" id="viewport-sub">Awaiting Departure Vector...</div>
+  </div>
+
+  <div class="control-group">
+    <div class="slider-label" id="slider-readout">Timeline / Speed Scrub: 0.0x</div>
+    <input type="range" id="time-slider" min="-100" max="100" value="0">
+    <button id="main-btn" class="btn-action">Engage Simulation</button>
+  </div>
+</div>
+
+<div class="nav-group">
+  <a href="../index.html" class="btn-link">Return to Core Architecture</a>
+</div>
+
+<div class="footer">
+  Deterministic Sieve · Civilisational Backup v1.0
+</div>
+
+<script>
+  const mainBtn = document.getElementById('main-btn');
+  const slider = document.getElementById('time-slider');
+  const readout = document.getElementById('slider-readout');
+  const viewportStatus = document.getElementById('viewport-status');
+  const viewportSub = document.getElementById('viewport-sub');
+
+  let simState = 'READY';
+
+  // Planck 2018 Constants & Live Calculations
+  const currentYear = new Date().getFullYear();
+  const EPOCH = Date.UTC(currentYear, 0, 1);
+  const REACH_GLY = 16.58, SEEN_GLY = 46.18;
+  const SECONDS_PER_YEAR = 31557600;
+  
+  // Estimated stellar loss rate scaling (~24,500 stars/sec)
+  const STARS_LOST_PER_SECOND = 24500; 
+
+  function updateCosmicMetrics() {
+    const now = Date.now();
+    const yearsElapsed = (now - EPOCH) / (SECONDS_PER_YEAR * 1000);
+    
+    // Dynamic horizon shifting for baseline accuracy
+    const currentReach = REACH_GLY - (yearsElapsed * 1e-9);
+    const currentSeen = SEEN_GLY + (yearsElapsed * 1e-9);
+    const unreachablePct = 100 * (1 - (currentReach / currentSeen) ** 3);
+
+    // Cumulative stars lost since epoch start
+    const totalSecondsElapsed = (now - EPOCH) / 1000;
+    const starsLostTotal = Math.floor(totalSecondsElapsed * STARS_LOST_PER_SECOND).toLocaleString();
+
+    // And the inverse beside it: what can still be reached.
+    document.getElementById('limitation-counter').innerHTML = `${unreachablePct.toFixed(1)}% Unreachable<br>${(100 - unreachablePct).toFixed(1)}% Still Reachable`;
+    document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since the start of ${currentYear}.`;
+  }
+
+  // Single clean interval
+  setInterval(updateCosmicMetrics, 1000);
+  updateCosmicMetrics();
+
+  // Handle Timeline Slider Updates
+  slider.addEventListener('input', (e) => {
+    const val = e.target.value;
+    readout.innerText = `Timeline / Speed Scrub: ${val > 0 ? '+' : ''}${val}.0x`;
+    
+    if (simState === 'RUNNING') {
+      viewportSub.innerText = `Calculating vector shifts at ${val}x speed...`;
+    }
+  });
+
+  // Handle Multi-State Core Button
+  mainBtn.addEventListener('click', () => {
+    if (simState === 'READY') {
+      simState = 'RUNNING';
+      mainBtn.innerText = 'Reset Simulation';
+      viewportStatus.innerText = '[ GALACTIC DISPLAY ACTIVE ]';
+      viewportStatus.style.color = '#888';
+      viewportSub.innerText = `Executing departure sequence...`;
+      
+    } else if (simState === 'RUNNING') {
+      simState = 'CONFIRM_RESET';
+      mainBtn.innerText = 'Are you sure? (Click to Confirm)';
+      mainBtn.classList.add('warning');
+      
+    } else if (simState === 'CONFIRM_RESET') {
+      simState = 'READY';
+      mainBtn.innerText = 'Engage Simulation';
+      mainBtn.classList.remove('warning');
+      slider.value = 0;
+      readout.innerText = `Timeline / Speed Scrub: 0.0x`;
+      viewportStatus.innerText = '[ PLANETARY DISPLAY ACTIVE ]';
+      viewportStatus.style.color = '#444';
+      viewportSub.innerText = `Awaiting Departure Vector...`;
+    }
+  });
+
+  // Fullscreen Handler
+  const fsBtn = document.getElementById('fs-btn');
+  const simContainer = document.getElementById('sim-container');
+
+  fsBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      simContainer.requestFullscreen().catch(err => {
+        console.error(`Fullscreen rendering failed: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  });
+
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+      fsBtn.innerText = '[X] Exit Fullscreen';
+    } else {
+      fsBtn.innerText = '[ ] Fullscreen';
+    }
+  });
+</script>
+
+</body>
+</html>

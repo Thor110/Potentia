@@ -6,267 +6,111 @@
 <title>Potentia // OLAP Simulation</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --bg:#0a0a0f; --panel:#0d0d14; --deep:#050508; --line:#2a2a3a; --line2:#1a1a24;
+    --ink:#e0ddd8; --ink2:#b0aca5; --muted:#888; --faint:#666; --dim:#444;
+    /* Series colours, validated for this surface (dataviz validator, dark mode). */
+    --blue:#3d8fd6; --amber:#c07a10; --rose:#d0507a;
+  }
   body{
-    background:#0a0a0f;
-    color:#e0ddd8;
-    font-family:'Courier New',monospace;
-    font-size: 16px;
-    min-height:100vh;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    padding:32px;
+    background:var(--bg); color:var(--ink);
+    font-family:'Courier New',monospace; font-size:16px;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:32px;
   }
-  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:#666;margin-bottom:12px;text-align:center;white-space:nowrap;}
-  .sub{font-size:16px;color:#444;margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
-  
+  a{color:var(--ink2);}
+  h1{font-size:16px;letter-spacing:0.3em;text-transform:uppercase;color:var(--faint);margin-bottom:12px;text-align:center;white-space:nowrap;}
+  .sub{font-size:16px;color:var(--dim);margin-bottom:24px;letter-spacing:0.15em;text-align:center;max-width:2000px;line-height:1.6;}
+  .wide{width:100%;max-width:1100px;}
+
+  .disclosure{width:100%;max-width:700px;border:1px solid var(--line);background:var(--panel);padding:16px 20px;margin:8px 0 16px;color:var(--faint);font-size:14px;line-height:1.6;text-align:center;letter-spacing:0.05em;}
+  .disclosure .t{text-transform:uppercase;letter-spacing:0.2em;color:#555;margin-bottom:6px;}
+
   /* Counter block matching the audio archive aesthetic */
-  .counter-box {
-    width: 100%;
-    max-width: 800px;
-    border: 1px solid #2a2a3a;
-    background: #0d0d14;
-    padding: 20px;
-    margin-bottom: 24px;
-    text-align: center;
-  }
-  .counter-title {
-    font-size: 16px;
-    text-transform: uppercase;
-    letter-spacing: 0.2em;
-    color: #666;
-    margin-bottom: 8px;
-    white-space: nowrap;
-  }
-  .counter-value {
-    font-size: 16px;
-    color: #e0ddd8;
-    letter-spacing: 0.1em;
-    font-weight: bold;
-    white-space: nowrap;
-    margin-bottom: 12px;
-  }
-  .counter-group {
-    font-size: 14px;
-    line-height: 1.6;
-    color: #888;
-    text-align: left;
-    margin-top: 12px;
-    border-top: 1px solid #1a1a24;
-    padding-top: 12px;
-  }
-  .counter-group p {
-    margin-bottom: 8px;
-  }
-  .counter-group p:last-child {
-    margin-bottom: 0;
-  }
+  .counter-box{width:100%;max-width:800px;border:1px solid var(--line);background:var(--panel);padding:20px;margin-bottom:24px;text-align:center;}
+  .counter-title{font-size:16px;text-transform:uppercase;letter-spacing:0.2em;color:var(--faint);margin-bottom:8px;white-space:nowrap;}
+  .counter-value{font-size:16px;color:var(--ink);letter-spacing:0.1em;font-weight:bold;white-space:nowrap;margin-bottom:12px;}
+  .counter-group{font-size:14px;line-height:1.6;color:var(--muted);text-align:left;margin-top:12px;border-top:1px solid var(--line2);padding-top:12px;}
+  .counter-group p{margin-bottom:8px;}
+  .counter-group p:last-child{margin-bottom:0;}
+  .star-loss-divider{border:none;border-top:1px solid var(--line);margin:16px 0;}
+  .star-loss-value{font-size:16px;color:#fff;letter-spacing:0.1em;font-weight:bold;text-align:center;margin-top:8px;white-space:nowrap;}
 
-  /* Star loss divider and standalone counter styling */
-  .star-loss-divider {
-    border: none;
-    border-top: 1px solid #2a2a3a;
-    margin: 16px 0;
-  }
-  .star-loss-value {
-    font-size: 16px;
-    color: #ffffff;
-    letter-spacing: 0.1em;
-    font-weight: bold;
-    text-align: center;
-    margin-top: 8px;
-    white-space: nowrap;
-  }
+  .box{width:100%;max-width:1100px;border:1px solid var(--line);background:var(--panel);padding:24px;margin-bottom:24px;position:relative;}
+  .box-title{font-size:16px;text-transform:uppercase;letter-spacing:0.2em;color:var(--faint);margin-bottom:12px;text-align:center;}
+  .box-text{font-size:15px;color:var(--ink2);line-height:1.6;margin-bottom:12px;}
+  .box-text:last-child{margin-bottom:0;}
+  .section-label{font-size:16px;text-transform:uppercase;letter-spacing:0.2em;color:var(--dim);margin:8px 0 16px;text-align:center;}
 
-  .box {
-    width: 100%;
-    max-width: 800px;
-    border: 1px solid #2a2a3a;
-    background: #0d0d14;
-    padding: 24px;
-    margin-bottom: 24px;
-    position: relative;
-  }
-  
-  /* Simulation Viewport Container */
-  .sim-viewport {
-    width: 100%;
-    height: 400px;
-    background: #050508;
-    border: 1px solid #2a2a3a;
-    margin-bottom: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: #444;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    position: relative;
-    overflow: hidden;
-  }
+  /* The simulation */
+  .tabs{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+  .tab{flex:1;min-width:120px;background:transparent;border:1px solid var(--line);color:var(--muted);padding:10px 12px;font-family:inherit;font-size:14px;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;}
+  .tab:hover{border-color:#555;color:#ccc;background:#111;}
+  .tab[aria-selected="true"]{border-color:var(--muted);color:var(--ink);background:#14141d;}
+  .sim-viewport{width:100%;height:min(62vh,620px);min-height:320px;background:var(--deep);border:1px solid var(--line);position:relative;overflow:hidden;touch-action:none;}
+  .sim-viewport canvas{display:block;width:100%;height:100%;cursor:grab;}
+  .hud{position:absolute;left:12px;top:12px;font-size:13px;line-height:1.5;color:var(--ink2);pointer-events:none;max-width:min(560px,calc(100% - 150px));text-shadow:0 0 4px #000,0 0 2px #000;}
+  .hud b{color:var(--ink);font-weight:normal;letter-spacing:0.08em;text-transform:uppercase;}
+  .hint{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--faint);pointer-events:none;text-shadow:0 0 3px #000;}
+  .btn-action{display:block;width:100%;background:transparent;border:1px solid var(--line);color:var(--muted);padding:12px 16px;font-family:'Courier New',monospace;font-size:15px;letter-spacing:0.15em;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.15s;}
+  .btn-action:hover{border-color:#555;color:#ccc;background:#111;}
+  .btn-action.fs-toggle{position:absolute;top:12px;right:12px;width:auto;display:inline-block;padding:8px 14px;font-size:12px;letter-spacing:0.1em;background:rgba(13,13,20,0.85);z-index:100;}
+  .btn-action.warning{color:#a35d5d;border-color:#a35d5d;}
+  .btn-action.warning:hover{background:#2a1515;}
+  .timeline{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;margin-top:14px;}
+  .timeline .readout{grid-column:1 / -1;font-size:14px;color:var(--ink2);letter-spacing:0.06em;text-align:center;}
+  .btn-row{display:flex;gap:8px;}
+  .btn-row .btn-action{width:auto;padding:10px 14px;font-size:13px;}
+  #sim-container:fullscreen{background:var(--deep);border:none;padding:12px;max-width:100%;overflow:auto;}
+  #sim-container:fullscreen .sim-viewport{height:calc(100vh - 170px);}
 
-  .sim-overlay-text {
-    font-size: 14px;
-    color: #666;
-    margin-top: 8px;
-    text-align: center;
-  }
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;background:transparent;height:20px;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;height:16px;width:16px;background:var(--muted);cursor:pointer;margin-top:-6px;border-radius:0;}
+  input[type=range]::-webkit-slider-runnable-track{width:100%;height:4px;cursor:pointer;background:var(--line);}
+  input[type=range]::-moz-range-thumb{height:16px;width:16px;background:var(--muted);border:0;border-radius:0;}
+  input[type=range]::-moz-range-track{height:4px;background:var(--line);}
+  input[type=range]:focus-visible{outline:1px solid var(--muted);}
+  select,input[type=number]{background:var(--deep);color:var(--ink);border:1px solid var(--line);font-family:inherit;font-size:14px;padding:6px 8px;width:100%;}
 
-  .control-group {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 100%;
-    transition: all 0.3s ease;
-  }
+  /* Plan panels */
+  .panels{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;width:100%;max-width:1100px;margin-bottom:24px;}
+  .panel{border:1px solid var(--line);background:var(--panel);padding:18px;}
+  .panel h2{font-size:14px;font-weight:normal;text-transform:uppercase;letter-spacing:0.2em;color:var(--muted);margin-bottom:6px;}
+  .panel .why{font-size:13px;color:var(--faint);line-height:1.5;margin-bottom:12px;}
+  .field{margin-bottom:10px;}
+  .field label{display:flex;justify-content:space-between;gap:10px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  .field label span:last-child{color:var(--ink);text-transform:none;letter-spacing:0;text-align:right;}
+  .field.check label{justify-content:flex-start;align-items:center;cursor:pointer;}
+  .out{border-top:1px solid var(--line2);margin-top:12px;padding-top:10px;font-size:13px;line-height:1.55;color:var(--ink2);}
+  .out p{margin-bottom:6px;}
+  .out b{color:var(--ink);font-weight:normal;}
+  .cmp{color:var(--faint);}
+  .note{font-size:12px;color:var(--faint);line-height:1.5;margin-top:8px;}
+  canvas.chart{width:100%;height:170px;display:block;margin-top:10px;background:var(--deep);border:1px solid var(--line2);}
+  .btn-small{background:transparent;border:1px solid var(--line);color:var(--muted);padding:8px 10px;font-family:inherit;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;margin:4px 6px 4px 0;}
+  .btn-small:hover{border-color:#555;color:#ccc;background:#111;}
+  sup{font-size:0.7em;}
 
-  .slider-label {
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #888;
-    text-align: center;
-  }
+  /* Ledger and tables */
+  table{width:100%;border-collapse:collapse;font-size:13px;line-height:1.45;}
+  th,td{border-bottom:1px solid var(--line2);padding:8px 6px;text-align:left;vertical-align:top;color:var(--ink2);}
+  th{font-weight:normal;color:var(--faint);text-transform:uppercase;letter-spacing:0.1em;font-size:12px;}
+  .tbl-wrap{overflow-x:auto;}
+  .verdict{white-space:nowrap;}
+  .v-ok{color:#7fb4e6;} .v-big{color:#d9a24a;} .v-no{color:#e0809f;}
+  details{margin-top:10px;} summary{cursor:pointer;color:var(--muted);font-size:13px;letter-spacing:0.08em;text-transform:uppercase;}
 
-  /* Custom Input Slider */
-  input[type=range] {
-    -webkit-appearance: none;
-    width: 100%;
-    background: transparent;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    height: 16px;
-    width: 16px;
-    background: #888;
-    cursor: pointer;
-    margin-top: -6px;
-    border-radius: 0;
-  }
-  input[type=range]::-webkit-slider-runnable-track {
-    width: 100%;
-    height: 4px;
-    cursor: pointer;
-    background: #2a2a3a;
-  }
-  input[type=range]:focus {
-    outline: none;
-  }
-
-  /* Base Action Button Styles */
-  .btn-action {
-    display: block;
-    width: 100%;
-    background: transparent;
-    border: 1px solid #2a2a3a;
-    color: #888;
-    padding: 16px 20px;
-    font-family: 'Courier New',monospace;
-    font-size: 16px;
-    letter-spacing: 0.15em;
-    cursor: pointer;
-    text-transform: uppercase;
-    text-align: center;
-    transition: all 0.15s;
-  }
-  .btn-action:hover {
-    border-color: #555;
-    color: #ccc;
-    background: #111;
-  }
-
-  /* Specific Fullscreen Toggle Overlay Override */
-  .btn-action.fs-toggle {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    width: auto;
-    display: inline-block;
-    padding: 8px 14px;
-    font-size: 12px;
-    letter-spacing: 0.1em;
-    background: rgba(13, 13, 20, 0.85);
-    z-index: 100;
-  }
-  .btn-action.fs-toggle:hover {
-    background: rgba(25, 25, 35, 0.95);
-  }
-  
-  /* Warning state for reset confirmation */
-  .btn-action.warning {
-    color: #a35d5d;
-    border-color: #a35d5d;
-  }
-  .btn-action.warning:hover {
-    background: #2a1515;
-  }
-
-  /* HUD Morphing for Fullscreen State */
-  #sim-container:fullscreen {
-    background: #050508;
-    border: none;
-    padding: 0;
-    max-width: 100%;
-  }
-  #sim-container:fullscreen .sim-viewport {
-    height: 100vh;
-    margin: 0;
-    border: none;
-  }
-  #sim-container:fullscreen .control-group {
-    position: absolute;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(100% - 64px);
-    max-width: 800px;
-    background: rgba(13, 13, 20, 0.9);
-    padding: 24px;
-    border: 1px solid #2a2a3a;
-    z-index: 20;
-  }
-
-  .nav-group {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    width: 100%;
-    max-width: 800px;
-  }
-
-  .btn-link {
-    display: block;
-    text-decoration: none;
-    background: transparent;
-    border: 1px solid #2a2a3a;
-    color: #888;
-    padding: 14px 20px;
-    font-family: 'Courier New',monospace;
-    font-size: 16px;
-    letter-spacing: 0.15em;
-    cursor: pointer;
-    text-transform: uppercase;
-    text-align: center;
-    transition: all 0.15s;
-  }
-  .btn-link:hover {
-    border-color: #555;
-    color: #ccc;
-    background: #111;
-  }
-
-  .footer {
-    margin-top: 32px;
-    font-size: 16px;
-    color: #222;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    text-align: center;
-  }
+  .nav-group{display:flex;flex-direction:column;gap:12px;width:100%;max-width:800px;}
+  .btn-link{display:block;text-decoration:none;background:transparent;border:1px solid var(--line);color:var(--muted);padding:14px 20px;font-family:'Courier New',monospace;font-size:16px;letter-spacing:0.15em;cursor:pointer;text-transform:uppercase;text-align:center;transition:all 0.15s;}
+  .btn-link:hover{border-color:#555;color:#ccc;background:#111;}
+  .footer{margin-top:32px;font-size:16px;color:#222;letter-spacing:0.1em;text-transform:uppercase;text-align:center;}
 
   /* On a phone, long titles and figures wrap rather than push the page sideways. */
   @media (max-width: 720px) {
+    body{padding:16px;}
+    .box{padding:16px;}
+    .panels{grid-template-columns:1fr;}
+    .hud{font-size:11px;max-width:calc(100% - 24px);top:48px;}
+    .hint{display:none;}
     h1, .sub, .section-label, .counter-title, .counter-value, .counter-group, .btn-link, .footer, #star-loss-ticker { white-space: normal; overflow-wrap: anywhere; }
   }
 </style>
@@ -274,17 +118,14 @@
 <body>
 
 <h1>Potentia // OLAP Sandbox</h1>
-<div class="sub">
-  Planetary Departure & Trajectory Simulation (v0.1)
+<div class="sub">Orbital Launch Accelerator Platform · planning &amp; feasibility simulation (v0.2)</div>
+
+<div class="disclosure">
+  <div class="t">AI Disclosure</div>
+  Potentia is Edward's (Thor110's) work, grown from theory and ideas he has developed over the past few years. Google's Gemini has helped him theorise and conceptualise, and helped write parts of this website. Anthropic's Claude has written much of Sieve's code and documentation with him, and built this simulation from his OLAP documents. Transparency fosters trust.
 </div>
 
-
-<div style="width:100%;max-width:700px;border:1px solid #2a2a3a;background:#0d0d14;padding:16px 20px;margin:8px 0 16px;color:#666;font-size:14px;line-height:1.6;text-align:center;letter-spacing:0.05em;">
-  <div style="text-transform:uppercase;letter-spacing:0.2em;color:#555;margin-bottom:6px;">AI Disclosure</div>
-  Potentia is Edward's (Thor110's) work, grown from theory and ideas he has developed over the past few years. Google's Gemini has helped him theorise and conceptualise, and helped write parts of this website. Anthropic's Claude has written much of Sieve's code and documentation with him. Transparency fosters trust.
-</div>
-
-<!-- Live Calculation Counter Box -->
+<!-- Live Calculation Counter Box (its constants are quoted by the Build or Buy page) -->
 <div class="counter-box">
   <div class="counter-title">Cosmic Horizon & Reachability Metric</div>
   <div class="counter-value" id="limitation-counter">95.4% Unreachable</div>
@@ -293,24 +134,73 @@
     <p>Even a signal sent at the speed of light, today, could never get there: space is expanding faster and faster, and the gap grows faster than light can cross it.</p>
     <p>We can still see those galaxies, by light they sent billions of years ago, but nothing we send will ever arrive.</p>
     <p>And the reachable part keeps shrinking: every second, tens of thousands more stars slip past the edge.</p>
-    
+    <p id="horizon-check"></p>
     <hr class="star-loss-divider">
-    
     <div class="star-loss-value" id="star-loss-ticker">(~0 stars crossed permanently since epoch start)</div>
   </div>
 </div>
 
-<div class="box" id="sim-container">
-  <div class="sim-viewport" id="viewport">
-    <button id="fs-btn" class="btn-action fs-toggle">[ ] Fullscreen</button>
-    <div id="viewport-status">[ PLANETARY DISPLAY ACTIVE ]</div>
-    <div class="sim-overlay-text" id="viewport-sub">Awaiting Departure Vector...</div>
+<div class="box">
+  <div class="box-title">The Plan, In Brief</div>
+  <div class="box-text">
+    The OLAP Initiative (Edward James Gordon, 2025) proposes a global grid of nine great-circle rings meeting at 26 stations (6 quad, 12 dual, 8 tri), each with underground habitats, planetary flywheels and six Orbital Launch Accelerators. Its long goal is to take the Earth itself out of the solar system in one to two billion years, before the brightening Sun makes it uninhabitable; to pass the Oort cloud; to slingshot round the Galactic Centre towards another galaxy; and to leave colonies along the way.
   </div>
+  <div class="box-text">
+    This page plays that route out with the measured numbers: how many flywheels and how much mass, how much energy and for how long, which steps known physics allows, and where the plan has to lean on something else. Every figure is worked out below from sources listed at the bottom, and every setting can be changed. The link to a plan keeps its settings.
+  </div>
+</div>
 
-  <div class="control-group">
-    <div class="slider-label" id="slider-readout">Timeline / Speed Scrub: 0.0x</div>
-    <input type="range" id="time-slider" min="-100" max="100" value="0">
-    <button id="main-btn" class="btn-action">Engage Simulation</button>
+<div class="box" id="sim-container">
+  <div class="tabs" role="tablist" aria-label="Scale">
+    <button class="tab" role="tab" data-view="planet" aria-selected="true">Earth &amp; Grid</button>
+    <button class="tab" role="tab" data-view="sun" aria-selected="false">Solar System</button>
+    <button class="tab" role="tab" data-view="galaxy" aria-selected="false">Milky Way</button>
+    <button class="tab" role="tab" data-view="universe" aria-selected="false">Local Universe (2MRS)</button>
+  </div>
+  <div class="sim-viewport" id="viewport">
+    <canvas id="view" aria-label="Simulation view"></canvas>
+    <div class="hud" id="hud"></div>
+    <div class="hint" id="hint"></div>
+    <button id="fs-btn" class="btn-action fs-toggle">[ ] Fullscreen</button>
+  </div>
+  <div class="timeline">
+    <input type="range" id="time-slider" min="0" max="1050" value="0" aria-label="Time from now (logarithmic)">
+    <div class="btn-row">
+      <button id="play-btn" class="btn-action">Engage</button>
+      <button id="reset-btn" class="btn-action">Reset</button>
+    </div>
+    <div class="readout" id="time-readout">Today</div>
+    <label class="readout" style="cursor:pointer"><input type="checkbox" id="follow" checked> follow the Earth between scales while playing</label>
+  </div>
+  <canvas class="chart" id="chart-sun" aria-label="Sunlight on the Earth over time"></canvas>
+  <div class="note" id="chart-sun-note"></div>
+</div>
+
+<div class="section-label">The Plan's Settings</div>
+<div class="panels" id="panels"></div>
+
+<div class="box">
+  <div class="box-title">Feasibility Ledger</div>
+  <div class="box-text">Each step of the route as it stands with the settings above: what it needs, what that compares with, and whether known physics allows it.</div>
+  <div class="tbl-wrap"><table id="ledger"></table></div>
+  <div class="note">✓ allowed by known physics at a scale people already work at or could plausibly reach · ◐ allowed by known physics, at a scale far beyond anything built · ✗ not possible this way</div>
+</div>
+
+<div class="box">
+  <div class="box-title">Colonies Along The Way</div>
+  <div class="box-text" id="colony-intro"></div>
+  <div class="tbl-wrap"><table id="colonies"></table></div>
+</div>
+
+<div class="box">
+  <div class="box-title">Data &amp; Sources</div>
+  <div class="box-text">Catalogues read from VizieR are fetched live and checked against the SHA-256 recorded when they were last fetched; the others are kept in this repository and checked the same way. To refresh them all, run <code>python3 Pages/space/tools/update_data.py</code>; to check the physics, <code>node Pages/space/tools/check.mjs</code>. How it all fits together is in <a href="space/README.md">space/README.md</a>.</div>
+  <div class="tbl-wrap"><table id="datasets"></table></div>
+  <details><summary>Every constant, with its source</summary><div class="tbl-wrap"><table id="constants"></table></div></details>
+  <div style="margin-top:14px">
+    <button class="btn-small" id="copy-link">Copy a link to this plan</button>
+    <button class="btn-small" id="defaults">Back to the published plan</button>
+    <span class="note" id="copy-status"></span>
   </div>
 </div>
 
@@ -322,104 +212,13 @@
   Deterministic Sieve · Civilisational Backup v1.0
 </div>
 
-<script>
-  const mainBtn = document.getElementById('main-btn');
-  const slider = document.getElementById('time-slider');
-  const readout = document.getElementById('slider-readout');
-  const viewportStatus = document.getElementById('viewport-status');
-  const viewportSub = document.getElementById('viewport-sub');
-
-  let simState = 'READY';
-
-  // Planck 2018 Constants & Live Calculations
-  const currentYear = new Date().getFullYear();
-  const EPOCH = Date.UTC(currentYear, 0, 1);
-  const REACH_GLY = 16.58, SEEN_GLY = 46.18;
-  const SECONDS_PER_YEAR = 31557600;
-  
-  // Estimated stellar loss rate scaling (~24,500 stars/sec)
-  const STARS_LOST_PER_SECOND = 24500; 
-
-  function updateCosmicMetrics() {
-    const now = Date.now();
-    const yearsElapsed = (now - EPOCH) / (SECONDS_PER_YEAR * 1000);
-    
-    // Dynamic horizon shifting for baseline accuracy
-    const currentReach = REACH_GLY - (yearsElapsed * 1e-9);
-    const currentSeen = SEEN_GLY + (yearsElapsed * 1e-9);
-    const unreachablePct = 100 * (1 - (currentReach / currentSeen) ** 3);
-
-    // Cumulative stars lost since epoch start
-    const totalSecondsElapsed = (now - EPOCH) / 1000;
-    const starsLostTotal = Math.floor(totalSecondsElapsed * STARS_LOST_PER_SECOND).toLocaleString();
-
-    // And the inverse beside it: what can still be reached.
-    document.getElementById('limitation-counter').innerHTML = `${unreachablePct.toFixed(1)}% Unreachable<br>${(100 - unreachablePct).toFixed(1)}% Still Reachable`;
-    document.getElementById('star-loss-ticker').innerText = `~${starsLostTotal} stars crossed permanently since the start of ${currentYear}.`;
-  }
-
-  // Single clean interval
-  setInterval(updateCosmicMetrics, 1000);
-  updateCosmicMetrics();
-
-  // Handle Timeline Slider Updates
-  slider.addEventListener('input', (e) => {
-    const val = e.target.value;
-    readout.innerText = `Timeline / Speed Scrub: ${val > 0 ? '+' : ''}${val}.0x`;
-    
-    if (simState === 'RUNNING') {
-      viewportSub.innerText = `Calculating vector shifts at ${val}x speed...`;
-    }
-  });
-
-  // Handle Multi-State Core Button
-  mainBtn.addEventListener('click', () => {
-    if (simState === 'READY') {
-      simState = 'RUNNING';
-      mainBtn.innerText = 'Reset Simulation';
-      viewportStatus.innerText = '[ GALACTIC DISPLAY ACTIVE ]';
-      viewportStatus.style.color = '#888';
-      viewportSub.innerText = `Executing departure sequence...`;
-      
-    } else if (simState === 'RUNNING') {
-      simState = 'CONFIRM_RESET';
-      mainBtn.innerText = 'Are you sure? (Click to Confirm)';
-      mainBtn.classList.add('warning');
-      
-    } else if (simState === 'CONFIRM_RESET') {
-      simState = 'READY';
-      mainBtn.innerText = 'Engage Simulation';
-      mainBtn.classList.remove('warning');
-      slider.value = 0;
-      readout.innerText = `Timeline / Speed Scrub: 0.0x`;
-      viewportStatus.innerText = '[ PLANETARY DISPLAY ACTIVE ]';
-      viewportStatus.style.color = '#444';
-      viewportSub.innerText = `Awaiting Departure Vector...`;
-    }
-  });
-
-  // Fullscreen Handler
-  const fsBtn = document.getElementById('fs-btn');
-  const simContainer = document.getElementById('sim-container');
-
-  fsBtn.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-      simContainer.requestFullscreen().catch(err => {
-        console.error(`Fullscreen rendering failed: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-  });
-
-  document.addEventListener('fullscreenchange', () => {
-    if (document.fullscreenElement) {
-      fsBtn.innerText = '[X] Exit Fullscreen';
-    } else {
-      fsBtn.innerText = '[ ] Fullscreen';
-    }
-  });
-</script>
-
+<script src="space/constants.js"></script>
+<script src="space/physics.js"></script>
+<script src="space/data/manifest.js"></script>
+<script src="space/data/land.js"></script>
+<script src="space/data/exoplanets.js"></script>
+<script src="space/datasets.js"></script>
+<script src="space/views.js"></script>
+<script src="space/app.js"></script>
 </body>
 </html>
