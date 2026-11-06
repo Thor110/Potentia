@@ -176,6 +176,16 @@ that keeps proper names and drops short all-caps tokens.
 hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most
 at risk: audio's dark green and video's dark red (and so tracks and movies, which share them),
 which differ mostly in hue, the difference red–green colour blindness loses.
+> **Strong note (Edward, 6 November 2026, on seeing the result: "Dark Green and Red? Hmm that is
+> interesting"):** the colour-blindness check found that **tracks (dark green) and movies (dark
+> red) become all but the same colour with deuteranopia**, the commonest colour blindness.
+> Every future change to a line's colours, and
+> every new line, is run through `python tools/colour_check.py` first, and no pair is let below 10
+> (CIEDE2000) under any of the three simulations without it being said here. Edward's view for
+> now: "in reality it doesn't matter all that much, there is only so much freedom with colour
+> blindness", and the lines are always named on screen as well; so the colours stay, and this
+> note stays with them.
+
 *Checked (6 November 2026, `tools/colour_check.py`):* every pair of lines' walls and edges through
 Machado's (2009) simulations of protanopia, deuteranopia and tritanopia, by CIEDE2000. One pair
 told apart normally is lost: **tracks and movies**, 58.9 normally and 2.4 with deuteranopia (their
@@ -496,6 +506,9 @@ why compact image mode keeps sparse pictures rather than structured ones.
 line and pass it through `key-v1` so the result is in a valid key. Continuous in-key ambient from
 your actual coordinate, out of three things that already exist. The cheapest real win in the list.
 
+- *Edward's answer (6 November 2026): "I think the music is probably fine as it is for now. It
+  already has scales per dimension." So nothing below is built; it stays here, described, in case
+  it is wanted later.*
 - *Described in full (6 November 2026, for Edward to decide on before it is built).* What exists
   already (client/music.hpp): WORLD's music is drawn from the survivors of WORLD's filter stack (the
   key filter among them), at random, a rank drawn below their count and unranked; each line moves
