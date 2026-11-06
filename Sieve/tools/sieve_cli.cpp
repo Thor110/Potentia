@@ -103,6 +103,14 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shellapi.h> // CommandLineToArgvW
 #endif
 
 
@@ -2512,6 +2520,7 @@ int cmd_locate(const Args& a)
             cmp.original = bytes.size();
             cmp.deflate = deflate_size(bytes);
             cmp.lzma2 = lzma2_size(bytes);
+            if (a.has("more-formats")) cmp.more = more_format_sizes(bytes);
             cmp.address_bytes = address_bytes(addr);
             cmp.address_hex = addr.is_zero() ? 0 : hex.size();
         }
@@ -2540,9 +2549,11 @@ int cmd_locate(const Args& a)
                 const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
                 if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
                 std::string carried;
-                write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried));
+                write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried),
+                                        a.has("install-folder") ? a.get("install-folder") : std::string());
                 std::cout << "program   " << o << ": sieve-install with the instructions attached; run it to install\n";
                 std::cout << "          dictionaries: " << carried << "\n";
+                if (a.has("install-folder")) std::cout << "          offers to install into: " << a.get("install-folder") << "\n";
             }
             if (a.has("compare"))
             {
@@ -2570,6 +2581,8 @@ int cmd_locate(const Args& a)
         if (auto pair = names_one_ignoring_case(names))
             std::cerr << "warning: " << pair->first << " and " << pair->second
                       << " are one name where case is ignored: Windows and macOS will refuse to install them\n";
+        if (auto bad = name_windows_cannot_hold(names))
+            std::cerr << "warning: " << bad->first << " is a name Windows cannot hold (" << bad->second << "): Windows will refuse to install it\n";
     }
     // Which manifest: v2 lists every file's address (--with-addresses); an installer's has every
     // file's bytes after its text, packed (v4; --v3: as they are), and the installer is its
@@ -2664,10 +2677,12 @@ int cmd_locate(const Args& a)
         const auto stub = installer_program_beside(own_executable(g_argv0).parent_path());
         if (!stub) throw std::runtime_error("--program needs sieve-install beside sieve (build it with the client)");
         std::string carried;
-        write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried));
+        write_installer_program(*stub, iraw, fs::path(std::u8string(o.begin(), o.end())), carried_dictionaries_block(&carried),
+                                a.has("install-folder") ? a.get("install-folder") : std::string());
         *info << "program   " << o << ": sieve-install with the installer attached (" << fs::file_size(fs::path(std::u8string(o.begin(), o.end())))
               << " bytes); run it to install\n";
         *info << "          dictionaries: " << carried << "\n";
+        if (a.has("install-folder")) *info << "          offers to install into: " << a.get("install-folder") << "\n";
         std::error_code ec;
         if (fs::exists(stub->parent_path() / "SDL3.dll", ec))
             *info << "          note: this sieve-install uses SDL3.dll, so the program needs SDL3.dll beside it too;\n"
@@ -2713,6 +2728,7 @@ int cmd_locate(const Args& a)
     if (compare)
     {
         cmp.lzma2 = lzma2_size(all);
+        if (a.has("more-formats")) cmp.more = more_format_sizes(all);
         cmp.manifest = text.size();
         if (installer)
         {
@@ -3169,6 +3185,34 @@ bool is_command(const std::string& name)
 
 int main(int argc, char** argv)
 {
+#ifdef _WIN32
+    // The arguments as UTF-8 where Windows does not give them so (0.13.78): the manifest asks for
+    // UTF-8 as the process code page, which Windows 10 1903 and later honour; before it (and on
+    // Windows 7) a name with an accent arrived in the system's code page, or as "?". So the
+    // command line is read again as Windows keeps it, in UTF-16, and each argument made UTF-8,
+    // as SDL does for the windowed programs.
+    static std::vector<std::string> utf8_args;
+    static std::vector<char*> utf8_argv;
+    if (GetACP() != CP_UTF8)
+    {
+        int n = 0;
+        if (LPWSTR* w = CommandLineToArgvW(GetCommandLineW(), &n))
+        {
+            for (int i = 0; i < n; ++i)
+            {
+                const int len = WideCharToMultiByte(CP_UTF8, 0, w[i], -1, nullptr, 0, nullptr, nullptr);
+                std::string s(size_t(std::max(len, 1)) - 1, '\0');
+                if (len > 1) WideCharToMultiByte(CP_UTF8, 0, w[i], -1, s.data(), len, nullptr, nullptr);
+                utf8_args.push_back(std::move(s));
+            }
+            LocalFree(w);
+            for (std::string& s : utf8_args) utf8_argv.push_back(s.data());
+            utf8_argv.push_back(nullptr);
+            argc = n;
+            argv = utf8_argv.data();
+        }
+    }
+#endif
     g_argv0 = argv[0];
     try
     {

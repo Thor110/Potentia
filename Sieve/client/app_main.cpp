@@ -126,6 +126,8 @@ const char* kUsage =
     "                      way chosen for each file by its kind ([locator] optimise_search)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
+    "  --more-formats      the File Locator's More formats ticked, for this run: the comparison with\n"
+    "                      gzip, bzip2, zstd, brotli and lz4 beside zip and 7z (slower)\n"
     "  --prioritise-decoding  the File Locator's Prioritise Decoding Speed ticked, for this run:\n"
     "                      no file mixed, so its instructions install quickly ([locator] prioritise_decoding)\n"
     "  --v34-draft         the next version's draft in the File Locator, for this run (testing only: its\n"
@@ -702,6 +704,7 @@ int run(const Args& a)
     sieve::cli::use_item_maker();
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
+    const AppSettings loaded = app; // (as the file has them: what the options below are for this run only)
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
     if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
     sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
@@ -739,6 +742,35 @@ int run(const Args& a)
     // The view distance (Settings > Graphics): the rooms drawn and kept, and those with pictures.
     if (a.has("view-rooms")) app.view_rooms = std::clamp(int(a.get_positive("view-rooms", 7)), 2, 64);
     if (a.has("picture-rooms")) app.picture_rooms = std::clamp(int(a.get_u32("picture-rooms", 1)), 0, 8);
+    {
+        // The options above are for this run: saving a setting writes each back as the file had it,
+        // unless it was changed since (in the setup menu, or a box in the File Locator).
+        // --locate-log, below, is one too.
+        AppSettings run = app;
+        run.locator_log = true;
+        const bool every = a.has("search-every-wave"), optimise = a.has("optimise-search") || every, decoding = a.has("prioritise-decoding"),
+                   draft = a.has(sieve::cli::draft_flag()), widen = a.has("widen-weights"), filter = a.has("filter-memory"),
+                   counting = a.has("counting-memory"), merge = a.has("merge-cache"), unit = a.has("unit-time"), item = a.has("item-memory"),
+                   rooms = a.has("view-rooms"), pictures = a.has("picture-rooms"), log = a.has("locate-log");
+        app.run_only = std::make_shared<const std::function<void(AppSettings&)>>([=](AppSettings& s) {
+            auto back = [](bool given, auto& now, const auto& for_run, const auto& on_disk) {
+                if (given && now == for_run) now = on_disk;
+            };
+            back(every, s.locator_every_wave, run.locator_every_wave, loaded.locator_every_wave);
+            back(optimise, s.locator_optimise, run.locator_optimise, loaded.locator_optimise);
+            back(decoding, s.locator_decoding, run.locator_decoding, loaded.locator_decoding);
+            back(draft, s.locator_draft, run.locator_draft, loaded.locator_draft);
+            back(widen, s.widen_weights, run.widen_weights, loaded.widen_weights);
+            back(filter, s.filter_memory_mb, run.filter_memory_mb, loaded.filter_memory_mb);
+            back(counting, s.counting_memory_pct, run.counting_memory_pct, loaded.counting_memory_pct);
+            back(merge, s.merge_cache_pct, run.merge_cache_pct, loaded.merge_cache_pct);
+            back(unit, s.unit_time_ms, run.unit_time_ms, loaded.unit_time_ms);
+            back(item, s.item_memory_pct, run.item_memory_pct, loaded.item_memory_pct);
+            back(rooms, s.view_rooms, run.view_rooms, loaded.view_rooms);
+            back(pictures, s.picture_rooms, run.picture_rooms, loaded.picture_rooms);
+            back(log, s.locator_log, run.locator_log, loaded.locator_log);
+        });
+    }
     set_view(app.view_rooms, app.picture_rooms);
     if (metrics)
     {
@@ -805,6 +837,11 @@ int run(const Args& a)
     });
     FileLocator::remember_decoding(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
         app.locator_decoding = on;
+        app.save(app_path);
+    });
+    // More formats in the comparison ([locator] more_formats; --more-formats for this run).
+    FileLocator::remember_more(app.locator_more || a.has("more-formats"), shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
+        app.locator_more = on;
         app.save(app_path);
     });
     // Keep a log ([locator] keep_log; --locate-log for this run): each run's reports, in the logs

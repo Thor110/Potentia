@@ -114,6 +114,9 @@ public:
     // by mixing (0.3 to 1 MB/s to decode, 15 to 60 times slower than the other ways), so the
     // instructions install quickly; larger. Its state is the packer's own (sieve::prioritise_decoding).
     static void remember_decoding(std::function<void(bool)> changed);
+    // More formats (0.13.78): the comparison with gzip, bzip2, zstd, brotli and lz4 beside zip and
+    // 7z, as the settings have it; `changed` saves the box when it is changed here.
+    static void remember_more(bool on, std::function<void(bool)> changed);
     // Keep a log: whether it is ticked, the folder the logs go in, and who keeps the box's setting.
     static void remember_log(bool on, std::filesystem::path folder, std::function<void(bool)> changed);
     // The share of the search's time a run has really used, packing and weighing, learned on this
@@ -253,6 +256,19 @@ private:
     // .sieve's bytes attached to sieve-install as they are, nothing read or packed again.
     void program_from(const std::string& sieve_file, const std::string& out);
     int save_what_ = 0;
+    // The folder an installer program offers to install into (0.13.78, Edward's idea): asked for
+    // once the program's name is chosen, typed as Documents/Games/Name (cli/locate.hpp,
+    // offered_folder_problem); empty: none, so it offers Documents and the folder's name.
+    struct FolderAsk
+    {
+        bool from_sieve = false; // made from a .sieve already made (program_from), else from what was read
+        std::string out, text, problem;
+    };
+    std::optional<FolderAsk> asking_folder_;
+    std::string offer_folder_; // the answer, for the program being written
+    void ask_folder(bool from_sieve, const std::string& out, const std::string& name);
+    void folder_event(const SDL_Event& e);
+    void draw_folder_prompt(float W, float H, SDL_Color ink, SDL_Color grey);
     bool go_armed_ = false; // Go to it pressed once for a file past the BINARY length
     float mouse_x_ = -1, mouse_y_ = -1;
     std::vector<std::pair<SDL_FRect, std::string>> buttons_;

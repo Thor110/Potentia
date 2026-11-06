@@ -5904,6 +5904,7 @@ bool unpack_archive(const AnyArchive& a, const std::filesystem::path& dest, bool
         for (const auto& e : a.entries)
             if (!e.dir) names.push_back(e.path);
         refuse_names_one_ignoring_case(names, dest); // (they would be written one over the other)
+        refuse_names_windows_cannot_hold(names);
     }
     if (!force)
         for (const auto& e : a.entries)

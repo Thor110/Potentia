@@ -220,6 +220,7 @@ struct Installer
     };
     std::shared_ptr<Reading> reading; // (shared with the reader, which may outlive a window closed meanwhile)
     bool keep_dest = false;           // the destination given (--to): reading leaves it as it is
+    std::optional<fs::path> offered;  // the folder an installer program offers (0.13.78), where it names one
 
     static Opened read_installer(const fs::path& file)
     {
@@ -300,9 +301,11 @@ struct Installer
         screen = (manifest || any) ? Screen::Ready : Screen::NoInstaller;
         if (screen == Screen::Ready && !keep_dest)
         {
-            // Where it goes unless you say otherwise: into your documents (see where_in).
+            // Where it goes unless you say otherwise: the folder an installer program offers, where its
+            // maker named one; else into your documents (see where_in).
             const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-            set_dest(where_in(docs ? from_u8(docs) : fs::current_path()));
+            if (offered) set_dest(u8(*offered));
+            else set_dest(where_in(docs ? from_u8(docs) : fs::current_path()));
         }
         return true;
     }
@@ -702,16 +705,39 @@ int main(int argc, char** argv)
         in.error = e.what();
     }
     CarriedDictionaries carried;
+    // The folder an installer program offers to install into (0.13.78): its place made the
+    // person's own here (their Documents, Desktop, Downloads or home), the folders under it after.
+    auto offer_of = [](const fs::path& program) -> std::optional<fs::path> {
+        try
+        {
+            const auto o = offered_folder(program);
+            if (!o) return std::nullopt;
+            const SDL_Folder kind = o->first == "desktop" ? SDL_FOLDER_DESKTOP : o->first == "downloads" ? SDL_FOLDER_DOWNLOADS
+                                    : o->first == "home"  ? SDL_FOLDER_HOME : SDL_FOLDER_DOCUMENTS;
+            const char* place = SDL_GetUserFolder(kind);
+            if (!place) return std::nullopt;
+            return from_u8(place) / from_u8(o->second);
+        }
+        catch (const std::exception&)
+        {
+            return std::nullopt; // (a damaged program: offered nothing, and reading it says why)
+        }
+    };
     if (!file_arg.empty())
     {
         const fs::path f = from_u8(file_arg);
         std::error_code ec;
-        if (fs::is_regular_file(f, ec) && has_attached(f)) carried.use(f); // (another installer program)
+        if (fs::is_regular_file(f, ec) && has_attached(f))
+        {
+            carried.use(f); // (another installer program)
+            in.offered = offer_of(f);
+        }
         in.open(f);
     }
     else if (mine)
     {
         carried.use(self);
+        in.offered = offer_of(self);
         in.open(self);
     }
     else if (!in.error.empty()) {}
@@ -778,7 +804,13 @@ int main(int argc, char** argv)
         while (SDL_PollEvent(&e))
         {
             if (e.type == SDL_EVENT_QUIT && in.screen != Screen::Installing) quit = true;
-            if (e.type == SDL_EVENT_DROP_FILE && in.screen != Screen::Installing && e.drop.data) in.open(from_u8(e.drop.data));
+            if (e.type == SDL_EVENT_DROP_FILE && in.screen != Screen::Installing && e.drop.data)
+            {
+                const fs::path dropped = from_u8(e.drop.data);
+                std::error_code ec;
+                in.offered = fs::is_regular_file(dropped, ec) && has_attached(dropped) ? offer_of(dropped) : std::nullopt; // (its own, not this program's)
+                in.open(dropped);
+            }
             // The address bar's editing: the selection taken out, and what is typed or pasted put in its
             // place at the cursor (line ends and tabs left out: a path has none).
             const auto sel_lo = [&] { return std::min(in.cur, in.anchor); };

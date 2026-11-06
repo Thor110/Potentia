@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 
@@ -59,6 +60,44 @@ bool folders_ignore_case(const std::filesystem::path& dest)
     return true;
 #else
     return false;
+#endif
+}
+
+std::optional<std::pair<std::string, std::string>> name_windows_cannot_hold(const std::vector<std::string>& files)
+{
+    auto why_not = [](const std::string& part) -> std::string {
+        for (const char c : part)
+            if (static_cast<unsigned char>(c) < 32) return "a control character";
+            else if (std::string_view("<>:\"\\|?*").find(c) != std::string_view::npos) return std::string("the character ") + c;
+        if (!part.empty() && (part.back() == '.' || part.back() == ' ')) return part.back() == '.' ? "a dot at its end" : "a space at its end";
+        std::string stem = part.substr(0, part.find('.'));
+        while (!stem.empty() && stem.back() == ' ') stem.pop_back();
+        for (char& c : stem)
+            if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
+        if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL") return "a device's name (" + stem + ")";
+        if (stem.size() == 4 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && stem[3] >= '0' && stem[3] <= '9')
+            return "a device's name (" + stem + ")";
+        return {};
+    };
+    for (const std::string& p : files)
+        for (size_t at = 0; at <= p.size();)
+        {
+            size_t s = p.find('/', at);
+            if (s == std::string::npos) s = p.size();
+            if (const std::string why = why_not(p.substr(at, s - at)); !why.empty()) return std::make_pair(p, why);
+            at = s + 1;
+        }
+    return std::nullopt;
+}
+
+void refuse_names_windows_cannot_hold(const std::vector<std::string>& files)
+{
+#ifdef _WIN32
+    if (auto bad = name_windows_cannot_hold(files))
+        throw std::runtime_error(bad->first + " is a name Windows cannot hold (" + bad->second +
+                                 "): written here it would be another file, so nothing is written");
+#else
+    (void)files;
 #endif
 }
 

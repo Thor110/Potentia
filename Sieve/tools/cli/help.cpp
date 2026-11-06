@@ -954,7 +954,7 @@ const std::vector<Page>& pages()
         {"locate", "A file's place on the binary line, or a folder's manifest.",
          "sieve locate FILE [--out ADDRESS.hex] [--compare] [--weigh [--tailored [--out-filters PATH]]]\n"
          "  sieve locate FOLDER [--manifest OUT] [--addresses DIR] [--with-addresses] [--installer OUT.sieve [--hex] [--items [--item-hashes]]]\n"
-         "  [--program OUT.exe] [--compare]\n"
+         "  [--program OUT.exe [--install-folder PLACE/FOLDER]] [--compare [--more-formats]]\n"
          "  [--weigh [--tailored [--out-filters PATH]]] [--filters PATH] [line options]",
          "A file is one unit of the binary line (every file up to N bytes, binary-v1): its\n"
          "positional address is its own hex dump plus 0101...01, one 01 for each of its bytes.\n"
@@ -1023,7 +1023,14 @@ const std::vector<Page>& pages()
                                     "it."},
           {"--program OUT.exe", "A folder: an installer program, one file to hand to someone: a copy of\n"
                                 "sieve-install (it must be beside sieve) with the installer attached to\n"
-                                "its end. Run, it installs the folder."},
+                                "its end. Run, it installs the folder. It carries the dictionaries folder too."},
+          {"--install-folder PLACE/FOLDER", "With --program: the folder the program offers to install into, in place of\n"
+                                            "Documents and the folder's name: PLACE is Documents, Desktop, Downloads or\n"
+                                            "Home (the person's own), then the folders under it (Documents/Games/WoW).\n"
+                                            "No .. and no name Windows cannot hold. It is only offered: it can be changed."},
+          {"--more-formats", "With --compare: more formats beside zip and 7z, each the whole as one stream at its\n"
+                             "strongest usual setting (gzip -9, bzip2 -9, zstd -19 --long=27, brotli -q 11 -w 24,\n"
+                             "lz4 -12). Slower: brotli at 11 above all."},
           {"--hex", "Write the installer in hex rather than raw bytes."},
           {"--v3", "Make the older installer: every file's bytes as they are, not packed (sieve-manifest-v3)."},
           {"--v4", "Make the plain installer: every file packed by LZMA2, no items and no rope (sieve-manifest-v4)."},

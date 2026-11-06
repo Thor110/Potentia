@@ -31,4 +31,17 @@ bool folders_ignore_case(const std::filesystem::path& dest);
 // `dest` ignore case. (The pair is looked for first: `dest` is looked at only for such a pair.)
 void refuse_names_one_ignoring_case(const std::vector<std::string>& files, const std::filesystem::path& dest);
 
+// Names Windows cannot hold (0.13.78, IDEAS §19.120): a part of a path that is one of the devices'
+// names (CON, PRN, AUX, NUL, COM0 to COM9, LPT0 to LPT9, in any case, with or without an
+// extension: aux.txt is AUX), that ends in a dot or a space (Windows takes them off, so `a.` is
+// `a`), or that holds a character Windows keeps out of names (a control character, or one of
+// < > : " / \ | ? *; a colon writes a stream of the file before it, unseen). Writing such a name
+// on Windows writes another file, or a device, while the install says it succeeded. The first of
+// `files` (paths with '/' between their parts) with such a part, and why; nullopt where none has.
+std::optional<std::pair<std::string, std::string>> name_windows_cannot_hold(const std::vector<std::string>& files);
+
+// Throws, naming the file and why, where `files` has a name Windows cannot hold, on Windows; on
+// other systems such names are names, and nothing is refused (the packer warns of them instead).
+void refuse_names_windows_cannot_hold(const std::vector<std::string>& files);
+
 } // namespace sieve::cli

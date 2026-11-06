@@ -182,6 +182,30 @@ cp alone/words-setup alone/run/
 (cd alone/run && TMPDIR="$PWD/tmp" && mkdir tmp && export TMPDIR && ./words-setup --to out --yes)
 diff -r alone/src alone/run/out
 test -z "$(ls alone/run/tmp)"
+# The folder an installer program offers (0.13.78): made with --install-folder, run with no --to,
+# it installs there; folders not allowed are refused when it is made. Run on Linux only, where Home
+# is $HOME and so this run's own folder: Windows and macOS ask the system for the person's home,
+# and it would be written there.
+rm -rf offer
+mkdir -p offer/home
+(cd alone && ../build/sieve locate src --program ../offer/offer-setup --install-folder "Home/Games/My Thing" --v4 > ../offer/made.txt 2>&1)
+grep -q "^          offers to install into: Home/Games/My Thing" offer/made.txt
+if [ "$(uname -s)" = Linux ]; then
+    (cd offer && HOME="$PWD/home" ./offer-setup --yes)
+    diff -r alone/src "offer/home/Games/My Thing"
+fi
+for bad in "C:/Windows" "Documents" "Documents/../x" "Documents/CON/x" "Somewhere/x"; do
+    if build/sieve locate alone/src --program offer/bad-setup --install-folder "$bad" --v4 > offer/bad.txt 2>&1; then exit 1; fi
+    grep -q "the folder to offer, " offer/bad.txt
+done
+[ ! -e offer/bad-setup ]
+# More formats in the comparison (0.13.78): --more-formats adds gzip, bzip2, zstd, brotli and lz4
+# beside zip and 7z; bzip2's figure is bzip2 -9's own file, byte for byte (its stream is the file).
+build/sieve locate docs/MANUAL.md --compare --more-formats > more.txt
+for f in "gzip -9 (as .tar.gz)" "bzip2 -9 (as .tar.bz2)" "zstd -19 --long=27" "brotli -q 11 -w 24" "lz4 -12"; do grep -qF "  $f " more.txt; done
+if command -v bzip2 > /dev/null; then grep -qE "^  bzip2 -9 \(as .tar.bz2\) +$(bzip2 -9 -c docs/MANUAL.md | wc -c | tr -d ' ') bytes" more.txt; fi
+build/sieve locate docs/MANUAL.md --compare > fewer.txt
+if grep -q "bzip2" fewer.txt; then exit 1; fi
 rm -rf again
 mkdir again
 cp build/sieve again/

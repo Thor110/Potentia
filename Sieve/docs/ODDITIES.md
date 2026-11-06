@@ -21,7 +21,11 @@ a result surprises; close it with what explained it.
   hallway when he trained it again. Here (Linux): exactly, with 4, 12 and 1 threads, in the
   harness itself, and 40 times of 40 on a shorter run with 5 to 29 threads; valgrind finds no
   memory read before it is written. Nothing changed in training's arithmetic since the result
-  was recorded, and the harness takes no key but Esc while a model trains. So it is a fault that
+  was recorded, and the harness takes no key but Esc while a model trains. Edward remembers
+  clicking the melodies model while it trained, to see what would happen; a click on a run's row
+  is refused while one trains (since 22 October), and when he did it again on purpose nothing went
+  wrong. The other two shipped picture models were trained again here too, in case the click had
+  started one of them: melodies-2x64 and type-2x32 both reproduce exactly. So it is a fault that
   shows rarely, on that machine (a race not yet found, or the machine itself, busy recording), and
   not a step that differs.
 - *Next:* `sieve diffuse` and the harness now write the new result beside the recorded one

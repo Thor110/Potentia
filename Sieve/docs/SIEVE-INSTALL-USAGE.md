@@ -35,7 +35,7 @@ It is a single file: run it, and it installs.
 | What | Size |
 |---|---|
 | `.sieve` installer | the folder packed + its listing (usually a few kilobytes) |
-| installer program | `sieve-install` + the `.sieve` installer + 24 bytes |
+| installer program | `sieve-install` + the dictionaries folder, packed (855,664 bytes) + the `.sieve` installer + 48 bytes (and the folder it offers, where it names one) |
 
 ## How small: measured
 
@@ -117,6 +117,7 @@ From the command line:
 
 ```sh
 sieve locate RELEASE --program "Release installer.exe"   # an installer program: one file to hand out
+sieve locate RELEASE --program setup.exe --install-folder "Documents/Games/Release"   # offering that folder
 sieve locate RELEASE --installer release.sieve           # the installer on its own
 sieve locate RELEASE --installer release.sieve --compare # and the sizes beside zip and 7z
 sieve locate RELEASE --installer release.sieve --v4      # the plain installer: every file packed by LZMA2
@@ -133,7 +134,18 @@ under its name. Then:
 
 - **Save Sieve instructions...** gives the `.sieve` on its own: the folder packed, plus its
   listing. Send this to anyone who already has Sieve.
-- **Make an installer program...** gives a single program that anyone can run.
+- **Make an installer program...** gives a single program that anyone can run. Once its name is
+  chosen, it asks which folder the program should offer to install into: `Documents` and the
+  folder's name to begin with, which Enter keeps; or type another (below). Esc: not made.
+
+**The folder an installer program offers (0.13.78).** A program offers your Documents folder and
+the folder's name unless its maker names another: `--install-folder PLACE/FOLDERS` on the command
+line, or typed when the File Locator makes it. PLACE is `Documents`, `Desktop`, `Downloads` or
+`Home`, each meaning the person's own wherever the program runs; then the folders under it, as
+`Documents/Games/WoWRevived`. A path of its own (`C:\...`, `/...`), `..`, an empty folder name or a
+name Windows cannot hold is refused when it is made, and checked again when the program reads it.
+It is only offered: the person can still Browse or type another before Install, and `--to`
+overrides it.
 
 The folder's listing on its own (its manifest: names, sizes and SHA-256s) is part of the
 instructions and is for the tools. The command line still writes it (`sieve locate FOLDER
@@ -148,8 +160,8 @@ instructions and is for the tools. The command line still writes it (`sieve loca
 
 ## Installing
 
-- **An installer program:** run it. It shows what it installs and where (your Documents folder
-  by default; Browse, or type a path). Then choose Install.
+- **An installer program:** run it. It shows what it installs and where (the folder it offers,
+  else your Documents folder; Browse, or type a path). Then choose Install.
 - **A `.sieve` file:** put it beside `sieve-install` and run that (it opens the one `.sieve` beside
   it), drop the file on its window, or open the file with it.
 - **From the command line:** `sieve install NAME.sieve --to FOLDER`, which also accepts an
@@ -185,6 +197,15 @@ installer refuses before writing anything, naming the pair. Packing such a folde
 warns that it will not install there. Whether the destination ignores case is looked at, not
 assumed: so a Windows drive seen from Linux (WSL's `/mnt/c`) counts, and a Mac folder made to heed
 case does not.
+
+**Names Windows cannot hold (0.13.78).** A name made on Linux can be one Windows takes for something
+else: a device's (`CON`, `PRN`, `AUX`, `NUL`, `COM0` to `COM9`, `LPT0` to `LPT9`, in any case and
+with any extension, so `aux.txt` too), one ending in a dot or a space (which Windows takes off), or
+one with a character Windows keeps out of names (`< > : " \ | ? *` or a control character; a colon
+writes a hidden stream of the file before it). Written on Windows, each would be another file, or
+a device, while the install said it succeeded. On Windows the installers refuse such a name before
+writing anything, naming it and why; elsewhere it is a name like any other. Packing a folder that
+holds one (`sieve locate`) warns that Windows will refuse it.
 
 **Other archives are extracted, as an archiver extracts them (25 October 2026).** Open a `.zip`,
 `.rar`, `.tar.gz` or any kind below with `sieve-install` (or right-click it: Sieve > Extract) and it
@@ -265,9 +286,9 @@ not show in GitHub Desktop.
 
 ```sh
 python tools/make_release.py                                   # build, stage, instructions, program, map, checks
-python tools/make_release.py --version 0.13.77                  # the same, with the version given
-python tools/make_release.py --version 0.13.77 --skip-build     # the Release build is already made
-python tools/make_release.py --version 0.13.77 --seven-zip      # carry a 7z of the folder, as before v4
+python tools/make_release.py --version 0.13.78                  # the same, with the version given
+python tools/make_release.py --version 0.13.78 --skip-build     # the Release build is already made
+python tools/make_release.py --version 0.13.78 --seven-zip      # carry a 7z of the folder, as before v4
 ```
 
 It stages only what the program uses (the programs, their data folders, an empty `maps`

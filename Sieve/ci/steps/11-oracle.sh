@@ -1231,6 +1231,25 @@ else
     for d in cp_s cp_si cp_z; do [ "$(cat $d/A.txt)" = upper ] && [ "$(cat $d/a.txt)" = lower ]; done
     $S locate cp_s --installer cp_again.sieve 2>&1 | tr -d '\r' | grep -q "^warning: A.txt and a.txt are one name where case is ignored"
 fi
+# A name Windows cannot hold (aux.txt, the device AUX, made on Linux: tests/windows_names.sieve,
+# 0.13.78): on Windows, Sieve and sieve-install refuse it before writing anything, naming it; on
+# other systems it is a name like any other, written, and packing it warns.
+rm -rf wn_s wn_si
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*)
+    if $S install ../tests/windows_names.sieve --to wn_s > wn_s.txt 2>&1; then exit 1; fi
+    grep -q "aux.txt is a name Windows cannot hold (a device's name (AUX))" wn_s.txt
+    if $SI ../tests/windows_names.sieve --to wn_si --yes > wn_si.txt 2>&1; then exit 1; fi
+    grep -q "is a name Windows cannot hold" wn_si.txt
+    [ ! -e wn_si ] || [ -z "$(ls wn_si)" ]
+    ;;
+*)
+    $S install ../tests/windows_names.sieve --to wn_s > /dev/null
+    [ "$(cat wn_s/aux.txt)" = device ]
+    $S locate wn_s --installer wn_again.sieve > wn_again.txt 2>&1
+    tr -d '\r' < wn_again.txt | grep -q "^warning: aux.txt is a name Windows cannot hold (a device's name (AUX))"
+    ;;
+esac
 # v32, too: a JPEG carried as its brunsli form ("jbr <form size>"), made again byte
 # for byte, under Compressed Formats' boxes. The repository's seven JPEGs (all public domain or
 # Sieve's own) and a text: with temporary, each JPEG carried so and the folder given

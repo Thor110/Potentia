@@ -104,6 +104,10 @@ they need no path given; in the repository they find the Release build.
 
 `sieve` in `tools\` finds the dictionaries and models in the folder above; the hallway finds `sieve-install` in `tools\`. A build folder keeps all three programs together, and they work either way.
 
+**More formats in the comparison** (0.13.78): the File Locator's **More formats** box (C), or `sieve locate PATH --compare --more-formats`, sets gzip, bzip2, zstd, brotli and lz4 beside zip and 7z, each the whole as one stream at its strongest usual setting (gzip -9, bzip2 -9, zstd -19 --long=27, brotli -q 11 -w 24, lz4 -12), without its container. It is unticked unless ticked, as it takes longer: brotli at 11 above all. Kept in the settings (`[locator] more_formats`).
+
+**An installer program can offer its own folder** (0.13.78): `sieve locate FOLDER --program OUT --install-folder Documents/Games/Name`, or typed when the File Locator makes one; run, it offers that folder (the person's own Documents, Desktop, Downloads or home, then the folders named) in place of Documents and the folder's name. SIEVE-INSTALL-USAGE has the rules.
+
 **An installer program carries the dictionaries folder too** (5 November 2026): handed to someone and run on its own, it has no dictionaries beside it, and files mixed with a word list or a primer need them to be made again. Packed, the folder adds 855,664 bytes (its 12 MB, measured here); the installer checks each file against its SHA-256 and uses them only where it finds no dictionaries folder of its own, from a temporary folder it removes when it ends.
 
 **Continuous integration:** `.github/workflows/build.yml`, at the repository's root (GitHub reads workflows only there), builds and tests on Windows, Linux and macOS, every step in this folder (`PROJECT_DIR: Sieve`). It checks that every platform produces the same addresses, and that the Python oracle reproduces the committed vectors.
@@ -646,7 +650,8 @@ pictures are made one at a time, as each is shown. `sieve-view --help` gives the
 options for testing (`--check`, `--make-simage`, `--thumbnail`, `--budget`, `--screenshot`).
 
 **Thumbnails in Explorer** (Windows, 5 November 2026): `sieve-thumbs.dll`, beside `sieve-view`, gives
-Explorer a `.simage`'s first picture as its thumbnail, in place of the viewer's icon. It reads the
+Explorer a `.simage`'s first picture as its thumbnail, in place of the viewer's icon, and (since
+0.13.78) with no program icon drawn in its corner, as a photo's has none. It reads the
 file exactly as the viewer does (the same code, `client/picture_source.cpp`: the listing first, the
 files checked against their SHA-256, each limit before anything is decoded), in a process of
 Windows' own, so a file it refuses only keeps its icon. `context\install_context.bat` registers

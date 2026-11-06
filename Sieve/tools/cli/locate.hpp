@@ -460,10 +460,28 @@ std::optional<std::filesystem::path> installer_program_beside(const std::filesys
 //
 // (5 November 2026: an installer program whose files were mixed with a word list or primer could
 // not install them where no dictionaries folder was to be found: one downloaded, run on its own.)
+//
+// And (0.13.78) the folder it offers to install into, where its maker named one, before both:
+//
+//     <sieve-install> "sieve-folder-v1\n" PLACE/FOLDERS "\n" <its length: 8 bytes>
+//     "sieve-offers-to1" <dictionaries> ...
+//
+// PLACE is one of Documents, Desktop, Downloads or Home (the person's own, wherever the program
+// runs); FOLDERS the folders under it (offered_folder_problem says what is allowed). Throws
+// std::invalid_argument for a folder that is not allowed.
 void write_installer_program(const std::filesystem::path& program, const BigUint& address, const std::filesystem::path& out,
-                             const std::vector<uint8_t>& dictionaries = {});
+                             const std::vector<uint8_t>& dictionaries = {}, const std::string& folder = {});
 void write_installer_program(const std::filesystem::path& program, const std::vector<uint8_t>& raw, const std::filesystem::path& out,
-                             const std::vector<uint8_t>& dictionaries = {});
+                             const std::vector<uint8_t>& dictionaries = {}, const std::string& folder = {});
+inline constexpr char kOffersFolderMagic[] = "sieve-offers-to1"; // 16 bytes, no terminator used
+// Why `spec` (PLACE/FOLDERS, '/' or '\\' between them) may not be offered, or nullopt where it may:
+// PLACE one of Documents, Desktop, Downloads or Home (any case); one to 16 folders under it, none
+// empty, . or .., nor a name Windows cannot hold (case_names.hpp); at most 512 bytes.
+std::optional<std::string> offered_folder_problem(const std::string& spec);
+// The folder `program` offers, checked again as it is read (a program is made by anyone): its
+// place, in lower case ("documents" ...), and the folders under it with '/' between them; nullopt
+// where it offers none, or one not allowed.
+std::optional<std::pair<std::string, std::string>> offered_folder(const std::filesystem::path& program);
 inline constexpr char kCarriedDictionariesMagic[] = "sieve-carried-d1"; // 16 bytes, no terminator used
 // A file of the dictionaries folder an installer program carries, checked against its SHA-256.
 struct CarriedFile

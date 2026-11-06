@@ -25,6 +25,8 @@
 #include <charconv>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -122,6 +124,7 @@ struct AppSettings
     bool locator_search_run = false;
     bool locator_every_wave = false; // the rope's search through every wave, even on packed bytes
     bool locator_decoding = false;   // Prioritise Decoding Speed: no file mixed
+    bool locator_more = false;       // More formats: the comparison with gzip, bzip2, zstd, brotli and lz4 too (0.13.78)
     bool locator_optimise = true;    // Optimise Search: Try every way chosen for each file by its kind (ticked unless unticked)
     bool locator_draft = false;      // the next version's draft (cli/draft.hpp; [locator] v33_draft, its name from the version)
     bool locator_log = false;        // Keep a log: each run's reports and times written to a text file
@@ -149,6 +152,10 @@ struct AppSettings
     // (cli/media_decode.hpp). --ffmpeg wins over it.
     std::string ffmpeg;
     std::string language = "en";
+    // The values this run was given on its command line (--search-every-wave, --filter-memory ...):
+    // save() writes each back as the file had it, unless it was changed since (not saved). (0.13.78:
+    // they were written to the file by the next setting saved, and so kept for every run after.)
+    std::shared_ptr<const std::function<void(AppSettings&)>> run_only;
     // Whether the file loaded had every entry save() writes (not saved). An older file lacks the
     // entries added since it was written, and is written again at start so that it gains them.
     bool complete = true;

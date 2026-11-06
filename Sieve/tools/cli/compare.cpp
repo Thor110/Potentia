@@ -4,8 +4,23 @@
 
 #include "sieve/stop.hpp"
 
+// bzlib.h includes <windows.h> on Windows: without these first, its min and max macros break
+// std::min and std::max (as in pack.cpp).
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+#include <bzlib.h>
 #include <lzma.h>
 #include <zlib.h>
+#include <zstd.h>
+#include <brotli/encode.h>
+#include <lz4frame.h>
+#include <lz4hc.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -91,6 +106,179 @@ uint64_t lzma2_size(std::span<const uint8_t> data)
     return total;
 }
 
+namespace {
+
+constexpr size_t kPiece = size_t(1) << 20;
+
+// bzip2 at block size 9 (900 KB), as bzip2 -9.
+uint64_t bzip2_size(std::span<const uint8_t> data)
+{
+    bz_stream z{};
+    if (BZ2_bzCompressInit(&z, 9, 0, 0) != BZ_OK) throw std::runtime_error("bzip2: cannot start");
+    std::vector<char> out(kPiece);
+    size_t at = 0;
+    uint64_t total = 0;
+    for (;;)
+    {
+        if (stop_requested())
+        {
+            BZ2_bzCompressEnd(&z);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        z.next_in = const_cast<char*>(reinterpret_cast<const char*>(data.data() + at));
+        z.avail_in = unsigned(n);
+        at += n;
+        const int action = at == data.size() ? BZ_FINISH : BZ_RUN;
+        int r = BZ_RUN_OK;
+        do
+        {
+            z.next_out = out.data();
+            z.avail_out = unsigned(out.size());
+            r = BZ2_bzCompress(&z, action);
+            if (r < 0)
+            {
+                BZ2_bzCompressEnd(&z);
+                throw std::runtime_error("bzip2: could not compress");
+            }
+            total += out.size() - z.avail_out;
+        } while (z.avail_in > 0 || (action == BZ_FINISH && r != BZ_STREAM_END));
+        if (action == BZ_FINISH) break;
+    }
+    BZ2_bzCompressEnd(&z);
+    return total;
+}
+
+// zstd at level 19 with long-distance matching over a 128 MiB window, as zstd -19 --long=27.
+uint64_t zstd_size(std::span<const uint8_t> data)
+{
+    ZSTD_CCtx* c = ZSTD_createCCtx();
+    if (!c) throw std::runtime_error("zstd: cannot start");
+    ZSTD_CCtx_setParameter(c, ZSTD_c_compressionLevel, 19);
+    ZSTD_CCtx_setParameter(c, ZSTD_c_enableLongDistanceMatching, 1);
+    ZSTD_CCtx_setParameter(c, ZSTD_c_windowLog, 27);
+    std::vector<uint8_t> out(ZSTD_CStreamOutSize());
+    size_t at = 0;
+    uint64_t total = 0;
+    for (;;)
+    {
+        if (stop_requested())
+        {
+            ZSTD_freeCCtx(c);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        ZSTD_inBuffer in{data.data() + at, n, 0};
+        at += n;
+        const ZSTD_EndDirective mode = at == data.size() ? ZSTD_e_end : ZSTD_e_continue;
+        size_t left = 0;
+        do
+        {
+            ZSTD_outBuffer o{out.data(), out.size(), 0};
+            left = ZSTD_compressStream2(c, &o, &in, mode);
+            if (ZSTD_isError(left))
+            {
+                ZSTD_freeCCtx(c);
+                throw std::runtime_error(std::string("zstd: ") + ZSTD_getErrorName(left));
+            }
+            total += o.pos;
+        } while (mode == ZSTD_e_end ? left != 0 : in.pos < in.size);
+        if (mode == ZSTD_e_end) break;
+    }
+    ZSTD_freeCCtx(c);
+    return total;
+}
+
+// brotli at quality 11 with its largest standard window (16 MiB), as brotli -q 11 -w 24.
+uint64_t brotli_size(std::span<const uint8_t> data)
+{
+    BrotliEncoderState* e = BrotliEncoderCreateInstance(nullptr, nullptr, nullptr);
+    if (!e) throw std::runtime_error("brotli: cannot start");
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_QUALITY, 11);
+    BrotliEncoderSetParameter(e, BROTLI_PARAM_LGWIN, 24);
+    if (data.size() <= 0x7FFFFFFF) BrotliEncoderSetParameter(e, BROTLI_PARAM_SIZE_HINT, uint32_t(data.size()));
+    size_t at = 0;
+    uint64_t total = 0;
+    for (;;)
+    {
+        if (stop_requested())
+        {
+            BrotliEncoderDestroyInstance(e);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        size_t avail_in = n;
+        const uint8_t* next_in = data.data() + at;
+        at += n;
+        const BrotliEncoderOperation op = at == data.size() ? BROTLI_OPERATION_FINISH : BROTLI_OPERATION_PROCESS;
+        for (;;)
+        {
+            size_t avail_out = 0;
+            if (!BrotliEncoderCompressStream(e, op, &avail_in, &next_in, &avail_out, nullptr, nullptr))
+            {
+                BrotliEncoderDestroyInstance(e);
+                throw std::runtime_error("brotli: could not compress");
+            }
+            size_t got = 0;
+            while (BrotliEncoderHasMoreOutput(e)) (void)BrotliEncoderTakeOutput(e, &got), total += got;
+            if (op == BROTLI_OPERATION_FINISH ? bool(BrotliEncoderIsFinished(e)) : avail_in == 0) break;
+        }
+        if (op == BROTLI_OPERATION_FINISH) break;
+    }
+    BrotliEncoderDestroyInstance(e);
+    return total;
+}
+
+// LZ4 at its strongest (LZ4HC level 12), blocks of 4 MB linked, as lz4 -12.
+uint64_t lz4_size(std::span<const uint8_t> data)
+{
+    LZ4F_cctx* c = nullptr;
+    if (LZ4F_isError(LZ4F_createCompressionContext(&c, LZ4F_VERSION))) throw std::runtime_error("lz4: cannot start");
+    LZ4F_preferences_t p{};
+    p.compressionLevel = LZ4HC_CLEVEL_MAX;
+    p.frameInfo.blockSizeID = LZ4F_max4MB;
+    p.frameInfo.blockMode = LZ4F_blockLinked;
+    std::vector<uint8_t> out(LZ4F_compressBound(kPiece, &p) + 64);
+    auto fail = [&](size_t r) {
+        if (LZ4F_isError(r))
+        {
+            LZ4F_freeCompressionContext(c);
+            throw std::runtime_error(std::string("lz4: ") + LZ4F_getErrorName(r));
+        }
+        return uint64_t(r);
+    };
+    uint64_t total = fail(LZ4F_compressBegin(c, out.data(), out.size(), &p));
+    for (size_t at = 0; at < data.size();)
+    {
+        if (stop_requested())
+        {
+            LZ4F_freeCompressionContext(c);
+            return kNotMeasured;
+        }
+        const size_t n = std::min(kPiece, data.size() - at);
+        total += fail(LZ4F_compressUpdate(c, out.data(), out.size(), data.data() + at, n, nullptr));
+        at += n;
+    }
+    total += fail(LZ4F_compressEnd(c, out.data(), out.size(), nullptr));
+    LZ4F_freeCompressionContext(c);
+    return total;
+}
+
+} // namespace
+
+std::vector<FormatSize> more_format_sizes(std::span<const uint8_t> data)
+{
+    // (each checked for a stop before it starts, so a stop leaves the rest not measured at once)
+    auto measured = [&](uint64_t (*f)(std::span<const uint8_t>)) { return stop_requested() ? kNotMeasured : f(data); };
+    std::vector<FormatSize> out;
+    out.push_back({"gzip -9 (as .tar.gz)", "deflate as zip's, but everything as one stream", measured(deflate_size)});
+    out.push_back({"bzip2 -9 (as .tar.bz2)", "900 KB blocks", measured(bzip2_size)});
+    out.push_back({"zstd -19 --long=27", "long-distance matching, a 128 MiB window", measured(zstd_size)});
+    out.push_back({"brotli -q 11 -w 24", "its strongest, a 16 MiB window (slow)", measured(brotli_size)});
+    out.push_back({"lz4 -12", "the fastest to unpack", measured(lz4_size)});
+    return out;
+}
+
 std::string comparison_table(const Comparison& c)
 {
     auto row = [&](const char* name, uint64_t v, const char* note) {
@@ -111,6 +299,7 @@ std::string comparison_table(const Comparison& c)
     t += row("original", c.original, "");
     t += row("zip (deflate, level 9)", c.deflate, "each file on its own, without the zip container");
     t += row("7z (LZMA2, preset 9e)", c.lzma2, "everything as one stream, without the 7z container");
+    for (const FormatSize& f : c.more) t += row(f.name.c_str(), f.bytes, f.note.c_str()); // (where more formats were asked for)
     t += row("address, as raw bytes", c.address_bytes, "its place on the binary line as a number: the file, plus 0101...01");
     t += row("address, written in hex", c.address_hex, "two characters a byte");
     if (c.manifest && !c.installer_hex)

@@ -285,6 +285,7 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
         for (const Unpacked& u : z.entries)
             if (!u.dir) names.push_back(u.path);
         sieve::cli::refuse_names_one_ignoring_case(names, dest); // (they would be written one over the other)
+        sieve::cli::refuse_names_windows_cannot_hold(names);
     }
     if (!force)
         for (const Unpacked& u : z.entries)

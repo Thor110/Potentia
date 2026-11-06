@@ -30,6 +30,18 @@ inline constexpr uint64_t kNotMeasured = UINT64_MAX;
 uint64_t deflate_size(std::span<const uint8_t> data);
 uint64_t lzma2_size(std::span<const uint8_t> data);
 
+// More formats (0.13.78, Edward: "a wide range of archive and compression formats ... guarded by a
+// checkbox due to the increase in time"): each the whole as one stream, as tar and then the
+// compressor would make it, at its strongest usual setting, without its container. Slow ones among
+// them (brotli at 11 above all), so only where asked (sieve locate --compare --more-formats, the
+// File Locator's More formats box). Each in pieces of 1 MiB, stopped as the two above are.
+struct FormatSize
+{
+    std::string name, note;
+    uint64_t bytes = 0; // or kNotMeasured
+};
+std::vector<FormatSize> more_format_sizes(std::span<const uint8_t> data);
+
 struct Comparison
 {
     uint64_t original = 0;       // bytes
@@ -41,6 +53,7 @@ struct Comparison
     uint64_t manifest_deflate = 0, manifest_lzma2 = 0; // an installer's manifest, compressed
     uint64_t installer_hex = 0;  // the installer: the manifest's address, in hex
     uint64_t installer_raw = 0;  // and as raw bytes, as sieve-install reads it
+    std::vector<FormatSize> more; // more formats, where asked for (more_format_sizes), else none
     bool packed = false;         // the installer's manifest is v4 or later, its files packed
     std::string version = "sieve-manifest-v4"; // which, when packed (v5 and v6 carry items as their places)
 };

@@ -4295,9 +4295,10 @@ order:
    files mixed together in a group) and two single files at v20.
 5. **A release** (0.13.76, set 28 October 2026 to keep it apart from the last release) once 1 and 2 are done: the notes leading with the benchmark
    tables and the three uses (smaller archives, right-click extract, installers that check).
-   Edward released 0.13.76 on 30 October 2026, and the version is now 0.13.77 (CMakeLists.txt,
+   Edward released 0.13.76 on 30 October 2026, and the version became 0.13.77 (CMakeLists.txt,
    vcpkg.json, the extension's manifest and web/README, make_release.py's examples,
-   SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it. Its release notes needed hand-fixing
+   SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it. He released 0.13.77 on 5
+   November 2026 (v33, posted to encode.su), and the version is now 0.13.78, in the same places. Its release notes needed hand-fixing
    (Edward: "mostly just new lines and spaces"): `make_release.py` wrapped paragraphs and list
    items, which GitHub shows as line breaks. Each is now one line; rendered with 0.13.76's values,
    the notes match Edward's fixed copy exactly.

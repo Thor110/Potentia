@@ -225,6 +225,7 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "search_every_wave") s.locator_every_wave = value == "1";
             else if (key == "optimise_search") s.locator_optimise = value == "1";
             else if (key == "prioritise_decoding") s.locator_decoding = value == "1";
+            else if (key == "more_formats") s.locator_more = value == "1";
             else if (key == sieve::cli::draft_ini_key()) s.locator_draft = value == "1"; // (the draft in the making: its key from its number)
             else if (key.size() > 6 && key[0] == 'v' && key.compare(key.size() - 6, 6, "_draft") == 0) {} // (an older draft's switch, once frozen: read and let go)
             else if (key == "keep_log") s.locator_log = value == "1";
@@ -322,6 +323,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "optimise_search", locator_optimise ? "1" : "0", "1: Optimise Search ticked (the default): Try every way chosen for each file by its kind, from what was measured (off for every file with Prioritise Decoding Speed; else on for a JPEG, a file over 16 MiB or under 4 KiB, off between), its own box unused; 0: Try every way as its box says"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing, nor the files carried together mixed (quicker to install, larger); 0: off"},
+        {"locator", "more_formats", locator_more ? "1" : "0", "1: More formats ticked: the comparison with gzip, bzip2, zstd, brotli and lz4 too, each the whole as one stream (slower: brotli above all); 0: zip and 7z only"},
         {"locator", sieve::cli::draft_ini_key(), locator_draft ? "1" : "0", "1: " + sieve::cli::draft_manifest() + " in the making, for testing only (docs/NEXT-VERSION.md): what it makes is a draft, not to be published; 0: off, the newest frozen version made"},
         {"locator", "keep_log", locator_log ? "1" : "0", "1: Keep a log ticked: each reading and saving writes what it reported as it went (every best so far, with its time), how long it took and its phases' times to a text file in the logs folder beside these settings, and each install its decoding and writing times; 0: off"},
         {"locator", "search_share_packing", share_text(locator_share_packing), "learned: the share of the search's time packing has used here, 0 to 1, for the time estimate; -1: not measured yet"},
@@ -362,7 +364,9 @@ std::string AppSettings::text() const
 
 bool AppSettings::save(const fs::path& path) const
 {
-    const std::string t = text();
+    AppSettings kept = *this;
+    if (run_only && *run_only) (*run_only)(kept);
+    const std::string t = kept.text();
     std::ofstream out(path, std::ios::binary);
     out << t;
     return bool(out);

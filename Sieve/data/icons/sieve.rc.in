@@ -1,3 +1,32 @@
 // Sieve's icon as a Windows resource, for Explorer and the task bar. CMake fills in the path
 // (configure_file), so the resource compiler finds the icon from any build folder.
 1 ICON "@SIEVE_ICON_FILE@"
+
+// The version, as Explorer shows it under Properties, Details (0.13.78): every program, and every
+// installer program made from sieve-install, says which Sieve it is. Filled from CMakeLists.txt's
+// project version. Written with numbers rather than winver.h's names, so no header is needed:
+// 0x3F every flag meaningful, none set; 0x40004 Windows NT, 32-bit or wider; 1 an application.
+1 VERSIONINFO
+FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK 0x3FL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080904B0"
+        BEGIN
+            VALUE "FileDescription", "Sieve"
+            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "ProductName", "Sieve"
+            VALUE "ProductVersion", "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0809, 1200
+    END
+END

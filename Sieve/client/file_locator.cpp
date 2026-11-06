@@ -407,6 +407,21 @@ std::function<void(bool)>& kept_decoding()
 void FileLocator::remember_decoding(std::function<void(bool)> changed) { kept_decoding() = std::move(changed); }
 
 namespace {
+struct KeptMore
+{
+    bool on = false;
+    std::function<void(bool)> changed;
+};
+KeptMore& kept_more()
+{
+    static KeptMore k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_more(bool on, std::function<void(bool)> changed) { kept_more() = {on, std::move(changed)}; }
+
+namespace {
 // The search's shares as learned (-1: not measured yet), and what saves them.
 struct KeptShares
 {
@@ -682,7 +697,7 @@ void FileLocator::program_from(const std::string& sieve_file, const std::string&
     if (worker_.joinable()) worker_.join();
     busy_ = true;
     status_ = trf("loc.program_from.making", {out});
-    worker_ = std::thread([this, sieve_file, out] {
+    worker_ = std::thread([this, sieve_file, out, folder = offer_folder_] {
         std::string done;
         try
         {
@@ -694,7 +709,7 @@ void FileLocator::program_from(const std::string& sieve_file, const std::string&
             else raw = cli::read_file_bytes(from_u8(sieve_file));
             // Sieve instructions' raw bytes begin as "sieve" does with every byte one higher (SIEVE-FORMAT §1).
             if (raw.size() < 5 || std::memcmp(raw.data(), "tjfwf", 5) != 0) throw std::runtime_error(tr("loc.program_from.not_sieve"));
-            cli::write_installer_program(*stub, raw, from_u8(out), cli::carried_dictionaries_block()); // (the dictionaries too: run on its own, it has them)
+            cli::write_installer_program(*stub, raw, from_u8(out), cli::carried_dictionaries_block(), folder); // (the dictionaries too: run on its own, it has them)
             done = trf("loc.program_from.done", {out});
         }
         catch (const std::exception& e)
@@ -734,7 +749,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         std::lock_guard<std::mutex> lock(mx_);
         open_log(tailor ? "tailoring the filters to" : "reading", path);
     }
-    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes] {
+    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes, more = kept_more().on] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
@@ -845,6 +860,13 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     const T t("locator.7z");
                     c.lzma2 = measured(cli::lzma2_size, r.bytes);
                 }
+                if (more && !stop_requested())
+                {
+                    // (More formats ticked: gzip, bzip2, zstd, brotli and lz4 too; brotli at 11 is slow)
+                    progress("what gzip, bzip2, zstd, brotli and lz4 make of it (More formats)");
+                    const T t("locator.more");
+                    c.more = cli::more_format_sizes(r.bytes);
+                }
                 refine_estimate(3);
                 c.address_bytes = a.bytes;
                 c.address_hex = a.bytes ? a.hex_digits : 0;
@@ -912,6 +934,12 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 refine_estimate(2);
                 progress("what 7z makes of them (LZMA2, preset 9 extreme, as one stream)");
                 c.lzma2 = measured(cli::lzma2_size, all);
+                if (more && !stop_requested())
+                {
+                    progress("what gzip, bzip2, zstd, brotli and lz4 make of them, as one stream (More formats)");
+                    const cli::timings::Scope t("locator.more");
+                    c.more = cli::more_format_sizes(all);
+                }
                 refine_estimate(3);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
@@ -1053,7 +1081,7 @@ void FileLocator::save(const std::string& to)
             job_estimate_text_ = trf("loc.estimate.save", {duration_text(job_estimate_), duration_text(r.pack_seconds), duration_text(r.pack_search)});
         }
     }
-    worker_ = std::thread([this, what, to, rope_seconds, archives, made] {
+    worker_ = std::thread([this, what, to, rope_seconds, archives, made, folder = offer_folder_] {
         const Result& r = result_;
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
         std::string done;
@@ -1085,7 +1113,7 @@ void FileLocator::save(const std::string& to)
                     const char* base = SDL_GetBasePath();
                     const auto stub = cli::installer_program_beside(base ? from_u8(base) : fs::current_path());
                     if (!stub) throw std::runtime_error(tr("loc.no_installer_program"));
-                    cli::write_installer_program(*stub, raw, out, cli::carried_dictionaries_block()); // (the dictionaries too)
+                    cli::write_installer_program(*stub, raw, out, cli::carried_dictionaries_block(), folder); // (the dictionaries too)
                     done = trf("loc.saved.program", {to});
                 }
             }
@@ -1127,6 +1155,11 @@ void FileLocator::go()
 
 void FileLocator::event(const SDL_Event& e)
 {
+    if (asking_folder_)
+    {
+        folder_event(e); // (the folder's prompt takes every key and the typing until it is answered)
+        return;
+    }
     if (e.type == SDL_EVENT_DROP_FILE && e.drop.data) analyse(e.drop.data);
     if (e.type == SDL_EVENT_MOUSE_MOTION)
     {
@@ -1159,6 +1192,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
+        case SDLK_C: pressed = "more"; break;     // More formats in the comparison, on or off
         case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
@@ -1212,6 +1246,12 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "log")
     {
         KeptLog& k = kept_log();
+        k.on = !k.on;
+        if (k.changed) k.changed(k.on);
+    }
+    else if (pressed == "more")
+    {
+        KeptMore& k = kept_more();
         k.on = !k.on;
         if (k.changed) k.changed(k.on);
     }
@@ -1287,7 +1327,8 @@ void FileLocator::draw(float W, float H)
             to.swap(pending_save_);
         }
         if (pick) analyse(*pick);
-        if (to) save(*to);
+        if (to && save_what_ == 3) ask_folder(false, *to, u8(from_u8(result_.path).filename())); // (an installer program: the folder it offers first)
+        else if (to) save(*to);
         std::optional<std::pair<int, std::string>> inst;
         {
             std::lock_guard<std::mutex> lock(mx_);
@@ -1316,7 +1357,7 @@ void FileLocator::draw(float W, float H)
             static const SDL_DialogFileFilter kProgram[] = {{"Installer program", "exe"}};
             save_file_dialog(on_program_to, this, window_, kProgram, 1, start.c_str(), this);
         }
-        else if (inst && inst->first == 3 && !program_src_.empty()) program_from(program_src_, inst->second);
+        else if (inst && inst->first == 3 && !program_src_.empty()) ask_folder(true, inst->second, u8(from_u8(program_src_).stem()));
     }
     const SDL_Color ink = host_.ink ? host_.ink() : SDL_Color{0, 255, 255, 255}, grey{150, 150, 150, 255}, white{255, 255, 255, 255}, red{255, 80, 80, 255};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
@@ -1453,6 +1494,7 @@ void FileLocator::draw(float W, float H)
         else box("every", sieve::rope_search_every_wave(), tr("loc.every"));
         box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
         box("log", kept_log().on, tr("loc.log"));
+        box("more", kept_more().on, tr("loc.more"));
         return box_y;
     };
     if (!busy && r.kind == Result::None && r.error.empty())
@@ -1515,7 +1557,7 @@ void FileLocator::draw(float W, float H)
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
-            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.decoding", "loc.log"})
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.decoding", "loc.log", "loc.more"})
             {
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
                 const std::string label = tr(id) + (std::string(id) == "loc.every" && sieve::cli::optimise_search() ? " " + tr("loc.every.chosen") : std::string());
@@ -1597,6 +1639,71 @@ void FileLocator::draw(float W, float H)
         if (!now.empty()) draw_text(r_, 20, H - 74, fit_text(now, W - 40, 1), 1, ink);
     }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
+    if (asking_folder_) draw_folder_prompt(W, H, ink, grey);
+}
+
+void FileLocator::ask_folder(bool from_sieve, const std::string& out, const std::string& name)
+{
+    // Offered as Documents and the name, which Enter keeps; typed over, any place and folders.
+    asking_folder_ = FolderAsk{from_sieve, out, "Documents/" + name, {}};
+    SDL_StartTextInput(window_);
+}
+
+void FileLocator::folder_event(const SDL_Event& e)
+{
+    FolderAsk& a = *asking_folder_;
+    if (e.type == SDL_EVENT_TEXT_INPUT)
+    {
+        a.text += e.text.text;
+        a.problem.clear();
+        return;
+    }
+    if (e.type != SDL_EVENT_KEY_DOWN) return;
+    if (e.key.key == SDLK_BACKSPACE && !a.text.empty())
+    {
+        a.text.pop_back();
+        while (!a.text.empty() && (uint8_t(a.text.back()) & 0xC0) == 0x80) a.text.pop_back(); // (a whole UTF-8 character)
+        a.problem.clear();
+    }
+    else if (e.key.key == SDLK_ESCAPE)
+    {
+        // Not written at all: the program is not made.
+        SDL_StopTextInput(window_);
+        asking_folder_.reset();
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = tr("loc.offer.cancelled");
+    }
+    else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)
+    {
+        // Empty: no folder offered (the installer offers Documents and the folder's name, as before).
+        if (!a.text.empty())
+            if (const auto why = cli::offered_folder_problem(a.text))
+            {
+                a.problem = *why;
+                return;
+            }
+        const FolderAsk done = a;
+        SDL_StopTextInput(window_);
+        asking_folder_.reset();
+        offer_folder_ = done.text;
+        if (done.from_sieve) program_from(program_src_, done.out);
+        else save(done.out);
+    }
+}
+
+void FileLocator::draw_folder_prompt(float W, float H, SDL_Color ink, SDL_Color grey)
+{
+    const FolderAsk& a = *asking_folder_;
+    const float w = std::min(W - 40, 760.0f), h = 132, x = (W - w) / 2, y = (H - h) / 2;
+    const SDL_FRect box{x, y, w, h};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+    SDL_RenderFillRect(r_, &box);
+    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+    SDL_RenderRect(r_, &box);
+    draw_text(r_, x + 16, y + 14, fit_text(tr("loc.offer.title"), w - 32, 1.5f), 1.5f, ink);
+    draw_text(r_, x + 16, y + 46, fit_text(a.text + "_", w - 32, 2), 2, SDL_Color{255, 255, 255, 255});
+    if (!a.problem.empty()) draw_text(r_, x + 16, y + 80, fit_text(a.problem, w - 32, 1), 1, SDL_Color{255, 80, 80, 255});
+    draw_text(r_, x + 16, y + 104, fit_text(tr("loc.offer.keys"), w - 32, 1), 1, grey);
 }
 
 // What the work says of itself (sieve/stop.hpp), on the worker: the line of what it is doing, and

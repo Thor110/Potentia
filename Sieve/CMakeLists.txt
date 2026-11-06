@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Sieve VERSION 0.13.77 LANGUAGES CXX)
+project(Sieve VERSION 0.13.78 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -454,8 +454,11 @@ add_executable(sieve
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
 if(WIN32)
-    # UTF-8 command lines on Windows (the manifest sets the process code page).
+    # UTF-8 command lines on Windows (the manifest sets the process code page; before Windows 10
+    # 1903, which ignores it, main reads the command line again in UTF-16: shell32's
+    # CommandLineToArgvW).
     target_sources(sieve PRIVATE tools/utf8.manifest)
+    target_link_libraries(sieve PRIVATE shell32)
 endif()
 target_compile_definitions(sieve PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 

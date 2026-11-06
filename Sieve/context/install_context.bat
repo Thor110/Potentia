@@ -48,6 +48,10 @@ reg add "%CLASSES%\CLSID\%CLSID%" /ve /t REG_SZ /d "Sieve picture thumbnails" /f
 reg add "%CLASSES%\CLSID\%CLSID%\InprocServer32" /ve /t REG_SZ /d "%THUMBS%" /f > nul
 reg add "%CLASSES%\CLSID\%CLSID%\InprocServer32" /v ThreadingModel /t REG_SZ /d "Apartment" /f > nul
 reg add "%CLASSES%\.simage\ShellEx\{e357fccd-a995-4576-b01f-234630154e96}" /ve /t REG_SZ /d "%CLSID%" /f > nul
+rem (No program icon drawn over the picture, as photos have none (Edward, 5 November 2026): Explorer
+rem marks a thumbnail with its program's icon unless the class's TypeOverlay is empty. Taken away
+rem with the class by uninstall_context.bat.)
+reg add "%CLASSES%\Sieve.Picture" /v TypeOverlay /t REG_SZ /d "" /f > nul
 echo and show their pictures as thumbnails, by
 echo   %THUMBS%
 echo (A file Explorer already showed with the icon may keep it; Disk Cleanup's "Thumbnails"

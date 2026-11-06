@@ -2762,14 +2762,23 @@ namespace {
 
 constexpr size_t kMagic = sizeof(kAttachedMagic) - 1, kTrailer = 8 + kMagic;
 constexpr size_t kDictMagic = sizeof(kCarriedDictionariesMagic) - 1, kDictTrailer = 8 + kDictMagic;
+constexpr size_t kFolderMagic = sizeof(kOffersFolderMagic) - 1;
 
-// Where each part of a program lies: the program itself [0, program_end), the dictionaries it
-// carries [dicts_at, dicts_at + dicts_size) (none: size 0), and the installer [installer_at,
-// installer_at + installer_size) (none: program_end is the file's whole length).
+// Where each part of a program lies: the program itself [0, program_end), the folder it offers
+// [folder_at, folder_at + folder_size) and the dictionaries it carries [dicts_at, dicts_at +
+// dicts_size) (none: size 0), and the installer [installer_at, installer_at + installer_size)
+// (none: program_end is the file's whole length).
 struct Parts
 {
-    uint64_t program_end = 0, dicts_at = 0, dicts_size = 0, installer_at = 0, installer_size = 0;
+    uint64_t program_end = 0, folder_at = 0, folder_size = 0, dicts_at = 0, dicts_size = 0, installer_at = 0, installer_size = 0;
 };
+
+// The folder written with '/' between its parts, whichever the maker typed (\\ on Windows).
+std::string normal_folder(std::string s)
+{
+    std::replace(s.begin(), s.end(), '\\', '/');
+    return s;
+}
 
 uint64_t length_before(const std::vector<uint8_t>& f, uint64_t end, size_t magic_size, const char* magic, uint64_t* n)
 {
@@ -2788,15 +2797,19 @@ Parts parts_of(const std::vector<uint8_t>& f)
     p.program_end = p.installer_at;
     if (p.installer_size == 0 && p.installer_at == f.size()) return p; // (nothing attached)
     p.dicts_at = length_before(f, p.installer_at, kDictMagic, kCarriedDictionariesMagic, &p.dicts_size);
-    p.program_end = p.dicts_at;
+    p.folder_at = length_before(f, p.dicts_at, kFolderMagic, kOffersFolderMagic, &p.folder_size);
+    p.program_end = p.folder_at;
     return p;
 }
 
 // Where the program itself ends: its whole length, or where what is attached to it begins.
 uint64_t program_length(const std::vector<uint8_t>& f) { return parts_of(f).program_end; }
 
-void write_program(const fs::path& program, std::span<const uint8_t> raw, const std::vector<uint8_t>& dictionaries, const fs::path& out)
+void write_program(const fs::path& program, std::span<const uint8_t> raw, const std::vector<uint8_t>& dictionaries, const fs::path& out,
+                   const std::string& folder)
 {
+    if (!folder.empty())
+        if (const auto why = offered_folder_problem(folder)) throw std::invalid_argument("the folder to offer, " + folder + ": " + *why);
     const auto p = read_file_bytes(program);
     const uint64_t length = program_length(p);
     {
@@ -2808,6 +2821,11 @@ void write_program(const fs::path& program, std::span<const uint8_t> raw, const 
             for (int i = 0; i < 8; ++i, n >>= 8) o.put(char(n & 0xFF));
             o.write(magic, std::streamsize(magic_size));
         };
+        if (!folder.empty())
+        {
+            const std::string block = "sieve-folder-v1\n" + normal_folder(folder) + "\n";
+            with_length(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(block.data()), block.size()), kOffersFolderMagic, kFolderMagic);
+        }
         if (!dictionaries.empty()) with_length(dictionaries, kCarriedDictionariesMagic, kDictMagic);
         with_length(raw, kAttachedMagic, kMagic);
         finish_writing(o, out);
@@ -2819,7 +2837,8 @@ void write_program(const fs::path& program, std::span<const uint8_t> raw, const 
 
 } // namespace
 
-void write_installer_program(const fs::path& program, const BigUint& address, const fs::path& out, const std::vector<uint8_t>& dictionaries)
+void write_installer_program(const fs::path& program, const BigUint& address, const fs::path& out, const std::vector<uint8_t>& dictionaries,
+                             const std::string& folder)
 {
     std::vector<uint8_t> raw;
     if (!address.is_zero())
@@ -2830,14 +2849,15 @@ void write_installer_program(const fs::path& program, const BigUint& address, co
         raw.resize(h.size() / 2);
         for (size_t i = 0; i < raw.size(); ++i) raw[i] = uint8_t(nib(h[2 * i]) << 4 | nib(h[2 * i + 1]));
     }
-    write_program(program, raw, dictionaries, out);
+    write_program(program, raw, dictionaries, out, folder);
 }
 
-void write_installer_program(const fs::path& program, const std::vector<uint8_t>& raw_in, const fs::path& out, const std::vector<uint8_t>& dictionaries)
+void write_installer_program(const fs::path& program, const std::vector<uint8_t>& raw_in, const fs::path& out, const std::vector<uint8_t>& dictionaries,
+                             const std::string& folder)
 {
     size_t lead = 0; // (as the number's bytes: no leading zero bytes)
     while (lead < raw_in.size() && raw_in[lead] == 0) ++lead;
-    write_program(program, std::span<const uint8_t>(raw_in).subspan(lead), dictionaries, out);
+    write_program(program, std::span<const uint8_t>(raw_in).subspan(lead), dictionaries, out, folder);
 }
 
 std::optional<std::vector<uint8_t>> attached_raw(const fs::path& program)
@@ -2882,6 +2902,59 @@ std::vector<CarriedFile> carried_dictionaries(const fs::path& program)
     const Parts p = parts_of(f);
     if (p.dicts_size == 0) return {};
     return unpack_dictionaries(std::span<const uint8_t>(f).subspan(size_t(p.dicts_at), size_t(p.dicts_size)));
+}
+
+std::optional<std::string> offered_folder_problem(const std::string& spec)
+{
+    // A known place, then the folders under it: never a path of its own (C:\..., /...), never
+    // above the place (..), and no name Windows cannot hold, whoever made it and wherever it runs.
+    const std::string s = normal_folder(spec);
+    if (s.empty()) return std::string("it is empty");
+    if (s.size() > 512) return std::string("it is longer than 512 bytes");
+    std::vector<std::string> parts;
+    for (size_t at = 0; at <= s.size();)
+    {
+        size_t e = s.find('/', at);
+        if (e == std::string::npos) e = s.size();
+        parts.push_back(s.substr(at, e - at));
+        at = e + 1;
+    }
+    std::string base = parts[0];
+    for (char& c : base)
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    if (base != "documents" && base != "desktop" && base != "downloads" && base != "home")
+        return "it begins with " + (parts[0].empty() ? std::string("a separator") : parts[0]) +
+               ", not one of Documents, Desktop, Downloads or Home (the folder is written under one of them)";
+    if (parts.size() < 2) return std::string("it names no folder under ") + parts[0];
+    if (parts.size() > 17) return std::string("it is more than 16 folders deep");
+    std::string under;
+    for (size_t i = 1; i < parts.size(); ++i)
+    {
+        if (parts[i].empty()) return std::string("it has an empty folder name (two separators together, or one at the end)");
+        if (parts[i] == "." || parts[i] == "..") return std::string("it has . or .. in it");
+        under += (under.empty() ? "" : "/") + parts[i];
+    }
+    if (const auto bad = name_windows_cannot_hold({under})) return "it is a name Windows cannot hold (" + bad->second + ")";
+    return std::nullopt;
+}
+
+std::optional<std::pair<std::string, std::string>> offered_folder(const fs::path& program)
+{
+    std::error_code ec;
+    if (!fs::is_regular_file(program, ec) || !has_attached(program)) return std::nullopt;
+    const auto f = read_file_bytes(program);
+    const Parts p = parts_of(f);
+    if (p.folder_size == 0 || p.folder_size > 1024) return std::nullopt;
+    const std::string block(reinterpret_cast<const char*>(f.data() + p.folder_at), size_t(p.folder_size));
+    const std::string head = "sieve-folder-v1\n";
+    if (block.rfind(head, 0) != 0 || block.back() != '\n') return std::nullopt;
+    const std::string spec = block.substr(head.size(), block.size() - head.size() - 1);
+    if (offered_folder_problem(spec)) return std::nullopt; // (checked again as it is read: made by anyone)
+    const size_t slash = spec.find('/');
+    std::string base = spec.substr(0, slash);
+    for (char& c : base)
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    return std::make_pair(base, spec.substr(slash + 1));
 }
 
 std::vector<CarriedFile> unpack_dictionaries(std::span<const uint8_t> block)
@@ -3170,6 +3243,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         names.reserve(files.size());
         for (const auto& f : files) names.push_back(f.first->path);
         refuse_names_one_ignoring_case(names, dest);
+        refuse_names_windows_cannot_hold(names); // (and a name Windows cannot hold would be another file)
     }
     size_t at = 0;
     for (size_t i = 0; i < files.size(); ++i)
