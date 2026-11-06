@@ -34,6 +34,16 @@ a result surprises; close it with what explained it.
 
 ## Resolved
 
+### Brotli and zstd smaller than Sieve on a small zip (6 November 2026: as expected)
+- *Seen:* Edward, the File Locator with More formats ticked, on `oddity-click.zip` (5,312 bytes:
+  two text files, deflated): brotli -q 11 4,915 bytes and zstd -19 4,905, Sieve's instructions
+  4,984.
+- *Explained:* the zip's files are already deflated, so every coder ties within a few dozen bytes
+  (7z 4,940, lz4 4,957, gzip 4,966), and Sieve's instructions also carry the file's name, size
+  and SHA-256 (59 bytes of the 4,984). With Archive and compressed formats: temporary, Sieve opens
+  the zip, packs the text in it and makes the zip again exactly: 3,880 bytes, 21% under brotli's,
+  installed back byte for byte. Measured here, 6 November 2026.
+
 ### Silesia's mozilla was not made smaller than LZMA2 makes it (overcome 2 November 2026, with the v33 draft)
 - *Seen:* a tar of 51,220,480 bytes (525 files, most of them programs for the Alpha processor,
   Tru64's COFF). Sieve keeps it whole, by LZMA2: 13,376,239 bytes, level with xz -9e on the same

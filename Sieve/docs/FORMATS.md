@@ -41,6 +41,31 @@ every installed file is checked against its SHA-256 before anything is written.
 
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.
 
+## Pictures: every format, and what each part of Sieve does with it
+
+Edward, 6 November 2026: the picture formats listed as the compressed ones are above. Sieve meets
+pictures in four places: packing them into a `.sieve` (above: PNG and JPEG have ways of their own
+under the boxes), the image line (`sieve warp --line image --file`, J on the binary line, the
+setup menu's pictures), the picture viewer and Explorer's thumbnails (`sieve-view`,
+`sieve-thumbs.dll`), and the vault (pictures matched by PDQ, near copies too). Decoding is
+stb_image's, built with every format it has but HDR; for the image line, what stb_image does not
+read goes to ffmpeg, where one is found.
+
+| Format | Packed into a `.sieve` | Image line | Viewer and thumbnails | Vault |
+| :--- | :--- | :--- | :--- | :--- |
+| **PNG** | temporary: made again from its pixels or its skeleton, its rows carried unfiltered, its pixels mixed as a picture of its own shape, as its palette where it has 256 colours or fewer; permanent: the same picture re-saved at its smallest (`pngr`); no box: as it is | yes | yes; Export saves pictures as PNG | yes |
+| **JPEG** (`.jpg`, `.jpeg`, `.jpe`, `.jfif`) | temporary: its brunsli form, made again exactly (`jbr`, 1 KiB and over); permanent: the same coefficients with tables made for them; no box: as it is | yes, progressive too | yes; one too large for the memory free shown at an eighth, from its blocks' averages | yes |
+| **GIF** | as its bytes (its LZW is not undone) | every frame (more than one: the video line) | its first frame | every frame |
+| **BMP** | as its bytes; uncompressed pixels may be mixed as a picture where a shape guessed from them is at least 2% smaller on the file's start | yes | yes | yes |
+| **TGA** | as BMP | yes | yes | yes |
+| **PNM** (`.ppm`, `.pgm`, `.pnm`) | as BMP | yes | not offered (by name; the viewer opens the six above) | yes |
+| **PSD** (its flattened picture), **PIC** (Softimage) | as their bytes | yes | not offered | yes |
+| **WebP, TIFF, AVIF and others** | as their bytes | through ffmpeg, where one is found | not offered | not by PDQ |
+| **`.simage`** (Sieve instructions holding only pictures) | is itself a `.sieve` | its pictures, as any `.sieve`'s files | yes: every picture in it, and its first as the thumbnail | its pictures, once installed |
+
+A picture made of noise (a camera's grain, a compressed film's frames) has nothing for any of these
+to take: under every box it is carried as its bytes, which LZMA2 and mixing weigh like any file.
+
 ## What has been measured
 
 - **7z, temporary (v31):** the source's 7z, without the anchors folder, 8,005,603 bytes to
