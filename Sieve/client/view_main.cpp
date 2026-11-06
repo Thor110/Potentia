@@ -65,6 +65,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -254,15 +255,24 @@ int main(int argc, char** argv)
         else if (a == "--check") check = true;
         else if (a == "--make-simage") make = true;
         else if (a == "--thumbnail-check") thumb_check = true;
-        else if (a == "--thumbnail" && i + 2 < argc) thumb_side = uint32_t(std::strtoul(argv[++i], nullptr, 10)), thumb_out = argv[++i];
+        else if (a == "--thumbnail" && i + 2 < argc)
+        {
+            thumb_side = uint32_t(std::strtoul(argv[++i], nullptr, 10)), thumb_out = argv[++i];
+            if (thumb_side == 0) // (else it would open the window instead: review, 6 November 2026)
+            {
+                hallway::attach_parent_console();
+                std::fputs("sieve-view: --thumbnail needs a side of 1 or more pixels\n", stderr);
+                return 2;
+            }
+        }
         else file_arg = a;
     }
     // Every file Sieve's instructions can carry made again (a JPEG from its brunsli form, a PNG by
     // stb_image_write ...), as sieve install does.
     sieve::cli::use_item_maker();
     // (a picture's frames, decoded by the vault to check them as a .sieve is installed, handed on
-    // to be shown rather than decoded again)
-    sieve::cli::vault::keep_checked_frames(true);
+    // to be shown rather than decoded again; no more than the viewer itself may hold)
+    sieve::cli::vault::keep_checked_frames(true, memory_budget() / 2);
 
     // The pictures of one place: an ordinary picture, or every picture of a .sieve, the pixels made
     // of the one to be shown first only (the first, or coming back to it, the last).
@@ -277,10 +287,16 @@ int main(int argc, char** argv)
             p.file = read_all(at.path);
             out.push_back(std::move(p));
         }
+        // (coming back to a .sieve, its last is shown: the first's frames, kept by the vault, let go first)
+        if (backwards && out.size() > 1)
+        {
+            sieve::cli::vault::keep_checked_frames(false);
+            sieve::cli::vault::keep_checked_frames(true, memory_budget() / 2);
+        }
         make_pixels(out[backwards ? out.size() - 1 : 0], all_frames);
         // (what the vault kept of the pictures it checked, given up: taken above where it was the one shown)
         sieve::cli::vault::keep_checked_frames(false);
-        sieve::cli::vault::keep_checked_frames(true);
+        sieve::cli::vault::keep_checked_frames(true, memory_budget() / 2);
         return out;
     };
 

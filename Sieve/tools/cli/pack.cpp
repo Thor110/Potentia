@@ -59,6 +59,7 @@
 #include <exception>
 #include <functional>
 #include <fstream>
+#include <future>
 #include <initializer_list>
 #include <map>
 #include <memory>
@@ -2003,9 +2004,18 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     {
         // "gif <sub-block size> <skeleton size> <inner size>" (v34 draft): a GIF made again from its
         // skeleton and its frames' colour indices, each frame's LZW coded as compress codes it (gif_lzw.hpp).
+        // (each number as the packer writes one, digits alone and no leading zero, as the oracle reads
+        // it: sscanf alone took "+255". Review, 6 November 2026.)
+        bool plain = recipe.size() > 4;
+        for (size_t i = 4; i < recipe.size(); ++i)
+        {
+            const char c = recipe[i];
+            const bool starts = recipe[i - 1] == ' ';
+            if (c == ' ' ? starts || i + 1 == recipe.size() : c < '0' || c > '9' || (starts && c == '0' && i + 1 < recipe.size() && recipe[i + 1] != ' ')) plain = false;
+        }
         unsigned long long block = 0, skeleton = 0, size = 0;
         char extra = 0;
-        if (std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &size, &extra) != 3 || size != inner.size() || block < 1 || block > 255 ||
+        if (!plain || std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &size, &extra) != 3 || size != inner.size() || block < 1 || block > 255 ||
             skeleton > size)
             throw std::runtime_error("a GIF's recipe this Sieve does not know: " + recipe);
         return gif_remake(inner, size_t(skeleton), size_t(block));
@@ -3198,18 +3208,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         s.table_bits = Mix4Params::for_size(start.size()).table_bits;
         // (The whole file is its start, and the trials' table is the whole's: the winner's code kept.)
         const bool whole = start.size() == f.size() && s.table_bits == mp.table_bits;
-        std::vector<uint8_t> least_code = mix4_code(start, s, words);
+        // (The three trials at once, where this file's share of the cores allows: none, C2, and all
+        // three, compared in that order as before, so the same choice. 6 November 2026: one after
+        // another they were most of a single file's making, prose.md 2.8 s of 3.8.)
+        Mix4Params trial[3] = {s, s, s};
+        trial[1].candidates = trial[2].candidates = 2;
+        trial[2].recover = true, trial[2].min_match = 4;
+        std::vector<uint8_t> codes[3];
+        for_each_index(3, pack_threads(), [&](size_t k) { codes[k] = mix4_code(start, trial[k], words); });
+        std::vector<uint8_t> least_code = std::move(codes[0]);
         uint64_t least = least_code.size();
         for (const int k : {1, 2})
         {
-            Mix4Params t = s;
-            t.candidates = 2;
-            if (k == 2) t.recover = true, t.min_match = 4;
-            std::vector<uint8_t> c = mix4_code(start, t, words);
-            if (const uint64_t n = c.size(); n < least)
+            const Mix4Params& t = trial[k];
+            if (const uint64_t n = codes[k].size(); n < least)
             {
                 least = n, best = mp, best.candidates = 2, best.recover = t.recover, best.min_match = t.min_match;
-                if (whole) least_code = std::move(c);
+                if (whole) least_code = std::move(codes[k]);
             }
         }
         // All three, chosen on the start of a file over 4 MiB, weighed again against C2 alone on its
@@ -3225,7 +3240,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             Mix4Params c2 = mp, all = best;
             c2.table_bits = all.table_bits = Mix4Params::for_size(first.size()).table_bits;
             c2.candidates = 2;
-            if (mix4_code(first, c2, words).size() <= mix4_code(first, all, words).size()) best.recover = false, best.min_match = 6;
+            size_t sizes[2] = {0, 0};
+            for_each_index(2, pack_threads(), [&](size_t k) { sizes[k] = mix4_code(first, k == 0 ? c2 : all, words).size(); });
+            if (sizes[0] <= sizes[1]) best.recover = false, best.min_match = 6;
         }
         std::shared_ptr<const std::vector<uint8_t>> kept;
         if (whole) kept = std::make_shared<const std::vector<uint8_t>>(std::move(least_code));
@@ -4577,7 +4594,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // and mixing whole through the filter; not the rope or pieces, which its bytes do not suit.)
             const bool program = files[i]->way == "x86";
             FileWays fw;
-            if (program)
+            // (A program's LZMA2 figure is first read when its mixing is weighed against it, so it is
+            // made on a thread of its own while the program is mixed, and waited for there; where it
+            // is not mixed, at once. 6 November 2026: an 11 MB program's 5 s of it had come first.)
+            std::future<uint64_t> program_lzma2;
+            const bool program_mixed = program && mix_on && !prioritise_decoding() && !stop_requested() &&
+                                       (rope_search_every_wave() || bytes[i].size() <= (size_t(16) << 20));
+            if (program && program_mixed)
+            {
+                const std::atomic<int>* stop = current_stop();
+                const std::vector<uint8_t>* b = &bytes[i];
+                program_lzma2 = std::async(std::launch::async, [stop, b] {
+                    const StopScope scope(stop, nullptr);
+                    return uint64_t(pack_stream(*b, dictionary_for(b->size()), true, 6, false, true).size());
+                });
+                fw.rope_bytes = UINT64_MAX;
+            }
+            else if (program)
                 fw.lzma2 = pack_stream(bytes[i], dictionary_for(bytes[i].size()), true, 6, false, true).size(), fw.rope_bytes = UINT64_MAX;
             else
             {
@@ -4591,6 +4624,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::vector<uint8_t> code;
             RopeParams params;
             uint64_t best = fw.lzma2;
+            // (the program's figure, waited for where it is first needed: before its mixing is weighed)
+            auto program_figure = [&] {
+                if (!program_lzma2.valid()) return;
+                fw.lzma2 = program_lzma2.get();
+                if (way.empty()) best = fw.lzma2;
+            };
             if (fw.rope_bytes < best)
             {
                 best = fw.rope_bytes;
@@ -4842,6 +4881,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // 0.26% over the stream and their mixing codes no smaller than it; Silesia's mozilla
                     // with the v33 draft's match ways mixed 0.43% under LZMA2, its estimate a little under
                     // the stream: 0.25% keeps the five and takes mozilla, 0.5% kept both.)
+                    program_figure();
                     const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best;
                     if (mc.size() + vl < need)
                     {
@@ -4853,6 +4893,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     }
                 }
             }
+            program_figure(); // (not mixed after all, stopped: its figure all the same)
             // What each way came to, and the one taken, said once for the file (Keep a log keeps it: the
             // window shows it only until the next; it is where a folder's bytes went, file by file).
             {
@@ -5120,7 +5161,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 try
                 {
                     const MixDictionary& list = mix_words()(word_key);
-                    if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size()) words = &list;
+                    // (with the list and without, at once where the cores allow: the same two sizes)
+                    size_t sizes[2] = {0, 0};
+                    for_each_index(2, pack_threads(), [&](size_t k) {
+                        sizes[k] = k == 0 ? mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() : mix4_code(start, Mix4Params::for_size(sn)).size();
+                    });
+                    if (sizes[0] < sizes[1]) words = &list;
                 }
                 catch (const std::exception&)
                 {
@@ -5145,18 +5191,46 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             while (len >>= 7) ++vl;
             return d.kept ? d.code.size() + vl + d.params.size() + 24 + 5 * d.members.size() : d.apart;
         };
+        // (Each group's share of the cores, for its own weighings at once: 6 November 2026, docs/'s one
+        // group of 24 files, with and without its optional files and each of their trials one after
+        // another, was 14 s of the folder's 46 on one core.)
+        const unsigned groups_at_once = unsigned(std::max<size_t>(1, std::min<size_t>(groups.size(), at_once)));
+        const unsigned group_share = std::max(1u, pack_threads() / groups_at_once);
+        // (A group of files every one mixed alone as a picture is not mixed together: mixing's groups
+        // have no picture's shape, so their pixels are mixed as bytes, and lose. 6 November 2026,
+        // docs/: five groups of three hallway screenshots, 8.3 MB each, came to 1.9 to 3 times their
+        // own codes, 81,311 bytes against 29,435 at best, and took most of the folder's 15 s of
+        // groups.)
+        auto all_pictures = [&](const std::vector<size_t>& members) {
+            for (const size_t i : members)
+            {
+                const std::string& w = files[i]->way;
+                if (!((w.rfind("mix2 ", 0) == 0 || w.rfind("mix4 ", 0) == 0) && w.find(" I") != std::string::npos)) return false;
+            }
+            return true;
+        };
+        std::vector<char> pictures_only(groups.size(), 0);
+        for (size_t g = 0; g < groups.size(); ++g) pictures_only[g] = groups[g].size() >= 2 && all_pictures(groups[g]);
         for_each_index(groups.size(), at_once, [&](size_t g) {
-            if (stop_requested() || groups[g].size() < 2) return;
-            Made with = mix_group(groups[g]);
+            if (stop_requested() || groups[g].size() < 2 || pictures_only[g]) return;
+            const InnerThreads inner(group_share);
             std::vector<size_t> without;
             uint64_t theirs = 0;
             for (const size_t i : groups[g])
                 if (optional[i]) theirs += own(i);
                 else without.push_back(i);
+            // (with its optional files and, where it has any, without them: both at once, where the
+            // share allows, the same two weighed as before)
+            const bool both = without.size() < groups[g].size() && without.size() >= 2;
+            Made with, alone;
+            for_each_index(both ? 2 : 1, pack_threads(), [&](size_t k) {
+                const InnerThreads half(both ? std::max(1u, group_share / 2) : group_share);
+                if (k == 0) with = mix_group(groups[g]);
+                else if (!stop_requested()) alone = mix_group(without);
+            });
             if (without.size() < groups[g].size() && !stop_requested())
             {
                 // (without its optional files, they carried their own ways: weighed whole against it)
-                Made alone = without.size() >= 2 ? mix_group(without) : Made{};
                 if (without.size() < 2)
                 {
                     alone.members = without;
@@ -5169,6 +5243,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         for (size_t g = 0; g < groups.size(); ++g)
         {
             const std::vector<size_t>& members = made[g].members;
+            if (pictures_only[g])
+                progress("group " + std::to_string(g + 1) + ": " + std::to_string(groups[g].size()) + " files from " + files[groups[g].front()]->path + " to " +
+                         files[groups[g].back()]->path + ", each mixed alone as a picture: not mixed together (as bytes, without their shapes)");
             if (members.size() >= 2 && made[g].total) // (said once a group: Keep a log keeps it)
             {
                 uint64_t len = made[g].code.size(), vl = 1;
@@ -6088,10 +6165,19 @@ std::vector<uint8_t> carried_dictionaries_block(std::string* said)
     for (const auto& e : fs::directory_iterator(folder))
     {
         const std::string name = e.path().filename().string();
-        if (!e.is_regular_file() || name.empty() || name[0] == '.' ||
-            name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos)
+        // (only what unpack_dictionaries takes: a plain name of 128 bytes at most that Windows can hold)
+        if (!e.is_regular_file() || name.empty() || name[0] == '.' || name.size() > 128 ||
+            name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos ||
+            name_windows_cannot_hold({name}))
             continue;
         files.push_back(e.path());
+    }
+    // (and no more than it takes: 256 files, a quarter of a GiB; else none carried, and said, rather
+    // than a program whose dictionaries every installer refuses. Review, 6 November 2026.)
+    if (files.size() > 256)
+    {
+        if (said) *said = "no dictionaries carried: the folder holds more than 256 files";
+        return {};
     }
     std::sort(files.begin(), files.end());
     std::string listing;
@@ -6105,11 +6191,32 @@ std::vector<uint8_t> carried_dictionaries_block(std::string* said)
     listing += "\n";
     std::vector<uint8_t> all(listing.begin(), listing.end());
     all.insert(all.end(), bytes.begin(), bytes.end());
-    const uint32_t dict = dictionary_for(all.size());
-    const std::vector<uint8_t> packed = encode_lzma2(all, dict, false, 9 | LZMA_PRESET_EXTREME, -1, 0, false);
-    const std::string head = "sieve-dicts-v1 " + std::to_string(all.size()) + " " + std::to_string(dict) + "\n";
-    std::vector<uint8_t> out(head.begin(), head.end());
-    out.insert(out.end(), packed.begin(), packed.end());
+    if (all.size() > (size_t(256) << 20))
+    {
+        if (said) *said = "no dictionaries carried: the folder comes to more than 256 MiB";
+        return {};
+    }
+    // (Kept for the run by the listing, every file's name, size and SHA-256: the File Locator writes
+    // a program for each folder it saves one for, and the folder's LZMA2 at 9e took seconds each
+    // time. Review, 6 November 2026.)
+    static std::mutex kept_mx;
+    static std::string kept_listing;
+    static std::vector<uint8_t> kept;
+    std::vector<uint8_t> out;
+    {
+        std::lock_guard<std::mutex> lock(kept_mx);
+        if (!kept.empty() && kept_listing == listing) out = kept;
+    }
+    if (out.empty())
+    {
+        const uint32_t dict = dictionary_for(all.size());
+        const std::vector<uint8_t> packed = encode_lzma2(all, dict, false, 9 | LZMA_PRESET_EXTREME, -1, 0, false);
+        const std::string head = "sieve-dicts-v1 " + std::to_string(all.size()) + " " + std::to_string(dict) + "\n";
+        out.assign(head.begin(), head.end());
+        out.insert(out.end(), packed.begin(), packed.end());
+        std::lock_guard<std::mutex> lock(kept_mx);
+        kept_listing = listing, kept = out;
+    }
     if (said)
         *said = std::to_string(files.size()) + " files of " + folder.string() + " (" + std::to_string(all.size()) + " bytes), carried in " +
                 std::to_string(out.size()) + " bytes";

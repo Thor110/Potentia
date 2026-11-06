@@ -92,8 +92,9 @@ std::vector<PictureHash> picture_hashes(const std::vector<uint8_t>& bytes);
 // (sieve-view), so it is not decoded twice (6 November 2026: a sieved GIF of 54 frames decoded
 // once to be checked and again to be shown). Off unless asked for; one picture kept, the first
 // checked since it was last taken or cleared (turning it off clears it), and given only for the
-// very bytes it was made from (their size and SHA-256), once.
-void keep_checked_frames(bool on);
+// very bytes it was made from (their size and SHA-256), once; and only where its frames come to
+// `most` bytes or fewer (the viewer's share of the memory: review, 6 November 2026).
+void keep_checked_frames(bool on, uint64_t most = 0);
 struct CheckedFrames
 {
     std::vector<RgbaImage> frames;

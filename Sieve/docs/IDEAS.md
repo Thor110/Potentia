@@ -6456,3 +6456,19 @@ Speed, installed in 3 s; every GIF given back. Pillow 12's GIFs open too. Still 
 before as context (the indices of one frame mean other colours in the next where the palette
 changes, so first measured, not assumed); the viewer playing GIFs; making faster (LZMA2's passes
 over the indices took most of the 101 to 161 s; with the stream's four passes run at once, 161 s became 96 s, the same bytes).
+
+**19.124 A box for zip and 7z's comparison (Edward, 6 November 2026; noted, nothing built).**
+Edward: "Another checkbox for disabling/enabling the basic zip/7zip comparisons to be added in
+the future, on by default." *What it would save:* the File Locator works out, for every folder or
+file it reads, what zip (deflate at level 9, each file on its own) and 7z (LZMA2 at preset 9
+extreme, everything as one stream) make of it, and then what they make of the Sieve instructions
+themselves. Measured on the six GIFs (9.6 MB): zip 0.19 s and 7z 3.5 s on the files, which since
+6 November run beside the packing rather than before it, so they no longer lengthen it where the
+packing takes as long; and 2.7 s on the instructions (8.4 MB), after the packing, which still
+does. On `docs/` (2.7 MB of text) neither came to anything measurable. So the box would save the
+instructions' comparison outright, and the files' comparison's processor time (energy, and cores
+the packing could have had on a folder whose packing is quick), not its wait. *How:* a "Compare
+with zip and 7z" box beside More formats, ticked by default and kept in the settings like it
+([locator] compare); unticked, the table shows Sieve's figures alone, and More formats, which only
+adds to the comparison, is greyed. *Worth keeping in mind:* the comparison is how the File
+Locator shows what Sieve gained, so the default stays on, as Edward said.

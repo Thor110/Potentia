@@ -688,6 +688,8 @@ int main(int argc, char** argv)
     }
     SDL_SetRenderVSync(r, 1);
     set_window_icon(window);
+    // (before the installer, so it is let go after it: the dictionaries it carried outlive any reading)
+    CarriedDictionaries carried;
     Installer in;
     // What to install: the file named, else the installer attached to this program itself (an
     // installer program, made with sieve locate --program or the File Locator), else the one
@@ -704,7 +706,6 @@ int main(int argc, char** argv)
     {
         in.error = e.what();
     }
-    CarriedDictionaries carried;
     // The folder an installer program offers to install into (0.13.78): its place made the
     // person's own here (their Documents, Desktop, Downloads or home), the folders under it after.
     auto offer_of = [](const fs::path& program) -> std::optional<fs::path> {
@@ -808,7 +809,11 @@ int main(int argc, char** argv)
             {
                 const fs::path dropped = from_u8(e.drop.data);
                 std::error_code ec;
-                in.offered = fs::is_regular_file(dropped, ec) && has_attached(dropped) ? offer_of(dropped) : std::nullopt; // (its own, not this program's)
+                const bool program = fs::is_regular_file(dropped, ec) && has_attached(dropped);
+                // (its own folder and its own dictionaries, not this program's: review, 6 November 2026,
+                // a dropped installer program's carried dictionaries were not used)
+                if (program) carried.use(dropped);
+                in.offered = program ? offer_of(dropped) : std::nullopt;
                 in.open(dropped);
             }
             // The address bar's editing: the selection taken out, and what is typed or pasted put in its

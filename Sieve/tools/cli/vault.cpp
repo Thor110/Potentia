@@ -19,12 +19,14 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <exception>
 #include <iterator>
 #include <fstream>
 #include <map>
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <system_error>
 #include <string_view>
 #include <thread>
 
@@ -251,9 +253,10 @@ bool withheld_picture(const uint8_t* rgba, uint32_t width, uint32_t height)
 
 namespace {
 
-// (keep_checked_frames: the last picture checked, its frames kept for whoever shows it next)
+// (keep_checked_frames: the first picture checked, its frames kept for whoever shows it next)
 std::mutex g_checked_mx;
 bool g_keep_checked = false;
+uint64_t g_keep_most = 0;
 std::string g_checked_key; // its size and SHA-256
 CheckedFrames g_checked;
 
@@ -294,24 +297,52 @@ bool withheld_as_picture(std::span<const uint8_t> bytes)
         if (k == 0 || frames[k].rgba != frames[k - 1].rgba) to_check.push_back(k);
     std::atomic<size_t> next{0};
     std::atomic<bool> hit{false};
+    std::exception_ptr failed;
+    std::mutex failed_mx;
     auto work = [&] {
-        for (size_t i = next++; i < to_check.size() && !hit; i = next++)
+        try
         {
-            const RgbaImage& f = frames[to_check[i]];
-            if (withheld_picture(f.rgba.data(), f.width, f.height)) hit = true;
+            for (size_t i = next++; i < to_check.size() && !hit; i = next++)
+            {
+                const RgbaImage& f = frames[to_check[i]];
+                if (withheld_picture(f.rgba.data(), f.width, f.height)) hit = true;
+            }
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(failed_mx);
+            if (!failed) failed = std::current_exception();
+            next = to_check.size(); // (the rest left: the check fails as a whole, below)
         }
     };
-    const size_t n = std::min<size_t>(to_check.size(), std::max(1u, std::thread::hardware_concurrency()));
+    // (At most 4 threads: the files are often checked on threads of their own already, one each,
+    // so this asks for no more than a few more apiece. A thread that cannot be started leaves its
+    // share to the others; every one started is joined. Review, 6 November 2026.)
+    const size_t n = std::min(std::min<size_t>(to_check.size(), 4), size_t(std::max(1u, std::thread::hardware_concurrency())));
     std::vector<std::thread> threads;
-    for (size_t t = 1; t < n; ++t) threads.emplace_back(work);
+    for (size_t t = 1; t < n; ++t)
+    {
+        try
+        {
+            threads.emplace_back(work);
+        }
+        catch (const std::system_error&)
+        {
+            break;
+        }
+    }
     work();
     for (std::thread& t : threads) t.join();
+    if (failed) std::rethrow_exception(failed);
     if (keep && !hit)
     {
-        // (the first picture checked kept, not the last: a .sieve's first is the one shown first)
+        // (the first picture checked kept, not the last: a .sieve's first is the one shown first;
+        // and none whose frames come to more than the viewer may hold)
+        uint64_t held = 0;
+        for (const RgbaImage& f : frames) held += f.rgba.size();
         {
             std::lock_guard<std::mutex> lock(g_checked_mx);
-            if (!g_checked_key.empty()) return hit;
+            if (!g_checked_key.empty() || (g_keep_most && held > g_keep_most)) return hit;
         }
         std::string key = bytes_key(bytes);
         std::lock_guard<std::mutex> lock(g_checked_mx);
@@ -448,10 +479,11 @@ std::string hash_checked_file(const fs::path& file, const std::string& what)
     return hex;
 }
 
-void keep_checked_frames(bool on)
+void keep_checked_frames(bool on, uint64_t most)
 {
     std::lock_guard<std::mutex> lock(g_checked_mx);
     g_keep_checked = on;
+    g_keep_most = most;
     if (!on) g_checked_key.clear(), g_checked = {};
 }
 

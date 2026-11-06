@@ -2967,7 +2967,8 @@ std::optional<std::pair<std::string, std::string>> offered_folder(const fs::path
     const std::string block(reinterpret_cast<const char*>(f.data() + p.folder_at), size_t(p.folder_size));
     const std::string head = "sieve-folder-v1\n";
     if (block.rfind(head, 0) != 0 || block.back() != '\n') return std::nullopt;
-    const std::string spec = block.substr(head.size(), block.size() - head.size() - 1);
+    // (in the form it was checked in: Desktop\\Foo is Desktop/Foo; review, 6 November 2026)
+    const std::string spec = normal_folder(block.substr(head.size(), block.size() - head.size() - 1));
     if (offered_folder_problem(spec)) return std::nullopt; // (checked again as it is read: made by anyone)
     const size_t slash = spec.find('/');
     std::string base = spec.substr(0, slash);
@@ -3024,10 +3025,14 @@ std::vector<CarriedFile> unpack_dictionaries(std::span<const uint8_t> block)
             c.name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos)
             throw bad("a name");
         if (size.empty() || size.size() > 10 || size.find_first_not_of("0123456789") != std::string::npos) throw bad("a size");
+        if (name_windows_cannot_hold({c.name})) throw bad("a name Windows cannot hold"); // (CON, aux.txt: a device there)
         if (c.sha256.size() != 64) throw bad("a SHA-256");
-        c.bytes.resize(size_t(std::stoull(size)));
-        total += c.bytes.size();
-        if (total > unpacked || out.size() >= 256) throw bad("more than it holds");
+        // (its size checked against what the block holds before any of it is set aside: review, 6
+        // November 2026, a listed size of ten digits was allocated first)
+        const uint64_t n = std::stoull(size);
+        if (n > unpacked - total || out.size() >= 256) throw bad("more than it holds");
+        c.bytes.resize(size_t(n));
+        total += n;
         out.push_back(std::move(c));
     }
     if (at + total != all.size()) throw bad("its files do not fill it");

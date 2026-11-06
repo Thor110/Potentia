@@ -7483,7 +7483,7 @@ def cmd_unpack_v7(args, data):
             # "gif <sub-block size> <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft):
             # a GIF made again from its skeleton and its frames' colour indices (gif_make).
             _, blk, skel, n, way = way.split(" ", 4)
-            if not (all(x.isdigit() for x in (blk, skel, n)) and 1 <= int(blk) <= 255 and 13 <= int(skel) <= int(n)) or \
+            if not (all(re.fullmatch(r"0|[1-9][0-9]*", x, re.ASCII) for x in (blk, skel, n)) and 1 <= int(blk) <= 255 and 13 <= int(skel) <= int(n)) or \
                     not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
                 sys.exit(f"{path}: a GIF's recipe Sieve does not write")
             remakes[i] = ("gif", int(blk), int(skel), size)

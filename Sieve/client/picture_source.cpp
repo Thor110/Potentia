@@ -164,6 +164,7 @@ void make_pixels(Picture& p, bool all_frames)
     // (made already: done, unless its other frames are asked for now and were not made then)
     if (p.made && (!all_frames || p.frames <= 1 || !p.more.empty() || !p.one_frame.empty())) return;
     p.made = false;
+    p.one_frame.clear(), p.delays_ms.clear(), p.more.clear();
     uint32_t w = 0, h = 0;
     const bool jpeg = is_jpeg_bytes(p.file);
     const bool info = image_info(p.file.data(), p.file.size(), w, h);
@@ -206,6 +207,9 @@ void make_pixels(Picture& p, bool all_frames)
         for (size_t k = 1; k < frames.size(); ++k)
             if (frames[k].width == p.pixels.width && frames[k].height == p.pixels.height) p.more.push_back(std::move(frames[k]));
         if (p.more.size() + 1 != frames.size()) p.more.clear(), p.delays_ms.clear();
+        // (the frames there were, where all were asked for: a GIF whose blocks count more than
+        // decode, one cut short, is not decoded again on each call; review, 6 November 2026)
+        if (every) p.frames = p.more.size() + 1;
         p.scale = 1;
     }
     else

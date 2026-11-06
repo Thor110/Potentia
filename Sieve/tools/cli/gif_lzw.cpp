@@ -17,18 +17,22 @@ constexpr uint64_t kMostIndices = uint64_t(1) << 30;
 
 uint16_t le16(const uint8_t* p) { return uint16_t(p[0] | p[1] << 8); }
 
-// Each frame's LZW undone: its indices, or nothing where the stream is not one this reads (a code
-// not yet in the table, no end code, more or fewer indices than the frame holds, an index past
-// the code size's colours).
-std::optional<std::vector<uint8_t>> lzw_decode(int mcs, const std::vector<uint8_t>& data, uint64_t pixels)
+// Each frame's LZW undone: its indices put after what `out` holds, or false where the stream is not
+// one this reads (a code not yet in the table, no end code, more or fewer indices than the frame
+// holds); `out` is then as it was. (Onto the end of one vector, every frame's: review, 6 November
+// 2026, each frame held apart and then copied had held them all twice.)
+bool lzw_decode(int mcs, const std::vector<uint8_t>& data, uint64_t pixels, std::vector<uint8_t>& out)
 {
+    const size_t base = out.size();
+    auto fail = [&] {
+        out.resize(base);
+        return false;
+    };
     const uint32_t clear = 1u << mcs, eoi = clear + 1;
     std::array<uint16_t, 4096> prefix{};
     std::array<uint8_t, 4096> suffix{}, first{};
     std::array<uint16_t, 4096> length{};
     for (uint32_t i = 0; i < clear; ++i) suffix[i] = first[i] = uint8_t(i), length[i] = 1;
-    std::vector<uint8_t> out;
-    out.reserve(size_t(pixels));
     int nbits = mcs + 1;
     uint32_t next = clear + 2;
     int32_t prev = -1;
@@ -36,7 +40,7 @@ std::optional<std::vector<uint8_t>> lzw_decode(int mcs, const std::vector<uint8_
     const uint64_t bits = uint64_t(data.size()) * 8;
     auto emit = [&](uint32_t code) {
         const size_t n = length[code];
-        if (out.size() + n > pixels) return false;
+        if (out.size() - base + n > pixels) return false;
         out.resize(out.size() + n);
         uint8_t* p = out.data() + out.size();
         for (uint32_t c = code;; c = prefix[c])
@@ -48,7 +52,7 @@ std::optional<std::vector<uint8_t>> lzw_decode(int mcs, const std::vector<uint8_
     };
     for (;;)
     {
-        if (bit + uint64_t(nbits) > bits) return std::nullopt; // (no end code)
+        if (bit + uint64_t(nbits) > bits) return fail(); // (no end code)
         uint32_t code = 0;
         for (int i = 0; i < nbits; ++i, ++bit) code |= uint32_t(data[bit >> 3] >> (bit & 7) & 1) << i;
         if (code == clear)
@@ -61,13 +65,13 @@ std::optional<std::vector<uint8_t>> lzw_decode(int mcs, const std::vector<uint8_
         if (code == eoi) break;
         if (prev < 0)
         {
-            if (code >= clear || !emit(code)) return std::nullopt;
+            if (code >= clear || !emit(code)) return fail();
             prev = int32_t(code);
             continue;
         }
         if (code < next && code != clear && code != eoi)
         {
-            if (!emit(code)) return std::nullopt;
+            if (!emit(code)) return fail();
             if (next < 4096)
             {
                 prefix[next] = uint16_t(prev), suffix[next] = first[code], first[next] = first[prev], length[next] = uint16_t(length[prev] + 1);
@@ -78,14 +82,14 @@ std::optional<std::vector<uint8_t>> lzw_decode(int mcs, const std::vector<uint8_
         {
             prefix[next] = uint16_t(prev), suffix[next] = first[prev], first[next] = first[prev], length[next] = uint16_t(length[prev] + 1);
             ++next;
-            if (!emit(code)) return std::nullopt;
+            if (!emit(code)) return fail();
         }
-        else return std::nullopt;
+        else return fail();
         prev = int32_t(code);
         if (next == (1u << nbits) && nbits < 12) ++nbits;
     }
-    if (out.size() != pixels) return std::nullopt;
-    return out;
+    if (out.size() - base != pixels) return fail();
+    return true;
 }
 
 // A frame's indices coded as compress codes them (Weiner's LZWEncoder, as gifenc has it): the code
@@ -281,7 +285,8 @@ std::optional<GifOpened> gif_open(const std::vector<uint8_t>& b)
     size_t at = 13;
     if (b[10] & 0x80) at += size_t(3) << ((b[10] & 7) + 1);
     std::vector<uint8_t> skeleton;
-    std::vector<std::vector<uint8_t>> indices;
+    std::vector<uint8_t> indices; // (every frame's, one after another)
+    size_t frames = 0;
     size_t copied = 0;
     int block = 0; // (the sub-block size every frame cuts its LZW into, the last cut shorter)
     uint64_t total = 0;
@@ -328,20 +333,18 @@ std::optional<GifOpened> gif_open(const std::vector<uint8_t>& b)
             ++at;
             copied = at;
             if (sizes.size() > 1 && !block) block = sizes[0];
-            auto px = lzw_decode(mcs, data, pixels);
-            if (!px) return std::nullopt;
-            indices.push_back(std::move(*px));
+            if (!lzw_decode(mcs, data, pixels, indices)) return std::nullopt;
+            ++frames;
         }
         else return std::nullopt;
     }
-    if (indices.empty()) return std::nullopt;
+    if (frames == 0) return std::nullopt;
     skeleton.insert(skeleton.end(), b.begin() + std::ptrdiff_t(copied), b.end());
     if (!block) block = 255;
     GifOpened g;
-    g.frames = indices.size();
+    g.frames = frames;
     const size_t skeleton_size = skeleton.size();
-    g.inner.reserve(skeleton_size + size_t(total));
-    for (const auto& px : indices) g.inner.insert(g.inner.end(), px.begin(), px.end());
+    g.inner = std::move(indices);
     g.inner.insert(g.inner.end(), skeleton.begin(), skeleton.end());
     // (Given back exactly, or not taken: the one check that the GIF was coded as compress codes.)
     try

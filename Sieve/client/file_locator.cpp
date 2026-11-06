@@ -16,14 +16,17 @@
 #include "sieve/rope_wave.hpp"
 #include "sieve/stop.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <fstream>
 #include <random>
+#include <span>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace hallway {
 
@@ -756,6 +759,52 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         // A measure for the table, or kNotMeasured once asked to stop.
         auto measured = [](uint64_t (*f)(std::span<const uint8_t>), std::span<const uint8_t> b) { return stop_requested() ? cli::kNotMeasured : f(b); };
         auto plus = [](uint64_t a, uint64_t b) { return a == cli::kNotMeasured || b == cli::kNotMeasured ? cli::kNotMeasured : a + b; };
+        // What zip and 7z (and, with More formats, the others) make of what was read, on a thread of
+        // its own beside the packing rather than before it, taking the job's stop with it, and
+        // waited for (even where the packing throws) before the table is made. (6 November 2026:
+        // on six GIFs, 9.6 MB, they had added 6.7 s to the packing's 20 s.)
+        struct Beside
+        {
+            std::thread t;
+            std::vector<uint8_t> owned; // (a folder's files joined; a file's bytes are read where they are)
+            uint64_t deflate = 0, lzma2 = 0;
+            std::vector<cli::FormatSize> more;
+            void wait()
+            {
+                if (t.joinable()) t.join();
+            }
+            ~Beside() { wait(); }
+        } beside;
+        // (`all` untouched until compared() has waited for it)
+        auto compare_beside = [&](std::span<const uint8_t> all, std::vector<size_t> ends, bool with_more) {
+            const std::atomic<int>* stop = current_stop();
+            beside.t = std::thread([&beside, measured, plus, stop, with_more, all, ends = std::move(ends)] {
+                const StopScope scope(stop, nullptr);
+                {
+                    // (zip: each file on its own)
+                    const cli::timings::Scope t("locator.zip");
+                    size_t from = 0;
+                    for (const size_t to : ends)
+                    {
+                        beside.deflate = plus(beside.deflate, measured(cli::deflate_size, std::span<const uint8_t>(all.data() + from, to - from)));
+                        from = to;
+                    }
+                }
+                {
+                    const cli::timings::Scope t("locator.7z");
+                    beside.lzma2 = measured(cli::lzma2_size, all);
+                }
+                if (with_more && !stop_requested())
+                {
+                    const cli::timings::Scope t("locator.more");
+                    beside.more = cli::more_format_sizes(all);
+                }
+            });
+        };
+        auto compared = [&](cli::Comparison& into) {
+            beside.wait();
+            into.deflate = beside.deflate, into.lzma2 = beside.lzma2, into.more = std::move(beside.more);
+        };
         Result r;
         r.path = path;
         try
@@ -849,24 +898,9 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 }
                 refine_estimate(1);
                 c.original = r.bytes.size();
-                progress("what zip makes of it (deflate, level 9)");
-                {
-                    const T t("locator.zip");
-                    c.deflate = measured(cli::deflate_size, r.bytes);
-                }
+                // (zip, 7z and, More formats ticked, gzip, bzip2, zstd, brotli and lz4: beside the packing)
+                compare_beside(r.bytes, {r.bytes.size()}, more);
                 refine_estimate(2);
-                progress("what 7z makes of it (LZMA2, preset 9 extreme)");
-                {
-                    const T t("locator.7z");
-                    c.lzma2 = measured(cli::lzma2_size, r.bytes);
-                }
-                if (more && !stop_requested())
-                {
-                    // (More formats ticked: gzip, bzip2, zstd, brotli and lz4 too; brotli at 11 is slow)
-                    progress("what gzip, bzip2, zstd, brotli and lz4 make of it (More formats)");
-                    const T t("locator.more");
-                    c.more = cli::more_format_sizes(r.bytes);
-                }
                 refine_estimate(3);
                 c.address_bytes = a.bytes;
                 c.address_hex = a.bytes ? a.hex_digits : 0;
@@ -881,6 +915,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.pack_seconds = since(packing);
                 refine_estimate(4);
                 const T tc("locator.instructions-compared");
+                progress("what zip and 7z make of it");
+                compared(c);
                 std::vector<uint8_t> mb = fi.file();
                 warn_rars(fi); // (a RAR to be made again by rar: said now, in a box, not only in the documents)
                 c.packed = fi.packed;
@@ -920,27 +956,23 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     estimate(r.manifest.bytes, largest, most, files, searched);
                 }
                 std::vector<uint8_t> all;
-                progress("reading its files, their addresses, and what zip makes of each");
+                std::vector<size_t> ends; // (where each file ends in all: zip takes each on its own)
+                progress("reading its files and their addresses");
                 for (const auto& e : r.manifest.entries)
                 {
                     if (e.dir) continue;
                     const auto bytes = cli::read_file_bytes(p / from_u8(e.path));
                     const cli::RawSummary a = cli::raw_summary(bytes, 24);
                     c.original += bytes.size();
-                    c.deflate = plus(c.deflate, measured(cli::deflate_size, bytes));
                     c.address_bytes += a.bytes;
                     c.address_hex += a.bytes ? a.hex_digits : 0;
                     all.insert(all.end(), bytes.begin(), bytes.end());
+                    ends.push_back(all.size());
                 }
+                // (zip, each file; 7z, all as one stream; More formats: beside the packing)
+                beside.owned = std::move(all);
+                compare_beside(beside.owned, std::move(ends), more);
                 refine_estimate(2);
-                progress("what 7z makes of them (LZMA2, preset 9 extreme, as one stream)");
-                c.lzma2 = measured(cli::lzma2_size, all);
-                if (more && !stop_requested())
-                {
-                    progress("what gzip, bzip2, zstd, brotli and lz4 make of them, as one stream (More formats)");
-                    const cli::timings::Scope t("locator.more");
-                    c.more = cli::more_format_sizes(all);
-                }
                 refine_estimate(3);
                 // The installer's manifest (v4: every file packed after it), compressed, and the installer.
                 cli::Manifest with = r.manifest;
@@ -956,6 +988,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     r.pack_seconds = since(packing);
                 }
                 refine_estimate(4);
+                progress("what zip and 7z make of them");
+                compared(c);
                 warn_rars(with);
                 c.packed = with.packed;
                 c.version = with.version();
@@ -1330,7 +1364,14 @@ void FileLocator::draw(float W, float H)
             to.swap(pending_save_);
         }
         if (pick) analyse(*pick);
-        if (to && save_what_ == 3) ask_folder(false, *to, u8(from_u8(result_.path).filename())); // (an installer program: the folder it offers first)
+        if (to && save_what_ == 3)
+        {
+            // (an installer program: the folder it offers first, named after what was read; a path
+            // ending in a separator named by its last folder, not left empty: review, 6 November 2026)
+            fs::path named = from_u8(result_.path);
+            if (named.filename().empty()) named = named.parent_path();
+            ask_folder(false, *to, u8(named.filename()));
+        }
         else if (to) save(*to);
         std::optional<std::pair<int, std::string>> inst;
         {
