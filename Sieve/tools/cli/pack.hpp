@@ -27,6 +27,7 @@
 #include <set>
 #include <atomic>
 #include <cstdint>
+#include <future>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -210,7 +211,12 @@ struct FileWays
     uint64_t runs = 0;              // where the file is long runs of one byte, how many (else 0): no search was made
     std::vector<uint8_t> runs_code; // and (v33 draft) each run's length (a varint) and byte
     std::string rope_said;          // where the rope was not searched, why (said in its place)
+    // Where LZMA2's figure is still being made, on a thread of its own (a file the rope was not
+    // searched for, whose figure nothing reads until mixing is weighed): lzma2_of waits for it.
+    std::shared_future<uint64_t> lzma2_later;
 };
+// LZMA2's figure, waited for where it is still being made (and kept in `lzma2` after).
+uint64_t lzma2_of(FileWays& w);
 FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest = 6, bool pieces = true);
 // The ways file_ways keeps for the run (the File Locator's weighing asks for them again) let go:
 // when a reading is done, so a large file's are not held after it.

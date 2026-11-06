@@ -124,6 +124,7 @@ struct AppSettings
     bool locator_search_run = false;
     bool locator_every_wave = false; // the rope's search through every wave, even on packed bytes
     bool locator_decoding = false;   // Prioritise Decoding Speed: no file mixed
+    bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)
     bool locator_more = false;       // More formats: the comparison with gzip, bzip2, zstd, brotli and lz4 too (0.13.78)
     bool locator_optimise = true;    // Optimise Search: Try every way chosen for each file by its kind (ticked unless unticked)
     bool locator_draft = false;      // the next version's draft (cli/draft.hpp; [locator] v33_draft, its name from the version)

@@ -349,10 +349,19 @@ WarpInput read_warp_input(const Line& line, const Args& a)
             break;
         }
         const NoteSet set = note_set_of(line.space.symbols_id());
-        const NotesCanonResult c = set.legacy ? canonicalise_notes(input, line.space.unit_length())
-                                              : canonicalise_notes2(input, set, line.space.unit_length() / set.voices);
-        w.report.push_back(std::string(set.legacy ? kNotesCanonVersion : kNotes2CanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
-                           std::to_string(c.units.size()) + " unit(s)");
+        // A MIDI file (by its signature) read back as notation first, on every note set as on notes3,
+        // and as the hallway reads one (IDEAS §13: warp and bind --file took MIDI on notes3 alone).
+        std::string notation = input;
+        if (input.rfind("MThd", 0) == 0)
+        {
+            std::vector<std::string> notes;
+            notation = midi_to_notation(std::vector<uint8_t>(input.begin(), input.end()), set, &notes);
+            for (const std::string& n : notes) w.report.push_back("midi: " + n);
+        }
+        const NotesCanonResult c = set.legacy ? canonicalise_notes(notation, line.space.unit_length())
+                                              : canonicalise_notes2(notation, set, line.space.unit_length() / set.voices);
+        w.report.insert(w.report.begin(), std::string(set.legacy ? kNotesCanonVersion : kNotes2CanonVersion) + ": " + std::to_string(c.events) + " event(s), " +
+                                              std::to_string(c.units.size()) + " unit(s)");
         if (c.flats_rewritten) w.report.push_back(count_line("flats as sharps", c.flats_rewritten));
         if (c.octave_shifted)
             w.report.push_back(count_line("octave shifted", c.octave_shifted, set.legacy ? "moved into C4-C6" : "moved into the line's range"));

@@ -44,6 +44,15 @@ It asks `sieve-install --archive-extensions` which names to add the menu to, so 
 added to Sieve later is taken up by running it again; `uninstall_context.bat` takes Sieve out of
 the menu of every kind of file it is on, whatever the list was.
 
+**Create .sieve** (6 November 2026, IDEAS §19.100): every file and folder gets a "Create .sieve"
+entry of its own (`HKCU\Software\Classes\*\shell\SieveCreate` and `Directory\shell\SieveCreate`),
+which opens the hallway's File Locator alone (`hallway --create PATH`) on what was chosen, with its
+estimate, best so far and Stop; once it is read, `NAME.sieve` is saved beside it, said for a moment,
+and the window closes (exit code 0). Stopped or failed, it stays open saying why (1 once closed).
+It uses the hallway one folder above `tools\` (a release) or beside `sieve-install` (a build), and
+is left out where there is none. One file or folder a time: Explorer starts one window for each
+chosen.
+
 A release carries this folder beside the programs. There, `install_context.bat` finds
 `tools\sieve-install.exe` in the installation by itself; in the repository, the Release build's.
 

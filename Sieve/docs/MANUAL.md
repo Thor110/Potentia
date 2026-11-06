@@ -104,6 +104,10 @@ they need no path given; in the repository they find the Release build.
 
 `sieve` in `tools\` finds the dictionaries and models in the folder above; the hallway finds `sieve-install` in `tools\`. A build folder keeps all three programs together, and they work either way.
 
+**Create .sieve** (6 November 2026): with `context\install_context.bat` run, every file and folder in Explorer has "Create .sieve" on its right-click menu, which opens the File Locator alone on it (`hallway --create PATH [--out FILE]`), saves `NAME.sieve` beside it once it is read, says so and closes; stopped or failed, it stays open saying why. On Windows 11, under "Show more options".
+
+**Compare with zip and 7z** (6 November 2026, IDEAS §19.124): the File Locator's box (Z), ticked unless unticked, works out what zip (deflate 9, each file on its own) and 7z (LZMA2 9e, everything as one stream) make of what was read, beside the packing, and of the Sieve instructions after it, and shows them in the table. Unticked, neither is worked out and the table shows Sieve's figures alone, which is quicker on a large folder (six GIFs, 9.6 MB: 25.7 s to 21.6 s); More formats, which only adds to the comparison, is greyed with it. Kept in the settings (`[locator] compare`).
+
 **More formats in the comparison** (0.13.78): the File Locator's **More formats** box (C), or `sieve locate PATH --compare --more-formats`, sets gzip, bzip2, zstd, brotli and lz4 beside zip and 7z, each the whole as one stream at its strongest usual setting (gzip -9, bzip2 -9, zstd -19 --long=27, brotli -q 11 -w 24, lz4 -12), without its container. It is unticked unless ticked, as it takes longer: brotli at 11 above all. Kept in the settings (`[locator] more_formats`).
 
 **An installer program can offer its own folder** (0.13.78): `sieve locate FOLDER --program OUT --install-folder Documents/Games/Name`, or typed when the File Locator makes one; run, it offers that folder (the person's own Documents, Desktop, Downloads or home, then the folders named) in place of Documents and the folder's name. SIEVE-INSTALL-USAGE has the rules.
@@ -751,7 +755,7 @@ The Python oracle shares no code with the C++ core. It uses native big integers,
 
 The oracle also rebuilds the default model from the raw corpus (`sieve_ref.py model-build`) and must produce the same SHA-256 as `sieve train`. The core tests check every tiny space exhaustively: at L = 1–3 the arcs of all 27^L units tile the line exactly, every address is the shortest block that fits, and every address decodes back. The same holds for the sieved guided line over the survivors of `clean` and `words`: no non-survivor has an arc. Every ranker is checked against its filter over every unit of small lengths, and the shuffle is checked as a permutation of every size up to 300.
 
-`sieve_tests` runs every check twice: once on the portable SHA-256 and once on the CPU's SHA instructions (SHA-NI, on x86-64 CPUs that have them), so both paths are held to the same vectors. The fast path is picked automatically at start-up; `sieve version` shows which one this machine uses.
+`sieve_tests` runs every check twice: once on the portable SHA-256 and once on the CPU's SHA instructions (SHA-NI, on x86-64 CPUs that have them), so both paths are held to the same vectors. The fast path is picked automatically at start-up; `sieve version` shows which one this machine uses. To check one area alone, `sieve_tests tests --only NAME[,NAME...]` runs only the tests whose name holds one of them (`--only mix4,rope_wave`: 242 checks in about 4 s, where the whole suite takes minutes), and `--list` names them all; `tools\run_tests.bat` and CI run the whole suite, as the metrics it logs are of the whole.
 
 ### Performance
 

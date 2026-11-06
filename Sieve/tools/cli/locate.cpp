@@ -18,6 +18,7 @@
 #include "Lzma2Dec.h"
 
 #include <algorithm>
+#include <system_error>
 #include <atomic>
 #include <condition_variable>
 #include <exception>
@@ -3269,34 +3270,78 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         refuse_names_one_ignoring_case(names, dest);
         refuse_names_windows_cannot_hold(names); // (and a name Windows cannot hold would be another file)
     }
+    // (Each file's place first, in order: its bytes where they lie in the contents, or read back
+    // from its address.)
     size_t at = 0;
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (cancelled()) return false;
         const ManifestEntry& e = *files[i].first;
-        std::span<const uint8_t> bytes;
         if (m.with_contents)
         {
             if (m.contents.size() - at < e.size) throw std::runtime_error("the installer ends before " + e.path);
-            bytes = std::span<const uint8_t>(m.contents.data() + at, size_t(e.size));
+            view[i] = std::span<const uint8_t>(m.contents.data() + at, size_t(e.size));
             at += size_t(e.size);
         }
         else
         {
             files[i].second = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
-            bytes = files[i].second;
+            view[i] = files[i].second;
         }
-        // (An item's own SHA-256 is "-": the tree's, checked when the manifest was read, covers it.)
-        Sha256 hasher;
-        hasher.update(bytes);
-        const std::string sha = Sha256::hex(hasher.finish());
-        if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
-            throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
-        vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever written
-        if (!kept(e.path) && fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
-        view[i] = bytes;
-        if (progress) progress(0, i + 1, files.size(), e.path);
     }
+    // Then each file checked, its size and SHA-256 and the vault's check, on up to 4 threads at
+    // once (the vault may decode a picture on each); what fails said as the first file's in order,
+    // as one at a time says it. (IDEAS 19.120: one after another, about 4 s a GB on one core.)
+    std::vector<std::exception_ptr> failed(files.size());
+    std::atomic<size_t> next{0}, done{0};
+    auto check = [&](bool reports) {
+        for (size_t i; (i = next.fetch_add(1)) < files.size();)
+        {
+            if (cancelled()) return;
+            const ManifestEntry& e = *files[i].first;
+            try
+            {
+                // (An item's own SHA-256 is "-": the tree's, checked when the manifest was read, covers it.)
+                Sha256 hasher;
+                hasher.update(view[i]);
+                const std::string sha = Sha256::hex(hasher.finish());
+                if (view[i].size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
+                    throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
+                vault::check_known(view[i], sha, e.path); // the vault: nothing it withholds is ever written
+            }
+            catch (...)
+            {
+                failed[i] = std::current_exception();
+            }
+            const size_t n = ++done;
+            if (reports && progress) progress(0, n, files.size(), e.path);
+        }
+    };
+    {
+        const unsigned threads = unsigned(std::min<size_t>(std::min(4u, std::max(1u, pack_threads())), files.size()));
+        std::vector<std::thread> pool;
+        for (unsigned t = 1; t < threads; ++t)
+        {
+            try
+            {
+                pool.emplace_back(check, false);
+            }
+            catch (const std::system_error&)
+            {
+                break; // (a thread not to be had: its share left to the others)
+            }
+        }
+        check(true); // (this thread says how it goes)
+        for (auto& t : pool) t.join();
+    }
+    if (cancelled()) return false;
+    for (size_t i = 0; i < files.size(); ++i)
+    {
+        if (failed[i]) std::rethrow_exception(failed[i]);
+        const ManifestEntry& e = *files[i].first;
+        if (!kept(e.path) && fs::exists(path_of(e.path)) && !force) throw std::runtime_error(e.path + " is already there");
+    }
+    if (progress && !files.empty()) progress(0, files.size(), files.size(), files.back().first->path);
     // Phase 1: the folders, then the files, remembering what was made so a cancel can undo it.
     std::vector<fs::path> made_dirs, made_files;
     auto undo = [&] {

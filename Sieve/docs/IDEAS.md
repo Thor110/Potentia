@@ -923,7 +923,7 @@ is a setting, as a book holds pages of any length.
   the books' kind (`cover`, `title`, `units` sections), `sieve-book-v2` where an audio section names
   a set other than `notes104`; F saves one (`.track`, `.movie`), J opens one onto its shelf, and
   `sieve bind --line tracks|movies`, `read --record` and `unbind --units` make and read them.
-- **The `sieve` tool reads MIDI files** only on `notes3` lines; on `notes104` and `notes2` a `.mid`
+- ~~**The `sieve` tool reads MIDI files** only on `notes3` lines;~~ Done (6 November 2026): `warp --file` and `bind --file` read a MIDI file on every note set (`midi_to_notation`, as the hallway); CI step 3 checks the hymn's 73 events on notes104 and notes2. Before: on `notes104` and `notes2` a `.mid`
   given to `warp --file` (or `bind --file`) is read as notation and refused. The hallway's J reads
   MIDI on every note set (`midi_to_notation`); the tool should too.
 
@@ -1954,6 +1954,8 @@ package. To spend less of his time: packages grouped by category (a round of fil
 the AI line, a round of the hallway) and delivered less often; the full suite run here before each;
 and a way for the suite to run one area at a time (a test name or category on its command line), so
 a feature can be checked on its own while the full run is kept for the end of a round.
+*Built (6 November 2026):* `sieve_tests tests --only NAME[,NAME...]` runs only the tests whose name
+holds one of them, and `--list` names the 80; `--only mix4,rope_wave` is 242 checks in about 4 s here.
 
 **19.11 A video game dimension (Edward, 12 October 2026).** Not yet designed. Edward's thoughts: the
 game line of GAME.md §4 (arcade cabinets) was meant to be woven through the story. Possibly a new
@@ -4821,7 +4823,12 @@ allotted time".
   works.
 - *Still open:* the time the boundaries take grows with how many there are, and threads (§19.99)
   are the next step; the memory a very large file needs is not estimated yet (for 700 MB, about 4
-  to 6 GB expected from how the address is made, not measured).
+  to 6 GB expected from how the address is made, not measured). *Built (6 November 2026):* "about N GB of
+  memory" beside the estimate, and "more than the N GB free: it may be slow, or stop" where it is:
+  200 MB, 150 MB for each of up to as many files as threads (at least 3), and nine times what is
+  read. Fitted on six measured here (docs/, six GIFs, nine files, dickens, samba, an 11 MB program:
+  0.65 to 1.04 GB at the most, on 4 threads), each within about a quarter; it puts Edward's 377 MB
+  folder on 12 threads at 5.4 GB, where it took 4.1 (§19.105).
 
 **19.98 Recurring values, scale repeats and a randomly locked byte (Edward, 22 October 2026;
 measured or answered, nothing built).**
@@ -5081,6 +5088,12 @@ faster:
   line of progress.
 - *When:* after making is faster and the estimate is checked against Edward's logs (HANDOFF's plan
   of 29 October 2026, items 1 and 4).
+- *Built (6 November 2026):* `hallway --create PATH [--out FILE]` and the "Create .sieve" entry on
+  every file and folder (`context/install_context.bat`), as decided: the File Locator alone, live
+  while it works, NAME.sieve saved beside it, closed with 0; stopped or failed, open and saying why
+  (1). A folder of the test fixture 2.2 s, MANUAL.md 3.2 s, each installing back the same. Still
+  to come: several files chosen as one `.sieve` (Explorer starts one window for each), and "Other
+  compressed formats".
 
 
 **19.101 The crawler as a card: a hardware layer for a site's table (Edward, 25 October 2026;
@@ -5945,6 +5958,22 @@ the day's measurements and review, roughly in the order they would pay:
   - *A bar for mixing over 16 MiB:* not built: it waits on the power benchmark's figures, which say
     what a second of installing costs against a byte saved.
 
+*Measured and left (6 November 2026, the easy wins' list):* mixing an Alpha ECOFF program whole
+without the start test, as an x86 one is. On the five mozilla libraries: three are already mixed
+(libgkcontent 1,289,253 bytes, libxpcom 348,104, libmailnews 252,465: mixing now takes them as
+pictures 4 bytes wide, their instructions, which passes the start test), the same bytes with or
+without it; libnecko, mixed whole without the test, still went to LZMA2 (326,211 either way); and
+libgklayout, which the test turns away, mixed whole to 1,036,101 bytes, under LZMA2's estimate but
+over the stream LZMA2 then made (1,022,018), so 0.6% larger. The test is right where it says no,
+and nothing is built.
+*Built (6 November 2026):* mixing's tables at least B20 for a file of 32 KiB or more, where v33 is
+made (mix4_for in pack.cpp). Measured first with `sieve mix` on ten files of 39 KB to 235 KB
+(programs, a source, JPEGs, a screenshot's pixels, a film, a text): B20 smaller on every one, 0.05%
+to 3.3% (t32.exe 42,737 bytes to 41,470), 0.03 to 0.04 s more a file coded and as much decoded;
+B22 0.2% to 4.1% for about 0.15 s more and 268 MB a file to decode, so B20. In the packer, where a
+file of that size is mixed alone: sieve_cli.cpp 30,967 bytes to 30,754; the other files measured,
+and docs/, the same bytes (not mixed alone, or of another size), their times within the noise.
+
 **19.113 From Edward's enwik9 bench and the enwik8 power bench (2 November 2026).**
 - *enwik9, four ways (no search limit, 12 logical processors):* size/try mixed it, 185,105,231 bytes
   (12.59% under 7z's 211,776,158), installing in 1,007 s; size/no, decode/try and decode/no all came
@@ -6272,7 +6301,10 @@ should take on:
 - *Speed, packing:* (a) a single file's LZMA2 first pass (preset 9e) runs alone before its mixing
   is weighed, though nothing reads it until mixing's last comparison: made on a thread of its own
   and taken when needed, dickens 49.4 s to 36.5 s in a prototype, every `.sieve` the same bytes; it
-  wants FileWays to hold the figure still to come, and weigh.cpp to wait for it. (b) The start
+  wants FileWays to hold the figure still to come, and weigh.cpp to wait for it. (*Built, 6 November
+  2026:* for programs and for every file the rope is not searched for, a text it cannot win or a
+  file its probe turns away, the figure made beside the mixing (FileWays::lzma2_later); dickens
+  34.9 s to 23.6 s with mixing's trials at once, the same bytes.) (b) The start
   test's cache keyed on "over 4 MiB", so a file over 4 MiB mixes its first 256 KiB three ways
   twice; keyed without it, two files with the same first 256 KiB would share the 4 MiB decision,
   valid but not the bytes made before, so it waits for a format's turn. (c) Archives' and spans'
@@ -6280,12 +6312,18 @@ should take on:
   cores' number on that step (estimated).
 - *Speed, installing:* every file's SHA-256 and the vault's chunk scan run on one core (about 4 s a
   GB measured on their parts); on the threads, reporting the first failure in listing order as
-  decode_deferred does.
+  decode_deferred does. (*Built, 6 November 2026:* on up to 4 threads; the six GIFs' check and
+  write 1.41 s to 0.66 s with the vault's frames at once, docs/ 0.26 s to 0.08 s; the same files,
+  and the same messages for a damaged file or one already there.)
 - *Names on Windows and macOS:* case is folded for A to Z only, so É.txt and é.txt (or a name in
   its NFC and NFD forms on macOS) are written one over the other there, the install saying it
   succeeded; Windows' reserved names (CON, NUL, COM1, aux.txt) and names ending in a dot or a space
   are not refused. Unicode simple case folding with NFC, or refusing such names, in the packer's
-  warning and the installer's refusal alike.
+  warning and the installer's refusal alike. (*Built:* the reserved names on 5 November (0.13.78); and on 6
+  November every letter Unicode gives a case folded as Windows folds it, one to one
+  (tools/cli/case_fold_table.hpp, made by tools/gen_case_fold.py from Unicode 15.1: 1,455 pairs),
+  so É.txt and é.txt, Σοφία and σοφία, are one name to the packer's warning and the installer's
+  refusal, while straße and STRASSE stay two, as on Windows. NFC and NFD forms are still two.)
 - *A RAR made again* sets each member's mode before the RAR is checked; the modes are now masked
   to 0777, but the members could be held to the files this install wrote, and the modes set only
   once the RAR matches.
@@ -6457,7 +6495,7 @@ before as context (the indices of one frame mean other colours in the next where
 changes, so first measured, not assumed); the viewer playing GIFs; making faster (LZMA2's passes
 over the indices took most of the 101 to 161 s; with the stream's four passes run at once, 161 s became 96 s, the same bytes).
 
-**19.124 A box for zip and 7z's comparison (Edward, 6 November 2026; noted, nothing built).**
+**19.124 A box for zip and 7z's comparison (Edward, 6 November 2026; built the same day).**
 Edward: "Another checkbox for disabling/enabling the basic zip/7zip comparisons to be added in
 the future, on by default." *What it would save:* the File Locator works out, for every folder or
 file it reads, what zip (deflate at level 9, each file on its own) and 7z (LZMA2 at preset 9
@@ -6471,4 +6509,6 @@ the packing could have had on a folder whose packing is quick), not its wait. *H
 with zip and 7z" box beside More formats, ticked by default and kept in the settings like it
 ([locator] compare); unticked, the table shows Sieve's figures alone, and More formats, which only
 adds to the comparison, is greyed. *Worth keeping in mind:* the comparison is how the File
-Locator shows what Sieve gained, so the default stays on, as Edward said.
+Locator shows what Sieve gained, so the default stays on, as Edward said. *Built (6 November 2026):*
+"Compare with zip and 7z" (Z, `[locator] compare`, ticked by default); unticked, the six GIFs 25.7 s
+to 21.6 s in the File Locator, the table Sieve's figures alone and More formats greyed.

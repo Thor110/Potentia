@@ -207,6 +207,9 @@ const char* kUsage =
     "                      made into Sieve instructions (--sample-out FILE, else DIR.sieve)\n"
     "  --stop-after S      with --locate: press Stop after S seconds (the best found by then kept)\n"
     "  --locate-save FILE  with --locate: save its Sieve instructions to FILE once it is read\n"
+    "  --create PATH       Create .sieve: the File Locator alone on a file or folder, NAME.sieve\n"
+    "                      saved beside it once it is read (--out FILE: there), then closed (0);\n"
+    "                      stopped or failed, it stays open saying why (1 once closed)\n"
     "  --shot-after S      with --locate and --screenshot: the picture taken S seconds in, while it works\n"
     "  --force-after S     with --locate: press Stop again (force) S seconds in: the pass under way abandoned\n"
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
@@ -411,7 +414,8 @@ std::optional<std::pair<double, bool>> locator_search_of(const sieve::cli::Args&
 
 bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& settings, FilterConfig& filters, const std::string& filters_path,
                  const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "",
-                 std::optional<LocatedGo>* go = nullptr, std::optional<std::pair<double, bool>> search = std::nullopt)
+                 std::optional<LocatedGo>* go = nullptr, std::optional<std::pair<double, bool>> search = std::nullopt,
+                 const std::string& create_out = "", int* created = nullptr)
 {
     MenuLocator m;
     settings.apply(m.la);
@@ -462,7 +466,8 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
     FileLocator loc(window, renderer, host);
     self = &loc;
     if (search) loc.set_search(search->first, search->second);
-    if (!path.empty()) loc.locate_now(path, tailor);
+    if (!create_out.empty()) loc.create(path, create_out); // (Create .sieve: the window live while it works)
+    else if (!path.empty()) loc.locate_now(path, tailor);
     else loc.open();
     auto frame = [&] {
         int ww = 0, wh = 0;
@@ -501,6 +506,12 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
         music_mode(MusicMode::Menus);
         frame();
         present(renderer);
+        // (Create .sieve: saved and said, so closed; stopped or failed, left open saying why)
+        if (!create_out.empty() && loc.create_finished() == 1)
+        {
+            if (created) *created = 1;
+            break;
+        }
     }
     loc.stop();
     return !quit;
@@ -837,6 +848,11 @@ int run(const Args& a)
     });
     FileLocator::remember_decoding(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
         app.locator_decoding = on;
+        app.save(app_path);
+    });
+    // Compare with zip and 7z ([locator] compare, on unless turned off).
+    FileLocator::remember_compare(app.locator_compare, shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
+        app.locator_compare = on;
         app.save(app_path);
     });
     // More formats in the comparison ([locator] more_formats; --more-formats for this run).
@@ -1279,6 +1295,20 @@ int run(const Args& a)
         return finish();
     }
 
+    // Create .sieve (Explorer's right-click menu, IDEAS 19.100, as Edward decided on 29 October
+    // 2026): the File Locator alone, no hallway behind it, on PATH; NAME.sieve saved beside it
+    // (--out: there instead), said for a moment, and closed, with 0 for a script to read; stopped
+    // or failed, it stays open saying why, and closing it gives 1.
+    if (a.has("create"))
+    {
+        std::string what = a.get("create");
+        while (what.size() > 1 && (what.back() == '/' || what.back() == '\\')) what.pop_back();
+        const std::string out = a.has("out") ? a.get("out") : what + ".sieve";
+        int created = 0;
+        run_locator(window, renderer, settings, filters, filters_path, what, false, "", "", nullptr, locator_search_of(a), out, &created);
+        finish();
+        return created ? 0 : 1;
+    }
     // Interactive: the main menu, then the setup menu, then the hallway (--no-menu goes straight
     // in). F1 in the hallway returns to the setup menu, and Esc there to the main menu.
     bool show_menu = !a.has("no-menu");

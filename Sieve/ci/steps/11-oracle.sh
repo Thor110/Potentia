@@ -1237,6 +1237,16 @@ else
     $SI case_pair.zip --to cp_z --yes > /dev/null
     for d in cp_s cp_si cp_z; do [ "$(cat $d/A.txt)" = upper ] && [ "$(cat $d/a.txt)" = lower ]; done
     $S locate cp_s --installer cp_again.sieve 2>&1 | tr -d '\r' | grep -q "^warning: A.txt and a.txt are one name where case is ignored"
+    # (6 November 2026, IDEAS §19.120: letters beyond A to Z folded too, as Windows folds them: É and
+    # é one name, Σ and σ one; ß and SS two, as Windows has them.)
+    rm -rf cp_u cp_ss
+    mkdir cp_u cp_ss
+    printf one > "cp_u/$(printf '\303\211').txt"
+    printf two > "cp_u/$(printf '\303\251').txt"
+    $S locate cp_u --installer cp_u.sieve 2>&1 | tr -d '\r' | grep -q "are one name where case is ignored"
+    printf one > "cp_ss/stra$(printf '\303\237')e.txt"
+    printf two > cp_ss/STRASSE.txt
+    if $S locate cp_ss --installer cp_ss.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
 fi
 # A name Windows cannot hold (aux.txt, the device AUX, made on Linux: tests/windows_names.sieve,
 # 0.13.78): on Windows, Sieve and sieve-install refuse it before writing anything, naming it; on

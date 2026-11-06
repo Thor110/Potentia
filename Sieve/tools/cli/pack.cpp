@@ -288,6 +288,22 @@ std::vector<uint8_t> encode_lzma2(const std::vector<uint8_t>& data, uint32_t dic
 // stream's first pass 658 s, of the same bytes. Keyed by the bytes' SHA-256, the dictionary, the
 // filter and the preset; at most one, let go once the stream is packed.
 std::atomic<bool> g_keep_first{false};
+
+// Mixing's tables for a file of 32 KiB or more at least B20 (64 MB), where the newest instructions
+// are made (v33 on; older versions make what they made, byte for byte). Mix4Params::for_size gives
+// a file tables about twice its size (B16 to B22), which on small files leaves mixing a little
+// short: on ten files of 39 KB to 235 KB (programs, a source, JPEGs, a screenshot's pixels, a film,
+// a text), B20 made every one smaller than their own size's tables, 0.05% to 3.3% (t32.exe 42,737
+// bytes to 41,470), for 0.03 to 0.04 s more a file coded and as much decoded; B22 made them 0.2%
+// to 4.1% smaller for about 0.15 s more and 268 MB a file to decode (IDEAS 19.112; 6 November 2026).
+std::atomic<bool> g_table_floor{false};
+
+Mix4Params mix4_for(uint64_t bytes, uint32_t width = 0, uint32_t channels = 1, uint32_t dictionary = 0, bool by_use = false)
+{
+    Mix4Params p = Mix4Params::for_size(bytes, width, channels, dictionary, by_use);
+    if (g_table_floor.load(std::memory_order_relaxed) && bytes >= (uint64_t(32) << 10) && p.table_bits < 20) p.table_bits = 20;
+    return p;
+}
 std::mutex g_first_mx;
 std::string g_first_key;
 std::vector<uint8_t> g_first_code;
@@ -2710,6 +2726,30 @@ static uint64_t whole_estimate(const std::vector<uint8_t>& bytes)
     return n;
 }
 
+uint64_t lzma2_of(FileWays& w)
+{
+    if (w.lzma2_later.valid())
+    {
+        w.lzma2 = w.lzma2_later.get();
+        w.lzma2_later = {};
+    }
+    return w.lzma2;
+}
+
+// LZMA2's figure for a file the rope was not searched for, made on a thread of its own and taken
+// when it is first read (lzma2_of): nothing reads it before mixing is weighed, so the two run at
+// once. (6 November 2026, IDEAS 19.120 (a): a single file's first pass, 9e, had run alone before
+// its mixing; dickens 49.4 s to 36.5 s in the prototype. The same figure, so the same bytes.)
+static std::shared_future<uint64_t> whole_estimate_later(const std::vector<uint8_t>& bytes)
+{
+    const std::atomic<int>* stop = current_stop();
+    const std::vector<uint8_t>* b = &bytes;
+    return std::async(std::launch::async, [stop, b] {
+               const StopScope scope(stop, nullptr);
+               return whole_estimate(*b);
+           }).share();
+}
+
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces)
 {
     FileWays w;
@@ -2763,7 +2803,7 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
                 std::snprintf(ratio, sizeof ratio, "%.2f", double(by_rope) / double(std::max<uint64_t>(by_lzma2, 1)));
                 w.rope_said = std::string("not searched: a text whose start its line wave makes ") + ratio + " times LZMA2's";
                 progress(w.rope_said);
-                w.lzma2 = whole_estimate(bytes);
+                w.lzma2_later = whole_estimate_later(bytes);
                 w.rope_bytes = UINT64_MAX;
                 w.pieces_said = "not cut: the rope does not win this text";
                 if (force_requested()) w.forced = true;
@@ -2813,7 +2853,7 @@ static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rop
             w.rope_said = std::string("not searched: its first 256 KiB the rope's search makes ") + ratio + " times LZMA2's";
             progress(w.rope_said);
             w.tried += tried;
-            w.lzma2 = whole_estimate(bytes);
+            w.lzma2_later = whole_estimate_later(bytes);
             w.rope_bytes = UINT64_MAX;
             w.pieces_said = "not cut: the rope does not win this file";
             if (force_requested()) w.forced = true;
@@ -3167,6 +3207,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // Quixote 1.2% larger with all three and 0.2% smaller with C2 alone; a screenshot a little larger
     // (so weighed, not always on).
     const bool match_ways_on = mix4_on && rope_newest >= 16; // (v33's own number: still on once v33 is frozen and the draft moves on)
+    g_table_floor = mix4_on && rope_newest >= 16; // (mixing's tables at least B20 from 32 KiB: mix4_for)
     // v33 draft (2 November 2026): a file of a repeating byte or pattern carried as its segments ("runs").
     const bool runs_way_on = rope_newest >= 16;
     const bool palette_on = rope_newest >= 16; // v33 draft: a picture of 256 colours or fewer mixed as its palette (mix-v4's P)
@@ -3205,7 +3246,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         }
         if (weighed.size() > 256) weighed.clear();
         Mix4Params best = mp, s = mp;
-        s.table_bits = Mix4Params::for_size(start.size()).table_bits;
+        s.table_bits = mix4_for(start.size()).table_bits;
         // (The whole file is its start, and the trials' table is the whole's: the winner's code kept.)
         const bool whole = start.size() == f.size() && s.table_bits == mp.table_bits;
         // (The three trials at once, where this file's share of the cores allows: none, C2, and all
@@ -3238,7 +3279,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const size_t more = size_t(4) << 20;
             const std::span<const uint8_t> first = f.first(mp.palette ? more - more % mp.channels : more);
             Mix4Params c2 = mp, all = best;
-            c2.table_bits = all.table_bits = Mix4Params::for_size(first.size()).table_bits;
+            c2.table_bits = all.table_bits = mix4_for(first.size()).table_bits;
             c2.candidates = 2;
             size_t sizes[2] = {0, 0};
             for_each_index(2, pack_threads(), [&](size_t k) { sizes[k] = mix4_code(first, k == 0 ? c2 : all, words).size(); });
@@ -3258,7 +3299,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         if (!primer_on || !text_like(start) || !web_like(start) || stop_requested()) return 0;
         try
         {
-            Mix4Params s = Mix4Params::for_size(start.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+            Mix4Params s = mix4_for(start.size(), 0, 1, words ? word_size : 0, words && by_use_on);
             const uint64_t without = mix4_code(start, s, words).size();
             s.primer = 1;
             return mix4_code(start, s, words).size() < without ? 1 : 0;
@@ -3400,7 +3441,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 // Mixing's gain over LZMA2 on the sample, applied to LZMA2's estimate of the whole (a
                 // sample alone misses what repeats across the whole, which LZMA2's dictionary finds).
-                const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
+                const double code = double(mix4_code(s, mix4_for(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
                 return uint64_t(double(estimate(inner)) * std::min(1.0, code / lz));
             };
             // The same, in its two halves (the sample's ratio, -1 where mixing is not weighed; LZMA2's
@@ -3414,7 +3455,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     const size_t at = (inner.size() - each) * k / 7;
                     s.insert(s.end(), inner.begin() + std::ptrdiff_t(at), inner.begin() + std::ptrdiff_t(at + each));
                 }
-                const double code = double(mix4_code(s, Mix4Params::for_size(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
+                const double code = double(mix4_code(s, mix4_for(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
                 return std::min(1.0, code / lz);
             };
             // v33 draft: a text holding binary written as text (base64, hex, lists of byte values;
@@ -4597,17 +4638,17 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // (A program's LZMA2 figure is first read when its mixing is weighed against it, so it is
             // made on a thread of its own while the program is mixed, and waited for there; where it
             // is not mixed, at once. 6 November 2026: an 11 MB program's 5 s of it had come first.)
-            std::future<uint64_t> program_lzma2;
+            std::shared_future<uint64_t> figure_later;
             const bool program_mixed = program && mix_on && !prioritise_decoding() && !stop_requested() &&
                                        (rope_search_every_wave() || bytes[i].size() <= (size_t(16) << 20));
             if (program && program_mixed)
             {
                 const std::atomic<int>* stop = current_stop();
                 const std::vector<uint8_t>* b = &bytes[i];
-                program_lzma2 = std::async(std::launch::async, [stop, b] {
-                    const StopScope scope(stop, nullptr);
-                    return uint64_t(pack_stream(*b, dictionary_for(b->size()), true, 6, false, true).size());
-                });
+                figure_later = std::async(std::launch::async, [stop, b] {
+                                    const StopScope scope(stop, nullptr);
+                                    return uint64_t(pack_stream(*b, dictionary_for(b->size()), true, 6, false, true).size());
+                                }).share();
                 fw.rope_bytes = UINT64_MAX;
             }
             else if (program)
@@ -4617,6 +4658,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", the rope and pieces");
                 // The smallest of LZMA2 alone, the rope, and (v13) the file in pieces (file_ways).
                 fw = file_ways(bytes[i], rope_seconds, rope_newest, pieces);
+                // (a file the rope was not searched for: its LZMA2 figure still being made, beside
+                // the mixing below, and taken as a program's is; IDEAS 19.120 (a))
+                if (fw.lzma2_later.valid()) figure_later = std::move(fw.lzma2_later), fw.lzma2_later = {};
             }
             got.tried = fw.tried;
             if (fw.forced || force_requested()) return; // force stop: this file and the rest as they are
@@ -4624,10 +4668,11 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::vector<uint8_t> code;
             RopeParams params;
             uint64_t best = fw.lzma2;
-            // (the program's figure, waited for where it is first needed: before its mixing is weighed)
-            auto program_figure = [&] {
-                if (!program_lzma2.valid()) return;
-                fw.lzma2 = program_lzma2.get();
+            // (a figure still being made, a program's or one the rope's probe left: waited for where it
+            // is first needed, before mixing is weighed against it)
+            auto take_figure = [&] {
+                if (!figure_later.valid()) return;
+                fw.lzma2 = figure_later.get();
                 if (way.empty()) best = fw.lzma2;
             };
             if (fw.rope_bytes < best)
@@ -4709,7 +4754,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                                    uint32_t primer = 0) {
                     if (mix4_on)
                     {
-                        Mix4Params base = Mix4Params::for_size(f.size(), w, c, words ? word_size : 0, words && by_use_on);
+                        Mix4Params base = mix4_for(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
@@ -4860,6 +4905,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 // (A program is mixed whole, its start no guide: of the 16 above, 5 that came out
                 // smaller whole were not 3% smaller on their first 256 KiB, cmake 9% larger there.)
                 const bool tried = every || program || [&] {
+                    if (sn == bytes[i].size()) take_figure(); // (the file is its start: its figure is read here)
                     const uint64_t ls = sn == bytes[i].size() ? fw.lzma2 : estimate(start);
                     return ms * 100 < ls * 97;
                 }();
@@ -4881,7 +4927,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // 0.26% over the stream and their mixing codes no smaller than it; Silesia's mozilla
                     // with the v33 draft's match ways mixed 0.43% under LZMA2, its estimate a little under
                     // the stream: 0.25% keeps the five and takes mozilla, 0.5% kept both.)
-                    program_figure();
+                    take_figure();
                     const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best;
                     if (mc.size() + vl < need)
                     {
@@ -4893,7 +4939,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     }
                 }
             }
-            program_figure(); // (not mixed after all, stopped: its figure all the same)
+            take_figure(); // (not mixed after all, stopped: its figure all the same)
             // What each way came to, and the one taken, said once for the file (Keep a log keeps it: the
             // window shows it only until the next; it is where a folder's bytes went, file by file).
             {
@@ -5164,7 +5210,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // (with the list and without, at once where the cores allow: the same two sizes)
                     size_t sizes[2] = {0, 0};
                     for_each_index(2, pack_threads(), [&](size_t k) {
-                        sizes[k] = k == 0 ? mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() : mix4_code(start, Mix4Params::for_size(sn)).size();
+                        sizes[k] = k == 0 ? mix4_code(start, mix4_for(sn, 0, 1, word_size, by_use_on), &list).size() : mix4_code(start, mix4_for(sn)).size();
                     });
                     if (sizes[0] < sizes[1]) words = &list;
                 }
@@ -5172,7 +5218,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     // (no word list here: without it)
                 }
-            Mix4Params base = Mix4Params::for_size(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+            Mix4Params base = mix4_for(joined.size(), 0, 1, words ? word_size : 0, words && by_use_on);
             base.primer = primer_for(start, words);
             const Mix4Params mp = with_ways(base, joined, words);
             d.code = mix4_code(joined, mp, words);
@@ -5333,14 +5379,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     try
                     {
                         const MixDictionary& list = mix_words()(word_key);
-                        if (mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size() < mix4_code(start, Mix4Params::for_size(sn)).size())
+                        if (mix4_code(start, mix4_for(sn, 0, 1, word_size, by_use_on), &list).size() < mix4_code(start, mix4_for(sn)).size())
                             words = &list;
                     }
                     catch (const std::exception&)
                     {
                         // (no word list here: without it)
                     }
-                Mix4Params base = Mix4Params::for_size(together.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                Mix4Params base = mix4_for(together.size(), 0, 1, words ? word_size : 0, words && by_use_on);
                 base.primer = primer_for(start, words);
                 const Mix4Params mp = with_ways(base, together, words);
                 std::vector<uint8_t> code = mix4_code(together, mp, words);
@@ -5512,12 +5558,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const size_t sn = std::min<size_t>(plain.size(), size_t(256) << 10);
             const std::span<const uint8_t> start(plain.data(), sn);
             const MixDictionary* words = nullptr;
-            uint64_t ms = mix4_code(start, Mix4Params::for_size(sn)).size();
+            uint64_t ms = mix4_code(start, mix4_for(sn)).size();
             if (text_like(start) && mix_words())
                 try
                 {
                     const MixDictionary& list = mix_words()(word_key);
-                    if (const uint64_t with = mix4_code(start, Mix4Params::for_size(sn, 0, 1, word_size, by_use_on), &list).size(); with < ms)
+                    if (const uint64_t with = mix4_code(start, mix4_for(sn, 0, 1, word_size, by_use_on), &list).size(); with < ms)
                     {
                         ms = with;
                         words = &list;
@@ -5530,7 +5576,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             const uint64_t ls = sn == plain.size() ? pp.size() : estimate(std::vector<uint8_t>(start.begin(), start.end()));
             if (every || ms * 100 < ls * 97)
             {
-                Mix4Params base = Mix4Params::for_size(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on);
+                Mix4Params base = mix4_for(plain.size(), 0, 1, words ? word_size : 0, words && by_use_on);
                 base.primer = primer_for(start, words);
                 const Mix4Params mp = with_ways(base, plain, words);
                 std::vector<uint8_t> code = mix4_code(plain, mp, words);

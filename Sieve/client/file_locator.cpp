@@ -425,6 +425,18 @@ KeptMore& kept_more()
 void FileLocator::remember_more(bool on, std::function<void(bool)> changed) { kept_more() = {on, std::move(changed)}; }
 
 namespace {
+// "Compare with zip and 7z" (IDEAS 19.124, Edward: "on by default"): unticked, what zip and 7z make
+// of what was read and of the instructions is not worked out, and the table shows Sieve's alone.
+KeptMore& kept_compare()
+{
+    static KeptMore k{true, {}};
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_compare(bool on, std::function<void(bool)> changed) { kept_compare() = {on, std::move(changed)}; }
+
+namespace {
 // The search's shares as learned (-1: not measured yet), and what saves them.
 struct KeptShares
 {
@@ -504,6 +516,7 @@ void FileLocator::start_job(bool new_graph)
     job_started_ = Clock::now();
     job_estimate_ = -1;
     job_estimate_text_.clear();
+    memory_text_.clear();
     est_live_ = est_unlimited_ = false;
     last_took_ = -1;
     est_done_ = 0;
@@ -558,11 +571,12 @@ void FileLocator::estimate_now(double remaining)
 // the job has run longer than estimated.
 std::string FileLocator::estimate_text() const
 {
-    if (!est_live_) return job_estimate_text_;
+    auto with_memory = [this](std::string t) { return memory_text_.empty() ? t : t.empty() ? memory_text_ : t + "; " + memory_text_; };
+    if (!est_live_) return with_memory(job_estimate_text_);
     const double left = job_estimate_ - since(job_started_);
     const char* key = left >= 1 ? (est_unlimited_ ? "loc.estimate.refined.unlimited" : "loc.estimate.refined")
                                 : (est_unlimited_ ? "loc.estimate.past.unlimited" : "loc.estimate.past");
-    return trf(key, {duration_text(job_estimate_), duration_text(std::abs(left))});
+    return with_memory(trf(key, {duration_text(job_estimate_), duration_text(std::abs(left))}));
 }
 
 // A run that was not stopped: the share of each search's limit it used, kept for the next estimate
@@ -596,6 +610,7 @@ std::string FileLocator::finish_job()
     est_on_ = est_live_ = est_unlimited_ = false;
     est_first_ = -1;
     job_estimate_text_.clear();
+    memory_text_.clear();
     job_started_ = {};
     progress_.clear();
     if (stop_ >= kForce) t = tr("loc.forced") + "; " + t;
@@ -752,7 +767,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         std::lock_guard<std::mutex> lock(mx_);
         open_log(tailor ? "tailoring the filters to" : "reading", path);
     }
-    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes, more = kept_more().on] {
+    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes, compare = kept_compare().on, more = kept_more().on && kept_compare().on] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
@@ -777,6 +792,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         } beside;
         // (`all` untouched until compared() has waited for it)
         auto compare_beside = [&](std::span<const uint8_t> all, std::vector<size_t> ends, bool with_more) {
+            if (!compare) return; // (the box unticked: not worked out)
             const std::atomic<int>* stop = current_stop();
             beside.t = std::thread([&beside, measured, plus, stop, with_more, all, ends = std::move(ends)] {
                 const StopScope scope(stop, nullptr);
@@ -802,6 +818,8 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             });
         };
         auto compared = [&](cli::Comparison& into) {
+            into.compared = compare;
+            if (!compare) return;
             beside.wait();
             into.deflate = beside.deflate, into.lzma2 = beside.lzma2, into.more = std::move(beside.more);
         };
@@ -814,6 +832,23 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             // The estimate: the reading timed on the start of the largest file and drawn out to
             // the whole, and the most the search may take (packing, then weighing) on top.
             auto estimate = [&](uint64_t bytes, const fs::path& largest, uint64_t largest_bytes, size_t files, size_t searched) {
+                // The memory it needs, about (IDEAS 19.97; Edward's 700 MB folder had stalled the machine):
+                // mixing's tables and LZMA2's passes, a few at once, then about nine times what is read.
+                // Fitted on six measured here (2.7 to 22 MB read, 0.65 to 1.0 GB at the most, on 4
+                // threads), each within about a quarter; a 377 MB folder on 12 threads took 4.1 GB,
+                // this says 5.4. Said beside the estimate, and where it is over the memory free, so.
+                {
+                    const uint64_t threads = std::max(1u, std::thread::hardware_concurrency());
+                    const uint64_t need = (uint64_t(200) << 20) + (uint64_t(150) << 20) * std::min<uint64_t>(threads, std::max<uint64_t>(files, 3)) + 9 * bytes;
+                    const uint64_t free_now = cli::memory_free();
+                    auto gb = [](uint64_t n) {
+                        char b[32];
+                        std::snprintf(b, sizeof b, "%.1f GB", double(n) / 1073741824.0);
+                        return std::string(b);
+                    };
+                    std::lock_guard<std::mutex> lock(mx_);
+                    memory_text_ = free_now && need > free_now ? trf("loc.memory.over", {gb(need), gb(free_now)}) : trf("loc.memory", {gb(need)});
+                }
                 const double each = by_total ? cli::budget_per_file(total, files) : per_file;
                 r.pack_search = 2 * each * double(searched); // the file whole, then its pieces (file_ways)
                 r.pack_search_unlimited = each <= 0;
@@ -915,16 +950,19 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.pack_seconds = since(packing);
                 refine_estimate(4);
                 const T tc("locator.instructions-compared");
-                progress("what zip and 7z make of it");
+                if (compare) progress("what zip and 7z make of it");
                 compared(c);
                 std::vector<uint8_t> mb = fi.file();
                 warn_rars(fi); // (a RAR to be made again by rar: said now, in a box, not only in the documents)
                 c.packed = fi.packed;
                 c.version = fi.version();
                 c.manifest = mb.size();
-                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes; what zip and 7z make of them");
-                c.manifest_deflate = measured(cli::deflate_size, mb);
-                c.manifest_lzma2 = measured(cli::lzma2_size, mb);
+                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes" + (compare ? "; what zip and 7z make of them" : ""));
+                if (compare)
+                {
+                    c.manifest_deflate = measured(cli::deflate_size, mb);
+                    c.manifest_lzma2 = measured(cli::lzma2_size, mb);
+                }
                 progress("the instructions' address");
                 std::vector<uint8_t> raw = cli::raw_of_file(std::move(mb));
                 c.installer_hex = cli::raw_hex_digits(raw);
@@ -988,16 +1026,19 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                     r.pack_seconds = since(packing);
                 }
                 refine_estimate(4);
-                progress("what zip and 7z make of them");
+                if (compare) progress("what zip and 7z make of them");
                 compared(c);
                 warn_rars(with);
                 c.packed = with.packed;
                 c.version = with.version();
                 std::vector<uint8_t> mb = with.file();
                 c.manifest = mb.size();
-                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes; what zip and 7z make of them");
-                c.manifest_deflate = measured(cli::deflate_size, mb);
-                c.manifest_lzma2 = measured(cli::lzma2_size, mb);
+                progress("Sieve instructions of " + std::to_string(cli::raw_summary(mb, 24).bytes) + " bytes" + (compare ? "; what zip and 7z make of them" : ""));
+                if (compare)
+                {
+                    c.manifest_deflate = measured(cli::deflate_size, mb);
+                    c.manifest_lzma2 = measured(cli::lzma2_size, mb);
+                }
                 progress("the instructions' address");
                 std::vector<uint8_t> raw = cli::raw_of_file(std::move(mb));
                 c.installer_hex = cli::raw_hex_digits(raw);
@@ -1121,6 +1162,7 @@ void FileLocator::save(const std::string& to)
         const Result& r = result_;
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
         std::string done;
+        bool ok = true;
         try
         {
             const fs::path out = from_u8(to);
@@ -1158,8 +1200,10 @@ void FileLocator::save(const std::string& to)
         catch (const std::exception& e)
         {
             done = trf("loc.save_failed", {e.what()});
+            ok = false;
         }
         std::lock_guard<std::mutex> lock(mx_);
+        last_save_ok_ = ok && stop_ == 0;
         status_ = done + "; " + finish_job();
         // A save that packed nothing again took seconds: the time that made the instructions, the
         // search with it, was the reading's, said beside it (else only the save's was shown).
@@ -1229,7 +1273,8 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
         case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
-        case SDLK_C: pressed = "more"; break;     // More formats in the comparison, on or off
+        case SDLK_C: pressed = kept_compare().on ? "more" : ""; break; // More formats in the comparison, on or off (the comparison on)
+        case SDLK_Z: pressed = "compare"; break;  // Compare with zip and 7z, on or off
         case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
         case SDLK_S: pressed = busy_ ? "stop" : ""; break; // Stop: the best found so far kept
         case SDLK_RETURN:
@@ -1283,6 +1328,12 @@ void FileLocator::event(const SDL_Event& e)
     else if (pressed == "log")
     {
         KeptLog& k = kept_log();
+        k.on = !k.on;
+        if (k.changed) k.changed(k.on);
+    }
+    else if (pressed == "compare")
+    {
+        KeptMore& k = kept_compare();
         k.on = !k.on;
         if (k.changed) k.changed(k.on);
     }
@@ -1548,7 +1599,16 @@ void FileLocator::draw(float W, float H)
         else box("every", sieve::rope_search_every_wave(), tr("loc.every"));
         box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
         box("log", kept_log().on, tr("loc.log"));
-        box("more", kept_more().on, tr("loc.more"));
+        box("compare", kept_compare().on, tr("loc.compare"));
+        // (More formats only adds to the comparison: greyed and not pressed while it is off)
+        if (!kept_compare().on)
+        {
+            const std::string text = std::string(kept_more().on ? "[x] " : "[ ] ") + tr("loc.more");
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
+            draw_text(r_, bx + 12, box_y + 8, text, 2, grey);
+            bx += text_width(text, 2) + 24 + 12;
+        }
+        else box("more", kept_more().on, tr("loc.more"));
         return box_y;
     };
     if (!busy && r.kind == Result::None && r.error.empty())
@@ -2045,6 +2105,47 @@ Scripted& scripted()
 void FileLocator::script(double stop_after, const std::string& save_to, double shot_after, double force_after)
 {
     scripted() = {stop_after, save_to, shot_after, force_after};
+}
+
+void FileLocator::create(const std::string& path, const std::string& out)
+{
+    open();
+    create_out_ = out;
+    create_state_ = 1;
+    analyse(path); // (on the worker: the window drawn while it works)
+}
+
+int FileLocator::create_finished()
+{
+    if (create_state_ == 0 || create_state_ == 4) return create_state_ == 4 ? -1 : 0;
+    if (busy_) return 0;
+    if (create_state_ == 1)
+    {
+        // Read: saved where it was read whole, as Save does; else left open, saying why.
+        if (result_.kind == Result::None || !result_.error.empty() || result_.stopped)
+        {
+            create_state_ = 4;
+            return -1;
+        }
+        save_what_ = 4;
+        last_save_ok_ = false;
+        save(create_out_);
+        create_state_ = 2;
+        return 0;
+    }
+    if (create_state_ == 2)
+    {
+        if (!last_save_ok_)
+        {
+            create_state_ = 4;
+            return -1;
+        }
+        create_state_ = 3;
+        create_saved_at_ = std::chrono::steady_clock::now();
+        return 0;
+    }
+    // (saved: said for two seconds, then closed)
+    return std::chrono::steady_clock::now() - create_saved_at_ >= std::chrono::seconds(2) ? 1 : 0;
 }
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame; with

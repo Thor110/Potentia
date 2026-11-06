@@ -6628,91 +6628,117 @@ void test_midi_read()
     std::cout << "MIDI read back: " << n << " melodies\n";
 }
 
+// `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole
+// suite): only the tests whose call names one of them (as part of it: "mix" runs test_mix to
+// test_mix4); `--list` names them all and runs none.
+std::vector<std::string> g_only;
+bool g_list = false;
+
+bool wanted(const char* call)
+{
+    if (g_list)
+    {
+        std::cout << call << "\n";
+        return false;
+    }
+    if (g_only.empty()) return true;
+    const std::string c = call;
+    for (const std::string& o : g_only)
+        if (c.find(o) != std::string::npos) return true;
+    return false;
+}
+
+#define RUN(call) \
+    do \
+    { \
+        if (wanted(#call)) call; \
+    } while (false)
+
 void run_all(int argc, char** argv)
 {
-    test_sha256();
-    test_utf8();
-    test_biguint();
-    test_space_basics();
-    test_scramble_bijection();
-    test_neighbour();
-    test_fraction();
-    test_corridor();
-    test_canon();
-    test_sieve();
-    test_image();
-    test_audio();
-    test_midi_read();
-    test_model();
-    test_guided();
-    test_modelspace();
+    RUN(test_sha256());
+    RUN(test_utf8());
+    RUN(test_biguint());
+    RUN(test_space_basics());
+    RUN(test_scramble_bijection());
+    RUN(test_neighbour());
+    RUN(test_fraction());
+    RUN(test_corridor());
+    RUN(test_canon());
+    RUN(test_sieve());
+    RUN(test_image());
+    RUN(test_audio());
+    RUN(test_midi_read());
+    RUN(test_model());
+    RUN(test_guided());
+    RUN(test_modelspace());
     if (argc > 1)
     {
         const std::string dir = std::string(argv[1]) + "/";
-        test_vectors(dir + "vectors_v1.tsv");
-        test_biguint_vectors(dir + "vectors_biguint_v1.tsv");
-        test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv");
-        test_digit_vectors(dir + "vectors_digits_v1.tsv");
-        test_canon_vectors(dir + "vectors_canon.tsv");
-        test_bytes_vectors(dir + "vectors_bytes_v1.tsv");
-        test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv");
-        test_model_vectors(dir + "vectors_models_v1.tsv");
-        test_image_vectors(dir + "vectors_image_v1.tsv");
-        test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32);
-        test_system_prompt(dir + "../data/prompts/sieve-system-v1.txt");
-        test_cipher_vectors(dir + "vectors_cipher_v1.tsv");
-        test_guided_vectors(dir);
-        test_filters(dir);
-        test_filter_vectors(dir);
-        test_compact(dir);
-        test_compact_vectors(dir);
-        test_bookspace();
-        test_booksieve();
-        test_review_additions();
-        test_book_vectors(dir);
-        test_composition_vectors(dir);
-        test_composition_sieve();
-        test_world_vectors(dir);
-        test_world_sieve();
-        test_json();
-        test_safetensors();
-        test_jpeg_eighth(dir);
-        test_weights();
-        test_llm(dir);
-        test_ai_vectors(dir);
-        test_ai_filters();
-        test_ai_filter_vectors(dir);
-        test_ai_run_filters(dir);
-        test_training(dir);
-        test_diffusion_vectors(dir);
-        test_titled_vectors(dir + "vectors_titled_v1.tsv");
-        test_binary_vectors(dir + "vectors_binary_v1.tsv");
-        test_chunk_vectors(dir + "vectors_chunks_v1.tsv");
-        test_notes2_vectors(dir + "vectors_notes2_v1.tsv");
-        test_pcm_vectors(dir + "vectors_pcm_v1.tsv");
-        test_pcm_digits();
-        test_notes3_vectors(dir + "vectors_notes3_v1.tsv");
-        test_sound_vectors(dir);
-        test_notes2(dir);
-        test_plugins(dir);
-        test_book_filter_vectors(dir);
-        test_kinds();
-        test_kind_vectors(dir + "vectors_kinds_v1.tsv");
-        test_written_vectors(dir);
-        test_cross_vectors(dir);
-        test_picture_vectors(dir);
-        test_figure_vectors(dir);
-        test_utf8_vectors(dir);
-        test_utf8_joint();
-        test_shortest_path();
-        test_filter_memory(dir);
-        test_byte_conversions();
-        test_digit_histogram();
-        test_rope_wave();
-        test_mix();
-        test_mix2();
-        test_mix3();
-        test_mix4();
+        RUN(test_vectors(dir + "vectors_v1.tsv"));
+        RUN(test_biguint_vectors(dir + "vectors_biguint_v1.tsv"));
+        RUN(test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv"));
+        RUN(test_digit_vectors(dir + "vectors_digits_v1.tsv"));
+        RUN(test_canon_vectors(dir + "vectors_canon.tsv"));
+        RUN(test_bytes_vectors(dir + "vectors_bytes_v1.tsv"));
+        RUN(test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv"));
+        RUN(test_model_vectors(dir + "vectors_models_v1.tsv"));
+        RUN(test_image_vectors(dir + "vectors_image_v1.tsv"));
+        RUN(test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32));
+        RUN(test_system_prompt(dir + "../data/prompts/sieve-system-v1.txt"));
+        RUN(test_cipher_vectors(dir + "vectors_cipher_v1.tsv"));
+        RUN(test_guided_vectors(dir));
+        RUN(test_filters(dir));
+        RUN(test_filter_vectors(dir));
+        RUN(test_compact(dir));
+        RUN(test_compact_vectors(dir));
+        RUN(test_bookspace());
+        RUN(test_booksieve());
+        RUN(test_review_additions());
+        RUN(test_book_vectors(dir));
+        RUN(test_composition_vectors(dir));
+        RUN(test_composition_sieve());
+        RUN(test_world_vectors(dir));
+        RUN(test_world_sieve());
+        RUN(test_json());
+        RUN(test_safetensors());
+        RUN(test_jpeg_eighth(dir));
+        RUN(test_weights());
+        RUN(test_llm(dir));
+        RUN(test_ai_vectors(dir));
+        RUN(test_ai_filters());
+        RUN(test_ai_filter_vectors(dir));
+        RUN(test_ai_run_filters(dir));
+        RUN(test_training(dir));
+        RUN(test_diffusion_vectors(dir));
+        RUN(test_titled_vectors(dir + "vectors_titled_v1.tsv"));
+        RUN(test_binary_vectors(dir + "vectors_binary_v1.tsv"));
+        RUN(test_chunk_vectors(dir + "vectors_chunks_v1.tsv"));
+        RUN(test_notes2_vectors(dir + "vectors_notes2_v1.tsv"));
+        RUN(test_pcm_vectors(dir + "vectors_pcm_v1.tsv"));
+        RUN(test_pcm_digits());
+        RUN(test_notes3_vectors(dir + "vectors_notes3_v1.tsv"));
+        RUN(test_sound_vectors(dir));
+        RUN(test_notes2(dir));
+        RUN(test_plugins(dir));
+        RUN(test_book_filter_vectors(dir));
+        RUN(test_kinds());
+        RUN(test_kind_vectors(dir + "vectors_kinds_v1.tsv"));
+        RUN(test_written_vectors(dir));
+        RUN(test_cross_vectors(dir));
+        RUN(test_picture_vectors(dir));
+        RUN(test_figure_vectors(dir));
+        RUN(test_utf8_vectors(dir));
+        RUN(test_utf8_joint());
+        RUN(test_shortest_path());
+        RUN(test_filter_memory(dir));
+        RUN(test_byte_conversions());
+        RUN(test_digit_histogram());
+        RUN(test_rope_wave());
+        RUN(test_mix());
+        RUN(test_mix2());
+        RUN(test_mix3());
+        RUN(test_mix4());
     }
 }
 
@@ -6720,7 +6746,28 @@ void run_all(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory>\n"; return 1; }
+    if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory> [--only NAME[,NAME...]] [--list]\n"; return 1; }
+    for (int i = 2; i < argc; ++i)
+    {
+        const std::string a = argv[i];
+        if (a == "--list") g_list = true;
+        else if (a == "--only" && i + 1 < argc)
+        {
+            std::string list = argv[++i];
+            for (size_t at = 0; at <= list.size();)
+            {
+                const size_t e = std::min(list.find(',', at), list.size());
+                if (e > at) g_only.push_back(list.substr(at, e - at));
+                at = e + 1;
+            }
+        }
+        else { std::cerr << "sieve_tests: unknown option " << a << "\n"; return 1; }
+    }
+    if (g_list)
+    {
+        run_all(argc, argv);
+        return 0;
+    }
 
     // Everything runs on the portable SHA-256 path, then again on SHA-NI where the CPU has it.
     Sha256::use_hardware(false);

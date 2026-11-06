@@ -54,6 +54,7 @@ struct Comparison
     uint64_t installer_hex = 0;  // the installer: the manifest's address, in hex
     uint64_t installer_raw = 0;  // and as raw bytes, as sieve-install reads it
     std::vector<FormatSize> more; // more formats, where asked for (more_format_sizes), else none
+    bool compared = true;        // false: zip and 7z not asked (the File Locator's box unticked), and none of their rows shown
     bool packed = false;         // the installer's manifest is v4 or later, its files packed
     std::string version = "sieve-manifest-v4"; // which, when packed (v5 and v6 carry items as their places)
 };

@@ -84,6 +84,13 @@ public:
     // Scripted runs: open on a file or folder, measured (and tailored) before the next frame; and
     // an install, at once.
     void locate_now(const std::string& path, bool tailor = false);
+    // "Create .sieve" from Explorer's right-click menu (hallway --create PATH, IDEAS 19.100): the
+    // locator opened on PATH, working as Choose a file or a folder does, the window live (the
+    // estimate, the best so far, Stop); once it is read, not stopped and not failed, its Sieve
+    // instructions saved to `out` as Save does. create_finished: 0 still working, 1 saved (and said
+    // for two seconds: time to close), -1 stopped or failed (the locator stays open, saying why).
+    void create(const std::string& path, const std::string& out);
+    int create_finished();
     // For scripted runs, before locate_now: Stop pressed so many seconds after it starts (0: never),
     // and the instructions saved to this file once it is read (empty: not), as the buttons do.
     // With shot_after, it is left working and the picture taken so many seconds in.
@@ -117,6 +124,8 @@ public:
     // More formats (0.13.78): the comparison with gzip, bzip2, zstd, brotli and lz4 beside zip and
     // 7z, as the settings have it; `changed` saves the box when it is changed here.
     static void remember_more(bool on, std::function<void(bool)> changed);
+    // Compare with zip and 7z ([locator] compare, ticked unless unticked; Z), and what saves it.
+    static void remember_compare(bool on, std::function<void(bool)> changed);
     // Keep a log: whether it is ticked, the folder the logs go in, and who keeps the box's setting.
     static void remember_log(bool on, std::filesystem::path folder, std::function<void(bool)> changed);
     // The share of the search's time a run has really used, packing and weighing, learned on this
@@ -130,6 +139,12 @@ public:
     void install_picked(int step, const std::string& path); // 0 the installer, 1 where; 2 a .sieve, 3 its program's name
 
 private:
+    // (create: the file it saves to, how far it has gone (0 none, 1 reading, 2 saving, 3 saved, 4
+    // stopped or failed), and when it was saved; last_save_ok_: whether the last save wrote its file)
+    std::string create_out_;
+    int create_state_ = 0;
+    std::chrono::steady_clock::time_point create_saved_at_{};
+    bool last_save_ok_ = false;
     struct Result
     {
         enum Kind { None, File, Folder } kind = None;
@@ -193,6 +208,7 @@ private:
     std::chrono::steady_clock::time_point job_started_{};
     double job_estimate_ = -1;
     std::string job_estimate_text_;
+    std::string memory_text_; // the memory the reading needs, about, said beside the estimate (IDEAS 19.97)
     // The estimate step by step (IDEAS §19.97): what the samples predict for each step of the
     // reading (seconds, without the search's time), refined as each is done by how long the done
     // ones took against their prediction; the first estimate kept, to say beside the time taken.

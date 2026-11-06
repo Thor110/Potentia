@@ -297,9 +297,12 @@ std::string comparison_table(const Comparison& c)
     };
     std::string t = "comparison (the original is 100%; under 100% is smaller)\n";
     t += row("original", c.original, "");
-    t += row("zip (deflate, level 9)", c.deflate, "each file on its own, without the zip container");
-    t += row("7z (LZMA2, preset 9e)", c.lzma2, "everything as one stream, without the 7z container");
-    for (const FormatSize& f : c.more) t += row(f.name.c_str(), f.bytes, f.note.c_str()); // (where more formats were asked for)
+    if (c.compared)
+    {
+        t += row("zip (deflate, level 9)", c.deflate, "each file on its own, without the zip container");
+        t += row("7z (LZMA2, preset 9e)", c.lzma2, "everything as one stream, without the 7z container");
+        for (const FormatSize& f : c.more) t += row(f.name.c_str(), f.bytes, f.note.c_str()); // (where more formats were asked for)
+    }
     t += row("address, as raw bytes", c.address_bytes, "its place on the binary line as a number: the file, plus 0101...01");
     t += row("address, written in hex", c.address_hex, "two characters a byte");
     if (c.manifest && !c.installer_hex)
@@ -308,8 +311,11 @@ std::string comparison_table(const Comparison& c)
     {
         t += c.packed ? row("listing and files", c.manifest, ("the folder's listing, then every file packed (" + c.version + ")").c_str())
                       : row("listing and files", c.manifest, "the folder's listing, then every file's bytes (sieve-manifest-v3)");
-        t += row("  zip of it (deflate)", c.manifest_deflate, "that compressed");
-        t += row("  7z of it (LZMA2)", c.manifest_lzma2, "");
+        if (c.compared)
+        {
+            t += row("  zip of it (deflate)", c.manifest_deflate, "that compressed");
+            t += row("  7z of it (LZMA2)", c.manifest_lzma2, "");
+        }
         t += row("Sieve instructions", c.installer_raw, "the .sieve: all of that as one number, its address, in raw bytes");
         t += row("  the same, in hex", c.installer_hex, "that number written in hex");
     }

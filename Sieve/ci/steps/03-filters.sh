@@ -71,6 +71,10 @@ $exe browse --line audio --filters lines.ini --compact --count 2 --seed 4 > /dev
 # The notes2 family: two voices of a larger set, warped, and a stack of melody plugins
 # that judges each voice, counting one voice's survivors squared (218112^2).
 $exe warp --line audio --note-set notes2 --voices 2 --length 6 "C4q E4q. G4h Bb5s // C3w G2h" | tr -d '\r' | q "C4q E4q. G4h A#5s Rs Rs // C3w G3h Rs Rs Rs Rs"
+# A MIDI file read on every note set, not notes3 alone (6 November 2026, IDEAS §13): the hymn's 73
+# events on notes104 and notes2 as on notes3, as the hallway reads it.
+$exe warp --line audio --note-set notes104 --file data/anchors/public-domain/hurrian-hymn-6.mid | tr -d '\r' | q "canon-notes-v1: 73 event(s)"
+$exe warp --line audio --note-set notes2 --file data/anchors/public-domain/hurrian-hymn-6.mid | tr -d '\r' | q "canon-notes-v2: 73 event(s)"
 printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-leap-v1\n[audio.key-data-v2]\ntonic = D\n[audio.melody-leap-v1]\nleap = 2\n' > n2.ini
 $exe filters --line audio --note-set notes2 --voices 1 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    218112 "
 $exe filters --line audio --note-set notes2 --voices 2 --length 3 --filters n2.ini | tr -d '\r' | q "^survivors    47572844544 "

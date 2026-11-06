@@ -194,7 +194,8 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                 // and, for the rope, the wave's parameters as the text they are; the pieces' way
                 // holds both its pieces and its wave.
                 const auto t0 = std::chrono::steady_clock::now();
-                const FileWays ways = file_ways(bytes, rope_seconds);
+                FileWays ways = file_ways(bytes, rope_seconds);
+                lzma2_of(ways); // (made on a thread of its own where the rope was not searched: waited for)
                 rope_spent += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
                 uint64_t size_bytes = 1;
                 for (uint64_t n = bytes.size(); n >= 0x80; n >>= 7) ++size_bytes;

@@ -63,6 +63,28 @@ goto done
 :noviewer
 echo (No sieve-view.exe beside it, so .simage files are not set to open in the picture viewer.)
 :done
+rem "Create .sieve" on every file and folder (IDEAS 19.100, as Edward decided on 29 October 2026): the
+rem hallway's File Locator alone (hallway --create), NAME.sieve saved beside what was chosen once
+rem it is read, then closed; stopped or failed, it stays open saying why. On its own, not in the
+rem Sieve submenu, so a .sieve file is not given two menus of one name. The hallway is the one in
+rem the folder above tools\ (a release), else beside sieve-install (a build).
+for %%F in ("%INSTALLER%") do set "HALLWAY=%%~dpF..\hallway.exe"
+if not exist "%HALLWAY%" for %%F in ("%INSTALLER%") do set "HALLWAY=%%~dpFhallway.exe"
+for %%F in ("%HALLWAY%") do set "HALLWAY=%%~fF"
+if not exist "%HALLWAY%" goto nocreate
+rem (Written out for each, not in a FOR: a FOR takes "*" as file names to look for.)
+reg add "HKCU\Software\Classes\*\shell\SieveCreate" /v MUIVerb /t REG_SZ /d "Create .sieve" /f > nul
+reg add "HKCU\Software\Classes\*\shell\SieveCreate" /v Icon /t REG_SZ /d "\"%HALLWAY%\",0" /f > nul
+reg add "HKCU\Software\Classes\*\shell\SieveCreate\command" /ve /t REG_SZ /d "\"%HALLWAY%\" --create \"%%1\"" /f > nul
+reg add "HKCU\Software\Classes\Directory\shell\SieveCreate" /v MUIVerb /t REG_SZ /d "Create .sieve" /f > nul
+reg add "HKCU\Software\Classes\Directory\shell\SieveCreate" /v Icon /t REG_SZ /d "\"%HALLWAY%\",0" /f > nul
+reg add "HKCU\Software\Classes\Directory\shell\SieveCreate\command" /ve /t REG_SZ /d "\"%HALLWAY%\" --create \"%%1\"" /f > nul
+echo "Create .sieve" added for every file and folder, by
+echo   %HALLWAY%
+goto created
+:nocreate
+echo (No hallway.exe found above or beside it, so "Create .sieve" is not added.)
+:created
 rem Explorer told the kinds of file changed (SHChangeNotify, SHCNE_ASSOCCHANGED), as installers
 rem tell it, so it takes up the handlers now rather than when it next starts (Edward, 5 November
 rem 2026: the thumbnails showed only once Explorer was restarted). By PowerShell, which every
