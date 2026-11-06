@@ -709,7 +709,19 @@ bool is_xz(const std::vector<uint8_t>& b)
 // then carries it as it is, and Extract says so). Where the memory free cannot be known, no limit.
 static bool past_inner_limit(size_t n)
 {
-    if (n < (size_t(256) << 20)) return false; // (asked only once it is large: memory_free asks the system)
+    // Asked from 16 MiB, and then at each 16 MiB more of one read (memory_free asks the system, so
+    // not at every piece): a folder of many archives each under the old 256 MiB went unchecked
+    // (6 November 2026), and what earlier ones made is already out of what is free.
+    constexpr size_t kStep = size_t(16) << 20;
+    thread_local size_t asked_at = 0;
+    if (n < kStep)
+    {
+        asked_at = 0; // (a new read)
+        return false;
+    }
+    if (n < asked_at) asked_at = 0;
+    if (asked_at && n - asked_at < kStep) return false;
+    asked_at = n;
     const uint64_t free_now = memory_free();
     return free_now && n > free_now;
 }
@@ -1009,6 +1021,7 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
     if (extract) archive_read_support_format_zip(a);
     std::vector<sieve::install::InMemory> out;
     std::unordered_set<std::string> names;
+    size_t held = 0; // (every member read so far)
     bool ok = archive_read_open_memory(a, b.data(), b.size()) == ARCHIVE_OK;
     struct archive_entry* en = nullptr;
     while (ok)
@@ -1062,6 +1075,14 @@ std::optional<std::vector<sieve::install::InMemory>> libarchive_entries(const st
                 if (n < 0) { ok = false; break; }
                 if (n == 0) break;
                 m.bytes.insert(m.bytes.end(), buf.data(), buf.data() + n);
+                // (every member read so far, against the memory: a RAR, cab or ISO can declare and
+                // make gigabytes from kilobytes, as any compressed file can; 6 November 2026)
+                held += size_t(n);
+                if (past_inner_limit(held))
+                {
+                    ok = false;
+                    break;
+                }
             }
             if (ok && archive_entry_size_is_set(en) && uint64_t(archive_entry_size(en)) != m.bytes.size()) ok = false;
         }

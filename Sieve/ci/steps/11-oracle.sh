@@ -1568,3 +1568,38 @@ if command -v 7z > /dev/null; then
     7z x -bd -ocz_7z cz_out/src.7z > /dev/null
     diff -r cz/src cz_7z/src
 fi
+# Decompression bombs (6 November 2026): a 7z of 114 bytes whose header says its block makes 2^50
+# bytes. Extracting it is refused before anything is unpacked (the blocks' declared sizes against
+# the memory available), and the packer carries it as it is rather than opening it.
+rm -rf bomb7z bomb7z_x bomb7z_i
+mkdir -p bomb7z
+python -c "
+import lzma, struct, zlib
+def num(v):
+    first, mask = 0, 0x80
+    for i in range(8):
+        if v < (1 << (7 * (i + 1))):
+            first |= v >> (8 * i)
+            break
+        first |= mask
+        mask >>= 1
+    else:
+        i = 8
+    return bytes([first]) + v.to_bytes(8, 'little')[:i]
+data = bytes(1000)
+packed = lzma.compress(data, format=lzma.FORMAT_RAW, filters=[{'id': lzma.FILTER_LZMA2, 'dict_size': 1 << 20}])
+h = bytes([1, 4, 6]) + num(0) + num(1) + bytes([9]) + num(len(packed)) + bytes([0])
+h += bytes([7, 0x0B]) + num(1) + bytes([0]) + num(1) + bytes([0x21, 0x21]) + num(1) + bytes([16])
+h += bytes([0x0C]) + num(1 << 50) + bytes([0])
+h += bytes([8, 0x0A, 1]) + struct.pack('<I', zlib.crc32(data)) + bytes([0, 0])
+name = 'zeros.bin'.encode('utf-16-le') + bytes(2)
+h += bytes([5]) + num(1) + bytes([0x11]) + num(len(name) + 1) + bytes([0]) + name + bytes([0, 0])
+start = struct.pack('<QQI', len(packed), len(h), zlib.crc32(h))
+open('bomb7z/claim.7z', 'wb').write(b'7z\xbc\xaf\x27\x1c\x00\x04' + struct.pack('<I', zlib.crc32(start)) + start + packed + h)"
+if $SI bomb7z/claim.7z --to bomb7z_x --yes 2> bomb7z.txt; then exit 1; fi
+grep -q "blocks declare .* MiB to unpack into memory" bomb7z.txt
+test ! -e bomb7z_x/zeros.bin
+$S locate bomb7z --installer bomb7z.sieve --optimise-archives | tr -d '\r' > bomb7z_l.txt
+if grep -q "^remade" bomb7z_l.txt; then exit 1; fi
+$S install bomb7z.sieve --to bomb7z_i > /dev/null
+cmp bomb7z/claim.7z bomb7z_i/claim.7z

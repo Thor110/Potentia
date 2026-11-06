@@ -10,12 +10,14 @@
 #include "unpack_7z.hpp"
 
 #include "cli/case_names.hpp"
+#include "cli/locate.hpp"
 #include "cli/vault.hpp"
 
 #include "7z.h"
 #include "7zCrc.h"
 
 #include <set>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -183,6 +185,24 @@ struct Open7z
     }
 };
 
+// A 7z's blocks against the memory (a decompression bomb, 6 November 2026): the LZMA SDK unpacks a
+// solid block whole into one buffer of the size its header declares, so a few kilobytes can ask for
+// gigabytes. Each block's declared size is checked before any is unpacked, against the memory
+// available now; and where every file is to be held in memory (`held`: the packer reading a 7z's
+// contents), their total and the largest block together. Where the memory cannot be told, nothing
+// is refused here (the allocation itself then fails).
+void check_7z_sizes(const Open7z& a, const SevenZip& z, bool held)
+{
+    const uint64_t free = sieve::cli::memory_available();
+    if (!free) return;
+    uint64_t largest = 0;
+    for (UInt32 f = 0; f < a.db.db.NumFolders; ++f) largest = std::max<uint64_t>(largest, SzAr_GetFolderUnpackSize(&a.db.db, f));
+    const uint64_t need = held ? (z.bytes > UINT64_MAX - largest ? UINT64_MAX : z.bytes + largest) : largest;
+    if (need > free)
+        throw std::runtime_error("the 7z's blocks declare " + std::to_string(need >> 20) + " MiB to unpack into memory, more than the " +
+                                 std::to_string(free >> 20) + " MiB available");
+}
+
 // The listing, with the common top folder found and removed; `index` is each entry's in the archive.
 SevenZip listing(const Open7z& a, std::vector<UInt32>* index)
 {
@@ -243,6 +263,7 @@ std::vector<InMemory> read_7z(const std::vector<uint8_t>& archive)
     Open7z a(archive);
     std::vector<UInt32> index;
     const SevenZip z = listing(a, &index);
+    check_7z_sizes(a, z, true);
     std::vector<InMemory> out;
     UInt32 block = 0xFFFFFFFF;
     Byte* buf = nullptr;
@@ -280,6 +301,7 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
     Open7z a(archive);
     std::vector<UInt32> index;
     const SevenZip z = listing(a, &index);
+    check_7z_sizes(a, z, false);
     {
         std::vector<std::string> names;
         for (const Unpacked& u : z.entries)

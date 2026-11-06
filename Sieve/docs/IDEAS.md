@@ -6655,3 +6655,30 @@ adds to the comparison, is greyed. *Worth keeping in mind:* the comparison is ho
 Locator shows what Sieve gained, so the default stays on, as Edward said. *Built (6 November 2026):*
 "Compare with zip and 7z" (Z, `[locator] compare`, ticked by default); unticked, the six GIFs 25.7 s
 to 21.6 s in the File Locator, the table Sieve's figures alone and More formats greyed.
+
+**19.125 Every compressed format is a possible bomb (Edward, 6 November 2026: "in theory can't any
+compressed format become a zip bomb for sieve ... I don't know if it can really be avoided that well").**
+In theory, yes: a few kilobytes of any compressed format can say, or make, gigabytes. It cannot be
+prevented; it can be met before the memory runs out, which is what Sieve does.
+- *Installing a `.sieve`:* the declared total of every file, and of what each remade archive is made
+  from, against half the memory available, before anything is made; each stream's size read from its
+  chunks before it is decoded; pictures against the viewer's limits (since 4 November 2026).
+- *Packing, single streams:* xz, gzip, bzip2, zstd, lz4, brotli, lzma and lzip contents, and zip's
+  members, read only while they stay under the memory free; past it the file is carried as it is,
+  not opened.
+- *Closed today (6 November 2026):*
+  - **RAR, cab, ISO, LHA, cpio, ar, WARC and tar** (libarchive): every member read so far, together,
+    under the same limit (it had none);
+  - **7z**: the LZMA SDK unpacks a solid block whole into one buffer of the size its header
+    declares, so each block's declared size (and, where every file is held in memory, the files'
+    total beside the largest block) is checked against the memory available before anything is
+    unpacked. A 7z of 16 GiB of zeros (3.6 MB) is now refused by Extract at once ("the 7z's blocks
+    declare 32768 MiB to unpack into memory, more than the 15534 MiB available": the files and their
+    block, held together) and carried as it is by the packer (4.2 s, 323 MiB at most); a 114-byte 7z
+    declaring 2^50 bytes is in CI step 11;
+  - **the limit asked from 16 MiB** of one read, and at every 16 MiB after (it was asked only from
+    256 MiB, so a folder of many archives each under that went unchecked). What earlier archives
+    made is already out of the memory free, so many bombs in one folder, or one inside another,
+    meet the same limit together.
+- *Not tested with a real RAR, cab or LHA bomb:* there is no maker for those formats here; the
+  libarchive limit is the same code as the others'.

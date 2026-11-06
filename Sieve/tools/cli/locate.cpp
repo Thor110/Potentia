@@ -78,7 +78,7 @@ void within_decode_limit(uint64_t bytes, const char* what)
 // Memory that can be had for installing, or 0 where it cannot be known: on Linux the kernel's
 // MemAvailable (free memory and the cache it can give back; memory_free counts only the free, which
 // on a busy machine can be a small part of it), elsewhere memory_free.
-static uint64_t memory_available()
+uint64_t memory_available_now()
 {
 #if defined(__linux__)
     if (std::ifstream mi("/proc/meminfo"); mi)
@@ -335,7 +335,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         // before any is made (4 November 2026: 171 bytes of runs declaring a 3 GB file were installed
         // with 5.7 GB in use; a real folder that large would not fit either). Where what is available
         // cannot be known, nothing is refused here.
-        if (const uint64_t free = memory_available(); free && declared > free / 2)
+        if (const uint64_t free = memory_available_now(); free && declared > free / 2)
             throw std::runtime_error("these Sieve instructions make " + std::to_string(declared >> 20) + " MiB of files, and making them takes about twice that in memory: more than the " +
                                      std::to_string(free >> 20) + " MiB available");
     }
@@ -3407,5 +3407,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
     finish_archives(m, dest, force, notes, keep);
     return true;
 }
+
+uint64_t memory_available() { return memory_available_now(); }
 
 } // namespace sieve::cli
