@@ -11,7 +11,7 @@
 //                graphics_memory_gb, view_rooms, picture_rooms, fps_counter
 //   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
 //                merge_cache_pct, unit_time_ms, item_memory_pct
-//   [controls]   mouse_sensitivity, invert_mouse_y
+//   [controls]   mouse_sensitivity, invert_mouse_y, read_aloud
 //   [models]     text_model, picture_model, widen_weights
 //   [setup]      every line's shape and the GLOBAL settings (Settings::entries, setup.hpp)
 //   [paths]      ffmpeg
@@ -110,13 +110,15 @@ struct AppSettings
     bool fps_counter = false;    // show frames per second in the hallway
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
+    bool read_aloud = false; // the menus' chosen item spoken (speech.hpp; Windows)
     // The models given as files (the setup menu's AI rows): a language model's folder for CHAT,
     // and a picture model's run folder for DRAW. Empty: the model in hand, and the first trained
     // picture model in the training folders.
     std::string text_model, picture_model;
-    // How a model given as a file keeps its BF16 and F16 weights (llm::set_widen_weights): off, as
-    // stored (half the memory); on, widened to 32-bit floats as it loads. The same numbers either way.
-    bool widen_weights = false;
+    // How a model given as a file keeps its BF16 and F16 weights (llm::set_widen_weights): 0 off, as
+    // stored (half the memory); 1 on, widened to 32-bit floats as it loads; 2 auto, widened where
+    // the widened model fits in ITEM MEMORY's share of installed memory. The same numbers either way.
+    int widen_weights = 0;
     // The File Locator's search for shorter addresses ([locator]): its time in seconds (0: no
     // limit), for each file or for the whole run (`search_run`), the other worked out from the
     // files counted. Kept so that the first search of the next run has it too.

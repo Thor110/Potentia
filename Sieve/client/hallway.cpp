@@ -9,6 +9,8 @@
 #include "cli/vault_decode.hpp"
 #include "cli/timings.hpp"
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <future>
 
@@ -1696,12 +1698,21 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     if (e.type == SDL_EVENT_MOUSE_WHEEL)
     {
         // Touchpads send fractions of a notch: a tile per whole notch, however it arrives.
+        // A fast spin goes further (IDEAS 5.5): each notch within 60 ms of the one before, the
+        // same way, adds to a run, and every two notches of a run double how far a notch goes, up
+        // to 1,024 tiles (about PgUp's 1,000; ] goes further). A pause, or a turn back, starts
+        // again from one tile a notch, so a slow turn is as exact as it was.
         wheel_ += e.wheel.y;
         const int notches = int(wheel_);
         if (notches != 0)
         {
             wheel_ -= float(notches);
-            jump_tiles(notches);
+            const Uint64 now = SDL_GetTicks();
+            const int way = notches > 0 ? 1 : -1;
+            wheel_run_ = (way == wheel_way_ && now - wheel_at_ <= 60) ? wheel_run_ + std::abs(notches) : 0;
+            wheel_way_ = way;
+            wheel_at_ = now;
+            jump_tiles(int64_t(notches) << std::min(wheel_run_ / 2, 10));
         }
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return;
@@ -1939,7 +1950,7 @@ std::string Hallway::status()
     if (first.empty) where += "first slot empty (padding)";
     else
     {
-        where += percent(first.fraction) + " along, first book " + short_hex_of(first);
+        where += percent(first.fraction) + " along (" + percent(1.0 - first.fraction) + " to go), first book " + short_hex_of(first);
         if (first.parts) where += " \"" + ascii(utf8_encode(line().space.text_of(first.parts->title))) + "\"";
         else if (first.model)
         {

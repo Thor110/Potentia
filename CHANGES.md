@@ -1,43 +1,62 @@
-# The easy-wins list, worked down in order (6 November 2026)
+# The six, then the smaller things (6 November 2026)
 
-Ten commits on top of 8bc923d. Nine items built; one measured and left. Nothing needed a new
-manifest version. Every speed change was compared byte for byte, and gave the same bytes.
+Fourteen commits on top of becb224. Nothing needs a new manifest version. The unit suite passes
+(154,324 checks); every new CI line was run here. The roof (item 4) is still measuring and comes in
+the next zip.
+
+## The six
 
 | # | Item | Result |
 | ---: | :--- | :--- |
-| 1 | A single file's LZMA2 figure made beside its mixing (IDEAS §19.120 a) | dickens 34.9 s to 23.6 s, the same bytes |
-| 2 | `sieve_tests tests --only NAME[,NAME...]` and `--list` | `--only mix4,rope_wave`: 242 checks in 4 s |
-| 3 | Installed files checked on up to 4 threads | check and write: six GIFs 1.41 s to 0.66 s, docs/ 0.26 s to 0.08 s |
-| 4 | "Compare with zip and 7z" box (Z), ticked by default | unticked: six GIFs 25.7 s to 21.6 s in the File Locator |
-| 5 | Non-x86 programs mixed without the start test | **measured and left**: no gain, and one Alpha library came out 0.6% larger |
-| 6 | Mixing's tables at least B20 from 32 KiB | 0.05% to 3.3% smaller on ten files mixed alone; sieve_cli.cpp 30,967 to 30,754 bytes |
-| 7 | `sieve warp/bind --file` read MIDI on every note set | the hymn's 73 events on notes104 and notes2, where it had been refused |
-| 8 | "Create .sieve" on every file and folder (`hallway --create PATH`) | the File Locator alone, NAME.sieve saved beside it, closed with 0 |
-| 9 | The File Locator's memory estimate, with a warning over the memory free | within about a quarter on six measured |
-| 10 | Names folded as Windows folds them, beyond A to Z | É/é and Σ/σ one name; straße/STRASSE two |
+| 3 | The reader fuzzed (`tools/fuzz/fuzz_reader.py`, ASan and UBSan) | 45,283 changed `.sieve` files: nothing in Sieve's own code. One shift by 32 inside preflate (pinned third-party code; the release build refuses that file cleanly) is for you to decide on: results/fuzz-2026-11-06.md |
+| 1 | Several files chosen at once make one `.sieve` | a folder of just them, named after the folder they are in |
+| 5 | A rising bar for mixing over 16 MiB (1%, and 0.5% more for each 100 MB) | only mozilla changes: 0.43% larger, installs in 1.0 s instead of 49.5 s (results/rising-bar-2026-11-06.md) |
+| 2 | "Compress to" in the right-click menu, and `sieve compress` | zip, 7z, xz, gz, bz2, zst, lz4, br, lzma, tar; each read back before it is saved |
+| 4 | The roof, 1 MB to 1 GB | running now on enwik9 (fetched for it); next zip |
+| 6 | Names written two ways (NFC and NFD) count as one name on macOS | the packer warns, macOS refuses |
 
-## For you to try on Windows
+## The smaller things
 
-- **Item 8, "Create .sieve":**
-  - run `context\install_context.bat` again, then right-click a file or folder; on Windows 11 it is
-    under "Show more options";
-  - check that it finds `hallway.exe` above `tools\` in a release;
-  - the batch files are CRLF.
-- **Item 4, the comparison box:** untick "Compare with zip and 7z" (Z); More formats greys out with
-  it.
-- **Item 9, the memory line:** shown beside the estimate as a reading starts.
+- **Hallway:**
+  - the wheel spun fast goes further (up to 1,024 tiles a notch);
+  - the navigator shows the place in decimal too;
+  - every "along the line" says how far is still to go;
+  - a picture file's card in CHAT shows its exchange rate (the file 1,660,000 bits, full size
+    29,608,800, fitted to the image line 100, for Vitruvian.jpg).
+- **CHAT:**
+  - `/random page|book|world|model|ai|track|video|movie|file`;
+  - `/docs`, `/docs NAME`, `/docs NAME SECTION`. The documents are found beside the program or in
+    a folder above it. A release does not carry them yet; whether it should is your call.
+- **Harness:** "+ new melody model..." (or M), as a picture model is made.
+- **AI:** `widen_weights = auto` widens a model only if, widened, it fits ITEM MEMORY's share of
+  memory.
+- **Accessibility:**
+  - `tools/colour_check.py`. One pair is lost: tracks and movies under deuteranopia (58.9 normally,
+    2.4). The ways out are measured in IDEAS §2.4 for you to choose. No colour has been changed.
+  - **Read menus aloud** (Settings, Controls; off by default) speaks the main menu's and pause
+    menu's chosen item with Windows' own voice.
+- **Build:** `tools\build_release.bat` builds with only Visual Studio, then makes the release where
+  Python is installed.
+- **Music:** the detailed description is in IDEAS §7.8, and nothing is built yet. It covers the
+  tile's melody chosen by the place's hash among the survivors, when it changes, a setting, and
+  what changes a place's tune.
+
+## For you to try on Windows (none of this could be run here)
+
+- **The right-click menu:** run `context\install_context.bat` again, then right-click a file, a
+  folder, or several. "Compress to" should give `NAME.zip`, `NAME.7z`, `NAME.tar.xz` and so on
+  beside them, in a console window that closes by itself. The batch files are CRLF.
+- **Read menus aloud:** Settings, Controls. It uses SAPI through COM and has never been compiled on
+  Windows: watch for build errors in `client/speech.cpp`.
+- **`tools\build_release.bat`:** double-click it.
+- **Names:** `sieve compress` with a name that has an accent, to zip and 7z. Both are read back
+  here, and 7-Zip reads them.
 
 ## Notes
 
-- **Item 6** changes v33's bytes, though only to make them smaller, where a file of 32–512 KiB is
-  mixed alone. Older versions (`--v32`) are as before.
-- **Item 5:** ARM ELF is already taken as a program. Of mozilla's five Alpha libraries, three are
-  already mixed (as pictures 4 bytes wide), one goes to LZMA2 either way, and libgklayout came out
-  0.6% larger mixed without the test. So the test stays.
-- **Item 8:**
-  - several files chosen are still one window each, not one `.sieve` together;
-  - "Other compressed formats" is still to come.
-- **Item 10:** NFC and NFD forms of a name are still two names; macOS takes them as one.
-
-**Tested:** the unit suite (154,318 checks, 0 failures), plus the CI lines each item touches. New CI
-lines: step 3 (MIDI) and step 11 (the case of É and é).
+- The fuzzer's ASan build lived in its own folder with its own `_deps`, and the main build was
+  checked clean of sanitizer symbols.
+- New files:
+  - `tools/cli/compress.cpp/.hpp`, `tools/cli/gather.cpp/.hpp`;
+  - `client/speech.cpp/.hpp`;
+  - `tools/colour_check.py`, `tools/fuzz/`, `tools/build_release.bat`.

@@ -176,6 +176,18 @@ that keeps proper names and drops short all-caps tokens.
 hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most
 at risk: audio's dark green and video's dark red (and so tracks and movies, which share them),
 which differ mostly in hue, the difference red–green colour blindness loses.
+*Checked (6 November 2026, `tools/colour_check.py`):* every pair of lines' walls and edges through
+Machado's (2009) simulations of protanopia, deuteranopia and tritanopia, by CIEDE2000. One pair
+told apart normally is lost: **tracks and movies**, 58.9 normally and 2.4 with deuteranopia (their
+walls are audio's green and video's red, and both have black edges). Audio and video themselves
+keep 11.5 (deuteranopia), held apart by their edges, amber against yellow. Every other pair stays
+at 14.2 or more. Measured ways out, for Edward to choose (the colours are his, and a composition
+shares its unit line's walls on purpose): tracks' walls `0,90,60` (a blue-green) gives tracks and
+movies 15.4 at the worst, but tracks and audio only 2.1 with tritanopia; tracks `0,130,0` with
+movies `110,0,0` gives 17.6, tracks and audio 12.7, and movies and video 5.2. (Giving the
+compositions their unit lines' edges instead would make tracks look exactly as audio does.) Nothing
+is changed yet. The lines are named wherever they are shown (the HUD, the setup menu's columns), so
+colour is not the only thing that tells them apart.
 
 **2.5 Layouts are built for 8-pixel text.** Unifont draws at half size, so CJK and much of Cyrillic
 are unreadable in the menus. Supporting them means reworking the layouts first, not adding fonts.
@@ -346,6 +358,9 @@ It also hides the moment the shelf changes side.
 **5.5 Accelerating scroll.** The wheel already moves by tiles; give it an acceleration curve so a
 fast spin compresses distance, which is the only way browsing stays possible once the fork count is
 unbounded.
+*Built (6 November 2026):* a notch within 60 ms of the one before, the same way, adds to a run;
+every two notches of a run double how far a notch goes, up to 1,024 tiles; a pause or a turn back
+starts again at one tile a notch (client/hallway.cpp).
 
 **5.6 Shimmer on the item under the crosshair.** Small, and it makes the interactable thing obvious.
 
@@ -395,7 +410,9 @@ the jump keys only ever reach the right-hand end of an address. The navigator sh
 it, a hex digit at a time, full screen and scrolling; any digit can be chosen with the keys or the
 pointer and turned with Up/Down, the wheel or its arrows, carrying as counting does and wrapping
 round the line. Possible next steps: a preview of the item at the address being turned, and a
-decimal view beside the hex.
+decimal view beside the hex. *Decimal built (6 November 2026):* the place in decimal under the
+bearing, with its number of digits, its first and last digits where it is wider than the screen;
+worked out when the address changes, for addresses of up to 4,096 hex digits.
 
 **5.13 Filters on titled lines scan bottom-up.** Edward, 27 September 2026. A titled unit reads
 top-down as cover, title, content, and that is the order its address is packed in (the content
@@ -478,6 +495,62 @@ why compact image mode keeps sparse pictures rather than structured ones.
 **7.8 Ambient audio sampled from where you stand.** Warp the current tile's position into the audio
 line and pass it through `key-v1` so the result is in a valid key. Continuous in-key ambient from
 your actual coordinate, out of three things that already exist. The cheapest real win in the list.
+
+- *Described in full (6 November 2026, for Edward to decide on before it is built).* What exists
+  already (client/music.hpp): WORLD's music is drawn from the survivors of WORLD's filter stack (the
+  key filter among them), at random, a rank drawn below their count and unranked; each line moves
+  the notes into its own mode (Lydian on the brightest, Locrian on the darkest); a melody plays to
+  its end, then the gap's quiet, then the next. What this adds is only *which* survivor: the one
+  belonging to the place you stand in, instead of a random one.
+  - *What you hear.* Every stretch of corridor has a melody of its own. Stand in a tile and its
+    melody plays; walk on and the next one is the new tile's; come back tomorrow, with the same
+    settings, and that tile plays the same melody again. The music becomes part of the place, like
+    the books on its shelves: a tile can be remembered by its tune, and a tune found again by
+    walking back to it. Nothing about the sound changes (tempo, voice, echo, modes, key and filters
+    are as they are now); only the choosing.
+  - *A place.* The line you are on and your tile in its loop: `(t mod loop tiles)`, the same number
+    that puts unit `(t mod loop) * 128 + k` in slot k (hallway.hpp). By tile and not by book, so a
+    melody belongs to a stretch about as long as it takes to walk past one at a stroll, and does not
+    change at every step. Each line's loop repeats, so its tunes repeat with it, exactly where its
+    books do.
+  - *From a place to a melody (the cheap form).* SHA-256 of a fixed label (`sieve-music-place-v1`),
+    the line's id and the tile's number, as its 256 bits (and as many more of the same chain as the
+    count needs, 64 above its length, so the rank is as even as the random draw's): that number
+    modulo the count of survivors is the rank, and the rank unranked is the melody. It is the code
+    there now with the random generator swapped for the place's bits; a stack that only judges
+    draws its tries from the same chain, in order, so it is just as fixed. A withheld melody (the
+    vault) moves on to the next number of the chain, as a random draw moves on now. The same tile
+    on another line plays something else, and then in that line's mode as well.
+  - *Neighbouring places alike (a second form, to be heard before it is offered).* Instead of a
+    hash, the line's own seed plus the tile number as the rank, so tile t+1 plays the survivor
+    after tile t's: a walk along the corridor is a walk along the stack's own order of melodies.
+    What consecutive survivors have in common depends on how the stack orders them (a key filter's
+    count, a length's, a range's), so whether this sounds like variations on a theme or like
+    nothing at all has to be listened to first. The cheap form scatters, and is the one to build.
+  - *When it changes.* Never mid-melody: when one ends, after the gap, the next is the tile you are
+    in *then*. Running past twenty tiles during one melody plays only the tile you stop in;
+    standing still repeats your tile's melody after each gap (or, a setting, plays it once and then
+    falls back to the random draw until you move). A jump with the navigator is the same: the
+    melody in hand finishes, the next one is where you landed.
+  - *Settings.* One more choice in WORLD's music settings, "Chosen by: chance / where you stand",
+    saved in sieve-music.ini as the others are. MENUS has no place and keeps chance. The tracks
+    source works the same way, the place choosing a track of N units instead of one unit.
+  - *Showing it.* The overlay says where a melody came from ("tile 4,096 of BINARY"); the recent
+    list keeps the place with each melody, so a melody you liked can be walked back to (a jump to
+    the tile it names), and its address, MIDI and favourites stay as they are.
+  - *What changes the tune of a place.* Anything that changes the count: a filter ticked or
+    unticked, the melody length, the note set, the tracks source. That is the honest consequence of
+    choosing by rank among survivors: the place keeps its number, and the number lands on a
+    different melody when the shelf of melodies changes. Worth saying in the setting's help ("the
+    same place plays the same melody while the music settings stay the same").
+  - *What it is not.* Not the book's contents turned into sound (sonifying a file's bytes, which
+    would be a new filter or a new line, not this); not a soundtrack written for the hallway. Each
+    melody is still one unit of the audio line with an address, played because of where you are.
+  - *Cost and checks.* One SHA-256 and the unrank done now, per melody; nothing heavier. Checked
+    by a harness test that one place gives one melody twice, that two tiles and two lines give
+    different ones, and that a withheld melody is passed over the same way each time. About an
+    hour for the cheap form, as the list of easy wins has it; the second form, half as much again
+    plus the listening.
 
 **7.9 Generalise the preview bake.** The crate-face queue — reticle priority, flood fill outward,
 per-frame budget, LRU — is written for models. One interface where each slot type supplies a cheap
@@ -2477,8 +2550,10 @@ models can serve.
   - *Shown:* the harness lists melody runs as it lists picture runs, and a made melody is written
     in notation. In CHAT, a melody comes as a card with a piano roll, PLAY, GO TO IT (to the
     melody on the audio line) and SAVE (a MIDI file).
-  - *Not yet:* recording a melody run from the harness (it is `sieve diffuse` for now), a track
-    model, and a model of sound itself.
+  - *Not yet:* a track model, and a model of sound itself. *Recording a melody run from the
+    harness, built (6 November 2026):* "+ new melody model..." (or M) sets one up as a picture
+    model is, its melodies drawn from the audio line's stack at the setup menu's note set and
+    length (notes104 or notes2), recorded as `melodies-<stack>` and trained.
 - **Classification.** The kinds above are named by their line (§19.30), so "sound AI" is the
   family; "melody model" and "track model" are its members.
 
@@ -2497,6 +2572,10 @@ track or picture from the library, given to the person first, before any model i
   rule of what a model may do without asking.
 - **More commands** follow the lines: a random page, book, world or model; a random survivor of
   the filters ticked; the unit at an address. Each is a card the window already knows how to show.
+  *Built (6 November 2026):* `/random page|book|world|model|ai|track|video|movie|file`, a card
+  with a random place on that line (every place as likely as any other, as the navigator's R
+  draws one; where the line is compact, its places are its survivors) and GO TO IT, which goes
+  through the door to it. The unit at an address is still to come.
 
 **19.33 A voice made the way a voice is made (Edward, 12 October 2026).** His idea: a natural
 vocalisation system for AI models, built on the structure and form of the human mouth: the vocal
@@ -2727,7 +2806,10 @@ GitHub Desktop, open the folder, build Release or run the release script, done.
     - The first build downloads SDL3 and builds it, so it needs the internet and a few minutes.
     - The release script (`tools/make_release.bat`) needs Python. For "done" to be true, a
       `build_release.bat` that needs only Visual Studio would help: it would find Visual Studio's
-      own CMake, configure, build and copy the result, with Python optional.
+      own CMake, configure, build and copy the result, with Python optional. *Written (6 November
+      2026), not yet run on Windows:* `tools\build_release.bat` finds Visual Studio by vswhere,
+      loads VsDevCmd (its CMake and Ninja), configures and builds the x64-Release preset, and makes
+      the release where Python is installed; without Python the build folder is the result.
   - *The video* is then those three steps, start to finish, uncut, with the time it took on
     screen.
 - **The front page:** "This game is free if you build it yourself!", then the video, then the
@@ -2756,6 +2838,11 @@ variants and its address? The scalability of it all has to be kept.
 - **What would join them up:** a card listing all three addresses together, with the bits each
   costs, and walking between them (a picture's 10x10 version on the shelf beside its 64x64
   version). The image line's sizes are a ladder, and a picture can climb it. Not built.
+- *The exchange rate on the card, built (6 November 2026; with §19.62):* a picture file's card in
+  CHAT says what it costs on each line it can be on and what each keeps: the file as stored (its
+  bytes, GO TO IT), its pixels at their own size in rgb24 (every pixel kept, F), and fitted to this
+  hallway's image line (its cells times the bits of a cell's colour, J). Walking between them is
+  still to come.
 
 **19.41 Asking other developers for their oddities (Edward, 13 October 2026).** His idea: reach
 out to ffmpeg's developers and others, to ask whether the game may include oddities of theirs:
@@ -2908,6 +2995,12 @@ the pages and books lines. There should be a free-flowing way between all catalo
 
   The model given as a file could then be pointed at the right section, rather than told
   everything in its system prompt.
+- *Built (6 November 2026):* `/docs` lists the documents, `/docs NAME` a document's sections, and
+  `/docs NAME SECTION` shows a section (by the start of its title or its number, up to 6,000
+  characters, the rest said to be there), as a note. The documents are found beside the program
+  or in a folder above it (a build inside the repository); a release does not carry them, which
+  is Edward's call (they would add the docs folder to it). GO TO IT and J on a section are still to
+  come.
 - **One catalogue:** every catalogued thing (documents, anchors, models, runs, maps, chains)
   named by its SHA-256 and linked in the node graph's map, so that from any one of them the others
   are a step away. The maps already do this for files; the rest are files too.
@@ -3478,6 +3571,12 @@ already shows each voice as text while it speaks, so it has subtitles.
   - **Menus and buttons that can be read aloud:** the item under the cursor spoken when it
     changes, as a screen reader would. Every string is already in the language files
     (`data/lang`), so the speech reads what the screen shows.
+    *Built for the main menu and the pause menu (6 November 2026):* Settings, Controls, **Read
+    menus aloud** (`[controls] read_aloud`, off by default) speaks the item chosen when it changes,
+    with its value on a settings screen, through Windows' own voice (SAPI, on a thread of its own,
+    each item cutting short the one before); elsewhere it says it has no voice. Not yet the setup
+    menu, the File Locator or the hallway's panels; and not yet heard on Windows here (built and
+    checked on Linux, where it is silent): Edward's first run is its first test.
   - **Objects that can be translated:** every item's description and every sign through the same
     language files, so a new language translates the world as well as the menus.
   - **Other settings:** text size, contrast and colour-blind palettes (the lines' colours are
@@ -3563,7 +3662,10 @@ perspective.
   - **The time since the last build:** a time has no "left", until there is a plan to measure
     against.
 - *Next:* the game's figures (the setup menu's counts, the HUD's position along a line) get the
-  same pairing: how far along, and how far still to go.
+  same pairing: how far along, and how far still to go. *Built for the position (6 November
+  2026):* the HUD, the book in hand, the shelf's verdict line, the navigator and the position
+  message each say how far along the line and how far still to go ("X% along, Y% to go").
+  The setup menu's counts are still to come.
 
 **19.79 Things that get in the way, from playing it (Edward, 17 October 2026).** Found while
 building Debug and Release, running the tests and playing it. Each is small; together they are
@@ -3788,8 +3890,10 @@ and model types there are, then work out the best way to dissect them on the fly
     the unit tests check for both types. Measured here on one thread, a model of 27.4 million
     weights: as stored 54.9 MB, F16 64 tokens a second and BF16 48; widened 109.7 MB, F16 78 to
     94 and BF16 65 to 85 (two runs on a shared machine). So it is memory against speed, and the
-    choice is the player's. *Still to come:* "auto", widening only while the model fits a share
-    of installed memory, as ITEM MEMORY is a share.
+    choice is the player's. *"auto" built (6 November 2026):* `widen_weights = auto` widens a
+    model file's 16-bit weights only where the model, widened, fits in ITEM MEMORY's share of
+    installed memory (25% until it is set), and keeps them as stored where it would not; the unit
+    tests check both sides of the line.
 - **The way to take them apart on the fly,** in stages, each one measured before the next:
   1. **Inspect without loading.** From `config.json` and the header (or a GGUF file's header)
      alone: the family, every tensor's role, the memory it needs at its stored width, the shards,
@@ -5091,9 +5195,26 @@ faster:
 - *Built (6 November 2026):* `hallway --create PATH [--out FILE]` and the "Create .sieve" entry on
   every file and folder (`context/install_context.bat`), as decided: the File Locator alone, live
   while it works, NAME.sieve saved beside it, closed with 0; stopped or failed, open and saying why
-  (1). A folder of the test fixture 2.2 s, MANUAL.md 3.2 s, each installing back the same. Still
-  to come: several files chosen as one `.sieve` (Explorer starts one window for each), and "Other
-  compressed formats".
+  (1). A folder of the test fixture 2.2 s, MANUAL.md 3.2 s, each installing back the same. Several
+  chosen (Edward: "treat the multiple selected files as a directory"), the same day: the folder
+  they are in, holding just them (walk_folder's `only`), saved as FOLDER.sieve; Explorer starts a
+  program for each, and the first gathers the others' paths (a lock in the temporary folder for
+  that folder, half a second without a new one). Three files and a folder chosen: one .sieve of
+  the four, the file not chosen left out.
+- *Built, the other formats (6 November 2026):* `sieve compress PATH... --format F` and a
+  "Compress to" submenu on every file and folder (on its own, as "Create .sieve" is): zip, 7z, xz,
+  gz, bz2, zst, lz4, br, lzma and tar, at the settings the comparison table measures (zip deflate 9,
+  7z LZMA2 9e solid, xz -9e, gzip -9, bzip2 -9, zstd -19 --long=27, lz4 -12, brotli -q 11 -w 24),
+  each made in memory, read back and compared with what went in before it is written. A folder or
+  several files go into a stream format as a tar first. tar and zip by libarchive's writers; 7z
+  written by Sieve itself (libarchive's 7z writer has no LZMA2 without liblzma built into it, which
+  Sieve's libarchive is not) and read back by the installer's own 7z reader; the streams by the
+  libraries Sieve already remakes them with. Not cpio, iso, ar or warc (no one asks for them by a
+  menu), nor rar, lz, cab or lha, as above. Each read by 7-Zip, tar, unzip, xz, gzip, bzip2 and
+  Python's modules here, names with accents included. IDEAS.md (520,976 bytes) alone: gz 195,506
+  bytes, zip 195,667, xz 167,464, lzma 167,402, 7z 167,518, zst 170,227, br 162,994, bz2 152,916,
+  lz4 225,407; each under a second. Several chosen are gathered as for "Create .sieve" (the
+  gathering moved to tools/cli/gather.cpp, for both). Everything is read into memory.
 
 
 **19.101 The crawler as a card: a hardware layer for a site's table (Edward, 25 October 2026;
@@ -5914,6 +6035,12 @@ the day's measurements and review, roughly in the order they would pay:
   For size that is the choice asked for, but a bar that grows with the install's time (a larger
   gain asked of a slower decode) would keep near ties fast; the power benchmark's figures decide
   where it sits.
+  *Built (6 November 2026; results/rising-bar-2026-11-06.md):* over 16 MiB, mixing is kept only
+  where it is at least 1% under LZMA2, and 0.5% more for each 100 MB (1.25% at mozilla's 51 MB,
+  1.5% at 100 MB, 6% at 1 GB), unless Try every way was asked for itself. Of samba, nci, webster,
+  mozilla and enwik8 with Optimise Search, only mozilla changes: 13,318,582 bytes mixed to
+  13,376,239 as LZMA2 (0.43% more), installing in 1.0 s instead of 49.5 s; the others are the same
+  bytes as before.
 - *The stream weighing's cost on large folders.* It estimates the shared LZMA2 stream twice (with and
   without the mixed files); on a folder of hundreds of MB that is minutes. Where the mixed files are
   a small share of the stream (under 1%), or their codes already far under their bytes' share, it
@@ -5955,8 +6082,7 @@ the day's measurements and review, roughly in the order they would pay:
     pack.cpp the same (results/shortcut-coder-2026-11-02.md). Still 16.8% behind xz on the program.
   - *The picture viewer:* `sieve-view` (client/view_main.cpp; MANUAL, Commands), with the checks
     above before anything is decoded, and its Sieve button making NAME.simage.
-  - *A bar for mixing over 16 MiB:* not built: it waits on the power benchmark's figures, which say
-    what a second of installing costs against a byte saved.
+  - *A bar for mixing over 16 MiB:* built 6 November 2026 (above, "Mixing whole over 16 MiB").
 
 *Measured and left (6 November 2026, the easy wins' list):* mixing an Alpha ECOFF program whole
 without the start test, as an x86 one is. On the five mozilla libraries: three are already mixed
@@ -6323,7 +6449,11 @@ should take on:
   November every letter Unicode gives a case folded as Windows folds it, one to one
   (tools/cli/case_fold_table.hpp, made by tools/gen_case_fold.py from Unicode 15.1: 1,455 pairs),
   so É.txt and é.txt, Σοφία and σοφία, are one name to the packer's warning and the installer's
-  refusal, while straße and STRASSE stay two, as on Windows. NFC and NFD forms are still two.)
+  refusal, while straße and STRASSE stay two, as on Windows. And the same evening, a letter written
+  as one character and as a letter and its combining accents (NFC and NFD): one name on macOS alone
+  (tools/cli/normalise_table.hpp, made by tools/gen_normalise.py: 2,061 decompositions, Hangul by
+  rule, 922 combining classes); the packer says so as macOS's, the installer refuses it on macOS,
+  and Windows and Linux keep the two.)
 - *A RAR made again* sets each member's mode before the RAR is checked; the modes are now masked
   to 0777, but the members could be held to the files this install wrote, and the modes set only
   once the RAR matches.

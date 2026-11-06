@@ -26,6 +26,7 @@
 #include <span>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace hallway {
@@ -767,7 +768,9 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
         std::lock_guard<std::mutex> lock(mx_);
         open_log(tailor ? "tailoring the filters to" : "reading", path);
     }
-    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes, compare = kept_compare().on, more = kept_more().on && kept_compare().on] {
+    // (the names chosen in the folder, where several files were chosen: taken for this reading alone)
+    auto job = [this, path, tailor, per_file, total, by_total, archives, boxes, compare = kept_compare().on, more = kept_more().on && kept_compare().on,
+                only = std::exchange(only_, {})] {
         // Stop asks every search and every trial not needed for a result to end, the best so far
         // kept; what the work is doing, and its best so far, goes to the line under the status.
         const StopScope scope(&stop_, [this](const std::string& what, double best, double of) { report(what, best, of); });
@@ -979,7 +982,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
             else if (fs::is_directory(p))
             {
                 r.kind = Result::Folder;
-                r.manifest = cli::walk_folder(p);
+                r.manifest = cli::walk_folder(p, only.empty() ? nullptr : &only);
                 {
                     fs::path largest;
                     uint64_t most = 0;
@@ -2107,9 +2110,10 @@ void FileLocator::script(double stop_after, const std::string& save_to, double s
     scripted() = {stop_after, save_to, shot_after, force_after};
 }
 
-void FileLocator::create(const std::string& path, const std::string& out)
+void FileLocator::create(const std::string& path, const std::string& out, std::vector<std::string> only)
 {
     open();
+    only_ = std::move(only);
     create_out_ = out;
     create_state_ = 1;
     analyse(path); // (on the worker: the window drawn while it works)

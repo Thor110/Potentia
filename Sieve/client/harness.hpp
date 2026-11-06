@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <future>
 #include <memory>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -41,6 +42,10 @@ struct PictureSource
     uint32_t width = 10, height = 10;
     std::string palette = "mono";
     std::filesystem::path filters;
+    // A new melody model's melodies (6 November 2026): the audio line as the setup menu has it,
+    // as the options sieve::cli::make_line takes (line, length, note-set and notes2's range,
+    // durations and voices); empty, the audio line's defaults.
+    std::map<std::string, std::string> melody_line;
 };
 
 class Harness
@@ -88,7 +93,7 @@ private:
     void key(SDL_Keycode k, SDL_Keymod mod);
     bool training() const { return job_.valid() || djob_.valid(); }
     // Picture models (diffusion-v1): the settings page for a new one, training one, and what it makes.
-    void open_pictures();
+    void open_pictures(bool melodies = false); // a new picture model, or a melody model (the audio line)
     void change_picture_setting(int row, int dir, bool big);
     void start_picture_training();
     void poll_pictures();

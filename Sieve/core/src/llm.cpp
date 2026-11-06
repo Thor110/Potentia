@@ -60,6 +60,7 @@ const float* half_table()
 }
 
 std::atomic<bool> g_widen{false};
+std::atomic<uint64_t> g_widen_budget{0}; // auto: the most a widened model may take; 0, not auto
 
 } // namespace
 
@@ -238,7 +239,16 @@ Config Config::from_json(const json::Value& c)
     return m;
 }
 
-void set_widen_weights(bool on) { g_widen = on; }
+void set_widen_weights(bool on)
+{
+    g_widen = on;
+    g_widen_budget = 0;
+}
+void set_widen_weights_auto(uint64_t budget)
+{
+    g_widen = false;
+    g_widen_budget = budget;
+}
 bool widen_weights() { return g_widen; }
 
 struct Model::Impl
@@ -265,7 +275,7 @@ struct Model::Impl
 
 namespace {
 
-Matrix load(std::ifstream& in, uint64_t data_start, const safetensors::Tensor& t, size_t rows, size_t cols)
+Matrix load(std::ifstream& in, uint64_t data_start, const safetensors::Tensor& t, size_t rows, size_t cols, bool wide)
 {
     if (t.elements() != uint64_t(rows) * cols) bad("tensor " + t.name + " is not the shape config.json gives");
     Matrix m;
@@ -275,7 +285,6 @@ Matrix load(std::ifstream& in, uint64_t data_start, const safetensors::Tensor& t
     std::vector<char> raw(size_t(t.bytes()));
     if (!in.read(raw.data(), std::streamsize(raw.size()))) bad("the file ends inside " + t.name);
     const size_t n = rows * cols;
-    const bool wide = g_widen.load();
     auto half = [&](size_t i) { return uint16_t(uint8_t(raw[2 * i]) | (uint8_t(raw[2 * i + 1]) << 8)); };
     if (t.dtype == "BF16")
     {
@@ -332,11 +341,22 @@ Model::Model(const json::Value& config, const std::filesystem::path& file, unsig
     const safetensors::Header h = safetensors::read_header(in);
     std::map<std::string, const safetensors::Tensor*> by;
     for (const safetensors::Tensor& t : h.tensors) by[t.name] = &t;
+    // Widened, or as stored: "auto" weighs the model as it would be widened (its 16-bit weights
+    // taking four bytes each) against the budget.
+    uint64_t stored = 0, halves = 0;
+    for (const safetensors::Tensor& t : h.tensors)
+    {
+        stored += t.bytes();
+        if (t.dtype == "BF16" || t.dtype == "F16") halves += t.bytes();
+    }
+    const uint64_t budget = g_widen_budget.load();
+    widened_ = halves > 0 && (g_widen.load() || (budget > 0 && stored + halves <= budget));
+    const bool wide = widened_;
     build([&](const std::string& name) { return by.count(name) != 0; },
           [&](const std::string& name, size_t rows, size_t cols) {
               const auto it = by.find(name);
               if (it == by.end()) bad("the file has no tensor " + name);
-              return load(in, h.start_bytes(), *it->second, rows, cols);
+              return load(in, h.start_bytes(), *it->second, rows, cols, wide);
           });
 }
 

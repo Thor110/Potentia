@@ -298,6 +298,10 @@ $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/
 q "^melody 1 by melodies-2x64: 8ac6f76023e45b65ccb9d8e98b4" chatmel.txt
 q "^a random melody: " chatmel.txt
 $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --training-dir data/training --screenshot chat-rand.png | tr -d '\r' | q "^a random picture: "
+# A random place on another line (6 November 2026): a book's card, and GO TO IT on a page's goes
+# through the door to it.
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/random book" --training-dir data/training --screenshot chat-rbook.png | tr -d '\r' | q "^a random book, on the BOOKS line: [0-9a-f]*$"
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/random page" --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-rpage.png | tr -d '\r' | q "^PAGES line, .*| went to "
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-mgo.png | tr -d '\r' | q "^AUDIO line, .*on the audio line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
@@ -327,6 +331,9 @@ printf '[ai]\nmode = compact\nfilters = weight-rows-v1\n' > ai-rows.ini
 printf '[ai]\nmode = hide\nfilters = canonical-model-v1\n' > ai-canon.ini
 $H --no-menu --line ai --filters ai-rows.ini --walk "0,0" --screenshot ai-compact.png | tr -d '\r' | sed -n 1p | q "^AI line, positional, filters: 1 compact"
 $H --harness --training-dir data/training --filters ai-canon.ini --script "g" --screenshot harness-go-canon.png | tr -d '\r' | q "as its class's canonical form"
+# A new melody model (6 November 2026): M opens its settings, of the audio line as the setup menu
+# has it.
+$H --harness --training-dir hruns --script "M" --screenshot harness-mel.png | tr -d '\r' | q "^status: set the melody model"
 $H --menu --line ai --filters ai-rows.ini --settle 200 --press "F" --screenshot menu-ai-filters.png | q "saved menu-ai-filters.png"
 $H --menu --line ai --press "F,Down,Left" --settle 100 --screenshot menu-ai-judge-only.png | q "saved menu-ai-judge-only.png"
 printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini

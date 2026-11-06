@@ -1512,7 +1512,7 @@ public:
 private:
     struct ChatEntry
     {
-        enum class Kind { You, It, Note, File, Picture } kind = Kind::Note;
+        enum class Kind { You, It, Note, File, Picture, Place } kind = Kind::Note;
         std::string text; // You, It, Note: what was said
         // A file: its name, bytes and kind, where it stands (the File Locator's weighing), and how
         // many of its bytes the model was given.
@@ -1535,11 +1535,16 @@ private:
         std::string symbols, title;
         bool melody() const { return !symbols.empty(); }
         std::string heading() const;
-        uint32_t width = 0, height = 0;
+        uint32_t width = 0, height = 0; // a picture's cells; a picture file's own pixels (its exchange rate)
+        // A place (/random page, book, world ...): the line it is on and where on it, as the
+        // navigator holds a place (a number below the line's count of places).
+        int place_line = -1;
+        BigUint place_index;
     };
     enum class ChatAct { Go, Item, Save, Play, Full };
     void close_chat();
     void chat_event(const SDL_Event& e);
+    std::string docs_answer(const std::string& name, const std::string& section) const; // CHAT's /docs
     // The CHAT tab drawn in the hand panel's area from (x, top), `w` wide, down to `bottom`.
     void draw_chat(float x, float top, float w, float bottom);
     // Every frame: what the dialogs chose (files to give, where to save a card), and the keys given
@@ -1661,6 +1666,7 @@ private:
     bool nav_open_ = false, nav_had_mouse_ = false;
     BigUint nav_value_;           // the position being edited, < loop_.units()
     std::string nav_hex_;         // nav_value_ in hex, nav_width_ digits
+    std::string nav_dec_, nav_dec_for_; // nav_value_ in decimal, and the hex it was worked out for
     size_t nav_width_ = 1, nav_sel_ = 0;
     std::optional<size_t> nav_hover_;
     std::string nav_note_;        // why the last typed digit was refused
@@ -1686,6 +1692,8 @@ private:
     bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
     float wheel_ = 0;      // mouse wheel movement not yet turned into whole tiles
+    int wheel_run_ = 0, wheel_way_ = 0; // notches in a fast spin so far, and which way (IDEAS 5.5)
+    Uint64 wheel_at_ = 0;  // when the last notch came (ms)
     std::string filter_status_;
     std::vector<std::vector<SDL_FPoint>> edge_buckets_;
     bool invert_y_ = false;

@@ -11,6 +11,8 @@
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
+#include "cli/gather.hpp"
+#include "speech.hpp"
 #include "cli/draft.hpp"
 #include "cli/pack.hpp"
 #include "cli/dictionaries.hpp" // executable_dir (--metrics-text)
@@ -28,6 +30,18 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
+#include <functional>
+#include <iterator>
+#include <optional>
+#include <random>
+#include <set>
+#include <string>
+#include <system_error>
+#include <thread>
+#include <vector>
 
 using namespace hallway;
 using namespace hallway::hall;
@@ -171,7 +185,7 @@ const char* kUsage =
     "  --metrics-text FILE with --metrics: the text the guided ordering's saving is measured on\n"
     "                      (default: data/metrics/reference-text.txt, Dickens, which the model was not trained on)\n"
     "  --widen-weights     a model file's BF16 and F16 weights widened to 32-bit floats as they load (twice the\n"
-    "                      memory; the same numbers): [models] widen_weights in the settings\n"
+    "                      memory; the same numbers): [models] widen_weights in the settings (off, on or auto)\n"
     "  --picture-model DIR DRAW uses this picture model's run folder\n"
     "  --chat-press KEYS   keys pressed in CHAT after those (e.g. Ctrl+G: the newest card's GO TO IT)\n"
     "  --print-system-prompt  print the system prompt a model given as a file is told here\n"
@@ -241,7 +255,7 @@ const char* kUsage =
     "  --picture-rooms N   rooms either side of yours with item pictures of their own (0 to 8; 1)\n\n"
     "Controls: WASD move, mouse look, Shift run, E or click take a book, T warp, G go to,\n"
     "M switch ordering (positional, scrambled, guided), - and = zoom out/in (guided; Shift: 8x),\n"
-    "wheel/PgUp/PgDn/[ ] jump 1/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
+    "wheel/PgUp/PgDn/[ ] jump 1 (more spun fast)/1000/1000000 tiles, Home to corridor tile 0 (every line's start line),\n"
     "N/B next/previous unit of a warped trail (or page of a book in hand), P play an audio book, F save the item in hand as a file, F1 the setup menu, Tab free the mouse,\n"
     "Esc close or free the mouse, Ctrl+Q quit.\n\n"
     "Every line shares one corridor, 128 books a tile unless --items-per-wall. Each line repeats along it; a\n"
@@ -280,6 +294,24 @@ bool notes3_settings_ok(const Args& a)
     {
         return false;
     }
+}
+
+// Where the AI Training Harness's new picture and melody models draw their units from: the image
+// line and the audio line as the setup menu has them, and the filters file.
+PictureSource picture_source(const Settings& s, const std::filesystem::path& filters)
+{
+    PictureSource p{s.image_w, s.image_h, s.image_palette, filters, {}};
+    p.melody_line["length"] = std::to_string(s.notes);
+    if (s.note_set == "notes2")
+    {
+        p.melody_line["note-set"] = "notes2";
+        p.melody_line["low"] = s.note_low;
+        p.melody_line["high"] = s.note_high;
+        p.melody_line["durations"] = s.note_durations;
+        p.melody_line["voices"] = std::to_string(s.voices);
+    }
+    else if (s.note_set != "notes104") p.melody_line["note-set"] = s.note_set; // (refused: not notes)
+    return p;
 }
 
 std::vector<Line> make_lines(const Args& a)
@@ -367,6 +399,14 @@ std::filesystem::path training_dir()
     return (b.empty() ? std::filesystem::current_path() : std::filesystem::path(std::u8string(b.begin(), b.end()))) / "training";
 }
 
+// A path and its UTF-8 text, both ways (as the File Locator has them).
+std::filesystem::path path_of_utf8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+std::string utf8_of(const std::filesystem::path& p)
+{
+    const std::u8string u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+
 // The File Locator from the main menu: files weighed under the lines the setup menu's settings
 // would build (made when the first weighing starts), and nowhere to walk to, so no Go to it.
 // Tailored filters, when used, are saved for the next hallway built. Esc comes back to the main
@@ -415,7 +455,7 @@ std::optional<std::pair<double, bool>> locator_search_of(const sieve::cli::Args&
 bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& settings, FilterConfig& filters, const std::string& filters_path,
                  const std::string& path = "", bool tailor = false, const std::string& screenshot = "", const std::string& presses = "",
                  std::optional<LocatedGo>* go = nullptr, std::optional<std::pair<double, bool>> search = std::nullopt,
-                 const std::string& create_out = "", int* created = nullptr)
+                 const std::string& create_out = "", int* created = nullptr, std::vector<std::string> only = {})
 {
     MenuLocator m;
     settings.apply(m.la);
@@ -466,7 +506,7 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
     FileLocator loc(window, renderer, host);
     self = &loc;
     if (search) loc.set_search(search->first, search->second);
-    if (!create_out.empty()) loc.create(path, create_out); // (Create .sieve: the window live while it works)
+    if (!create_out.empty()) loc.create(path, create_out, std::move(only)); // (Create .sieve: the window live while it works)
     else if (!path.empty()) loc.locate_now(path, tailor);
     else loc.open();
     auto frame = [&] {
@@ -735,8 +775,11 @@ int run(const Args& a)
     if (a.has(sieve::cli::draft_flag())) app.locator_draft = true;
     sieve::cli::set_draft(app.locator_draft);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
-    if (a.has("widen-weights")) app.widen_weights = true;
-    sieve::llm::set_widen_weights(app.widen_weights);
+    if (a.has("widen-weights")) app.widen_weights = 1;
+    if (app.widen_weights == 2)
+        sieve::llm::set_widen_weights_auto(uint64_t(std::max(0, SDL_GetSystemRAM())) * (uint64_t(1) << 20) / 100 * uint64_t(app.item_memory_pct));
+    else sieve::llm::set_widen_weights(app.widen_weights == 1);
+    set_read_aloud(app.read_aloud); // the menus read aloud ([controls] read_aloud; speech.hpp)
     // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
     // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
     if (a.has("counting-memory")) app.counting_memory_pct = std::clamp(int(a.get_positive("counting-memory", 50)), 5, 100);
@@ -1075,7 +1118,7 @@ int run(const Args& a)
         // for its runs (else the training folder beside the programs); --script runs keys and typed
         // text as the designer's does, each step waiting for a training to finish.
         Harness harness(window, renderer, a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(), ai_shape_of(settings),
-                        PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                        picture_source(settings, filters_path));
         harness.set_scripted(true);
         if (a.has("script"))
         {
@@ -1303,9 +1346,33 @@ int run(const Args& a)
     {
         std::string what = a.get("create");
         while (what.size() > 1 && (what.back() == '/' || what.back() == '\\')) what.pop_back();
-        const std::string out = a.has("out") ? a.get("out") : what + ".sieve";
+        // Several files or folders chosen (Edward, 6 November 2026: "treat the multiple selected
+        // files as a directory"): Explorer starts one program for each, so the first gathers the
+        // others' paths and makes one .sieve of them, the folder they are in holding just them,
+        // named after it; the others hand over their path and close. (Not with --out: a script
+        // names one thing.)
+        std::vector<std::string> only;
+        std::string folder = what;
+        if (!a.has("out"))
+        {
+            const auto gathered = sieve::cli::gather_chosen(what);
+            if (!gathered) // (handed to the first, which makes the .sieve)
+            {
+                finish();
+                return 0;
+            }
+            if (gathered->size() > 1)
+            {
+                folder = utf8_of(std::filesystem::path(path_of_utf8(what)).parent_path());
+                for (const std::string& p : *gathered) only.push_back(utf8_of(std::filesystem::path(path_of_utf8(p)).filename()));
+            }
+        }
+        const std::string out = a.has("out") ? a.get("out")
+                                : only.empty() ? what + ".sieve"
+                                               : utf8_of(std::filesystem::path(path_of_utf8(folder)) /
+                                                           (std::filesystem::path(path_of_utf8(folder)).filename().u8string() + u8".sieve"));
         int created = 0;
-        run_locator(window, renderer, settings, filters, filters_path, what, false, "", "", nullptr, locator_search_of(a), out, &created);
+        run_locator(window, renderer, settings, filters, filters_path, folder, false, "", "", nullptr, locator_search_of(a), out, &created, only);
         finish();
         return created ? 0 : 1;
     }
@@ -1346,7 +1413,7 @@ int run(const Args& a)
                 // The AI Training Harness; GO TO IT goes into the hallway on the AI line, at the
                 // model, in the run's shape (and without the setup menu: the shape is the run's).
                 Harness harness(window, renderer, training_dir(), ai_shape_of(settings),
-                                PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                                picture_source(settings, filters_path));
                 const Harness::Result hr = harness.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::Back) continue;
@@ -1588,7 +1655,7 @@ int run(const Args& a)
             {
                 hall->clear_request();
                 Harness harness(window, renderer, training_dir(), ai_shape_of(settings),
-                                PictureSource{settings.image_w, settings.image_h, settings.image_palette, filters_path});
+                                picture_source(settings, filters_path));
                 const Harness::Result hr = harness.run();
                 if (hr == Harness::Result::Quit) break;
                 if (hr == Harness::Result::GoTo)

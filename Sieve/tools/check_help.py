@@ -29,7 +29,8 @@ HELPERS = {"cmd_check_binary": "check", "cmd_check_book": "check", "cmd_filters_
 # Files whose options belong to one command's page.
 FILES = {"diffuse.cpp": "diffuse", "ai.cpp": ("ai", "filters"),  # filters --line ai is in ai.cpp
          "train_cmd.cpp": "ai-train", "rope.cpp": ("rope", "mix"),  # sieve mix is in rope.cpp
-         "tensors.cpp": "tensors", "cipher_cmd.cpp": "cipher", "chat.cpp": "chat", "site.cpp": "site"}
+         "tensors.cpp": "tensors", "cipher_cmd.cpp": "cipher", "chat.cpp": "chat", "site.cpp": "site",
+         "compress.cpp": "compress"}
 
 
 def text(path):

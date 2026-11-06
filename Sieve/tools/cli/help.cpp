@@ -630,6 +630,29 @@ const std::vector<Page>& pages()
           {"sieve cipher --decrypt --recipe \"vigenere lemon; feistel my key\" --in-hex HEX", "and back"},
           {"sieve cipher --break --in secret.bin", "is it a weak cipher?"},
           {"sieve cipher --catalogue --depth 3", "how many recipes there are"}}},
+        {"compress", "Make a file, a folder or several files into zip, 7z, xz, gzip, bzip2, zstd, lz4, brotli, lzma or tar, at each one's strongest usual setting, read back before it is kept.",
+         "sieve compress PATH [PATH ...] --format zip|7z|xz|gz|bz2|zst|lz4|br|lzma|tar [--out FILE] [--force]",
+         "The formats people already use, for what Sieve is not wanted for (the right-click menu's \"Compress\n"
+         "to\"). Each is made in memory, read back and compared with what went in before it is written:\n"
+         "  zip   each file deflated at 9, names in UTF-8\n"
+         "  7z    every file as one LZMA2 stream (preset 9e, solid, as 7-Zip makes them by default)\n"
+         "  xz    LZMA2 preset 9e with CRC-64 (xz -9e); lzma the older .lzma format at the same setting\n"
+         "  gz    gzip -9; bz2 bzip2 -9; zst zstd -19 --long=27; lz4 lz4 -12; br brotli -q 11 -w 24\n"
+         "  tar   POSIX (pax) tar, not compressed\n"
+         "The settings are those the comparison table measures (sieve locate --compare --more-formats).\n"
+         "One file goes into a stream format (xz, gz ...) as it is (notes.txt.xz); a folder or several files go\n"
+         "in as a tar first (photos.tar.xz). Without --out the result is saved beside what was chosen: one\n"
+         "file or folder by its own name (zip, 7z and tar without the file's extension, notes.zip, as 7-Zip\n"
+         "names them), several by the folder they are in; NAME (2).EXT where the name is taken. Everything is\n"
+         "read into memory, so what goes in must fit in it, with the result.",
+         {{"--format F", "zip, 7z, xz, gz, bz2, zst, lz4, br, lzma or tar."},
+          {"--out FILE", "Where to write it (refused if it is there already, unless --force)."},
+          {"--force", "Replace --out if it is there."},
+          {"--gather", "Several chosen in Explorer at once, one program each: the first takes them all (the menu's)."},
+          {"--from-menu", "Started from the right-click menu: a failure waits for Enter, so it can be read."}},
+         {{"sieve compress notes.txt --format xz", "notes.txt.xz beside it"},
+          {"sieve compress photos --format 7z", "photos.7z"},
+          {"sieve compress a.txt b.txt --format zip --out both.zip", "two files in one zip"}}},
         {"diffuse", "Train a diffusion model that makes pictures of the image line or melodies of the audio line, check a run again, or make with it.",
          "sieve diffuse --record FOLDER [--line image|audio] [line options] [--filters PATH] [--figures N] [--figure-seed S] [--pictures FILE]\n"
          "  [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B] [--levels S] [--steps N] [--batch N]\n"
@@ -1443,7 +1466,7 @@ void print_usage()
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
         {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
-        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "version"}},
+        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "version"}},
     };
     std::vector<std::string> shown;
     auto show = [&](const Page& p) {

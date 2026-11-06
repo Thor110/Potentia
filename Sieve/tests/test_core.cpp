@@ -3650,6 +3650,15 @@ void test_llm(const std::string& dir)
         for (const uint32_t t : tok.encode("The library holds every book.", true)) w = wide.step(t);
         CHECK(w == a);
         CHECK(wide.weight_bytes() == 2 * one.weight_bytes());
+        CHECK(wide.widened() && !one.widened());
+        // "auto": widened where the widened model fits the budget, as stored where it does not.
+        L::set_widen_weights_auto(uint64_t(1) << 40);
+        L::Model roomy(config, path, 1);
+        L::set_widen_weights_auto(one.weight_bytes()); // (twice that is needed)
+        L::Model tight(config, path, 1);
+        L::set_widen_weights(false);
+        CHECK(roomy.widened() && roomy.weight_bytes() == wide.weight_bytes());
+        CHECK(!tight.widened() && tight.weight_bytes() == one.weight_bytes());
     }
     std::filesystem::remove(path);
     // The same model in F16: kept as stored (two bytes a value, no longer widened as it loads) and

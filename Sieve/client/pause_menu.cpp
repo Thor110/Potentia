@@ -17,6 +17,7 @@
 // with the pause menu still open (app_main.cpp).
 
 #include "hallway.hpp"
+#include "speech.hpp"
 
 namespace hallway::hall {
 
@@ -168,6 +169,7 @@ void Hallway::draw_pause(float W, float H)
             SDL_RenderFillRect(r_, &row);
         }
         const SDL_Color c = !it.built ? grey : i == pause_row_ ? white : ink;
+        if (i == pause_row_) announce(label); // (read aloud when chosen, speech.hpp)
         text(bx + (bw - text_width(label, 2)) / 2, y, label, 2, c);
         y += 36;
     }

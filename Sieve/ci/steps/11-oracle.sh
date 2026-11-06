@@ -1247,6 +1247,15 @@ else
     printf one > "cp_ss/stra$(printf '\303\237')e.txt"
     printf two > cp_ss/STRASSE.txt
     if $S locate cp_ss --installer cp_ss.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
+    # (and é written as one character and as e and a combining accent: one name on macOS alone,
+    # which the packer says; installed here, both)
+    rm -rf cp_nf cp_nf_s
+    mkdir cp_nf
+    printf one > "cp_nf/$(printf '\303\251').txt"
+    printf two > "cp_nf/e$(printf '\314\201').txt"
+    $S locate cp_nf --installer cp_nf.sieve 2>&1 | tr -d '\r' | grep -q "are one name on macOS, the same letters written in two ways"
+    $S install cp_nf.sieve --to cp_nf_s > /dev/null
+    [ "$(ls cp_nf_s | wc -l)" -eq 2 ]
 fi
 # A name Windows cannot hold (aux.txt, the device AUX, made on Linux: tests/windows_names.sieve,
 # 0.13.78): on Windows, Sieve and sieve-install refuse it before writing anything, naming it; on
@@ -1511,3 +1520,51 @@ python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
 diff -r g34 g34_oracle
 $S locate g34 --installer g34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
 if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi
+# sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
+# name inside, an empty file and an empty folder, in every format, each read back by Python's own
+# modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.
+pip_add "zstandard==0.25.0"
+rm -rf cz cz_out
+mkdir -p cz/src/sub/empty cz_out
+cp sieve_ref.py cz/src/
+printf 'caf\xc3\xa9' > "cz/src/sub/caf$(printf '\xc3\xa9').txt"
+: > cz/src/sub/empty.txt
+for f in zip 7z xz gz bz2 zst lz4 br lzma tar; do
+    $S compress cz/src --format $f --out cz_out/src.$f > /dev/null
+done
+$S compress cz/src/sieve_ref.py --format xz > /dev/null
+test -f cz/src/sieve_ref.py.xz
+$S compress cz/src/sieve_ref.py --format zip > /dev/null
+test -f cz/src/sieve_ref.zip
+if $S compress cz/src --format zip --out cz_out/src.zip 2> /dev/null; then exit 1; fi
+if $S compress cz/src --format rar 2> /dev/null; then exit 1; fi
+rm cz/src/sieve_ref.py.xz cz/src/sieve_ref.zip
+python -c "
+import io, os, sys, tarfile, zipfile, gzip, lzma, bz2, zstandard, lz4.frame, brotli
+want = {}
+for root, dirs, files in os.walk('cz/src'):
+    for d in dirs: want[os.path.relpath(os.path.join(root, d), 'cz') + '/'] = b''
+    for f in files: want[os.path.relpath(os.path.join(root, f), 'cz')] = open(os.path.join(root, f), 'rb').read()
+want['src/'] = b''
+def from_tar(b):
+    got = {}
+    with tarfile.open(fileobj=io.BytesIO(b)) as t:
+        for m in t.getmembers():
+            got[m.name + ('/' if m.isdir() else '')] = b'' if m.isdir() else t.extractfile(m).read()
+    return got
+undo = {'gz': gzip.decompress, 'xz': lzma.decompress, 'lzma': lzma.decompress, 'bz2': bz2.decompress,
+        'zst': lambda b: zstandard.ZstdDecompressor().stream_reader(io.BytesIO(b)).read(),
+        'lz4': lz4.frame.decompress, 'br': brotli.decompress, 'tar': lambda b: b}
+for f, u in undo.items():
+    got = from_tar(u(open('cz_out/src.' + f, 'rb').read()))
+    assert got == want, (f, sorted(set(got) ^ set(want)))
+z = zipfile.ZipFile('cz_out/src.zip')
+got = {i.filename: z.read(i) for i in z.infolist()}
+assert got == want, ('zip', sorted(set(got) ^ set(want)))
+assert open('cz_out/src.7z', 'rb').read(6) == b'7z\xbc\xaf\x27\x1c'
+"
+if command -v 7z > /dev/null; then
+    rm -rf cz_7z
+    7z x -bd -ocz_7z cz_out/src.7z > /dev/null
+    diff -r cz/src cz_7z/src
+fi

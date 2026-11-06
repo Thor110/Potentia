@@ -40,7 +40,11 @@
 #include <cmath>
 #include <ctime>
 #include <fstream>
+#include <filesystem>
 #include <sstream>
+#include <string>
+#include <system_error>
+#include <vector>
 
 namespace hallway::hall {
 
@@ -631,7 +635,11 @@ void Hallway::chat_attach(const std::string& path)
                         if (!first) return;
                         first = false;
                         if (cli::vault::withheld_picture(f.rgba.data(), f.width, f.height)) withheld = true;
-                        else e.thumb = small_copy(f, kThumb);
+                        else
+                        {
+                            e.thumb = small_copy(f, kThumb);
+                            e.width = f.width, e.height = f.height; // (for the exchange rate on its card)
+                        }
                     });
                 }
                 catch (const std::exception&)
@@ -667,6 +675,20 @@ void Hallway::chat_attach(const std::string& path)
                 ways += (i ? "; " : "") + trf(i == f.best ? "chat.way.best" : "chat.way", {f.ways[i].how, grouped(uint64_t(f.ways[i].bits + 0.5))});
             e.weighing = trf("chat.file.ways", {ways});
             if (f.line >= 0) e.weighing += "\n" + trf("chat.file.item", {tr(theme_of(line_of(LineKind(f.line))).key)});
+            // The exchange rate (IDEAS 19.40, 19.62): what the picture costs on each line it can be
+            // on, and what each keeps. The file as it is (the binary line), every pixel at its own
+            // size (FULL SIZE: rgb24), and fitted to this hallway's image line (J): the bits of
+            // each, a unit's cells times the bits a cell's colour takes.
+            if (e.width && e.height)
+            {
+                const Line& image = unit_line(LineKind::Image);
+                const uint64_t full = uint64_t(e.width) * e.height * 24;
+                const uint32_t colours = image.image.palette ? image.image.palette->size() : 2;
+                const double fitted = double(image.image.unit_length()) * std::log2(double(std::max<uint32_t>(colours, 2)));
+                e.weighing += "\n" + trf("chat.file.rate", {grouped(uint64_t(e.bytes.size()) * 8), std::to_string(e.width) + "x" + std::to_string(e.height),
+                                                            grouped(full), std::to_string(image.image.width) + "x" + std::to_string(image.image.height),
+                                                            image.image.palette ? image.image.palette->id() : "?", grouped(uint64_t(fitted + 0.5))});
+            }
         });
         if (withheld)
         {
@@ -807,6 +829,134 @@ BigUint random_below(const BigUint& n, sieve::diffusion::SplitMix& g)
 
 } // namespace
 
+namespace {
+
+// The documents' folder: docs/ beside the program, or in a folder above it (a build inside the
+// repository), or under where it was started. A release does not carry them (yet).
+fs::path docs_folder()
+{
+    std::vector<fs::path> tries{fs::path("docs"), fs::path("..") / "docs"};
+    if (fs::path exe = cli::executable_dir(); !exe.empty())
+        for (int up = 0; up < 5 && !exe.empty(); ++up, exe = exe.parent_path())
+        {
+            tries.push_back(exe / "docs");
+            if (exe == exe.parent_path()) break;
+        }
+    std::error_code ec;
+    for (const fs::path& t : tries)
+        if (fs::is_regular_file(t / "MANUAL.md", ec)) return t;
+    return {};
+}
+
+std::string lowered(std::string s)
+{
+    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// A section's start: a heading ("## 4. Manifests"), or a paragraph opening with a number in bold
+// ("**19.32 Commands in CHAT"), as IDEAS numbers its ideas. Its title, or empty.
+std::string section_title(const std::string& l)
+{
+    if (!l.empty() && l[0] == '#')
+    {
+        const size_t at = l.find_first_not_of("# ");
+        return at == std::string::npos ? std::string() : l.substr(at);
+    }
+    if (l.size() > 3 && l[0] == '*' && l[1] == '*' && std::isdigit(static_cast<unsigned char>(l[2])))
+    {
+        std::string t = l.substr(2);
+        const size_t end = t.find("**");
+        return end == std::string::npos ? t : t.substr(0, end);
+    }
+    return {};
+}
+
+} // namespace
+
+// /docs: the documents (no name), a document's sections (a name), or a section's text (a name
+// and the start of a section's title or number: "/docs ideas 19.32"). Up to 6,000 characters of
+// it; the rest is said to be there.
+std::string Hallway::docs_answer(const std::string& name, const std::string& section) const
+{
+    const fs::path dir = docs_folder();
+    if (dir.empty()) return tr("chat.docs.none");
+    std::error_code ec;
+    std::vector<fs::path> all;
+    for (const auto& e : fs::directory_iterator(dir, ec))
+        if (e.path().extension() == ".md") all.push_back(e.path());
+    std::sort(all.begin(), all.end());
+    if (name.empty())
+    {
+        std::string list;
+        for (const fs::path& p : all) list += (list.empty() ? "" : ", ") + u8(p.stem());
+        return trf("chat.docs.list", {list});
+    }
+    const std::string want = lowered(name);
+    const fs::path* doc = nullptr;
+    for (const fs::path& p : all)
+        if (lowered(u8(p.stem())) == want || lowered(u8(p.filename())) == want) doc = &p;
+    if (!doc)
+        for (const fs::path& p : all)
+            if (!doc && lowered(u8(p.stem())).rfind(want, 0) == 0) doc = &p;
+    if (!doc) return trf("chat.docs.unknown", {name});
+    std::ifstream in(*doc, std::ios::binary);
+    std::ostringstream all_text;
+    all_text << in.rdbuf();
+    std::vector<std::string> lines;
+    {
+        std::istringstream t(all_text.str());
+        for (std::string l; std::getline(t, l);)
+        {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            lines.push_back(l);
+        }
+    }
+    if (section.empty())
+    {
+        std::string list;
+        size_t n = 0;
+        for (const std::string& l : lines)
+            if (const std::string t = section_title(l); !t.empty() && l[0] == '#')
+                list += (n++ ? "; " : "") + t;
+        if (list.empty())
+            for (const std::string& l : lines)
+                if (const std::string t = section_title(l); !t.empty()) list += (n++ ? "; " : "") + t;
+        return trf("chat.docs.sections", {u8(doc->filename()), list});
+    }
+    // The section: from the first line whose title starts with what was asked (or holds it), to
+    // the next section's start at the same level or above.
+    const std::string ask = lowered(section);
+    size_t from = lines.size();
+    for (int pass = 0; pass < 2 && from == lines.size(); ++pass)
+        for (size_t i = 0; i < lines.size(); ++i)
+        {
+            const std::string t = lowered(section_title(lines[i]));
+            if (!t.empty() && (pass == 0 ? t.rfind(ask, 0) == 0 : t.find(ask) != std::string::npos))
+            {
+                from = i;
+                break;
+            }
+        }
+    if (from == lines.size()) return trf("chat.docs.no_section", {section, u8(doc->filename())});
+    auto level = [](const std::string& l) { return l[0] == '#' ? int(l.find_first_not_of('#')) : 9; };
+    const int lv = level(lines[from]);
+    std::string text;
+    for (size_t i = from; i < lines.size(); ++i)
+    {
+        if (i > from && !section_title(lines[i]).empty() && level(lines[i]) <= lv) break;
+        text += lines[i] + "\n";
+    }
+    constexpr size_t kMost = 6000;
+    if (text.size() > kMost)
+    {
+        size_t cut = kMost;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut; // (not inside a character)
+        text = text.substr(0, cut) + "\n" + trf("chat.docs.more", {grouped(text.size() - cut), u8(doc->filename())});
+    }
+    return text;
+}
+
 void Hallway::chat_command(const std::string& line)
 {
     std::istringstream in(line.substr(1));
@@ -846,6 +996,47 @@ void Hallway::chat_command(const std::string& line)
         else e.width = l.image.width, e.height = l.image.height, e.palette = l.image.palette->id();
         e.address = l.space.address_of(e.cells, AddressMode::Positional);
         chat_show_unit(std::move(e));
+        return;
+    }
+    if (verb == "random" && !what.empty())
+    {
+        // A random place on another line (IDEAS 19.32): a page, a book, a world, a model ... Every
+        // place on it as likely as any other, as the navigator's R draws one; where the line is
+        // compact (its filters ticked and counting), its places are its survivors, so it is one of
+        // them. GO TO IT goes there.
+        static const std::pair<const char*, const char*> kWords[] = {
+            {"page", "pages"}, {"pages", "pages"}, {"book", "books"}, {"books", "books"}, {"world", "worlds"}, {"worlds", "worlds"},
+            {"model", "models"}, {"models", "models"}, {"ai", "ai"}, {"track", "tracks"}, {"tracks", "tracks"}, {"video", "video"},
+            {"movie", "movies"}, {"movies", "movies"}, {"file", "binary"}, {"binary", "binary"}};
+        int li = -1;
+        for (const auto& [word, id] : kWords)
+            if (what == word) li = line_named(id);
+        if (li >= 0)
+        {
+            static sieve::diffusion::SplitMix g(uint64_t(SDL_GetPerformanceCounter()) ^ 0x9ace);
+            const BigUint n = units_of(li);
+            ChatEntry e;
+            e.kind = ChatEntry::Kind::Place;
+            e.place_line = li;
+            if (!n.is_zero()) e.place_index = random_below(n, g);
+            e.title = trf("chat.random.place", {what, tr(theme_of(li).key)});
+            e.address = e.place_index.to_hex();
+            e.text = n.is_zero() ? tr("chat.random.place.none") : trf("chat.random.place.of", {short_big(e.place_index), short_big(n)});
+            talk_ += e.title + ": " + e.address + "\n";
+            chat_.push_back(std::move(e));
+            chat_scroll_ = 0;
+            return;
+        }
+    }
+    if (verb == "docs") // the documents, their sections, and a section's text (IDEAS 19.48)
+    {
+        std::string rest = line.substr(std::min(line.size(), line.find("docs") + 4));
+        std::istringstream words(rest);
+        std::string name, section;
+        words >> name;
+        std::getline(words, section);
+        section.erase(0, std::min(section.size(), section.find_first_not_of(' ')));
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, docs_answer(name, section)));
         return;
     }
     if (verb == "chain") // the chain of the CHAIN tab, given the rest of the line
@@ -923,6 +1114,7 @@ std::string Hallway::chat_log_text() const
             o << "  [" << (e.melody() ? "melody" : "picture") << "] " << e.heading() << ", its address on the "
               << (e.melody() ? "audio" : "image") << " line: " << e.address << "\n";
             break;
+        case ChatEntry::Kind::Place: o << "  [place] " << e.title << ", place " << e.address << " (hex)\n"; break;
         }
     return o.str();
 }
@@ -955,7 +1147,7 @@ void Hallway::chat_save_log(const std::string& path)
 std::optional<size_t> Hallway::chat_last_card() const
 {
     for (size_t i = chat_.size(); i-- > 0;)
-        if (chat_[i].kind == ChatEntry::Kind::File || chat_[i].kind == ChatEntry::Kind::Picture) return i;
+        if (chat_[i].kind == ChatEntry::Kind::File || chat_[i].kind == ChatEntry::Kind::Picture || chat_[i].kind == ChatEntry::Kind::Place) return i;
     return std::nullopt;
 }
 
@@ -964,6 +1156,25 @@ void Hallway::chat_act(size_t i, ChatAct act)
     if (i >= chat_.size()) return;
     const ChatEntry e = chat_[i]; // the window may close, and the conversation with it, below
     const bool file = e.kind == ChatEntry::Kind::File;
+    if (e.kind == ChatEntry::Kind::Place)
+    {
+        // GO TO IT: through the door to its line, as the navigator's Shift+R goes (anything in hand
+        // put back), and there to the place.
+        if (act != ChatAct::Go || e.place_line < 0) return;
+        close_chat();
+        if (pause_open_) close_pause();
+        drop_in_hand();
+        trail_.clear();
+        door_back_.clear();
+        if (e.place_line != li_)
+        {
+            tile_ = TileIndex{false, BigUint()};
+            set_line(e.place_line);
+        }
+        if (e.place_index < line_units()) place(e.place_index, true);
+        message(trf("nav.went", {short_address(e.address)}));
+        return;
+    }
     if (act == ChatAct::Save)
     {
         {
@@ -1213,7 +1424,15 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
     std::vector<Line> lines;
     float pic_w = 0, pic_h = 0;
     std::vector<std::pair<std::string, ChatAct>> buttons{{tr("chat.go"), ChatAct::Go}};
-    if (e.kind == K::File)
+    const bool place = e.kind == K::Place;
+    if (place)
+    {
+        const size_t cols = size_t(std::max(8.0f, (w - 2 * kPad) / (8 * kSmall)));
+        lines.push_back({fit(e.title, w - 2 * kPad, kBig), kBig, white});
+        for (const std::string& l : wrap_words(e.text, cols)) lines.push_back({l, kSmall, ink});
+        for (const std::string& l : wrap(trf("chat.random.place.hex", {e.address}), cols)) lines.push_back({l, kSmall, ink});
+    }
+    else if (e.kind == K::File)
     {
         if (e.thumb.width > 0)
         {
@@ -1255,7 +1474,7 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
             lines.push_back({trf(e.with_next ? "chat.given.next" : "chat.given.rows", {grouped(e.given)}), kSmall, ink});
         }
     }
-    buttons.push_back({tr("chat.save"), ChatAct::Save});
+    if (!place) buttons.push_back({tr("chat.save"), ChatAct::Save});
     float text_h = 0;
     for (const Line& l : lines) text_h += l.scale == kBig ? kBigLine : kSmallLine;
     const float body = std::max(text_h, pic_h);

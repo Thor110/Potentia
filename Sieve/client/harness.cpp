@@ -152,8 +152,8 @@ void Harness::scan()
 
 void Harness::select(int row)
 {
-    // The runs, then two rows: record a new (text) run, and a new picture model.
-    row_ = std::clamp(row, 0, int(entries_.size()) + 1);
+    // The runs, then three rows: record a new (text) run, a new picture model, a new melody model.
+    row_ = std::clamp(row, 0, int(entries_.size()) + 2);
     run_.reset();
     drun_.reset();
     doutcome_.reset();
@@ -271,7 +271,7 @@ void Harness::act(Action a)
         if (pic_recipe_)
         {
             // The new picture model: its pictures drawn from the stack, recorded, and trained.
-            const std::string base = "pictures-" + pic_stack_id_.substr(0, 8);
+            const std::string base = (pic_recipe_->audio() ? "melodies-" : "pictures-") + pic_stack_id_.substr(0, 8);
             std::string name = base;
             for (int n = 2; fs::exists(dir_ / from_u8(name)); ++n) name = base + "-" + std::to_string(n);
             try
@@ -619,6 +619,7 @@ void Harness::handle(const SDL_Event& event)
             {
                 if (i == int(entries_.size())) act(Action::Record);
                 else if (i == int(entries_.size()) + 1) act(Action::RecordPictures);
+                else if (i == int(entries_.size()) + 2) open_pictures(true);
                 else select(i);
                 return;
             }
@@ -839,9 +840,13 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
     case SDLK_DOWN: select(row_ + 1); break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-        act(row_ == int(entries_.size()) ? Action::Record : row_ == int(entries_.size()) + 1 ? Action::RecordPictures : Action::Train);
+        if (row_ == int(entries_.size()) + 2) open_pictures(true);
+        else act(row_ == int(entries_.size()) ? Action::Record : row_ == int(entries_.size()) + 1 ? Action::RecordPictures : Action::Train);
         break;
     case SDLK_D: act(Action::RecordPictures); break;
+    case SDLK_M:
+        if (!training()) open_pictures(true);
+        break;
     case SDLK_G: act(Action::GoTo); break;
     case SDLK_P: act(Action::Pack); break;
     case SDLK_N: act(Action::Record); break;
@@ -852,7 +857,7 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
 
 // ---------------------------------------------------------------- picture models (diffusion-v1)
 
-void Harness::open_pictures()
+void Harness::open_pictures(bool melodies)
 {
     // The new picture model's settings, starting from the AI line's shape and the rate and loss
     // scale measured to learn (SPECIFICATIONS §12.0g), and its pictures' stack: the image line's,
@@ -869,14 +874,33 @@ void Harness::open_pictures()
     pic_stack_id_.clear();
     try
     {
-        r.setup.colours = sieve::palette_by_id(r.palette).size();
-        r.check();
-        const sieve::FilterLine line{"image", "image/" + r.palette + "/" + std::to_string(r.setup.width) + "x" + std::to_string(r.setup.height),
-                                     r.setup.colours, r.setup.cells(), nullptr, r.setup.width, r.setup.height, 1};
+        std::shared_ptr<const sieve::FilterStack> stack;
         const sieve::cli::FilterConfig cfg = sieve::cli::FilterConfig::load(pic_source_.filters);
-        auto stack = std::make_shared<const sieve::FilterStack>(sieve::cli::build_stack(line, cfg.of(sieve::cli::LineKind::Image)));
-        if (stack->empty()) pic_stack_note_ = tr("harness.pictures.stack.none");
-        else if (!stack->ranker()) pic_stack_note_ = trf("harness.pictures.stack.uncountable", {stack->compact_blocker()});
+        if (melodies)
+        {
+            // Melodies of the audio line, as the setup menu has it (notes104 or notes2): a unit of
+            // so many events, all voices, as a picture one cell high (sieve diffuse --line audio).
+            sieve::cli::Args la;
+            la.opts = pic_source_.melody_line;
+            la.opts["line"] = "audio";
+            const sieve::cli::Line line = sieve::cli::make_line(la);
+            if (!sieve::is_note_symbols(line.space.symbols_id())) throw std::invalid_argument(tr("harness.melodies.notes"));
+            r.line = "audio";
+            r.symbols = line.space.symbols_id();
+            r.setup.width = line.space.unit_length(), r.setup.height = 1, r.setup.colours = line.space.base();
+            r.check();
+            stack = std::make_shared<const sieve::FilterStack>(sieve::cli::build_stack(line, cfg.of(sieve::cli::LineKind::Audio)));
+        }
+        else
+        {
+            r.setup.colours = sieve::palette_by_id(r.palette).size();
+            r.check();
+            const sieve::FilterLine line{"image", "image/" + r.palette + "/" + std::to_string(r.setup.width) + "x" + std::to_string(r.setup.height),
+                                         r.setup.colours, r.setup.cells(), nullptr, r.setup.width, r.setup.height, 1};
+            stack = std::make_shared<const sieve::FilterStack>(sieve::cli::build_stack(line, cfg.of(sieve::cli::LineKind::Image)));
+        }
+        if (stack->empty()) pic_stack_note_ = tr(melodies ? "harness.melodies.stack.none" : "harness.pictures.stack.none");
+        else if (!stack->ranker()) pic_stack_note_ = trf(melodies ? "harness.melodies.stack.uncountable" : "harness.pictures.stack.uncountable", {stack->compact_blocker()});
         else
         {
             pic_stack_ = stack;
@@ -884,7 +908,7 @@ void Harness::open_pictures()
             const sieve::BigUint& n = stack->ranker()->count();
             std::string names;
             for (size_t i = 0; i < stack->size(); ++i) names += (i ? ", " : "") + stack->filter_name(i);
-            pic_stack_note_ = trf("harness.pictures.stack.value", {names,
+            pic_stack_note_ = trf(melodies ? "harness.melodies.stack.value" : "harness.pictures.stack.value", {names,
                                                                    n.log10_approx() < 15 ? grouped(std::stoull(n.to_decimal()))
                                                                                          : "~10^" + std::to_string(int(n.log10_approx()))});
         }
@@ -895,7 +919,7 @@ void Harness::open_pictures()
     }
     pic_recipe_ = r;
     pic_row_ = 0;
-    say(tr("harness.pictures.status"));
+    say(tr(melodies ? "harness.melodies.status" : "harness.pictures.status"));
 }
 
 void Harness::change_picture_setting(int row, int dir, bool big)
@@ -1075,9 +1099,10 @@ void Harness::render_pictures(float x, float& ry, float colW, float H)
         // A new picture model's settings, a row each.
         const sieve::cli::DiffusionRecipe& r = *pic_recipe_;
         const sieve::AiShape& sh = r.train.shape;
-        txt(r_, x, ry, tr("harness.pictures.title"), kWhite, 1.5f);
+        txt(r_, x, ry, tr(r.audio() ? "harness.melodies.title" : "harness.pictures.title"), kWhite, 1.5f);
         ry += 26;
-        line(tr("harness.pictures.of"), trf("harness.pictures.of.value", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
+        if (r.audio()) line(tr("harness.melodies.of"), trf("harness.melodies.of.value", {std::to_string(r.setup.width), r.symbols}));
+        else line(tr("harness.pictures.of"), trf("harness.pictures.of.value", {std::to_string(r.setup.width), std::to_string(r.setup.height), r.palette}));
         line(tr("harness.pictures.from"), pic_stack_note_, pic_stack_ ? kWhite : kBad);
         ry += 6;
         const std::string values[kPictureRows] = {
@@ -1104,7 +1129,9 @@ void Harness::render_pictures(float x, float& ry, float colW, float H)
                 SDL_RenderFillRect(r_, &rr);
             }
             set_rects_.push_back({rr, i});
-            txt(r_, x, ry, tr(kLabels[i]), kGrey);
+            // (a melody model's rows say melodies where a picture model's say pictures)
+            const char* label = !r.audio() ? kLabels[i] : i == 6 ? "harness.melodies.batch" : i == 9 ? "harness.melodies.count" : kLabels[i];
+            txt(r_, x, ry, tr(label), kGrey);
             if (i == pic_row_) txt(r_, x + 136, ry, "<", kAccent);
             txt(r_, x + 150, ry, values[i], i == pic_row_ ? kWhite : kGrey);
             if (i == pic_row_) txt(r_, x + 158 + text_width(values[i], 1), ry, ">", kAccent);
@@ -1112,7 +1139,7 @@ void Harness::render_pictures(float x, float& ry, float colW, float H)
         }
         ry += 6;
         const sieve::AiSpace space(sh, "sieve");
-        line(tr("harness.est.size"), trf("harness.pictures.size.value", {grouped(space.weights()), grouped(uint64_t(r.steps) * r.batch)}));
+        line(tr("harness.est.size"), trf(r.audio() ? "harness.melodies.size.value" : "harness.pictures.size.value", {grouped(space.weights()), grouped(uint64_t(r.steps) * r.batch)}));
         txt(r_, x, ry, tr("harness.pictures.measured"), kDim);
         ry += 16;
         return;
@@ -1260,6 +1287,20 @@ void Harness::render()
         }
         row_rects_.push_back({rr, i});
         txt(r_, 20, y, tr("harness.record.pictures"), sel ? kAccent : kGrey);
+        y += rowH;
+    }
+    {
+        // A third: a melody model.
+        const int i = int(entries_.size()) + 2;
+        const bool sel = i == row_;
+        const SDL_FRect rr{12, y - 3, listW - 8, rowH};
+        if (sel)
+        {
+            SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
+            SDL_RenderFillRect(r_, &rr);
+        }
+        row_rects_.push_back({rr, i});
+        txt(r_, 20, y, tr("harness.record.melodies"), sel ? kAccent : kGrey);
         y += rowH;
     }
     if (entries_.empty()) txt(r_, 20, y + 8, tr("harness.none"), kDim);
@@ -1465,7 +1506,7 @@ void Harness::render()
             ry += 18;
         }
     }
-    else txt(r_, x, ry, tr(row_ == int(entries_.size()) + 1 ? "harness.record.pictures.help" : "harness.record.help"), kGrey);
+    else txt(r_, x, ry, tr(row_ == int(entries_.size()) + 2 ? "harness.record.melodies.help" : row_ == int(entries_.size()) + 1 ? "harness.record.pictures.help" : "harness.record.help"), kGrey);
 
     // The buttons, along the bottom of the right side.
     button_rects_.clear();

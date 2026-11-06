@@ -10,6 +10,7 @@
 #include "cli/media_decode.hpp"
 #include "cli/timings.hpp"
 #include "dialogs.hpp"
+#include "speech.hpp"
 
 #include "dimensions.hpp"
 #include "font.hpp"
@@ -70,7 +71,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
                 {Kind::Action, "back"}};
-    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Action, "back"}};
+    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
     }
@@ -92,6 +93,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "picture_rooms") return trf("value.picture_rooms", {std::to_string(s_.picture_rooms)});
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
+    if (it.id == "read_aloud") return speech_available() ? onoff(s_.read_aloud) : tr("value.read_aloud.none");
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {
@@ -255,6 +257,11 @@ void MainMenu::change(int dir)
         else if (it.id == "door_portals") s_.door_portals = !s_.door_portals;
         else if (it.id == "fps_counter") s_.fps_counter = !s_.fps_counter;
         else if (it.id == "invert_mouse_y") s_.invert_mouse_y = !s_.invert_mouse_y;
+        else if (it.id == "read_aloud")
+        {
+            s_.read_aloud = !s_.read_aloud;
+            set_read_aloud(s_.read_aloud);
+        }
         save();
         return;
     case Kind::Number:
@@ -517,6 +524,8 @@ void MainMenu::render()
             if (it.id == list_) list_anchor = r;
         }
         item_y = yy + rowh;
+        // Read aloud when chosen (speech.hpp): the item, and its value on a settings screen.
+        if (sel) announce(pairs && it.kind != Kind::Action ? label + ", " + value_of(it) : label);
     }
 
     // What the selected item does.

@@ -23,6 +23,7 @@
 #include "cli/args.hpp"
 #include "cli/book.hpp"
 #include "cli/compare.hpp"
+#include "cli/compress.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
 #include "cli/image_io.hpp"
@@ -2582,6 +2583,9 @@ int cmd_locate(const Args& a)
         if (auto pair = names_one_ignoring_case(names))
             std::cerr << "warning: " << pair->first << " and " << pair->second
                       << " are one name where case is ignored: Windows and macOS will refuse to install them\n";
+        else if (auto two_ways = names_one_on_macos(names))
+            std::cerr << "warning: " << two_ways->first << " and " << two_ways->second
+                      << " are one name on macOS, the same letters written in two ways: macOS will refuse to install them\n";
         if (auto bad = name_windows_cannot_hold(names))
             std::cerr << "warning: " << bad->first << " is a name Windows cannot hold (" << bad->second << "): Windows will refuse to install it\n";
     }
@@ -3179,7 +3183,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site";
 }
@@ -3316,6 +3320,7 @@ int main(int argc, char** argv)
         if (a.command == "ai-train") return cmd_ai_train(a);
         if (a.command == "diffuse") return cmd_diffuse(a);
         if (a.command == "cipher") return cmd_cipher(a);
+        if (a.command == "compress") return cmd_compress(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
         if (a.command == "train") return cmd_train(a);

@@ -18,9 +18,13 @@ namespace sieve::cli
 // The first two of `files` (paths with '/' between their parts) that are one name where case is
 // ignored, or a file that is one name with a folder another file is in (`a` and `A/b`). Case is
 // folded as Windows folds it, each letter Unicode gives a case to one other (case_fold_table.hpp:
-// É and é one, Σ σ ς one; ß stays ß); names in NFC and NFD forms are still two (macOS takes them as
-// one).
+// É and é one, Σ σ ς one; ß stays ß). Written two ways (é as one character and as e and an accent),
+// they are two here, as on Windows: names_one_on_macos below takes them as one.
 std::optional<std::pair<std::string, std::string>> names_one_ignoring_case(const std::vector<std::string>& files);
+// The same as macOS compares names: also each letter as one character and as a letter and its
+// combining accents taken as one (Unicode's canonical decomposition, normalise_table.hpp), which
+// Windows keeps as two (é written either way). The packer warns of such a pair as macOS's alone.
+std::optional<std::pair<std::string, std::string>> names_one_on_macos(const std::vector<std::string>& files);
 
 // Whether names written under `dest` ignore case. It is looked at, writing nothing: the nearest
 // folder at or above `dest` that exists and has a letter in its name is asked for by that name with

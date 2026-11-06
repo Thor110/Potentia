@@ -314,7 +314,7 @@ void Hallway::draw_hud(int w, int h)
         trf("hud.line", {tr(th.key)}) + "   " + ordering_name() +
                           (guided_on() ? "  " + trf("hud.zoom", {std::to_string(zoom_)}) : std::string()) + "   " + tr("hud.tile") + " " +
                           tile_label_ +
-                          (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction)}));
+                          (first.empty ? "   " + tr("hud.padding") : "   " + trf("hud.along", {percent(first.fraction), percent(1.0 - first.fraction)}));
     text(10, 7, fit(where, W - 20, 2), 2, ink);
     const std::string per_tile = "   " + trf("hud.per_tile", {std::to_string(sieve::books_per_tile())});
     const std::string loop = trf("hud.loop", {loop_label_}) + (loop_.fills_whole_tiles()
@@ -359,7 +359,7 @@ void Hallway::draw_hud(int w, int h)
             std::string verdict;
             if (bk.survivor) verdict = trf("hud.survivor", {bk.survivor_label}) + "   ";
             else if (has_filters()) verdict = (bk.passes ? tr("hud.passes") : trf("hud.fails", {bk.failed_by})) + "   ";
-            text(20, y, verdict + trf("hud.along_loop", {percent(bk.fraction)}), 1, ink);
+            text(20, y, verdict + trf("hud.along_loop", {percent(bk.fraction), percent(1.0 - bk.fraction)}), 1, ink);
             y += 16;
             if (bk.parts)
             {
@@ -622,7 +622,7 @@ void Hallway::draw_in_hand(float W, float H)
     const float x = (W - pw) / 2, y = 50;
     panel(x, y, pw, ph, 255);
     float cy = y + 12;
-    text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction)}), pw - 28, 2), 2, ink);
+    text(x + 14, cy, fit(tr("hand.title") + "   " + in_hand_where_ + "   " + trf("hud.along", {percent(bk.fraction), percent(1.0 - bk.fraction)}), pw - 28, 2), 2, ink);
     cy += 28;
     // Three tabs: the thing itself, what it costs to name it, and where it stands in a map (and
     // META, for an anchor with notes; and CHAT, for a model of the AI line). C moves between them. On every tab, at the right, the chosen map and V to add the item to it.

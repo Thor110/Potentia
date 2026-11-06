@@ -1753,7 +1753,7 @@ Manifest manifest_of_file(const fs::path& file)
     return m;
 }
 
-Manifest walk_folder(const fs::path& root_in)
+Manifest walk_folder(const fs::path& root_in, const std::vector<std::string>* only)
 {
     const fs::path root = fs::absolute(root_in).lexically_normal();
     if (!fs::is_directory(root)) throw std::runtime_error(root_in.generic_string() + " is not a folder");
@@ -1772,6 +1772,16 @@ Manifest walk_folder(const fs::path& root_in)
     for (auto it = fs::recursive_directory_iterator(root, fs::directory_options::none); it != fs::recursive_directory_iterator(); ++it)
     {
         const fs::directory_entry& d = *it;
+        // (only the names chosen, where some were: what else is directly in the root left unread)
+        if (only && it.depth() == 0)
+        {
+            const std::u8string n = d.path().filename().generic_u8string();
+            if (std::find(only->begin(), only->end(), std::string(n.begin(), n.end())) == only->end())
+            {
+                if (d.is_directory()) it.disable_recursion_pending();
+                continue;
+            }
+        }
         if (d.is_symlink())
         {
             ++m.skipped;

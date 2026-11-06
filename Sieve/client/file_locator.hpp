@@ -89,7 +89,9 @@ public:
     // estimate, the best so far, Stop); once it is read, not stopped and not failed, its Sieve
     // instructions saved to `out` as Save does. create_finished: 0 still working, 1 saved (and said
     // for two seconds: time to close), -1 stopped or failed (the locator stays open, saying why).
-    void create(const std::string& path, const std::string& out);
+    // `only`: several files or folders chosen in the folder `path` (their names in it), read as a
+    // folder holding just them.
+    void create(const std::string& path, const std::string& out, std::vector<std::string> only = {});
     int create_finished();
     // For scripted runs, before locate_now: Stop pressed so many seconds after it starts (0: never),
     // and the instructions saved to this file once it is read (empty: not), as the buttons do.
@@ -142,6 +144,7 @@ private:
     // (create: the file it saves to, how far it has gone (0 none, 1 reading, 2 saving, 3 saved, 4
     // stopped or failed), and when it was saved; last_save_ok_: whether the last save wrote its file)
     std::string create_out_;
+    std::vector<std::string> only_; // (the names chosen, for the next reading only)
     int create_state_ = 0;
     std::chrono::steady_clock::time_point create_saved_at_{};
     bool last_save_ok_ = false;

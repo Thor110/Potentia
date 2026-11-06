@@ -4928,7 +4928,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // with the v33 draft's match ways mixed 0.43% under LZMA2, its estimate a little under
                     // the stream: 0.25% keeps the five and takes mozilla, 0.5% kept both.)
                     take_figure();
-                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best;
+                    uint64_t margin = 64 + best / 400;
+                    // (A bar that rises with the file, as its install's time does (IDEAS 19.112, "a larger gain
+                    // asked of a slower decode"; 6 November 2026): over 16 MiB, mixing kept only where it is
+                    // 1% under LZMA2 and 0.5% more each 100 MB, as mixing decodes at 0.5 to 2 MB a second
+                    // against LZMA2's tens: Silesia's mozilla, 51 MB, was 0.43% under and installed in 96 s
+                    // against 3, below the bar (1.25%); enwik8, 13% under, and enwik9, 12.6%, above theirs
+                    // (1.5% and 6%). Not where Try every way was asked for itself: size, at any cost.)
+                    if (bytes[i].size() > (size_t(16) << 20) && !(rope_search_every_wave() && !optimise_search()))
+                        margin = std::max<uint64_t>(margin, uint64_t(double(best) * (0.01 + 0.005 * double(bytes[i].size()) / 1e8)));
+                    const uint64_t need = way.empty() ? best - std::min<uint64_t>(best, margin) : best;
+                    if (way.empty() && margin > 64 + best / 400 && mc.size() + vl < best - std::min<uint64_t>(best, 64 + best / 400) && mc.size() + vl >= need)
+                    {
+                        char bar[128];
+                        std::snprintf(bar, sizeof bar, " (under LZMA2's, but not by the bar for a file this size, %.2f%%: kept quick to install)",
+                                      100.0 * double(margin) / double(std::max<uint64_t>(best, 1)));
+                        mixed_said += bar;
+                    }
                     if (mc.size() + vl < need)
                     {
                         best = mc.size() + vl;

@@ -50,6 +50,10 @@ struct Matrix;
 // not depend on it. Read when a model is made.
 void set_widen_weights(bool on);
 bool widen_weights();
+// "auto" (6 November 2026, IDEAS 19.86): widened only where the model, widened, takes no more
+// than `budget` bytes (the hallway gives ITEM MEMORY's share of installed memory); kept as stored
+// where it would take more. set_widen_weights turns it off again.
+void set_widen_weights_auto(uint64_t budget);
 
 struct Config
 {
@@ -77,12 +81,14 @@ public:
     // Feeds one token at the next position; returns the logits for the token after it.
     const std::vector<float>& step(uint32_t token);
     uint64_t weight_bytes() const;
+    bool widened() const { return widened_; } // its BF16 and F16 weights widened as they loaded
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     Config cfg_;
     size_t pos_ = 0;
+    bool widened_ = false;
     void build(const std::function<bool(const std::string&)>& has, const std::function<Matrix(const std::string&, size_t, size_t)>& get);
 };
 

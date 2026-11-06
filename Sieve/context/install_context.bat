@@ -85,6 +85,22 @@ goto created
 :nocreate
 echo (No hallway.exe found above or beside it, so "Create .sieve" is not added.)
 :created
+rem "Compress to" on every file and folder (IDEAS 19.100): a submenu of the formats people already use,
+rem each made by sieve compress (sieve help compress) at its strongest usual setting and read back
+rem before it is kept, NAME.EXT saved beside what was chosen, in a console window that says what it
+rem made (and stays open, saying why, where it fails). Several chosen go into one, as for "Create
+rem .sieve" (--gather). sieve.exe is the one beside sieve-install (tools\ in a release; the release's
+rem own sieve.exe is the setup program, not this).
+for %%F in ("%INSTALLER%") do set "SIEVE=%%~dpFsieve.exe"
+if not exist "%SIEVE%" goto nocompress
+call :compress "HKCU\Software\Classes\*\shell\SieveCompress"
+call :compress "HKCU\Software\Classes\Directory\shell\SieveCompress"
+echo "Compress to" added for every file and folder, by
+echo   %SIEVE%
+goto compressed
+:nocompress
+echo (No sieve.exe beside sieve-install, so "Compress to" is not added.)
+:compressed
 rem Explorer told the kinds of file changed (SHChangeNotify, SHCNE_ASSOCCHANGED), as installers
 rem tell it, so it takes up the handlers now rather than when it next starts (Edward, 5 November
 rem 2026: the thumbnails showed only once Explorer was restarted). By PowerShell, which every
@@ -105,6 +121,31 @@ if "%~2"=="" exit /b 0
 if "%VIEWER%"=="" exit /b 0
 reg add "%KEY%\shell\3view" /ve /t REG_SZ /d "View pictures" /f > nul
 reg add "%KEY%\shell\3view\command" /ve /t REG_SZ /d "\"%VIEWER%\" \"%%1\"" /f > nul
+exit /b 0
+:compress
+reg add "%~1" /v MUIVerb /t REG_SZ /d "Compress to" /f > nul
+reg add "%~1" /v SubCommands /t REG_SZ /d "" /f > nul
+reg add "%~1" /v Icon /t REG_SZ /d "\"%SIEVE%\",0" /f > nul
+reg add "%~1\shell\01zip" /v MUIVerb /t REG_SZ /d "zip" /f > nul
+reg add "%~1\shell\01zip\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format zip --gather --from-menu" /f > nul
+reg add "%~1\shell\027z" /v MUIVerb /t REG_SZ /d "7z" /f > nul
+reg add "%~1\shell\027z\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format 7z --gather --from-menu" /f > nul
+reg add "%~1\shell\03xz" /v MUIVerb /t REG_SZ /d "xz (.tar.xz for folders)" /f > nul
+reg add "%~1\shell\03xz\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format xz --gather --from-menu" /f > nul
+reg add "%~1\shell\04gz" /v MUIVerb /t REG_SZ /d "gzip (.gz)" /f > nul
+reg add "%~1\shell\04gz\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format gz --gather --from-menu" /f > nul
+reg add "%~1\shell\05bz2" /v MUIVerb /t REG_SZ /d "bzip2 (.bz2)" /f > nul
+reg add "%~1\shell\05bz2\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format bz2 --gather --from-menu" /f > nul
+reg add "%~1\shell\06zst" /v MUIVerb /t REG_SZ /d "zstd (.zst)" /f > nul
+reg add "%~1\shell\06zst\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format zst --gather --from-menu" /f > nul
+reg add "%~1\shell\07lz4" /v MUIVerb /t REG_SZ /d "lz4" /f > nul
+reg add "%~1\shell\07lz4\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format lz4 --gather --from-menu" /f > nul
+reg add "%~1\shell\08br" /v MUIVerb /t REG_SZ /d "brotli (.br)" /f > nul
+reg add "%~1\shell\08br\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format br --gather --from-menu" /f > nul
+reg add "%~1\shell\09lzma" /v MUIVerb /t REG_SZ /d "lzma (xz's older format)" /f > nul
+reg add "%~1\shell\09lzma\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format lzma --gather --from-menu" /f > nul
+reg add "%~1\shell\10tar" /v MUIVerb /t REG_SZ /d "tar (not compressed)" /f > nul
+reg add "%~1\shell\10tar\command" /ve /t REG_SZ /d "\"%SIEVE%\" compress \"%%1\" --format tar --gather --from-menu" /f > nul
 exit /b 0
 :missing
 echo sieve-install.exe is not at %INSTALLER%

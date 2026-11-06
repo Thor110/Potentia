@@ -409,7 +409,9 @@ Manifest manifest_of_file(const std::filesystem::path& file);
 
 // Walks `root` to the bottom. Throws on anything it cannot read, or a path that cannot be written
 // in the manifest (one with a tab or a line break in it).
-Manifest walk_folder(const std::filesystem::path& root);
+// `only` (6 November 2026, Create .sieve on several files chosen): the names directly in `root`
+// to take, files or folders (a folder's whole contents with it); nothing else is read. Null: all.
+Manifest walk_folder(const std::filesystem::path& root, const std::vector<std::string>* only = nullptr);
 
 // An address stored in a file: as raw bytes (the number in base 256, most significant first:
 // exactly as long as the file it names, or one byte longer when adding 0101...01 carries past the

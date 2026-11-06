@@ -450,8 +450,30 @@ void Hallway::draw_navigator(float W, float H)
     const size_t p = nav_width_ - 1 - nav_sel_;
     const double frac = nav_value_.is_zero() ? 0.0 : std::pow(10.0, nav_value_.log10_approx() - line_units().log10_approx());
     float y = H - 92;
+    // The same place in decimal (IDEAS 5.11a), worked out when the address changes, up to 4,096
+    // hex digits (a decimal conversion grows with the square of the length); its first and last
+    // digits where it is wider than the screen.
+    if (nav_dec_for_ != nav_hex_)
+    {
+        nav_dec_for_ = nav_hex_;
+        nav_dec_ = nav_width_ <= 4096 ? nav_value_.to_decimal() : std::string();
+    }
+    {
+        std::string shown;
+        if (nav_dec_.empty())
+            shown = trf("nav.decimal_long", {std::to_string(nav_width_)});
+        else
+        {
+            const size_t chars = size_t(std::max(20.0f, (W - 40) / std::max(1.0f, text_width("0", 1)))) - 40;
+            std::string digits = nav_dec_;
+            if (digits.size() > chars)
+                digits = digits.substr(0, chars / 2 - 2) + " .. " + digits.substr(digits.size() - (chars / 2 - 2));
+            shown = trf("nav.decimal", {digits, std::to_string(nav_dec_.size())});
+        }
+        text(20, y - 14, fit(shown, W - 40, 1), 1, grey);
+    }
     text(20, y, fit(trf("nav.digit", {std::to_string(nav_sel_ + 1), std::to_string(nav_width_), std::to_string(p)}), W - 40, 1), 1, ink);
-    text(20, y + 14, fit(trf("nav.along", {percent(frac)}), W - 40, 1), 1, ink);
+    text(20, y + 14, fit(trf("nav.along", {percent(frac), percent(1.0 - frac)}), W - 40, 1), 1, ink);
     if (!nav_note_.empty()) text(20, y + 28, nav_note_, 1, SDL_Color{255, 80, 80, 255});
     else if (!nav_info_.empty()) text(20, y + 28, fit(nav_info_, W - 40, 1), 1, white);
     // Which page of rows is in view, of how many: bottom right, where a reader looks for it.

@@ -198,12 +198,13 @@ AppSettings AppSettings::load(const fs::path& path)
                 try { s.mouse_sensitivity = std::clamp(std::stoi(value), 10, 400); } catch (...) {}
             }
             else if (key == "invert_mouse_y") s.invert_mouse_y = on_off(value, false);
+            else if (key == "read_aloud") s.read_aloud = on_off(value, false);
         }
         else if (section == "models")
         {
             if (key == "text_model") s.text_model = value;
             else if (key == "picture_model") s.picture_model = value;
-            else if (key == "widen_weights") s.widen_weights = on_off(value, false);
+            else if (key == "widen_weights") s.widen_weights = value == "auto" ? 2 : on_off(value, s.widen_weights == 1) ? 1 : 0;
         }
         else if (section == "locator")
         {
@@ -313,9 +314,10 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"world", "item_memory_pct", std::to_string(item_memory_pct), "percent of installed memory the items around you may take, 5 to 90"},
         {"controls", "mouse_sensitivity", std::to_string(mouse_sensitivity), "percent, 10 to 400"},
         {"controls", "invert_mouse_y", on_off(invert_mouse_y), "on: moving the mouse up looks down"},
+        {"controls", "read_aloud", on_off(read_aloud), "on: the item chosen in a menu is read aloud by the system's voice (Windows)"},
         {"models", "text_model", text_model, "a model folder CHAT talks with; empty: the model in hand"},
         {"models", "picture_model", picture_model, "a picture model's run folder DRAW uses; empty: the first trained one"},
-        {"models", "widen_weights", on_off(widen_weights), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; the same numbers either way"},
+        {"models", "widen_weights", widen_weights == 2 ? "auto" : on_off(widen_weights == 1), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; auto: widened where the widened model fits in ITEM MEMORY's share of installed memory; the same numbers either way"},
         {"locator", "search_seconds", seconds_text(locator_search), "the File Locator's search for shorter addresses: seconds, 0 for no limit"},
         {"locator", "search_for", locator_search_run ? "run" : "file", "file: those seconds for each file; run: for the whole run, shared among its files"},
         {"locator", "optimise_archives", (locator_temporary || locator_permanent) ? "1" : "0", "1: either half of Archive and compressed formats ticked (as Archive and Compressed Formats, the one box before v31, read it: both); the next two say which; 0: off"},

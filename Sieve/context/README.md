@@ -50,8 +50,17 @@ which opens the hallway's File Locator alone (`hallway --create PATH`) on what w
 estimate, best so far and Stop; once it is read, `NAME.sieve` is saved beside it, said for a moment,
 and the window closes (exit code 0). Stopped or failed, it stays open saying why (1 once closed).
 It uses the hallway one folder above `tools\` (a release) or beside `sieve-install` (a build), and
-is left out where there is none. One file or folder a time: Explorer starts one window for each
-chosen.
+is left out where there is none. Several files or folders chosen at once make one `.sieve`: the
+folder they are in, holding just them, saved there as `FOLDER.sieve` (Explorer starts a program for
+each; the first gathers the others' paths and the rest close).
+
+**Compress to** (6 November 2026, IDEAS §19.100): every file and folder also gets a "Compress to"
+submenu (`*\shell\SieveCompress` and `Directory\shell\SieveCompress`): zip, 7z, xz, gzip, bzip2,
+zstd, lz4, brotli, lzma and tar, each run as `sieve compress "PATH" --format F --gather --from-menu`
+by the `sieve.exe` beside `sieve-install` (left out where there is none). It is made at each
+format's strongest usual setting, read back before it is kept, and saved beside what was chosen, in
+a console window that closes by itself once it is done and waits for Enter where it failed.
+Several chosen go into one, as for "Create .sieve".
 
 A release carries this folder beside the programs. There, `install_context.bat` finds
 `tools\sieve-install.exe` in the installation by itself; in the repository, the Release build's.
