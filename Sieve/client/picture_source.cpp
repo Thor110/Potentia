@@ -9,6 +9,7 @@
 #include "cli/image_io.hpp"
 #include "cli/locate.hpp"
 #include "cli/pack.hpp" // memory_free
+#include "cli/vault.hpp" // take_checked_frames
 #include "sieve/jpeg_dc.hpp"
 
 #include <algorithm>
@@ -189,7 +190,16 @@ void make_pixels(Picture& p, bool all_frames)
         if (all_frames && count > 1 && !every)
             p.one_frame = "its " + std::to_string(count) + " frames need about " + human_bytes(need * count) + " to play, more than half the memory free (" +
                           human_bytes(budget) + ")";
-        std::vector<RgbaImage> frames = decode_image_frames(p.file.data(), p.file.size(), p.name, every ? &p.delays_ms : nullptr, !every);
+        // (the frames the vault decoded to check them, where it has them for these very bytes: not
+        // decoded a second time)
+        std::vector<RgbaImage> frames;
+        if (auto checked = vault::take_checked_frames(p.file))
+        {
+            frames = std::move(checked->frames);
+            if (every) p.delays_ms = std::move(checked->delays_ms);
+            else if (frames.size() > 1) frames.resize(1);
+        }
+        else frames = decode_image_frames(p.file.data(), p.file.size(), p.name, every ? &p.delays_ms : nullptr, !every);
         if (frames.empty()) throw std::runtime_error(p.name + ": no picture in it");
         p.pixels = std::move(frames.front());
         p.more.clear();

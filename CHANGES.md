@@ -1,39 +1,30 @@
-# GIF route, GIF playback, and a faster stream search (6 November 2026)
+# A sieved GIF opens about twice as fast in the viewer (6 November 2026)
 
-Three commits on top of 5505251 ("sieve gif plan measurements"):
+One commit on top of 56af7f3 ("orbital simulation update").
 
-1. `0a205dd`: **v34 draft: GIFs made again exactly from their frames' colour indices**
-   - **What it does:** behind `--v34-draft`, under temporary or Optimise Search, a GIF is carried
-     as its frames' colour indices followed by its skeleton. Its LZW is coded again on installing,
-     as compress codes it (gifenc's coder; Pillow's too). The recipe is kept only where the GIF
-     comes back byte for byte.
-   - **Measured on your six demo GIFs** (9,616,677 bytes, 346 frames):
+Where the time went, opening cube_demonstration's .simage (made by the viewer's Sieve button):
+- **The vault check, frame by frame:** installing checks every picture against the vault, which
+  decoded the GIF and took a PDQ hash of each of its 54 frames one after another (147 ms).
+- **A second decode:** the viewer then decoded the same GIF again to show it.
 
-     | Settings | Size | Of the GIFs | Installing |
-     | :--- | ---: | ---: | ---: |
-     | v33, Optimise Search | 8,377,298 | 87% | |
-     | v34 | 4,150,626 | 43.2% | 27 s |
-     | v34, Prioritise Decoding Speed | 4,652,864 | 48.4% | 3 s |
+Now:
+- **Hashes on every core:** the vault hashes the frames in parallel, and skips a frame identical to
+  the one before (same pixels give the same hash). Every frame is still checked: a GIF with the
+  vault's test picture as its fourth frame is withheld.
+- **Decoded once:** the vault hands the frames it decoded to the viewer, for those exact bytes only
+  (size and SHA-256). It's off unless the viewer asks, holds one picture, and is cleared after each
+  load.
 
-   - **Also changed:**
-     - SPECIFICATIONS §12.2 v34; the oracle reads it;
-     - a new block at the end of CI step 11 (about 33 s here, mostly the oracle's Python);
-     - the reader refused 20,000 damaged inputs, with no crash under AddressSanitizer.
-2. `156dc3e`: **sieve-view plays animated GIFs**
-   - **Playback:** each frame plays for its own delay. **Pause/Play** (P), comma and full stop step a
-     frame, and Export writes the frame shown.
-   - **Memory:** all the frames are made only where they fit in half the memory free, counted from
-     the GIF's blocks first. Otherwise the first frame is shown, and the foot says why.
-   - **Thumbnails** stay the first frame. A .simage or .sieve of GIFs plays too.
-   - **New options:** `--check` counts the frames, and `--frame K` starts paused at frame K.
-3. `ad27940`: **Speed: the lzma2 stream's four LZMA2 passes at once**
-   - The settings trial (half a second) now runs first, then all four passes together, instead of
-     the preset's pass alone and then the other three.
-   - The six GIFs went from 161 s to 96 s to make, and the `.sieve` is byte for byte the same.
+| `sieve-view --check` (every frame made) | Before | After |
+| :--- | ---: | ---: |
+| the GIF | 0.17 s | 0.17 s |
+| its .simage (Sieve button) | 0.63 s | 0.29 s |
+| its .simage, v34 draft, Prioritise Decoding Speed | 0.62 s | 0.37 s |
+| the six GIFs' .sieve (all six made) | 3.82 s | 3.36 s |
 
-Unit suite: 154,318 checks, 0 failures. Tested here: the new CI block, the six GIFs both ways,
-and viewer screenshots of frames 1 and 30.
+**Checks:** frame 30 shows the same pixels from the .simage as from the GIF, and the unit suite
+passed with 0 failures.
 
-**To try:**
-- `sieve locate <folder of GIFs> --installer gifs.sieve --optimise-search --v34-draft`
-- `sieve-view some.gif`, or open the .sieve in the viewer.
+**Still slow:** a GIF carried mixed (v34 draft without Prioritise Decoding Speed) takes about 9 s,
+because mixing decodes about 2 MB a second. The viewer's Sieve button never mixes, so its .simage
+files aren't affected.

@@ -41,6 +41,7 @@
 #include "cli/items.hpp"
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
+#include "cli/vault.hpp"
 #include "sieve/jpeg_dc.hpp"
 #include "dialogs.hpp"
 #include "window_icon.hpp"
@@ -259,10 +260,14 @@ int main(int argc, char** argv)
     // Every file Sieve's instructions can carry made again (a JPEG from its brunsli form, a PNG by
     // stb_image_write ...), as sieve install does.
     sieve::cli::use_item_maker();
+    // (a picture's frames, decoded by the vault to check them as a .sieve is installed, handed on
+    // to be shown rather than decoded again)
+    sieve::cli::vault::keep_checked_frames(true);
 
     // The pictures of one place: an ordinary picture, or every picture of a .sieve, the pixels made
     // of the one to be shown first only (the first, or coming back to it, the last).
-    auto load = [](const Place& at, std::string& said, bool backwards) {
+    // (all_frames: an animated GIF's every frame, as the window plays it; a thumbnail takes the first)
+    auto load = [](const Place& at, std::string& said, bool backwards, bool all_frames = true) {
         std::vector<Picture> out;
         if (at.sieve) out = pictures_of_sieve(at.path, &said);
         else
@@ -272,7 +277,10 @@ int main(int argc, char** argv)
             p.file = read_all(at.path);
             out.push_back(std::move(p));
         }
-        make_pixels(out[backwards ? out.size() - 1 : 0]);
+        make_pixels(out[backwards ? out.size() - 1 : 0], all_frames);
+        // (what the vault kept of the pictures it checked, given up: taken above where it was the one shown)
+        sieve::cli::vault::keep_checked_frames(false);
+        sieve::cli::vault::keep_checked_frames(true);
         return out;
     };
 
@@ -307,7 +315,7 @@ int main(int argc, char** argv)
             try
             {
                 std::string said;
-                std::vector<Picture> got = load(Place{f, sieve_name(u8(f.filename()))}, said, false);
+                std::vector<Picture> got = load(Place{f, sieve_name(u8(f.filename()))}, said, false, false);
                 const RgbaImage t = shrink_to(got.front().pixels, thumb_side);
                 const std::string png = stb_png(t.rgba, int(t.width), int(t.height), 4, 8, -1);
                 std::ofstream o(from_u8(thumb_out), std::ios::binary);

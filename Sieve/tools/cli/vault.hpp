@@ -40,9 +40,12 @@
 // (test_picture below) by PDQ, and a test file (test_file_bytes) by its chunks.
 #pragma once
 
+#include "sieve/image.hpp" // RgbaImage
+
 #include <span>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -84,6 +87,19 @@ struct PictureHash
     int quality = 0;
 };
 std::vector<PictureHash> picture_hashes(const std::vector<uint8_t>& bytes);
+
+// A picture's frames as the vault decoded them to check them, handed on to whoever shows it next
+// (sieve-view), so it is not decoded twice (6 November 2026: a sieved GIF of 54 frames decoded
+// once to be checked and again to be shown). Off unless asked for; one picture kept, the first
+// checked since it was last taken or cleared (turning it off clears it), and given only for the
+// very bytes it was made from (their size and SHA-256), once.
+void keep_checked_frames(bool on);
+struct CheckedFrames
+{
+    std::vector<RgbaImage> frames;
+    std::vector<int> delays_ms; // (an animated GIF's, as decode_image_frames gives them)
+};
+std::optional<CheckedFrames> take_checked_frames(const std::vector<uint8_t>& bytes);
 
 // The test picture: 64 x 64 grey, in 4 x 4 blocks whose shades are the bytes of SHA-256 chained
 // from "sieve vault test picture" (the digest, then the digest of that, eight times over: 256

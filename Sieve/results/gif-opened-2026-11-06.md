@@ -71,3 +71,26 @@ here, with 15 GB and 4 cores). The same passes, compared in the same order.
 
 Which pass won (`SIEVE_PASS_SIZES=1`) on the 119,811,620 bytes of indices: the preset's 4,719,913;
 the settings chosen (lc2 lp0 pb0) 4,652,654, kept; at match length 64 5,110,752; 7-Zip's 4,678,648.
+
+## Opening a sieved GIF in the viewer (the same day)
+
+Edward: the GIFs, sieved, "can take a second or two to decode ... versus being instant as a regular
+gif". `sieve-view --check` (every frame made) on cube_demonstration.gif, here:
+
+| Opened | Before | After |
+| :--- | ---: | ---: |
+| the GIF itself | 0.17 s | 0.17 s |
+| its .simage from the viewer's Sieve button (1,428,117 bytes) | 0.63 s | **0.29 s** |
+| its .simage at the v34 draft, Prioritise Decoding Speed (632,816) | 0.62 s | 0.37 s |
+| its .simage at the v34 draft, mixed (526,638) | 9.2 s | (mixing's decoding: unchanged) |
+
+Where the time went: installing checks every picture against the vault, which decodes a GIF and
+takes a PDQ hash of each frame (54 hashes, 147 ms, one after another), and then the viewer decoded
+the same GIF again to show it. Now the frames are hashed on every core (a frame with the same
+pixels as the one before not hashed again: 52 of 54 here), and the vault hands the frames it
+decoded to the viewer, for those very bytes only (their size and SHA-256), so they are decoded once.
+Every frame is still checked. Frame 30 shown from the .simage and from the GIF: the same pixels.
+
+A GIF carried mixed at the v34 draft takes as long as mixing takes to decode its indices (17,367,891
+bytes in about 9 s here, 2 MB a second); the viewer's own Sieve button makes them with Prioritise Decoding Speed, so its
+.simage files are not mixed.

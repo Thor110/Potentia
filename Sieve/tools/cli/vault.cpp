@@ -17,6 +17,7 @@
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <iterator>
 #include <fstream>
@@ -24,6 +25,8 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <string_view>
+#include <thread>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -248,6 +251,18 @@ bool withheld_picture(const uint8_t* rgba, uint32_t width, uint32_t height)
 
 namespace {
 
+// (keep_checked_frames: the last picture checked, its frames kept for whoever shows it next)
+std::mutex g_checked_mx;
+bool g_keep_checked = false;
+std::string g_checked_key; // its size and SHA-256
+CheckedFrames g_checked;
+
+std::string bytes_key(std::span<const uint8_t> bytes)
+{
+    const auto d = Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    return std::to_string(bytes.size()) + ":" + std::string(d.begin(), d.end());
+}
+
 // The picture half of the check: the bytes' frames by PDQ, if the bytes are a picture.
 bool withheld_as_picture(std::span<const uint8_t> bytes)
 {
@@ -256,17 +271,56 @@ bool withheld_as_picture(std::span<const uint8_t> bytes)
     uint32_t w = 0, h = 0;
     if (v.pdq.empty() || !image_info(bytes.data(), bytes.size(), w, h) || uint64_t(w) * h > kMaxPicturePixels) return false;
     std::vector<RgbaImage> frames;
+    std::vector<int> delays;
+    bool keep = false;
+    {
+        std::lock_guard<std::mutex> lock(g_checked_mx);
+        keep = g_keep_checked;
+    }
     try
     {
-        frames = decode_image_frames(bytes.data(), bytes.size(), "the picture");
+        frames = decode_image_frames(bytes.data(), bytes.size(), "the picture", keep ? &delays : nullptr);
     }
     catch (const std::exception&)
     {
         return false; // a header without a picture behind it: nothing to see
     }
-    for (const RgbaImage& f : frames)
-        if (withheld_picture(f.rgba.data(), f.width, f.height)) return true;
-    return false;
+    // Every frame checked; an animated GIF's on the cores at once, and a frame with the same pixels
+    // as the frame before not hashed again (the same pixels give the same hash: a recording's pauses).
+    // (6 November 2026, Edward: a sieved GIF slower to open than the GIF: a 54-frame GIF's 54 hashes
+    // were 147 ms of the 0.31 s its install spent after decoding.)
+    std::vector<size_t> to_check;
+    for (size_t k = 0; k < frames.size(); ++k)
+        if (k == 0 || frames[k].rgba != frames[k - 1].rgba) to_check.push_back(k);
+    std::atomic<size_t> next{0};
+    std::atomic<bool> hit{false};
+    auto work = [&] {
+        for (size_t i = next++; i < to_check.size() && !hit; i = next++)
+        {
+            const RgbaImage& f = frames[to_check[i]];
+            if (withheld_picture(f.rgba.data(), f.width, f.height)) hit = true;
+        }
+    };
+    const size_t n = std::min<size_t>(to_check.size(), std::max(1u, std::thread::hardware_concurrency()));
+    std::vector<std::thread> threads;
+    for (size_t t = 1; t < n; ++t) threads.emplace_back(work);
+    work();
+    for (std::thread& t : threads) t.join();
+    if (keep && !hit)
+    {
+        // (the first picture checked kept, not the last: a .sieve's first is the one shown first)
+        {
+            std::lock_guard<std::mutex> lock(g_checked_mx);
+            if (!g_checked_key.empty()) return hit;
+        }
+        std::string key = bytes_key(bytes);
+        std::lock_guard<std::mutex> lock(g_checked_mx);
+        if (!g_checked_key.empty()) return hit;
+        g_checked_key = std::move(key);
+        g_checked.frames = std::move(frames);
+        g_checked.delays_ms = std::move(delays);
+    }
+    return hit;
 }
 
 // chunk-match-v1, as the chunks close: true once two different chunks of one entry (or the only
@@ -392,6 +446,28 @@ std::string hash_checked_file(const fs::path& file, const std::string& what)
     if (hit) throw VaultWithheld("withheld by the vault: " + what);
     check_picture_file(file, head, head_len, what);
     return hex;
+}
+
+void keep_checked_frames(bool on)
+{
+    std::lock_guard<std::mutex> lock(g_checked_mx);
+    g_keep_checked = on;
+    if (!on) g_checked_key.clear(), g_checked = {};
+}
+
+std::optional<CheckedFrames> take_checked_frames(const std::vector<uint8_t>& bytes)
+{
+    {
+        std::lock_guard<std::mutex> lock(g_checked_mx);
+        if (!g_keep_checked || g_checked_key.empty() || g_checked.frames.empty()) return std::nullopt;
+    }
+    const std::string key = bytes_key(std::span<const uint8_t>(bytes.data(), bytes.size()));
+    std::lock_guard<std::mutex> lock(g_checked_mx);
+    if (key != g_checked_key) return std::nullopt;
+    CheckedFrames out = std::move(g_checked);
+    g_checked = {};
+    g_checked_key.clear();
+    return out;
 }
 
 std::vector<PictureHash> picture_hashes(const std::vector<uint8_t>& bytes)
