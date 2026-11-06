@@ -67,7 +67,7 @@
       const Rg = 0.4 * Math.min(w, h) * cam.zoom, cx = w / 2, cy = h / 2 + 8;
       const lat0 = cam.lat * D2R, lon0 = (cam.lon + (S.spin ? S.dayPhase * 180 / Math.PI : 0)) * D2R;
       // The globe, drawn pixel by pixel from the land mask (cheap enough at a modest resolution)
-      if (this.mask) {
+      if (this.mask && S.R.fw.isEarth) {
         const N = Math.max(80, Math.min(360, Math.round(2 * Rg / 2)));
         if (!this.img || this.img.width !== N) { this.cv = document.createElement("canvas"); this.cv.width = this.cv.height = N; this.img = this.cv.getContext("2d").createImageData(N, N); }
         const data = this.img.data, c0 = Math.cos(lat0), s0 = Math.sin(lat0);
@@ -88,7 +88,11 @@
         this.cv.getContext("2d").putImageData(this.img, 0, 0);
         ctx.imageSmoothingEnabled = true;
         ctx.drawImage(this.cv, cx - Rg, cy - Rg, 2 * Rg, 2 * Rg);
-      } else dot(ctx, cx, cy, Rg, "#0e1a2c");
+      } else {
+        const gr = ctx.createRadialGradient(cx - Rg * 0.3, cy - Rg * 0.3, Rg * 0.1, cx, cy, Rg);
+        gr.addColorStop(0, "#5a5a60"); gr.addColorStop(1, "#1c1c22");
+        dot(ctx, cx, cy, Rg, gr);
+      }
       circle(ctx, cx, cy, Rg, COL.line);
 
       const Rm = S.R.gridR;
@@ -121,7 +125,7 @@
         const p = this.project(v, lat0, lon0);
         if (p.d < 0) continue;
         const r = nd.kind === "quad" ? 6 : nd.kind === "tri" ? 5 : 4;
-        dot(ctx, cx + Rg * p.x, cy - Rg * p.y, r, nd.land ? COL.ink : "#050508", COL.ink);
+        dot(ctx, cx + Rg * p.x, cy - Rg * p.y, r, nd.land || !S.R.fw.isEarth ? COL.ink : "#050508", COL.ink);
       }
       // The spin axis
       const np = this.project([0, 0, 1], lat0, lon0), sp = this.project([0, 0, -1], lat0, lon0);

@@ -21,6 +21,9 @@
   function years(y) {
     if (!isFinite(y)) return "never";
     const a = Math.abs(y);
+    if (a < 1 / 365.25 / 24 / 60) return sci(y * K.year, 2) + " seconds";
+    if (a < 1 / 365.25 / 24) return Number((y * K.year / 60).toPrecision(2)).toLocaleString("en-GB") + " minutes";
+    if (a < 1 / 365.25) return Number((y * K.year / 3600).toPrecision(2)).toLocaleString("en-GB") + " hours";
     if (a < 1) return Number((y * 365.25).toPrecision(2)).toLocaleString("en-GB") + " days";
     if (a < 1e4) return grp(y) + " years";
     if (a < 1e6) return Number((y / 1e3).toPrecision(3)) + " thousand years";
@@ -45,18 +48,23 @@
   // ---------------------------------------------------------------------------------------------
   // The plan: every setting, its default (the published plan where it gives one), and its control
   // ---------------------------------------------------------------------------------------------
-  const MAT = C.materials.v;
+  const MAT = C.materials.v, BODIES = C.bodies.v;
   const FIELDS = [
-    { panel: "fw", key: "fwGoal", label: "What the wheels must do", type: "select", def: "fraction",
-      options: [["fraction", "Shift a share of the Earth's spin (as published)"], ["tilt", "Tilt the axis by an angle"], ["day", "Change the length of the day"]] },
-    { panel: "fw", key: "fwFraction", label: "Share of the Earth's spin", type: "log", min: 1e-9, max: 0.1, def: 1e-3, fmt: (v) => sci(v * 100) + "%", show: (p) => p.fwGoal === "fraction" },
-    { panel: "fw", key: "fwTilt", label: "Tilt", type: "log", min: 1e-6, max: 30, def: 1, fmt: (v) => sci(v) + "°", show: (p) => p.fwGoal === "tilt" },
+    { panel: "fw", key: "fwBody", label: "Body being steered", type: "select", def: "earth", options: BODIES.map(b => [b.id, b.name]) },
+    { panel: "fw", key: "fwGoal", label: "What the steering must do", type: "select", def: "fraction",
+      options: [["fraction", "Shift a share of the spin (as published)"], ["tilt", "Tilt the axis by an angle"], ["day", "Change the length of the day"]] },
+    { panel: "fw", key: "fwFraction", label: "Share of the spin", type: "log", min: 1e-9, max: 0.1, def: 1e-3, fmt: (v) => sci(v * 100) + "%", show: (p) => p.fwGoal === "fraction" },
+    { panel: "fw", key: "fwTilt", label: "Tilt", type: "log", min: 1e-6, max: 90, def: 1, fmt: (v) => sci(v) + "°", show: (p) => p.fwGoal === "tilt" },
     { panel: "fw", key: "fwDay", label: "Change in the day", type: "log", min: 1e-6, max: 3600, def: 1, fmt: (v) => sci(v) + " s", show: (p) => p.fwGoal === "day" },
-    { panel: "fw", key: "fwGeom", label: "Where the wheels are", type: "select", def: "node",
-      options: [["node", "Wheels at the 26 stations"], ["ring", "The 9 great-circle rings, as mass streams"]] },
-    { panel: "fw", key: "fwRadius", label: "Wheel radius", type: "log", min: 10, max: 1e5, def: 1000, fmt: (v) => sci(v) + " m", show: (p) => p.fwGeom === "node" },
+    { panel: "fw", key: "fwGeom", label: "What spins", type: "select", def: "ring",
+      options: [["ring", "Trains circling each ring: the circle itself"], ["along", "Wheels all along the rings"], ["node", "Wheels at the 26 stations"]] },
+    { panel: "fw", key: "trainOrbit", label: "Trains at orbital speed for this body (the fastest without being held down)", type: "check", def: true, show: (p) => p.fwGeom === "ring" },
+    { panel: "fw", key: "trainV", label: "Train speed", type: "log", min: 1, max: 12000, def: 7900, fmt: (v) => grp(v) + " m/s (" + grp(v * 3.6) + " km/h)", show: (p) => p.fwGeom === "ring" && !p.trainOrbit },
+    { panel: "fw", key: "trainsPerRing", label: "Trains per ring", type: "log", min: 1, max: 1e5, def: 1000, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "ring" },
+    { panel: "fw", key: "fwPerRing", label: "Wheels per ring", type: "log", min: 1, max: 1e5, def: 100, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "along" },
     { panel: "fw", key: "fwPerNode", label: "Wheels per station", type: "log", min: 1, max: 1000, def: 1, int: true, fmt: (v) => grp(v), show: (p) => p.fwGeom === "node" },
-    { panel: "fw", key: "fwMaterial", label: "How fast the rim may go", type: "select", def: "doc", options: MAT.map(m => [m.id, m.name + " (" + Math.round(P.materialSpeed(m)) + " m/s)"]) },
+    { panel: "fw", key: "fwRadius", label: "Wheel radius", type: "log", min: 10, max: 1e5, def: 1000, fmt: (v) => sci(v) + " m", show: (p) => p.fwGeom !== "ring" },
+    { panel: "fw", key: "fwMaterial", label: "How fast the rim may go", type: "select", def: "cfrp", options: MAT.filter(m => m.id !== "stream").map(m => [m.id, m.name + " (" + Math.round(P.materialSpeed(m)) + " m/s)"]), show: (p) => p.fwGeom !== "ring" },
     { panel: "fw", key: "fwPowerTW", label: "Power to spin them up", type: "log", min: 0.01, max: 1e5, def: K.worldPower / 1e12, fmt: (v) => sci(v) + " TW" },
 
     { panel: "grid", key: "gLat", label: "First quad-station: latitude", type: "range", min: -90, max: 90, step: 0.5, def: 90, fmt: (v) => v + "°" },
@@ -71,7 +79,8 @@
     { panel: "sun", key: "vinf", label: "Speed left once clear of the Sun", type: "range", min: 0, max: 100, step: 0.1, def: 29.6, fmt: (v) => v + " km/s" },
     { panel: "sun", key: "escDur", label: "Time taken by the escape push", type: "log", min: 0.01, max: 1e9, def: 1e7, fmt: (v) => years(v) },
     { panel: "sun", key: "method", label: "What pushes the Earth", type: "select", def: "flyby",
-      options: [["flyby", "Gravity assists from a large asteroid"], ["driver", "The launch accelerators, throwing mass away"], ["flywheels", "The flywheels alone"]] },
+      options: [["flyby", "Gravity assists from asteroids, taking energy from Jupiter"], ["sun", "Nudges against the Sun's pull, by the steering system"], ["flywheels", "The flywheels alone"], ["driver", "Throwing mass off the Earth (only if it becomes necessary)"]] },
+    { panel: "sun", key: "sunF", label: "Share of the Earth's mass shifted each orbit", type: "log", min: 1e-7, max: 0.1, def: 1e-3, fmt: (v) => sci(v * 100) + "%", show: (p) => p.method === "sun" },
     { panel: "sun", key: "flyMass", label: "Asteroid mass", type: "log", min: 1e16, max: 1e22, def: 1e19, fmt: (v) => sci(v) + " kg", show: (p) => p.method === "flyby" },
     { panel: "sun", key: "flyVrel", label: "Its speed past the Earth", type: "range", min: 1, max: 30, step: 0.5, def: 5, fmt: (v) => v + " km/s", show: (p) => p.method === "flyby" },
     { panel: "sun", key: "flyRp", label: "Closest approach (from the Earth's centre)", type: "log", min: 7000, max: 1e6, def: 1e4, fmt: (v) => grp(v) + " km", show: (p) => p.method === "flyby" },
@@ -83,7 +92,8 @@
     { panel: "gal", key: "galOn", label: "Go on through the Galactic Centre", type: "check", def: true },
     { panel: "gal", key: "rpAU", label: "Closest approach to Sgr A*", type: "log", min: 0.2, max: 1e5, def: 300, fmt: (v) => sci(v) + " AU", show: (p) => p.galOn },
     { panel: "gal", key: "burnKms", label: "Push at closest approach", type: "log", min: 0.01, max: 3000, def: 30, fmt: (v) => sci(v) + " km/s", show: (p) => p.galOn },
-    { panel: "gal", key: "galVex", label: "Launch speed for the galactic pushes", type: "log", min: 30, max: 150000, def: 30000, fmt: (v) => kms(v * 1000), show: (p) => p.galOn },
+    { panel: "gal", key: "galDrop", label: "How the drop and the push are made", type: "select", def: "open", options: [["open", "Not yet known: the open problem"], ["driver", "Throwing mass off the Earth (only if it becomes necessary)"]], show: (p) => p.galOn },
+    { panel: "gal", key: "galVex", label: "Launch speed for the galactic pushes", type: "log", min: 30, max: 150000, def: 30000, fmt: (v) => kms(v * 1000), show: (p) => p.galOn && p.galDrop === "driver" },
     { panel: "gal", key: "target", label: "Destination", type: "select", def: "Andromeda", options: [], show: (p) => p.galOn },
     { panel: "gal", key: "H0", label: "Hubble constant", type: "select", def: String(K.H0),
       options: [[String(K.H0), K.H0 + " km/s/Mpc (Planck 2018)"], [String(K.H0local), K.H0local + " km/s/Mpc (SH0ES 2022)"]] },
@@ -111,13 +121,23 @@
     const p = plan, r = {};
     // Flywheels
     const goal = p.fwGoal === "tilt" ? { kind: "tilt", tiltDeg: p.fwTilt } : p.fwGoal === "day" ? { kind: "day", dayS: p.fwDay } : { kind: "fraction", fraction: p.fwFraction };
-    const dL = P.momentumForGoal(goal);
+    const body = BODIES.find(b => b.id === p.fwBody) || BODIES[0], isEarth = body.id === "earth";
+    const dL = isEarth ? P.momentumForGoal(goal) : P.momentumForGoal(goal, body);
     const mat = MAT.find(m => m.id === p.fwMaterial) || MAT[0];
-    const ring = p.fwGeom === "ring";
-    const v = ring ? P.materialSpeed(MAT.find(m => m.id === "stream")) : P.materialSpeed(mat);
-    const rad = ring ? K.Rearth - 2000 : p.fwRadius;
-    const n = ring ? 9 : 26 * Math.round(p.fwPerNode);
-    r.fw = Object.assign(P.flywheels({ dL, r: rad, v, n, power: p.fwPowerTW * 1e12 }), { v, r: rad, n, ring, mat, goal });
+    const geom = p.fwGeom, ring = geom === "ring";
+    const v = ring ? (p.trainOrbit ? P.surfaceOrbitSpeed(body) : p.trainV) : P.materialSpeed(mat);
+    const rad = ring ? body.R - Math.min(2000, 0.02 * body.R) : p.fwRadius;   // trains run 2 km down (less in small bodies)
+    const n = ring ? 9 : geom === "along" ? 9 * Math.round(p.fwPerRing) : 26 * Math.round(p.fwPerNode);
+    r.fw = Object.assign(P.flywheels({ dL, r: rad, v, n, power: p.fwPowerTW * 1e12 }), { v, r: rad, n, ring, geom, mat, goal, body, isEarth, L: isEarth ? P.earthL() : P.bodyL(body) });
+    if (ring) {
+      const fw = r.fw;
+      fw.trains = 9 * Math.round(p.trainsPerRing);
+      fw.perTrain = fw.totalMass / fw.trains;
+      fw.ringLen = 2 * Math.PI * rad;
+      fw.perMetre = fw.totalMass / (9 * fw.ringLen);
+      fw.weight = P.trainWeight(body, v);
+      fw.vOrb = P.surfaceOrbitSpeed(body);
+    }
     r.proof = P.publishedProof();
     // Grid
     r.gridR = P.gridRotation(p.gLat, p.gLon, p.gRoll);
@@ -154,6 +174,8 @@
     r.mdMig = P.massDriver({ dv: r.migDv, vLaunch: p.drvV * 1000 });
     r.mdEsc = P.massDriver({ dv: r.escDv, vLaunch: p.drvV * 1000, M: K.Mearth - (isFinite(r.mdMig.massOut) ? r.mdMig.massOut : 0) });
     r.mdLaunches = (r.mdMig.massOut + r.mdEsc.massOut) / p.olaPayload;
+    r.sunN = P.sunNudges({ f: p.sunF, aAU: 1, need: r.migE + r.escE });
+    r.spinE = P.spinEnergy();
     r.mdRate = r.mdEsc.massOut / p.olaPayload / (p.escDur * K.year) / (26 * K.docOLAperNode);
     r.escPower = r.escE / (p.escDur * K.year);
     // Leaving
@@ -176,6 +198,8 @@
     r.mdBurn = P.massDriver({ dv: p.burnKms * 1000, vLaunch: gv, M: K.Mearth - r.mdDrop.massOut });
     r.dropE = 0.5 * K.Mearth * (r.gal.dvDrop * 1000) ** 2;
     r.directMd = P.massDriver({ dv: r.gal.directDv * 1000, vLaunch: gv });
+    r.mdDropRef = P.massDriver({ dv: r.gal.dvDrop * 1000, vLaunch: 0.1 * K.c });
+    r.starRate = P.starPassRate(1, 30000);   // a star within 1 AU, at a typical 30 km/s
     r.tooClose = p.rpAU < 2 * r.gal.rTidalAU;
     r.amongS = p.rpAU < 2000;
     // Destination
@@ -259,10 +283,10 @@
   // Panels
   // ---------------------------------------------------------------------------------------------
   const PANELS = [
-    { id: "fw", title: "Flywheels: steering the axis", why: "Wheels spun up inside the Earth take angular momentum from it, as reaction wheels turn a satellite. Whatever turn they give the Earth lasts only while they keep spinning." },
+    { id: "fw", title: "1 · Steering: the flywheels", why: "Mass set spinning inside a planet takes angular momentum from it, as reaction wheels turn a satellite: this is the platform's steering wheel. Whatever turn it gives lasts only while the mass keeps spinning. The same system could steer the Moon, Mars, Ceres or an asteroid." },
     { id: "grid", title: "The planetary grid", why: "Nine great circles, the cube's planes of symmetry, cross at 6 quad-stations, 12 dual-stations and 8 tri-stations. The plan wants as many stations as possible on land." },
-    { id: "sun", title: "Leaving the Sun", why: "The Sun brightens by about 1% every 110 million years. The plan's 1–2 billion years is about when the Earth's oceans would begin to boil away where it is now." },
-    { id: "gal", title: "Through the Galaxy", why: "The published route falls to the Galactic Centre and slingshots round it towards another galaxy." }
+    { id: "sun", title: "2 · Moving: leaving the Sun", why: "The Sun brightens by about 1% every 110 million years. The plan's 1–2 billion years is about when the Earth's oceans would begin to boil away where it is now." },
+    { id: "gal", title: "3 · The route through the Galaxy", why: "The published route falls to the Galactic Centre and slingshots round it towards another galaxy." }
   ];
   const ctrl = {};
   const LOGN = 1000;
@@ -328,16 +352,27 @@
 
   function renderOutputs() {
     const r = R, p = plan, fw = r.fw;
-    const goalText = fw.goal.kind === "tilt" ? "turn the axis " + sci(p.fwTilt) + "°" : fw.goal.kind === "day" ? "change the day by " + sci(p.fwDay) + " s" : "shift " + sci(p.fwFraction * 100) + "% of the Earth's spin";
+    const bname = fw.body.name.replace(/^The /, "the ").replace(/^A /, "a ");
+    const goalText = fw.goal.kind === "tilt" ? "turn " + bname + "'s axis " + sci(p.fwTilt) + "°" : fw.goal.kind === "day" ? "change " + bname + "'s day by " + sci(p.fwDay) + " s" : "shift " + sci(p.fwFraction * 100) + "% of " + bname + "'s spin";
+    const what = fw.geom === "ring" ? "trains" : "wheels";
+    const trainLines = fw.ring ? [
+      `<p><b>Trains:</b> ${grp(fw.trains)} in all, ${grp(p.trainsPerRing)} on each ring, ${sci(fw.perTrain)} kg each, at ${grp(fw.v)} m/s; or ${sci(fw.perMetre)} kg on every metre of the ${grp(fw.ringLen / 1000)} km of each ring: as solid steel, a ring ${sci(Math.sqrt(fw.perMetre / 7850))} m square in cross-section</p>`,
+      fw.weight >= 0 ? `<p><b>On the track:</b> at this speed a train weighs ${Math.round(fw.weight * 100)}% of its weight at rest: the faster it goes, the more it floats, and at ${grp(fw.vOrb)} m/s (orbital speed at the surface) it weighs nothing.</p>`
+        : `<p class="v-big">▲ Faster than orbital speed at the surface (${grp(fw.vOrb)} m/s): the trains push outward with ${-fw.weight < 2 ? Math.round(-fw.weight * 100) + "% of" : sci(-fw.weight) + " times"} their weight, so the track must hold them in, as a hoop or under the rock above.</p>`,
+      `<p class="note">The fastest train yet ran at ${grp(K.maglevRecord * 3.6)} km/h (${grp(K.maglevRecord)} m/s). At that speed the same goal needs ${sci(fw.dL / (fw.r * K.maglevRecord))} kg.</p>`
+    ] : [
+      `<p class="note">How the mass is split does not change the total: ${what} held at one radius and rim speed need the same mass whether there are 26 or 26,000 of them. Only the radius and the speed reduce it, and nothing on a body has a larger radius than a ring round the whole of it. That is why the trains are the flywheel.</p>`
+    ];
     $("out-fw").innerHTML = [
-      `<p><b>Momentum the wheels must hold:</b> ${sci(fw.dL)} kg m²/s, to ${goalText} (the Earth's spin is ${sci(P.earthL())}).</p>`,
-      `<p><b>Wheel mass, all together:</b> ${sci(fw.totalMass)} kg <span class="cmp">${massCmp(fw.totalMass)}</span></p>`,
-      `<p><b>Each of the ${grp(fw.n)} ${fw.ring ? "rings" : "wheels"}:</b> ${sci(fw.perWheel)} kg, ${fw.ring ? "streaming round the planet 2 km down" : sci(fw.r) + " m in radius"}, rim at ${grp(fw.v)} m/s</p>`,
+      `<p><b>Momentum the steering must hold:</b> ${sci(fw.dL)} kg m²/s, to ${goalText} (its whole spin is ${sci(fw.L)}).</p>`,
+      `<p><b>Mass, all together:</b> ${sci(fw.totalMass)} kg <span class="cmp">${massCmp(fw.totalMass)}${fw.isEarth ? "" : "; " + sci(fw.totalMass / fw.body.M, 2) + " of " + bname.replace(/^a /, "the ") + "'s own mass"}</span></p>`,
+      fw.ring ? "" : `<p><b>Each of the ${grp(fw.n)} wheels:</b> ${sci(fw.perWheel)} kg, ${sci(fw.r)} m in radius, rim at ${grp(fw.v)} m/s</p>`,
+      ...trainLines,
       `<p><b>Energy stored:</b> ${sci(fw.energy)} J <span class="cmp">${energyCmp(fw.energy)}</span></p>`,
       `<p><b>Time to spin up</b> at ${sci(p.fwPowerTW)} TW: ${years(fw.spinUpYears)}</p>`,
-      `<p class="note"><b>The published proof, redone:</b> a 0.1% shift is ${sci(r.proof.dL)} kg m²/s; a millionth of it, at 1 rpm on a 1 km radius, needs ${sci(r.proof.massPerNudge)} kg, as published. The million nudges add up, though: to hold the whole shift the wheels together need ${sci(r.proof.massAll)} kg, ${sci(r.proof.massAll / K.Mearth, 2)} Earth masses. That shift tilts the axis by ${r.proof.tiltDeg.toFixed(3)}°. Faster rims and wider wheels cut the mass: the great-circle rings as mass streams near orbital speed need about 500,000 times less.</p>`,
-      `<p class="note"><b>What wheels cannot do:</b> move the Earth along its orbit. Forces inside a body cannot move its centre of mass. The Three Gorges Dam moved the pole about 2 cm and shortened the day, but did not move the Earth round the Sun. The flywheels are the platform's steering; the accelerators or gravity assists must be its engine.</p>`,
-      fw.goal.kind !== "day" ? `<p class="note"><b>Holding a tilt:</b> the Earth turns under the held vector once a day, so the rings must hand momentum to one another all day long. On the globe each ring's thickness and colour shows what it holds right now. That is why every station must know its exact alignment (the neutrino positioning of <i>Global Positioning &amp; Alignment Systems</i>).</p>` : ""
+      `<p class="note"><b>The published proof, redone:</b> a 0.1% shift of the Earth's spin is ${sci(r.proof.dL)} kg m²/s; a millionth of it, at 1 rpm on a 1 km radius, needs ${sci(r.proof.massPerNudge)} kg, as published. The million nudges add up, though: to hold the whole shift the wheels together need ${sci(r.proof.massAll)} kg, ${sci(r.proof.massAll / K.Mearth, 2)} Earth masses. That shift tilts the axis by ${r.proof.tiltDeg.toFixed(3)}°.</p>`,
+      `<p class="note"><b>Steering, not the engine:</b> forces inside a body cannot move its centre of mass, so the trains turn the planet and set its day but do not move it along its orbit. That needs something outside: see <i>Moving</i>.</p>`,
+      fw.goal.kind !== "day" ? `<p class="note"><b>Holding a tilt:</b> the planet turns under the held direction once a day, so the rings hand momentum to one another all day long (the globe shows each ring's share now). That is why every station must know its exact alignment (the neutrino positioning of <i>Global Positioning &amp; Alignment Systems</i>).</p>` : ""
     ].join("");
 
     const gi = r.gridInfo, nk = (k) => gi.nodes.filter(n => n.kind === k && n.land).length;
@@ -356,6 +391,10 @@
       r.fbAsteroids > 1 ? `<p class="v-big">▲ One asteroid takes about ${r.shuttleYr.toFixed(1)} years to swing out to Jupiter and back, so this needs about ${sci(r.fbAsteroids)} of them working in turn (or a longer push, or bigger asteroids).</p>` : "",
       `<p><b>Jupiter pays:</b> its orbit shrinks from ${K.aJupiter} AU to ${r.jupA.toFixed(3)} AU</p>`,
       `<p class="note">After Korycansky, Laughlin &amp; Adams (2001): the asteroid swings by Jupiter between passes, taking energy from it and handing it to the Earth.</p>`
+    ] : p.method === "sun" ? [
+      `<p><b>Each orbit, shifting ${sci(p.sunF * 100)}% of the Earth's mass across its radius gains at most</b> ${sci(r.sunN.perOrbit)} J</p>`,
+      `<p class="v-no">✗ Staying habitable and escaping need ${sci(r.migE + r.escE)} J: ${years(r.sunN.years)} of nudging, against ${years(r.tMS)} left of the Sun's steady life.</p>`,
+      `<p class="note">Why so little: the Sun's pull differs across the Earth by only (Earth's radius / its distance)² ≈ 2×10<sup>-9</sup> of itself, and the orbit is nearly a circle (closest 0.983 AU, furthest 1.017 AU), so there is little rhythm to pump. And the Sun does not pay: it is the fixed centre, so the energy comes from the machinery doing the shifting. Even spending all the Earth's spin (${sci(r.spinE)} J) gives 1/${grp((r.migE + r.escE) / r.spinE)} of what is needed. Energy can be taken from a body that moves, which is why the gravity assists take it from Jupiter.</p>`
     ] : p.method === "driver" ? [
       `<p><b>Mass leaves the Earth at</b> ${kms(r.mdEsc.vex)} once clear of its gravity</p>`,
       p.migrate ? `<p><b>Migration throws away</b> ${sci(r.mdMig.massOut)} kg (${sci(r.mdMig.fraction * 100, 2)}% of the Earth)</p>` : "",
@@ -363,7 +402,7 @@
       `<p><b>Launch energy:</b> ${sci(r.mdMig.energy + r.mdEsc.energy)} J <span class="cmp">${energyCmp(r.mdMig.energy + r.mdEsc.energy)}</span></p>`,
       `<p><b>Launches:</b> ${sci(r.mdLaunches)} of ${sci(p.olaPayload)} kg; during the escape, ${sci(r.mdRate)} a second from each of the 156 accelerators</p>`
     ] : [
-      `<p><b>Change of orbit from the flywheels:</b> none. Wheels inside the Earth cannot change its momentum round the Sun, however many there are.</p>`
+      `<p class="v-no">✗ <b>Change of orbit from the flywheels:</b> none. Wheels inside the Earth cannot change its momentum round the Sun, however many there are.</p>`
     ];
     $("out-sun").innerHTML = [
       `<p><b>Without moving:</b> sunlight at 1 AU passes ${p.hzS.toFixed(3)}× today's in ${years(r.tHZ)}.</p>`,
@@ -382,13 +421,14 @@
     const tr = r.targetObj;
     $("out-gal").innerHTML = p.galOn ? [
       `<p><b>Drop towards the centre:</b> cancel ${kms(g.dvDrop * 1000)} of the Sun's orbital speed, ${sci(r.dropE)} J <span class="cmp">${energyCmp(r.dropE)}</span></p>`,
-      `<p><b>…by throwing away</b> ${sci(r.mdDrop.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>`,
+      p.galDrop === "driver" ? `<p><b>…by throwing away</b> ${sci(r.mdDrop.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>`
+        : `<p class="v-big">? <b>The open problem:</b> no known way to make this drop without an engine. Gravity assists need something moving to take energy from, and a star passes within 1 AU of the Earth about once in ${years(1 / r.starRate)}. Throwing mass off instead would take ${sci(r.mdDropRef.fraction * 100, 2)}% of the Earth even at a tenth of light speed. Leaving the Sun is possible without it; this leg is where the plan needs a new idea, or the Milky Way's meeting with Andromeda.</p>`,
       `<p><b>Fall:</b> ${years(r.tGC - r.tDrop)}, reaching ${kms(g.vp * 1000)} (${(g.vpOverC * 100).toFixed(1)}% of light) at ${sci(p.rpAU)} AU from Sgr A*</p>`,
       r.tooClose ? `<p class="v-no">✗ Too close: Sgr A*'s tides tear the Earth apart inside ${g.rTidalAU.toFixed(2)} AU.</p>` : "",
       r.amongS ? `<p class="v-big">▲ Among the S-stars: S2 itself comes within ${K.s2Peri} AU of Sgr A*.</p>` : "",
       g.vpOverC > 0.1 ? `<p class="note">At over a tenth of light speed relativity begins to matter; these figures are Newtonian.</p>` : "",
       `<p><b>Push of ${sci(p.burnKms)} km/s at closest approach:</b> leaves the Galaxy at ${g.vinf > 0 ? kms(g.vinf * 1000) : "nothing: it stays bound, climbing back out to " + sci(g.apoAfter / 1000) + " kpc"} <span class="cmp">(the Oberth effect: the same push far from anything gives just ${sci(p.burnKms)} km/s)</span></p>`,
-      `<p><b>…costing</b> ${sci(r.mdBurn.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>`,
+      p.galDrop === "driver" ? `<p><b>…costing</b> ${sci(r.mdBurn.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>` : `<p class="note">The push at closest approach needs an engine too: the same open problem, though far smaller than the drop.</p>`,
       `<p class="note">Without the slingshot the Earth would fall back out to where it began. Leaving the Galaxy directly from the Sun's orbit would take ${kms(g.directDv * 1000)}, ${sci(r.directMd.fraction * 100, 3)}% of the Earth at the same launch speed. Nature does it already: S5-HVS1 was flung from Sgr A* at ${grp(K.hvsPrecedent)} km/s.</p>`,
       `<p><b>${tr.name}:</b> ${sci(r.targetDistPc / 1000)} kpc from the Galactic Centre; arrival ${isFinite(r.tTravel) ? years(r.tTravel) + " after the slingshot" : ": never, on this route"}</p>`,
       tr.name === "Andromeda" ? `<p class="note">Andromeda is already falling towards us, at about 110 km/s. The two may merge within 10 billion years (an even chance, Sawala et al. 2025).</p>` : "",
@@ -401,26 +441,27 @@
   // The ledger
   // ---------------------------------------------------------------------------------------------
   const OK = '<span class="verdict v-ok">✓ known physics</span>', BIG = '<span class="verdict v-big">▲ far beyond anything built</span>', NO = '<span class="verdict v-no">✗ not possible this way</span>';
+  const OPEN = '<span class="verdict v-big">? open problem</span>';
   function renderLedger() {
-    const r = R, p = plan, rows = [];
-    const fwV = r.fw.totalMass > K.Mearth * 0.01 ? NO : r.fw.totalMass > K.anthroMass * 1000 ? BIG : OK;
-    rows.push(["Flywheels hold the steering", sci(r.fw.totalMass) + " kg of wheels; " + sci(r.fw.energy) + " J", massCmp(r.fw.totalMass) + "; spin-up " + years(r.fw.spinUpYears), fwV]);
-    rows.push(["Flywheels move the orbit", "a change in the Earth's momentum round the Sun", "forces inside a body cannot move its centre of mass", NO]);
-    if (p.migrate) {
-      const how = p.method === "flyby" ? sci(r.fbMigN) + " asteroid passes, one every " + years(r.fbMigEvery) : p.method === "driver" ? sci(r.mdMig.fraction * 100, 2) + "% of the Earth thrown away" : "nothing";
-      rows.push(["Stay habitable until departure", "out to " + r.aDep.toFixed(3) + " AU; " + sci(r.migE) + " J", how, p.method === "flywheels" ? NO : BIG]);
-    }
-    const esc = p.method === "flyby" ? sci(r.fbEscN) + " passes, one every " + years(r.fbEscEvery) + (r.fbAsteroids > 1 ? " (" + sci(r.fbAsteroids) + " asteroids)" : "") : p.method === "driver" ? sci(r.mdEsc.fraction * 100, 2) + "% of the Earth thrown away" : "nothing";
-    rows.push(["Escape the Sun", kms(r.escDv) + "; " + sci(r.escE) + " J", esc + "; " + years(r.escE / K.Lsun / K.year) + " of the Sun's entire output", p.method === "flywheels" || r.lateDeparture ? NO : BIG]);
-    rows.push(["Reach 50,000 AU", years(r.t50k), "published: 7,961 years (needs " + kms(r.vinfForDoc) + ")", OK]);
-    rows.push(["Cross the Oort cloud", sci(r.oort.lambda, 2) + " expected collisions", sci(r.oort.background, 2) + " ordinary 1 km impacts in the same time", OK]);
-    rows.push(["Live without the Sun", "the surface near " + Math.round(r.tSurf) + " K", "heat from inside the Earth: " + sci(K.geoHeat / 1e12, 2) + " TW, " + (K.geoHeat / K.worldPower).toFixed(1) + "× today's world energy use", OK]);
+    const r = R, p = plan, rows = [], fw = r.fw;
+    const fwV = fw.totalMass > fw.body.M * 0.01 ? NO : fw.totalMass > K.anthroMass * 1000 ? BIG : OK;
+    rows.push(["Steering", "Hold the steering (" + fw.body.name + ")", sci(fw.totalMass) + " kg of " + (fw.ring ? "trains" : "wheels") + "; " + sci(fw.energy) + " J", massCmp(fw.totalMass) + "; spin-up " + years(fw.spinUpYears), fwV]);
+    rows.push(["Steering", "Move the orbit with the steering", "a change in the Earth's momentum round the Sun", "forces inside a body cannot move its centre of mass", NO]);
+    const how = (n, every, frac) => p.method === "flyby" ? sci(n) + " asteroid passes, one every " + years(every) + (r.fbAsteroids > 1 ? " (" + sci(r.fbAsteroids) + " asteroids)" : "")
+      : p.method === "driver" ? sci(frac * 100, 2) + "% of the Earth thrown away"
+      : p.method === "sun" ? years(r.sunN.years) + " of nudges against the Sun" : "nothing";
+    const engV = p.method === "flywheels" || p.method === "sun" ? NO : BIG;
+    if (p.migrate) rows.push(["Engine", "Stay habitable until departure", "out to " + r.aDep.toFixed(3) + " AU; " + sci(r.migE) + " J", how(r.fbMigN, r.fbMigEvery, r.mdMig.fraction), engV]);
+    rows.push(["Engine", "Escape the Sun", kms(r.escDv) + "; " + sci(r.escE) + " J", how(r.fbEscN, r.fbEscEvery, r.mdEsc.fraction), r.lateDeparture ? NO : engV]);
+    rows.push(["Route", "Reach 50,000 AU", years(r.t50k), "published: 7,961 years (needs " + kms(r.vinfForDoc) + ")", OK]);
+    rows.push(["Route", "Cross the Oort cloud", sci(r.oort.lambda, 2) + " expected collisions", sci(r.oort.background, 2) + " ordinary 1 km impacts in the same time", OK]);
+    rows.push(["Route", "Live without the Sun", "the surface near " + Math.round(r.tSurf) + " K", "heat from inside the Earth: " + sci(K.geoHeat / 1e12, 2) + " TW, " + (K.geoHeat / K.worldPower).toFixed(1) + "× today's world energy use", OK]);
     if (p.galOn) {
-      rows.push(["Drop to the Galactic Centre", kms(r.gal.dvDrop * 1000) + "; " + sci(r.dropE) + " J", sci(r.mdDrop.fraction * 100, 3) + "% of the Earth at " + kms(p.galVex * 1000), r.mdDrop.fraction > 0.5 ? NO : BIG]);
-      rows.push(["Slingshot round Sgr A*", sci(p.rpAU) + " AU at " + (r.gal.vpOverC * 100).toFixed(1) + "% of light", r.tooClose ? "inside the tidal radius (" + r.gal.rTidalAU.toFixed(2) + " AU)" : r.gal.vinf > 0 ? "leaves at " + kms(r.gal.vinf * 1000) : "stays bound", r.tooClose ? NO : r.gal.vinf > 0 ? BIG : NO]);
-      rows.push(["Reach " + r.targetObj.name, isFinite(r.tTravel) ? years(r.tTravel) : "never", "reach ever: " + r.reachMpc.toFixed(2) + " Mpc", isFinite(r.tTravel) ? BIG : NO]);
+      rows.push(["Engine", "Drop to the Galactic Centre", kms(r.gal.dvDrop * 1000) + "; " + sci(r.dropE) + " J", p.galDrop === "driver" ? sci(r.mdDrop.fraction * 100, 3) + "% of the Earth at " + kms(p.galVex * 1000) : "no known way without an engine", p.galDrop === "driver" ? (r.mdDrop.fraction > 0.5 ? NO : BIG) : OPEN]);
+      rows.push(["Route", "Slingshot round Sgr A*", sci(p.rpAU) + " AU at " + (r.gal.vpOverC * 100).toFixed(1) + "% of light", r.tooClose ? "inside the tidal radius (" + r.gal.rTidalAU.toFixed(2) + " AU)" : r.gal.vinf > 0 ? "leaves at " + kms(r.gal.vinf * 1000) : "stays bound", r.tooClose ? NO : r.gal.vinf > 0 ? BIG : NO]);
+      rows.push(["Route", "Reach " + r.targetObj.name, isFinite(r.tTravel) ? years(r.tTravel) : "never", "reach ever: " + r.reachMpc.toFixed(2) + " Mpc", isFinite(r.tTravel) ? (p.galDrop === "driver" ? BIG : OPEN) : NO]);
     }
-    $("ledger").innerHTML = "<tr><th>Step</th><th>Needs</th><th>Compared with</th><th>Verdict</th></tr>" +
+    $("ledger").innerHTML = "<tr><th>Role</th><th>Step</th><th>Needs</th><th>Compared with</th><th>Verdict</th></tr>" +
       rows.map(rw => "<tr>" + rw.map(c => "<td>" + c + "</td>").join("") + "</tr>").join("");
   }
 
@@ -585,7 +626,7 @@
     if (view === "planet") {
       const held = Math.min(1, Math.sqrt(simT / r.fw.spinUpYears));
       const big = Math.max(...r.ringSharesNow.map(Math.abs));
-      return `<b>Earth &amp; Grid</b><br>${r.gridInfo.landNodes} of 26 stations on land · ${Math.round(r.gridInfo.ringLandShare * 100)}% of the rings under land<br>Wheels: ${sci(r.fw.totalMass)} kg in ${grp(r.fw.n)} ${r.fw.ring ? "rings" : "wheels"} · ${(held * 100).toFixed(1)}% of the goal held by now<br>Busiest ring now: ${sci(big)} kg m²/s`;
+      return `<b>${r.fw.isEarth ? "Earth &amp; Grid" : "Steering " + r.fw.body.name}</b><br>${r.fw.isEarth ? r.gridInfo.landNodes + " of 26 stations on land · " + Math.round(r.gridInfo.ringLandShare * 100) + "% of the rings under land" : "the same grid of 9 rings and 26 stations, scaled to " + r.fw.body.name.replace(/^The /, "the ").replace(/^A /, "a ")}<br>Steering: ${sci(r.fw.totalMass)} kg in ${r.fw.ring ? grp(r.fw.trains) + " trains on 9 rings" : grp(r.fw.n) + " wheels"} · ${(held * 100).toFixed(1)}% of the goal held by now<br>Busiest ring now: ${sci(big)} kg m²/s`;
     }
     if (view === "sun") {
       const au = e.au != null ? e.au : null;

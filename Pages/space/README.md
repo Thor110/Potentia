@@ -33,7 +33,9 @@ needs, and whether known physics allows it.
 - **Flywheels can steer, but cannot move the orbit.** Forces inside a body cannot move its centre
   of mass. The wheels can turn the axis and change the day; the accelerators (throwing mass
   away) or gravity assists must change the orbit. That is the platform's own name: the
-  *Launch Accelerator* Platform.
+  *Launch Accelerator* Platform. (Edward, 6 November 2026: no mass is meant to be thrown off; the
+  flywheels are the steering wheel. The page now defaults to that, and keeps mass ejection only as
+  an option "if it becomes necessary".)
 - **Holding a tilt is a network task.** The Earth turns under the held vector once a day, so the
   rings must hand momentum between them all day. The globe shows each ring's share as it turns,
   which is why the stations must know their alignments exactly (the neutrino positioning
@@ -53,11 +55,14 @@ needs, and whether known physics allows it.
 - **The expanding universe sets the final limit.** At 112 km/s the Earth can ever reach about
   0.9 Mpc: Andromeda (and it is coming to us anyway), but just 32 of 2MRS's 43,533 galaxies.
 
+Ideas, decisions and the running list of improvements are kept in **[OLAP.md](OLAP.md)**.
+
 ## Files
 
 | File | What it is |
 |---|---|
 | `../space.html` | The page: layout and styles. |
+| `OLAP.md` | The running log: ideas, decisions, findings and what to do next. |
 | `constants.js` | **Every number, with its source.** Change a value here and everything follows. |
 | `physics.js` | Pure functions: the Sun's brightening, flywheels, the grid, orbits, gravity assists, mass drivers, the Oort cloud, the Galaxy's potential, the route, the expanding universe. No page code. |
 | `datasets.js` | Where each dataset comes from, how it is read, and the SHA-256 check against the record. |

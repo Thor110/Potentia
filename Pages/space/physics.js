@@ -72,19 +72,29 @@
   // ---------------------------------------------------------------------------------------------
 
   P.earthI = () => K.IearthNorm * K.Mearth * K.ReqEarth * K.ReqEarth;   // kg m^2
+  // Any body: moment of inertia, spin rate and spin angular momentum
+  P.bodyI = (b) => b.k * b.M * (b.Rin || b.R) ** 2;
+  P.bodyOmega = (b) => 2 * Math.PI / b.T;
+  P.bodyL = (b) => P.bodyI(b) * P.bodyOmega(b);
+  // The fastest a train can circle a body at its surface without lifting off its track
+  P.surfaceOrbitSpeed = (b) => Math.sqrt(K.G * b.M / b.R);
+  // How heavy a train is on its track at speed v, as a share of its weight at rest
+  // (1 at rest, 0 at orbital speed; below 0 it pushes outward and must be held down).
+  P.trainWeight = (b, v) => 1 - v * v / (K.G * b.M / b.R);
   P.earthL = () => P.earthI() * K.omegaEarth;                           // kg m^2 / s
 
   // The angular momentum the wheels must hold for a goal.
   //   tilt: turn the spin axis by tiltDeg (the wheels hold the difference: 2 L sin(θ/2))
   //   day:  lengthen (or shorten, if negative) the day by dayS seconds
   //   fraction: a share of the Earth's spin, as in the OLAP Initiative's proof
-  P.momentumForGoal = function (goal) {
-    const L = P.earthL();
+  P.momentumForGoal = function (goal, body) {
+    const L = body ? P.bodyL(body) : P.earthL();
+    const I = body ? P.bodyI(body) : P.earthI(), w = body ? P.bodyOmega(body) : K.omegaEarth;
     if (goal.kind === "tilt") return 2 * L * Math.sin((goal.tiltDeg * Math.PI / 180) / 2);
     if (goal.kind === "day") {
-      const T = 2 * Math.PI / K.omegaEarth;
+      const T = 2 * Math.PI / w;
       const w2 = 2 * Math.PI / (T + goal.dayS);
-      return P.earthI() * Math.abs(K.omegaEarth - w2);
+      return I * Math.abs(w - w2);
     }
     return goal.fraction * L;
   };
@@ -310,6 +320,26 @@
     const E0 = -K.GMsun * K.Mjupiter / (2 * K.aJupiter * K.AU);
     const a1 = -K.GMsun * K.Mjupiter / (2 * (E0 - dE));
     return a1 / K.AU;
+  };
+
+  // Nudges against the Sun's pull: shifting a share f of the Earth's mass across its own radius in
+  // step with the orbit, so the Sun's tide does work on it (the technique proposed for space
+  // tethers that change length as they orbit). Energy gained per orbit, at most about
+  //   (G M_sun M / 2a) * f * (R/a)^2 * e,
+  // with e the orbit's eccentricity. An upper estimate, order of magnitude only; the energy itself
+  // comes from the machinery doing the shifting, not from the Sun.
+  P.sunNudges = function ({ f, aAU, e, need }) {
+    const a = (aAU || 1) * K.AU;
+    const perOrbit = K.GMsun * K.Mearth / (2 * a) * f * (K.Rearth / a) ** 2 * (e == null ? 0.0167 : e);
+    const period = 2 * Math.PI * Math.sqrt(a ** 3 / K.GMsun) / K.year;
+    return { perOrbit, perYear: perOrbit / period, years: need / (perOrbit / period) };
+  };
+  // Spin, used up entirely: how far the Earth's own spin energy goes towards a need (J)
+  P.spinEnergy = () => 0.5 * P.earthI() * K.omegaEarth ** 2;
+  // How often a star passes within d AU of the Earth, per year (n stars per pc^3, at v m/s)
+  P.starPassRate = function (dAU, vRel) {
+    const d = dAU * K.AU / K.pc, focus = 1 + (2 * K.GMsun / (dAU * K.AU)) / (vRel * vRel);
+    return K.starDensity * Math.PI * d * d * focus * (vRel * K.year / K.pc);
   };
 
   // Leaving: distance against time on the way out, starting at aAU with speed sqrt(vinf^2 + 2mu/r)

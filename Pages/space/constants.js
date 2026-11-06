@@ -110,6 +110,18 @@
     { id: "stream",  name: "Maglev mass stream in a ring tunnel", vmax: 7900, note: "a stream below orbital speed rests on its tunnel: no hoop stress; the limit is orbital speed" }
   ], src: "hoop stress v = sqrt(sigma/rho); values typical" };
 
+  // Bodies the steering system could be built into (it is not only for the Earth).
+  //   M kg, R m (mean), k = moment of inertia / (M R^2), T s (sidereal rotation).
+  C.bodies = { v: [
+    { id: "earth", name: "Earth", M: 5.9722e24, R: 6.3710e6, Rin: 6.3781e6, k: 0.3307, T: 86164.0905 },
+    { id: "mars", name: "Mars", M: 6.4171e23, R: 3.3895e6, k: 0.3644, T: 88642.66 },
+    { id: "moon", name: "The Moon", M: 7.342e22, R: 1.7374e6, k: 0.3929, T: 2360591.5 },
+    { id: "ceres", name: "Ceres", M: 9.384e20, R: 4.697e5, k: 0.37, T: 32667 },
+    { id: "asteroid", name: "A 10 km rocky asteroid", M: 1.047e15, R: 5000, k: 0.4, T: 21600 }
+  ], src: "NASA fact sheets (Earth, Mars, Moon); Park et al. 2016 (Ceres); the asteroid is illustrative (density 2,000 kg/m^3, 6 h day)" };
+  C.starDensity = { v: 0.1, u: "stars per pc^3", src: "local stellar number density, order of magnitude" };
+  C.maglevRecord = { v: 167.5, u: "m/s", src: "603 km/h, JR Central L0 series, 2015" };
+
   root.OLAP = root.OLAP || {};
   root.OLAP.C = C;
   // Shorthand: K.x is C.x.v
