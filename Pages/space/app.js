@@ -89,6 +89,7 @@
     { panel: "sun", key: "flyEta", label: "Share of each kick along the Earth's path", type: "range", min: 0.05, max: 1, step: 0.05, def: 0.5, fmt: (v) => Math.round(v * 100) + "%", show: (p) => p.method === "flyby" },
     { panel: "sun", key: "drvV", label: "Launch speed", type: "log", min: 12, max: 150000, def: 30, fmt: (v) => kms(v * 1000), show: (p) => p.method === "driver" },
     { panel: "sun", key: "olaPayload", label: "Mass per launch", type: "log", min: 1e3, max: 1e12, def: 1e6, fmt: (v) => sci(v) + " kg", show: (p) => p.method === "driver" },
+    { panel: "sun", key: "takeMoon", label: "Take the Moon along", type: "check", def: true },
     { panel: "sun", key: "oortN", label: "Comets in the Oort cloud", type: "log", min: 1e10, max: 1e13, def: K.oortCount, fmt: (v) => sci(v) },
 
     { panel: "gal", key: "galOn", label: "Go on through the Galactic Centre", type: "check", def: true },
@@ -97,10 +98,17 @@
     { panel: "gal", key: "galDrop", label: "How the drop and the push are made", type: "select", def: "open", options: [["open", "Not yet known: the open problem"], ["driver", "Throwing mass off the Earth (only if it becomes necessary)"]], show: (p) => p.galOn },
     { panel: "gal", key: "galVex", label: "Launch speed for the galactic pushes", type: "log", min: 30, max: 150000, def: 30000, fmt: (v) => kms(v * 1000), show: (p) => p.galOn && p.galDrop === "driver" },
     { panel: "gal", key: "target", label: "Destination", type: "select", def: "Andromeda", options: [], show: (p) => p.galOn },
+    { panel: "gal", key: "galHalo", label: "The Milky Way's dark halo", type: "select", def: String(K.mwHaloEdge),
+      options: [[String(K.mwHaloEdge), "Ends at " + K.mwHaloEdge / 1000 + " kpc (about its virial radius)"], ["200000", "Ends at 200 kpc"], ["300000", "Ends at 300 kpc"], ["0", "No edge (its pull reaches to infinity)"]], show: (p) => p.galOn },
     { panel: "gal", key: "H0", label: "Hubble constant", type: "select", def: String(K.H0),
       options: [[String(K.H0), K.H0 + " km/s/Mpc (Planck 2018)"], [String(K.H0local), K.H0local + " km/s/Mpc (SH0ES 2022)"]] },
 
     { panel: "nrg", key: "people", label: "People to take", type: "log", min: 1e6, max: 2e10, def: K.population, fmt: (v) => sci(v) },
+    { panel: "life", key: "kWLive", label: "Power per person for living (today's world average is 2.4 kW)", type: "log", min: 0.1, max: 100, def: 2.4, fmt: (v) => sci(v) + " kW" },
+    { panel: "life", key: "kWFood", label: "Power per person to grow food under lights (an assumption)", type: "log", min: 0.1, max: 100, def: 10, fmt: (v) => sci(v) + " kW" },
+    { panel: "life", key: "m2", label: "Living floor per person", type: "log", min: 5, max: 500, def: 50, fmt: (v) => grp(v) + " m²" },
+    { panel: "life", key: "levelM", label: "Height of each level", type: "range", min: 2.5, max: 10, step: 0.5, def: 4, fmt: (v) => v + " m" },
+    { panel: "life", key: "overhead", label: "Farms, plant, halls and corridors, per unit of living floor", type: "range", min: 0, max: 10, step: 0.25, def: 3, fmt: (v) => "× " + v },
     { panel: "nrg", key: "shipKg", label: "Ship mass per person (habitat, air, water, food, shielding)", type: "log", min: 1e3, max: 1e7, def: 1e5, fmt: (v) => grp(v / 1000) + " t" },
     { panel: "nrg", key: "shipYears", label: "Time to launch everyone", type: "log", min: 1, max: 1e6, def: 100, fmt: (v) => years(v) },
     { panel: "col", key: "colV", label: "Colony ship speed", type: "log", min: 1e-4, max: 0.5, def: 0.01, fmt: (v) => sci(v * 100) + "% of light" }
@@ -174,13 +182,15 @@
     r.aAt = (t) => (p.migrate && t > r.tMigStart) ? Math.max(1, P.aForInsolation(Math.min(t, r.tMS), p.keepS)) : 1;
     const tDep = p.depYr;
     r.aDep = r.aAt(tDep);
-    r.migE = P.migrationEnergy(1, r.aDep);
+    // With the Moon along, everything that moves the Earth moves 1.2% more mass
+    r.massFactor = p.takeMoon ? 1 + K.Mmoon / K.Mearth : 1;
+    r.migE = P.migrationEnergy(1, r.aDep) * r.massFactor;
     const vinf = p.vinf * 1000;
-    const period = 2 * Math.PI * Math.sqrt((r.aDep * K.AU) ** 3 / K.GMsun) / K.year;
-    r.impulsive = p.escDur < 0.1 * period;
-    r.escDv = r.impulsive ? P.escapeDvImpulse(r.aDep, vinf) : P.escapeDvSpiral(r.aDep, vinf);
+    // The escape, followed step by step: a steady push lasting about escDur
+    r.spiral = memo("spiral", [r.aDep, vinf, p.escDur], () => P.spiralEscape({ aAU: r.aDep, vinf: Math.max(vinf, 1), years: p.escDur }));
+    r.escDv = r.spiral.dv;
     r.escDvImp = P.escapeDvImpulse(r.aDep, vinf);
-    r.escE = P.escapeEnergy(r.aDep, vinf);
+    r.escE = P.escapeEnergy(r.aDep, vinf) * r.massFactor;
     r.migDv = P.migrationDvSpiral(1, r.aDep);
     r.lateDeparture = !p.migrate && tDep > r.tHZ;
     r.pastMS = tDep > r.tMS;
@@ -202,31 +212,48 @@
     r.mdRate = r.mdEsc.massOut / p.olaPayload / (p.escDur * K.year) / (26 * K.docOLAperNode);
     r.escPower = r.escE / (p.escDur * K.year);
     // Leaving
-    r.cruise = memo("cruise", [r.aDep, vinf], () => P.cruiseTable(r.aDep, Math.max(vinf, 1), 3e5));
-    r.tHelio = P.timeToRadius(r.cruise, K.heliopause);
-    r.t50k = P.timeToRadius(r.cruise, K.docExitAU);
-    r.tOort = P.timeToRadius(r.cruise, K.oortOuter);
+    // The way out: the push (step by step), then the coast from where it ended. Times from departure.
+    r.out = memo("out", [r.aDep, vinf, p.escDur], () => {
+      const sp = r.spiral, end = sp.endAU;
+      const coast = P.cruiseTable(end, Math.max(vinf, 1), Math.max(3e5, end * 10));
+      return sp.table.concat(coast.slice(1).map(([t, a]) => [t + sp.years, a]));
+    });
+    r.cruise = r.out;
+    r.tHelio = P.timeToRadius(r.out, K.heliopause);
+    r.t50k = P.timeToRadius(r.out, K.docExitAU);
+    r.tOort = P.timeToRadius(r.out, K.oortOuter);
+    // The surface: when it falls below freezing on the way out (a mean of 0 °C)
+    const sFreeze = P.sunlightForTemp(273.15);
+    r.tFreeze = (function () {
+      for (const [dt, a] of r.out) if (P.lum(Math.min(tDep + dt, r.tMS)) / (a * a) < sFreeze) return tDep + dt;
+      return Infinity;
+    })();
     r.vinfForDoc = VINF_FOR_DOC;
     r.oort = P.oortHazard({ N: p.oortN, rInAU: K.oortInner, rOutAU: K.oortOuter, vinf });
     r.tSurf = Math.pow(K.geoHeat / (4 * Math.PI * K.Rearth ** 2) / K.sigmaSB, 0.25);
     // The Galaxy
     r.galOn = p.galOn;
-    r.gal = memo("gal", [p.rpAU, p.burnKms], () => P.galRoute({ rpAU: p.rpAU, burnKms: p.burnKms }));
-    r.galTab = memo("galTab", [p.rpAU, p.burnKms], () => P.galTables(r.gal));
-    r.tLeave = tDep + p.escDur;   // the escape push runs from tDep to tLeave; the coast starts then
-    r.tDrop = r.tLeave + (isFinite(r.tOort) ? r.tOort : 0);
+    P.haloEdge = Number(p.galHalo) || 0;
+    r.gal = memo("gal", [p.rpAU, p.burnKms, p.galHalo, K.vcSun], () => P.galRoute({ rpAU: p.rpAU, burnKms: p.burnKms }));
+    r.galTab = memo("galTab", [p.rpAU, p.burnKms, p.galHalo, K.vcSun], () => P.galTables(r.gal));
+    r.tLeave = tDep + r.spiral.years;   // the escape push runs from tDep to tLeave; the coast starts then
+    r.tDrop = tDep + Math.max(r.spiral.years, isFinite(r.tOort) ? r.tOort : 0);
     r.tGC = r.tDrop + r.galTab.fall[r.galTab.fall.length - 1][0];
     const gv = p.galVex * 1000;
     r.mdDrop = P.massDriver({ dv: r.gal.dvDrop * 1000, vLaunch: gv });
     r.mdBurn = P.massDriver({ dv: p.burnKms * 1000, vLaunch: gv, M: K.Mearth - r.mdDrop.massOut });
-    r.dropE = 0.5 * K.Mearth * (r.gal.dvDrop * 1000) ** 2;
+    r.dropE = 0.5 * K.Mearth * r.massFactor * (r.gal.dvDrop * 1000) ** 2;
+    // The alternatives for the drop: move the whole solar system instead, or wait for Andromeda
+    r.shk = P.shkadov({ share: 1, dv: r.gal.dvDrop * 1000 });
     r.directMd = P.massDriver({ dv: r.gal.directDv * 1000, vLaunch: gv });
     r.mdDropRef = P.massDriver({ dv: r.gal.dvDrop * 1000, vLaunch: 0.1 * K.c });
     r.starRate = P.starPassRate(1, 30000);   // a star within 1 AU, at a typical 30 km/s
     // Energy budget
-    r.burnE = 0.5 * K.Mearth * (((r.gal.vp + p.burnKms) * 1000) ** 2 - (r.gal.vp * 1000) ** 2);
+    r.burnE = 0.5 * K.Mearth * r.massFactor * (((r.gal.vp + p.burnKms) * 1000) ** 2 - (r.gal.vp * 1000) ** 2);
     r.stores = P.energyStores(tDep);
     r.liveE = K.worldPower * tDep * K.year;
+    r.life = P.lifeSupport({ people: p.people, kWLive: p.kWLive, kWFood: p.kWFood, m2: p.m2, levelM: p.levelM, overhead: p.overhead });
+    r.moon = P.moonCheck({ aAU: 1, kickMs: p.method === "flyby" ? r.fb.dvEarth : 0 });
     r.ships = P.shipsForAll({ people: p.people, kgPerPerson: p.shipKg, vinf: Math.max(vinf, 1), launchPerYear: K.launchPerYear });
     r.shipsRate = r.ships.mass / p.shipYears;
     r.tooClose = p.rpAU < 2 * r.gal.rTidalAU;
@@ -274,9 +301,10 @@
       { t: K.gliese710.years, label: "Gliese 710 passes through the Oort cloud", show: true },
       { t: tDep, label: "departure: the escape push begins", show: true },
       { t: r.tLeave, label: "the escape push ends: the Earth coasts away", show: true },
-      { t: r.tLeave + r.tHelio, label: "past the heliopause", show: true },
-      { t: r.tLeave + r.t50k, label: "50,000 AU (the published exit)", show: true },
-      { t: r.tLeave + r.tOort, label: "clear of the Oort cloud", show: true },
+      { t: tDep + r.tHelio, label: "past the heliopause", show: true },
+      { t: tDep + r.t50k, label: "50,000 AU (the published exit)", show: true },
+      { t: tDep + r.tOort, label: "clear of the Oort cloud", show: true },
+      { t: r.tFreeze, label: "the surface falls below freezing: everyone underground by now", show: true },
       { t: r.tGC, label: "closest approach to Sgr A*", show: r.galOn },
       { t: r.tArrive, label: "arrival: " + tg.name, show: r.galOn && isFinite(r.tArrive) },
       { t: r.tMS, label: "the Sun leaves the main sequence", show: true },
@@ -291,10 +319,12 @@
     const r = R, out = { phase: "", au: null, gal: null };
     const tDep = plan.depYr;
     if (t < tDep) { out.au = r.aAt(t); out.phase = t < 1e4 ? "Building the grid, the flywheels and the accelerators" : t < r.tMigStart || !plan.migrate ? "In orbit round the Sun" : "Migrating outward as the Sun brightens"; }
-    else if (t < r.tLeave) { out.au = r.aDep; out.phase = "The escape push is under way"; }
     else if (t < r.tDrop || !r.galOn) {
-      out.au = P.radiusAtTime(r.cruise, t - r.tLeave);
-      out.phase = t - r.tLeave < r.tHelio ? "Leaving the Sun" : t - r.tLeave < r.tOort ? "Crossing the Oort cloud" : "Between the stars, still moving with the Sun round the Galaxy";
+      const dt = t - tDep;
+      out.au = P.radiusAtTime(r.out, dt);
+      out.phase = (t < r.tLeave ? "The escape push is under way: " : "") +
+        (dt < r.tHelio ? "leaving the Sun" : dt < r.tOort ? "crossing the Oort cloud" : "between the stars, still moving with the Sun round the Galaxy");
+      out.phase = out.phase[0].toUpperCase() + out.phase.slice(1);
     }
     out.gal = r.sunAt(Math.min(t, r.galOn ? r.tDrop : t));
     if (r.galOn && t >= r.tDrop) {
@@ -335,7 +365,7 @@
     }
     for (const f of FIELDS) {
       const pn = PANELS.find(q => q.id === f.panel);
-      const hostEl = pn ? pn.el.querySelector(".fields") : $(f.panel === "nrg" ? "energy-fields" : "colony-fields");
+      const hostEl = pn ? pn.el.querySelector(".fields") : $({ nrg: "energy-fields", life: "life-fields" }[f.panel] || "colony-fields");
       const wrap = document.createElement("div"); wrap.className = "field" + (f.type === "check" ? " check" : "");
       const id = "f-" + f.key;
       if (f.type === "check") {
@@ -446,9 +476,11 @@
       p.migrate ? `<p><b>Moving out:</b> to ${r.aDep.toFixed(3)} AU by departure, ${sci(r.migE)} J <span class="cmp">${energyCmp(r.migE)}</span></p>` : "",
       r.lateDeparture ? `<p class="v-no">✗ Departure comes after the Earth has left the habitable zone: move it outward, or leave sooner.</p>` : "",
       r.pastMS ? `<p class="v-no">✗ Departure is after the Sun leaves the main sequence (in ${years(r.tMS)}); the brightness model no longer holds.</p>` : "",
-      `<p><b>Escape:</b> ${kms(r.escDv)} ${r.impulsive ? "in one quick push" : "as a slow spiral"} (one quick push would need ${kms(r.escDvImp)}), ${sci(r.escE)} J <span class="cmp">${energyCmp(r.escE)}; as power over the push, ${sci(r.escPower)} W</span></p>`,
+      `<p><b>Escape:</b> ${kms(r.escDv)} of push over ${years(r.spiral.years)}, followed step by step (one quick push from a still orbit would need ${kms(r.escDvImp)}), ${sci(r.escE)} J <span class="cmp">${energyCmp(r.escE)}; as power over the push, ${sci(r.escPower)} W</span></p>`,
       ...methodOut,
-      `<p><b>On the way out:</b> heliopause in ${years(r.tHelio)}, 50,000 AU in ${years(r.t50k)}, clear of the Oort cloud in ${years(r.tOort)}</p>`,
+      `<p><b>On the way out</b> (from departure): heliopause in ${years(r.tHelio)}, 50,000 AU in ${years(r.t50k)}, clear of the Oort cloud in ${years(r.tOort)}; the push ends ${grp(r.spiral.endAU)} AU out</p>`,
+      `<p><b>The Moon:</b> ${p.takeMoon ? "comes along" : "is left behind (it would come along unless pushed away)"}. It sits at ${Math.round(r.moon.hillShare * 100)}% of the distance where the Sun's pull would take it from the Earth, and that distance grows as the Earth leaves; ${p.method === "flyby" ? "each asteroid pass changes the Earth's speed by " + sci(r.moon.kickShare * 100, 2) + "% of the Moon's orbital speed, far too little to lose it" : "a slow push leaves it undisturbed"}. ${p.takeMoon ? "It adds 1.2% to every energy figure, and it keeps steadying the Earth's tilt." : ""}</p>`,
+      `<p><b>The surface:</b> ${isFinite(r.tFreeze) ? "falls below freezing " + years(r.tFreeze - p.depYr) + " after departure: by then everyone must be living underground" : "never falls below freezing on this plan"}.</p>`,
       `<p class="note">The published 7,961 years to 50,000 AU holds if the Earth leaves at ${kms(r.vinfForDoc)}, close to its orbital speed today.</p>`,
       `<p><b>Oort cloud:</b> expected collisions crossing it ${sci(r.oort.lambda, 2)}, against ${sci(r.oort.background, 2)} ordinary 1 km impacts over the same ${years(r.oort.years)}. The cloud is so sparse (one comet per ${sci(1 / r.oort.density / K.AU ** 3, 2)} cubic AU) that crossing it adds almost nothing to the risk.</p>`,
       `<p class="note">Far from the Sun the surface, warmed only by the Earth's own ${sci(K.geoHeat / 1e12, 2)} TW of internal heat, settles near ${Math.round(r.tSurf)} K (${Math.round(r.tSurf - 273.15)} °C). Life must move underground, as the plan intends.</p>`
@@ -459,7 +491,8 @@
     $("out-gal").innerHTML = p.galOn ? [
       `<p><b>Drop towards the centre:</b> cancel ${kms(g.dvDrop * 1000)} of the Sun's orbital speed, ${sci(r.dropE)} J <span class="cmp">${energyCmp(r.dropE)}</span></p>`,
       p.galDrop === "driver" ? `<p><b>…by throwing away</b> ${sci(r.mdDrop.fraction * 100, 3)}% of the Earth at ${kms(p.galVex * 1000)}</p>`
-        : `<p class="v-big">? <b>The open problem:</b> no known way to make this drop without an engine. Gravity assists need something moving to take energy from, and a star passes within 1 AU of the Earth about once in ${years(1 / r.starRate)}. Throwing mass off instead would take ${sci(r.mdDropRef.fraction * 100, 2)}% of the Earth even at a tenth of light speed. Leaving the Sun is possible without it; this leg is where the plan needs a new idea, or the Milky Way's meeting with Andromeda.</p>`,
+        : `<p class="v-big">? <b>The open problem:</b> no known way to make this drop without an engine. Gravity assists need something moving to take energy from, and a star passes within 1 AU of the Earth about once in ${years(1 / r.starRate)}. Throwing mass off instead would take ${sci(r.mdDropRef.fraction * 100, 2)}% of the Earth even at a tenth of light speed. Leaving the Sun is possible without it; this leg is where the plan needs a new idea.</p>`,
+          `<p class="note"><b>The alternatives, measured:</b> moving the whole solar system instead, with a mirror turning sunlight into thrust (a Shkadov thruster, at its most), gives about ${sci(r.shk.dvPerGyr / 1000, 2)} km/s every billion years: the ${grp(r.gal.dvDrop)} km/s drop would take ${years(r.shk.yearsFor)}, longer than the Sun will shine. Waiting is the other way: the Milky Way and Andromeda have about an even chance of merging within 10 billion years (Sawala et al. 2025), bringing another galaxy to us.</p>`,
       `<p><b>Fall:</b> ${years(r.tGC - r.tDrop)}, reaching ${kms(g.vp * 1000)} (${(g.vpOverC * 100).toFixed(1)}% of light) at ${sci(p.rpAU)} AU from Sgr A*</p>`,
       r.tooClose ? `<p class="v-no">✗ Too close: Sgr A*'s tides tear the Earth apart inside ${g.rTidalAU.toFixed(2)} AU.</p>` : "",
       r.amongS ? `<p class="v-big">▲ Among the S-stars: S2 itself comes within ${K.s2Peri} AU of Sgr A*.</p>` : "",
@@ -471,7 +504,7 @@
       tr.name === "Andromeda" ? `<p class="note">Andromeda is already falling towards us, at about 110 km/s. The two may merge within 10 billion years (an even chance, Sawala et al. 2025).</p>` : "",
       `<p><b>Reach, ever:</b> ${r.reachMpc.toFixed(2)} Mpc, ${g.vinf > 0 ? "at " + kms(g.vinf * 1000) + ", as the universe's expansion slows anything moving through it" : "the farthest the bound orbit climbs"}${r.reach2mrs ? `; ${grp(r.reach2mrs.inside)} of 2MRS's ${grp(r.reach2mrs.all)} galaxies (${(100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2)}%)` : ""}. Light sent today reaches ${r.lightReachGly.toFixed(2)} Gly.</p>`
     ].join("") : `<p>The Earth stays with the Sun's orbit round the Galaxy, a wandering planet among the stars.</p>`;
-    renderLedger(); renderColonies(); renderEnergy();
+    renderLedger(); renderColonies(); renderEnergy(); renderLife(); renderTimeline();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -502,6 +535,100 @@
     }
     $("ledger").innerHTML = "<tr><th>Role</th><th>Step</th><th>Needs</th><th>Compared with</th><th>Verdict</th></tr>" +
       rows.map(rw => "<tr>" + rw.map(c => "<td>" + c + "</td>").join("") + "</tr>").join("");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Life support, and the timeline as a table
+  // ---------------------------------------------------------------------------------------------
+  function renderLife() {
+    const L = R.life, p = plan;
+    const fuel = (y) => y > 1e10 ? "longer than the Sun will shine" : years(y);
+    $("life").innerHTML = [
+      `<p><b>Power:</b> ${sci(L.watts / 1e12)} TW for ${sci(p.people)} people (${sci(p.kWLive + p.kWFood)} kW each). The Earth's own heat (${sci(K.geoHeat / 1e12, 2)} TW) covers ${Math.round(Math.min(1, L.geoShare) * 100)}% of it.</p>`,
+      `<p><b>Fuel:</b> fusing the oceans' deuterium would last ${fuel(L.deuteriumYears)}; fissioning the crust's uranium and thorium, ${fuel(L.fissionYears)}. The journey to Andromeda on this plan takes ${isFinite(R.tArrive) ? years(R.tArrive - p.depYr) : "—"} from departure.</p>`,
+      `<p><b>Space:</b> ${sci(L.floorKm2)} km² of floor (${(100 * L.floorKm2 / 1.49e8).toFixed(1)}% of the Earth's land area), ${sci(L.volume / 1e9)} km³ dug out: ${sci(L.rock)} kg of rock, ${sci(L.rock / K.anthroMass, 2)} times everything humanity has built so far.</p>`,
+      `<p><b>When:</b> ${isFinite(R.tFreeze) ? "the surface falls below freezing " + years(R.tFreeze - p.depYr) + " after departure begins (" + years(R.tFreeze) + " from now)" : "on this plan the surface never falls below freezing"}. The move underground should be finished long before, and can begin as soon as the first cities are built: there are ${years(p.depYr)} to do it.</p>`,
+      `<p class="note">Underground, the Earth itself is the shield: from radiation, from impacts, and from the cold. Space and heat are the hard limits; with fusion, fuel is not.</p>`
+    ].join("");
+  }
+  function renderTimeline() {
+    const dep = plan.depYr;
+    $("timeline").innerHTML = "<tr><th>From now</th><th>After departure</th><th>What happens</th></tr>" +
+      R.events.map(e => `<tr><td>${e.t < 1 ? "now" : years(e.t)}</td><td>${e.t >= dep ? (e.t - dep < 1 ? "at once" : years(e.t - dep)) : "—"}</td><td>${esc(e.label)}</td></tr>`).join("");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Robustness: the plan again at the low and high end of each uncertain figure
+  // ---------------------------------------------------------------------------------------------
+  const ROBUST = [
+    { what: "Crossing the Oort cloud adds little risk", k: "oortCount", plan: "oortN", lo: 1e11, hi: 1e13, why: "comets in the cloud, 10^11 to 10^13",
+      show: (r) => sci(r.oort.lambda, 2) + " expected collisions", holds: (r) => r.oort.lambda < 0.1 },
+    { what: "The surface becomes too hot in about a billion years", k: "hzRunaway", plan: "hzS", lo: 1.015, hi: 1.2, why: "where the runaway greenhouse begins, 1.015 to 1.2 × today's sunlight",
+      show: (r) => years(r.tHZ), holds: (r) => r.tHZ > 1e8 && r.tHZ < 3e9 },
+    { what: "Andromeda can be reached after the slingshot", plan: "galHalo", lo: "0", hi: "200000", why: "the dark halo: no edge, or ending at 200 kpc",
+      show: (r) => isFinite(r.tTravel) ? years(r.tTravel) : "never", holds: (r) => isFinite(r.tTravel) },
+    { what: "The drop to the Galactic Centre needs about 240 km/s", k: "vcSun", lo: 220, hi: 240, why: "the Sun's orbital speed, 220 to 240 km/s",
+      show: (r) => kms(r.gal.dvDrop * 1000), holds: (r) => r.gal.dvDrop > 200 },
+    { what: "Stellar assists cannot make that drop", k: "starDensity", lo: 0.05, hi: 0.2, why: "stars per cubic parsec, 0.05 to 0.2",
+      show: (r) => "a close pass every " + years(1 / r.starRate), holds: (r) => 1 / r.starRate > 1e12 },
+    { what: "Fusion can power everyone for longer than the journey", plan: "kWFood", lo: 3, hi: 50, why: "power to grow each person's food, 3 to 50 kW",
+      show: (r) => years(r.life.deuteriumYears), holds: (r) => !isFinite(r.tArrive) || r.life.deuteriumYears > r.tArrive - plan.depYr },
+    { what: "Only Jupiter's orbit can pay for leaving the Sun", k: "ddEnergy", lo: K.ddEnergy, hi: 2 * K.ddEnergy, why: "fusion's yield, as stated or even doubled",
+      show: (r) => sci(r.stores.deuterium.J / (r.migE + r.escE) * 100, 2) + "% from fusing all the deuterium", holds: (r) => r.stores.deuterium.J < r.migE + r.escE },
+    { what: "2MRS: almost nothing is reachable", plan: "H0", lo: String(K.H0), hi: String(K.H0local), why: "the Hubble constant, Planck or SH0ES",
+      show: (r) => r.reach2mrs ? (100 * r.reach2mrs.inside / r.reach2mrs.all).toFixed(2) + "% of 2MRS in reach" : "(2MRS not loaded)", holds: (r) => !r.reach2mrs || r.reach2mrs.inside / r.reach2mrs.all < 0.05 }
+  ];
+  function runRobust() {
+    const saved = Object.assign({}, plan), rows = [];
+    for (const it of ROBUST) {
+      const res = [it.lo, it.hi].map(v => {
+        const oldK = it.k ? K[it.k] : undefined;
+        if (it.k) K[it.k] = v;
+        if (it.plan) plan = Object.assign({}, saved, { [it.plan]: v });
+        for (const n in memoStore) delete memoStore[n];
+        compute();
+        const out = { text: it.show(R), ok: it.holds(R) };
+        if (it.k) K[it.k] = oldK;
+        plan = Object.assign({}, saved);
+        return out;
+      });
+      const ok = res.every(x => x.ok);
+      rows.push(`<tr><td>${it.what}</td><td>${it.why}</td><td>${res[0].text}</td><td>${res[1].text}</td><td>${ok ? '<span class="v-ok">✓ holds at both ends</span>' : '<span class="v-big">▲ depends on it</span>'}</td></tr>`);
+    }
+    for (const n in memoStore) delete memoStore[n];
+    compute(); renderOutputs();
+    $("robust").innerHTML = "<tr><th>Conclusion</th><th>Uncertain figure</th><th>Low end</th><th>High end</th><th>Verdict</th></tr>" + rows.join("");
+    $("robust-status").textContent = " tested " + new Date().toLocaleTimeString("en-GB");
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Whole plans, and a report of one
+  // ---------------------------------------------------------------------------------------------
+  const PRESETS = {
+    published: {},
+    conservative: { hzS: 1.015, oortN: 1e13, trainPreset: "record", kWFood: 30, m2: 30, flyEta: 0.3, escDur: 1e8, galHalo: "0", H0: String(K.H0local) },
+    optimistic: { hzS: 1.2, oortN: 1e11, trainPreset: "tube", kWFood: 3, flyMass: 1e20, flyEta: 0.8, galHalo: "200000", burnKms: 40 }
+  };
+  function report() {
+    const r = R, st = OLAP.data.status, man = OLAP.manifest.datasets;
+    const rep = {
+      title: "OLAP simulation: a plan and its results",
+      made: new Date().toISOString(), page: "Pages/space.html (v0.6)", link: location.href,
+      plan: Object.assign({}, plan),
+      results: {
+        steering: { momentum: r.fw.dL, mass_kg: r.fw.totalMass, energy_J: r.fw.energy, spinUp_years: r.fw.spinUpYears },
+        sun: { tooHot_years: r.tHZ, departure_AU: r.aDep, migration_J: r.migE, escape_J: r.escE, escape_dv_ms: r.escDv, push_years: r.spiral.years, surfaceFreezes_yearsFromNow: r.tFreeze },
+        route: { heliopause_years: r.tHelio, au50000_years: r.t50k, oortCleared_years: r.tOort, oortCollisions: r.oort.lambda, dropToCentre_kms: r.gal.dvDrop, fall_years: r.tGC - r.tDrop, vinfAfterSlingshot_kms: r.gal.vinf, target: r.targetObj.name, travel_years: r.tTravel, reach_Mpc: r.reachMpc },
+        life: r.life, events: r.events.map(e => ({ yearsFromNow: e.t, what: e.label }))
+      },
+      ledger: [...document.querySelectorAll("#ledger tr")].slice(1).map(tr => [...tr.cells].map(c => c.textContent)),
+      datasets: Object.keys(man).map(id => ({ id, recorded: man[id], read: st[id] ? { state: st[id].state, sha256: st[id].sha256, verified: st[id].verified, via: st[id].via } : null })),
+      constants: Object.fromEntries(Object.entries(C).map(([k, o]) => [k, { value: o.v, unit: o.u, source: o.src, checked: o.audit || "to check against the source" }]))
+    };
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(rep, null, 2)], { type: "application/json" }));
+    a.download = "olap-plan-" + rep.made.slice(0, 10) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -586,9 +713,9 @@
       if (Array.isArray(v)) s = v.map(x => Array.isArray(x) ? x.join(" ") : (x && x.name) || x).join(", ");
       else if (typeof v === "object") s = Object.entries(v).map(([a, b]) => a + " " + b).join(", ");
       else s = typeof v === "number" ? sci(v, 6) : v;
-      return `<tr><td>${k}</td><td>${s} ${C[k].u || ""}</td><td>${C[k].src}</td></tr>`;
+      return `<tr><td>${k}</td><td>${s} ${C[k].u || ""}</td><td>${C[k].src}</td><td>${C[k].audit || "to check against the source"}</td></tr>`;
     });
-    $("constants").innerHTML = "<tr><th>Name</th><th>Value</th><th>Source</th></tr>" + rows.join("");
+    $("constants").innerHTML = "<tr><th>Name</th><th>Value</th><th>Source</th><th>Checked</th></tr>" + rows.join("");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -957,6 +1084,16 @@
     (navigator.clipboard ? navigator.clipboard.writeText(location.href) : Promise.reject()).then(() => $("copy-status").textContent = " copied", () => $("copy-status").textContent = " copy this page's address");
   });
   $("defaults").addEventListener("click", () => { plan = Object.assign({}, DEF); changed(); });
+  document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
+    plan = Object.assign({}, DEF, PRESETS[b.dataset.preset]); changed();
+    $("preset-note").textContent = "Now showing the " + b.dataset.preset + " plan. " + $("preset-note").textContent.replace(/^Now showing the \w+ plan\. /, "");
+  }));
+  $("robust-btn").addEventListener("click", () => {
+    $("robust-status").textContent = " reading 2MRS, then testing…";
+    // Wait for 2MRS at most 10 seconds; without it, that row says so
+    Promise.race([loadData("2mrs"), new Promise(ok => setTimeout(ok, 10000))]).then(() => setTimeout(runRobust, 20));
+  });
+  $("report-btn").addEventListener("click", report);
   window.addEventListener("resize", () => { scheduleCharts(); });
   const fsBtn = $("fs-btn"), simContainer = $("sim-container");
   fsBtn.addEventListener("click", () => {

@@ -120,6 +120,9 @@
     { id: "asteroid", name: "A 10 km rocky asteroid", M: 1.047e15, R: 5000, k: 0.4, T: 21600 }
   ], src: "NASA fact sheets (Earth, Mars, Moon); Park et al. 2016 (Ceres); the asteroid is illustrative (density 2,000 kg/m^3, 6 h day)" };
   C.starDensity = { v: 0.1, u: "stars per pc^3", src: "local stellar number density, order of magnitude" };
+  C.surfaceTempNow = { v: 288, u: "K", src: "the Earth's mean surface temperature (about 15 °C)" };
+  C.rockDensity = { v: 2700, u: "kg/m^3", src: "typical crustal rock (granite)" };
+  C.mwHaloEdge = { v: 250000, u: "pc", src: "about the Milky Way's virial radius (order of 250 kpc); with it the model's escape speed at the Sun is 540 km/s, against 528 +24/-25 measured" };
   C.typicalStarMass = { v: 0.5, u: "Msun", src: "most stars are red dwarfs; order of magnitude" };
   C.maglevRecord = { v: 167.5, u: "m/s", src: "603 km/h, JR Central L0 series, 2015" };
   // Train speeds to choose from: realistic first. Safety rises with every step up.
@@ -140,6 +143,19 @@
   C.population = { v: 8.2e9, u: "people", src: "UN World Population Prospects 2024" };
   C.launchPerYear = { v: 3e6, u: "kg to orbit per year", src: "order of magnitude, worldwide c. 2024" };
   C.tntMegaton = { v: 4.184e15, u: "J", src: "definition" };
+
+  // The source audit: how each value has been checked so far. Anything not listed is still to be
+  // checked against its source (the original paper or catalogue, with table or page). When one is
+  // checked, add it here with what it was checked against.
+  const AUDIT = {
+    "exact (a definition)": ["c", "year", "AU", "pc", "ly", "tntMegaton"],
+    "nominal value (IAU resolution)": ["GMsun", "Lsun", "ReqEarth", "Mearth"],
+    "CODATA 2018 (standard)": ["G", "sigmaSB"],
+    "the OLAP documents (Edward)": ["docNodes", "docOLAperNode", "docWheelDiameter", "docWheelRPM", "docShiftFraction", "docNudges", "docMassPerNudge", "docDepartureYears", "docExitYears", "docExitAU", "threeGorges"],
+    "kept from earlier versions of the page": ["REACH_GLY", "SEEN_GLY", "STARS_LOST_PER_SECOND"],
+    "an assumption, shown as such": ["typicalStarMass", "starDensity", "launchPerYear", "rockDensity", "surfaceTempNow", "materials", "trainSpeeds", "bodies"]
+  };
+  for (const [how, keys] of Object.entries(AUDIT)) for (const k of keys) if (C[k]) C[k].audit = how;
 
   root.OLAP = root.OLAP || {};
   root.OLAP.C = C;

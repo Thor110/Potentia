@@ -124,7 +124,7 @@
 <body>
 
 <h1>Potentia // OLAP Sandbox</h1>
-<div class="sub">Orbital Launch Accelerator Platform · planning &amp; feasibility simulation (v0.4)</div>
+<div class="sub">Orbital Launch Accelerator Platform · planning &amp; feasibility simulation (v0.6)</div>
 
 <div class="disclosure">
   <div class="t">AI Disclosure</div>
@@ -186,6 +186,10 @@
 </div>
 
 <div class="section-label">The Plan's Settings</div>
+<div class="box" style="padding:14px 18px">
+  <div class="box-text" style="margin-bottom:8px">Start from a whole plan, then change anything: <button class="btn-small" data-preset="published">Published</button><button class="btn-small" data-preset="conservative">Conservative</button><button class="btn-small" data-preset="optimistic">Optimistic</button></div>
+  <div class="note" id="preset-note">Published: the plan as written, with today's figures. Conservative: the pessimistic end of every uncertain figure. Optimistic: the hopeful end, still within known physics.</div>
+</div>
 <div class="panels" id="panels"></div>
 
 <div class="box">
@@ -205,6 +209,25 @@
 </div>
 
 <div class="box">
+  <div class="box-title">Life Support For Everyone</div>
+  <div class="box-text">Taking everyone means keeping everyone alive for the whole journey, underground, after the sunlight fades. What that needs: the power, the space dug out, and how long each fuel lasts. The food figure is an assumption until farming under lights at this scale is designed.</div>
+  <div class="panels" style="margin:0"><div class="panel" id="life-fields"></div><div class="panel"><div class="out" id="life" style="border:0;margin:0;padding:0"></div></div></div>
+</div>
+
+<div class="box">
+  <div class="box-title">Timeline</div>
+  <div class="box-text">Every event of the plan, in order (the same as the ticks on the chart above).</div>
+  <div class="tbl-wrap"><table id="timeline"></table></div>
+</div>
+
+<div class="box">
+  <div class="box-title">How Robust Are The Conclusions?</div>
+  <div class="box-text">Several figures are known only roughly. This runs the plan again at the low and the high end of each, and says whether the conclusion changes.</div>
+  <button class="btn-small" id="robust-btn">Test the conclusions</button> <span class="note" id="robust-status"></span>
+  <div class="tbl-wrap"><table id="robust"></table></div>
+</div>
+
+<div class="box">
   <div class="box-title">Colonies Along The Way</div>
   <div class="box-text" id="colony-intro"></div>
   <div class="field" id="colony-fields" style="max-width:520px"></div>
@@ -219,6 +242,7 @@
   <div style="margin-top:14px">
     <button class="btn-small" id="copy-link">Copy a link to this plan</button>
     <button class="btn-small" id="defaults">Back to the published plan</button>
+    <button class="btn-small" id="report-btn">Download this plan as a report</button>
     <span class="note" id="copy-status"></span>
   </div>
 </div>

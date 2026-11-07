@@ -417,6 +417,95 @@
     return { mass, vSurface, energy: 0.5 * mass * vSurface ** 2, years: mass / launchPerYear };
   };
 
+  // ---------------------------------------------------------------------------------------------
+  // The escape, step by step
+  // ---------------------------------------------------------------------------------------------
+  // A steady push along the Earth's motion (acceleration f, m/s^2) from a circular orbit at aAU,
+  // until the Earth is leaving with vinf. Far from escape, the orbit stays nearly circular and
+  // widens as da/dt = 2 f a^1.5 / sqrt(mu) (averaged over each orbit); once the push is no longer
+  // tiny next to the Sun's pull (beyond a_s, where f = 10^-3 of it), the motion is followed directly
+  // (fourth-order Runge-Kutta). Returns { table: [[years, AU]...], years, dv (m/s), aSwitch }.
+  // f is chosen from the time wanted: about (circular speed + vinf) / time.
+  P.spiralEscape = function ({ aAU, vinf, years }) {
+    const mu = K.GMsun, a0 = aAU * K.AU, v0 = Math.sqrt(mu / a0);
+    const f = (v0 + vinf) / (years * K.year);
+    const aS = Math.max(a0, Math.sqrt(mu / (1e-3 * f)));
+    const table = [[0, aAU]];
+    // Averaged phase, solved exactly: a^-1/2 = a0^-1/2 - f t / sqrt(mu)
+    const tS = Math.sqrt(mu) * (1 / Math.sqrt(a0) - 1 / Math.sqrt(aS)) / f;
+    for (let i = 1; i <= 200; i++) {
+      const t = tS * i / 200, a = 1 / (1 / Math.sqrt(a0) - f * t / Math.sqrt(mu)) ** 2;
+      table.push([t / K.year, a / K.AU]);
+    }
+    // Direct phase: position and velocity in the plane, starting circular at aS
+    let x = aS, y = 0, vx = 0, vy = Math.sqrt(mu / aS), t = tS;
+    const acc = (x, y, vx, vy) => {
+      const r = Math.hypot(x, y), v = Math.hypot(vx, vy), g = -mu / (r * r * r);
+      return [g * x + f * vx / v, g * y + f * vy / v];
+    };
+    for (let step = 0; step < 200000; step++) {
+      const r = Math.hypot(x, y), E = 0.5 * (vx * vx + vy * vy) - mu / r;
+      if (E >= 0.5 * vinf * vinf && E > 0) break;
+      // A step short against the orbit, the distance and the change of speed (once unbound the
+      // "orbit" is no measure at all)
+      const v = Math.hypot(vx, vy);
+      const dt = Math.min(2 * Math.PI * Math.sqrt(r * r * r / mu) / 400, 0.005 * r / v, 0.005 * (v + 1) / f);
+      const k1 = acc(x, y, vx, vy);
+      const k2 = acc(x + vx * dt / 2, y + vy * dt / 2, vx + k1[0] * dt / 2, vy + k1[1] * dt / 2);
+      const k3 = acc(x + (vx + k1[0] * dt / 2) * dt / 2, y + (vy + k1[1] * dt / 2) * dt / 2, vx + k2[0] * dt / 2, vy + k2[1] * dt / 2);
+      const k4 = acc(x + (vx + k2[0] * dt / 2) * dt, y + (vy + k2[1] * dt / 2) * dt, vx + k3[0] * dt, vy + k3[1] * dt);
+      x += dt * (vx + dt / 6 * (k1[0] + k2[0] + k3[0]));   // classical RK4 for x'' = acc
+      y += dt * (vy + dt / 6 * (k1[1] + k2[1] + k3[1]));
+      vx += dt / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]);
+      vy += dt / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]);
+      t += dt;
+      if (step % 20 === 0) table.push([t / K.year, Math.hypot(x, y) / K.AU]);
+    }
+    table.push([t / K.year, Math.hypot(x, y) / K.AU]);
+    return { table, years: t / K.year, dv: f * t, f, aSwitchAU: aS / K.AU, endAU: Math.hypot(x, y) / K.AU };
+  };
+
+  // Does the Moon come along? It stays bound while it is well inside the Earth's Hill sphere (the
+  // region where the Earth's pull beats the Sun's tide), and while no single kick to the Earth is a
+  // sizeable part of the Moon's orbital speed. Both only get easier as the Earth leaves the Sun.
+  P.moonCheck = function ({ aAU, kickMs }) {
+    const aMoon = 3.844e8, vMoon = 1022;
+    const hill = aAU * K.AU * Math.cbrt(K.Mearth / (3 * K.Msun));
+    return { hillShare: aMoon / hill, kickShare: kickMs / vMoon, stays: aMoon / hill < 0.5 && kickMs / vMoon < 0.1 };
+  };
+
+  // Moving the whole solar system: a mirror sends part of the Sun's light one way, and the Sun
+  // drifts the other, taking its planets with it (a Shkadov thruster). At most about L / (2c) of
+  // thrust. The speed it gives the Sun in a time (m/s), and the time for a given change (years).
+  P.shkadov = function ({ share, dv }) {
+    const F = (share == null ? 1 : share) * K.Lsun / (2 * K.c), a = F / K.Msun;
+    return { thrust: F, accel: a, dvPerGyr: a * 1e9 * K.year, yearsFor: dv / a / K.year };
+  };
+
+  // The Earth's mean surface temperature from its sunlight (in units of today's), keeping today's
+  // greenhouse warming, with the Earth's own heat as the floor when sunlight fades.
+  P.surfaceTemp = function (S) {
+    const sun = K.surfaceTempNow * Math.pow(Math.max(S, 0), 0.25);
+    const geo = Math.pow(K.geoHeat / (4 * Math.PI * K.Rearth ** 2) / K.sigmaSB, 0.25);
+    return Math.pow(sun ** 4 + geo ** 4, 0.25);
+  };
+  // Sunlight at which the mean surface temperature reaches T (K), in units of today's
+  P.sunlightForTemp = (T) => Math.pow(T / K.surfaceTempNow, 4);
+
+  // Keeping everyone alive: power, space under the ground, and how long each fuel lasts.
+  //   people; kW per person for living; kW per person for growing food under lights; m^2 of floor
+  //   per person; m per level; overhead (corridors, plant, farms) as a multiple of living floor.
+  P.lifeSupport = function ({ people, kWLive, kWFood, m2, levelM, overhead }) {
+    const W = people * (kWLive + kWFood) * 1000;
+    const stores = P.energyStores(0);
+    const volume = people * m2 * levelM * (1 + overhead);      // m^3 dug out
+    return {
+      watts: W, geoShare: K.geoHeat / W,
+      deuteriumYears: stores.deuterium.J / W / K.year, fissionYears: stores.fission.J / W / K.year,
+      volume, rock: volume * K.rockDensity, floorKm2: people * m2 * (1 + overhead) / 1e6
+    };
+  };
+
   // Leaving: distance against time on the way out, starting at aAU with speed sqrt(vinf^2 + 2mu/r)
   // (straight out; for distances far beyond the start the true hyperbola gives nearly the same).
   // Returns a table of [years, AU] from aAU out to rMaxAU.
@@ -470,31 +559,41 @@
   const Gpc = 4.300917270e-3;  // G in pc (km/s)^2 / Msun
   P.Gpc = Gpc;
   // Circular speeds squared (km/s)^2 of each part, at radius r in the plane.
+  // The halo can be given an edge (P.haloEdge, pc; 0 for none): beyond it no more halo mass, so
+  // its pull falls off as from a point. Inside, nothing changes.
+  P.haloEdge = 0;
+  const nfwM = (r, Ms) => { const x = r / K.mwHalo.rs; return Ms * (Math.log(1 + x) - x / (1 + x)); };
   function vc2Parts(r, Ms) {
-    const d = K.mwDisk, b = K.mwBulge, rs = K.mwHalo.rs, x = r / rs;
+    const d = K.mwDisk, b = K.mwBulge;
+    const rh = P.haloEdge > 0 ? Math.min(r, P.haloEdge) : r;
     return {
       bh: Gpc * K.MsgrA / r,
       bulge: Gpc * b.M * r / ((r + b.a) ** 2),
       disk: Gpc * d.M * r * r / Math.pow(r * r + (d.a + d.b) ** 2, 1.5),
-      halo: Ms ? Gpc * Ms * (Math.log(1 + x) - x / (1 + x)) / r : 0
+      halo: Ms ? Gpc * nfwM(rh, Ms) / r : 0
     };
   }
-  // The halo's mass scale, chosen so the circular speed at R0 is the measured one.
+  // The halo's mass scale, chosen so the circular speed at R0 is the measured one (worked out again
+  // whenever a constant it depends on changes).
   P.haloMs = (function () {
-    let cache = null;
+    let key = null, cache = null;
     return function () {
-      if (cache) return cache;
+      const k = [K.R0, K.vcSun, K.MsgrA, K.mwDisk.M, K.mwBulge.M, K.mwHalo.rs].join("|");
+      if (k === key) return cache;
       const p = vc2Parts(K.R0, 0), x = K.R0 / K.mwHalo.rs;
       cache = (K.vcSun ** 2 - p.bh - p.bulge - p.disk) * K.R0 / (Gpc * (Math.log(1 + x) - x / (1 + x)));
+      key = k;
       return cache;
     };
   })();
   P.galVc = (r) => { const p = vc2Parts(r, P.haloMs()); return Math.sqrt(p.bh + p.bulge + p.disk + p.halo); };
   // The potential in the plane (km/s)^2, zero far away.
   P.galPhi = function (r) {
-    const d = K.mwDisk, b = K.mwBulge, rs = K.mwHalo.rs;
-    return -Gpc * K.MsgrA / r - Gpc * b.M / (r + b.a) - Gpc * d.M / Math.sqrt(r * r + (d.a + d.b) ** 2)
-      - Gpc * P.haloMs() * Math.log(1 + r / rs) / r;
+    const d = K.mwDisk, b = K.mwBulge, rs = K.mwHalo.rs, Ms = P.haloMs(), e = P.haloEdge;
+    let halo;
+    if (e > 0 && r >= e) halo = -Gpc * nfwM(e, Ms) / r;
+    else halo = -Gpc * Ms * Math.log(1 + r / rs) / r + (e > 0 ? Gpc * (Ms * Math.log(1 + e / rs) - nfwM(e, Ms)) / e : 0);
+    return -Gpc * K.MsgrA / r - Gpc * b.M / (r + b.a) - Gpc * d.M / Math.sqrt(r * r + (d.a + d.b) ** 2) + halo;
   };
   P.galVesc = (r) => Math.sqrt(-2 * P.galPhi(r));
   P.galMassWithin = (r) => P.galVc(r) ** 2 * r / Gpc;

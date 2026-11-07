@@ -243,6 +243,43 @@ the findings:
 - **The data pipeline** now fetches and checks everything before writing anything, refuses
   error pages and missing columns, and can verify the repository's copies offline.
 
+### Step 10 — The plan forward begun (Edward and Claude, 7 November 2026)
+
+*Edward: make a start on all of it; tests as a script to run locally (no automated workflow).
+The Galactic Centre leg and the Moon were left open, so both stay in the page as choices.*
+
+- **The escape, step by step.** The push is now followed from the start: averaged over each orbit
+  while it is tiny next to the Sun's pull, then integrated directly. It needs about 58.6 km/s,
+  confirming the earlier estimate, but it changes the timing: on a 10-million-year push the
+  Earth crosses the heliopause about 4.5 million years after departure, and the push ends 16
+  million AU out, far beyond the Oort cloud.
+- **The surface freezes about 270,000 years into the push** (a mean below 0 °C): the deadline for
+  everyone to be living underground, about a billion years from now. There are a billion years to
+  prepare.
+- **The Moon comes along.** It sits at a quarter of the distance where the Sun could take it, and
+  that margin grows as the Earth leaves; each asteroid pass nudges the Earth by about a
+  hundred-thousandth of the Moon's orbital speed. It adds 1.2% to every energy figure, and keeps
+  steadying the Earth's tilt. It is a setting, on by default.
+- **A halo with an edge.** Ending the Milky Way's dark halo at 250 kpc (about its virial radius)
+  brings the model's escape speed at the Sun to 540 km/s, within the measured 528 (+24/−25). With
+  it, the default slingshot frees the Earth at about 116 km/s (Step 9's "just bound, out to
+  6.9 Mpc" was the halo without an edge, still a choice).
+- **The open problem, measured:** moving the whole solar system with a mirror turning sunlight
+  into thrust (a Shkadov thruster, at its most) gives about 10 km/s every billion years; the
+  242 km/s drop would take about 24 billion years, longer than the Sun will shine. Waiting for
+  Andromeda remains the other way.
+- **Life support for everyone (new).** For 8.2 billion people at 2.4 kW each for living and an
+  assumed 10 kW each to grow food under lights: about 100 TW. The Earth's own heat covers about
+  half; fusing the oceans' deuterium would last about 5 billion years, longer than the journey
+  to Andromeda (about 3.8 billion). Space: about 1.6 million km² of floor, some 6,600 km³ dug out,
+  16 times the mass of everything humanity has built so far.
+- **Robustness:** each conclusion re-run at both ends of its uncertain figure. All hold except
+  one: if food takes 50 kW a person, fusion fuel runs out before Andromeda. Growing food
+  efficiently underground is a real requirement, not a detail.
+- **The source audit begun:** every constant shows how it has been checked; 52 are still to be
+  checked against their sources.
+- **Presets, a downloadable report, a timeline table, and a test script** (`tools/test.mjs`).
+
 ---
 
 ## 4. Where each idea stands
@@ -267,6 +304,10 @@ the findings:
 | Slingshot round the Galactic Centre | Step 1 | open | works once there; the 242 km/s drop has no known way (Step 9) |
 | Steering smaller bodies; Dyson scale | Step 6 | open | small bodies look buildable |
 | Take everyone, not some | Step 7 | the aim | ships leave most behind |
+| The Moon comes along | Step 10 | current (a setting) | it stays bound; +1.2% to every energy figure |
+| Everyone underground before the surface freezes | Step 10 | current | about 270,000 years into the push; a billion years to prepare |
+| Move the whole solar system (Shkadov thruster) | Step 10 | measured: too slow for the drop | ~10 km/s per billion years |
+| Fusion powers everyone for the journey | Step 10 | holds if food is grown efficiently | fails at 50 kW a person |
 
 ## 5. Findings, with numbers
 
@@ -291,73 +332,70 @@ At today's record (603 km/h) each needs about 47 times more: the published shift
 
 ## 6. Open questions and the plan forward
 
-*(Claude, 6 November 2026, after the code review in Step 9. Ordered by what most improves the
-answer to the aim, a way to take everyone. Each item says what it would settle.)*
+*(Claude, 7 November 2026. Five milestones, each building on the one before. Marks: ✓ done,
+◐ begun, ○ to do. Each item says what it would settle.)*
 
 ### Open questions
 
-- **The Galactic Centre drop** (242 km/s) without an engine: the largest open problem.
-  Alternatives: stop at leaving the Sun; ride the Milky Way's meeting with Andromeda.
-- **The Moon:** does it come along? It steadies the Earth's tilt, could be steered itself, and
-  stays bound in a slow escape.
+- **The Galactic Centre drop** (242 km/s) without an engine: the largest open problem. Measured
+  so far: stellar assists (a close pass every 10¹⁵ years) and moving the solar system (24 billion
+  years) cannot do it. Still open: the Andromeda meeting; something not yet thought of.
+  **Edward's decision pending:** keep the leg in the main plan, or make leaving the Sun the goal.
+- **The Moon:** it comes along naturally (Step 10). **Edward's decision pending:** take it, or
+  not.
 - **Dyson-scale steering:** the same rings round a star or a ring habitat; formation-keeping
   for a swarm.
 - **Steering in transit:** pointing a pole along the direction of travel as a shield (a 90° turn
   needs about two Moons of trains at orbital speed).
 - **Safety engineering:** the uncounted items in Step 8, once designs exist.
 
-### Phase 1: trust the numbers
+### v0.6: trust the numbers
 
-1. **Audit every source** in `constants.js` against the original paper, adding the table or page
-   number. Settles: whether any figure the plan rests on is wrong.
-2. **Show uncertainty.** Several inputs are known only to a factor (comets in the Oort cloud,
-   the Galaxy's halo, the Hubble constant, the edge of the habitable zone). Run each result at the
-   low and high ends and show a range, not one number. Settles: which conclusions are robust.
-3. **Simulate the escape properly,** step by step: the spiral out, sunlight falling as it goes,
-   the Moon's orbit through it. Replaces the current approximation (circular speed plus the
-   speed left over).
-4. **A better Milky Way:** a halo that ends, a choice of published models, and the route in
-   three dimensions; relativity near Sgr A*. Settles: whether the slingshot leaves the Earth bound
-   or free, which today depends on the model.
+1. ◐ **Audit every source** against the original paper, with table or page. The audit status is
+   now shown for every constant; 52 remain to check (needs access to the papers).
+2. ✓ **Show uncertainty:** the robustness test runs each conclusion at both ends of its
+   uncertain figure. ○ Next: ranges on every headline figure, not only a pass/fail.
+3. ✓ **Simulate the escape step by step,** with sunlight and surface temperature falling as it
+   goes; ✓ the Moon checked. ○ Next: the Moon's orbit followed through the push.
+4. ◐ **A better Milky Way:** ✓ a halo with an edge (a choice of four). ○ Next: other published
+   models, the route in three dimensions, relativity near Sgr A*.
 
-### Phase 2: the engine, without throwing mass away
+### v0.7: everyone, the life support
 
-5. **Model the asteroid-assist campaign in detail:** the asteroids' own orbits between Jupiter
-   and the Earth, how many are needed at once, timing each pass, and what Jupiter's slow inward
-   drift does to the other planets. This is where the steering earns its place: aligning the
-   planet for every pass.
-6. **Look for answers to the open problem:** the Andromeda meeting (when, and what it does to the
-   Sun's orbit); moving the whole solar system with the Earth in it (a star-driven engine, such
-   as a Shkadov thruster) instead of the Earth alone; anything else that keeps everyone together.
-   Settles: whether the Galactic Centre leg stays in the plan.
+5. ◐ **Life support for everyone:** ✓ power, fuel, space, rock to dig, and the deadline to be
+   underground. ○ Next: people over time; food under lights designed rather than assumed; the
+   heat the cities give off, and where it goes; a staged move underground as a timeline.
 
-### Phase 3: the steering, engineered
+### v0.8: the engine, without throwing mass away
 
-7. **The train system in detail:** the number of trains, their spacing and speed, the power to
-   hand momentum between the rings through the day, and the loads on the track and the rock.
-8. **Safety, counted where it can be:** the energy in each train against what a tunnel can
-   contain; how many trains can fail at once; and what a change of tilt or day does to seasons,
-   tides and climate. The rest stays listed as open until designs exist.
-9. **Other bodies:** steering the Moon, Ceres and asteroids in detail, the first places the
-   system could actually be built and tested.
+6. ○ **The asteroid-assist campaign in detail:** the asteroids' own orbits between Jupiter and
+   the Earth, how many at once, the timing of each pass, and Jupiter's slow inward drift and what
+   it does to the other planets. This is where the steering earns its place: aligning the planet
+   for every pass.
+7. ◐ **Answers to the open problem:** ✓ the Shkadov thruster measured. ○ Next: the Andromeda
+   meeting (when, and what it does to the Sun's orbit); other ideas that keep everyone together.
 
-### Phase 4: data
+### v0.9: the steering, engineered
 
-10. **Cosmicflows-4 distances** for nearby galaxies (redshift is poor within ~10 Mpc).
-11. **Any 2MRS galaxy as a destination,** chosen by clicking it.
-12. **Close stellar passes** from a Gaia-based catalogue, for hazards and chances on the way out.
-13. **A true-colour Ceres map,** when one can be fetched.
+8. ○ **The train system in detail:** trains, spacing, speed, the power to hand momentum between
+   the rings through the day, and the loads on the track and the rock.
+9. ○ **Safety, counted where it can be:** the energy in a train against what a tunnel can
+   contain; how many can fail at once; what a change of tilt or day does to seasons, tides and
+   climate.
+10. ○ **Other bodies in detail:** the Moon, Ceres and asteroids, the first places the system
+    could actually be built and tested.
 
-### Phase 5: using and keeping it
+### v1.0: keep and share it
 
-14. **Presets:** "published", "conservative" and "optimistic" plans, one click each.
-15. **A downloadable report** of a plan: its settings, every result, and the hash of every
-    dataset used, so a plan can be archived and checked exactly, in the spirit of Sieve.
-16. **Automated checks:** a scheduled run of `check.mjs` and `update_data.py --check`, and a short
-    browser test of the page. This needs a workflow in `.github/`, outside the page: Edward's
-    decision.
-17. **Accessibility:** a text table for every chart and view, so the whole plan can be read
-    without a canvas.
+11. ✓ **Presets:** published, conservative and optimistic plans, one click each.
+12. ✓ **A downloadable report** of a plan: settings, results, ledger, dataset hashes and every
+    constant with its source and checked status.
+13. ✓ **Tests as a script** to run locally (`tools/test.mjs`; Edward's decision: no automated
+    workflow).
+14. ◐ **Text tables for every chart and view:** ✓ the timeline. ○ Next: the sunlight chart and
+    each view's contents.
+15. ○ **Data:** Cosmicflows-4 distances; any 2MRS galaxy as a destination, chosen by clicking it;
+    close stellar passes from Gaia; a true-colour Ceres map.
 
 ## 7. How to use this record
 

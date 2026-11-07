@@ -50,12 +50,12 @@ needs, and whether known physics allows it.
   risk of a 1 km impact over the same years. This answers the addendum's main worry.
 - **The Galactic Centre slingshot works, through the Oberth effect.** Falling to Sgr A* takes
   about 45 million years and needs 242 km/s of the Sun's orbital speed cancelled first. A push of
-  30 km/s at 300 AU from Sgr A* flings the Earth out to about 6.9 Mpc (still just bound to the
-  model Milky Way, whose halo reaches to infinity), past Andromeda; a push of 32 km/s frees it
-  entirely, leaving at about 130 km/s. Nature already does it:
+  30 km/s at 300 AU from Sgr A* leaves the Galaxy at about 116 km/s, with the dark halo ending at
+  250 kpc (the default). With no edge to the halo the same push leaves the Earth just bound, but
+  still climbing out to 6.9 Mpc, past Andromeda. Nature already does it:
   S5-HVS1 was flung out at 1,755 km/s.
-- **The expanding universe sets the final limit.** Within reach on the default route: about
-  78 of the 43,507 2MRS galaxies that are moving away from us (0.2%). Andromeda is in reach, and it
+- **The expanding universe sets the final limit.** Within reach on the default route (0.96 Mpc,
+  ever): 6 of the 43,507 2MRS galaxies that are moving away from us. Andromeda is in reach, and it
   is coming to us anyway.
 
 **[OLAP.md](OLAP.md)** keeps the evolution of the idea: from the first framing (April 2025) through
@@ -76,6 +76,7 @@ every change and its reason, where each idea stands, and what is open.
 | `data/exoplanets.js`, `data/land.js`, `data/skin-*.js` | Snapshots kept here (public data). |
 | `tools/update_data.py` | Fetches every dataset again and rewrites the snapshots and the manifest. |
 | `tools/check.mjs` | Checks the physics against values known independently. |
+| `tools/test.mjs` | Runs every check: the physics, the data, and (optionally) the page in a browser. |
 
 No build step and no libraries: the page runs as it is, from GitHub Pages or straight from the
 folder (`file://`).
@@ -99,6 +100,41 @@ Surface maps carry a *frame* in `datasets.js`: where the map sits in its image a
 at its left edge. Ceres's frame was measured from the map's own grid lines (0° at x = 31, 360° at
 x = 931, 90°N at y = 19, 90°S at y = 469, in a 960 × 489 image). The updater refuses a map whose
 size has changed, so a frame is never silently wrong.
+
+## Testing
+
+Run from the repository's root; Node 18 or later, and Python 3 for the data checks.
+
+```bash
+node Pages/space/tools/test.mjs
+```
+
+That runs the physics checks and checks the snapshot files against the manifest (offline, a few
+seconds). Two options add more:
+
+- `--online` fetches every dataset again and compares it with the manifest (a few minutes, as
+  Wikimedia asks to be fetched slowly).
+- `--browser` opens the page in a real browser and tries it: every view, the presets, the
+  robustness test, the surface maps, a phone-sized screen, a link with bad settings, and a link
+  that tries to run script. It needs Playwright, once:
+
+```bash
+npm install playwright
+```
+
+```bash
+npx playwright install chromium
+```
+
+It exits 0 when everything passed and 1 when anything failed, and says what.
+
+## The source audit
+
+Every constant carries a *checked* status, shown in the page's table of constants: exact (a
+definition), an IAU or CODATA standard, from the OLAP documents, an assumption shown as such, or
+**to check against the source**. Checking one means opening the original paper or catalogue,
+confirming the value, and recording in `constants.js` (the `AUDIT` list) what it was checked
+against, with the table or page.
 
 ## Keeping it up to date
 
@@ -131,6 +167,12 @@ Other pages quote the cosmic horizon counter's constants (`REACH_GLY`, `SEEN_GLY
 `STARS_LOST_PER_SECOND`, now in `constants.js`): change them together with the Build or Buy page.
 
 ## Limits of the model
+
+- The escape is a steady push along the Earth's motion, lasting the time chosen: averaged over
+  each orbit while the push is tiny next to the Sun's pull, then followed step by step. Asteroid
+  assists are really a series of kicks; the steady push stands in for them.
+- The life-support figures rest on assumptions shown as settings, above all the power to grow
+  food under lights; the robustness test shows that conclusion depends on it.
 
 - The Sun's brightening follows Gough (1981), which holds while the Sun burns hydrogen in its core
   (about 6.3 billion more years).
