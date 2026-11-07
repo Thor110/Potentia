@@ -6706,3 +6706,21 @@ prevented; it can be met before the memory runs out, which is what Sieve does.
     meet the same limit together.
 - *Not tested with a real RAR, cab or LHA bomb:* there is no maker for those formats here; the
   libarchive limit is the same code as the others'.
+
+**19.126 cmix: a source of ideas and a yardstick, not a way (Edward, 7 November 2026: "useful as a
+source of ideas and as a yardstick definitely").** Byron Knoll's cmix leads LTCB and Silesia (by
+Matt Mahoney's note on encode.su, its first version needed 20 GB of memory and two days each way
+for enwik9). Sieve uses none of it. Not taken as a way: its strongest parts (the LSTM among them)
+work in floating point, which is not the same bit for bit across compilers and processors, so a
+`.sieve` made on one machine might not install on another, where Sieve's mixers are exact in
+integers; and context mixing decodes as slowly as it codes, which the rising bar (§19.112) weighs
+against. (Its licence, GPLv3, would combine with Sieve's AGPLv3.) Kept for:
+- *Ideas,* each made again in integers under a new manifest version and measured first on enwik8,
+  samba and the rest, as v33's pieces were: its text preprocessing by dictionary (paq8hp's word
+  model), more context models, more mixer and SSE layers.
+- *A yardstick:* cmix beside Sieve on a few files (a text of 100 KB, a source, a picture), to show
+  where the gap is (enwik8: cmix v21 14,623,723 bytes as quoted in NEXT-VERSION.md, Sieve 21,431,896).
+  *Run 7 November 2026* (results/cmix-yardstick-2026-11-07.md; cmix's paq8 at level 9 to fit 15 GB):
+  Sieve 2.7% smaller on a raw picture, 15% to 26% larger on text and source, 36% on a program
+  (`ls`), 12.8% on control.py; cmix took 84 to 261 s each way and 6 to 12 GB, Sieve under 3 s and
+  under 400 MB. The ideas in order: a model of x86 instructions, text by dictionary, more SSE layers.
