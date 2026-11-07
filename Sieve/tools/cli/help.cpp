@@ -1138,6 +1138,12 @@ const std::vector<Page>& pages()
                                   "no smaller (a JPEG, a PNG, a film: already packed), and on text once its own\n"
                                   "waves (by line, and by column where its lines are all one length) are tried.\n"
                                   "Any command that makes instructions takes it (locate, site, map, rope)."},
+          {"--priority WHAT", "What each file's ways are weighed by (the File Locator's Size, Balanced and Decoding speed):\n"
+                              "size, the smallest (this command's own, unless given); balanced, mixing, which installs at\n"
+                              "about 1.2 s a MB, only where it saves at least 4% of what it carries over the quickest of\n"
+                              "the other ways (on 23 files and folders, 3.8% larger than size and installed in about a third of\n"
+                              "its time; results/balanced-2026-11-07.md); speed, as --prioritise-decoding. None changes\n"
+                              "what a reader reads."},
           {"--prioritise-decoding", "Prioritise Decoding Speed (the File Locator's box): no file carried by mixing, and the\n"
                                     "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"

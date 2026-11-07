@@ -1576,11 +1576,27 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
 }
 
 namespace {
-std::atomic<bool> g_prioritise_decoding{false};
+std::atomic<int> g_priority{int(Priority::size)};
 }
 
-void set_prioritise_decoding(bool on) { g_prioritise_decoding = on; }
-bool prioritise_decoding() { return g_prioritise_decoding.load(std::memory_order_relaxed); }
+void set_priority(Priority p) { g_priority = int(p); }
+Priority priority() { return Priority(g_priority.load(std::memory_order_relaxed)); }
+// (Prioritise Decoding Speed is the speed setting; turned off, size, as it was before the middle one.)
+void set_prioritise_decoding(bool on) { set_priority(on ? Priority::speed : Priority::size); }
+bool prioritise_decoding() { return priority() == Priority::speed; }
+
+const char* priority_name(Priority p) { return p == Priority::speed ? "speed" : p == Priority::balanced ? "balanced" : "size"; }
+
+bool priority_from_name(std::string_view s, Priority& p)
+{
+    for (const Priority q : {Priority::size, Priority::balanced, Priority::speed})
+        if (s == priority_name(q))
+        {
+            p = q;
+            return true;
+        }
+    return false;
+}
 
 namespace {
 std::atomic<const std::atomic<bool>*> g_decode_cancel{nullptr};

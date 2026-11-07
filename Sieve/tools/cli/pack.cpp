@@ -5200,13 +5200,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // (The rising bar against whatever is best before mixing, not only LZMA2: a FLAC,
                     // which LZMA2 cannot shrink, had the rope as its best, and was mixed for 0.56% at
                     // 52 MB, slow to install; 6 November 2026.)
+                    // (Balanced: mixing's code 4% of the file under the quickest of the other ways,
+                    // or more; balanced_floor, mix.hpp.)
+                    margin = std::max<uint64_t>(margin, balanced_floor(bytes[i].size()));
                     const bool barred = margin > 64 + best / 400;
                     const uint64_t need = way.empty() || barred ? best - std::min<uint64_t>(best, margin) : best;
                     if (barred && mc.size() + vl < (way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best) && mc.size() + vl >= need)
                     {
-                        char bar[128];
-                        std::snprintf(bar, sizeof bar, " (smaller, but not by the bar for a file this size, %.2f%%: kept quick to install)",
-                                      100.0 * double(margin) / double(std::max<uint64_t>(best, 1)));
+                        char bar[160];
+                        if (balanced_floor(bytes[i].size()) == margin)
+                            std::snprintf(bar, sizeof bar, " (smaller, but not by Balanced's %u%% of the file: kept quick to install)", unsigned(kBalancedShare));
+                        else
+                            std::snprintf(bar, sizeof bar, " (smaller, but not by the bar for a file this size, %.2f%%: kept quick to install)",
+                                          100.0 * double(margin) / double(std::max<uint64_t>(best, 1)));
                         mixed_said += bar;
                     }
                     if (mc.size() + vl < need)
@@ -5425,6 +5431,12 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // (a program mixed through the x86 filter stays out: a group's mixing has no filter)
             if (mixed_alone && w.size() >= 2 && w.compare(w.size() - 2, 2, " X") == 0) continue;
             optional[i] = (mixed_alone && !alone) || w.rfind("rope ", 0) == 0;
+            // (Balanced: a picture mixed alone or a file the rope carries stays as it is, and one LZMA2
+            // carries is optional, the group weighed with it and without it, its bytes asked to save
+            // 4% to be mixed: a group decodes on one thread, and docs/ with two screenshots' pixels in
+            // its texts' group, 7.3 MB, installed in 6.9 s against Size's 4.8; 7 November 2026)
+            if (priority() == Priority::balanced && optional[i]) continue;
+            if (priority() == Priority::balanced && w == "raw") optional[i] = 1;
             if ((!alone && w != "raw" && !optional[i]) || bytes[i].empty() || bytes[i].size() > kGroup) continue;
             {
                 // (already compressed, carried as it is or mixed alone for the little mixing finds in it:
@@ -5448,6 +5460,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::vector<uint8_t> code;
             std::string params;
             uint64_t apart = 0, total = 0;
+            uint64_t from_lzma2 = 0; // (the bytes of its files LZMA2 would carry: Balanced asks 4% of them)
             bool kept = false;
             std::vector<size_t> members; // the group's files as kept (without its optional ones, where that was smaller)
         };
@@ -5505,17 +5518,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             d.params = mp.text();
             d.apart = apart;
             d.total = joined.size();
+            d.from_lzma2 = rest.size();
             uint64_t len = d.code.size(), vl = 1;
             while (len >>= 7) ++vl;
             // (its way's text, "mixt ... T<bytes>" and the others' "mixn", against theirs: counted as their length)
-            d.kept = d.code.size() + vl + d.params.size() + 24 + 5 * members.size() < apart;
+            // (Balanced: the files LZMA2 carried, now to be mixed, 4% of their bytes under it too)
+            d.kept = d.code.size() + vl + d.params.size() + 24 + 5 * members.size() + balanced_floor(rest.size()) < apart;
             return d;
         };
         // What a group costs as made: its code and ways where kept, else its files apart.
         auto cost = [&](const Made& d) {
             uint64_t len = d.code.size(), vl = 1;
             while (len >>= 7) ++vl;
-            return d.kept ? d.code.size() + vl + d.params.size() + 24 + 5 * d.members.size() : d.apart;
+            return d.kept ? d.code.size() + vl + d.params.size() + 24 + 5 * d.members.size() + balanced_floor(d.from_lzma2) : d.apart;
         };
         // (Each group's share of the cores, for its own weighings at once: 6 November 2026, docs/'s one
         // group of 24 files, with and without its optional files and each of their trials one after
@@ -5543,7 +5558,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             std::vector<size_t> without;
             uint64_t theirs = 0;
             for (const size_t i : groups[g])
-                if (optional[i]) theirs += own(i);
+                if (optional[i]) theirs += files[i]->way == "raw" ? estimate(bytes[i]) : own(i); // (Balanced: LZMA2's, for one it carries)
                 else without.push_back(i);
             // (with its optional files and, where it has any, without them: both at once, where the
             // share allows, the same two weighed as before)
@@ -5670,7 +5685,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 base.primer = primer_for(start, words);
                 const Mix4Params mp = with_ways(base, together, words);
                 std::vector<uint8_t> code = mix4_code(together, mp, words);
-                if (code.size() + mp.text().size() + 1 < apart + without_cost)
+                if (code.size() + mp.text().size() + 1 + balanced_floor(without.size()) < apart + without_cost)
                 {
                     for (size_t i = 0; i < files.size(); ++i)
                         if (join[i])
@@ -5862,7 +5877,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 std::vector<uint8_t> code = mix4_code(plain, mp, words);
                 const std::string params = mp.text();
                 // (the parameters cost their length and a byte in the head, the dictionary byte 0xFE's place)
-                if (code.size() + params.size() + 1 < pp.size())
+                if (code.size() + params.size() + 1 + balanced_floor(plain.size()) < pp.size()) // (Balanced: 4% of it under LZMA2)
                 {
                     mixed = std::move(code);
                     mixed_params = params;

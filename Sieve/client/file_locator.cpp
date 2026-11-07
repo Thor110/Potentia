@@ -358,8 +358,8 @@ void FileLocator::open_log(const std::string& what, const std::string& path, boo
     log_ << "Sieve " SIEVE_VERSION " File Locator log, " << local_time("%Y-%m-%d %H:%M:%S") << "\n"
          << what << " " << path << "\n";
     if (search)
-        log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; Prioritise decoding speed "
-         << (sieve::prioritise_decoding() ? "on" : "off") << "; archive and compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
+        log_ << "settings: " << limits << "; Try every way " << (sieve::rope_search_every_wave() ? "on" : "off") << "; priority "
+         << sieve::priority_name(sieve::priority()) << "; archive and compressed formats " << (temporary_ ? "temporary" : "") << (temporary_ && permanent_ ? " and " : "")
          << (permanent_ ? "permanent" : "") << (!temporary_ && !permanent_ ? "as they are" : "")
          << "; Optimise Search " << (sieve::cli::optimise_search() ? "on (Try every way chosen file by file)" : "off")
          << "; " << sieve::cli::draft_name() << " draft " << (sieve::cli::draft_on() ? "on (" + sieve::cli::draft_manifest() + " where it is smaller; not to be published)" : std::string("off")) << "\n";
@@ -401,14 +401,21 @@ void FileLocator::close_log(const std::string& result)
 }
 
 namespace {
-std::function<void(bool)>& kept_decoding()
+std::function<void(sieve::Priority)>& kept_priority()
 {
-    static std::function<void(bool)> k;
+    static std::function<void(sieve::Priority)> k;
     return k;
+}
+
+// The button's text: "Priority: Balanced" and the like.
+std::string priority_label()
+{
+    const sieve::Priority p = sieve::priority();
+    return tr("loc.priority") + " " + tr(p == sieve::Priority::speed ? "loc.priority.speed" : p == sieve::Priority::balanced ? "loc.priority.balanced" : "loc.priority.size");
 }
 } // namespace
 
-void FileLocator::remember_decoding(std::function<void(bool)> changed) { kept_decoding() = std::move(changed); }
+void FileLocator::remember_priority(std::function<void(sieve::Priority)> changed) { kept_priority() = std::move(changed); }
 
 namespace {
 struct KeptMore
@@ -983,7 +990,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_optimise = sieve::cli::optimise_search();
-                r.made_decoding = sieve::prioritise_decoding();
+                r.made_priority = int(sieve::priority());
                 refine_estimate(5);
             }
             else if (fs::is_directory(p))
@@ -1058,7 +1065,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_optimise = sieve::cli::optimise_search();
-                r.made_decoding = sieve::prioritise_decoding();
+                r.made_priority = int(sieve::priority());
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
                 refine_estimate(5);
@@ -1146,7 +1153,7 @@ void FileLocator::save(const std::string& to)
     // Made when it was read, with what is set now: written as it is, nothing packed again (and the
     // graph of how it was made is kept).
     const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == boxes &&
-                      r.made_every == sieve::rope_search_every_wave() && r.made_optimise == sieve::cli::optimise_search() && r.made_decoding == sieve::prioritise_decoding();
+                      r.made_every == sieve::rope_search_every_wave() && r.made_optimise == sieve::cli::optimise_search() && r.made_priority == int(sieve::priority());
     start_job(!made);
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -1282,7 +1289,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
-        case SDLK_P: pressed = "decoding"; break; // Prioritise Decoding Speed, on or off
+        case SDLK_P: pressed = "priority"; break; // Size, Balanced, Decoding speed, round the three
         case SDLK_C: pressed = kept_compare().on ? "more" : ""; break; // More formats in the comparison, on or off (the comparison on)
         case SDLK_Z: pressed = "compare"; break;  // Compare with zip and 7z, on or off
         case SDLK_L: pressed = "log"; break;      // Keep a log, on or off
@@ -1353,11 +1360,13 @@ void FileLocator::event(const SDL_Event& e)
         k.on = !k.on;
         if (k.changed) k.changed(k.on);
     }
-    else if (pressed == "decoding")
+    else if (pressed == "priority")
     {
-        const bool on = !sieve::prioritise_decoding();
-        sieve::set_prioritise_decoding(on);
-        if (kept_decoding()) kept_decoding()(on);
+        // (round the three: Size, Balanced, Decoding speed, Size...)
+        const sieve::Priority p = sieve::priority();
+        const sieve::Priority next = p == sieve::Priority::size ? sieve::Priority::balanced : p == sieve::Priority::balanced ? sieve::Priority::speed : sieve::Priority::size;
+        sieve::set_priority(next);
+        if (kept_priority()) kept_priority()(next);
     }
     else if (pressed == "temporary" || pressed == "permanent")
     {
@@ -1607,7 +1616,12 @@ void FileLocator::draw(float W, float H)
             bx += text_width(text, 2) + 24 + 12;
         }
         else box("every", sieve::rope_search_every_wave(), tr("loc.every"));
-        box("decoding", sieve::prioritise_decoding(), tr("loc.decoding"));
+        {
+            // (not a box: one button for the three, the setting in its text)
+            const std::string text = priority_label();
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
+            button("priority", text, box_y);
+        }
         box("log", kept_log().on, tr("loc.log"));
         box("compare", kept_compare().on, tr("loc.compare"));
         // (More formats only adds to the comparison: greyed and not pressed while it is off)
@@ -1681,12 +1695,12 @@ void FileLocator::draw(float W, float H)
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
-            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.decoding", "loc.log", "loc.more"})
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.more"})
             {
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
                 const bool chosen = sieve::cli::optimise_search() && (std::string(id) == "loc.every" || std::string(id) == "loc.temporary");
-                const std::string label = tr(id) + (chosen ? " " + tr("loc.every.chosen") : std::string());
-                const float w = text_width("[ ] " + label, 2) + 24;
+                const std::string label = std::string(id) == "loc.priority" ? priority_label() : tr(id) + (chosen ? " " + tr("loc.every.chosen") : std::string());
+                const float w = text_width(std::string(id) == "loc.priority" ? label : "[ ] " + label, 2) + 24;
                 if (x > 20 && x + w > W - 20) ++rows, x = 20;
                 x += w + 12;
             }

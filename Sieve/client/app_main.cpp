@@ -142,8 +142,10 @@ const char* kUsage =
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
     "  --more-formats      the File Locator's More formats ticked, for this run: the comparison with\n"
     "                      gzip, bzip2, zstd, brotli and lz4 beside zip and 7z (slower)\n"
-    "  --prioritise-decoding  the File Locator's Prioritise Decoding Speed ticked, for this run:\n"
-    "                      no file mixed, so its instructions install quickly ([locator] prioritise_decoding)\n"
+    "  --priority WHAT     the File Locator's Size, Balanced or Decoding speed, for this run: size, balanced\n"
+    "                      (mixing only where it saves 4% of what it carries; the default) or speed\n"
+    "                      ([locator] priority)\n"
+    "  --prioritise-decoding  as --priority speed: no file mixed, so its instructions install quickly\n"
     "  --v34-draft         the next version's draft in the File Locator, for this run (testing only: its\n"
     "                      name follows the version in the making, docs/NEXT-VERSION.md; [locator] v34_draft)\n"
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
@@ -780,9 +782,20 @@ int run(const Args& a)
     if (a.has("optimise-search")) app.locator_optimise = true;
     if (a.has("search-every-wave") && !a.has("optimise-search")) app.locator_optimise = false;
     sieve::cli::set_optimise_search(app.locator_optimise);
-    // No file mixed ([locator] prioritise_decoding; --prioritise-decoding for this run).
-    if (a.has("prioritise-decoding")) app.locator_decoding = true;
-    sieve::set_prioritise_decoding(app.locator_decoding);
+    // Size, Balanced or Decoding speed ([locator] priority; --priority, or --prioritise-decoding for
+    // speed, for this run).
+    if (a.has("prioritise-decoding")) app.locator_priority = "speed";
+    if (a.has("priority"))
+    {
+        sieve::Priority given = sieve::Priority::balanced;
+        if (!sieve::priority_from_name(a.get("priority"), given)) throw std::invalid_argument("--priority: size, balanced or speed, not " + a.get("priority"));
+        app.locator_priority = sieve::priority_name(given);
+    }
+    {
+        sieve::Priority p = sieve::Priority::balanced;
+        sieve::priority_from_name(app.locator_priority, p);
+        sieve::set_priority(p);
+    }
     // The next version's draft ([locator] v33_draft; --v33-draft for this run: cli/draft.hpp).
     if (a.has(sieve::cli::draft_flag())) app.locator_draft = true;
     sieve::cli::set_draft(app.locator_draft);
@@ -812,7 +825,7 @@ int run(const Args& a)
         // --locate-log, below, is one too.
         AppSettings run = app;
         run.locator_log = true;
-        const bool every = a.has("search-every-wave"), optimise = a.has("optimise-search") || every, decoding = a.has("prioritise-decoding"),
+        const bool every = a.has("search-every-wave"), optimise = a.has("optimise-search") || every, decoding = a.has("prioritise-decoding") || a.has("priority"),
                    draft = a.has(sieve::cli::draft_flag()), widen = a.has("widen-weights"), filter = a.has("filter-memory"),
                    counting = a.has("counting-memory"), merge = a.has("merge-cache"), unit = a.has("unit-time"), item = a.has("item-memory"),
                    rooms = a.has("view-rooms"), pictures = a.has("picture-rooms"), log = a.has("locate-log");
@@ -822,7 +835,7 @@ int run(const Args& a)
             };
             back(every, s.locator_every_wave, run.locator_every_wave, loaded.locator_every_wave);
             back(optimise, s.locator_optimise, run.locator_optimise, loaded.locator_optimise);
-            back(decoding, s.locator_decoding, run.locator_decoding, loaded.locator_decoding);
+            back(decoding, s.locator_priority, run.locator_priority, loaded.locator_priority);
             back(draft, s.locator_draft, run.locator_draft, loaded.locator_draft);
             back(widen, s.widen_weights, run.widen_weights, loaded.widen_weights);
             back(filter, s.filter_memory_mb, run.filter_memory_mb, loaded.filter_memory_mb);
@@ -899,8 +912,8 @@ int run(const Args& a)
         app.locator_optimise = on;
         app.save(app_path);
     });
-    FileLocator::remember_decoding(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
-        app.locator_decoding = on;
+    FileLocator::remember_priority(shot ? std::function<void(sieve::Priority)>() : [&app, app_path](sieve::Priority p) {
+        app.locator_priority = sieve::priority_name(p);
         app.save(app_path);
     });
     // Compare with zip and 7z ([locator] compare, on unless turned off).

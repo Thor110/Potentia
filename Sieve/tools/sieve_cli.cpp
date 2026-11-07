@@ -3267,6 +3267,13 @@ int main(int argc, char** argv)
         if (a.has("timings")) timings::enable();
         if (a.has("search-every-wave")) set_rope_search_every_wave(true); // the rope's search through every wave
         if (a.has("prioritise-decoding")) set_prioritise_decoding(true);   // no file mixed: quicker to install
+        if (a.has("priority"))                                             // size, balanced or speed (mix.hpp's Priority)
+        {
+            Priority p = Priority::size;
+            if (!priority_from_name(a.get("priority"), p)) throw std::invalid_argument("--priority: size, balanced or speed, not " + a.get("priority"));
+            if (a.has("prioritise-decoding") && p != Priority::speed) throw std::invalid_argument("--prioritise-decoding is --priority speed: not with --priority " + a.get("priority"));
+            set_priority(p);
+        }
         if (a.has(draft_flag())) set_draft(true);                          // the next version's draft (draft.hpp)
         if (a.has("optimise-search")) set_optimise_search(true);           // Try every way chosen file by file
         // --filter-memory MB, on any command: what one count's tables may take (the setup menu's

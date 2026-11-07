@@ -228,7 +228,8 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "compressed_permanent") s.locator_permanent = value == "1";
             else if (key == "search_every_wave") s.locator_every_wave = value == "1";
             else if (key == "optimise_search") s.locator_optimise = value == "1";
-            else if (key == "prioritise_decoding") s.locator_decoding = value == "1";
+            else if (key == "priority" && (value == "size" || value == "balanced" || value == "speed")) s.locator_priority = value;
+            else if (key == "prioritise_decoding" && value == "1") s.locator_priority = "speed"; // (an older settings file's box)
             else if (key == "more_formats") s.locator_more = value == "1";
             else if (key == "compare") s.locator_compare = value != "0";
             else if (key == sieve::cli::draft_ini_key()) s.locator_draft = value == "1"; // (the draft in the making: its key from its number)
@@ -328,7 +329,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "compressed_permanent", locator_permanent ? "1" : "0", "1: Archive and compressed formats: permanent ticked (an archive or a compressed file carried as what it holds, installed so); 0: off"},
         {"locator", "optimise_search", locator_optimise ? "1" : "0", "1: Optimise Search ticked (the default): Try every way chosen for each file by its kind, from what was measured (off for every file with Prioritise Decoding Speed; else on for a JPEG, a file over 16 MiB or under 4 KiB, off between), its own box unused; 0: Try every way as its box says"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
-        {"locator", "prioritise_decoding", locator_decoding ? "1" : "0", "1: Prioritise Decoding Speed ticked: no file carried by mixing, nor the files carried together mixed (quicker to install, larger); 0: off"},
+        {"locator", "priority", locator_priority, "size: the smallest; balanced: mixing only where it saves 4% of what it carries (the default); speed: no file mixed (quickest to install, largest)"},
         {"locator", "compare", locator_compare ? "1" : "0", "1: Compare with zip and 7z ticked (the default): what zip (deflate 9) and 7z (LZMA2 9e) make of it and of the instructions, beside Sieve's; 0: Sieve's figures alone, quicker on a large folder"},
         {"locator", "more_formats", locator_more ? "1" : "0", "1: More formats ticked: the comparison with gzip, bzip2, zstd, brotli and lz4 too, each the whole as one stream (slower: brotli above all); 0: zip and 7z only"},
         {"locator", sieve::cli::draft_ini_key(), locator_draft ? "1" : "0", "1: " + sieve::cli::draft_manifest() + " in the making, for testing only (docs/NEXT-VERSION.md): what it makes is a draft, not to be published; 0: off, the newest frozen version made"},

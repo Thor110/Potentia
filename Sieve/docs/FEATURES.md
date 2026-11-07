@@ -87,9 +87,11 @@ against 13,376,180 (`results/mixing-match-ways-2026-11-02.md`).
 
 ## Choosing how hard it works
 
-- **For size or for decoding speed** (Prioritise Decoding Speed): mixing decodes slowly, about as
-  slowly as it packs, so it can be left out. Edward's MAPS.WoW: 52,897,726 bytes unpacked in 166.7
-  s for size (v33), 60,130,138 unpacked in 4.6 s for decoding speed (STATISTICS).
+- **Size, Balanced or Decoding speed** (the File Locator's Priority; `--priority`): mixing decodes
+  slowly, about as slowly as it packs. Size takes it wherever it is smallest; Decoding speed leaves it
+  out (Edward's MAPS.WoW: 52,897,726 bytes unpacked in 166.7 s for size, v33; 60,130,138 unpacked in
+  4.6 s for decoding speed: STATISTICS); Balanced, the default, takes it only where it saves 4% of the
+  file (23 files and folders: 3.8% larger than Size, installed in about a third of its time).
 - **Try every way:** the search's shortcuts off, every file mixed whatever its size.
 - **Optimise Search** (on unless unticked): Try every way chosen file by file, from what was
   measured on each kind of file.

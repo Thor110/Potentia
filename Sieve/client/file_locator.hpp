@@ -119,10 +119,10 @@ public:
     // Try every way chosen for each file by its kind, from what was measured, in place of its box
     // (sieve::cli::optimise_search). Set once, at start.
     static void remember_optimise(std::function<void(bool)> changed);
-    // "Prioritise Decoding Speed" ([locator] prioritise_decoding), kept between runs: no file carried
-    // by mixing (0.3 to 1 MB/s to decode, 15 to 60 times slower than the other ways), so the
-    // instructions install quickly; larger. Its state is the packer's own (sieve::prioritise_decoding).
-    static void remember_decoding(std::function<void(bool)> changed);
+    // Size, Balanced or Decoding speed ([locator] priority, Balanced unless changed; one button that
+    // goes round the three), kept between runs: what the packer weighs ways by (sieve::Priority,
+    // mix.hpp). Its state is the packer's own (sieve::priority).
+    static void remember_priority(std::function<void(sieve::Priority)> changed);
     // More formats (0.13.78): the comparison with gzip, bzip2, zstd, brotli and lz4 beside zip and
     // 7z, as the settings have it; `changed` saves the box when it is changed here.
     static void remember_more(bool on, std::function<void(bool)> changed);
@@ -175,7 +175,7 @@ private:
         int made_archives = 0; // the Compressed formats boxes it was made with (1 temporary, 2 permanent)
         bool made_every = false;    // Try every way, as it was when they were made
         bool made_optimise = false; // Optimise Search, as it was when they were made
-        bool made_decoding = false; // Prioritise Decoding Speed, as it was
+        int made_priority = 0; // Size, Balanced or Decoding speed, as it was (sieve::Priority)
     };
     bool in_world() const { return bool(host_.go); }
     // `tailor`: the weighing tailors each line's filters to the files that are its items.

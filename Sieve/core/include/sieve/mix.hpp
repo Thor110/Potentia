@@ -221,6 +221,29 @@ std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& 
 void set_prioritise_decoding(bool on);
 bool prioritise_decoding();
 
+// What the packer weighs a file's ways by (7 November 2026, Edward: "a middle ground option ...
+// Balance Size and Decoding speed"; --priority, the File Locator's choice, [locator] priority):
+//   size      the smallest, whatever it costs to install (mixing's rising bar over 16 MiB aside);
+//   balanced  a way that decodes slowly (mixing) only where it saves at least kBalancedShare of the
+//             bytes it carries over the quickest of the others: mixing installs at about 1.2 s a MB
+//             (measured on 23 files and folders, results/balanced-2026-11-07.md), so 4% is about
+//             33 KB saved for each second it adds; the Size setting's gain kept where it pays most;
+//   speed     Prioritise Decoding Speed: no file mixed.
+// Each chooses among the ways the format has: none changes what a reader reads.
+enum class Priority
+{
+    size,
+    balanced,
+    speed
+};
+inline constexpr uint32_t kBalancedShare = 4; // (per cent of the bytes carried)
+void set_priority(Priority p);
+Priority priority();
+const char* priority_name(Priority p);               // "size", "balanced", "speed"
+bool priority_from_name(std::string_view s, Priority& p); // false where it is none of them
+// Under balanced, the bytes a slow way must save over the quickest for `bytes` carried; 0 else.
+inline uint64_t balanced_floor(uint64_t bytes) { return priority() == Priority::balanced ? bytes * kBalancedShare / 100 : 0; }
+
 // An install cancelled while mixing decodes (3 November 2026, Edward: the File Locator's Stop while
 // installing). Mixing decodes at 0.3 to 1 MB/s, so a large file can take minutes; for the length of
 // a DecodeCancelScope, every mixing decode, on any thread, looks at the flag about every 64 KiB it
