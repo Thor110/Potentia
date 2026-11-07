@@ -1,5 +1,6 @@
 #include "sieve/cipher.hpp"
 
+#include "sieve/biguint.hpp"
 #include "sieve/space.hpp"
 
 #include <algorithm>
@@ -247,6 +248,34 @@ std::vector<Guess> break_weak(const std::vector<uint8_t>& cipher, size_t max_key
     if (all.size() > top) all.resize(top);
     for (Guess& g : all) g.plain = decrypt(g.recipe, cipher);
     return all;
+}
+
+Catalogue catalogue(uint32_t key_bytes, uint32_t depth)
+{
+    if (key_bytes == 0 || depth == 0) throw std::invalid_argument("the catalogue needs keys of at least one byte and a depth of at least one");
+    BigUint keys(0);
+    for (uint32_t i = 1; i <= key_bytes; ++i) keys += BigUint::pow(256, i);
+    BigUint layer = keys;
+    layer.mul_small(3);  // xor, vigenere and feistel
+    layer.add_small(257); // reverse and caesar's 256 shifts
+    Catalogue c;
+    c.key_bytes = key_bytes;
+    c.layers = layer.to_decimal();
+    c.layer_bits = layer.bit_length();
+    BigUint total(0);
+    for (uint32_t d = 1; d <= depth; ++d)
+    {
+        const BigUint r = BigUint::pow(layer, d);
+        total += r;
+        c.depths.push_back({d, r.to_decimal(), r.bit_length()});
+    }
+    c.total_bits = total.bit_length();
+    return c;
+}
+
+std::string short_decimal(const std::string& decimal)
+{
+    return decimal.size() <= 60 ? decimal : decimal.substr(0, 12) + "... (" + std::to_string(decimal.size()) + " digits)";
 }
 
 } // namespace sieve::cipher

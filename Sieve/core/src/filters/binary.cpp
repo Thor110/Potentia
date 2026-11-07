@@ -25,9 +25,10 @@ void add_binary_filters(std::vector<FilterSpec>& out)
     k.description = "Files of the chosen kinds, as their own first bytes say (file-kinds-v1: PNG, ZIP, MID, ... by "
                     "signature, TXT when every byte is readable, ? otherwise), or with keep = exclude every file but "
                     "those. Exact: the survivors are counted and ranked however long the line is.";
-    k.params = {{"kinds", "which kinds: signed, text, signed-or-text, unknown, empty, any, or one kind", FilterParam::Kind::Text,
-                 "signed", 0, 0, 1, kind_set_names()},
+    k.params = {{"kinds", "which kinds: signed, text, signed-or-text, unknown, empty, any, or one kind; or several apart by commas (png,jpg)",
+                 FilterParam::Kind::Text, "signed", 0, 0, 1, kind_set_names()},
                 {"keep", "keep those kinds, or exclude them", FilterParam::Kind::Text, "keep", 0, 0, 1, {"keep", "exclude"}}};
+    k.params[0].choice_list = true;
     k.applies = [](const FilterLine& l) { return l.kind == "binary"; };
     k.make = [](const FilterLine&, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         throw std::invalid_argument("binary-kind-v1 judges files on the binary line (a BinarySieve), not units of digits");

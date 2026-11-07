@@ -154,6 +154,7 @@ const char* kUsage =
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
+    "  --read-aloud        the menus read aloud for this run (not saved); with --screenshot, prints what was said\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
     "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
@@ -195,6 +196,7 @@ const char* kUsage =
     "  --chain             show the CHAIN tab (with --take on the AI line); --chain-file PATH opens a\n"
     "                      chain, --chain-press KEYS presses keys there, --chain-save PATH saves it;\n"
     "                      --talk \"/chain WORDS\" runs it\n"
+    "  --route-places N    with --take: COST's shortest route searched to N places of bearing (L), waited for and printed\n"
     "  --tailor PATH       with --screenshot, the item in hand on COST: K, waited for, and what Return\n"
     "                      would apply saved to PATH as a settings file\n"
     "  --save-item PATH    then save it as a file (F on the item page), to PATH\n"
@@ -803,6 +805,7 @@ int run(const Args& a)
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = 1;
     set_read_aloud(app.read_aloud); // the menus read aloud ([controls] read_aloud; speech.hpp)
+    if (a.has("read-aloud")) set_read_aloud(true); // for this run only, not saved; scripted pictures print what is said
     // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
     // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
     if (a.has("counting-memory")) app.counting_memory_pct = std::clamp(int(a.get_positive("counting-memory", 50)), 5, 100);
@@ -1037,6 +1040,7 @@ int run(const Args& a)
         for (const std::string& l : c.output_lines()) std::cout << "  " << l << "\n";
         if (!c.output_hex().empty()) std::cout << "output: " << c.output_hex() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && (a.has("manual-nav") || a.has("manual-log") || a.has("manual-pick") || a.has("manual-example")))
@@ -1091,6 +1095,7 @@ int run(const Args& a)
         std::cout << "  " << nav.steering() << "\n";
         std::cout << "  " << nav.exact_text() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && a.has("designer"))
@@ -1134,6 +1139,7 @@ int run(const Args& a)
             out << d.doc().to_text();
         }
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && a.has("harness"))
@@ -1176,6 +1182,7 @@ int run(const Args& a)
             if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
             std::cout << "went to the model on the AI line: " << hall->status() << "\n";
             std::cout << "saved " << a.get("screenshot") << "\n";
+            if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
             return finish();
         }
         harness.render();
@@ -1183,6 +1190,7 @@ int run(const Args& a)
         std::cout << "harness: " << (harness.verdict().empty() ? "-" : harness.verdict()) << "\n";
         if (!harness.status().empty()) std::cout << "status: " << harness.status() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && a.has("main-menu") && a.has("locate"))
@@ -1194,6 +1202,7 @@ int run(const Args& a)
         std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)
         run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""), &go, locator_search_of(a));
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && a.has("main-menu"))
@@ -1205,7 +1214,9 @@ int run(const Args& a)
         mm.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "main menu: language " << language_code() << ", font " << font_name() << "\n";
+        for (const auto& [line, text] : mm.estimate_lines()) std::cout << "estimate: " << text << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot && a.has("menu"))
@@ -1226,6 +1237,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
     if (shot)
@@ -1347,6 +1359,8 @@ int run(const Args& a)
                 hall->render();
                 std::cout << hall->status() << "\n";
             }
+        // COST's shortest route for the item in hand, searched to --route-places N (L), waited for.
+        if (a.has("route-places")) std::cout << "route: " << hall->route_now(int(a.get_positive("route-places", 20))) << "\n";
         // K on the item in hand, waited for, and what Return would apply saved as a settings file.
         if (a.has("tailor") && !hall->tailor_now(a.get("tailor")))
             std::cerr << "--tailor: nothing tailored (no item in hand on the pages, image, audio or video line)\n";
@@ -1357,6 +1371,7 @@ int run(const Args& a)
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         hall->release_textures();
         hall.reset(); // before SDL goes (its audio stream, its textures)
         return finish();

@@ -22,4 +22,12 @@ void announce(const std::string& text);
 // November 2026: the pause menu reopened on Resume was silent).
 void forget_announced();
 
+// A line as it is shown, as it should be said: a tick box ("[x] name", "[ ] name") as "name, on" or
+// "name, off", and the spaces that line up columns as one.
+std::string spoken(const std::string& shown);
+
+// What was said last (empty if nothing since it was forgotten): scripted runs print it, since a
+// machine without a voice says nothing (--read-aloud).
+std::string last_announced();
+
 } // namespace hallway

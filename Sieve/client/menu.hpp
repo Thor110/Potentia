@@ -50,6 +50,14 @@ struct LineSize
 };
 // For a line of `length` symbols of `base` each.
 LineSize line_size(uint32_t base, uint64_t length);
+// The AI line's weights for a shape: 256 H (the embedding) + 16 L H^2 (each layer's matrices).
+inline uint64_t ai_weights_of(const Settings& s) { return 256ull * s.ai_width + 16ull * s.ai_layers * s.ai_width * s.ai_width; }
+// Every line's size under these settings, by door (dimensions.hpp): what the setup menu shows
+// beside each line, and the main menu's completion estimate (IDEAS §19.49).
+std::array<LineSize, kLines> line_sizes_of(const Settings& s);
+// How long walking 10^log10_units units at one a second would take: "~10^115.4 years", "3 years",
+// "40 seconds"; for the main menu's estimate and the setup menu's survivors.
+std::string walk_time_text(double log10_units);
 
 // The view distance (Settings > Graphics): the tiles drawn and kept in the item cache either side
 // of the one you are in, as many behind as ahead, and the rooms either side of yours whose items
@@ -243,7 +251,7 @@ private:
     static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
     // The AI line's weights: the embedding (256 by the width) and, in each layer, 16 times the width squared.
-    uint64_t ai_weights() const { return 256ull * s_.ai_width + 16ull * s_.ai_layers * s_.ai_width * s_.ai_width; }
+    uint64_t ai_weights() const { return ai_weights_of(s_); }
 
     // The filter overlay.
     struct ORow

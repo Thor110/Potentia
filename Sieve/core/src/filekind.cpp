@@ -161,6 +161,20 @@ const std::vector<std::string>& kind_set_names()
 
 KindSet kind_set_of(const std::string& name)
 {
+    // (several, apart by commas: the files of any of them; 7 November 2026, IDEAS §16.4)
+    if (name.find(',') != std::string::npos)
+    {
+        KindSet all(file_kinds().size(), 0);
+        for (size_t at = 0; at <= name.size();)
+        {
+            const size_t comma = std::min(name.find(',', at), name.size());
+            if (comma == at) throw std::invalid_argument("binary-kind-v1: an empty kind in '" + name + "'");
+            const KindSet one = kind_set_of(name.substr(at, comma - at));
+            for (size_t i = 0; i < all.size(); ++i) all[i] = uint8_t(all[i] | one[i]);
+            at = comma + 1;
+        }
+        return all;
+    }
     const auto& all = file_kinds();
     KindSet s(all.size(), 0);
     for (size_t i = 0; i < all.size(); ++i)

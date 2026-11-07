@@ -2,6 +2,7 @@
 // the main menu or the hallway's pause menu.
 
 #include "file_locator.hpp"
+#include "speech.hpp"
 
 #include "dialogs.hpp"
 #include "font.hpp"
@@ -15,16 +16,19 @@
 #include "sieve/mix.hpp" // Prioritise Decoding Speed
 #include "sieve/rope_wave.hpp"
 #include "sieve/stop.hpp"
+#include "sieve/paths.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <fstream>
 #include <random>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -38,13 +42,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 // A single file's Sieve instructions, from the bytes already read: as a folder holding just it,
 // packed, its items of Sieve's lines carried as their places where that makes it smaller, and the
@@ -1301,6 +1300,7 @@ void FileLocator::event(const SDL_Event& e)
     }
     if (pressed.empty() || (busy_ && pressed != "close" && pressed != "stop")) return;
     if (pressed != "go") go_armed_ = false; // "again" means the very next press
+    say_pressed_ = pressed; // (said with its new state as it is next drawn, when reading aloud)
     if (pressed == "stop" && installing_)
     {
         // An install: cancelled, nothing left written.
@@ -1489,6 +1489,8 @@ void FileLocator::draw(float W, float H)
     float bx = 20, row = 0, title_x = W - 20;
     const float title_end = 20 + text_width(tr("loc.title"), 3) + 24;
     bool wrap = true;
+    // What to read aloud this frame: at most one thing, so nothing is cut short by the next.
+    std::string say;
     auto button = [&](const std::string& id, const std::string& label, float y, bool enabled = true) {
         const float w = text_width(label, 2) + 24;
         float at_y = y + row;
@@ -1518,6 +1520,13 @@ void FileLocator::draw(float W, float H)
         SDL_RenderRect(r_, &r);
         draw_text(r_, r.x + 12, r.y + 7, label, 2, enabled ? white : grey);
         if (enabled) buttons_.emplace_back(r, id);
+        // Read aloud: the button just pressed, as it now stands, or the one the mouse comes onto.
+        if (read_aloud())
+        {
+            const std::string said = spoken(label);
+            if (id == say_pressed_) say = said, say_pressed_.clear(), spoken_hot_ = id;
+            else if (hot && spoken_hot_ != id) say = said, spoken_hot_ = id;
+        }
         bx = beside_title ? keep_bx : bx + w + 12;
     };
     const bool busy = busy_;
@@ -1779,6 +1788,24 @@ void FileLocator::draw(float W, float H)
     }
     draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
     if (asking_folder_) draw_folder_prompt(W, H, ink, grey);
+    // Read aloud: a button (above), or else the status line when it changes. While a job runs only
+    // its first status is read, so an install's file-by-file lines do not talk over each other; its
+    // last, the result, is read when it ends.
+    if (read_aloud())
+    {
+        Clock::time_point job;
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            job = job_started_;
+        }
+        if (say.empty() && !status.empty() && status != spoken_status_ && (!busy || spoken_job_ != job))
+        {
+            say = status;
+            spoken_status_ = status;
+            if (busy) spoken_job_ = job;
+        }
+        if (!say.empty()) announce(say);
+    }
 }
 
 void FileLocator::warn_rars(const cli::Manifest& m)

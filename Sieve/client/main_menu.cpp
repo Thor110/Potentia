@@ -13,6 +13,7 @@
 #include "speech.hpp"
 
 #include "dimensions.hpp"
+#include "menu.hpp" // line_sizes_of
 #include "font.hpp"
 #include "music.hpp"
 #include "strings.hpp"
@@ -412,6 +413,21 @@ MainMenu::Result MainMenu::run()
     return result_;
 }
 
+std::vector<std::pair<int, std::string>> MainMenu::estimate_lines() const
+{
+    const auto sizes = line_sizes_of(s_.setup);
+    std::vector<std::pair<int, std::string>> out;
+    for (int k = 0; k < kLines; ++k)
+    {
+        const int i = k == 0 ? kBinaryLine : k - 1; // binary (the last door) first, then the doors in order
+        const LineSize& z = sizes[size_t(i)];
+        const std::string name = tr(kDimensions[i].theme.key);
+        const std::string time = walk_time_text(std::isfinite(z.bits) ? z.bits * std::log10(2.0) : z.bits);
+        out.emplace_back(i, trf("main.est.line", {name, z.units, time}));
+    }
+    return out;
+}
+
 void MainMenu::render()
 {
     if (int(screen_) != spoken_screen_)
@@ -488,7 +504,31 @@ void MainMenu::render()
     for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr("help." + it.id)).size());
     const float block = (heading ? 40.0f : 0.0f) + float(its.size()) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
-    const float top = 50 + 8 * ts + 60, bottom = H - 50;
+    float top = 50 + 8 * ts + 60;
+    const float bottom = H - 50;
+    // The main screen's completion estimate (IDEAS §19.49), under the rule: a line a dimension in
+    // its colour, as many as fit above the items; the rest folded into "and N more".
+    if (screen_ == Screen::Main)
+    {
+        constexpr float kEstLine = 13;
+        const float ey = 50 + 8 * ts + 50;
+        const auto lines = estimate_lines();
+        const int room = int((bottom - ey - block - 12) / kEstLine) - 1; // less the heading
+        if (room >= 2)
+        {
+            draw_centred(r_, cx, ey, tr("main.est.heading"), 1, kGrey);
+            const int shown = room >= int(lines.size()) ? int(lines.size()) : room - 1;
+            for (int k = 0; k < shown; ++k)
+            {
+                const auto& [line, text] = lines[size_t(k)];
+                const std::string fitted = text_width(text, 1) <= W - 40 ? text : fit_cells(text, size_t((W - 40) / 8));
+                draw_centred(r_, cx, ey + kEstLine * float(k + 1), fitted, 1, menu_ink(theme_of(line)));
+            }
+            if (shown < int(lines.size()))
+                draw_centred(r_, cx, ey + kEstLine * float(shown + 1), trf("main.est.more", {std::to_string(int(lines.size()) - shown)}), 1, kDim);
+            top = ey + kEstLine * float(std::min<int>(room, int(lines.size())) + 1) + 12;
+        }
+    }
     float y = std::max(top, top + (bottom - top - block) / 2);
     if (heading)
     {

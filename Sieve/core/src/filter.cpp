@@ -66,7 +66,20 @@ std::string param_value(const FilterSpec& spec, const FilterValues& values, cons
         {
             const auto it = values.find(key);
             const std::string& v = it == values.end() ? p.default_value : it->second;
-            if (!p.choices.empty() && std::find(p.choices.begin(), p.choices.end(), v) == p.choices.end())
+            // (where the parameter takes a list, each of its parts one of the choices)
+            auto allowed = [&](const std::string& one) { return std::find(p.choices.begin(), p.choices.end(), one) != p.choices.end(); };
+            bool ok = p.choices.empty() || allowed(v);
+            if (!ok && p.choice_list && !v.empty())
+            {
+                ok = true;
+                for (size_t at = 0; at <= v.size() && ok;)
+                {
+                    const size_t comma = std::min(v.find(',', at), v.size());
+                    ok = comma > at && allowed(v.substr(at, comma - at));
+                    at = comma + 1;
+                }
+            }
+            if (!ok)
             {
                 std::string list;
                 for (const auto& c : p.choices) list += (list.empty() ? "" : ", ") + c;

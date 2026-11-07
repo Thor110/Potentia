@@ -3,8 +3,8 @@
 // what the recipe makes of them.
 //
 // Rows, chosen with Up/Down: the input (typed text, or bytes in hex), whether it is text or hex,
-// the recipe ("vigenere lemon; feistel my key"), and what to do: encrypt, decrypt, or try to break
-// it (the weak ciphers' guesses, ranked). Typing edits the row chosen; Left/Right change a choice;
+// the recipe ("vigenere lemon; feistel my key"), and what to do: encrypt, decrypt, try to break
+// it (the weak ciphers' guesses, ranked), or count the catalogue of recipes the recipe is one of. Typing edits the row chosen; Left/Right change a choice;
 // Enter runs it; Tab puts the output in as the input (in hex), so a result can be decrypted, broken
 // or encrypted again. Ctrl+V pastes into the row chosen, Ctrl+C copies the output's hex. Esc goes
 // back. The output is worked out again whenever it is run, never kept apart from what it shows.
@@ -60,7 +60,7 @@ public:
 
 private:
     enum Row { kInput, kInputKind, kRecipe, kAction, kRows };
-    enum class Action { Encrypt, Decrypt, Break };
+    enum class Action { Encrypt, Decrypt, Break, Catalogue };
     void key(SDL_Keycode k, SDL_Keymod mod);
     void handle(const SDL_Event& e);
     void run_recipe(); // works the output out again

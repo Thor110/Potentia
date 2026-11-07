@@ -3,14 +3,17 @@
 // cipher, or count the recipes there are.
 #include "cli/args.hpp"
 #include "cli/locate.hpp"
-#include "sieve/biguint.hpp"
 #include "sieve/cipher.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/sha256.hpp"
 
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace sieve::cli {
 
@@ -18,13 +21,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-std::string hex(const std::vector<uint8_t>& b)
-{
-    static const char k[] = "0123456789abcdef";
-    std::string s;
-    for (const uint8_t c : b) s += {k[c >> 4], k[c & 15]};
-    return s;
-}
+using sieve::hex_of;
 
 std::vector<uint8_t> from_hex(const std::string& h)
 {
@@ -66,7 +63,7 @@ std::string shown(const std::vector<uint8_t>& b, size_t at_most)
         for (const uint8_t c : head) s += c == '\n' ? std::string("\\n") : c == '\t' ? std::string("\\t") : std::string(1, char(c));
         s = "\"" + s + "\"";
     }
-    else s = hex(head);
+    else s = hex_of(head);
     return s + (b.size() > at_most ? " ..." : "");
 }
 
@@ -86,26 +83,12 @@ cipher::Recipe recipe_of(const Args& a)
 
 int catalogue(const Args& a)
 {
-    // Each layer with a key of at most K bytes: reverse (1), caesar (256), and xor, vigenere and
-    // feistel (keys of 1 to K bytes: 256 + 256^2 + ... + 256^K each).
-    const uint32_t k = a.get_positive("key-bytes", 16), depth = a.get_positive("depth", 4);
-    BigUint keys(0);
-    for (uint32_t i = 1; i <= k; ++i) keys += BigUint::pow(256, i);
-    BigUint layer = keys;
-    layer.mul_small(3);
-    layer.add_small(257);
-    std::cout << "cipher       " << cipher::kCipherVersion << ": 5 kinds of layer, keys of at most " << k << " bytes\n"
-              << "layers       " << layer.to_decimal() << " (" << layer.bit_length() << " bits)\n";
-    BigUint total(0);
-    for (uint32_t d = 1; d <= depth; ++d)
-    {
-        const BigUint r = BigUint::pow(layer, d);
-        total += r;
-        const std::string dec = r.to_decimal();
-        std::cout << "depth " << d << "      " << (dec.size() <= 60 ? dec : dec.substr(0, 12) + "... (" + std::to_string(dec.size()) + " digits)")
-                  << " recipes, " << r.bit_length() << " bits to name one\n";
-    }
-    std::cout << "up to " << depth << "      " << total.bit_length() << " bits name any of them. Every one is a bijection of the files\n"
+    const cipher::Catalogue c = cipher::catalogue(a.get_positive("key-bytes", 16), a.get_positive("depth", 4));
+    std::cout << "cipher       " << cipher::kCipherVersion << ": 5 kinds of layer, keys of at most " << c.key_bytes << " bytes\n"
+              << "layers       " << c.layers << " (" << c.layer_bits << " bits)\n";
+    for (const auto& d : c.depths)
+        std::cout << "depth " << d.depth << "      " << cipher::short_decimal(d.recipes) << " recipes, " << d.bits << " bits to name one\n";
+    std::cout << "up to " << c.depths.size() << "      " << c.total_bits << " bits name any of them. Every one is a bijection of the files\n"
               << "             of each length, so together they reach every file of that length: the key is what\n"
               << "             makes one path the message (IDEAS §19.52).\n";
     return 0;
@@ -153,7 +136,7 @@ int cmd_cipher(const Args& a)
     }
     else
     {
-        std::cout << "hex          " << hex(out) << "\n";
+        std::cout << "hex          " << hex_of(out) << "\n";
         if (shown(out, out.size() + 1).front() == '"') std::cout << "as text      " << shown(out, 400) << "\n";
     }
     return 0;

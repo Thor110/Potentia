@@ -291,6 +291,10 @@ private:
     void ask_folder(bool from_sieve, const std::string& out, const std::string& name);
     void folder_event(const SDL_Event& e);
     void draw_folder_prompt(float W, float H, SDL_Color ink, SDL_Color grey);
+    // Read aloud (speech.hpp): the button just pressed, and what was said last of the button under
+    // the mouse and of the status line, so each is said once, when it changes.
+    std::string say_pressed_, spoken_hot_, spoken_status_;
+    std::chrono::steady_clock::time_point spoken_job_{};
     bool go_armed_ = false; // Go to it pressed once for a file past the BINARY length
     float mouse_x_ = -1, mouse_y_ = -1;
     std::vector<std::pair<SDL_FRect, std::string>> buttons_;

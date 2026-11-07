@@ -1,5 +1,6 @@
 // Reading the menus aloud (speech.hpp).
 #include "speech.hpp"
+#include "strings.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -120,6 +121,32 @@ void forget_announced()
 }
 
 bool read_aloud() { return g_on; }
+
+std::string spoken(const std::string& shown)
+{
+    std::string s = shown, state;
+    if (s.rfind("[x] ", 0) == 0 || s.rfind("[ ] ", 0) == 0)
+    {
+        state = tr(s[1] == 'x' ? "value.on" : "value.off");
+        s = s.substr(4);
+    }
+    std::string out;
+    for (const char c : s)
+        if (c != ' ' || (!out.empty() && out.back() != ' ')) out += c;
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    if (state.empty()) return out;
+    // The state after the name, before what follows it ("max-run-v1, on, Filtered: 0.1%").
+    const size_t gap = shown.find("  ", 4);
+    if (gap == std::string::npos) return out + ", " + state;
+    const std::string name = spoken(shown.substr(4, gap - 4)), rest = spoken(shown.substr(gap));
+    return name + ", " + state + (rest.empty() ? "" : ", " + rest);
+}
+
+std::string last_announced()
+{
+    std::lock_guard<std::mutex> lock(g_mx);
+    return g_last;
+}
 
 bool speech_available()
 {

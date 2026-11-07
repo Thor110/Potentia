@@ -919,8 +919,21 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
             const size_t room = size_t(std::max(20.0f, (pw - 300) / 8));
             std::string w = p->written.size() > room ? p->written.substr(0, room - 3) + "..." : p->written;
             text(x + 28, cy, trf("cost.vla.route", {w}), 1, dim);
-            if (p->by_bearing && p->decimals > angle_decimals_)
+            if (p->by_bearing && p->decimals > kMaxAngleDecimals)
+                text(x + 28 + 8 * float(w.size() + 8), cy, trf("cost.vla.beyond", {std::to_string(p->decimals), std::to_string(kMaxAngleDecimals)}), 1, dim);
+            else if (p->by_bearing && p->decimals > angle_decimals_)
                 text(x + 28 + 8 * float(w.size() + 8), cy, trf("cost.vla.places", {std::to_string(p->decimals)}), 1, dim);
+            cy += 14;
+            // How far it has searched, and L to search further.
+            int searched = 0, wanted = 0;
+            {
+                std::lock_guard<std::mutex> lock(vla_mx_);
+                searched = vla_d_, wanted = vla_want_;
+            }
+            text(x + 28, cy, wanted > searched ? trf("cost.vla.further.working", {std::to_string(searched), std::to_string(wanted)})
+                             : searched >= kVlaFurthest ? trf("cost.vla.further.done", {std::to_string(searched)})
+                                                        : trf("cost.vla.further", {std::to_string(searched)}),
+                 1, dim);
             cy += 14;
         }
         else
@@ -1086,32 +1099,39 @@ float Hallway::draw_file(const BinarySpace::Bytes& f, float x, float cy, float p
 // The worker behind COST's variable length addressing (see hallway.hpp).
 const sieve::ShortestPath* Hallway::shortest_path_of(const BigUint& v, const BigUint& units)
 {
+    int want = 0;
     {
         std::lock_guard<std::mutex> lock(vla_mx_);
-        if (vla_done_ && vla_v_ == v && vla_units_ == units)
+        const bool same = vla_v_ == v && vla_units_ == units;
+        if (!same) vla_want_ = kMaxAngleDecimals; // (a new unit: the compass's places again)
+        want = vla_want_;
+        if (same && vla_done_)
         {
             if (vla_shown_gen_ != vla_done_gen_) // (a route on a line of files is as long as a file)
             {
                 vla_shown_ = vla_done_;
                 vla_shown_gen_ = vla_done_gen_;
             }
-            return &*vla_shown_;
+            if (vla_d_ >= want || vla_busy_) return &*vla_shown_; // (searching further: the best so far)
         }
+        else if (same && vla_busy_) return nullptr;
     }
     if (vla_busy_) return nullptr; // another unit's: this one is started when it is done
     if (vla_thread_.joinable()) vla_thread_.join(); // finished
     {
         std::lock_guard<std::mutex> lock(vla_mx_);
+        if (!(vla_v_ == v && vla_units_ == units)) vla_done_.reset(), vla_shown_.reset();
         vla_v_ = v;
         vla_units_ = units;
-        vla_done_.reset();
     }
     vla_busy_ = true;
-    vla_thread_ = std::thread([this, v, units] {
+    vla_thread_ = std::thread([this, v, units, want] {
         std::optional<sieve::ShortestPath> p;
         try
         {
-            p = sieve::shortest_path(v, units, kMaxAngleDecimals);
+            // Every place up to `want`: what fewer places found is among what this finds, so the
+            // answer is never longer than the last.
+            p = sieve::shortest_path(v, units, want);
         }
         catch (const std::exception&)
         {
@@ -1121,12 +1141,56 @@ const sieve::ShortestPath* Hallway::shortest_path_of(const BigUint& v, const Big
             if (vla_v_ == v && vla_units_ == units)
             {
                 vla_done_ = std::move(p);
+                vla_d_ = want;
                 ++vla_done_gen_;
             }
         }
         vla_busy_ = false;
     });
-    return nullptr;
+    std::lock_guard<std::mutex> lock(vla_mx_);
+    return vla_shown_ ? &*vla_shown_ : nullptr;
+}
+
+std::string Hallway::route_now(int places)
+{
+    if (!in_hand_ || !(in_hand_->index < line_units())) return "";
+    hand_tab_ = 1;
+    const BigUint v = in_hand_->index, units = line_units();
+    // The unit's search at the compass's places first, then as far as asked.
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        if (pass == 1)
+        {
+            std::lock_guard<std::mutex> lock(vla_mx_);
+            vla_want_ = std::clamp(places, kMaxAngleDecimals, kVlaFurthest);
+        }
+        uint64_t gen = 0;
+        {
+            std::lock_guard<std::mutex> lock(vla_mx_);
+            gen = vla_done_gen_;
+        }
+        for (;;)
+        {
+            shortest_path_of(v, units);
+            {
+                std::lock_guard<std::mutex> lock(vla_mx_);
+                const bool ours = vla_v_ == v && vla_units_ == units && !vla_busy_;
+                if (ours && vla_done_ && vla_d_ >= vla_want_) break;
+                if (ours && !vla_done_ && vla_done_gen_ != gen) return ""; // (the search failed)
+            }
+            SDL_Delay(5);
+        }
+    }
+    const sieve::ShortestPath* p = shortest_path_of(v, units);
+    if (!p) return "";
+    return p->written + " (" + std::to_string(p->chars) + " chars, " + (p->by_bearing ? std::to_string(p->decimals) + " places" : "the position") + ", searched to " +
+           std::to_string(vla_d_) + ")";
+}
+
+void Hallway::vla_search_further()
+{
+    std::lock_guard<std::mutex> lock(vla_mx_);
+    if (vla_want_ < kVlaFurthest) vla_want_ = std::min(kVlaFurthest, std::max(vla_want_, kMaxAngleDecimals) * 2);
 }
 
 } // namespace hallway::hall

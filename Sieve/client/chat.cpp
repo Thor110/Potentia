@@ -34,6 +34,7 @@
 #include "sieve/filekind.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -71,13 +72,8 @@ constexpr float kBig = 2, kSmall = 1, kBigLine = 20, kSmallLine = 14, kPad = 10,
 constexpr uint32_t kThumb = 96;
 constexpr size_t kPreviewLines = 4;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 void write_bytes(const fs::path& p, const std::vector<uint8_t>& b)
 {
@@ -879,7 +875,7 @@ std::string section_title(const std::string& l)
 // /docs: the documents (no name), a document's sections (a name), or a section's text (a name
 // and the start of a section's title or number: "/docs ideas 19.32"). Up to 6,000 characters of
 // it; the rest is said to be there.
-std::string Hallway::docs_answer(const std::string& name, const std::string& section) const
+std::string Hallway::docs_answer(const std::string& name, const std::string& section, std::pair<std::string, std::string>* card) const
 {
     const fs::path dir = docs_folder();
     if (dir.empty()) return tr("chat.docs.none");
@@ -924,6 +920,7 @@ std::string Hallway::docs_answer(const std::string& name, const std::string& sec
         if (list.empty())
             for (const std::string& l : lines)
                 if (const std::string t = section_title(l); !t.empty()) list += (n++ ? "; " : "") + t;
+        if (card) *card = {u8(doc->filename()), all_text.str()};
         return trf("chat.docs.sections", {u8(doc->filename()), list});
     }
     // The section: from the first line whose title starts with what was asked (or holds it), to
@@ -948,6 +945,25 @@ std::string Hallway::docs_answer(const std::string& name, const std::string& sec
     {
         if (i > from && !section_title(lines[i]).empty() && level(lines[i]) <= lv) break;
         text += lines[i] + "\n";
+    }
+    if (card)
+    {
+        // Named after the document and the section's title: "IDEAS-19.48-The-documentation.md".
+        std::string slug;
+        for (const char c : section_title(lines[from]))
+        {
+            if (c == '(' || c == ':') break; // (the title, not who asked for it or its gloss)
+            const bool keep = std::isalnum(static_cast<unsigned char>(c)) || c == '.';
+            if (keep) slug += c;
+            else if (!slug.empty() && slug.back() != '-') slug += '-';
+            if (slug.size() >= 48)
+            {
+                if (const size_t dash = slug.rfind('-'); dash != std::string::npos && dash > 0) slug.resize(dash); // (at a word's end)
+                break;
+            }
+        }
+        while (!slug.empty() && (slug.back() == '-' || slug.back() == '.')) slug.pop_back();
+        *card = {u8(doc->stem()) + (slug.empty() ? "" : "-" + slug) + u8(doc->extension()), text};
     }
     constexpr size_t kMost = 6000;
     if (text.size() > kMost)
@@ -1000,26 +1016,35 @@ void Hallway::chat_command(const std::string& line)
         chat_show_unit(std::move(e));
         return;
     }
+    // The lines a word names, for /random and /unit: a page, a book, a world, a model ...
+    static const std::pair<const char*, const char*> kWords[] = {
+        {"page", "pages"}, {"pages", "pages"}, {"book", "books"}, {"books", "books"}, {"world", "worlds"}, {"worlds", "worlds"},
+        {"model", "models"}, {"models", "models"}, {"ai", "ai"}, {"track", "tracks"}, {"tracks", "tracks"}, {"video", "video"},
+        {"movie", "movies"}, {"movies", "movies"}, {"file", "binary"}, {"binary", "binary"}, {"picture", "image"}, {"image", "image"},
+        {"melody", "audio"}, {"audio", "audio"}};
+    auto line_of_word = [&](const std::string& word, bool with_units) {
+        for (const auto& [w, id] : kWords)
+            if (word == w && (with_units || (line_named(id) != line_of(Media::Image) && line_named(id) != line_of(Media::Audio)))) return line_named(id);
+        return -1;
+    };
+    // A line's places, as the navigator counts them. (The binary line counts its places as files:
+    // its loop, units_of, counts the empty right wall too, twice as many; the review of 6 November
+    // 2026.)
+    auto places_of = [&](int li) {
+        return li == kBinaryLine ? (effective_mode(kBinaryLine) == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size())
+                                 : units_of(li);
+    };
     if (verb == "random" && !what.empty())
     {
         // A random place on another line (IDEAS 19.32): a page, a book, a world, a model ... Every
         // place on it as likely as any other, as the navigator's R draws one; where the line is
         // compact (its filters ticked and counting), its places are its survivors, so it is one of
         // them. GO TO IT goes there.
-        static const std::pair<const char*, const char*> kWords[] = {
-            {"page", "pages"}, {"pages", "pages"}, {"book", "books"}, {"books", "books"}, {"world", "worlds"}, {"worlds", "worlds"},
-            {"model", "models"}, {"models", "models"}, {"ai", "ai"}, {"track", "tracks"}, {"tracks", "tracks"}, {"video", "video"},
-            {"movie", "movies"}, {"movies", "movies"}, {"file", "binary"}, {"binary", "binary"}};
-        int li = -1;
-        for (const auto& [word, id] : kWords)
-            if (what == word) li = line_named(id);
+        const int li = line_of_word(what, false);
         if (li >= 0)
         {
             static sieve::diffusion::SplitMix g(uint64_t(SDL_GetPerformanceCounter()) ^ 0x9ace);
-            // (The binary line counts its places as files: its loop, units_of, counts the empty
-            // right wall too, twice as many; the review of 6 November 2026.)
-            const BigUint n = li == kBinaryLine ? (effective_mode(kBinaryLine) == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size())
-                                                : units_of(li);
+            const BigUint n = places_of(li);
             ChatEntry e;
             e.kind = ChatEntry::Kind::Place;
             e.place_line = li;
@@ -1033,6 +1058,41 @@ void Hallway::chat_command(const std::string& line)
             return;
         }
     }
+    if (verb == "unit") // the place at a number on a line, in hex, as the navigator and /random show it
+    {
+        std::string hex;
+        in >> hex;
+        const int li = line_of_word(what, true);
+        if (li < 0 || hex.empty())
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.unit.how")));
+            return;
+        }
+        if (hex.rfind("0x", 0) == 0) hex = hex.substr(2);
+        const BigUint n = places_of(li);
+        if (hex.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.unit.not_hex", {hex})));
+            return;
+        }
+        const BigUint at = BigUint::from_hex(hex);
+        if (!(at < n))
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.unit.past", {tr(theme_of(li).key), short_big(n)})));
+            return;
+        }
+        ChatEntry e;
+        e.kind = ChatEntry::Kind::Place;
+        e.place_line = li;
+        e.place_index = at;
+        e.title = trf("chat.unit.place", {tr(theme_of(li).key)});
+        e.address = at.to_hex();
+        e.text = trf("chat.unit.of", {short_big(at), short_big(n)});
+        talk_ += e.title + ": " + e.address + "\n";
+        chat_.push_back(std::move(e));
+        chat_scroll_ = 0;
+        return;
+    }
     if (verb == "docs") // the documents, their sections, and a section's text (IDEAS 19.48)
     {
         std::string rest = line.substr(std::min(line.size(), line.find("docs") + 4));
@@ -1041,7 +1101,26 @@ void Hallway::chat_command(const std::string& line)
         words >> name;
         std::getline(words, section);
         section.erase(0, std::min(section.size(), section.find_first_not_of(' ')));
-        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, docs_answer(name, section)));
+        std::pair<std::string, std::string> card;
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, docs_answer(name, section, &card)));
+        if (!card.first.empty())
+        {
+            // The document, or the section, as a file: GO TO IT walks to it on the binary line, J
+            // opens it as text on the pages line (IDEAS 19.48), S saves it.
+            ChatEntry e;
+            e.kind = ChatEntry::Kind::File;
+            e.from_docs = true;
+            e.name = card.first;
+            e.bytes.assign(card.second.begin(), card.second.end());
+            e.file_kind = sieve::file_kind(e.bytes, e.bytes.size());
+            for (std::string l : split_lines(card.second.substr(0, 600)))
+            {
+                if (!l.empty() && l.back() == '\r') l.pop_back();
+                if (e.preview.size() < kPreviewLines && !l.empty()) e.preview.push_back(text_line(l));
+            }
+            talk_ += trf("chat.docs.card", {e.name, grouped(e.bytes.size())}) + "\n";
+            chat_.push_back(std::move(e));
+        }
         return;
     }
     if (verb == "chain") // the chain of the CHAIN tab, given the rest of the line
@@ -1450,8 +1529,9 @@ float Hallway::chat_entry(size_t i, float x, float y, float w, bool draw)
         lines.push_back({trf("chat.file.what", {e.file_kind, grouped(e.bytes.size())}), kSmall, ink});
         for (const std::string& para : paragraphs(e.weighing))
             for (const std::string& l : wrap_words(para, cols)) lines.push_back({l, kSmall, ink});
-        lines.push_back({e.with_next ? (e.given ? trf("chat.given.next", {grouped(e.given)}) : tr("chat.given.next.what"))
-                                     : trf("chat.given", {grouped(e.given)}),
+        lines.push_back({e.from_docs  ? tr("chat.docs.not_given")
+                         : e.with_next ? (e.given ? trf("chat.given.next", {grouped(e.given)}) : tr("chat.given.next.what"))
+                                       : trf("chat.given", {grouped(e.given)}),
                          kSmall, ink});
         for (const std::string& l : e.preview) lines.push_back({fit(l, tw, kSmall), kSmall, grey});
         if (e.item_line >= 0 || e.file_kind != "?") buttons.push_back({tr("chat.item"), ChatAct::Item});

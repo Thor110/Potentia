@@ -302,6 +302,15 @@ $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --tra
 # through the door to it.
 $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random book" --training-dir data/training --screenshot chat-rbook.png | tr -d '\r' | q "^a random book, on the BOOKS line: [0-9a-f]*$"
 $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random page" --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-rpage.png | tr -d '\r' | q "^PAGES line, .*| went to "
+# COST's shortest route searched further (L; IDEAS 16.1 (a)): to 640 places, waited for.
+$H --no-menu --line binary --walk "0,0" --take --route-places 640 --screenshot cost-route.png | tr -d '\r' | q "^route: .*, searched to 640)$"
+# /unit (IDEAS 19.32): the place at a number, in hex, on a line, as a card; GO TO IT goes there.
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/unit page 1f" --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-unit.png | tr -d '\r' | q "^PAGES line, .*| went to 1f$"
+# /docs with its card (IDEAS 19.48): the section as a file, walked to on the binary line (GO TO
+# IT) and opened as text on the pages line (J).
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/docs ideas 19.48" --training-dir data/training --screenshot chat-docs.png | tr -d '\r' | q "^as a file: IDEAS-19.48-The-documentation-inside-the-game.md, "
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/docs ideas 19.48" --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-docs-go.png | tr -d '\r' | q "^BINARY line, .*went to a file of "
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/docs ideas 19.48" --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-docs-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-mgo.png | tr -d '\r' | q "^AUDIO line, .*on the audio line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
@@ -985,7 +994,22 @@ $H --cipher --cipher-in tests/manifest_fixture/a.txt --cipher-out engine.enc --s
 build/sieve cipher --encrypt --in tests/manifest_fixture/a.txt --recipe "vigenere lemon; feistel my key" --out cli.enc > /dev/null
 cmp engine.enc cli.enc
 $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst of times it was the age of wisdom it was the age of foolishness,Down,Down,Ctrl+Backspace,=xor 736563726574,Return,Tab,Down,Right" --screenshot cipher-break.png | tr -d '\r' | q "^cipher: the best guess: xor 736563726574$"
+# The catalogue (DO: CATALOGUE, Left from ENCRYPT): the recipes counted as sieve cipher --catalogue
+# counts them, and the opening recipe's two layers placed among them.
+$H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | tr -d '\r' | q "^cipher: the recipe has 2 layer(s): one of the recipes of its depth, named by 260 bits$"
+# The main menu's completion estimate (IDEAS §19.49): a line for each of the eleven dimensions,
+# binary first, each with its size and the time to walk it at one a second.
+$H --main-menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
+test "$(grep -c '^estimate: ' main-estimate.txt)" = 11
+q "^estimate: BINARY  title\*files<=" main-estimate.txt
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
+# Read aloud (--read-aloud, unsaved; IDEAS §19.74): what would be said is printed, since there is
+# no voice here. The main menu's item, the setup menu's row with its section and value, a filter
+# with its tick said as on or off, and the File Locator's box as pressed.
+$H --main-menu --read-aloud --press Down --screenshot ra-main.png | tr -d '\r' | q "^read aloud: File Locator$"
+$H --menu --read-aloud --press "Down,Down,Down" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
+$H --menu --read-aloud --press "F,Down,Down" --screenshot ra-filters.png | tr -d '\r' | q -E "^read aloud: max-run-v1, (On|Off), Filtered: "
+$H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --screenshot ra-locator.png | tr -d '\r' | q "^read aloud: Optimise Search, Off$"
 # Manual Navigation (IDEAS §19.117): Edward's four bytes turned by hand. A byte typed is one step
 # (its two digits); the log (--manual-logs: Keep a log's folder) holds every step, undos and redos
 # included, each starting where the one before it landed, and the precision changed between them;

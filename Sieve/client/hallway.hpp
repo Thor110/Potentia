@@ -1028,6 +1028,12 @@ public:
     std::optional<sieve::ShortestPath> vla_done_;     // (vla_mx_)
     uint64_t vla_done_gen_ = 0, vla_shown_gen_ = 0;   // which answer each is (done: vla_mx_)
     std::optional<sieve::ShortestPath> vla_shown_;    // a copy for the frames, made once per answer
+    // Search further (L on COST, IDEAS 16.1 (a)): the places the answer was searched to, and the
+    // places asked for (vla_mx_). Each L doubles them, from the compass's 20 to kVlaFurthest; the
+    // route found so far is shown while the worker searches. A new unit starts again at 20.
+    static constexpr int kVlaFurthest = 640;
+    int vla_d_ = 0, vla_want_ = 0;
+    void vla_search_further();
 
     // COST's tailoring (cli/tailor.hpp): the line's filters searched, on a worker, for those that
     // keep the item in hand and name it shortest. K starts it, or stops it; Return, once it is
@@ -1412,6 +1418,10 @@ public:
     // For screenshots and tests: K on the item in hand, waited for; with a path, what Return would
     // apply is saved there as a settings file. Returns false if there is nothing to tailor.
     bool tailor_now(const std::string& save_to = "");
+    // COST's shortest route for the item in hand searched to `places` decimal places of bearing
+    // (as L asks), waited for: the route written, its characters and its places; empty with nothing
+    // in hand. Scripted runs (--route-places).
+    std::string route_now(int places);
     void media_saved(const std::string& path); // the save dialog's choice (any thread)
 
 private:
@@ -1540,11 +1550,14 @@ private:
         // navigator holds a place (a number below the line's count of places).
         int place_line = -1;
         BigUint place_index;
+        bool from_docs = false; // a /docs answer's text as a file: not given to the model
     };
     enum class ChatAct { Go, Item, Save, Play, Full };
     void close_chat();
     void chat_event(const SDL_Event& e);
-    std::string docs_answer(const std::string& name, const std::string& section) const; // CHAT's /docs
+    // CHAT's /docs. With `card`: a document's or a section's text as a file (its name and bytes),
+    // for the card that goes with the answer (GO TO IT, J, S).
+    std::string docs_answer(const std::string& name, const std::string& section, std::pair<std::string, std::string>* card = nullptr) const;
     // The CHAT tab drawn in the hand panel's area from (x, top), `w` wide, down to `bottom`.
     void draw_chat(float x, float top, float w, float bottom);
     // Every frame: what the dialogs chose (files to give, where to save a card), and the keys given

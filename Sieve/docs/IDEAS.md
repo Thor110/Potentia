@@ -1368,6 +1368,11 @@ long as allowed. Built today, it would find routes for the lucky units, as now, 
 near-anchor-v1 and contains-fragment-v1; v4's `lines K`, which names a word list by another). That is
 real, and it is what the idea becomes when the filter is not the file itself. Verdict: (a) worth a
 button; the self-filter, no.
+*Built (7 November 2026), (a):* L on COST searches further, doubling the bearing's decimal places
+(20, 40, ... 640) on the route's worker, the best so far shown meanwhile; every walk is already
+weighed at each width, so more places are what is left to try. On a page and on a file of the
+binary line it took under a second to 640 places, and found nothing shorter than at 20, as the
+evaluation expects for most units. A bearing past 20 places is written down, not typed.
 
 **16.2 The File Locator from the main menu.** Show "Go to it" only when the locator is open in
 the world, and add "File Locator" to the main menu, under Settings and above the Filter Designer.
@@ -1441,6 +1446,9 @@ own first bytes by the `file-kinds-v1` table (PNG, ZIP, MID, EXE, ...), counted 
 so the line compacts under it. Its `kinds` setting takes one kind or a group (signed, text,
 signed-or-text, unknown, empty, any). What it lacks is a **set** of kinds (PNG and JPG together,
 say). Verdict: extend the setting to a list.
+*Built (7 November 2026):* `kinds` also takes several kinds apart by commas (`png,jpg`), the files
+of any of them; an empty or unknown part is refused. The manifest is unchanged: the setting was
+already text.
 
 **16.5 "Calculating Dimensions" where it is seen.** Move it to the top middle of the setup menu, in
 red, and grey out ENTER THE HALLWAY while it is calculating.
@@ -2588,7 +2596,9 @@ track or picture from the library, given to the person first, before any model i
   *Built (6 November 2026):* `/random page|book|world|model|ai|track|video|movie|file`, a card
   with a random place on that line (every place as likely as any other, as the navigator's R
   draws one; where the line is compact, its places are its survivors) and GO TO IT, which goes
-  through the door to it. The unit at an address is still to come.
+  through the door to it. *Built (7 November 2026):* `/unit LINE HEX`, the place at that number on
+  a line (in hex, as the navigator and `/random`'s cards show it; refused past the line's end), as
+  the same card, with GO TO IT.
 
 **19.33 A voice made the way a voice is made (Edward, 12 October 2026).** His idea: a natural
 vocalisation system for AI models, built on the structure and form of the human mouth: the vocal
@@ -3012,8 +3022,11 @@ the pages and books lines. There should be a free-flowing way between all catalo
   `/docs NAME SECTION` shows a section (by the start of its title or its number, up to 6,000
   characters, the rest said to be there), as a note. The documents are found beside the program
   or in a folder above it (a build inside the repository); a release does not carry them, which
-  is Edward's call (they would add the docs folder to it). GO TO IT and J on a section are still to
-  come.
+  is Edward's call (they would add the docs folder to it).
+  *Built (7 November 2026):* GO TO IT and J. With `/docs NAME` or `/docs NAME SECTION` comes a
+  card holding the document's or the section's whole text as a file ("IDEAS-19.48-The-documentation-inside-the-game.md"):
+  GO TO IT walks to it on the binary line, J opens it as an item (text, on the pages
+  line), S saves it. It is not given to the model.
 - **One catalogue:** every catalogued thing (documents, anchors, models, runs, maps, chains)
   named by its SHA-256 and linked in the node graph's map, so that from any one of them the others
   are a step away. The maps already do this for files; the rest are files too.
@@ -3042,6 +3055,12 @@ the game's calculations must stay in sync, and look alike.
   dimensions", so the menu never overflows.
 - **As filters:** each label is the line's name and size, so choosing one could open that line
   with its stack, the same thing seen from the menu.
+- *Built (7 November 2026), the menu's part:* under the rule on the main menu, a line for each
+  dimension in its colour, binary first: its name, its size under the setup menu's settings (the
+  same counts the setup menu shows, `line_sizes_of`), and the years walking every unit at one a
+  second would take. Lines that do not fit above the items fold into "and N more dimensions".
+  `hallway --main-menu --screenshot` prints them. *Still to come:* the website's copy checked
+  against them, and the labels as filters.
 
 **19.50 Metrics for every build, charted over time (Edward, 13 October 2026).** His idea: log each
 build's metrics, with its date, in a folder in the repository. Then chart how effective it all is
@@ -3143,8 +3162,10 @@ combinations of data, to be expanded and catalogued mathematically.
   It sits after Settings, so the menus' existing rows keep their places. CI: `hallway --cipher
   --script ...`.
 - *Stage 2, built (17 October 2026):* the item in hand or a file as the input, the output as an
-  item to Go to or save. *Still to come:* a layer keyed by a picture (§19.76), and the catalogue
-  on the screen.
+  item to Go to or save. *Still to come:* a layer keyed by a picture (§19.76).
+- *Built (7 November 2026):* the catalogue on the screen: DO: CATALOGUE counts the recipes, from
+  the same code as `sieve cipher --catalogue` (`cipher::catalogue`), and places the recipe among
+  those of its depth.
 - *Earlier plan, kept for the record:* the Encryption Engine screen on
   the main and pause menus, each layer's output an item; then layers that change the shape (a file
   as a picture, a page as a melody), which is the "as anything".
@@ -3590,6 +3611,16 @@ already shows each voice as text while it speaks, so it has subtitles.
     each item cutting short the one before); elsewhere it says it has no voice. Not yet the setup
     menu, the File Locator or the hallway's panels; and not yet heard on Windows here (built and
     checked on Linux, where it is silent): Edward's first run is its first test.
+    *Built for the setup menu and the File Locator (7 November 2026):* the setup menu says the row
+    chosen after its section's heading, with its value ("GLOBAL, number of items per wall, 128 a
+    tile, 64 on each wall"), and in a line's filters or the alphabets the entry chosen, a tick
+    said as on or off ("max-run-v1, On, Filtered: 0.1% ..."). The File Locator has no row to
+    choose, so it says the button the mouse comes onto, a button as pressed ("Optimise Search,
+    Off"), and its status line when it changes: while a job runs only its first, so an install's
+    file-by-file lines do not talk over each other, and the result when it ends. One thing a frame,
+    so nothing is cut short by the next. `hallway --read-aloud` turns it on for a run, unsaved,
+    and with `--screenshot` prints what was said, which is how CI checks it on a machine with no
+    voice. Still not the hallway's panels.
   - **Objects that can be translated:** every item's description and every sign through the same
     language files, so a new language translates the world as well as the menus.
   - **Other settings:** text size, contrast and colour-blind palettes (the lines' colours are
@@ -3678,7 +3709,9 @@ perspective.
   same pairing: how far along, and how far still to go. *Built for the position (6 November
   2026):* the HUD, the book in hand, the shelf's verdict line, the navigator and the position
   message each say how far along the line and how far still to go ("X% along, Y% to go").
-  The setup menu's counts are still to come.
+  *Built for the setup menu's counts (7 November 2026):* a stack's survivors line adds how long
+  walking them at one a second would take ("at one a second, ~10^38.3 years to walk them"), the
+  same reckoning as the main menu's estimate (§19.49).
 
 **19.79 Things that get in the way, from playing it (Edward, 17 October 2026).** Found while
 building Debug and Release, running the tests and playing it. Each is small; together they are
@@ -6499,7 +6532,14 @@ should take on:
   (`llama_shape`) for the tensors' layout and the model, every size bounded: the layout's copy had no
   bound, so a config.json claiming 10^18 layers was listed until the memory ran out; the model's
   further refusals (rope scaling, an activation other than silu) stay the model's, as the layout does
-  not depend on them. u8/from_u8, reading a file, hex and the rest still to do.)
+  not depend on them. A path's UTF-8 and back is one copy, `sieve/paths.hpp` (29 local ones gone,
+  picture_source.hpp's names now the same functions); a whole file read where it throws "cannot open
+  '…'" is `sieve/whole_file.hpp` (3 gone); bytes as lower-case hex `sieve/hex.hpp` (3 gone). Left: the
+  other readers, whose messages (seen by the user) or failures differ (some return nothing, one trims
+  the end), hex that is upper-case, "0" for nothing or one byte, `utf8_of`/`utf8_path` under other
+  names, and trim/lower, where the copies differ (CR LF, ASCII only) and a shared `lower` in `sieve`
+  would meet filekind's own; the top folder, the program's folder and `--script`'s runner not yet
+  looked at.)
 
 **19.121 Four ideas after the release build (Edward, 5 November 2026; evaluated, nothing built).**
 - **An installer program's own default folder.** Today `sieve-install` offers `Documents\` and the

@@ -65,4 +65,26 @@ struct Guess
 // that order).
 std::vector<Guess> break_weak(const std::vector<uint8_t>& cipher, size_t max_key = 16, size_t top = 5);
 
+// The catalogue of recipes (IDEAS §19.52), counted exactly: each layer with a key of at most
+// key_bytes bytes is reverse (1), caesar (256), or xor, vigenere or feistel (keys of 1 to key_bytes
+// bytes: 256 + 256^2 + ... each), and a recipe of depth d is d such layers. Numbers are in decimal.
+struct CatalogueDepth
+{
+    uint32_t depth = 0;
+    std::string recipes; // layers^depth
+    size_t bits = 0;     // the bits that name one of them
+};
+struct Catalogue
+{
+    uint32_t key_bytes = 0;
+    std::string layers;
+    size_t layer_bits = 0;
+    std::vector<CatalogueDepth> depths; // 1 to depth
+    size_t total_bits = 0;              // the bits that name any recipe of depth 1 to depth
+};
+Catalogue catalogue(uint32_t key_bytes, uint32_t depth);
+// A long decimal as its first 12 digits and its length ("123456789012... (157 digits)"); one of
+// at most 60 digits as it is.
+std::string short_decimal(const std::string& decimal);
+
 } // namespace sieve::cipher

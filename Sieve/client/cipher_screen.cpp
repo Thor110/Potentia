@@ -10,11 +10,15 @@
 #include "cli/locate.hpp" // read_file_bytes
 #include "cli/vault.hpp"
 #include "sieve/cipher.hpp"
+#include "sieve/hex.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
+#include <string>
 
 namespace hallway {
 
@@ -34,13 +38,8 @@ constexpr size_t kBreakBytes = 65536;
 // bytes it is, as a file would.
 constexpr size_t kTabHex = 4096;
 
-std::filesystem::path from_u8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
-
-std::string u8(const std::filesystem::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 void SDLCALL input_chosen(void* user, const char* const* files, int)
 {
@@ -56,13 +55,7 @@ void txt(SDL_Renderer* r, float x, float y, const std::string& s, SDL_Color c, f
 
 bool inside(const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
 
-std::string hex_of(const std::vector<uint8_t>& b)
-{
-    static const char k[] = "0123456789abcdef";
-    std::string s;
-    for (const uint8_t c : b) s += {k[c >> 4], k[c & 15]};
-    return s;
-}
+using sieve::hex_of;
 
 int hex_digit(char c)
 {
@@ -325,7 +318,7 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
             }
             else input_hex_ = !input_hex_;
         }
-        else if (row_ == kAction) action_ = Action((int(action_) + 3 + dir) % 3);
+        else if (row_ == kAction) action_ = Action((int(action_) + 4 + dir) % 4);
         else return;
         run_recipe();
     }
@@ -413,6 +406,41 @@ void CipherScreen::run_recipe()
             status_ = none ? tr("cipher.break_none") : trf("cipher.break_best", {guesses.front().recipe.layers.front().text()});
             return;
         }
+        if (action_ == Action::Catalogue)
+        {
+            // Counted with keys of up to 16 bytes and depths up to 4, or as far as the recipe
+            // reaches if it goes further; the recipe is then placed among them.
+            std::optional<sieve::cipher::Recipe> recipe;
+            std::string why;
+            try
+            {
+                recipe = sieve::cipher::Recipe::parse(recipe_);
+            }
+            catch (const std::exception& ex)
+            {
+                why = ex.what();
+            }
+            uint32_t key_bytes = 16, depth = 4;
+            if (recipe)
+            {
+                depth = std::max<uint32_t>(depth, uint32_t(recipe->layers.size()));
+                for (const auto& l : recipe->layers) key_bytes = std::max<uint32_t>(key_bytes, uint32_t(l.key.size()));
+            }
+            const auto c = sieve::cipher::catalogue(key_bytes, depth);
+            lines_.push_back(trf("cipher.cat.layers", {std::to_string(c.key_bytes), sieve::cipher::short_decimal(c.layers), std::to_string(c.layer_bits)}));
+            for (const auto& d : c.depths)
+                lines_.push_back(trf("cipher.cat.depth", {std::to_string(d.depth), sieve::cipher::short_decimal(d.recipes), std::to_string(d.bits)}));
+            lines_.push_back(trf("cipher.cat.total", {std::to_string(c.depths.size()), std::to_string(c.total_bits)}));
+            lines_.push_back(tr("cipher.cat.note"));
+            lines_.push_back(tr("cipher.cat.note2"));
+            if (recipe && !recipe->layers.empty())
+            {
+                const auto& d = c.depths[recipe->layers.size() - 1];
+                status_ = trf("cipher.cat.yours", {std::to_string(recipe->layers.size()), std::to_string(d.bits)});
+            }
+            else status_ = why.empty() ? tr("cipher.cat.none") : why;
+            return;
+        }
         const sieve::cipher::Recipe recipe = sieve::cipher::Recipe::parse(recipe_);
         out_ = action_ == Action::Encrypt ? sieve::cipher::encrypt(recipe, in) : sieve::cipher::decrypt(recipe, in);
         have_out_ = true;
@@ -452,7 +480,7 @@ void CipherScreen::render()
 
     // The rows.
     const char* labels[kRows] = {"cipher.row.input", "cipher.row.input_kind", "cipher.row.recipe", "cipher.row.action"};
-    const char* actions[3] = {"cipher.action.encrypt", "cipher.action.decrypt", "cipher.action.break"};
+    const char* actions[4] = {"cipher.action.encrypt", "cipher.action.decrypt", "cipher.action.break", "cipher.action.catalogue"};
     float y = 76;
     row_rects_.assign(kRows, SDL_FRect{});
     for (int i = 0; i < kRows; ++i)
@@ -530,7 +558,7 @@ void CipherScreen::render()
         else txt(r_, x, y, tr("cipher.not_text"), kDim);
     }
 
-    const bool bad = !have_out_ && action_ != Action::Break;
+    const bool bad = !have_out_ && action_ != Action::Break && action_ != Action::Catalogue;
     txt(r_, x, H - 58, fit_cells(status_, size_t((W - 2 * x) / 8)), bad ? kBad : kGood);
     txt(r_, x, H - 40, tr("cipher.footer"), kGrey);
     txt(r_, x, H - 24, tr("cipher.footer2"), kDim);

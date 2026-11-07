@@ -1206,6 +1206,14 @@ void test_cipher_vectors(const std::string& path)
         try { Recipe::parse(badr); } catch (const std::invalid_argument&) { threw = true; }
         CHECK(threw);
     }
+    // The catalogue: one-byte keys give 257 + 3 * 256 = 1,025 layers; sixteen-byte keys the
+    // number sieve cipher --catalogue prints (CI step 3), and depth d is layers^d.
+    const Catalogue one = catalogue(1, 2);
+    CHECK(one.layers == "1025" && one.layer_bits == 11 && one.depths.size() == 2 && one.depths[1].recipes == "1050625");
+    CHECK(one.total_bits == 21); // 1,025 + 1,050,625 = 1,051,650 < 2^21
+    const Catalogue c16 = catalogue(16, 2);
+    CHECK(c16.layers == "1024850422726591137019104700029796025345" && c16.layer_bits == 130 && c16.depths[1].bits == 260);
+    CHECK(short_decimal(c16.depths[1].recipes).find("... (") != std::string::npos && short_decimal("1025") == "1025");
 }
 
 // The system prompt sieve-system-v1 (docs/SYSTEM-PROMPT.md) is never edited: its bytes are the
@@ -4655,6 +4663,18 @@ FilterStack::Entry kind_entry(const std::string& kinds, const std::string& keep)
 // scrambled order.
 void test_kind_vectors(const std::string& path)
 {
+    // Several kinds apart by commas (7 November 2026): the files of any of them, the union of each alone.
+    {
+        const KindSet png = kind_set_of("png"), jpg = kind_set_of("jpg"), both = kind_set_of("png,jpg");
+        bool union_ok = both.size() == png.size();
+        for (size_t i = 0; i < both.size() && union_ok; ++i) union_ok = both[i] == uint8_t(png[i] | jpg[i]);
+        CHECK(union_ok);
+        CHECK(throws([] { (void)kind_set_of("png,,jpg"); }));
+        CHECK(throws([] { (void)kind_set_of("png,nothing"); }));
+        const FilterSpec* bk = find_filter("binary-kind-v1");
+        CHECK(bk && param_value(*bk, FilterValues{{"kinds", "png,jpg"}}, "kinds") == "png,jpg");
+        CHECK(bk && throws([&] { (void)param_value(*bk, FilterValues{{"kinds", "png,"}}, "kinds"); }));
+    }
     int n = 0;
     std::map<std::string, std::unique_ptr<KindCounter>> counters;
     auto counter = [&](const std::string& N, const std::string& kinds, const std::string& keep) -> const KindCounter& {

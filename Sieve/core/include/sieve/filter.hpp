@@ -85,6 +85,7 @@ struct FilterParam
     std::string default_value;
     int64_t min = 0, max = 0, step = 1; // Integer only
     std::vector<std::string> choices;   // Text only: the allowed values, if a fixed list
+    bool choice_list = false;           // Text with choices: one of them, or several apart by commas ("png,jpg")
     std::string registry = {};          // Text only: "dictionary" to choose from the registered dictionaries
 };
 using FilterValues = std::map<std::string, std::string>; // key -> value; missing keys take defaults

@@ -1845,6 +1845,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
     case SDLK_K:
         if (in_hand_) tailor_in_hand(); // COST: the filters tailored to it (tailoring.cpp)
         break;
+    case SDLK_L:
+        if (in_hand_ && hand_tab_ == 1) vla_search_further(); // COST: the shortest route searched to more places
+        break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
         if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the CHAT tab (chat.cpp)

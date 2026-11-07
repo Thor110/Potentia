@@ -664,7 +664,7 @@ byte of UTF-8, with the binary reading chosen, it judges only; the verdicts are 
   `clean-data-v1`, and 535 verdicts are in `tests/vectors_written_v1.tsv`, and CI regenerates them.
 
 **`binary-kind-v1`** (the binary line; `core/src/filekind.cpp`) keeps the files of chosen kinds
-(`kinds`: signed, text, signed-or-text, unknown, empty, any, or one kind; `keep`: keep or exclude).
+(`kinds`: signed, text, signed-or-text, unknown, empty, any, or one kind, or several apart by commas, `png,jpg`, the files of any of them; `keep`: keep or exclude).
 A file's kind is decided by its first 16 bytes and its size (`file-kinds-v1`: the hallway's label
 table, with MID added), so the survivors are counted and ranked exactly on a binary line of any
 length. A head of up to 16 bytes is walked byte by byte through an automaton of which signatures

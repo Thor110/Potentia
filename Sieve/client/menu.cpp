@@ -12,6 +12,7 @@
 // Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
 // alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "speech.hpp"
 #include "dialogs.hpp"
 #include "cli/timings.hpp"
 #include "display.hpp"
@@ -639,8 +640,9 @@ LineSize line_size(uint32_t base, uint64_t length)
 
 // ---------------------------------------------------------------- menu
 
-std::array<LineSize, kLines> Menu::line_sizes() const
+std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
 {
+    const uint64_t ai_w = ai_weights_of(s_);
     const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
     const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
     // Books: a cover, a title and book_pages pages, so |cover| * |page|^(pages + 1) books. The
@@ -734,7 +736,7 @@ std::array<LineSize, kLines> Menu::line_sizes() const
     // 16^8192. The heads divide H and change no count. No title: the line has none (§12.0d).
     LineSize ai;
     {
-        const uint64_t per = sieve::books_per_tile(), w = ai_weights();
+        const uint64_t per = sieve::books_per_tile(), w = ai_w;
         ai.bits = double(s_.ai_bits) * double(w);
         ai.padding = uint32_t((per - tile_pow(2, uint64_t(s_.ai_bits) * w)) % per);
         ai.units = "(2^B)^(256H+16LH^2), B=" + std::to_string(s_.ai_bits) + " L=" + std::to_string(s_.ai_layers) + " H=" +
@@ -761,6 +763,17 @@ std::array<LineSize, kLines> Menu::line_sizes() const
     if (uint64_t(audio_positions) * s_.track_units > kMaxPositions) out[size_t(line_of(Media::Tracks))].bits = HUGE_VAL;
     if (positions(s_.video_w, s_.video_h, s_.frames) * s_.movie_units > kMaxPositions) out[size_t(line_of(Media::Movies))].bits = HUGE_VAL;
     return out;
+}
+
+std::array<LineSize, kLines> Menu::line_sizes() const { return line_sizes_of(s_); }
+
+std::string walk_time_text(double log10_units)
+{
+    if (!std::isfinite(log10_units)) return tr("main.est.cannot_open");
+    const double log10_y = log10_units - std::log10(31556952.0); // a year of 365.2425 days, in seconds
+    if (log10_y >= 15) return trf("main.est.years_power", {fixed(log10_y, 1)});
+    if (log10_y >= 0) return trf("main.est.years", {fixed(std::pow(10.0, log10_y), 0)});
+    return trf("main.est.seconds", {fixed(std::pow(10.0, std::max(0.0, log10_units)), 0)});
 }
 
 // (menu_ink(), the colour a line's name is written in on black: dimensions.hpp.)
@@ -1619,6 +1632,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
 
 Menu::Result Menu::run()
 {
+    forget_announced(); // the row chosen said again as the menu opens (speech.hpp)
     SDL_SetWindowRelativeMouseMode(window_, false);
     SDL_StartTextInput(window_);
     music_mode(MusicMode::Menus);
@@ -2176,6 +2190,16 @@ void Menu::render()
     }
     if (alpha_open_) render_alphabets(W, H);
     else if (overlay_ >= 0) render_overlay(W, H);
+    else if (read_aloud() && row_ >= 0 && row_ < int(rows.size()))
+    {
+        // Read aloud (speech.hpp): the row chosen, after the heading of its section, and its value.
+        std::string section;
+        for (int i = row_; i >= 0 && section.empty(); --i)
+            if (rows[size_t(i)].section >= 0) section = tr(theme_of(rows[size_t(i)].section).key);
+            else if (rows[size_t(i)].section == kGlobal) section = tr("setup.start");
+        const Row& r = rows[size_t(row_)];
+        announce((row_ < kLimitsRow && !section.empty() ? section + ", " : std::string()) + r.label + (r.value.empty() ? "" : ", " + r.value));
+    }
 }
 
 
@@ -2390,6 +2414,7 @@ void Menu::survivors_of(StackInfo& out, const sieve::BigUint& n, const sieve::Bi
     out.kept_log10 = n.is_zero() ? -std::numeric_limits<double>::infinity() : n.log10_approx() - total.log10_approx();
     out.status = trf(n.is_zero() ? "status.survivors_none" : "status.survivors",
                      {n.log10_approx() < 15 ? n.to_decimal() : "~10^" + fixed(n.log10_approx(), 1)});
+    if (!n.is_zero()) out.status += trf("status.walk", {walk_time_text(n.log10_approx())});
 }
 
 void Menu::none_of(StackInfo& out)
@@ -2458,7 +2483,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                             out.survivor_bits = l / std::log10(2.0);
                             out.kept_log10 = l - space.size().log10_approx();
                         }
-                        out.status = trf("status.survivors_ai_judged", {fixed(l, 1)});
+                        out.status = trf("status.survivors_ai_judged", {fixed(l, 1)}) + trf("status.walk", {walk_time_text(l)});
                     }
                     else if (!small) out.status = tr("status.too_large");
                     else if (st.ranker())
@@ -2500,7 +2525,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                         out.filtered = filtered_estimate(l, space.size());
                         out.survivor_bits = std::isfinite(l) ? l / std::log10(2.0) : 0;
                         out.kept_log10 = l - space.size().log10_approx();
-                        out.status = trf("status.survivors_estimated", {fixed(l, 1), bs.blocker()});
+                        out.status = trf("status.survivors_estimated", {fixed(l, 1), bs.blocker()}) + trf("status.walk", {walk_time_text(l)});
                     }
                     return out;
                 }};
@@ -3645,6 +3670,7 @@ void Menu::render_alphabets(float W, float H)
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
             SDL_RenderFillRect(r_, &r);
         }
+        if (i == arow_ && read_aloud() && !it.lines.empty()) announce(spoken(it.lines[0])); // read aloud (speech.hpp)
         for (size_t k = 0; k < it.lines.size(); ++k)
             text(r_, x, y + float(k) * 12, (k == 0 && i == arow_ ? "> " : "  ") + it.lines[k], 1, k == 0 ? white : grey);
         y += it.h;
@@ -3850,6 +3876,7 @@ void Menu::render_overlay(float W, float H)
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
             SDL_RenderFillRect(r_, &r);
         }
+        if (i == orow_ && read_aloud() && !it.lines.empty()) announce(spoken(it.lines[0])); // read aloud (speech.hpp)
         for (size_t k = 0; k < it.lines.size(); ++k)
             text(r_, x, y + float(k) * 12, (k == 0 && i == orow_ ? "> " : "  ") + it.lines[k], 1,
                  k >= it.red ? SDL_Color{255, 80, 80, 255} : k == 0 && rows[size_t(i)].kind != ORow::Kind::Info ? white : grey);
