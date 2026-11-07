@@ -13,18 +13,24 @@ the cmix column is close to cmix as published on files this small, not certainly
 
 ## Sizes
 
-Sieve's code alone is what its mixing carried the file in; the `.sieve` adds the file's name, size
-and SHA-256 and the head (about 70 to 85 bytes). cmix's output holds the file's size. Texts were given
-cmix's English dictionary (`-c english.dic`); the rest `-c`.
+Sieve's code is what its mixing carried the file in. Its overhead, beside it, is the rest of the
+`.sieve`: the tree's SHA-256 (32 bytes, fixed: every file is checked against it before anything is
+written; SIEVE-FORMAT §5), and the other overhead, the `sieve` mark, version and flags (7 bytes),
+the file's name, its size, its way and its stream's sizes. cmix's output carries no check of what it
+gives back. Texts were given cmix's English dictionary (`-c english.dic`); the rest `-c`. xz -9e
+for reference: 35,680, 33,016, 14,080, 47,584, 54,520 and 748 bytes, in the table's order.
 
-| File | Bytes | xz -9e | cmix | Sieve, code alone | Sieve, the `.sieve` | Sieve against cmix |
-| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Dickens (Silesia), first 100 KB | 100,000 | 35,680 | 22,510 | 25,976 | 26,055 | +15.4% |
-| enwik8, first 100 KB | 100,000 | 33,016 | 19,743 | 24,772 | 24,859 | +25.5% |
-| `core/src/written.cpp` (C++) | 60,678 | 14,080 | 9,089 | 11,345 | 11,427 | +24.8% |
-| Vitruvian centre, 256 by 256 grey (raw) | 65,536 | 47,584 | 43,054 | 41,904 | 41,988 | **−2.7%** |
-| `/usr/bin/ls` (x86-64) | 142,312 | 54,520 | 35,567 | 48,480 | 48,556 | +36.3% |
-| `control.py` (data/anchors) | 1,597 | 748 | 461 (542 without its dictionary) | 520 | 591 | +12.8% (−4.1% against 542) |
+| File | Bytes | cmix | Sieve, code | Hash (SHA-256) | Other overhead | Sieve, the `.sieve` | Code against cmix | `.sieve` against cmix |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Dickens (Silesia), first 100 KB | 100,000 | 22,510 | 25,976 | 32 | 47 | 26,055 | +15.4% | +15.7% |
+| enwik8, first 100 KB | 100,000 | 19,743 | 24,772 | 32 | 55 | 24,859 | +25.5% | +25.9% |
+| `core/src/written.cpp` (C++) | 60,678 | 9,089 | 11,345 | 32 | 50 | 11,427 | +24.8% | +25.7% |
+| Vitruvian centre, 256 by 256 grey (raw) | 65,536 | 43,054 | 41,904 | 32 | 52 | 41,988 | **−2.7%** | **−2.5%** |
+| `/usr/bin/ls` (x86-64) | 142,312 | 35,567 | 48,480 | 32 | 44 | 48,556 | +36.3% | +36.5% |
+| `control.py` (data/anchors) | 1,597 | 461 (542 without its dictionary) | 520 | 32 | 39 | 591 | +12.8% (−4.1% against 542) | +28.2% (+9.0% against 542) |
+
+On a file of 100 KB the overhead (71 to 87 bytes) is under 0.4% of the `.sieve`; on control.py it
+is 12% of it, the hash alone 5.4%: a small file's figure is as much the overhead as the code.
 
 ## Time and memory
 

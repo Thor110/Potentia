@@ -955,6 +955,19 @@ $SI x33-33.sieve --to x33_si --yes > /dev/null
 diff -r x33 x33_si
 python sieve_ref.py unpack x33-33.sieve --to x33_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 X	48000	prog$"
 diff -r x33 x33_oracle
+# The v34 draft's x86 instruction model (E1, 7 November 2026): the same program mixed with contexts
+# from where each byte falls in its instruction, smaller than v33 made it; given back by Sieve,
+# sieve-install and the oracle (its own X86Reader); without the draft, v33 as before.
+$S locate x33 --installer x34.sieve --items --v34-draft 2>&1 | tr -d '\r' > x34.txt
+grep -q "^manifest  sieve-manifest-v34" x34.txt
+[ "$(wc -c < x34.sieve)" -lt "$(wc -c < x33-33.sieve)" ]
+rm -rf x34_inst x34_si x34_oracle
+$S install x34.sieve --to x34_inst > /dev/null
+diff -r x33 x34_inst
+$SI x34.sieve --to x34_si --yes > /dev/null
+diff -r x33 x34_si
+python sieve_ref.py unpack x34.sieve --to x34_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 E1 X	48000	prog$"
+diff -r x33 x34_oracle
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
 # back the same by Sieve and the oracle.

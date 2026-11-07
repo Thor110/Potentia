@@ -6147,6 +6147,33 @@ void test_mix4()
 {
     CHECK(Mix4Params::parse("B22").text() == "B22" && Mix4Params::parse("B20 I949x1").width == 949 && Mix4Params::parse("B16 D60").dictionary == 60);
     CHECK(throws([] { Mix4Params::parse("B22 I949x1 D60"); }));
+    // v34 draft (E1): the x86 instruction model, after the ways and before the filter; a program's only.
+    CHECK(Mix4Params::parse("B20 R1 M4 C2 E1 X").instructions && Mix4Params::parse("B20 R1 M4 C2 E1 X").text() == "B20 R1 M4 C2 E1 X");
+    CHECK(Mix4Params::parse("B20 E1").instructions && !Mix4Params::parse("B20 X").instructions);
+    CHECK(throws([] { Mix4Params::parse("B20 X E1"); }));
+    CHECK(throws([] { Mix4Params::parse("B20 I60x3 E1"); }));
+    CHECK(throws([] { Mix4Params::parse("B20 D60 E1"); }));
+    {
+        // Instructions of every part (prefixes, REX, 0F and 0F 38 opcodes, ModRM with SIB and
+        // displacements, immediates of 1 to 8 bytes) and bytes that are none, given back the same.
+        std::mt19937 r(34);
+        std::vector<uint8_t> prog;
+        const std::vector<std::vector<uint8_t>> pieces = {{0x48, 0x89, 0xE5}, {0xE8, 1, 2, 3, 4}, {0x48, 0xB8, 1, 2, 3, 4, 5, 6, 7, 8},
+                                                           {0x8B, 0x44, 0x24, 0x08}, {0x0F, 0x84, 9, 0, 0, 0}, {0x66, 0x0F, 0x38, 0x00, 0xC1},
+                                                           {0xF3, 0x0F, 0x10, 0x05, 1, 2, 3, 4}, {0xC3}, {0x90}, {0xC7, 0x45, 0xF8, 1, 0, 0, 0}};
+        for (int i = 0; i < 4000; ++i)
+        {
+            const auto& pc = pieces[r() % pieces.size()];
+            prog.insert(prog.end(), pc.begin(), pc.end());
+            if (r() % 50 == 0) prog.push_back(uint8_t(r())); // (a byte that throws the reading out)
+        }
+        for (const char* params : {"B16 E1", "B16 R1 M4 C2 E1 X"})
+        {
+            const Mix4Params p = Mix4Params::parse(params);
+            CHECK(mix4_file(mix4_code(prog, p), p, nullptr, prog.size()) == prog);
+        }
+        CHECK(mix4_code(prog, Mix4Params::parse("B16 R1 M4 C2 E1 X")).size() < mix4_code(prog, Mix4Params::parse("B16 R1 M4 C2 X")).size());
+    }
     CHECK(throws([] { Mix4Params::parse("B22 D61"); }));
     CHECK(throws([] { Mix4Params::parse("B22 I1x1"); }));
     CHECK(throws([] { Mix4Params::parse("B23"); }));

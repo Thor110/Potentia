@@ -6724,3 +6724,5 @@ against. (Its licence, GPLv3, would combine with Sieve's AGPLv3.) Kept for:
   Sieve 2.7% smaller on a raw picture, 15% to 26% larger on text and source, 36% on a program
   (`ls`), 12.8% on control.py; cmix took 84 to 261 s each way and 6 to 12 GB, Sieve under 3 s and
   under 400 MB. The ideas in order: a model of x86 instructions, text by dictionary, more SSE layers.
+  *Built since (7 November 2026), the first:* v34's `E1`, the x86 instruction model: eleven programs
+  4.0% to 7.9% smaller (results/x86-instructions-2026-11-07.md); `ls` 27% over cmix, from 36%.

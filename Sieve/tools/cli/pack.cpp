@@ -3280,6 +3280,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // v34 draft (6 November 2026): a GIF made again from its skeleton and its frames' colour indices,
     // where compress-style LZW gives it back exactly (gif_lzw.hpp); temporary only, as "sk" is.
     const bool gif_on = rope_newest >= 17 && v21 && newest_made;
+    // v34 draft (7 November 2026): a program mixed with the x86 instruction model (mix-v4's E1).
+    const bool instructions_on = rope_newest >= 17 && newest_made;
     // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
     // rope_newest is held to the rope's own versions below).
     const bool v32_head_on = rope_newest >= 15;
@@ -3309,7 +3311,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         // (Each file's start is weighed twice, in its test and when it is mixed whole: the same bytes
         // and shape, so the answer is kept, by thread, for the second.)
         uint64_t key = 1469598103934665603ull ^ (uint64_t(start.size()) << 1) ^ uint64_t(mp.width) * 0x9E3779B97F4A7C15ull ^ uint64_t(mp.channels) << 40 ^
-                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58 ^
+                       uint64_t(reinterpret_cast<uintptr_t>(words)) * 31 ^ uint64_t(mp.x86) << 62 ^ uint64_t(mp.palette) << 48 ^ uint64_t(mp.primer) << 58 ^ uint64_t(mp.instructions) << 57 ^
                        uint64_t(f.size() > (size_t(4) << 20)) << 59;
         for (const uint8_t b : start) key = (key ^ b) * 1099511628211ull;
         struct Weighed
@@ -5013,6 +5015,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     {
                         Mix4Params base = mix4_for(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
+                        base.instructions = program && instructions_on; // (v34 draft, E1)
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         std::shared_ptr<const std::vector<uint8_t>> made;
@@ -6009,8 +6012,9 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
         return false;
     };
-    // v34 (draft): a GIF made again from its indices.
-    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("gif ", 0) == 0; });
+    // v34 (draft): a GIF made again from its indices; a program mixed with the x86 instruction model (E1).
+    auto e1_in = [](const std::string& w) { return w.rfind("mix4 ", 0) == 0 && Mix4Params::parse(w.substr(5)).instructions; };
+    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return x.remake.rfind("gif ", 0) == 0 || e1_in(x.way); });
     m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
     m.v32 = m.v32 || m.v33;

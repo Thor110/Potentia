@@ -413,6 +413,147 @@ struct MatchWays
     bool recover = false;
     int min_match = 6;
     int candidates = 1;
+    bool instructions = false; // v34 draft (E1): the x86 instruction model's contexts in place of the text's three
+};
+
+// v34 draft (E1, 7 November 2026): where each byte of a program falls in its x86 instruction, followed
+// as the bytes go by, for the model's contexts. A small decoder of x86-64's encodings: legacy prefixes
+// and REX, the one-byte opcodes and those after 0F, 0F 38 and 0F 3A, whether a ModRM byte follows, a
+// SIB byte, a displacement of 1 or 4 bytes, and an immediate of 1, 2, 4 or 8. It only chooses
+// contexts: where it reads the bytes wrongly (data among the code, 32-bit code, a VEX encoding), the
+// code comes out a little larger and is given back the same, as the decoder, given the same bytes,
+// reads them the same way. (paq8's model of executables follows instructions so; written here anew.)
+struct X86Reader
+{
+    enum Part : uint8_t { kStart, kOpcode2, kOpcode3, kModrm, kSib, kDisp, kImm };
+    uint8_t part = kStart; // what the next byte is
+    uint8_t prefixes = 0;  // bits: 66, 67, F2, F3, REX.W, any other prefix
+    uint16_t op = 0;       // the opcode: its map (0, 1 for 0F, 2 for 0F 38, 3 for 0F 3A) times 256 plus its byte
+    uint16_t last_op = 0;  // the instruction's before
+    uint16_t last2_op = 0; // and the one before that
+    uint8_t modrm = 0, sib = 0;
+    uint8_t left = 0, index = 0; // the displacement's or immediate's bytes still to come, and which of them this is
+    uint8_t disp = 0, imm = 0;   // their sizes, for the instruction under way
+    uint8_t three = 0;           // after 0F: 0x38 or 0x3A
+
+    // The context of the next byte: what it is, and of which instruction.
+    uint32_t what() const { return uint32_t(part) | uint32_t(index) << 4 | uint32_t(prefixes) << 8; }
+
+    static bool has_modrm1(uint8_t b)
+    {
+        if (b < 0x40) return (b & 7) < 4;
+        if (b == 0x62 || b == 0x63 || b == 0x69 || b == 0x6B) return true;
+        if (b >= 0x80 && b <= 0x8F) return true;
+        if (b == 0xC0 || b == 0xC1 || (b >= 0xC4 && b <= 0xC7)) return true;
+        if ((b >= 0xD0 && b <= 0xD3) || (b >= 0xD8 && b <= 0xDF)) return true;
+        return b == 0xF6 || b == 0xF7 || b == 0xFE || b == 0xFF;
+    }
+    // A one-byte opcode's immediate (before what a ModRM's reg field adds, F6 and F7).
+    uint8_t imm1(uint8_t b) const
+    {
+        const uint8_t z = (prefixes & 1) ? 2 : 4; // (66: 16 bits)
+        if (b < 0x40 && (b & 7) == 4) return 1;
+        if (b < 0x40 && (b & 7) == 5) return z;
+        if (b == 0x6A || b == 0x6B || (b >= 0x70 && b <= 0x7F) || b == 0x80 || b == 0x82 || b == 0x83 || b == 0xA8) return 1;
+        if (b == 0x68 || b == 0x69 || b == 0x81 || b == 0xA9 || b == 0xC7) return z;
+        if (b >= 0xB0 && b <= 0xB7) return 1;
+        if (b >= 0xB8 && b <= 0xBF) return (prefixes & 16) ? 8 : z;
+        if (b == 0xC0 || b == 0xC1 || b == 0xC6 || b == 0xCD || b == 0xD4 || b == 0xD5 || b == 0xEB) return 1;
+        if (b >= 0xE0 && b <= 0xE7) return 1;
+        if (b == 0xC2 || b == 0xCA) return 2;
+        if (b == 0xC8) return 3;
+        if (b == 0xE8 || b == 0xE9) return 4;
+        if (b >= 0xA0 && b <= 0xA3) return 8; // (moffs, 64-bit)
+        return 0;
+    }
+    static bool has_modrm2(uint8_t b)
+    {
+        if (b <= 0x03 || (b >= 0x10 && b <= 0x2F) || (b >= 0x40 && b <= 0x7F && b != 0x77)) return true;
+        if (b >= 0x90 && b <= 0x9F) return true;
+        if (b >= 0xA3 && b <= 0xAF && b != 0xA8 && b != 0xA9 && b != 0xAA) return true;
+        if (b >= 0xB0 && b <= 0xC7) return true;
+        return b >= 0xD0 && b != 0xFF;
+    }
+    static uint8_t imm2(uint8_t b)
+    {
+        if (b >= 0x80 && b <= 0x8F) return 4; // (jcc rel32)
+        if ((b >= 0x70 && b <= 0x73) || b == 0xA4 || b == 0xAC || b == 0xBA || b == 0xC2 || (b >= 0xC4 && b <= 0xC6)) return 1;
+        return 0;
+    }
+    void end_instruction()
+    {
+        last2_op = last_op;
+        last_op = op;
+        part = kStart;
+        prefixes = 0;
+        modrm = sib = 0;
+        disp = imm = left = index = 0;
+        three = 0;
+    }
+    void after_operands() // (the ModRM and SIB read, or none: the displacement, then the immediate)
+    {
+        if (disp) part = kDisp, left = disp, index = 0;
+        else if (imm) part = kImm, left = imm, index = 0;
+        else end_instruction();
+    }
+    void after_opcode(bool modrm_follows)
+    {
+        if (modrm_follows) part = kModrm;
+        else after_operands();
+    }
+    void read(uint8_t b)
+    {
+        switch (part)
+        {
+        case kStart:
+            if (b == 0x66) { prefixes |= 1; return; }
+            if (b == 0x67) { prefixes |= 2; return; }
+            if (b == 0xF2) { prefixes |= 4; return; }
+            if (b == 0xF3) { prefixes |= 8; return; }
+            if (b == 0xF0 || b == 0x2E || b == 0x36 || b == 0x3E || b == 0x26 || b == 0x64 || b == 0x65) { prefixes |= 32; return; }
+            if (b >= 0x40 && b <= 0x4F) { prefixes |= (b & 8) ? 16 : 64; return; } // (REX; W apart)
+            if (b == 0x0F) { part = kOpcode2; return; }
+            op = b;
+            imm = imm1(b);
+            after_opcode(has_modrm1(b));
+            return;
+        case kOpcode2:
+            if (b == 0x38 || b == 0x3A) { three = b; part = kOpcode3; return; }
+            op = uint16_t(0x100 | b);
+            imm = imm2(b);
+            after_opcode(has_modrm2(b));
+            return;
+        case kOpcode3:
+            op = uint16_t((three == 0x38 ? 0x200 : 0x300) | b);
+            imm = three == 0x3A ? 1 : 0;
+            after_opcode(true);
+            return;
+        case kModrm:
+        {
+            modrm = b;
+            const int mod = b >> 6, rm = b & 7, reg = (b >> 3) & 7;
+            disp = mod == 1 ? 1 : mod == 2 ? 4 : (mod == 0 && rm == 5) ? 4 : 0;
+            if ((op == 0xF6 || op == 0xF7) && reg == 0) imm = op == 0xF6 ? 1 : ((prefixes & 1) ? 2 : 4);
+            if (mod != 3 && rm == 4) part = kSib;
+            else after_operands();
+            return;
+        }
+        case kSib:
+            sib = b;
+            if ((modrm >> 6) == 0 && (b & 7) == 5) disp = 4;
+            after_operands();
+            return;
+        case kDisp:
+        case kImm:
+            ++index;
+            if (--left == 0)
+            {
+                if (part == kDisp && imm) part = kImm, left = imm, index = 0;
+                else end_instruction();
+            }
+            return;
+        }
+    }
 };
 
 class Model2
@@ -434,10 +575,11 @@ public:
         t_ = store_.data() + ((64 - at % 64) % 64) / sizeof(Counter2);
         // (Eight more at the end: the SSE2 loops read a row to its inputs rounded up to eight, the
         // last row's past its end, and the inputs there are 0, so nothing read there counts.)
-        w1_.assign(ninputs_ * 256 + 8, 1 << 14);
+        w1_.assign(ninputs_ * 256 * (mw.instructions ? 8 : 1) + 8, 1 << 14);
         w2_.assign(ninputs_ * 2048 + 8, 1 << 14);
         padded_ = (ninputs_ + 7) / 8 * 8;
         mw_ = mw;
+        if (mw_.instructions) ea_ = Apm(65536);
         if (mw_.candidates > 1) ht2_.assign(size_t(1) << kMatchBits, 0);
         new_byte();
     }
@@ -489,10 +631,23 @@ public:
         st_[k++] = 256;
         if (words_) st_[k++] = word_list_input();
         const int ml = mlen_ == 0 ? 0 : mlen_ < 16 ? 1 : mlen_ < 32 ? 2 : 3;
-        set2_ = size_t((ml * 8 + bitpos_) * 64 + (c1() >> 2));
-        s1_ = dot(&w1_[size_t(c0_) * ninputs_]);
+        // (v34 draft, E1: each mixer's weights chosen by the byte's part of its instruction too: the
+        // second's by the part and which byte of it in place of the byte before's top six bits.)
+        if (mw_.instructions) set2_ = size_t((ml * 8 + bitpos_) * 64 + ((x86_.part * 8 + std::min<int>(x86_.index, 7)) & 63));
+        else set2_ = size_t((ml * 8 + bitpos_) * 64 + (c1() >> 2));
+        set1_ = size_t(c0_);
+        if (mw_.instructions) set1_ |= size_t(x86_.part) << 8;
+        s1_ = dot(&w1_[set1_ * ninputs_]);
         s2_ = dot(&w2_[set2_ * ninputs_]);
         int pr = T.sq((s1_ + s2_) >> 1);
+        if (mw_.instructions)
+        {
+            // v34 draft (E1): one stage after the mixers, its context the opcode and the byte's part
+            // of the instruction with the bits so far of the byte, half of what is coded.
+            const size_t cx = (hash2(uint32_t(x86_.op) | uint32_t(x86_.what()) << 12, uint32_t(c0_)) >> 16) & 0xFFFF;
+            const int q = ea_.p(pr < 1 ? 1 : pr > 4095 ? 4095 : pr, cx);
+            pr = (pr + q + 1) >> 1;
+        }
         if (sse_)
         {
             const int q1 = a1_.p(pr, cx1);
@@ -504,7 +659,7 @@ public:
     void update(int bit)
     {
         const Tables& T = tables();
-        train(&w1_[size_t(c0_) * ninputs_], ((bit << 12) - T.sq(s1_)) * kRate);
+        train(&w1_[set1_ * ninputs_], ((bit << 12) - T.sq(s1_)) * kRate);
         train(&w2_[set2_ * ninputs_], ((bit << 12) - T.sq(s2_)) * kRate);
         const int target = bit ? 65535 : 0;
         // Each context's counter moved as moved() moves it, with the sign known from the bit (toward
@@ -538,6 +693,7 @@ public:
             a1_.update(bit);
             a2_.update(bit);
         }
+        if (mw_.instructions) ea_.update(bit);
         c0_ = c0_ * 2 + bit;
         if (++bitpos_ == 8)
         {
@@ -689,12 +845,40 @@ private:
             const size_t col = pos_ - linestart_;
             const int above = prevline_ + col < linestart_ ? buf_[prevline_ + col] : 0;
             const int above1 = prevline_ + col + 1 < linestart_ ? buf_[prevline_ + col + 1] : 0;
-            base_[k++] = hash2(0x1001, uint32_t(above) | uint32_t(c1()) << 8);
-            base_[k++] = hash2(0x1002, uint32_t(above) | uint32_t(above1) << 8 | uint32_t(std::min<size_t>(col, 255)) << 16);
-            base_[k++] = hash2(0x1003, std::min<uint32_t>(field_, 65535) | uint32_t(c1()) << 16 | uint32_t(c2()) << 24);
+            if (mw_.instructions)
+            {
+                // v34 draft (E1): in place of the text's three, the instruction's: what this byte is
+                // in it with its opcode; with its ModRM and SIB, and the byte before; and with the
+                // instruction before's opcode.
+                if (pos_ > 0) x86_.read(buf_[pos_ - 1]);
+                const uint32_t w = x86_.what();
+                base_[k++] = hash2(0x5001 + w, uint32_t(x86_.op));
+                base_[k++] = hash2(0x5002 + w, uint32_t(x86_.op) | uint32_t(x86_.modrm) << 16 | uint32_t(x86_.sib) << 24) ^ uint32_t(c1()) * 0x2545F491u;
+                base_[k++] = hash2(0x5003 + w, uint32_t(x86_.op) | uint32_t(x86_.last_op) << 16);
+            }
+            else
+            {
+                base_[k++] = hash2(0x1001, uint32_t(above) | uint32_t(c1()) << 8);
+                base_[k++] = hash2(0x1002, uint32_t(above) | uint32_t(above1) << 8 | uint32_t(std::min<size_t>(col, 255)) << 16);
+                base_[k++] = hash2(0x1003, std::min<uint32_t>(field_, 65535) | uint32_t(c1()) << 16 | uint32_t(c2()) << 24);
+            }
             base_[k++] = hash2(0x2001, uint32_t(at(2)) | uint32_t(at(3)) << 8);
-            base_[k++] = hash2(0x2002, uint32_t(at(4)) | uint32_t(at(3)) << 8);
-            base_[k++] = hash2(0x2003, uint32_t(at(1)) | uint32_t(at(3)) << 8);
+            if (mw_.instructions)
+            {
+                // v34 draft (E1): in place of two of the sparse three, the last three instructions'
+                // opcodes; and, where an immediate is under way, the byte of this place that the same
+                // byte of an absolute address near here would be (a call's target, through the x86
+                // filter, is such an address).
+                const uint32_t w = x86_.what(), op = x86_.op;
+                base_[k++] = hash2(0x6002 + w, uint32_t(x86_.last_op) | uint32_t(x86_.last2_op) << 16 | (op & 0xFFu) << 8);
+                const uint32_t near = x86_.part == X86Reader::kImm ? uint32_t(pos_ >> (8 * std::min<int>(x86_.index, 3))) & 0xFF : 0;
+                base_[k++] = hash2(0x6003 + w, op | near << 16);
+            }
+            else
+            {
+                base_[k++] = hash2(0x2002, uint32_t(at(4)) | uint32_t(at(3)) << 8);
+                base_[k++] = hash2(0x2003, uint32_t(at(1)) | uint32_t(at(3)) << 8);
+            }
         }
         // A new match where there is none: the place the last six bytes were last seen, if the
         // bytes before it agree for six or more (up to 32 counted).
@@ -747,13 +931,15 @@ private:
     Counter mm_[64];
     std::vector<uint32_t, BigTableAllocator<uint32_t>> ht_, ht2_;
     MatchWays mw_;
+    X86Reader x86_; // (v34 draft, E1)
+    Apm ea_{0}; // (v34 draft, E1: its stage, made only where it is used)
     bool missed_ = false;  // with recover: this byte's bits left the match's, which goes on after it
     uint32_t mlen_ = 0;
     size_t mptr_ = 0;
     int mi_ = -1;
     Apm a1_, a2_;
     int c0_ = 1, bitpos_ = 0, s1_ = 0, s2_ = 0;
-    size_t set2_ = 0;
+    size_t set2_ = 0, set1_ = 0;
 };
 
 } // namespace
@@ -1073,6 +1259,7 @@ void Mix4Params::check() const
     if (palette && (palette > 256 || width == 0 || channels < 2)) bad4("a palette of 1 to 256 colours, for a picture of 2 to 4 bytes a pixel (P)");
     if (primer > kMixPrimers) bad4("a primer W1 (web-mdn-2026-11-03-64k), or none");
     if (primer && (width || x86)) bad4("a primer for text, not a picture or a program (W)");
+    if (instructions && (width || dictionary || primer)) bad4("the x86 instruction model for a program's bytes, not a picture or text (E1)");
 }
 
 std::string Mix4Params::text() const
@@ -1085,6 +1272,7 @@ std::string Mix4Params::text() const
     if (recover) t += " R1";
     if (min_match != 6) t += " M" + std::to_string(min_match);
     if (candidates != 1) t += " C" + std::to_string(candidates);
+    if (instructions) t += " E1";
     if (x86) t += " X";
     return t;
 }
@@ -1102,9 +1290,10 @@ Mix4Params Mix4Params::parse(std::string_view t)
         s.resize(s.size() - 2);
     }
     // (v33, reopened: a primer before them, " W1")
-    for (const char* tail : {" C2", " M4", " R1", " W1"})
+    for (const char* tail : {" E1", " C2", " M4", " R1", " W1"})
         if (s.size() >= 3 && s.compare(s.size() - 3, 3, tail) == 0)
         {
+            if (tail[1] == 'E') p.instructions = true;
             if (tail[1] == 'C') p.candidates = 2;
             if (tail[1] == 'M') p.min_match = 4;
             if (tail[1] == 'R') p.recover = true;
@@ -1144,6 +1333,7 @@ MatchWays ways_of(const Mix4Params& p)
     m.recover = p.recover;
     m.min_match = int(p.min_match);
     m.candidates = int(p.candidates);
+    m.instructions = p.instructions;
     return m;
 }
 

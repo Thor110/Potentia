@@ -2781,7 +2781,7 @@ def mix_word_list(n, by_use=False):
     return child, counts
 
 
-def mix4_file(code, params, size, v32=False, v33=False):
+def mix4_file(code, params, size, v32=False, v33=False, v34=False):
     """mix-v4: mix-v2 (or, with " D<n>", mix-v3) without the SSE stages (sse-v1, retired): the mixers'
     average is what is coded. Parameters "B22", "B22 I949x1" or "B22 D60"; in v32 also
     "B22 F80", scowl-en-80 counted by use; in the v33 draft, after them, the match model's ways
@@ -2793,12 +2793,19 @@ def mix4_file(code, params, size, v32=False, v33=False):
         if not v33:
             sys.exit(f"mix-v4: the x86 filter (X) is the v33 draft's: {params}")
         params = params[:-2]
+    # (v34 draft, 7 November 2026) " E1" after the ways: the x86 instruction model (X86Reader).
+    instructions = params.endswith(" E1")
+    if instructions:
+        if not v34:
+            sys.exit(f"mix-v4: the x86 instruction model (E1) is the v34 draft's: {params}")
+        params = params[:-3]
     tail = re.search(r"((?: R1)?(?: M4)?(?: C2)?)$", params).group(1)
     if tail:
         if not v33:
             sys.exit(f"mix-v4: the match model's ways ({tail.strip()}) are the v33 draft's: {params}")
         ways = {"recover": " R1" in tail, "min_match": 4 if " M4" in tail else 6, "candidates": 2 if " C2" in tail else 1}
         params = params[: len(params) - len(tail)]
+    ways["instructions"] = instructions
     # (v33, reopened 3 November 2026) " W1" before the ways: the model primed on web-mdn-2026-11-03-64k.
     primer = b""
     if params.endswith(" W1"):
@@ -2813,6 +2820,8 @@ def mix4_file(code, params, size, v32=False, v33=False):
     # picture first shows them, the rest zero): mixed so, and the pixels made from them after.
     palette = re.fullmatch(r"(B(?:1[6-9]|2[0-2]) I([1-9][0-9]*)x([2-4])) P([1-9][0-9]*)", params)
     if palette:
+        if instructions:
+            sys.exit(f"mix-v4: the x86 instruction model (E1) is not for a picture: {params}")
         if not v33:
             sys.exit(f"mix-v4: a palette (P) is the v33 draft's: {params}")
         n, c = int(palette.group(4)), int(palette.group(3))
@@ -2832,6 +2841,8 @@ def mix4_file(code, params, size, v32=False, v33=False):
         sys.exit(f"mix-v4: the x86 filter (X) is for a program's bytes, not a picture or text with a word list: {params}")
     if primer and " I" in params:
         sys.exit(f"mix-v4: a primer for text, not a picture: {params}")
+    if instructions and (params != f"B{m.group(1)}" or primer):
+        sys.exit(f"mix-v4: the x86 instruction model (E1) is for a program's bytes, not a picture or text: {params}")
     out = mix2_file(code, params.replace(" F80", " D80"), size, words, sse=False, ways=ways, primer=primer)
     return x86_filter(out, encoding=False) if x86 else out
 
@@ -2849,6 +2860,140 @@ def mix_primer(n):
     if hashlib.sha256(data).hexdigest() != sha:
         sys.exit(f"mix-v4: {name} is not the registered primer (its SHA-256 differs)")
     return data
+
+
+class X86Reader:
+    """SPECIFICATIONS v34 (a draft), E1: where each byte of a program falls in its x86 instruction,
+    followed as the bytes go by: legacy prefixes and REX, one-byte opcodes and those after 0F, 0F 38
+    and 0F 3A, a ModRM byte, a SIB byte, a displacement of 1 or 4 bytes, an immediate of 1, 2, 3, 4 or
+    8. It only chooses contexts; a wrong reading costs size, never the bytes."""
+    START, OPCODE2, OPCODE3, MODRM, SIB, DISP, IMM = range(7)
+
+    def __init__(self):
+        self.part, self.prefixes, self.op, self.last_op, self.last2_op = 0, 0, 0, 0, 0
+        self.modrm = self.sib = self.left = self.index = self.disp = self.imm = self.three = 0
+
+    def what(self):
+        return self.part | self.index << 4 | self.prefixes << 8
+
+    @staticmethod
+    def has_modrm1(b):
+        if b < 0x40:
+            return (b & 7) < 4
+        return (b in (0x62, 0x63, 0x69, 0x6B) or 0x80 <= b <= 0x8F or b in (0xC0, 0xC1) or 0xC4 <= b <= 0xC7
+                or 0xD0 <= b <= 0xD3 or 0xD8 <= b <= 0xDF or b in (0xF6, 0xF7, 0xFE, 0xFF))
+
+    def imm1(self, b):
+        z = 2 if self.prefixes & 1 else 4
+        if b < 0x40 and (b & 7) == 4:
+            return 1
+        if b < 0x40 and (b & 7) == 5:
+            return z
+        if b in (0x6A, 0x6B, 0x80, 0x82, 0x83, 0xA8) or 0x70 <= b <= 0x7F:
+            return 1
+        if b in (0x68, 0x69, 0x81, 0xA9, 0xC7):
+            return z
+        if 0xB0 <= b <= 0xB7:
+            return 1
+        if 0xB8 <= b <= 0xBF:
+            return 8 if self.prefixes & 16 else z
+        if b in (0xC0, 0xC1, 0xC6, 0xCD, 0xD4, 0xD5, 0xEB) or 0xE0 <= b <= 0xE7:
+            return 1
+        if b in (0xC2, 0xCA):
+            return 2
+        if b == 0xC8:
+            return 3
+        if b in (0xE8, 0xE9):
+            return 4
+        if 0xA0 <= b <= 0xA3:
+            return 8
+        return 0
+
+    @staticmethod
+    def has_modrm2(b):
+        if b <= 0x03 or 0x10 <= b <= 0x2F or (0x40 <= b <= 0x7F and b != 0x77):
+            return True
+        if 0x90 <= b <= 0x9F or (0xA3 <= b <= 0xAF and b not in (0xA8, 0xA9, 0xAA)) or 0xB0 <= b <= 0xC7:
+            return True
+        return b >= 0xD0 and b != 0xFF
+
+    @staticmethod
+    def imm2(b):
+        if 0x80 <= b <= 0x8F:
+            return 4
+        if 0x70 <= b <= 0x73 or b in (0xA4, 0xAC, 0xBA, 0xC2) or 0xC4 <= b <= 0xC6:
+            return 1
+        return 0
+
+    def end_instruction(self):
+        self.last2_op, self.last_op = self.last_op, self.op
+        self.part = self.START
+        self.prefixes = self.modrm = self.sib = self.disp = self.imm = self.left = self.index = self.three = 0
+
+    def after_operands(self):
+        if self.disp:
+            self.part, self.left, self.index = self.DISP, self.disp, 0
+        elif self.imm:
+            self.part, self.left, self.index = self.IMM, self.imm, 0
+        else:
+            self.end_instruction()
+
+    def after_opcode(self, modrm_follows):
+        if modrm_follows:
+            self.part = self.MODRM
+        else:
+            self.after_operands()
+
+    def read(self, b):
+        part = self.part
+        if part == self.START:
+            flag = {0x66: 1, 0x67: 2, 0xF2: 4, 0xF3: 8}.get(b)
+            if flag:
+                self.prefixes |= flag
+            elif b in (0xF0, 0x2E, 0x36, 0x3E, 0x26, 0x64, 0x65):
+                self.prefixes |= 32
+            elif 0x40 <= b <= 0x4F:
+                self.prefixes |= 16 if b & 8 else 64
+            elif b == 0x0F:
+                self.part = self.OPCODE2
+            else:
+                self.op = b
+                self.imm = self.imm1(b)
+                self.after_opcode(self.has_modrm1(b))
+        elif part == self.OPCODE2:
+            if b in (0x38, 0x3A):
+                self.three, self.part = b, self.OPCODE3
+            else:
+                self.op = 0x100 | b
+                self.imm = self.imm2(b)
+                self.after_opcode(self.has_modrm2(b))
+        elif part == self.OPCODE3:
+            self.op = (0x200 if self.three == 0x38 else 0x300) | b
+            self.imm = 1 if self.three == 0x3A else 0
+            self.after_opcode(True)
+        elif part == self.MODRM:
+            self.modrm = b
+            mod, rm, reg = b >> 6, b & 7, (b >> 3) & 7
+            self.disp = 1 if mod == 1 else 4 if mod == 2 else 4 if (mod == 0 and rm == 5) else 0
+            if self.op in (0xF6, 0xF7) and reg == 0:
+                self.imm = 1 if self.op == 0xF6 else (2 if self.prefixes & 1 else 4)
+            if mod != 3 and rm == 4:
+                self.part = self.SIB
+            else:
+                self.after_operands()
+        elif part == self.SIB:
+            self.sib = b
+            if (self.modrm >> 6) == 0 and (b & 7) == 5:
+                self.disp = 4
+            self.after_operands()
+        else:
+            self.index += 1
+            self.left -= 1
+            if self.left == 0:
+                if part == self.DISP and self.imm:
+                    self.part, self.left, self.index = self.IMM, self.imm, 0
+                else:
+                    self.end_instruction()
 
 
 def x86_filter(data, encoding):
@@ -2902,6 +3047,8 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
     # the file's are, nothing decoded; the file's bytes after them.)
     ways = ways or {"recover": False, "min_match": 6, "candidates": 1}
     recover, min_match, two = ways["recover"], ways["min_match"], ways["candidates"] == 2
+    instructions = ways.get("instructions", False)  # (v34 draft, E1)
+    xr = X86Reader() if instructions else None
     if words is not None:  # mix-v3: "B22 D60", mix-v2's text with the word list's model
         m = re.fullmatch(r"B(1[6-9]|2[0-2]) D(35|60|80)", params)
         if not m:
@@ -2925,11 +3072,11 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
     nctx = 1 + orders + 1 + 6 + 1 + (1 if words else 0)
     nin = nctx + 3 + (1 if words else 0)
     tables = [dict() for _ in range(nctx)]  # counter number -> [p, n]
-    w1, w2 = [1 << 14] * (nin * 256), [1 << 14] * (nin * 2048)
+    w1, w2 = [1 << 14] * (nin * 256 * (8 if instructions else 1)), [1 << 14] * (nin * 2048)
     mm = [[32768, 0] for _ in range(64)]
     T = {}  # the match's table: hash -> place
     T2 = {}  # (C2: the place before)
-    apm = [dict(), dict()]  # (context * 33 + point) -> 16-bit probability
+    apm = [dict(), dict(), dict()]  # (context * 33 + point) -> 16-bit probability (the third: E1's stage)
 
     def apm_cell(k, i):
         if i not in apm[k]:
@@ -2993,9 +3140,21 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
             col = pos - L
             above = x[P + col] if P + col < L else 0
             above1 = x[P + col + 1] if P + col + 1 < L else 0
-            for v in (h2(0x1001, above | c1 << 8), h2(0x1002, above | above1 << 8 | min(col, 255) << 16),
-                      h2(0x1003, min(state["field"], 65535) | c1 << 16 | c2 << 24),
-                      h2(0x2001, back(2) | back(3) << 8), h2(0x2002, back(4) | back(3) << 8), h2(0x2003, back(1) | back(3) << 8)):
+            if instructions:
+                # (v34 draft, E1: the instruction's three in place of the text's, and two of the sparse
+                # three: the last three opcodes, and an absolute address's byte near here)
+                if pos > 0:
+                    xr.read(x[-1])
+                w, op = xr.what(), xr.op
+                near = ((pos >> (8 * min(xr.index, 3))) & 0xFF) if xr.part == X86Reader.IMM else 0
+                vals = (h2(0x5001 + w, op), h2(0x5002 + w, op | xr.modrm << 16 | xr.sib << 24) ^ ((c1 * 0x2545F491) & M),
+                        h2(0x5003 + w, op | xr.last_op << 16), h2(0x2001, back(2) | back(3) << 8),
+                        h2(0x6002 + w, xr.last_op | xr.last2_op << 16 | (op & 0xFF) << 8), h2(0x6003 + w, op | near << 16))
+            else:
+                vals = (h2(0x1001, above | c1 << 8), h2(0x1002, above | above1 << 8 | min(col, 255) << 16),
+                        h2(0x1003, min(state["field"], 65535) | c1 << 16 | c2 << 24),
+                        h2(0x2001, back(2) | back(3) << 8), h2(0x2002, back(4) | back(3) << 8), h2(0x2003, back(1) | back(3) << 8))
+            for v in vals:
                 base[k] = v
                 k += 1
         if pos >= min_match:
@@ -3080,11 +3239,22 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
             n = state["n"]
             mset = 0 if n == 0 else 1 if n < 16 else 2 if n < 32 else 3
             c1, c2 = back(1), back(2)
-            o1, o2 = c0 * nin, ((mset * 8 + place) * 64 + (c1 >> 2)) * nin
+            if instructions:  # (E1: each mixer's weights chosen by the byte's part of its instruction too)
+                o1, o2 = (c0 | xr.part << 8) * nin, ((mset * 8 + place) * 64 + ((xr.part * 8 + min(xr.index, 7)) & 63)) * nin
+            else:
+                o1, o2 = c0 * nin, ((mset * 8 + place) * 64 + (c1 >> 2)) * nin
             s1 = max(-2047, min(2047, sum(st[i] * w1[o1 + i] for i in range(nin)) >> 16))
             s2 = max(-2047, min(2047, sum(st[i] * w2[o2 + i] for i in range(nin)) >> 16))
             p = sq((s1 + s2) >> 1)
             reads = []
+            if instructions:  # (E1: one stage, the opcode and the byte's part with the bits so far, half of what is coded)
+                cx = (h2(xr.op | xr.what() << 12, c0) >> 16) & 0xFFFF
+                u = stretch[min(max(p, 1), 4095)] + 2048
+                lo = cx * 33 + (u >> 7)
+                wt = u & 127
+                q = (apm_cell(2, lo) * (128 - wt) + apm_cell(2, lo + 1) * wt) >> 11
+                reads.append((2, lo, q))
+                p = (p + q + 1) >> 1
             for k, cx in (((0, c0 | c1 << 8), (1, (h2(c1 | c2 << 8, c0) >> 16) & 0xFFFF)) if sse else ()):
                 u = stretch[p] + 2048
                 lo = cx * 33 + (u >> 7)
@@ -3131,7 +3301,7 @@ def mix2_file(code, params, size, words=None, sse=True, ways=None, primer=b""):
 def cmd_mix_unpack(args):
     code = open(args.code, "rb").read()
     if args.v4:
-        out = mix4_file(code, args.params, args.size, v32=True, v33=True)  # (a test tool: the v33 draft's ways read too)
+        out = mix4_file(code, args.params, args.size, v32=True, v33=True, v34=True)  # (a test tool: the v33 draft's ways read too)
     elif args.words:
         out = mix2_file(code, args.params, args.size, mix_word_list(int(args.words)))
     else:
@@ -7672,7 +7842,7 @@ def cmd_unpack_v7(args, data):
                 shift += 7
                 if not b & 0x80:
                     break
-            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32, v33), 0, path]
+            group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32, v33, v34), 0, path]
             ra += n
             if size > len(group[0]):
                 sys.exit(f"{path} is larger than its group")
@@ -7693,7 +7863,7 @@ def cmd_unpack_v7(args, data):
                 if not b & 0x80:
                     break
             if way.startswith("mix4 "):  # v28: without the SSE stages
-                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32, v33), ra + n
+                got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32, v33, v34), ra + n
             elif way.startswith("mix3 "):  # v27: with its word list
                 m3 = re.fullmatch(r"B[0-9]+ D(35|60|80)", way[5:])
                 lists = mix_word_list(int(m3.group(1))) if m3 else None

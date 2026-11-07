@@ -353,6 +353,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     const std::span<const uint8_t> all(m.streams);
     if (!m.lzma2.mixed.empty() && !m.v32 && Mix4Params::parse(m.lzma2.mixed).by_use)
         throw std::runtime_error("manifest: its lzma2 stream mixed with a word list counted by use (F80), which is sieve-manifest-v32's");
+    if (!m.lzma2.mixed.empty() && Mix4Params::parse(m.lzma2.mixed).instructions)
+        throw std::runtime_error("manifest: its lzma2 stream mixed with the x86 instruction model (E1), which is for a program alone");
     if (!m.lzma2.mixed.empty() && !m.v33 && match_ways(Mix4Params::parse(m.lzma2.mixed)))
         throw std::runtime_error("manifest: its lzma2 stream mixed with the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) or a primer (W), which are sieve-manifest-v33's");
     // The two streams from their own bytes. Where the lzma2 stream is mixed (as slow to decode as
@@ -588,6 +590,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 const Mix4Params mp = Mix4Params::parse(w.substr(0, t));
                 if (mp.width) throw std::invalid_argument("a picture's parameters for a group of files");
                 if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) and a primer (W) are sieve-manifest-v33's");
+                if (mp.instructions && !m.v34) throw std::invalid_argument("the x86 instruction model (E1) is sieve-manifest-v34's");
                 const MixDictionary* words = nullptr;
                 if (mp.dictionary)
                 {
@@ -638,6 +641,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                     // v28: mix-v4 (a word list where its parameters name one, made ready here, once).
                     const Mix4Params mp = Mix4Params::parse(e.way.substr(5));
                     if (match_ways(mp) && !m.v33) throw std::invalid_argument("the match model's ways (R1, M4, C2), the x86 filter (X), the palette (P) and a primer (W) are sieve-manifest-v33's");
+                if (mp.instructions && !m.v34) throw std::invalid_argument("the x86 instruction model (E1) is sieve-manifest-v34's");
                     const MixDictionary* words = nullptr;
                     if (mp.dictionary)
                     {

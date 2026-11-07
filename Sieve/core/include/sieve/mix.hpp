@@ -169,6 +169,10 @@ struct Mix4Params
     // coded, so the file starts with what the dictionary taught it. 0: none; 1: web-mdn-2026-11-03-64k
     // (MDN's CC0 examples, HTML, CSS and JavaScript; mix_primer). Text only, not a picture or a program.
     uint32_t primer = 0;
+    // v34 draft (7 November 2026): E1, the x86 instruction model: in place of the three contexts
+    // made for text's lines and fields, three from where each byte falls in its x86 instruction (its
+    // part, its opcode, the ModRM and SIB bytes, the instruction before's opcode). A program's bytes.
+    bool instructions = false;
     // The list the hooks are asked for: its size, with kMixWordsByUse where it is counted by use.
     uint32_t list() const { return dictionary | (by_use ? kMixWordsByUse : 0); }
     void check() const;
@@ -180,7 +184,7 @@ struct Mix4Params
 
 // Whether mix-v4's parameters name any of the match model's ways or the x86 filter (v33 draft).
 // (And the palette, P, and a primer, W: all v33's.)
-inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1 || p.x86 || p.palette || p.primer; }
+inline bool match_ways(const Mix4Params& p) { return p.recover || p.min_match != 6 || p.candidates != 1 || p.x86 || p.palette || p.primer || p.instructions; }
 
 // v33 (W<n>): the dictionaries mixing may be primed on, each by its number. The bytes are asked of a
 // hook the program sets (the CLI's reads the registered file and checks its SHA-256); mix4_code and

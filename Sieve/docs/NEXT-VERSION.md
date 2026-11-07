@@ -16,6 +16,14 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   Decoding Speed 4,652,864 (48.4%), installed in 3 s. Making them took 101 s and 161 s, most of it
   LZMA2's passes over 120 MB of indices (the speed work's first target).
 
+- **Second piece, built 7 November 2026: mix-v4's `E1`, the x86 instruction model** (Edward: "start
+  with the x86 instruction model", after the cmix yardstick showed programs as the widest gap). A
+  program's mixing given contexts from where each byte falls in its x86 instruction (a small decoder
+  of x86-64's encodings), its mixers' weights chosen by that too, and one stage after them;
+  SPECIFICATIONS §12.2 v34; the oracle reads it; CI step 11 checks it.
+- **Measured** (results/x86-instructions-2026-11-07.md): eleven programs, 98 KB to 11.8 MB, every
+  one smaller, 4.0% to 7.9% under v33 (6.3% together); decoding about 35% to 55% slower.
+
 **v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
 MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).
 - **What it adds:** mix-v4's `W1`, the model primed on `data/dictionaries/web-mdn-2026-11-03-64k.bin`
