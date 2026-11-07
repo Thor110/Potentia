@@ -161,11 +161,13 @@ bool is_canonical(const Header& h)
 
 namespace {
 
-uint64_t size_of(const json::Value& c, const char* key)
+uint32_t size_of(const json::Value& c, const char* key, uint64_t most = 1'000'000'000)
 {
     const json::Value* v = c.find(key);
     if (!v) bad(std::string("config.json has no ") + key);
-    return v->u64();
+    const uint64_t n = v->u64();
+    if (n == 0 || n > most) bad(std::string("config.json's ") + key + " is out of range");
+    return uint32_t(n);
 }
 
 bool flag(const json::Value& c, const char* key, bool otherwise)
@@ -174,34 +176,15 @@ bool flag(const json::Value& c, const char* key, bool otherwise)
     return v && !v->is_null() ? v->boolean() : otherwise;
 }
 
-struct Llama
+struct Llama : LlamaShape
 {
-    uint64_t hidden, layers, inter, vocab, heads, kv_heads, head_dim;
-    bool tied;
     std::string dtype;
 };
 
 Llama llama_of(const json::Value& c)
 {
-    if (!c.is_object()) bad("config.json is not a JSON object");
-    const json::Value* type = c.find("model_type");
-    if (!type || type->string() != "llama") bad("config.json is not a llama model's (model_type)");
-    if (flag(c, "attention_bias", false) || flag(c, "mlp_bias", false)) bad("a llama model with biases is not covered yet");
     Llama m;
-    m.hidden = size_of(c, "hidden_size");
-    m.layers = size_of(c, "num_hidden_layers");
-    m.inter = size_of(c, "intermediate_size");
-    m.vocab = size_of(c, "vocab_size");
-    m.heads = size_of(c, "num_attention_heads");
-    m.kv_heads = c.find("num_key_value_heads") ? size_of(c, "num_key_value_heads") : m.heads;
-    if (!m.heads || !m.kv_heads || m.heads % m.kv_heads) bad("config.json's heads do not divide");
-    if (const json::Value* hd = c.find("head_dim"); hd && !hd->is_null()) m.head_dim = hd->u64();
-    else
-    {
-        if (m.hidden % m.heads) bad("config.json's hidden size is not a whole number of heads");
-        m.head_dim = m.hidden / m.heads;
-    }
-    m.tied = flag(c, "tie_word_embeddings", false); // LlamaConfig's default
+    static_cast<LlamaShape&>(m) = llama_shape(c);
     const json::Value* td = c.find("torch_dtype");
     const std::string t = td ? td->string() : "float32";
     m.dtype = t == "bfloat16" ? "BF16" : t == "float16" ? "F16" : t == "float32" ? "F32" : "";
@@ -210,6 +193,30 @@ Llama llama_of(const json::Value& c)
 }
 
 } // namespace
+
+LlamaShape llama_shape(const json::Value& c)
+{
+    if (!c.is_object()) bad("config.json is not a JSON object");
+    const json::Value* type = c.find("model_type");
+    if (!type || type->string() != "llama") bad("config.json is not a llama model's (model_type)");
+    if (flag(c, "attention_bias", false) || flag(c, "mlp_bias", false)) bad("a llama model with biases is not covered yet");
+    LlamaShape m;
+    m.hidden = size_of(c, "hidden_size");
+    m.layers = size_of(c, "num_hidden_layers", 100'000);
+    m.inter = size_of(c, "intermediate_size");
+    m.vocab = size_of(c, "vocab_size");
+    m.heads = size_of(c, "num_attention_heads");
+    m.kv_heads = c.find("num_key_value_heads") ? size_of(c, "num_key_value_heads") : m.heads;
+    if (m.heads % m.kv_heads) bad("config.json's heads do not divide");
+    if (const json::Value* hd = c.find("head_dim"); hd && !hd->is_null()) m.head_dim = size_of(c, "head_dim");
+    else
+    {
+        if (m.hidden % m.heads) bad("config.json's hidden size is not a whole number of heads");
+        m.head_dim = m.hidden / m.heads;
+    }
+    m.tied = flag(c, "tie_word_embeddings", false);
+    return m;
+}
 
 std::vector<Tensor> llama_tensors(const json::Value& config)
 {
@@ -222,7 +229,7 @@ std::vector<Tensor> llama_tensors(const json::Value& config)
         t.shape = std::move(shape);
         out.push_back(std::move(t));
     };
-    const uint64_t q = m.heads * m.head_dim, kv = m.kv_heads * m.head_dim;
+    const uint64_t q = uint64_t(m.heads) * m.head_dim, kv = uint64_t(m.kv_heads) * m.head_dim;
     add("model.embed_tokens.weight", {m.vocab, m.hidden});
     for (uint64_t l = 0; l < m.layers; ++l)
     {

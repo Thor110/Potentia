@@ -79,6 +79,12 @@ struct WrittenReading
 std::optional<WrittenReading> written_as(const std::u32string& text, uint32_t mask);
 std::optional<WrittenReading> written_as_bytes(std::span<const uint32_t> bytes);
 
+// Every reading's bytes for a text given as UTF-8, decoded outright, the readings in their order
+// (text's three: as it is, without its trailing whitespace, and so with one line feed; binary's
+// two: both ways round); a reading the text is not, left out. Text not valid UTF-8 reads as its
+// own bytes. The vault's decoders (tools/cli/vault_decode.cpp) are these, and ascii85.
+std::vector<std::vector<uint8_t>> written_readings(const std::string& utf8);
+
 // The rule for one alphabet and set of readings, made once and kept for the process.
 class WrittenRule;
 std::shared_ptr<const WrittenRule> written_rule(const Alphabet& a, uint32_t mask);

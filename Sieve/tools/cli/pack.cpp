@@ -13,6 +13,7 @@
 #include "sieve/rope_wave.hpp"
 #include "sieve/mix.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/varint.hpp"
 #include "sieve/stop.hpp"
 #include "unpack_7z.hpp"
 #include "cli/image_io.hpp"
@@ -48,6 +49,7 @@
 #include "7zCrc.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <tuple>
 #include <cmath>
@@ -1203,14 +1205,9 @@ void sk_put_varint(std::vector<uint8_t>& out, uint64_t v)
 uint64_t sk_get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
-    for (int shift = 0; shift < 64; shift += 7)
-    {
-        if (at >= in.size()) throw std::runtime_error("a deflate skeleton ends early");
-        const uint8_t c = in[at++];
-        v |= uint64_t(c & 0x7F) << shift;
-        if (!(c & 0x80)) return v;
-    }
-    throw std::runtime_error("a deflate skeleton's number is too long");
+    if (const sieve::VarintFault f = sieve::read_varint(in, at, v); f != sieve::VarintFault::none)
+        throw std::runtime_error(f == sieve::VarintFault::ends ? "a deflate skeleton ends early" : std::string("a deflate skeleton ") + sieve::varint_fault_text(f));
+    return v;
 }
 
 struct DeflateSkeleton
@@ -2726,37 +2723,75 @@ std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b)
     return out;
 }
 
+// Whether a file holds long stretches it repeats, however far apart: points chosen by the bytes
+// themselves (a rolling hash over 64 bytes, about one point each 4 KiB, wherever the bytes fall),
+// the 64 bytes after each hashed, and a repeat counted where a hash is met again. One pass, about
+// 50 ms over 52 MB. Samples cannot see such repeats, though a whole LZMA2 pass can: 20 MB of random
+// bytes three times over, 60 MB, came out at 60,001,033 bytes from a figure made from samples, where
+// LZMA2 made it 20,006,996 (7 November 2026). Where 1% of the points or more repeat, it says so.
+static bool long_repeats(std::span<const uint8_t> b)
+{
+    if (b.size() < 4096) return false;
+    std::array<uint64_t, 256> gear{};
+    uint64_t z = 0x5EED5EEDull;
+    for (uint64_t& g : gear)
+    {
+        z += 0x9E3779B97F4A7C15ull;
+        uint64_t x = z;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+        g = x ^ (x >> 31);
+    }
+    std::unordered_set<uint64_t> seen;
+    seen.reserve(b.size() / 4096 + 16);
+    uint64_t h = 0, points = 0, again = 0;
+    const size_t end = b.size() - 64;
+    for (size_t i = 0; i < end; ++i)
+    {
+        h = (h << 1) + gear[b[i]]; // (its last 64 bytes, the older shifted out)
+        if ((h >> 52) != 0) continue; // (one in 4096)
+        uint64_t k = 1469598103934665603ull;
+        for (size_t j = i + 1; j <= i + 64; ++j) k = (k ^ b[j]) * 1099511628211ull;
+        ++points;
+        if (!seen.insert(k).second) ++again;
+    }
+    return points && again * 100 >= points;
+}
+
+// A large file LZMA2 cannot shrink (sound, film, anything compressed already), told from three
+// samples of 1 MiB (its start, middle and end; LZMA2's estimate of each, preset 6): each sample's
+// figure where every one saves under 2% and the file repeats nothing far apart (long_repeats);
+// nothing otherwise. (The FLAC of 52 MB: 0.78%, 0.12% and 1.64%, its fade at the end.)
+static std::optional<std::array<uint64_t, 3>> flat_samples(const std::vector<uint8_t>& bytes)
+{
+    constexpr size_t kSample = size_t(1) << 20;
+    if (bytes.size() < (size_t(16) << 20)) return std::nullopt;
+    const size_t n = bytes.size();
+    const size_t at[3] = {0, n / 2 - kSample / 2, n - kSample};
+    std::array<uint64_t, 3> got{};
+    for (int k = 0; k < 3; ++k)
+    {
+        const std::vector<uint8_t> sample(bytes.begin() + std::ptrdiff_t(at[k]), bytes.begin() + std::ptrdiff_t(at[k] + kSample));
+        const uint64_t e = estimate(sample); // (kept by its bytes: asked again, not made again)
+        if (!e || e * 100 < uint64_t(kSample) * 98) return std::nullopt;
+        got[size_t(k)] = e;
+    }
+    if (long_repeats(bytes)) return std::nullopt;
+    return got;
+}
+
 // A file's LZMA2 figure for weighing its ways: LZMA2's estimate (preset 6), or where the run keeps a
 // first pass (g_keep_first, one file carried as it is), the stream's own first pass, kept.
 static uint64_t whole_estimate(const std::vector<uint8_t>& bytes)
 {
-    // A large file LZMA2 cannot shrink (sound, film, anything compressed already): its figure from
-    // three samples of 1 MiB (its start, middle and end, preset 6), not a whole pass. LZMA2 is at its
-    // slowest on such data (a FLAC of 52 MB: 29.1 s of its 34 s to pack were this pass, where LZMA2
-    // took 0.1% off; 6 November 2026), and a figure that close to the file's size only stands beside
-    // ways that beat it by far. Only where every sample saves under 2% (the FLAC's: 0.78%, 0.12% and
-    // 1.64%, its fade at the end): a file that shrinks more anywhere sampled has its pass as before.
-    if (bytes.size() >= (size_t(16) << 20))
-    {
-        constexpr size_t kSample = size_t(1) << 20;
-        const size_t n = bytes.size();
-        uint64_t got = 0;
-        bool flat = true;
-        for (const size_t at : {size_t(0), n / 2 - kSample / 2, n - kSample})
-        {
-            const std::vector<uint8_t> sample(bytes.begin() + std::ptrdiff_t(at), bytes.begin() + std::ptrdiff_t(at + kSample));
-            const uint64_t e = estimate(sample);
-            if (!e || e * 100 < uint64_t(kSample) * 98)
-            {
-                flat = false;
-                break;
-            }
-            got = std::max(got, e);
-        }
-        // (The sample that shrank least stands for the whole: the average had the FLAC's figure 0.8%
-        // under its pass, so LZMA2 was taken over the rope and came out larger.)
-        if (flat) return uint64_t(double(n) * double(got) / double(kSample));
-    }
+    // A large file LZMA2 cannot shrink (flat_samples): its figure from its samples, not a whole pass.
+    // LZMA2 is at its slowest on such data (a FLAC of 52 MB: 29.1 s of its 34 s to pack were this
+    // pass, where LZMA2 took 0.1% off; 6 November 2026), and a figure that close to the file's size
+    // only stands beside ways that beat it by far. The sample that shrank least stands for the whole:
+    // the average had the FLAC's figure 0.8% under its pass, so LZMA2 was taken over the rope and
+    // came out larger.
+    if (const auto flat = flat_samples(bytes))
+        return uint64_t(double(bytes.size()) * double(*std::max_element(flat->begin(), flat->end())) / double(size_t(1) << 20));
     if (!g_keep_first.load(std::memory_order_relaxed) || bytes.empty()) return estimate(bytes);
     const uint32_t dict = std::max(dictionary_for(bytes.size()), g_sample_floor.load(std::memory_order_relaxed));
     constexpr uint32_t preset = 9 | LZMA_PRESET_EXTREME;
@@ -3366,11 +3401,28 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     for (const ManifestEntry& x : m.entries)
         if (!x.dir && !x.sha256.empty()) ++listed_times[x.sha256];
     std::unordered_map<std::string, std::optional<std::pair<std::vector<uint8_t>, std::string>>> png_made_by;
+    // (A PNG's makers' results made a batch ahead, on the threads, by the step below that opens
+    // archives (prepare_from): taken here once, by the file's bytes, where they are.)
+    std::mutex png_ahead_mx;
+    std::unordered_map<std::string, std::optional<std::pair<std::vector<uint8_t>, std::string>>> png_ahead; // (maker and the bytes' address)
+    auto png_ahead_key = [](size_t maker, const std::vector<uint8_t>& b) {
+        return std::to_string(maker) + ":" + std::to_string(reinterpret_cast<uintptr_t>(b.data())) + ":" + std::to_string(b.size());
+    };
     auto png_made_with = [&](size_t maker, const std::vector<uint8_t>& b, const std::string& sha) {
         const bool copied = !sha.empty() && listed_times[sha] > 1;
         const std::string key = std::to_string(maker) + sha;
         if (copied)
             if (auto it = png_made_by.find(key); it != png_made_by.end()) return it->second;
+        {
+            std::lock_guard<std::mutex> lock(png_ahead_mx);
+            if (auto it = png_ahead.find(png_ahead_key(maker, b)); it != png_ahead.end())
+            {
+                std::optional<std::pair<std::vector<uint8_t>, std::string>> x = std::move(it->second);
+                png_ahead.erase(it);
+                if (copied) png_made_by.emplace(key, x);
+                return x;
+            }
+        }
         std::optional<std::pair<std::vector<uint8_t>, std::string>> x;
         {
             const timings::Scope t(maker == 0 ? "pack.png.stb" : "pack.png.skeleton"); // (stb's encoder tried, or preflate)
@@ -3422,6 +3474,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     const bool rar_ok = asked && compressed_temporary() && !routed;
     if ((optimise_archives || spans_on) && m.compact)
     {
+        const timings::Scope t_step("pack.archives.step"); // (archives opened and spans decoded, file by file)
         std::unordered_set<std::string> taken;
         for (const ManifestEntry& e : m.entries) taken.insert(e.dir && !e.path.empty() && e.path.back() == '/' ? e.path.substr(0, e.path.size() - 1) : e.path);
         const bool one = m.one_file_root();
@@ -3459,6 +3512,107 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
         std::unordered_set<std::string> folder_shas;
         for (const ManifestEntry& e : m.entries)
             if (!e.dir) folder_shas.insert(e.sha256);
+        // What each file's weighing here reads that is its own alone, worked out on the threads a batch
+        // ahead of the loop below (IDEAS 19.120 (c)): LZMA2's estimate of the file (kept by its bytes,
+        // so asked again below, not made again) and the spans of binary written as text it holds. The
+        // loop still takes every file in order, so the same choices. (A batch: four files a thread, at
+        // most 64 MiB together, so a folder's spans are not all held at once.)
+        // (A text's spans with what their weighing needs: the skeleton, the bytes joined that LZMA2 or
+        // mixing would carry, the JPEGs among them as their brunsli forms, and the four figures.)
+        struct SpansAhead
+        {
+            std::vector<spans::Span> found;
+            std::vector<uint8_t> sk;
+            std::vector<std::pair<std::string, std::vector<uint8_t>>> brunsli; // (a JPEG's SHA-256, its form)
+            uint64_t jpegs = 0, eb = 0, ej = 0;
+            double rb = -1, rj = -1;
+        };
+        std::vector<std::optional<SpansAhead>> spans_ahead(bytes.size());
+        // Mixing's gain over LZMA2 on a sample of 1 MiB in 8 stretches evenly across `inner` (-1 where
+        // mixing is not weighed); see mixed_estimate below.
+        auto mixed_ratio = [&](const std::vector<uint8_t>& inner) -> double {
+            if (!members_on || prioritise_decoding() || inner.size() < (size_t(64) << 10)) return -1;
+            const size_t each = std::min<size_t>(inner.size(), size_t(1) << 20) / 8;
+            std::vector<uint8_t> smp;
+            for (size_t k = 0; k < 8; ++k)
+            {
+                const size_t at = (inner.size() - each) * k / 7;
+                smp.insert(smp.end(), inner.begin() + std::ptrdiff_t(at), inner.begin() + std::ptrdiff_t(at + each));
+            }
+            const double code = double(mix4_code(smp, mix4_for(smp.size())).size()), lz = double(std::max<uint64_t>(1, estimate(smp)));
+            return std::min(1.0, code / lz);
+        };
+        auto weigh_spans = [&](const std::vector<uint8_t>& b) -> std::optional<SpansAhead> {
+            SpansAhead a;
+            a.found = spans::spans_of(b, 48);
+            if (a.found.empty()) return std::nullopt;
+            a.sk = spans::skeleton_of(b, a.found);
+            std::vector<uint8_t> joined = a.sk;
+            for (const spans::Span& x : a.found)
+            {
+                // The same bytes as a file of the folder: carried as the other's (a copy, or
+                // its lines), so it costs next to nothing; the 8 bytes below are its share.
+                if (folder_shas.count(sha256_hex(x.bytes))) continue;
+                // A JPEG reaches brunsli below, as a file does: its form made now, for the
+                // weighing, and kept for the JPEG step by its SHA-256.
+                // (Only with an archives box, where the JPEG step runs.)
+                if (jpeg_on && optimise_archives && x.bytes.size() >= 1024 && is_jpeg(x.bytes))
+                    if (auto form = jpeg_to_brunsli(x.bytes); form && form->size() < x.bytes.size())
+                    {
+                        a.jpegs += form->size();
+                        a.brunsli.emplace_back(sha256_hex(x.bytes), std::move(*form));
+                        continue;
+                    }
+                joined.insert(joined.end(), x.bytes.begin(), x.bytes.end());
+            }
+            // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
+            // of the file as it is and of the skeleton and its members.
+            // (The four at once, on the threads: each alone took seconds on a large text, one
+            // after another; the same values, put together as mixed_estimate does.)
+            for_each_index(4, pack_threads(), [&](size_t k) {
+                if (k == 0) a.eb = estimate(b);
+                else if (k == 1) a.ej = estimate(joined);
+                else if (k == 2) a.rb = mixed_ratio(b);
+                else a.rj = mixed_ratio(joined);
+            });
+            return a;
+        };
+        size_t ahead_to = 0;
+        auto prepare_from = [&](size_t from) {
+            if (from < ahead_to || from >= bytes.size()) return;
+            size_t to = from;
+            uint64_t total = 0;
+            const size_t most = size_t(std::max(1u, pack_threads())) * 4;
+            while (to < bytes.size() && to - from < most && (to == from || total + bytes[to].size() <= (uint64_t(64) << 20))) total += bytes[to++].size();
+            {
+                std::lock_guard<std::mutex> lock(png_ahead_mx);
+                png_ahead.clear(); // (the batch before's, each taken or not wanted: its files are done)
+            }
+            std::atomic<uint64_t> held{0}; // (a PNG's pixels held ahead: at most 256 MiB at once)
+            for_each_index(to - from, pack_threads(), [&](size_t k) {
+                const std::vector<uint8_t>& f = bytes[from + k];
+                if (stop_requested()) return;
+                if (optimise_archives && !f.empty()) (void)estimate(f);
+                if (spans_on && f.size() >= 256) spans_ahead[from + k] = weigh_spans(f);
+                // A PNG, as the loop tries it: stb's way, and its skeleton's only where stb's gives it
+                // no way back; what each makes weighed by LZMA2 too (kept by its bytes).
+                if (optimise_archives && png_on && is_png(f))
+                    for (size_t mk = 0; mk < png_makers.size(); ++mk)
+                    {
+                        auto x = png_makers[mk](f);
+                        if (x)
+                        {
+                            if (held.fetch_add(x->first.size()) + x->first.size() > (uint64_t(256) << 20)) break; // (made again in the loop)
+                            (void)estimate(x->first);
+                        }
+                        std::lock_guard<std::mutex> lock(png_ahead_mx);
+                        const bool made = x.has_value();
+                        png_ahead[png_ahead_key(mk, f)] = std::move(x);
+                        if (made) break;
+                    }
+            });
+            ahead_to = to;
+        };
         for (ManifestEntry& e : m.entries)
         {
             if (e.dir)
@@ -3468,6 +3622,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 kept.emplace_back();
                 continue;
             }
+            prepare_from(fi);
+            const size_t this_file = fi;
             std::vector<uint8_t>& b = bytes[fi++];
             if (copy_of.count(e.path))
             {
@@ -3492,20 +3648,6 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 const double code = double(mix4_code(s, mix4_for(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
                 return uint64_t(double(estimate(inner)) * std::min(1.0, code / lz));
             };
-            // The same, in its two halves (the sample's ratio, -1 where mixing is not weighed; LZMA2's
-            // estimate of the whole apart), so that the spans' four can be worked out at once.
-            auto mixed_ratio = [&](const std::vector<uint8_t>& inner) -> double {
-                if (!members_on || prioritise_decoding() || inner.size() < (size_t(64) << 10)) return -1;
-                const size_t each = std::min<size_t>(inner.size(), size_t(1) << 20) / 8;
-                std::vector<uint8_t> s;
-                for (size_t k = 0; k < 8; ++k)
-                {
-                    const size_t at = (inner.size() - each) * k / 7;
-                    s.insert(s.end(), inner.begin() + std::ptrdiff_t(at), inner.begin() + std::ptrdiff_t(at + each));
-                }
-                const double code = double(mix4_code(s, mix4_for(s.size())).size()), lz = double(std::max<uint64_t>(1, estimate(s)));
-                return std::min(1.0, code / lz);
-            };
             // v33 draft: a text holding binary written as text (base64, hex, lists of byte values;
             // spans-v1, text_spans.hpp), carried as an archive made again from its skeleton is: its
             // entry the text with each span taken out ("spn <members> <skeleton size>"), each span
@@ -3517,43 +3659,19 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             auto try_spans = [&]() -> bool {
                 if (spans_on && b.size() >= 256)
                 {
-                    std::vector<spans::Span> found = spans::spans_of(b, 48);
-                    if (!found.empty())
+                    const timings::Scope t("pack.archives.spans");
+                    // (Weighed ahead, on the threads, where it could be: prepare_from.)
+                    std::optional<SpansAhead> ahead = this_file < ahead_to ? std::move(spans_ahead[this_file]) : weigh_spans(b);
+                    spans_ahead[this_file].reset();
+                    if (ahead)
                     {
-                        std::vector<uint8_t> sk = spans::skeleton_of(b, found);
-                        std::vector<uint8_t> joined = sk;
+                        std::vector<spans::Span>& found = ahead->found;
+                        std::vector<uint8_t>& sk = ahead->sk;
                         std::vector<std::span<const uint8_t>> parts;
-                        uint64_t jpegs = 0; // what the JPEGs among them come to as their brunsli forms (below)
-                        for (const spans::Span& x : found)
-                        {
-                            parts.emplace_back(x.bytes);
-                            // The same bytes as a file of the folder: carried as the other's (a copy, or
-                            // its lines), so it costs next to nothing; the 8 bytes below are its share.
-                            if (folder_shas.count(sha256_hex(x.bytes))) continue;
-                            // A JPEG reaches brunsli below, as a file does: its form made now, for the
-                            // weighing, and kept for the JPEG step by its SHA-256.
-                            // (Only with an archives box, where the JPEG step runs.)
-                            if (jpeg_on && optimise_archives && x.bytes.size() >= 1024 && is_jpeg(x.bytes))
-                                if (auto form = jpeg_to_brunsli(x.bytes); form && form->size() < x.bytes.size())
-                                {
-                                    jpegs += form->size();
-                                    brunsli_kept.emplace(sha256_hex(x.bytes), std::move(*form));
-                                    continue;
-                                }
-                            joined.insert(joined.end(), x.bytes.begin(), x.bytes.end());
-                        }
-                        // Weighed as the archives are: LZMA2's estimate, or mixing's where that is less,
-                        // of the file as it is and of the skeleton and its members.
-                        // (The four at once, on the threads: each alone took seconds on a large text, one
-                        // after another; the same values, put together as mixed_estimate does.)
-                        uint64_t eb = 0, ej = 0;
-                        double rb = -1, rj = -1;
-                        for_each_index(4, pack_threads(), [&](size_t k) {
-                            if (k == 0) eb = estimate(b);
-                            else if (k == 1) ej = estimate(joined);
-                            else if (k == 2) rb = mixed_ratio(b);
-                            else rj = mixed_ratio(joined);
-                        });
+                        for (const spans::Span& x : found) parts.emplace_back(x.bytes);
+                        for (auto& [sha, form] : ahead->brunsli) brunsli_kept.emplace(sha, std::move(form));
+                        const uint64_t jpegs = ahead->jpegs, eb = ahead->eb, ej = ahead->ej;
+                        const double rb = ahead->rb, rj = ahead->rj;
                         const uint64_t mb = rb < 0 ? ~uint64_t(0) : uint64_t(double(eb) * rb), mj = rj < 0 ? ~uint64_t(0) : uint64_t(double(ej) * rj);
                         const uint64_t whole = std::min(std::min<uint64_t>(b.size(), eb), mb);
                         const uint64_t apart = std::min(ej, mj) + jpegs + 8 * found.size();
@@ -3590,7 +3708,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
             // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
             // remembered, so packing it later does not search again), its names and recipe counted.
-            const uint64_t as_is = std::min<uint64_t>(b.size(), estimate(b));
+            const uint64_t as_is = [&] {
+                const timings::Scope t("pack.archives.as-is");
+                return std::min<uint64_t>(b.size(), estimate(b));
+            }();
             auto worth = [&](const std::vector<uint8_t>& inner, uint64_t extra, bool one_file = true) {
                 if (archives_always) return true; // SIEVE_ARCHIVES_ALWAYS: every archive read, for testing the readers
                 uint64_t cost = 0;
@@ -3618,6 +3739,23 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             };
             // A single-stream archive (xz, gzip): remade exactly where a recipe gives it back, else
             // carried as what it holds, under its name without the extension.
+            // An archive's members become files of the install only where every system can write them as
+            // they are: none a name Windows cannot hold (a dot or a space at its end, CON, a colon...),
+            // and no two one name where case is ignored, or (macOS) in NFC and NFD. Else the installer
+            // refuses the whole install on that system. (7 November 2026, from encode.su: a cab in Adobe
+            // Reader 9.4.0's setup held "turnonnotificationinactrobat.", carried as its contents and
+            // then not installable on Windows.) Such an archive is left as it is.
+            // (`names`: its files and folders; `files`: its files alone, as the installer weighs them.)
+            auto members_writable = [&](const std::vector<std::string>& names, const std::vector<std::string>& files) -> bool {
+                std::optional<std::pair<std::string, std::string>> bad;
+                std::string why;
+                if ((bad = name_windows_cannot_hold(names))) why = bad->first + " is a name Windows cannot hold (" + bad->second + ")";
+                else if ((bad = names_one_ignoring_case(files))) why = bad->first + " and " + bad->second + " are one name where case is ignored";
+                else if ((bad = names_one_on_macos(files))) why = bad->first + " and " + bad->second + " are one name on macOS";
+                if (why.empty()) return true;
+                progress(e.path + ": not opened, left as it is: " + why);
+                return false;
+            };
             auto single = [&](const char* format, std::optional<std::vector<uint8_t>> inner, const std::string& recipe, const std::string& name,
                               uint64_t extra) {
                 if (!inner || !worth(*inner, extra)) return false;
@@ -3629,6 +3767,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     return true;
                 }
                 if (!permanent_ok || taken.count(name)) return false; // (temporary only: what Sieve cannot make again is left as it is)
+                if (!members_writable({name}, {name})) return false;
                 taken.insert(name);
                 m.unpacked.push_back({format, e.path, name, e.size});
                 ManifestEntry c = e;
@@ -3652,7 +3791,17 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 }
                 // (The rope's estimate only for an archive of one file: for more, their bytes joined
                 // are not what the rope would be given.)
-                if (all.empty() || taken.count(folder) || !worth(joined, names, nfiles == 1)) return false;
+                if (all.empty() || taken.count(folder)) return false;
+                {
+                    std::vector<std::string> paths, files_only;
+                    for (const auto& in : all)
+                    {
+                        paths.push_back((one ? std::string() : folder + "/") + in.entry.path);
+                        if (!in.entry.dir) files_only.push_back(paths.back());
+                    }
+                    if (!members_writable(paths, files_only)) return false;
+                }
+                if (!worth(joined, names, nfiles == 1)) return false;
                 taken.insert(folder);
                 m.unpacked.push_back({format, e.path, folder, e.size});
                 const std::string prefix = one ? std::string() : folder + "/";
@@ -3728,6 +3877,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     auto rs = png_resave_kept(b, e.sha256);
                     if (!rs || rs->png.size() >= b.size() || !worth(rs->inner, 40)) return false;
                     ++pngs_resaved;
+                    m.changed_on_packing.push_back(e.path);
                     png_bytes += b.size();
                     png_resaved_bytes += rs->png.size();
                     progress(e.path + ", a PNG of " + std::to_string(b.size()) + " bytes, installed re-saved at its smallest, " + std::to_string(rs->png.size()) +
@@ -3950,7 +4100,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                         joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
                         names += folder.size() + in.entry.path.size() + 40;
                     }
+                    std::vector<std::string> paths, files_only;
+                    for (const auto& in : *all)
+                    {
+                        paths.push_back(folder + "/" + in.entry.path);
+                        if (!in.entry.dir) files_only.push_back(paths.back());
+                    }
                     if (held != listed || held.size() != hdr->members.size()) why = "its headers and libarchive do not list the same files";
+                    else if (!members_writable(paths, files_only)) why.clear(); // (said, and left as it is)
                     else if (!worth(joined, names, all->size() == 1)) why.clear(); // not worth it: its contents are not either
                     else if (!(program = rar::find_program())) why = "rar was not found (" + rar::looked() + ")";
                     else if ((version = rar::program_version(*program)).empty()) why = "the rar found gives no version";
@@ -4247,6 +4404,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                          std::to_string(bytes[i].size()) + " bytes, installed with tables made for its values, " + std::to_string(r.better.size()) +
                          " bytes, the same picture, as its brunsli form of " + std::to_string(r.form.size()));
                 ++jpegs_optimised;
+                m.changed_on_packing.push_back(files[i]->path);
                 jpeg_was += bytes[i].size();
                 jpeg_now += r.better.size();
                 jpeg_bytes += r.better.size();
@@ -4673,10 +4831,50 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             bool every_here = rope_search_every_wave();
             if (optimise_search())
             {
-                const auto [on, why] = optimised_every_way(bytes[i]);
+                auto [on, why] = optimised_every_way(bytes[i]);
+                // (A file over 16 MiB that LZMA2 cannot shrink, by its samples (flat_samples): Try every
+                // way mixes it whole only to have the rising bar refuse it, unless mixing does far better
+                // than LZMA2 on it. Its three samples mixed, each its best of mixing's three trials; where
+                // mixing's lead over LZMA2 on them, together, is under half the bar for the file, it is
+                // left as without Optimise Search. The FLAC of 52 MB: a lead of 0.38% on its samples and
+                // 0.43% whole, against a bar of 1.26%; mixed whole, 229 s of its 428, then refused, with
+                // 171 s of the rope's search for nothing more. 7 November 2026.)
+                std::string why_text = why;
+                if (on && mix_on && mix4_on && match_ways_on && files[i]->way == "raw" && bytes[i].size() > (size_t(16) << 20) && !stop_requested() &&
+                    !(bytes[i].size() >= 3 && bytes[i][0] == 0xFF && bytes[i][1] == 0xD8 && bytes[i][2] == 0xFF))
+                    if (const auto flat = flat_samples(bytes[i]))
+                    {
+                        constexpr size_t kSample = size_t(1) << 20;
+                        const size_t n = bytes[i].size();
+                        const size_t at[3] = {0, n / 2 - kSample / 2, n - kSample};
+                        Mix4Params trial[3];
+                        trial[0] = trial[1] = trial[2] = mix4_for(kSample);
+                        trial[1].candidates = trial[2].candidates = 2;
+                        trial[2].recover = true, trial[2].min_match = 4;
+                        uint64_t mixed[9] = {};
+                        for_each_index(9, share ? share : pack_threads(), [&](size_t k) {
+                            const std::span<const uint8_t> s(bytes[i].data() + at[k / 3], kSample);
+                            mixed[k] = mix4_code(s, trial[k % 3], nullptr).size();
+                        });
+                        int64_t lead = 0;
+                        for (int k = 0; k < 3; ++k)
+                            lead += int64_t((*flat)[size_t(k)]) - int64_t(std::min({mixed[3 * k], mixed[3 * k + 1], mixed[3 * k + 2]}));
+                        const double lead_share = double(lead) / double(3 * kSample);
+                        const double bar = 0.01 + 0.005 * double(n) / 1e8;
+                        if (!stop_requested() && lead_share * 2 < bar)
+                        {
+                            on = false;
+                            char t[256];
+                            std::snprintf(t, sizeof t,
+                                          "over 16 MiB, and LZMA2 cannot shrink it: mixing %.2f%% under LZMA2 on its three samples, under half the bar of %.2f%% "
+                                          "it would have to clear",
+                                          100.0 * lead_share, 100.0 * bar);
+                            why_text = t;
+                        }
+                    }
                 every_here = on;
                 progress("file " + std::to_string(i + 1) + " of " + std::to_string(files.size()) + ": " + files[i]->path + ", Optimise Search: Try every way " +
-                         (on ? "on" : "off") + " (" + why + ")");
+                         (on ? "on" : "off") + " (" + why_text + ")");
             }
             const EveryWaveHere every_wave_here(every_here);
             // (A program, v33 draft: against LZMA2 with the x86 filter, as the x86 stream carries it,

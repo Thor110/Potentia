@@ -1769,7 +1769,8 @@ void FileLocator::draw(float W, float H)
 
 void FileLocator::warn_rars(const cli::Manifest& m)
 {
-    const std::string w = cli::rar_remake_warning(m);
+    std::string w = cli::rar_remake_warning(m);
+    if (const std::string c = cli::changed_files_warning(m); !c.empty()) w += (w.empty() ? "" : "\n\n") + c;
     if (w.empty()) return;
     std::lock_guard<std::mutex> lock(mx_);
     pending_warning_ = w;

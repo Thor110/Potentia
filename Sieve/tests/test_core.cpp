@@ -45,6 +45,7 @@
 #include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/varint.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -3399,6 +3400,18 @@ void test_safetensors()
         CHECK(throws([] { (void)st::llama_tensors(sieve::json::parse(R"({"model_type":"llama","attention_bias":true})")); }));
         CHECK(throws([] { (void)st::llama_tensors(sieve::json::parse(R"({"model_type":"gpt2"})")); }));
     }
+    // Sizes held to bounds, one reader for the layout and the model (7 November 2026): a config.json
+    // claiming 10^18 layers was listed until the memory ran out.
+    {
+        std::string huge = sieve::json::write(tiny);
+        huge.replace(huge.find("\"num_hidden_layers\":2"), 21, "\"num_hidden_layers\":1000000000000000000");
+        CHECK(throws([&] { (void)st::llama_tensors(sieve::json::parse(huge)); }));
+        std::string zero = sieve::json::write(tiny);
+        zero.replace(zero.find("\"num_key_value_heads\":2"), 23, "\"num_key_value_heads\":0");
+        CHECK(throws([&] { (void)st::llama_shape(sieve::json::parse(zero)); }));
+        const st::LlamaShape sh = st::llama_shape(tiny);
+        CHECK(sh.layers == 2 && sh.head_dim == 16 && sh.kv_heads == 2 && sh.tied);
+    }
     // The layout: sorted by name, offsets end to end, padded to 8; read back, canonical.
     std::vector<st::Tensor> laid;
     const std::string start = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, t, &laid);
@@ -4749,6 +4762,18 @@ FilterLine alphabet_line(const Alphabet& a, uint32_t L) { return {"text", a.id()
 // every unit of short lines, the count is the brute force's, and survivors round-trip by rank.
 void test_written_vectors(const std::string& dir)
 {
+    // The readings decoded outright, as the vault takes them (written_readings: one copy of each
+    // decoder since 7 November 2026): hex, base64 and the text's own three; text not UTF-8 read as
+    // its bytes.
+    {
+        const auto has = [](const std::vector<std::vector<uint8_t>>& all, std::vector<uint8_t> b) {
+            return std::find(all.begin(), all.end(), b) != all.end();
+        };
+        CHECK(has(sieve::written_readings("0x89 0x50 0x4E 0x47"), {0x89, 'P', 'N', 'G'}));
+        CHECK(has(sieve::written_readings("iVBORw=="), {0x89, 'P', 'N', 'G'}));
+        CHECK(has(sieve::written_readings("caf\xC3\xA9 \n"), {'c', 'a', 'f', 0xE9, '\n'}));
+        CHECK(has(sieve::written_readings(std::string("\xC3\x41", 2)), {0xC3, 0x41}));
+    }
     const TestResources none(nullptr, nullptr);
     int n = 0;
     const FilterSpec* spec = find_filter("not-written-v1");
@@ -6322,6 +6347,24 @@ void test_mix4()
 
 void test_rope_wave()
 {
+    // The one reader of Sieve's own numbers (sieve/varint.hpp): only the shortest form is read.
+    {
+        auto read = [](std::vector<uint8_t> b, uint64_t& v) {
+            size_t at = 0;
+            return sieve::read_varint(std::span<const uint8_t>(b.data(), b.size()), at, v);
+        };
+        uint64_t v = 0;
+        CHECK(read({0x00}, v) == sieve::VarintFault::none && v == 0);
+        CHECK(read({0xE5, 0x8E, 0x26}, v) == sieve::VarintFault::none && v == 624485);
+        CHECK(read({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01}, v) == sieve::VarintFault::none && v == UINT64_MAX);
+        CHECK(read({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x02}, v) == sieve::VarintFault::too_long); // (bit 64)
+        CHECK(read({0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01}, v) == sieve::VarintFault::too_long);
+        CHECK(read({0x85, 0x00}, v) == sieve::VarintFault::not_canonical); // (5, written in two bytes)
+        CHECK(read({0x85}, v) == sieve::VarintFault::ends);
+        size_t at = 0;
+        const std::vector<uint8_t> nine = {0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01};
+        CHECK(sieve::read_varint(std::span<const uint8_t>(nine.data(), nine.size()), at, v, 9) == sieve::VarintFault::too_long);
+    }
     // The parameters as written, and refused when written otherwise or out of range.
     CHECK(RopeParams::parse("L8 W949 S1 P3 K0").text() == "L8 W949 S1 P3 K0");
     CHECK((RopeParams::parse("L16 W1 S1 P2 K1") == RopeParams{16, 1, 1, 2, true}));

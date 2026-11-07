@@ -6455,7 +6455,11 @@ should take on:
   twice; keyed without it, two files with the same first 256 KiB would share the 4 MiB decision,
   valid but not the bytes made before, so it waits for a format's turn. (c) Archives' and spans'
   weighings run file by file; per file on the threads, a folder of pages would gain about the
-  cores' number on that step (estimated).
+  cores' number on that step (estimated). (*Built in part, 7 November 2026:* what each file's weighing
+  there reads that is its own alone, LZMA2's estimate of it, its spans with their four figures and a PNG's makers' results,
+  worked out on the threads a batch ahead of the loop, which still decides file by file in order: the
+  same bytes (Edward's `Pages/`, `docs/` with its step 4.0 s to 1.6 s, the CI's spans folders); a
+  zip's or a 7z's opening and weighing still one at a time.)
 - *Speed, installing:* every file's SHA-256 and the vault's chunk scan run on one core (about 4 s a
   GB measured on their parts); on the threads, reporting the first failure in listing order as
   decode_deferred does. (*Built, 6 November 2026:* on up to 4 threads; the six GIFs' check and
@@ -6478,13 +6482,24 @@ should take on:
   and Windows and Linux keep the two.)
 - *A RAR made again* sets each member's mode before the RAR is checked; the modes are now masked
   to 0777, but the members could be held to the files this install wrote, and the modes set only
-  once the RAR matches.
+  once the RAR matches. (*Built, 7 November 2026:* each member must be a file or folder this
+  install wrote, or the RAR is not made again and says which; the modes rar must read are set
+  before it runs, as they must be, and put back as written where the RAR does not match.)
 - *Duplicated code worth one copy each:* varint readers (most accept a tenth byte's high bits
   silently; one shared, canonical reader), the eight text-vault decoders written twice (written.cpp
   and vault_decode.cpp, which already differ on UTF-8), u8/from_u8 (37 copies), reading a file (15),
   hex (12), trim/lower/floor division, removing an archive's one top folder (4), the program's
   folder (3), the Llama config parser (2, one lacking three checks), and `--script`'s runner in
-  app_main.cpp (4). The oracle stays apart from all of them, as it must.
+  app_main.cpp (4). The oracle stays apart from all of them, as it must. (*Built in part, 7 November 2026:*
+  Sieve's own numbers read by one reader, `sieve/varint.hpp`, in their shortest form only (a tenth
+  byte past bit 63, or a number written longer than it is, refused), in the rope stream, the items
+  stream, the head, the runs' segments, delta, spans and rope-wave, with sieve-weights-v1's own
+  reader made as strict; RAR's and xz's numbers keep their formats' readers. The vault's decoders are
+  not-written-v1's (`written_readings`), ascii85 its own. The Llama config read once
+  (`llama_shape`) for the tensors' layout and the model, every size bounded: the layout's copy had no
+  bound, so a config.json claiming 10^18 layers was listed until the memory ran out; the model's
+  further refusals (rope scaling, an activation other than silu) stay the model's, as the layout does
+  not depend on them. u8/from_u8, reading a file, hex and the rest still to do.)
 
 **19.121 Four ideas after the release build (Edward, 5 November 2026; evaluated, nothing built).**
 - **An installer program's own default folder.** Today `sieve-install` offers `Documents\` and the

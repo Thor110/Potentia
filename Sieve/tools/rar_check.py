@@ -8,7 +8,7 @@ It makes RARs from the repository's own files with the rar found, at the setting
 (the defaults, each level, solid, BLAKE2, quick open, creation times, times to the second, a
 dictionary named, files without their folder), adds any RARs given, and for each:
 
-  1. packs it (sieve locate --items --optimise-archives, SIEVE_RAR_TRACE=1): made again or not, why,
+  1. packs it (sieve locate --items --optimise-archives --compressed-temporary --compressed-permanent, SIEVE_RAR_TRACE=1): made again or not, why,
      and for each try how many of its first bytes came out the same;
   2. installs it with rar there (sieve install): the RAR given back, byte for byte;
   3. installs it with no rar (SIEVE_RAR pointing nowhere): its files, and a warning saying so;
@@ -159,7 +159,7 @@ def main():
         orig = open(arc, "rb").read()
         row = {"name": name, "made": "-", "rar": "-", "none": "-", "si": "-"}
         # 1. Packing.
-        code, said = run([sieve, "locate", os.path.basename(arc), "--installer", "x.sieve", "--items", "--optimise-archives"], case,
+        code, said = run([sieve, "locate", os.path.basename(arc), "--installer", "x.sieve", "--items", "--optimise-archives", "--compressed-temporary", "--compressed-permanent"], case,
                          {"SIEVE_RAR": rar, "SIEVE_RAR_TRACE": "1", "SIEVE_ARCHIVES_ALWAYS": "1"})
         for line in said.splitlines():
             if line.startswith(("rar:", "rar ", "unpacked", "manifest", "error")):

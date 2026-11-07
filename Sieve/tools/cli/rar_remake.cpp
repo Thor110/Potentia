@@ -474,7 +474,8 @@ bool set_times(const fs::path& folder, const std::vector<Member>& members, std::
         // (Read, write and run for each, never setuid, setgid or sticky: the modes come from the
         // instructions and are set before the RAR made again is checked, so they must be harmless
         // whatever they say. A RAR that kept those bits is then not made again byte for byte, and
-        // its files are given as they are, as for any RAR that cannot be made again.)
+        // its files are given as they are, as for any RAR that cannot be made again; the installer puts their
+        // modes back then, and sets them only on the files it wrote: finish_archives.)
         if (::chmod(u8(p).c_str(), mode_t(m->attributes & 0777)) != 0) return (why = "cannot set the mode of " + m->path, false);
         struct timespec ts[2];
         ts[0].tv_nsec = UTIME_OMIT;

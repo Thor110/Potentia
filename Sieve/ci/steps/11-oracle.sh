@@ -489,7 +489,7 @@ open('a20/r.py.lz4', 'wb').write(lz4.frame.compress(t, compression_level=9, bloc
 open('a20/r.py.br', 'wb').write(brotli.compress(t, quality=5, lgwin=19))
 open('a20/r.py.lzma', 'wb').write(lzma.compress(t, format=lzma.FORMAT_ALONE, preset=0))
 open('a20/two.gz', 'wb').write(gzip.compress(t[:1000]) + gzip.compress(t[1000:]))"
-$S locate a20 --installer a20.sieve --items --optimise-archives --v20 --manifest a20.manifest | tr -d '\r' > a20.txt
+$S locate a20 --installer a20.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v20 --manifest a20.manifest | tr -d '\r' > a20.txt
 grep -c "^remade    3 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v20)$" a20.txt > /dev/null
 grep -c "^unpacked  1 archive(s) carried as their contents" a20.txt > /dev/null
 grep -c "^items     none; sieve-manifest-v20$" a20.txt > /dev/null
@@ -520,7 +520,7 @@ for pair in "test_read_format_cab_1.cab cab dir1/file1=d0c504f06bbd64d183524eb35
             "test_read_format_lha_header3.lzh lha file1=d0c504f06bbd64d183524eb35e5482ee5d966d456b905a24147165b2904d301b,file2=60f47caf717b06cf21b3bbb7775e49269a1b5cd6b94bba62da29a2ecb048ccf2"; do
   set -- $pair
   rm -rf la_inst la_oracle
-  SIEVE_ARCHIVES_ALWAYS=1 $S locate ../tests/archives/$1 --installer la.sieve --items --optimise-archives | tr -d '\r' > la.txt
+  SIEVE_ARCHIVES_ALWAYS=1 $S locate ../tests/archives/$1 --installer la.sieve --items --optimise-archives --compressed-temporary --compressed-permanent | tr -d '\r' > la.txt
   grep -c "^unpacked  1 archive(s) carried as their contents" la.txt > /dev/null
   $S install la.sieve --to la_inst | tr -d '\r' | grep -c "^note      $1 ($2, [0-9]* bytes) was carried as its contents" > /dev/null
   python -c "
@@ -550,7 +550,7 @@ with zipfile.ZipFile('a21/stored.zip', 'w', zipfile.ZIP_STORED) as z:
 cp ../tests/archives/sieve-7zip-lzma2.7z ../tests/archives/sieve-7zip-lzma.7z ../tests/archives/sieve-7zip-deflate.zip a21/
 # (Prioritise Decoding Speed: what the archives hold, 1.4 MB, is otherwise mixed as one group, which
 # the oracle took 726 s to decode in Python; groups are checked on their own below, v29 and v30.)
-SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --prioritise-decoding --manifest a21.manifest | tr -d '\r' > a21.txt
+SIEVE_ARCHIVES_ALWAYS=1 $S locate a21 --installer a21.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --prioritise-decoding --manifest a21.manifest | tr -d '\r' > a21.txt
 grep -c "^remade    6 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[1-9]\|3[0-3]\))$" a21.txt > /dev/null
 python -c "d = open('a21.manifest', 'rb').read(); assert d[:5] == b'sieve' and 21 <= d[5] <= 32, d[:6]"
 $S install a21.sieve --to a21_inst > /dev/null
@@ -577,15 +577,15 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   seq 1 30000 > r22/src/pack/numbers.txt
   (cd r22/src && "$RAR" a -cfg- -idq -y -m0 -qo- -r -- ../made.rar pack)
   # Alone: made again from its contents, then given back as the archive itself.
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22.sieve --items --optimise-archives | tr -d '\r' > r22.txt
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22.sieve --items --optimise-archives --compressed-temporary --compressed-permanent | tr -d '\r' > r22.txt
   grep -c "^rar       made.rar: made again by RAR 0.01 sieve-stand-in (top, -m0 -qo-)" r22.txt > /dev/null
   test -s r22.sieve
   # (0.13.78) Making it says so, as a warning (the File Locator in a box): only where the installing
   # machine has that rar does it come back byte for byte. Under Optimise Search no RAR is made again
   # (its box is greyed then), so there is nothing to warn of.
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22w.sieve --optimise-archives > /dev/null 2> r22w.txt
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22w.sieve --optimise-archives --compressed-temporary --compressed-permanent > /dev/null 2> r22w.txt
   grep -q "^warning: A RAR here is carried as its files and made again on installing by rar: made.rar (RAR 0.01 sieve-stand-in)" r22w.txt
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22o.sieve --optimise-archives --optimise-search > /dev/null 2> r22o.txt
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r22o.sieve --optimise-archives --compressed-temporary --compressed-permanent --optimise-search > /dev/null 2> r22o.txt
   if grep -q "made again on installing by rar" r22o.txt; then exit 1; fi
   rm -rf r22_inst r22_none r22_oracle r22_si
   SIEVE_RAR="$RAR" $S install r22.sieve --to r22_inst | tr -d '\r' | grep -c "^note      made.rar made again by RAR 0.01 sieve-stand-in, checked against its SHA-256" > /dev/null
@@ -601,12 +601,12 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   # In a folder: the archive given back in its place, the folder's other files as they were.
   cp r22/made.rar r22/folder/
   cp ../tests/manifest_fixture/a.txt r22/folder/
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[0-3]\)" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/folder --installer r22f.sieve --items --optimise-archives --compressed-temporary --compressed-permanent 2>&1 | tr -d '\r' | grep -c "^unpacked .*sieve-manifest-v\(2[2-9]\|3[0-3]\)" > /dev/null
   rm -rf r22f_inst
   SIEVE_RAR="$RAR" $S install r22f.sieve --to r22f_inst > /dev/null
   diff -r r22/folder r22f_inst
   # --v21: as before, its contents alone.
-  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r21.sieve --items --optimise-archives --v21 | tr -d '\r' | grep -c "sieve-manifest-v21\|sieve-manifest-v20" > /dev/null
+  SIEVE_ARCHIVES_ALWAYS=1 SIEVE_RAR="$RAR" $S locate r22/made.rar --installer r21.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v21 | tr -d '\r' | grep -c "sieve-manifest-v21\|sieve-manifest-v20" > /dev/null
   rm -rf r21_inst
   $S install r21.sieve --to r21_inst | tr -d '\r' | grep -c "^note      made.rar (rar, [0-9]* bytes) was carried as its contents" > /dev/null
 fi
@@ -665,13 +665,13 @@ cmp dq.txt dq_oracle/dq.txt
 rm -rf png25
 mkdir png25
 cp ../docs/images/hallway-audio.png ../web/extension/icon128.png png25/
-$S locate png25 --installer png25.sieve --items --optimise-archives --prioritise-decoding 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-3]\))$" > /dev/null
+$S locate png25 --installer png25.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --prioritise-decoding 2>&1 | tr -d '\r' | grep -c "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v\(2[5-9]\|3[0-3]\))$" > /dev/null
 [ "$(wc -c < png25.sieve)" -lt 50000 ]
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
 diff -r png25 png25_inst
 python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): " | grep -q "^2$"
-$S locate png25 --installer png24.sieve --items --optimise-archives --v24 2>&1 | tr -d '\r' > png24.txt
+$S locate png25 --installer png24.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v24 2>&1 | tr -d '\r' > png24.txt
 if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 # v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
 # contexts; for a picture, Edward's triangle and its neighbours; two mixers and two SSE stages).
@@ -1606,7 +1606,44 @@ open('bomb7z/claim.7z', 'wb').write(b'7z\xbc\xaf\x27\x1c\x00\x04' + struct.pack(
 if $SI bomb7z/claim.7z --to bomb7z_x --yes 2> bomb7z.txt; then exit 1; fi
 grep -q "blocks declare .* MiB to unpack into memory" bomb7z.txt
 test ! -e bomb7z_x/zeros.bin
-$S locate bomb7z --installer bomb7z.sieve --optimise-archives | tr -d '\r' > bomb7z_l.txt
+$S locate bomb7z --installer bomb7z.sieve --optimise-archives --compressed-temporary --compressed-permanent | tr -d '\r' > bomb7z_l.txt
 if grep -q "^remade" bomb7z_l.txt; then exit 1; fi
 $S install bomb7z.sieve --to bomb7z_i > /dev/null
 cmp bomb7z/claim.7z bomb7z_i/claim.7z
+# An archive whose members every system could not write as they are is left as it is (7 November
+# 2026, from encode.su: a cab in an installer held "turnonnotificationinactrobat.", was carried as its
+# contents under Archive and Compressed Formats: permanent, and the install was refused on Windows).
+# A zip holding a name with a dot at its end, and one holding two names one where case is ignored:
+# each said, left as it is, and installed byte for byte.
+rm -rf dotzip dotzip_i
+mkdir -p dotzip
+python -c "
+import zipfile
+t = open('../docs/METHODS.md', 'rb').read()[:60000]
+with zipfile.ZipFile('dotzip/Data1.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('notes.', t)
+    z.writestr('ok.txt', t[::-1])
+with zipfile.ZipFile('dotzip/Pair.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+    z.writestr('A.txt', t)
+    z.writestr('a.txt', t[::-1])
+"
+$S locate dotzip --installer dotzip.sieve --compressed-permanent --progress 2> dotzip_p.txt | tr -d '\r' > dotzip_l.txt
+grep -q "Data1.zip: not opened, left as it is: Data1/notes. is a name Windows cannot hold" dotzip_p.txt
+grep -q "Pair.zip: not opened, left as it is: Pair/A.txt and Pair/a.txt are one name where case is ignored" dotzip_p.txt
+if grep -q "^unpacked" dotzip_l.txt; then exit 1; fi
+$S install dotzip.sieve --to dotzip_i > /dev/null
+diff -r dotzip dotzip_i
+# Permanent asked for by name on the command line (7 November 2026, Edward: "command line should
+# ask explicitly"): --optimise-archives alone only makes again exactly, so a cab is left as it is;
+# with --compressed-permanent it is carried as its contents, and packing warns, naming it.
+rm -rf cabt cabt_i
+mkdir -p cabt
+cp ../tests/archives/test_read_format_cab_1.cab cabt/
+SIEVE_ARCHIVES_ALWAYS=1 $S locate cabt --installer cabt.sieve --optimise-archives 2>&1 | tr -d '\r' > cabt_l.txt
+if grep -q "^unpacked" cabt_l.txt; then exit 1; fi
+if grep -q "carried as what it holds, and installing gives that in its place" cabt_l.txt; then exit 1; fi
+$S install cabt.sieve --to cabt_i > /dev/null
+diff -r cabt cabt_i
+SIEVE_ARCHIVES_ALWAYS=1 $S locate cabt --installer cabtp.sieve --optimise-archives --compressed-permanent 2>&1 | tr -d '\r' > cabtp_l.txt
+grep -q "^unpacked" cabtp_l.txt
+grep -q "^warning: An archive or compressed file here is carried as what it holds, and installing gives that in its place, not the file itself: test_read_format_cab_1.cab" cabtp_l.txt

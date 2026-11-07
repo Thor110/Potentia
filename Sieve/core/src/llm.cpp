@@ -33,12 +33,6 @@ uint32_t size_of(const json::Value& c, const char* key)
     return uint32_t(n);
 }
 
-bool flag(const json::Value& c, const char* key, bool otherwise)
-{
-    const json::Value* v = c.find(key);
-    return v && !v->is_null() ? v->boolean() : otherwise;
-}
-
 inline float widen(uint16_t b)
 {
     const uint32_t u = uint32_t(b) << 16;
@@ -211,31 +205,18 @@ private:
 
 Config Config::from_json(const json::Value& c)
 {
-    if (!c.is_object()) bad("config.json is not a JSON object");
-    const json::Value* type = c.find("model_type");
-    if (!type || type->string() != "llama") bad("only llama models are covered (config.json's model_type)");
-    if (flag(c, "attention_bias", false) || flag(c, "mlp_bias", false)) bad("a llama model with biases is not covered yet");
+    // (The sizes as the tensors' layout reads them, safetensors.hpp's llama_shape: one reader, its
+    // bounds included; then what running it asks for besides.)
+    const safetensors::LlamaShape s = safetensors::llama_shape(c);
     if (const json::Value* rs = c.find("rope_scaling"); rs && !rs->is_null()) bad("rope scaling is not covered yet");
     if (const json::Value* act = c.find("hidden_act"); act && act->string() != "silu") bad("an activation other than silu is not covered");
     Config m;
-    m.hidden = size_of(c, "hidden_size");
-    m.layers = size_of(c, "num_hidden_layers");
-    m.inter = size_of(c, "intermediate_size");
-    m.vocab = size_of(c, "vocab_size");
-    m.heads = size_of(c, "num_attention_heads");
-    m.kv_heads = c.find("num_key_value_heads") ? size_of(c, "num_key_value_heads") : m.heads;
-    if (!m.heads || !m.kv_heads || m.heads % m.kv_heads) bad("config.json's heads do not divide");
-    if (const json::Value* hd = c.find("head_dim"); hd && !hd->is_null()) m.head_dim = uint32_t(hd->u64());
-    else
-    {
-        if (m.hidden % m.heads) bad("config.json's hidden size is not a whole number of heads");
-        m.head_dim = m.hidden / m.heads;
-    }
+    m.hidden = s.hidden, m.layers = s.layers, m.inter = s.inter, m.vocab = s.vocab;
+    m.heads = s.heads, m.kv_heads = s.kv_heads, m.head_dim = s.head_dim, m.tied = s.tied;
     if (m.head_dim % 2) bad("an odd head size");
     m.max_positions = c.find("max_position_embeddings") ? size_of(c, "max_position_embeddings") : 2048;
     if (const json::Value* e = c.find("rms_norm_eps")) m.rms_eps = float(e->number());
     if (const json::Value* t = c.find("rope_theta")) m.rope_theta = float(t->number());
-    m.tied = flag(c, "tie_word_embeddings", false);
     return m;
 }
 

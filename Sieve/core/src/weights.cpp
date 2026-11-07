@@ -41,6 +41,7 @@ uint64_t get_varint(std::istream& in)
         if (!(c & 0x80))
         {
             if (shift == 63 && c > 1) bad("a number too large");
+            if (c == 0 && shift > 0) bad("a number not written as Sieve writes it"); // (as sieve/varint.hpp reads)
             return v;
         }
     }

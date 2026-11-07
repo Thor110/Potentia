@@ -2456,10 +2456,12 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
     }
     // v31: --compressed-temporary (made again exactly, else left as it is) or --compressed-permanent
-    // (carried as what it holds); either alone asks Optimise Compressed Formats; both, or
-    // --optimise-compressed, made again where Sieve can, else carried as what it holds.
+    // (carried as what it holds); either alone asks Optimise Compressed Formats; both, made again where
+    // Sieve can, else carried as what it holds. --optimise-compressed alone is temporary: permanent,
+    // which changes what is installed, only where asked for by name (7 November 2026, Edward, after an
+    // installer's cab was installed as its files from encode.su).
     const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
-    set_compressed_modes(temporary || !permanent, permanent || !temporary);
+    set_compressed_modes(temporary || !permanent, permanent);
     // --progress: what the packer says as it goes (each file's ways weighed and the one taken, each
     // step's new best), to standard error with the seconds since the start, as the hallway's Keep a
     // log writes it (2 November 2026: so a run's reasons are seen without the hallway).
@@ -2536,6 +2538,7 @@ int cmd_locate(const Args& a)
             else pack_with_items(a, m, fs::absolute(target).parent_path(), rep);
             if ((a.has("installer") || a.has("program")) && m.packed) std::cout << pack_report_text(rep, m.bytes);
             if (const std::string w = rar_remake_warning(m); !w.empty()) std::cerr << "warning: " << w << "\n";
+            if (const std::string w = changed_files_warning(m); !w.empty()) std::cerr << "warning: " << w << "\n";
             const std::vector<uint8_t> ibytes = m.file();
             const std::vector<uint8_t> iraw = raw_of_file(ibytes); // (its address's raw bytes, with no number made)
             if (a.has("installer"))
@@ -2676,6 +2679,7 @@ int cmd_locate(const Args& a)
     const std::vector<uint8_t>& iraw = m.with_contents ? mraw : iraw_own;
     if (installer && !a.has("v3")) *info << pack_report_text(rep, m.bytes);
     if (const std::string w = rar_remake_warning(m.with_contents ? m : inst); !w.empty()) std::cerr << "warning: " << w << "\n";
+    if (const std::string w = changed_files_warning(m.with_contents ? m : inst); !w.empty()) std::cerr << "warning: " << w << "\n";
     if (a.has("program"))
     {
         // The installer attached to a copy of sieve-install: one program to hand to someone.

@@ -90,6 +90,19 @@ bool is_canonical(const Header& h);
 // with config.json's torch_dtype as their type and no offsets. Throws std::invalid_argument for a
 // configuration this does not cover (biases, another model type, a missing size).
 std::vector<Tensor> llama_tensors(const json::Value& config);
+
+// A Llama model's sizes from its config.json, read once for both the tensors' layout above and the
+// model that runs (llm.hpp's Config, which then refuses what it cannot run, as rope scaling: the
+// layout does not depend on it). Each size 1 to 10^9, the layers at most 100,000 (a config.json in
+// a folder being packed is anyone's: without a bound, a count of 10^18 layers was listed until the
+// memory ran out); the heads dividing; the head size given, or the hidden size over the heads.
+// Throws std::invalid_argument otherwise, or for another model type or a model with biases.
+struct LlamaShape
+{
+    uint32_t hidden = 0, layers = 0, inter = 0, vocab = 0, heads = 0, kv_heads = 0, head_dim = 0;
+    bool tied = false; // tie_word_embeddings (LlamaConfig's default: no)
+};
+LlamaShape llama_shape(const json::Value& config);
 // A one-line description of such a configuration: "llama, 32 layers, hidden 960, ...".
 std::string llama_summary(const json::Value& config);
 

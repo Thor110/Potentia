@@ -1,5 +1,6 @@
 // Sieve — the tightened rope, rope-wave-v1 (see rope_wave.hpp).
 #include "sieve/rope_wave.hpp"
+#include "sieve/varint.hpp"
 #include "sieve/stop.hpp"
 
 #include "sieve/sha256.hpp"
@@ -170,13 +171,9 @@ void put_varint(std::vector<uint8_t>& out, uint64_t v)
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
-    for (int shift = 0;; shift += 7)
-    {
-        if (at >= in.size() || shift > 63) bad("a code that ends inside a number");
-        const uint8_t b = in[at++];
-        v |= uint64_t(b & 0x7F) << shift;
-        if (!(b & 0x80)) return v;
-    }
+    if (const sieve::VarintFault f = sieve::read_varint(in, at, v); f != sieve::VarintFault::none)
+        bad(f == sieve::VarintFault::ends ? "a code that ends inside a number" : std::string("a code that ") + sieve::varint_fault_text(f));
+    return v;
 }
 
 double entropy_bytes(const std::vector<uint64_t>& counts, uint64_t n)

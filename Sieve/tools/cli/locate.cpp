@@ -13,6 +13,7 @@
 #include "sieve/rope_wave.hpp"
 #include "sieve/mix.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/varint.hpp"
 
 #include "Bra.h"
 #include "Lzma2Dec.h"
@@ -314,6 +315,15 @@ static uint64_t listed_number(std::string_view t, const char* what)
 
 namespace {
 
+// The length before each code in the rope stream (sieve/varint.hpp), at `ra`; never past its end.
+uint64_t rope_length(const Manifest& m, size_t& ra, const std::string& path)
+{
+    uint64_t len = 0;
+    if (sieve::read_varint(std::span<const uint8_t>(m.rope_carried.data(), m.rope_carried.size()), ra, len, 9) != sieve::VarintFault::none)
+        throw std::runtime_error("the installer's rope stream ends before " + path + " or is not written as Sieve writes it");
+    return len;
+}
+
 std::vector<uint8_t> unpack_v4(Manifest& m)
 {
     {
@@ -506,14 +516,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             }
             if (list.size() < 2 || zsum + rsum != e.size) throw std::runtime_error("manifest: " + e.path + "'s pieces are not its size");
             const std::vector<uint8_t> z = take(plain, pa, zsum, e.path);
-            uint64_t len = 0;
-            for (int shift = 0;; shift += 7)
-            {
-                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
-                const uint8_t c = m.rope_carried[ra++];
-                len |= uint64_t(c & 0x7F) << shift;
-                if (!(c & 0x80)) break;
-            }
+            const uint64_t len = rope_length(m, ra, e.path);
             if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
             std::vector<uint8_t> rbytes;
             try
@@ -543,14 +546,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         else if (m.roped && e.way.rfind("rope ", 0) == 0)
         {
             // v8: made again from its code, next in the rope stream (a varint of its length first).
-            uint64_t len = 0;
-            for (int shift = 0;; shift += 7)
-            {
-                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
-                const uint8_t b = m.rope_carried[ra++];
-                len |= uint64_t(b & 0x7F) << shift;
-                if (!(b & 0x80)) break;
-            }
+            const uint64_t len = rope_length(m, ra, e.path);
             if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
             try
             {
@@ -585,14 +581,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 throw std::runtime_error("manifest: " + e.path + "'s group is not written as Sieve writes it");
             const uint64_t total = std::stoull(w.substr(t + 2));
             if (std::to_string(total) != w.substr(t + 2)) throw std::runtime_error("manifest: " + e.path + "'s group is not written as Sieve writes it");
-            uint64_t len = 0;
-            for (int shift = 0;; shift += 7)
-            {
-                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
-                const uint8_t b = m.rope_carried[ra++];
-                len |= uint64_t(b & 0x7F) << shift;
-                if (!(b & 0x80)) break;
-            }
+            const uint64_t len = rope_length(m, ra, e.path);
             if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
             try
             {
@@ -638,14 +627,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
         {
             // v24: made again by mixing, from its code, next in the rope stream (a varint of its length first).
             // v26: "mix2 B22" (mix-v2), or a picture's "mix2 B22 I949x1", the same way.
-            uint64_t len = 0;
-            for (int shift = 0;; shift += 7)
-            {
-                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
-                const uint8_t b = m.rope_carried[ra++];
-                len |= uint64_t(b & 0x7F) << shift;
-                if (!(b & 0x80)) break;
-            }
+            const uint64_t len = rope_length(m, ra, e.path);
             if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
             try
             {
@@ -705,27 +687,16 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             // varint, 1 or more) and its pattern's bytes, repeated count times; the segments making
             // the file's size and the code read to its end.
             if (!m.v33) throw std::runtime_error("manifest: " + e.path + " is carried as a repeating byte or pattern, which is sieve-manifest-v33's");
-            uint64_t len = 0;
-            for (int shift = 0;; shift += 7)
-            {
-                if (ra >= m.rope_carried.size() || shift > 56) throw std::runtime_error("the installer's rope stream ends before " + e.path);
-                const uint8_t b = m.rope_carried[ra++];
-                len |= uint64_t(b & 0x7F) << shift;
-                if (!(b & 0x80)) break;
-            }
+            const uint64_t len = rope_length(m, ra, e.path);
             if (m.rope_carried.size() - ra < len) throw std::runtime_error("the installer's rope stream ends before " + e.path);
             const uint8_t* c = m.rope_carried.data() + ra;
             const size_t end = size_t(len);
             ra += end;
             auto varint = [&](size_t& at) {
                 uint64_t v = 0;
-                for (int shift = 0;; shift += 7)
-                {
-                    if (at >= end || shift > 63) throw std::runtime_error("manifest: " + e.path + "'s segments end part way");
-                    const uint8_t b = c[at++];
-                    v |= uint64_t(b & 0x7F) << shift;
-                    if (!(b & 0x80)) return v;
-                }
+                if (const sieve::VarintFault f = sieve::read_varint(std::span<const uint8_t>(c, end), at, v); f != sieve::VarintFault::none)
+                    throw std::runtime_error("manifest: " + e.path + "'s segments end part way or are not written as Sieve writes them");
+                return v;
             };
             std::vector<uint8_t> out;
             out.reserve(size_t(e.size));
@@ -1143,13 +1114,10 @@ void put_stream_v32(std::vector<uint8_t>& o, const PackedStream& s, std::span<co
 uint64_t get_varint_from(std::string_view in, size_t& at)
 {
     uint64_t v = 0;
-    for (int shift = 0;; shift += 7)
-    {
-        if (at >= in.size() || shift > 63) throw std::runtime_error("manifest: its head ends inside a number");
-        const uint8_t b = uint8_t(in[at++]);
-        v |= uint64_t(b & 0x7F) << shift;
-        if (!(b & 0x80)) return v;
-    }
+    if (const sieve::VarintFault f = sieve::read_varint(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(in.data()), in.size()), at, v);
+        f != sieve::VarintFault::none)
+        throw std::runtime_error(std::string("manifest: its head ") + sieve::varint_fault_text(f));
+    return v;
 }
 
 std::string stream_line(const char* name, const PackedStream& s)
@@ -2466,13 +2434,8 @@ Manifest Manifest::parse(std::string_view whole)
             {
                 // v7: a coded place, a varint of its length first.
                 uint64_t n = 0;
-                for (int shift = 0;; shift += 7)
-                {
-                    if (at >= places.size() || shift > 56) throw std::runtime_error("the installer's items stream ends before " + e.path);
-                    const uint8_t b = places[at++];
-                    n |= uint64_t(b & 0x7F) << shift;
-                    if (!(b & 0x80)) break;
-                }
+                if (sieve::read_varint(std::span<const uint8_t>(places.data(), places.size()), at, n, 9) != sieve::VarintFault::none)
+                    throw std::runtime_error("the installer's items stream ends before " + e.path + " or is not written as Sieve writes it");
                 if (places.size() - at < n) throw std::runtime_error("the installer's items stream ends before " + e.path);
                 static const char hx[] = "0123456789abcdef";
                 std::string code = " h";
@@ -2934,6 +2897,33 @@ std::string rar_remake_warning(const Manifest& m)
            "and the install says so. Untick Archive and compressed formats: temporary to carry it as it is instead.";
 }
 
+std::string changed_files_warning(const Manifest& m)
+{
+    std::vector<std::string> archives;
+    for (const Manifest::UnpackedArchive& u : m.unpacked)
+        if (u.program.empty()) archives.push_back(u.archive + " (as " + u.folder + ")");
+    auto list = [](const std::vector<std::string>& v) {
+        std::string t;
+        for (size_t k = 0; k < v.size() && k < 5; ++k) t += (k ? ", " : "") + v[k];
+        if (v.size() > 5) t += " and " + std::to_string(v.size() - 5) + " more";
+        return t;
+    };
+    std::string w;
+    if (!archives.empty())
+        w += archives.size() == 1 ? "An archive or compressed file here is carried as what it holds, and installing gives that in its place, not the file itself: " + list(archives) +
+                                        ". An installer or anything that reads such a file will not work from what is installed."
+                                  : std::to_string(archives.size()) +
+                                        " archives or compressed files here are carried as what they hold, and installing gives that in their place, not the files themselves: " +
+                                        list(archives) + ". An installer or anything that reads such files will not work from what is installed.";
+    if (!m.changed_on_packing.empty())
+        w += std::string(w.empty() ? "" : " ") +
+             (m.changed_on_packing.size() == 1 ? "A picture here is" : std::to_string(m.changed_on_packing.size()) + " pictures here are") +
+             (m.changed_on_packing.size() == 1 ? " installed re-saved, the same picture in other bytes: " : " installed re-saved, the same pictures in other bytes: ") +
+             list(m.changed_on_packing) + ".";
+    if (!w.empty()) w += " Untick Archive and compressed formats: permanent (--compressed-permanent) to install every file as it is.";
+    return w;
+}
+
 std::optional<std::string> offered_folder_problem(const std::string& spec)
 {
     // A known place, then the folders under it: never a path of its own (C:\..., /...), never
@@ -3212,9 +3202,55 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
                 fail(u.archive + " is already there");
                 continue;
             }
+            // Its members held to the files and folders this install wrote (review of 4 November 2026):
+            // their modes and times are set before rar reads them, and they are removed once it is
+            // made, so a member naming anything else in the folder installed to is refused.
+            {
+                std::set<std::string> wrote_files, wrote_dirs;
+                for (const ManifestEntry& e : m.entries)
+                {
+                    std::string p = e.path;
+                    if (e.dir)
+                    {
+                        if (!p.empty() && p.back() == '/') p.pop_back();
+                        wrote_dirs.insert(p);
+                    }
+                    else wrote_files.insert(p);
+                    for (size_t at = p.find('/'); at != std::string::npos; at = p.find('/', at + 1)) wrote_dirs.insert(p.substr(0, at));
+                }
+                const std::string* stray = nullptr;
+                for (const rar::Member& mb : u.members)
+                {
+                    std::string p = alone ? mb.path : under + mb.path;
+                    if (!p.empty() && p.back() == '/') p.pop_back();
+                    if (!(mb.dir ? wrote_dirs.count(p) : wrote_files.count(p)))
+                    {
+                        stray = &mb.path;
+                        break;
+                    }
+                }
+                if (stray)
+                {
+                    fail("it lists " + *stray + " as a member, which this install did not write");
+                    continue;
+                }
+            }
+            // (The modes as written, put back where the RAR is not made again: a mode from the
+            // instructions stays only on files that went into a RAR checked against its SHA-256.)
+            std::vector<std::pair<fs::path, fs::perms>> modes;
+            for (const rar::Member& mb : u.members)
+            {
+                const fs::path p = folder / p8(mb.path);
+                const fs::file_status st = fs::status(p, ec);
+                if (!ec) modes.emplace_back(p, st.permissions());
+            }
+            auto modes_back = [&] {
+                for (const auto& [p, perms] : modes) fs::permissions(p, perms, fs::perm_options::replace, ec);
+            };
             std::string why;
             if (!rar::set_times(folder, u.members, why))
             {
+                modes_back();
                 fail(why);
                 continue;
             }
@@ -3230,6 +3266,7 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
             if (status != 0 || bytes.size() != u.size || sha256_hex(bytes) != u.sha256)
             {
                 fs::remove(made, ec);
+                modes_back();
                 fail(status != 0 ? version + " failed (exit status " + std::to_string(status) + ")" : version + " did not make it again byte for byte");
                 continue;
             }

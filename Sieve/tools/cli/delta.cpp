@@ -1,6 +1,7 @@
 // Sieve CLI -- a file as its differences from another (delta.hpp).
 
 #include "delta.hpp"
+#include "sieve/varint.hpp"
 
 #include <array>
 #include <algorithm>
@@ -67,13 +68,9 @@ void put_varint(std::vector<uint8_t>& o, uint64_t v)
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
-    for (int shift = 0;; shift += 7)
-    {
-        if (at >= in.size() || shift > 63) throw std::runtime_error("delta: its script ends inside a number");
-        const uint8_t b = in[at++];
-        v |= uint64_t(b & 0x7F) << shift;
-        if (!(b & 0x80)) return v;
-    }
+    if (const sieve::VarintFault f = sieve::read_varint(in, at, v); f != sieve::VarintFault::none)
+        throw std::runtime_error(std::string("delta: its script ") + sieve::varint_fault_text(f));
+    return v;
 }
 
 constexpr size_t kWindow = 64; // the shortest copy, and the stretch the base is indexed by

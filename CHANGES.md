@@ -1,38 +1,37 @@
-# Changes: code review and optimisation pass (6 November 2026, evening)
+# Changes: items 1 to 3, and the encode.su report (7 November 2026)
 
-Commits since 4320887: 0a65311, e34a2b1 and its revert 2abaab7, 1cc5260.
-Full write-up: Sieve/results/review-2026-11-06b.md.
+Commits since 34d1cea: 0c69fd0, b79e8dd, f22d385, ffd3ff9, fc6fb01, and the last (PNGs ahead, write-up).
+Full write-up: Sieve/results/optimise-2026-11-07.md.
 
-## Sixteen fixes from the review
-- pack.cpp: the LZMA2 figure made beside the mixing is waited for on every way out (it could read freed bytes).
-- compress.cpp: an unreadable folder is refused rather than packed empty; no `clock_cast` (macOS lacks it);
-  CRC-32, gzip and bzip2 read-backs work in 1 GiB pieces (4 GiB and over failed); no extra whole copy.
-- gather.cpp: Create .sieve and each Compress-to format gather apart; each path acknowledged, taken back after 8 s.
-- case_names / gen_case_fold.py: names fold to uppercase as NTFS does (1,423 pairs); the Kelvin sign and k stay two.
-- ci/steps/11-oracle.sh: the compress check uses `/`; a Kelvin-sign line.
-- tools/fuzz/fuzz_reader.py: limits passed to spawned workers.
-- chat.cpp: `/random file` lands on a file every time; exchange rate for pictures only.
-- navigator.cpp: a narrow window no longer stops the program.
-- app_main.cpp: Create .sieve gathers before any window starts.
-- speech.cpp, menus: a reopened menu speaks again; turning Read aloud off stops speech.
-- app_settings / menu.cpp: widen_weights auto follows `--item-memory` and ITEM MEMORY changes.
-- harness.cpp: a failed melody model shows the melody page.
-- locate.hpp: comment back in place.
+## A fault in yesterday's sampling, fixed first
+A large file that repeats far apart looks incompressible in every 1 MiB sample. 20 MB of random
+bytes three times over came out at 60,001,033 bytes (xz: 20,006,996). Samples now stand for the
+whole only where nothing repeats far apart (a 50 ms pass): 20,006,995.
 
-## Optimisation
-Files of 16 MiB or more are sampled (1 MiB at start, middle and end, preset 6). If every sample saves
-under 2%, the 9e LZMA2 pass is skipped. Measured:
+## 1. Optimise Search on files that will not shrink
+Over 16 MiB, where LZMA2 cannot shrink the file, its three samples are mixed first; where mixing's
+lead is under half the rising bar, Try every way stays off.
+- The FLAC: 428.4 s to 43.4 s, the same 51,783,003 bytes.
+- samba, mozilla, enwik8: the same bytes (3,277,403 / 13,376,239 / 21,431,896).
 
-| | Before | After |
-| :--- | ---: | ---: |
-| The FLAC, default | 33.6 s, 51,783,003 bytes | 11.6 s, 51,783,003 bytes |
-| samba, Optimise Search | 3,277,403 bytes | 3,277,403 bytes |
-| mozilla, Optimise Search | 13,376,239 bytes | 13,376,239 bytes |
+## 2. Archives' and spans' weighings a batch ahead on the threads
+LZMA2's estimates, spans and PNGs' makers' results worked out ahead; the loop decides in order.
+- docs/: the step 4.0 s to 1.6 s; Pages/: 1.58 s to 0.87 s. The same bytes on both and on the CI's
+  spans folders.
 
-## Tried and reverted
-Skipping mixing for files over 16 MiB when their start foretold it would not clear the bar: samba came out
-3,728,015 bytes against 3,277,403, the FLAC gained nothing and enwik8 was slower. Reverted; samba is back to
-3,277,403.
+## 3. What the pre-release review left
+- A RAR's members must be files the install wrote; their modes put back if the RAR does not match.
+- One strict reader of Sieve's numbers (sieve/varint.hpp); one copy of the vault's decoders; one
+  bounded reader of a Llama config (a config.json claiming 10^18 layers ran the memory out).
+- Fuzzed again (about 16,000 cases): nothing new.
+
+## From encode.su
+- An archive whose members cannot all be written on every system (a name ending in a dot, as in
+  Adobe's cab; two names one where case is ignored) is now left as it is.
+- --optimise-archives / --optimise-compressed alone is temporary only; --compressed-permanent must be
+  given by name. Packing warns, naming each archive installed as its contents and each picture
+  re-saved (command line and File Locator). CI lines that meant both now say both.
 
 ## Tests
-Unit suite: 154,324 checks, 0 failures.
+Unit suite: 154,354 checks, 0 failures. CI blocks run here: v20 to v22 archives, RAR, v25 PNGs,
+spans, the two new blocks (dot names, cab), and the hallway's archive block.

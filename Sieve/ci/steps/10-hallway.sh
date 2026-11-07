@@ -800,7 +800,7 @@ xz -9 arch/x/table.txt
 build/sieve locate arch --installer arch_off.sieve --items --v19 --manifest arch_off.manifest | tr -d '\r' > arch_off.txt
 q "^items     none; sieve-manifest-v1[2-6]$" arch_off.txt
 if grep -q "sieve-manifest-v14\|^remade\|^unpacked" arch_off.txt; then exit 1; fi
-build/sieve locate arch --installer arch.sieve --items --optimise-archives --v19 --manifest arch.manifest | tr -d '\r' > arch.txt
+build/sieve locate arch --installer arch.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v19 --manifest arch.manifest | tr -d '\r' > arch.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v17)$" arch.txt
 q "^unpacked  2 archive(s) carried as their contents, not as the archives (Archive and Compressed Formats; sieve-manifest-v17)$" arch.txt
 q "^items     none; sieve-manifest-v17$" arch.txt
@@ -818,7 +818,7 @@ python reference/sieve_ref.py unpack arch.manifest --to arch_oracle | tr -d '\r'
 diff -r arch_inst arch_oracle
 build/sieve-install arch.sieve --to arch_si --yes
 diff -r arch_inst arch_si
-build/sieve locate arch --installer arch15.sieve --items --optimise-archives --v15 --manifest arch15.manifest > /dev/null
+build/sieve locate arch --installer arch15.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v15 --manifest arch15.manifest > /dev/null
 sed '1s/v1[45]$/v13/' arch15.manifest > arch-as-v13.manifest
 if build/sieve install arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
 if python reference/sieve_ref.py unpack arch-as-v13.manifest --to arch_bad > /dev/null 2>&1; then exit 1; fi
@@ -846,7 +846,7 @@ c = zstandard.ZstdCompressor(level=3)
 open('arch19/two.zst', 'wb').write(c.compress(d[:len(d) // 2]) + c.compress(d[len(d) // 2:]))
 open('arch19-two.txt', 'wb').write(d)
 "
-build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --v19 --manifest arch19.manifest | tr -d '\r' > arch19.txt
+build/sieve locate arch19 --installer arch19.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v19 --manifest arch19.manifest | tr -d '\r' > arch19.txt
 q "^remade    2 archive(s) carried as what they hold, remade exactly on installing (sieve-manifest-v19)$" arch19.txt
 q "^unpacked  1 archive(s) carried as their contents, not as the archives (Archive and Compressed Formats; sieve-manifest-v19)$" arch19.txt
 q "^items     none; sieve-manifest-v19$" arch19.txt

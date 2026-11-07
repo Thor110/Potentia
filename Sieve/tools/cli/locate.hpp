@@ -347,6 +347,10 @@ struct Manifest
         std::vector<rar::Member> members;
     };
     std::vector<UnpackedArchive> unpacked;
+    // Files the packing changed, which install as other bytes than the folder's (a PNG re-saved, a
+    // JPEG given tables made for its values: permanent): kept for the warning (changed_files_warning),
+    // never written into the instructions.
+    std::vector<std::string> changed_on_packing;
     PackedStream rope_stream;
     std::vector<uint8_t> rope_carried;
     // v7: the listing (every line after the first, up to and including "end") carried as LZMA2 where
@@ -500,6 +504,11 @@ std::optional<std::pair<std::string, std::string>> offered_folder(const std::fil
 // the installing machine has rar at the version that made it, and elsewhere its files are
 // installed in its place, with a warning then. Which RARs, and which rar.
 std::string rar_remake_warning(const Manifest& m);
+// What installing will not give back as it was (7 November 2026, Edward: "Add a warning when files
+// are repacked"): each archive or compressed file carried as what it holds, its contents installed in
+// its place, and each picture re-saved; empty where there is none. Archive and Compressed Formats:
+// permanent is what does it.
+std::string changed_files_warning(const Manifest& m);
 inline constexpr char kCarriedDictionariesMagic[] = "sieve-carried-d1"; // 16 bytes, no terminator used
 // A file of the dictionaries folder an installer program carries, checked against its SHA-256.
 struct CarriedFile

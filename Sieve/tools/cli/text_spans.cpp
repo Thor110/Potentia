@@ -1,6 +1,7 @@
 // Sieve CLI -- binary written as text, carried as what it is (spans-v1). See text_spans.hpp.
 
 #include "cli/text_spans.hpp"
+#include "sieve/varint.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -49,17 +50,10 @@ void put_varint(std::vector<uint8_t>& o, uint64_t v)
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
-    for (int shift = 0;; shift += 7)
-    {
-        if (at >= in.size() || shift > 56) throw std::runtime_error("spans-v1: the skeleton ends inside a number");
-        const uint8_t b = in[at++];
-        v |= uint64_t(b & 0x7F) << shift;
-        if (!(b & 0x80))
-        {
-            if (b == 0 && shift > 0) throw std::runtime_error("spans-v1: a number in the skeleton is not written as Sieve writes it");
-            return v;
-        }
-    }
+    if (const sieve::VarintFault f = sieve::read_varint(in, at, v, 9); f != sieve::VarintFault::none)
+        throw std::runtime_error(f == sieve::VarintFault::not_canonical ? "spans-v1: a number in the skeleton is not written as Sieve writes it"
+                                                                        : "spans-v1: the skeleton ends inside a number");
+    return v;
 }
 
 size_t line_end(std::span<const uint8_t> f, size_t q) // its length, 0 for none

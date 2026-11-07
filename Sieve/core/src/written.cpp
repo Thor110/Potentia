@@ -995,6 +995,35 @@ std::optional<WrittenReading> written_as(const std::u32string& text, uint32_t ma
     return std::nullopt;
 }
 
+std::vector<Bytes> written_readings(const std::string& utf8)
+{
+    std::vector<Bytes> out;
+    std::u32string text;
+    bool valid = true;
+    try
+    {
+        text = utf8_decode(utf8);
+    }
+    catch (const std::invalid_argument&)
+    {
+        valid = false;
+    }
+    if (valid) out = read_text(text);
+    else
+    {
+        // (Not UTF-8: its own bytes, the same three ways.)
+        Bytes b(utf8.begin(), utf8.end()), trimmed = b;
+        while (!trimmed.empty() && space(trimmed.back())) trimmed.pop_back();
+        Bytes lf = trimmed;
+        lf.push_back('\n');
+        out = {std::move(b), std::move(trimmed), std::move(lf)};
+    }
+    for (auto read : {read_hex, read_base64, read_base32, read_decimal, read_nibbles, read_spelled})
+        if (auto b = read(utf8)) out.push_back(std::move(*b));
+    for (Bytes& b : read_binary(utf8)) out.push_back(std::move(b));
+    return out;
+}
+
 std::optional<WrittenReading> written_as_bytes(std::span<const uint32_t> digits)
 {
     Bytes b;
