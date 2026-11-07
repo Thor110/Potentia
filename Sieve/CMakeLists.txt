@@ -296,13 +296,33 @@ set(SIEVE_ARCHIVE_INCLUDE ${libarchive_SOURCE_DIR}/libarchive)
 # preflate (Apache 2.0, third_party_licenses/preflate), Dirk Steinke's: any deflate stream (a zip's,
 # a gzip's, whoever made it) split into what it holds and a small difference from its own deflate,
 # and made again exactly from the two. Pinned to its last commit (it has no releases), its library's
-# files built here unchanged; two headers its files assume are given them on the command line, as
-# newer compilers no longer bring them in.
+# files built here unchanged but for one guard (below); two headers its files assume are given them
+# on the command line, as newer compilers no longer bring them in.
 FetchContent_Declare(preflate
     GIT_REPOSITORY https://github.com/deus-libri/preflate.git
     GIT_TAG 609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e
     SOURCE_SUBDIR support) # (no CMakeLists.txt there: fetched, not built by its own CMake)
 FetchContent_MakeAvailable(preflate)
+# One change to preflate, Sieve's only one (Edward, 7 November 2026; results/fuzz-2026-11-06.md):
+# ArithmeticDecoder::decodeBits shifts by a count read from the instructions, so damaged ones can ask
+# for 32 bits, a shift C++ leaves undefined, and a count of 31 or 32 can leave the step 0, which then
+# divides. Valid streams never ask for more than about 16 bits (deflate's lengths and distances).
+# Patched, such a count gives 0 and the install goes on to refuse the damaged stream as before.
+# Applied once to the fetched copy, and checked: configuring stops if the text is not there.
+set(SIEVE_PREFLATE_CODER ${preflate_SOURCE_DIR}/support/arithmetic_coder.h)
+file(READ ${SIEVE_PREFLATE_CODER} SIEVE_PREFLATE_TEXT)
+string(REPLACE "\r\n" "\n" SIEVE_PREFLATE_TEXT "${SIEVE_PREFLATE_TEXT}") # (a Windows checkout's line ends)
+string(FIND "${SIEVE_PREFLATE_TEXT}" "SIEVE_PATCHED" SIEVE_PREFLATE_DONE)
+if(SIEVE_PREFLATE_DONE EQUAL -1)
+    set(SIEVE_PREFLATE_OLD "  unsigned decodeBits(const uint32_t bits) {\n    uint32_t step = ((_high - _low) + 1) >> bits;\n")
+    set(SIEVE_PREFLATE_NEW "  unsigned decodeBits(const uint32_t bits) {\n    if (bits >= 32) return 0; // SIEVE_PATCHED: damaged input only\n    uint32_t step = ((_high - _low) + 1) >> bits;\n    if (step == 0) return 0; // SIEVE_PATCHED\n")
+    string(FIND "${SIEVE_PREFLATE_TEXT}" "${SIEVE_PREFLATE_OLD}" SIEVE_PREFLATE_AT)
+    if(SIEVE_PREFLATE_AT EQUAL -1)
+        message(FATAL_ERROR "preflate's decodeBits is not as Sieve's patch expects (${SIEVE_PREFLATE_CODER})")
+    endif()
+    string(REPLACE "${SIEVE_PREFLATE_OLD}" "${SIEVE_PREFLATE_NEW}" SIEVE_PREFLATE_TEXT "${SIEVE_PREFLATE_TEXT}")
+    file(WRITE ${SIEVE_PREFLATE_CODER} "${SIEVE_PREFLATE_TEXT}")
+endif()
 set(SIEVE_PREFLATE_SOURCES)
 foreach(f block_decoder block_reencoder block_trees complevel_estimator constants decoder hash_chain info parameter_estimator
           parser_config predictor_state reencoder seq_chain statistical_codec statistical_model token token_predictor tree_predictor)

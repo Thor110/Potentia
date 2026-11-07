@@ -1,3 +1,2 @@
 alignment:LzmaEnc.c
 alignment:*third_party/lzma/*
-shift-exponent:*preflate-src/*

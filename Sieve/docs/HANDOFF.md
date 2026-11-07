@@ -4710,6 +4710,13 @@ Edward: "we should delay the filter ideas until we deal with 7z, zip and rar exa
 - **Windows, the same day:** a second configure took the cache entries left for libarchive as a
   system zlib (now forgotten before Sieve looks); and preflate's headers use `std::result_of`, which
   C++20 removed and MSVC enforces, so preflate is built as C++17 behind `tools/cli/preflate_glue.*`.
+- **preflate patched, once (7 November 2026, Edward's call):** the fuzzer's shift by 32 in
+  `ArithmeticDecoder::decodeBits` (results/fuzz-2026-11-06.md). CMake adds two guards to the fetched
+  header: a count of 32 or more, or a step of 0 (a count of 31 can give one, and the next line
+  divides by it), returns 0. Valid streams never ask for more than about 16 bits, so nothing they
+  make changes; damaged ones are refused as before. A Windows checkout's CRLF is matched, the patch
+  is applied once, and configuring stops if the text it expects is not there. The fuzzer's
+  suppression for it is gone (`tools/fuzz/ubsan.supp`).
 
 ### Every archive format we can read: `sieve-manifest-v20` (25 October 2026)
 Edward: "all of the above for now, every step forward is a step in the right direction and even the
