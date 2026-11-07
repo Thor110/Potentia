@@ -4541,6 +4541,8 @@ switches), every file decoded back:
 
 ### Prioritise Decoding Speed, and decoding faster (27 October 2026)
 
+*Since 7 November 2026 the box is one of three settings, Size, Balanced and Decoding speed. **Defaults: Balanced in the File Locator and Create .sieve; Size on the command line**, unless `--priority` says otherwise: MANUAL, results/balanced-2026-11-07.md.*
+
 Edward: a box for decoding speed over footprint (for comparisons, measuring and recording, and where
 install time matters), and decoding made faster where it can be.
 - **The box** (File Locator, key P; `[locator] prioritise_decoding`; `--prioritise-decoding` for

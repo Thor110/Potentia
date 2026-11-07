@@ -1139,7 +1139,8 @@ const std::vector<Page>& pages()
                                   "waves (by line, and by column where its lines are all one length) are tried.\n"
                                   "Any command that makes instructions takes it (locate, site, map, rope)."},
           {"--priority WHAT", "What each file's ways are weighed by (the File Locator's Size, Balanced and Decoding speed):\n"
-                              "size, the smallest (this command's own, unless given); balanced, mixing, which installs at\n"
+                              "size, the smallest (the command line's default, where --priority is not given);\n"
+                              "balanced (the File Locator's and Create .sieve's default), mixing, which installs at\n"
                               "about 1.2 s a MB, only where it saves at least 4% of what it carries over the quickest of\n"
                               "the other ways (on 23 files and folders, 3.8% larger than size and installed in about a third of\n"
                               "its time; results/balanced-2026-11-07.md); speed, as --prioritise-decoding. None changes\n"
