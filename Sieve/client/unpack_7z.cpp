@@ -15,7 +15,9 @@
 
 #include "7z.h"
 #include "7zCrc.h"
+#include "sieve/paths.hpp"
 
+#include <filesystem>
 #include <set>
 #include <algorithm>
 #include <cstdlib>
@@ -23,6 +25,7 @@
 #include <fstream>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 
 namespace sieve::install {
 
@@ -146,7 +149,7 @@ std::string joined(const std::vector<std::string>& parts, size_t from)
     return s;
 }
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::from_u8;
 
 // The archive opened; closed again when this goes.
 struct Open7z

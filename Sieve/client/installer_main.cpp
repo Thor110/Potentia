@@ -38,6 +38,7 @@
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
+#include "sieve/paths.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -69,13 +70,8 @@ namespace fs = std::filesystem;
 using namespace sieve;
 using namespace sieve::cli;
 
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::u8;
+using sieve::from_u8;
 
 std::string files_n(uint64_t n) { return std::to_string(n) + (n == 1 ? " file" : " files"); }
 

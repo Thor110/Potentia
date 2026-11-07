@@ -26,6 +26,9 @@
 #include "cli/locate.hpp"
 #include "cli/map.hpp"
 #include "cli/map_sieve.hpp"
+#include "sieve/paths.hpp"
+#include <filesystem>
+#include <string>
 
 namespace hallway::hall {
 
@@ -33,13 +36,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 uint64_t mix(uint64_t x)
 {

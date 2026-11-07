@@ -1,4 +1,5 @@
 #include "image_io.hpp"
+#include "sieve/whole_file.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_HDR
@@ -18,13 +19,6 @@ namespace sieve::cli {
 
 namespace {
 
-std::string read_bytes(const std::string& path)
-{
-    std::ifstream in(std::filesystem::path(path), std::ios::binary);
-    if (!in) throw std::runtime_error("cannot open '" + path + "'");
-    return std::string(std::istreambuf_iterator<char>(in), {});
-}
-
 void append(void* ctx, void* data, int size)
 {
     auto* out = static_cast<std::string*>(ctx);
@@ -41,7 +35,7 @@ std::mutex g_stb_write;
 
 std::vector<RgbaImage> load_image_frames(const std::string& path)
 {
-    const std::string bytes = read_bytes(path);
+    const std::string bytes = read_whole_file(path);
     return decode_image_frames(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size(), path);
 }
 

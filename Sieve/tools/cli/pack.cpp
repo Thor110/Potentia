@@ -10,6 +10,7 @@
 #include "cli/timings.hpp"
 
 #include "sieve/filekind.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/rope_wave.hpp"
 #include "sieve/mix.hpp"
 #include "sieve/sha256.hpp"
@@ -874,14 +875,6 @@ std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& in, int level, int 
     if (r != Z_STREAM_END) throw std::runtime_error("zlib could not pack");
     out.resize(n);
     return out;
-}
-
-std::string hex_of(const uint8_t* p, size_t n)
-{
-    static const char* d = "0123456789abcdef";
-    std::string s;
-    for (size_t i = 0; i < n; ++i) (s += d[p[i] >> 4]) += d[p[i] & 15];
-    return s;
 }
 
 // A zip's entries, read into memory: stored and deflated ones, each checked against its CRC; the
@@ -2276,7 +2269,7 @@ std::string gzip_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t
     for (const int level : {6, 9, 1, 2, 3, 4, 5, 7, 8})
         for (const int mem : {8, 9})
             if (deflate_raw(inner, level, mem) == stream)
-                return "gz " + std::to_string(level) + " " + std::to_string(mem) + " " + hex_of(b.data(), h) + " " + std::to_string(inner.size());
+                return "gz " + std::to_string(level) + " " + std::to_string(mem) + " " + hex_of(std::span<const uint8_t>(b.data(), h)) + " " + std::to_string(inner.size());
     return "";
 }
 
@@ -3407,6 +3400,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
     // archives (prepare_from): taken here once, by the file's bytes, where they are.)
     std::mutex png_ahead_mx;
     std::unordered_map<std::string, std::optional<std::pair<std::vector<uint8_t>, std::string>>> png_ahead; // (maker and the bytes' address)
+    // (A zip's skeleton and what it holds, made a batch ahead the same way, and whether they make the
+    // zip again: by the bytes' address, taken once. 7 November 2026.)
+    struct ZipAhead
+    {
+        std::vector<uint8_t> whole;
+        size_t skeleton = 0;
+        bool remakes = false;
+    };
+    std::unordered_map<std::string, std::optional<ZipAhead>> zip_ahead;
     auto png_ahead_key = [](size_t maker, const std::vector<uint8_t>& b) {
         return std::to_string(maker) + ":" + std::to_string(reinterpret_cast<uintptr_t>(b.data())) + ":" + std::to_string(b.size());
     };
@@ -3589,6 +3591,7 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             {
                 std::lock_guard<std::mutex> lock(png_ahead_mx);
                 png_ahead.clear(); // (the batch before's, each taken or not wanted: its files are done)
+                zip_ahead.clear();
             }
             std::atomic<uint64_t> held{0}; // (a PNG's pixels held ahead: at most 256 MiB at once)
             for_each_index(to - from, pack_threads(), [&](size_t k) {
@@ -3596,6 +3599,39 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (stop_requested()) return;
                 if (optimise_archives && !f.empty()) (void)estimate(f);
                 if (spans_on && f.size() >= 256) spans_ahead[from + k] = weigh_spans(f);
+                // A zip, as the loop tries it: its skeleton (preflate on each member's deflate) and whether
+                // it gives the zip back; and a 7z's contents read, LZMA2's estimate of them made (kept by
+                // their bytes, for the weighing below).
+                if (optimise_archives && v21 && temporary_ok && f.size() >= 4 && f[0] == 'P' && f[1] == 'K' && f[2] == 3 && f[3] == 4)
+                {
+                    std::optional<ZipAhead> z;
+                    if (auto sk = zip_skeleton(f))
+                    {
+                        ZipAhead a;
+                        a.whole = sk->inner(a.skeleton);
+                        if (held.fetch_add(a.whole.size()) + a.whole.size() <= (uint64_t(256) << 20))
+                        {
+                            a.remakes = deflate_skeleton_remake(a.whole, a.skeleton) == f;
+                            z = std::move(a);
+                        }
+                    }
+                    if (z || held.load() <= (uint64_t(256) << 20))
+                    {
+                        std::lock_guard<std::mutex> lock(png_ahead_mx);
+                        zip_ahead[png_ahead_key(0, f)] = std::move(z);
+                    }
+                }
+                if (optimise_archives && v21 && temporary_ok && sieve::install::is_7z(f))
+                    try
+                    {
+                        std::vector<uint8_t> joined;
+                        for (const auto& in : sieve::install::read_7z(f)) joined.insert(joined.end(), in.bytes.begin(), in.bytes.end());
+                        if (!joined.empty()) (void)estimate(joined);
+                    }
+                    catch (const std::exception&)
+                    {
+                        // (read again below, where it says so)
+                    }
                 // A PNG, as the loop tries it: stb's way, and its skeleton's only where stb's gives it
                 // no way back; what each makes weighed by LZMA2 too (kept by its bytes).
                 if (optimise_archives && png_on && is_png(f))
@@ -4050,12 +4086,29 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             }
             // v21: a zip made again exactly from its skeleton and the data it holds; else, as before, its contents.
             if (v21 && temporary_ok && b.size() >= 4 && b[0] == 'P' && b[1] == 'K' && b[2] == 3 && b[3] == 4)
-                if (auto sk = zip_skeleton(b))
+                if (auto zk = [&]() -> std::optional<ZipAhead> {
+                        // (made a batch ahead where it could be: prepare_from)
+                        {
+                            std::lock_guard<std::mutex> lock(png_ahead_mx);
+                            if (auto it = zip_ahead.find(png_ahead_key(0, b)); it != zip_ahead.end())
+                            {
+                                std::optional<ZipAhead> z = std::move(it->second);
+                                zip_ahead.erase(it);
+                                return z;
+                            }
+                        }
+                        auto sk = zip_skeleton(b);
+                        if (!sk) return std::nullopt;
+                        ZipAhead a;
+                        a.whole = sk->inner(a.skeleton);
+                        a.remakes = deflate_skeleton_remake(a.whole, a.skeleton) == b;
+                        return a;
+                    }())
                 {
-                    size_t skeleton = 0;
-                    std::vector<uint8_t> whole = sk->inner(skeleton);
+                    size_t skeleton = zk->skeleton;
+                    std::vector<uint8_t> whole = std::move(zk->whole);
                     const std::string r = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
-                    if (deflate_skeleton_remake(whole, skeleton) == b)
+                    if (zk->remakes)
                     {
                         if (members_on)
                             if (auto held = zip_entries(b))
@@ -5009,13 +5062,14 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
                 const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
+                bool e1_allowed = true; // (v34 draft: E1 for a program; under Balanced weighed against mixing without it)
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
                                    uint32_t primer = 0) {
                     if (mix4_on)
                     {
                         Mix4Params base = mix4_for(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
-                        base.instructions = program && instructions_on; // (v34 draft, E1)
+                        base.instructions = program && instructions_on && e1_allowed; // (v34 draft, E1)
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         std::shared_ptr<const std::vector<uint8_t>> made;
@@ -5176,6 +5230,25 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                 {
                     std::string mix_way;
                     std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words, primed);
+                    // (Balanced, a program under the v34 draft: E1 decodes about 45% slower than mixing
+                    // without it (results/x86-instructions-2026-11-07.md), so it is asked half as much
+                    // again, 6% of the file against mixing's 4%: the program mixed without it too, and the
+                    // cheaper of the two, counting each its share, kept. 7 November 2026.)
+                    uint64_t floor_here = balanced_floor(bytes[i].size());
+                    if (program && instructions_on && priority() == Priority::balanced && !stop_requested())
+                    {
+                        const uint64_t e1_floor = floor_here * 3 / 2;
+                        e1_allowed = false;
+                        std::string plain_way;
+                        std::vector<uint8_t> plain = code_of(bytes[i], plain_way, pw, pc, words, primed);
+                        e1_allowed = true;
+                        if (plain.size() + floor_here <= mc.size() + e1_floor)
+                        {
+                            mc = std::move(plain);
+                            mix_way = plain_way;
+                        }
+                        else floor_here = e1_floor;
+                    }
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");
@@ -5202,14 +5275,15 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                     // 52 MB, slow to install; 6 November 2026.)
                     // (Balanced: mixing's code 4% of the file under the quickest of the other ways,
                     // or more; balanced_floor, mix.hpp.)
-                    margin = std::max<uint64_t>(margin, balanced_floor(bytes[i].size()));
+                    margin = std::max<uint64_t>(margin, floor_here);
                     const bool barred = margin > 64 + best / 400;
                     const uint64_t need = way.empty() || barred ? best - std::min<uint64_t>(best, margin) : best;
                     if (barred && mc.size() + vl < (way.empty() ? best - std::min<uint64_t>(best, 64 + best / 400) : best) && mc.size() + vl >= need)
                     {
                         char bar[160];
-                        if (balanced_floor(bytes[i].size()) == margin)
-                            std::snprintf(bar, sizeof bar, " (smaller, but not by Balanced's %u%% of the file: kept quick to install)", unsigned(kBalancedShare));
+                        if (floor_here == margin && floor_here)
+                            std::snprintf(bar, sizeof bar, " (smaller, but not by Balanced's %u%% of the file: kept quick to install)",
+                                          unsigned(floor_here * 100 / std::max<uint64_t>(bytes[i].size(), 1)));
                         else
                             std::snprintf(bar, sizeof bar, " (smaller, but not by the bar for a file this size, %.2f%%: kept quick to install)",
                                           100.0 * double(margin) / double(std::max<uint64_t>(best, 1)));

@@ -13,6 +13,7 @@
 #include "sieve/binaryspace.hpp"
 #include "sieve/corridor.hpp" // bearing_of, unit_at_bearing, shortest_path
 #include "sieve/sha256.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -45,7 +46,7 @@ constexpr size_t kMaxBytes = size_t(1) << 20;  // files taken up to 1 MiB
 constexpr size_t kRouteBytes = size_t(64) << 10; // the route worked out up to 64 KiB
 constexpr double kPi = 3.14159265358979323846;
 
-std::filesystem::path from_u8(const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); }
+using sieve::from_u8;
 
 void txt(SDL_Renderer* r, float x, float y, const std::string& s, SDL_Color c, float scale = 1) { draw_text(r, x, y, s, scale, c); }
 
@@ -132,11 +133,7 @@ std::string local_time(const char* format)
     return out;
 }
 
-std::string u8(const std::filesystem::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::u8;
 
 // The head every log and every walk saved begins with: what it was made on, so Load Log can open the
 // file again and know it is the same bytes.

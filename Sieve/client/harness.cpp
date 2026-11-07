@@ -12,10 +12,13 @@
 #include "sieve/image.hpp"
 #include "sieve/llm.hpp"
 #include "sieve/llm_tokenizer.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <string>
 #include <thread>
 
 namespace hallway {
@@ -39,12 +42,8 @@ void frame(SDL_Renderer* r, const SDL_FRect& f, SDL_Color c, Uint8 fill = 235)
 
 bool inside(const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 std::string grouped(uint64_t n)
 {

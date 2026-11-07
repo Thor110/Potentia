@@ -19,10 +19,13 @@
 #include "cli/dictionaries.hpp"
 #include "cli/train.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 namespace hallway::hall {
 
@@ -30,13 +33,8 @@ namespace {
 
 namespace fs = std::filesystem;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::from_u8;
+using sieve::u8;
 
 template <class Entry>
 Entry entry_of(typename Entry::Kind kind, std::string text)

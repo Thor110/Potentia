@@ -6,6 +6,7 @@
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -15,6 +16,7 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <string>
 
 namespace sieve::cli {
 
@@ -22,11 +24,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
+using sieve::u8;
 
 std::vector<PluginFile> load()
 {

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "sieve/image.hpp" // RgbaImage
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -33,8 +34,8 @@ struct Picture
     const RgbaImage& frame(size_t k) const { return k == 0 || more.empty() ? pixels : more[std::min(k, more.size()) - 1]; }
 };
 
-std::string u8(const std::filesystem::path& p);
-std::filesystem::path from_u8(const std::string& s);
+using sieve::u8;      // a path as UTF-8 (sieve/paths.hpp)
+using sieve::from_u8; // and back
 std::string lower(std::string s);
 std::string human_bytes(uint64_t n);
 bool picture_name(const std::string& name); // a picture by its extension

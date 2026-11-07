@@ -7,12 +7,15 @@
 #include "sieve/corridor.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <iomanip>
 #include <map>
 #include <sstream>
+#include <string>
 
 namespace sieve::cli {
 
@@ -20,7 +23,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::from_u8;
 
 // A way's group: what a reader must be told for it, paid once however many files use it. The base
 // (the binary line positional) is group -1, which every reader has.

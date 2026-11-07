@@ -11,13 +11,16 @@
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <atomic>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 
 namespace hallway::design {
 
@@ -25,13 +28,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::u8;
+using sieve::from_u8;
 
 // A value written on a header line: a `;` would start a comment, and a line break a new line.
 std::string clean(std::string s)

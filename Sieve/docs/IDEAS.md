@@ -6290,6 +6290,13 @@ taken up:
 - **To measure first (cheap):** the packets of WoWRevived's films hashed, to count how many bytes are
   packets seen before in the same or another film. That says whether the packet route is worth
   building, before any encoder is involved.
+  *Measured (7 November 2026), WoWRevived English v1.1.2's eight MP4s:* every packet hashed with
+  `ffprobe -show_packets -show_data_hash sha256`, no frame decoded. 43,969 packets, 617,099,672
+  bytes; 8,673 bytes in packets seen before in the same film and 1,128 in another (RAGELOGO's), so
+  9,801 bytes in all, 0.0016%. The Human and Martian INTROs share no packet: each film was encoded
+  on its own, so no stream is a copy of another's. Verdict: the packet route is not worth building
+  for these films; it would pay only for footage cut from one encode (trailers and films, chapters
+  split from one file), which nothing here is.
 
 **19.117 Steering the rope's locked bytes (Edward, 3 November 2026; nothing built or measured; measured since, `results/rope-wheels-2026-11-03.md`, and Manual Navigation built 4 November).**
 Edward: "Part of the way I also envisioned the rope filter is that the 1/3 and 2/3 bytes on their

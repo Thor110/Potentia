@@ -11,6 +11,7 @@
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/whole_file.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -24,13 +25,6 @@
 namespace sieve::cli {
 
 namespace {
-
-std::string read_file(const std::string& path)
-{
-    std::ifstream in(std::filesystem::path(path), std::ios::binary);
-    if (!in) throw std::runtime_error("cannot open '" + path + "'");
-    return std::string(std::istreambuf_iterator<char>(in), {});
-}
 
 std::string joined_positional(const Args& a)
 {
@@ -268,7 +262,7 @@ WarpInput read_warp_input(const Line& line, const Args& a)
     {
     case LineKind::Text:
     {
-        const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
+        const std::string input = a.has("file") ? read_whole_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give TEXT or --file PATH");
         // On a line that holds every byte, the input is bytes rather than text: reading it as
         // UTF-8 would refuse most files, and folding anything would stop it coming back.
@@ -321,7 +315,7 @@ WarpInput read_warp_input(const Line& line, const Args& a)
             w.units = r.units;
             break;
         }
-        const std::string input = a.has("file") ? read_file(a.get("file")) : joined_positional(a);
+        const std::string input = a.has("file") ? read_whole_file(a.get("file")) : joined_positional(a);
         if (input.empty()) throw std::invalid_argument("nothing to warp: give notes like \"C4q E4q G4h\" or --file PATH");
         if (is_notes3_symbols(line.space.symbols_id()))
         {

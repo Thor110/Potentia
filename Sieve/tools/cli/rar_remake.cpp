@@ -4,10 +4,12 @@
 
 #include "cli/rar_remake.hpp"
 #include "cli/dictionaries.hpp" // executable_dir
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <filesystem>
 #include <random>
 #include <cstdio>
 #include <cstdlib>
@@ -17,6 +19,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -35,13 +38,8 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::u8;
+using sieve::from_u8;
 
 uint32_t crc32_of(const uint8_t* p, size_t n)
 {

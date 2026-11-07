@@ -21,9 +21,12 @@
 #include "cli/pack.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/paths.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <set>
+#include <string>
 
 namespace hallway::hall {
 
@@ -31,7 +34,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::from_u8;
 
 // A path's extension in lower case (".TRACK" is a track's record too).
 std::string lower_ext(const fs::path& p)

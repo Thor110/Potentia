@@ -4,6 +4,7 @@
 #include "image_io.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/sound.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -21,6 +22,7 @@
 #include <mutex>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -48,13 +50,8 @@ namespace fs = std::filesystem;
 std::mutex g_mx;
 std::string g_path; // set by set_ffmpeg_path
 
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::u8;
+using sieve::from_u8;
 
 // An environment variable, as UTF-8 (wide on Windows, so a path in any script comes through).
 std::string env(const char* name)

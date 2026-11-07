@@ -78,6 +78,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/whole_file.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -686,8 +687,6 @@ int read_at(const Line& line, const Args& a, const std::string& mode)
     return 0;
 }
 
-std::string slurp(const std::string& path); // defined below, with the book commands
-
 int cmd_read(const Args& a)
 {
     const Line line = make_line(a);
@@ -718,7 +717,7 @@ int cmd_read(const Args& a)
         // All whitespace goes, not just the trailing newline: an address of forty thousand digits
         // is the sort of thing an editor or a pipe through `fold` will have wrapped, and a line
         // break in the middle of it is not a different address.
-        const std::string raw = slurp(a.get("address-file"));
+        const std::string raw = read_whole_file(a.get("address-file"));
         given.reserve(raw.size());
         for (char c : raw)
             if (c != '\n' && c != '\r' && c != ' ' && c != '\t') given.push_back(c);
@@ -2161,13 +2160,6 @@ int cmd_tailor(const Args& a)
 
 // ---------------------------------------------------------------- books
 
-std::string slurp(const std::string& path)
-{
-    std::ifstream in(std::filesystem::path(path), std::ios::binary);
-    if (!in) throw std::runtime_error("cannot open '" + path + "'");
-    return std::string(std::istreambuf_iterator<char>(in), {});
-}
-
 // The text of a section's units, joined, without the padding at the end.
 std::string section_text(const DecodedSection& d)
 {
@@ -2305,7 +2297,7 @@ int cmd_filters_books(const Args& a)
 // cover's picture, its pages' length, and as many pages as it has (or --book-pages).
 int cmd_check_book(const Args& a)
 {
-    const Book b = parse_book(slurp(a.get("book")));
+    const Book b = parse_book(read_whole_file(a.get("book")));
     const auto decoded = decode_book(b);
     if (book_id(decoded) != b.id) throw std::runtime_error("the book's content does not match its id (" + b.id + ")");
     auto [cover, page] = book_lines(a);
@@ -3004,7 +2996,7 @@ int cmd_install(const Args& a)
 int cmd_unbind(const Args& a)
 {
     if (a.positional.size() != 1) throw std::invalid_argument("give one BOOK file");
-    const Book b = parse_book(slurp(a.positional[0]));
+    const Book b = parse_book(read_whole_file(a.positional[0]));
     const auto decoded = decode_book(b);
     const std::string id = book_id(decoded);
     if (id != b.id) throw std::runtime_error("the book's content does not match its id (" + b.id + ")");

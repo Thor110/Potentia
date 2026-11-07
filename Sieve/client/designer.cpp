@@ -20,13 +20,16 @@
 #include "sieve/image.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/paths.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 namespace hallway {
 
@@ -59,7 +62,7 @@ std::string read_all(const fs::path& p)
     return o.str();
 }
 
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+using sieve::from_u8;
 
 template <typename T> void cycle(std::vector<T>& v, const T& cur, int dir, T& out)
 {

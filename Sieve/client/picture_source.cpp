@@ -18,6 +18,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <optional>
@@ -51,14 +52,6 @@ uint64_t memory_budget()
     const uint64_t free_now = memory_free();
     return free_now ? free_now / 2 : uint64_t(2) << 30;
 }
-
-std::string u8(const fs::path& p)
-{
-    const std::u8string s = p.u8string();
-    return std::string(s.begin(), s.end());
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
 
 std::string lower(std::string s)
 {
