@@ -17,8 +17,8 @@ namespace sieve::cli
 
 // The first two of `files` (paths with '/' between their parts) that are one name where case is
 // ignored, or a file that is one name with a folder another file is in (`a` and `A/b`). Case is
-// folded as Windows folds it, each letter Unicode gives a case to one other (case_fold_table.hpp:
-// É and é one, Σ σ ς one; ß stays ß). Written two ways (é as one character and as e and an accent),
+// folded as Windows folds it, each letter to its uppercase, one character to one (case_fold_table.hpp:
+// É and é one, Σ σ ς one; ß stays ß; the Kelvin sign and K two, as Windows keeps them). Written two ways (é as one character and as e and an accent),
 // they are two here, as on Windows: names_one_on_macos below takes them as one.
 std::optional<std::pair<std::string, std::string>> names_one_ignoring_case(const std::vector<std::string>& files);
 // The same as macOS compares names: also each letter as one character and as a letter and its

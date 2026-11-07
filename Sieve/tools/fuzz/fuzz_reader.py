@@ -15,7 +15,7 @@ allocation (2 GiB here) is below the installer's bound (half the memory availabl
 declaring a file of 2 to 4 GiB is reported though the installer allows it; those are read and set
 aside, not fixed.
 """
-import os, random, re, resource, shutil, subprocess, sys, time, multiprocessing as mp
+import os, random, re, shutil, subprocess, sys, time, multiprocessing as mp
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -143,7 +143,9 @@ def run_one(path, workdir, limit=60):
     return p.returncode, err.decode("utf-8", "replace"), timed_out, time.time() - t0
 
 
-def worker(wid):
+def worker(arg):
+    wid, limits = arg  # (the seeds' limits passed in: under spawn a worker does not see the parent's)
+    LIMITS.update(limits)
     rnd = random.Random(wid * 7919 + int(time.time()))
     all_seeds = seeds()
     texts = [t for _, _, t in all_seeds]
@@ -206,6 +208,6 @@ if __name__ == "__main__":
                 open(os.path.join(OUT, "seed-fails.txt"), "a").write("%s code %s %s\n" % (name, code, err.replace("\n", " | ")))
     open(os.path.join(OUT, "limits.txt"), "w").write("".join("%s %.0f\n" % kv for kv in sorted(LIMITS.items())))
     with mp.Pool(n) as pool:
-        results = pool.map(worker, range(n))
+        results = pool.map(worker, [(i, dict(LIMITS)) for i in range(n)])
     total = {k: sum(r[k] for r in results) for k in results[0]}
     print(total)

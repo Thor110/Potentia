@@ -17,4 +17,9 @@ bool speech_available(); // a voice to speak with (Windows)
 // is cut short by the next.
 void announce(const std::string& text);
 
+// Forgets what was said last, so the next announce speaks even the same words: called when a menu
+// opens or changes screen, where the item chosen may be the one chosen before (the review of 6
+// November 2026: the pause menu reopened on Resume was silent).
+void forget_announced();
+
 } // namespace hallway

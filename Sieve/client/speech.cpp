@@ -24,6 +24,7 @@ namespace hallway {
 namespace {
 
 std::atomic<bool> g_on{false};
+std::atomic<bool> g_started{false}; // (the voice made, so turning off may cut it short)
 std::mutex g_mx;
 std::string g_last;
 
@@ -93,6 +94,7 @@ struct Voice
 Voice& voice()
 {
     static Voice v; // (started the first time something is said, and ended with the program)
+    g_started = true;
     return v;
 }
 #endif
@@ -102,8 +104,19 @@ Voice& voice()
 void set_read_aloud(bool on)
 {
     g_on = on;
+    {
+        std::lock_guard<std::mutex> lock(g_mx);
+        g_last.clear(); // (turned on, the item chosen is said at once)
+    }
+#ifdef _WIN32
+    if (!on && g_started) voice().say(" "); // (turned off: what is being said is cut short)
+#endif
+}
+
+void forget_announced()
+{
     std::lock_guard<std::mutex> lock(g_mx);
-    g_last.clear(); // (turned on, the item chosen is said at once)
+    g_last.clear();
 }
 
 bool read_aloud() { return g_on; }

@@ -3,10 +3,13 @@
 another, and the one it takes it as (6 November 2026, IDEAS 19.120: names that are one name where
 case is ignored, beyond A to Z).
 
-The fold is one character to one: a character's lowercase of its uppercase, where both are a
-single character (Python's own Unicode database, its version written in the table). That is how
-Windows compares names (its upcase table maps each character to one other), and close to macOS's;
-so `ß` stays `ß` (not "ss"), `É` folds to `é`, `Σ`, `σ` and `ς` to one. Run it with the Python that
+The fold is one character to one: a character's uppercase, where that is a single character (Python's
+own Unicode database, its version written in the table). That is how Windows compares names (NTFS
+compares the uppercase of each character, from its upcase table, one character to one), so `ß`
+stays `ß` (not "SS"), `é` folds to `É`, `σ` and `ς` to `Σ`; and the Kelvin sign stays apart from
+K, as Windows keeps it (6 November 2026: the lowercase of the uppercase, as first written, joined
+32 such pairs Windows keeps apart). macOS folds a little more (the Kelvin sign with K): those few
+are not refused there. Run it with the Python that
 is to set the Unicode version: python tools/gen_case_fold.py > tools/cli/case_fold_table.hpp"""
 import sys
 import unicodedata
@@ -14,10 +17,7 @@ import unicodedata
 
 def fold(c):
     u = c.upper()
-    if len(u) != 1:
-        u = c
-    lo = u.lower()
-    return lo if len(lo) == 1 else u
+    return u if len(u) == 1 else c
 
 
 pairs = []

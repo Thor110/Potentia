@@ -185,4 +185,10 @@ struct AppSettings
 // Sizes the window (or switches to fullscreen) to match the settings.
 void apply_video(SDL_Window* window, const AppSettings& s);
 
+// Tells the engine how to keep a model file's weights (llm::set_widen_weights): off, on, or auto
+// against ITEM MEMORY's share of installed memory as it is now. Called at the start, once the
+// options are read, and again when ITEM MEMORY changes (the review of 6 November 2026: auto had
+// been worked out before --item-memory was read, and never again).
+void apply_widen_weights(const AppSettings& s);
+
 } // namespace hallway

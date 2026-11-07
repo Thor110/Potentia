@@ -2730,6 +2730,33 @@ std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b)
 // first pass (g_keep_first, one file carried as it is), the stream's own first pass, kept.
 static uint64_t whole_estimate(const std::vector<uint8_t>& bytes)
 {
+    // A large file LZMA2 cannot shrink (sound, film, anything compressed already): its figure from
+    // three samples of 1 MiB (its start, middle and end, preset 6), not a whole pass. LZMA2 is at its
+    // slowest on such data (a FLAC of 52 MB: 29.1 s of its 34 s to pack were this pass, where LZMA2
+    // took 0.1% off; 6 November 2026), and a figure that close to the file's size only stands beside
+    // ways that beat it by far. Only where every sample saves under 2% (the FLAC's: 0.78%, 0.12% and
+    // 1.64%, its fade at the end): a file that shrinks more anywhere sampled has its pass as before.
+    if (bytes.size() >= (size_t(16) << 20))
+    {
+        constexpr size_t kSample = size_t(1) << 20;
+        const size_t n = bytes.size();
+        uint64_t got = 0;
+        bool flat = true;
+        for (const size_t at : {size_t(0), n / 2 - kSample / 2, n - kSample})
+        {
+            const std::vector<uint8_t> sample(bytes.begin() + std::ptrdiff_t(at), bytes.begin() + std::ptrdiff_t(at + kSample));
+            const uint64_t e = estimate(sample);
+            if (!e || e * 100 < uint64_t(kSample) * 98)
+            {
+                flat = false;
+                break;
+            }
+            got = std::max(got, e);
+        }
+        // (The sample that shrank least stands for the whole: the average had the FLAC's figure 0.8%
+        // under its pass, so LZMA2 was taken over the rope and came out larger.)
+        if (flat) return uint64_t(double(n) * double(got) / double(kSample));
+    }
     if (!g_keep_first.load(std::memory_order_relaxed) || bytes.empty()) return estimate(bytes);
     const uint32_t dict = std::max(dictionary_for(bytes.size()), g_sample_floor.load(std::memory_order_relaxed));
     constexpr uint32_t preset = 9 | LZMA_PRESET_EXTREME;
@@ -4660,6 +4687,17 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             // made on a thread of its own while the program is mixed, and waited for there; where it
             // is not mixed, at once. 6 November 2026: an 11 MB program's 5 s of it had come first.)
             std::shared_future<uint64_t> figure_later;
+            // (Waited for on every way out, a force stop or an exception included: its task reads this
+            // file's bytes, which go when the packing does, and a copy of its future kept by the ways'
+            // cache would not wait for it. The review of 6 November 2026.)
+            struct WaitForFigure
+            {
+                std::shared_future<uint64_t>& f;
+                ~WaitForFigure()
+                {
+                    if (f.valid()) f.wait();
+                }
+            } wait_for_figure{figure_later};
             const bool program_mixed = program && mix_on && !prioritise_decoding() && !stop_requested() &&
                                        (rope_search_every_wave() || bytes[i].size() <= (size_t(16) << 20));
             if (program && program_mixed)

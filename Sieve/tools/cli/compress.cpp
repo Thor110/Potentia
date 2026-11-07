@@ -87,11 +87,17 @@ Bytes gunzip(std::span<const uint8_t> data)
     if (inflateInit2(&z, 15 + 16) != Z_OK) throw std::runtime_error("zlib: cannot start");
     Bytes out;
     Bytes piece(kPiece);
-    z.next_in = const_cast<Bytef*>(data.data());
-    z.avail_in = uInt(data.size());
+    size_t fed = 0; // (fed a GiB at a time: zlib counts in 32 bits)
     int r = Z_OK;
     while (r != Z_STREAM_END)
     {
+        if (z.avail_in == 0 && fed < data.size())
+        {
+            const size_t n = std::min(data.size() - fed, size_t(1) << 30);
+            z.next_in = const_cast<Bytef*>(data.data() + fed);
+            z.avail_in = uInt(n);
+            fed += n;
+        }
         z.next_out = piece.data();
         z.avail_out = uInt(piece.size());
         r = inflate(&z, Z_NO_FLUSH);
@@ -199,16 +205,22 @@ Bytes bunzip2(std::span<const uint8_t> data)
     if (BZ2_bzDecompressInit(&z, 0, 0) != BZ_OK) throw std::runtime_error("bzip2: cannot start");
     Bytes out;
     std::vector<char> piece(kPiece);
-    z.next_in = const_cast<char*>(reinterpret_cast<const char*>(data.data()));
-    z.avail_in = unsigned(data.size());
+    size_t fed = 0; // (fed a GiB at a time: bzip2 counts in 32 bits)
     int r = BZ_OK;
     while (r == BZ_OK)
     {
+        if (z.avail_in == 0 && fed < data.size())
+        {
+            const size_t n = std::min(data.size() - fed, size_t(1) << 30);
+            z.next_in = const_cast<char*>(reinterpret_cast<const char*>(data.data() + fed));
+            z.avail_in = unsigned(n);
+            fed += n;
+        }
         z.next_out = piece.data();
         z.avail_out = unsigned(piece.size());
         r = BZ2_bzDecompress(&z);
         out.insert(out.end(), piece.begin(), piece.end() - z.avail_out);
-        if (r == BZ_OK && z.avail_in == 0 && z.avail_out != 0) break; // (ended early)
+        if (r == BZ_OK && z.avail_in == 0 && fed == data.size() && z.avail_out != 0) break; // (ended early)
     }
     BZ2_bzDecompressEnd(&z);
     if (r != BZ_STREAM_END) throw std::runtime_error("bzip2: does not read back");
@@ -459,6 +471,19 @@ std::map<std::string, Bytes> libarchive_read(std::span<const uint8_t> data, bool
 // 7z's format describes it (7-Zip's DOC/7zFormat.txt): the streams' sizes and CRCs, then the names
 // (UTF-16), which are empty (folders and empty files), the times and the attributes.
 
+// CRC-32 of any length (zlib's takes 32 bits of length at a time).
+uint32_t crc_of(std::span<const uint8_t> d)
+{
+    uLong c = crc32(0, nullptr, 0);
+    for (size_t at = 0; at < d.size();)
+    {
+        const size_t n = std::min(d.size() - at, size_t(1) << 30);
+        c = crc32(c, d.data() + at, uInt(n));
+        at += n;
+    }
+    return uint32_t(c);
+}
+
 void put_number(Bytes& b, uint64_t v)
 {
     uint8_t first = 0, mask = 0x80;
@@ -527,7 +552,7 @@ Bytes seven_zip_of(const std::vector<CompressEntry>& entries)
         {
             all.insert(all.end(), e.bytes.begin(), e.bytes.end());
             sizes.push_back(e.bytes.size());
-            crcs.push_back(uint32_t(crc32(0, e.bytes.data(), uInt(e.bytes.size()))));
+            crcs.push_back(crc_of(e.bytes));
         }
     Bytes packed;
     uint8_t dict_prop = 0;
@@ -679,7 +704,9 @@ int64_t mtime_of(const fs::path& p)
     std::error_code ec;
     const auto t = fs::last_write_time(p, ec);
     if (ec) return 0;
-    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::clock_cast<std::chrono::system_clock>(t).time_since_epoch()).count();
+    // (Through now on both clocks: clock_cast is missing from some standard libraries, Apple's among them.)
+    const auto sys = std::chrono::system_clock::now() + std::chrono::duration_cast<std::chrono::system_clock::duration>(t - fs::file_time_type::clock::now());
+    return std::chrono::duration_cast<std::chrono::seconds>(sys.time_since_epoch()).count();
 }
 
 std::string utf8_of(const fs::path& p)
@@ -714,7 +741,14 @@ void gather_entries(const fs::path& p, const std::string& top, std::vector<Compr
     }
     out.push_back({top, true, {}, mtime_of(p)});
     std::vector<fs::path> under;
-    for (const auto& e : fs::directory_iterator(p, ec)) under.push_back(e.path());
+    // (A folder that cannot be read is refused, not carried empty: the review of 6 November 2026.)
+    fs::directory_iterator it(p, ec);
+    if (ec) throw std::runtime_error("cannot read the folder " + utf8_of(p) + ": " + ec.message());
+    for (; it != fs::directory_iterator(); it.increment(ec))
+    {
+        if (ec) throw std::runtime_error("cannot read the folder " + utf8_of(p) + ": " + ec.message());
+        under.push_back(it->path());
+    }
     std::sort(under.begin(), under.end()); // (the same order on every machine)
     for (const fs::path& u : under) gather_entries(u, top + "/" + utf8_of(u.filename()), out, skipped);
 }
@@ -790,9 +824,12 @@ std::vector<uint8_t> compress_entries(const std::vector<CompressEntry>& entries,
     }
     if (!is_stream_format(format)) throw std::invalid_argument("no such format: " + format);
     const bool one = entries.size() == 1 && !entries[0].dir;
-    Bytes inner = one ? entries[0].bytes : libarchive_of(entries, false);
+    Bytes tar;
+    if (!one) tar = libarchive_of(entries, false);
+    const std::span<const uint8_t> inner = one ? std::span<const uint8_t>(entries[0].bytes) : std::span<const uint8_t>(tar);
     Bytes out = compress_stream(inner, format);
-    if (decompress_stream(out, format) != inner) throw std::runtime_error(format + ": made, but it reads back differently");
+    const Bytes back = decompress_stream(out, format);
+    if (!std::equal(back.begin(), back.end(), inner.begin(), inner.end())) throw std::runtime_error(format + ": made, but it reads back differently");
     return out;
 }
 
@@ -838,7 +875,7 @@ int compress_run(const Args& a)
     if (a.has("gather"))
     {
         // Several chosen in Explorer: one program each, the first gathering the others (gather.hpp).
-        const auto gathered = gather_chosen(paths[0]);
+        const auto gathered = gather_chosen(paths[0], "compress " + format);
         if (!gathered) return 0; // (handed to the first, which makes the one result)
         paths = *gathered;
     }

@@ -20,10 +20,11 @@ namespace sieve::cli
 namespace
 {
 
-// A character folded as a folder ignoring case folds it (case_fold_table.hpp, one character to one).
+// A character folded as a folder ignoring case folds it (case_fold_table.hpp, one character to one):
+// to its uppercase, as Windows compares names.
 uint32_t fold_cp(uint32_t c)
 {
-    if (c < 0x80) return c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c;
+    if (c < 0x80) return c >= 'a' && c <= 'z' ? c - 'a' + 'A' : c;
     const auto* end = std::end(kCaseFold);
     const auto* it = std::lower_bound(std::begin(kCaseFold), end, c, [](const CaseFoldPair& p, uint32_t v) { return p.from < v; });
     return it != end && it->from == c ? it->to : c;

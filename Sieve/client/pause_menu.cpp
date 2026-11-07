@@ -42,6 +42,7 @@ constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 void Hallway::open_pause()
 {
     pause_open_ = true;
+    forget_announced(); // (its first item said again, as the menu opens)
     pause_confirm_ = false;
     pause_row_ = 0;
     SDL_SetWindowRelativeMouseMode(window_, false);

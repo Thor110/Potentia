@@ -464,7 +464,11 @@ void Hallway::draw_navigator(float W, float H)
             shown = trf("nav.decimal_long", {std::to_string(nav_width_)});
         else
         {
-            const size_t chars = size_t(std::max(20.0f, (W - 40) / std::max(1.0f, text_width("0", 1)))) - 40;
+            // (Room for the digits, beside the words around them; at least 12, so a narrow window
+            // shows a few at each end rather than none: the review of 6 November 2026 found a window
+            // about 370 pixels wide made this negative.)
+            const float fit_chars = (W - 40) / std::max(1.0f, text_width("0", 1));
+            const size_t chars = size_t(std::max(52.0f, fit_chars)) - 40;
             std::string digits = nav_dec_;
             if (digits.size() > chars)
                 digits = digits.substr(0, chars / 2 - 2) + " .. " + digits.substr(digits.size() - (chars / 2 - 2));

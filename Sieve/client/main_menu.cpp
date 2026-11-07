@@ -414,6 +414,11 @@ MainMenu::Result MainMenu::run()
 
 void MainMenu::render()
 {
+    if (int(screen_) != spoken_screen_)
+    {
+        forget_announced();
+        spoken_screen_ = int(screen_);
+    }
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     if (w < kMinW || h < kMinH)
@@ -525,7 +530,7 @@ void MainMenu::render()
         }
         item_y = yy + rowh;
         // Read aloud when chosen (speech.hpp): the item, and its value on a settings screen.
-        if (sel) announce(pairs && it.kind != Kind::Action ? label + ", " + value_of(it) : label);
+        if (sel && read_aloud()) announce(pairs && it.kind != Kind::Action ? label + ", " + value_of(it) : label);
     }
 
     // What the selected item does.

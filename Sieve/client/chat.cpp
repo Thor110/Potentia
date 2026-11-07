@@ -679,7 +679,9 @@ void Hallway::chat_attach(const std::string& path)
             // on, and what each keeps. The file as it is (the binary line), every pixel at its own
             // size (FULL SIZE: rgb24), and fitted to this hallway's image line (J): the bits of
             // each, a unit's cells times the bits a cell's colour takes.
-            if (e.width && e.height)
+            // (Pictures only, the kinds FULL SIZE is offered for: a video's first frame has a size
+            // too, but no F; the review of 6 November 2026.)
+            if (e.width && e.height && (e.file_kind == "PNG" || e.file_kind == "JPG" || e.file_kind == "GIF" || e.file_kind == "BMP"))
             {
                 const Line& image = unit_line(LineKind::Image);
                 const uint64_t full = uint64_t(e.width) * e.height * 24;
@@ -1014,7 +1016,10 @@ void Hallway::chat_command(const std::string& line)
         if (li >= 0)
         {
             static sieve::diffusion::SplitMix g(uint64_t(SDL_GetPerformanceCounter()) ^ 0x9ace);
-            const BigUint n = units_of(li);
+            // (The binary line counts its places as files: its loop, units_of, counts the empty
+            // right wall too, twice as many; the review of 6 November 2026.)
+            const BigUint n = li == kBinaryLine ? (effective_mode(kBinaryLine) == FilterMode::Compact ? binary_sieve_->count() : titled_[kBinaryLine]->size())
+                                                : units_of(li);
             ChatEntry e;
             e.kind = ChatEntry::Kind::Place;
             e.place_line = li;

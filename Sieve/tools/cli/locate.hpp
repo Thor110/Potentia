@@ -407,14 +407,14 @@ void add_contents(Manifest& m, const std::filesystem::path& root);
 // file keeps its name and its SHA-256 check.
 Manifest manifest_of_file(const std::filesystem::path& file);
 
-// Walks `root` to the bottom. Throws on anything it cannot read, or a path that cannot be written
-// in the manifest (one with a tab or a line break in it).
-// `only` (6 November 2026, Create .sieve on several files chosen): the names directly in `root`
-// to take, files or folders (a folder's whole contents with it); nothing else is read. Null: all.
 // The memory the system could give now (Linux: MemAvailable, which counts what the page cache would
 // give back; elsewhere what is free), or 0 where it cannot be told.
 uint64_t memory_available();
 
+// Walks `root` to the bottom. Throws on anything it cannot read, or a path that cannot be written
+// in the manifest (one with a tab or a line break in it).
+// `only` (6 November 2026, Create .sieve on several files chosen): the names directly in `root`
+// to take, files or folders (a folder's whole contents with it); nothing else is read. Null: all.
 Manifest walk_folder(const std::filesystem::path& root, const std::vector<std::string>* only = nullptr);
 
 // An address stored in a file: as raw bytes (the number in base 256, most significant first:

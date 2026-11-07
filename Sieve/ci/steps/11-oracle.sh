@@ -1247,6 +1247,13 @@ else
     printf one > "cp_ss/stra$(printf '\303\237')e.txt"
     printf two > cp_ss/STRASSE.txt
     if $S locate cp_ss --installer cp_ss.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
+    # (and the Kelvin sign and k two, as Windows has them: it compares uppercase, one character to
+    # one, and the Kelvin sign's is itself; the review of 6 November 2026)
+    rm -rf cp_k
+    mkdir cp_k
+    printf one > cp_k/k.txt
+    printf two > "cp_k/$(printf '\342\204\252').txt"
+    if $S locate cp_k --installer cp_k.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
     # (and é written as one character and as e and a combining accent: one name on macOS alone,
     # which the packer says; installed here, both)
     rm -rf cp_nf cp_nf_s
@@ -1543,8 +1550,8 @@ python -c "
 import io, os, sys, tarfile, zipfile, gzip, lzma, bz2, zstandard, lz4.frame, brotli
 want = {}
 for root, dirs, files in os.walk('cz/src'):
-    for d in dirs: want[os.path.relpath(os.path.join(root, d), 'cz') + '/'] = b''
-    for f in files: want[os.path.relpath(os.path.join(root, f), 'cz')] = open(os.path.join(root, f), 'rb').read()
+    for d in dirs: want[os.path.relpath(os.path.join(root, d), 'cz').replace(os.sep, '/') + '/'] = b''
+    for f in files: want[os.path.relpath(os.path.join(root, f), 'cz').replace(os.sep, '/')] = open(os.path.join(root, f), 'rb').read()
 want['src/'] = b''
 def from_tar(b):
     got = {}

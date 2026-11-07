@@ -78,6 +78,7 @@ private:
     Screen screen_ = Screen::Main;
     bool settings_only_ = false;
     int row_ = 0;
+    int spoken_screen_ = -1; // the screen last read aloud on (speech.hpp): a new one is read from its first item
     bool done_ = false;
     Result result_ = Result::Quit;
     // An open drop-down list: which item, its highlighted entry and first entry shown.

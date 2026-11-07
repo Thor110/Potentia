@@ -1194,6 +1194,7 @@ void Menu::adjust(int dir, int step)
         {
             app_->item_memory_pct = std::clamp(app_->item_memory_pct + dir * (step == 0 ? 25 : 5 * step), 5, 90);
             set_item_memory_share(app_->item_memory_pct);
+            apply_widen_weights(*app_); // (auto weighs against the new share)
             save_app();
         }
         break;

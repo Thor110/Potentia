@@ -736,6 +736,18 @@ int run(const Args& a)
         std::cout << "wrote " << a.get("write-settings") << "\n";
         return 0;
     }
+    // Create .sieve on several files chosen at once: gathered before anything starts, so the
+    // programs Explorer starts for the others hand their paths over and close without a window, a
+    // renderer or a sound player each (the review of 6 November 2026), and the first is listening
+    // at once. (Below, at --create, the rest.)
+    std::optional<std::vector<std::string>> create_gathered;
+    if (a.has("create") && !a.has("out"))
+    {
+        std::string what = a.get("create");
+        while (what.size() > 1 && (what.back() == '/' || what.back() == '\\')) what.pop_back();
+        create_gathered = sieve::cli::gather_chosen(what, "create");
+        if (!create_gathered) return 0; // (handed to the first, which makes the .sieve)
+    }
     // --metrics FILE: the metrics list (IDEAS §19.12), counted without a window or a display.
     const bool metrics = a.has("metrics");
     if (!metrics && !SDL_Init(SDL_INIT_VIDEO)) throw std::runtime_error(std::string("SDL_Init failed: ") + SDL_GetError());
@@ -776,9 +788,6 @@ int run(const Args& a)
     sieve::cli::set_draft(app.locator_draft);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = 1;
-    if (app.widen_weights == 2)
-        sieve::llm::set_widen_weights_auto(uint64_t(std::max(0, SDL_GetSystemRAM())) * (uint64_t(1) << 20) / 100 * uint64_t(app.item_memory_pct));
-    else sieve::llm::set_widen_weights(app.widen_weights == 1);
     set_read_aloud(app.read_aloud); // the menus read aloud ([controls] read_aloud; speech.hpp)
     // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
     // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
@@ -792,6 +801,7 @@ int run(const Args& a)
     set_time_budget(app.unit_time_ms);
     // The items around you (ITEM MEMORY): what the hallway's cache of them may take.
     if (a.has("item-memory")) app.item_memory_pct = std::clamp(int(a.get_positive("item-memory", 25)), 5, 90);
+    apply_widen_weights(app); // (after --item-memory: auto weighs against its share)
     set_item_memory_share(app.item_memory_pct);
     // The view distance (Settings > Graphics): the rooms drawn and kept, and those with pictures.
     if (a.has("view-rooms")) app.view_rooms = std::clamp(int(a.get_positive("view-rooms", 7)), 2, 64);
@@ -1353,14 +1363,9 @@ int run(const Args& a)
         // names one thing.)
         std::vector<std::string> only;
         std::string folder = what;
-        if (!a.has("out"))
+        if (create_gathered) // (gathered at the start, above)
         {
-            const auto gathered = sieve::cli::gather_chosen(what);
-            if (!gathered) // (handed to the first, which makes the .sieve)
-            {
-                finish();
-                return 0;
-            }
+            const auto& gathered = create_gathered;
             if (gathered->size() > 1)
             {
                 folder = utf8_of(std::filesystem::path(path_of_utf8(what)).parent_path());

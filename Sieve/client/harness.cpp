@@ -878,6 +878,7 @@ void Harness::open_pictures(bool melodies)
         const sieve::cli::FilterConfig cfg = sieve::cli::FilterConfig::load(pic_source_.filters);
         if (melodies)
         {
+            r.line = "audio"; // (first: a line that cannot be made still shows a melody model's page)
             // Melodies of the audio line, as the setup menu has it (notes104 or notes2): a unit of
             // so many events, all voices, as a picture one cell high (sieve diffuse --line audio).
             sieve::cli::Args la;

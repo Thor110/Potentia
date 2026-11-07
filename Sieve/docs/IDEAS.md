@@ -6467,7 +6467,9 @@ should take on:
   are not refused. Unicode simple case folding with NFC, or refusing such names, in the packer's
   warning and the installer's refusal alike. (*Built:* the reserved names on 5 November (0.13.78); and on 6
   November every letter Unicode gives a case folded as Windows folds it, one to one
-  (tools/cli/case_fold_table.hpp, made by tools/gen_case_fold.py from Unicode 15.1: 1,455 pairs),
+  (tools/cli/case_fold_table.hpp, made by tools/gen_case_fold.py from Unicode 15.1: 1,455 pairs;
+  1,423 after the review the same day, each letter to its uppercase as NTFS compares them, which keeps
+  apart 32 pairs the lowercase of the uppercase had joined, such as the Kelvin sign and K),
   so É.txt and é.txt, Σοφία and σοφία, are one name to the packer's warning and the installer's
   refusal, while straße and STRASSE stay two, as on Windows. And the same evening, a letter written
   as one character and as a letter and its combining accents (NFC and NFD): one name on macOS alone

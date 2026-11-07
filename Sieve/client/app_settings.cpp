@@ -11,6 +11,9 @@
 
 #include "cli/dictionaries.hpp"
 #include "cli/draft.hpp"
+#include "sieve/llm.hpp"
+
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -396,6 +399,13 @@ void apply_video(SDL_Window* window, const AppSettings& s)
         SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     }
     SDL_SyncWindow(window);
+}
+
+void apply_widen_weights(const AppSettings& s)
+{
+    if (s.widen_weights == 2)
+        sieve::llm::set_widen_weights_auto(uint64_t(std::max(0, SDL_GetSystemRAM())) * (uint64_t(1) << 20) / 100 * uint64_t(s.item_memory_pct));
+    else sieve::llm::set_widen_weights(s.widen_weights == 1);
 }
 
 } // namespace hallway
