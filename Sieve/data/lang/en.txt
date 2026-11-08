@@ -268,8 +268,9 @@ setup.go_anyway = Enter again to go in anyway: slower than this machine's budget
 setup.over_budget = The {0} line is larger than this machine can open. Reduce it, or press FIND MY LIMITS.
 setup.footer1 = Up/Down choose   Left/Right change (Shift x10, Ctrl x100)   PgUp/PgDn double/halve   Tab the settings
 setup.panel_tab = SETTINGS
-setup.footer2 = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in   Esc main menu
-setup.footer2.in_game = type to edit the key   F or the magnifying glass: a line's filters   Enter walk in anew   Esc back to the hallway
+setup.footer2 = F or the magnifying glass: a line's filters   Enter walk in   Esc main menu
+setup.footer2.key = type to change the key (it shuffles every line's scrambled order: another key, other neighbours)
+setup.footer2.in_game = F or the magnifying glass: a line's filters   Enter walk in anew   Esc back to the hallway
 setup.too_large = A line is too large for this machine to open (one address would need over a gigabyte).
 
 ; ---- the map

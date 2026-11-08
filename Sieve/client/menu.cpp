@@ -1578,6 +1578,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     default: break;
     }
+    // On the key's row a letter, a digit, - or _ is typing (taken as text above), never a shortcut:
+    // A would open the alphabets, F the filters (Edward, 9 November 2026). Ctrl and Alt still act.
+    if (row_ == 2 && !(e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT)) &&
+        ((e.key.key >= SDLK_A && e.key.key <= SDLK_Z) || (e.key.key >= SDLK_0 && e.key.key <= SDLK_9) || e.key.key == SDLK_MINUS))
+        return;
     switch (e.key.key)
     {
     case SDLK_TAB: toggle_panel(); break;
@@ -1596,8 +1601,8 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         break;
     case SDLK_X:
         // Optimise all dimensions, as X in a filters window does (and, after the filter memory has
-        // changed, with it). Not on the key's row, where X is a letter of the key.
-        if (row_ != 2) toggle_all_filters(ToggleScope::EveryLine);
+        // changed, with it). (Not on the key's row, where X is a letter of the key: above.)
+        toggle_all_filters(ToggleScope::EveryLine);
         break;
     case SDLK_F:
     {
@@ -2070,7 +2075,8 @@ void Menu::render()
         for (size_t k = 0; k < letters.size(); ++k) text(r_, panel_tab_.x + (panel_tab_.w - 8) / 2, panel_tab_.y + 4 + float(k) * 12, letters[k], 1, grey);
     }
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
-    text(r_, 20, H - 26, tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
+    // (typing edits the key only while its row is chosen: the hint is shown only then)
+    text(r_, 20, H - 26, (row_ == 2 ? tr("setup.footer2.key") + "   " : std::string()) + tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
     const SDL_Color red{255, 80, 80, 255};
     if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
     else if (go_anyway_armed_) text(r_, 20, H - 54, tr("setup.go_anyway"), 1, SDL_Color{255, 200, 80, 255}); // in place of why
