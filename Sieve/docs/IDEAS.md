@@ -6784,3 +6784,37 @@ is charged; shorter chunks lose; noise never hits. The same structure taken with
 leftover byte coded given the one before, saves 2.2 to 2.7%. Verdict: no table of roundings; a rope
 version coding by the byte before is worth building (a new format version).
 
+**19.128 Noise run through a file, its matches clipped out (Edward, 8 November 2026; measured the
+same day).** His idea: noise from a seed propagated through the file, the bytes it matches counted,
+every seed tried (and the noise propagated again), the most matches kept; the matching bytes clipped
+out and put back when decoding. *Measured* (`tools/bench/noise_match.py`): on 65,536 bytes of a WAV
+(WoWRevived's Music-Martian/03), a seed matches 256 bytes on average; the best of 65,536 seeds
+matched 341. Clipping them saves 2,728 bits; saying where they were costs 3,078 bits (the matched
+places as a bitmap, at its entropy) and 16 for the seed: 366 bits lost. On random bytes the same:
+the best seed matched 336, and 368 bits were lost. Why: noise matches a byte one time in 256 whatever
+the file is, so which bytes it matched is itself as much to write down as the bytes; more seeds find
+a few more matches, about as many as the seed's own bits pay for. Verdict: it cannot gain on any
+file; what the rope does instead is predict the bytes from the file's own neighbours, where a match
+is likely, not one in 256.
+
+**19.129 The rope's search on every thread (Edward, 8 November 2026).** His idea: run a rope pass
+on each thread, tallying the bytes each wave would leave, and keep the best. The search now tries
+one wave after another for a file (files are searched several at once); the waves of one file could
+be tried on the threads together, each reading the same bytes and counting its own leftovers. Since
+the memory pass (results/making-memory-2026-11-07.md) a wave's estimate holds only its counts, a few
+MB, not a copy of the file, so the threads need not hold the file more than once. It would shorten a
+large file's search, where one file is searched alone (MAPS.WoW's about 1,020 s); the result would be
+the same, as the waves and their order are. Not built.
+
+**19.130 Notes (Edward, 8 November 2026).**
+- **The completion estimate on the main menu looks out of place** where it is, between the title and
+  the items; it may move (beside the items, under them, or a page of its own).
+- **Optimise Search and the three priorities.** Optimise Search chooses, for each file by its kind,
+  how hard to search (Try every way or not), from what was measured on each kind: it guides each data
+  type to its best path (MANUAL, the File Locator). Size, Balanced and Speed say what "best" is. The
+  two are different questions (how much to search; what to keep), so Optimise Search should stay,
+  but be guided by the priority asked: a route table per data type and per priority, three paths a
+  kind, each measured (Speed: no mixing, so Try every way's mixing part changes nothing; Balanced:
+  mixing searched only where its saving could clear Balanced's bar). Today the table was measured for
+  size, and Balanced and Speed reuse it with their own limits on what mixing may take. Not built.
+

@@ -108,6 +108,22 @@ diagonal), and codes it in 832,146 bytes, where LZMA2 takes 865,400. As colour p
 `L8 W3 S1 P3 K0` (each colour from the one beside it and the same colour a pixel before) codes it in
 494,774 against LZMA2's 623,717 (SPECIFICATIONS, rope-wave-v1).
 
+**The WAVs' recipe, in full.** Every WAV the rope won in section 4 but one took `L16 W2 S1 P3 T1`
+(the other `L32 W1 S1 P2 K1`), and the rope alone carries it: its code is a stream of its own, kept
+as it is, with no LZMA2 over it. Read as 16-bit values in lines of two, a line is one stereo frame,
+left then right:
+- the left sample has no value before it in its line, so it is predicted from the line above, the
+  left sample of the frame before;
+- the right sample is predicted from before + above − diagonal: the left sample of this frame, plus
+  the right of the frame before, less the left of the frame before. That is the right channel's last
+  value moved by as much as the left channel just moved: the two channels predict each other;
+- `T1` splits what is left by how busy each sample's neighbourhood is (|a − c| + |b − c|, in eight
+  bands, quiet passages apart from loud ones), and each band's two byte planes get a table of their
+  own, coded by rANS.
+
+The search found this itself: it tried the value widths, line widths from the file's repeats (2 for
+stereo), every predictor and step, and kept the smallest.
+
 **Its relatives.** Predicting from neighbours and coding the residual is the family of PNG's
 filters, the gradient and median predictors of LOCO-I / JPEG-LS, FLAC's fixed predictors and
 7-Zip's Delta filter; finding a record's width echoes PAQ's record model; the kept values with
@@ -136,6 +152,13 @@ The rope's code is 83.1% of LZMA2's on them, and it decodes at near LZMA2's spee
 installed in 30.1 s (Proof/STATISTICS.md). Silesia's `mr`, a medical scan: 2,314,195 bytes by the
 rope against LZMA2's 2,735,555 (METHODS §3). A sine of 16-bit values with noise, 6,003 bytes: 4,583
 against LZMA2's 5,324.
+
+**Two ideas measured against it** (IDEAS §19.127, §19.128). Rounding a file's place and keeping
+the rounding in a table of common roundings: the leftovers repeat across files only as silence and
+runs of small values, and coding each leftover byte given the one before does better with no table
+(2.2 to 2.7% of these WAVs, a gain the rope does not yet take). Noise run through a file, its
+matching bytes clipped out: a seed matches one byte in 256 whatever the file, and saying which costs
+more than clipping them saves, on the WAV as on random bytes.
 
 **Where it loses.** Text is not smooth: on prose and code the rope's line wave comes to 1.74 to 2.54
 times LZMA2's, and Sieve does not search it there (results/weighing-order-2026-11-02.md). On
