@@ -555,11 +555,9 @@ iostream::iostream( void* src, int srctype, int srcsize, int iomode )
 	// don't free memory when reading - this will be useful if switching occurs
 	free_mem_sw = false;
 	
-	// set binary mode for streams
-	#if defined( _WIN32 )				
-		setmode( fileno( stdin ), O_BINARY );
-		setmode( fileno( stdout ), O_BINARY );
-	#endif
+	// (Sieve, 9 November 2026: packMP3 set stdin and stdout to binary here, for its own program; in
+	// Sieve, which gives it memory alone, that would change Sieve's own console, and MSVC has no
+	// setmode by that name: left out)
 	
 	// open file/mem/stream
 	switch ( srct )
