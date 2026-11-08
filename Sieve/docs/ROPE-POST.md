@@ -178,7 +178,9 @@ each block from up to 32 values back and codes what is left by Rice codes; the r
 one or two values back and code byte planes. Measured on 8 MB of three of the WAVs, a wave fitted to
 each block from 8 values back, with the leftovers coded by bit length, takes 12.88 to 36.19% off the
 rope's recipe and comes within 4.4 to 7.0% of FLAC (results/wave-paths-2026-11-08.md). The rope's
-win on sound is against general compressors, not against an audio codec.
+win on sound is against general compressors, not against an audio codec. Nor is it only electronic
+music: on 8 MB of jazz the rope is 17.6% under LZMA2, on a 24-bit orchestra 2.9%, and on speech 2.4%
+over it; FLAC is smaller than all of Sieve's ways on each (same file).
 
 **Three ideas measured against it** (IDEAS §19.127, §19.128, §19.131). Rounding a file's place and keeping
 the rounding in a table of common roundings: the leftovers repeat across files only as silence and

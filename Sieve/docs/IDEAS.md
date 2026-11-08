@@ -6859,4 +6859,13 @@ FLAC). The 5/3 wavelet won only on `x-ray` (15.69%). FLAC level 12 on the seven 
 224,783,126 bytes against the rope's 276,730,651 (81.2%). Verdict: no paths or seeds; the rope's audio
 gains most from a fitted wave and bit-length coding (FLAC's own methods), which would bring it near
 FLAC; a way that codes sound as FLAC does is the option to weigh. Not built.
+*Other sound* (the same file): 8 MB each of speech, jazz and a 24-bit orchestra from archive.org,
+made by the packer and by FLAC. The rope beats LZMA2 on the music (jazz 17.6%, the orchestra 2.9%)
+and loses on speech (2.4%); mixing beat the rope on all; FLAC was 20.0 to 54.5% smaller than the
+packer's choice on each. So the rope's sound is not only electronic music, but FLAC is the bar.
+*Edward's questions (8 November 2026), for later:* (a) a FLAC way, WAVs carried as FLAC codes them
+inside the `.sieve` and installed as the same WAV, every byte (libFLAC is BSD-licensed and can be
+fetched as the other libraries are); (b) as an opt-in repack (as permanent repacks PNGs), WAVs
+installed as `.flac` files; (c) a film's sound taken apart from its pictures: only worth it where the
+sound is plain samples, as most films' sound is already compressed (AAC, MP3, Opus).
 

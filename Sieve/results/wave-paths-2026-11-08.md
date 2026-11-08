@@ -99,3 +99,32 @@ same samples): 224,783,126 bytes against the rope's 276,730,651, 81.2% of it; pe
 gain most from a wave fitted to each block (FLAC's linear prediction, which is prior art) and from
 coding the leftovers by bit length; with those it would be near FLAC, not past it. A way that codes
 sound as FLAC does is the option to weigh against it (IDEAS §19.132). Not built.
+
+## Other sound: speech, jazz and an orchestra (added the same day)
+
+Is it only electronic music? 8 MB from the middle of three recordings on archive.org, each made by
+the packer as it is now (`sieve locate FOLDER --installer`, the WAV alone in its folder; each way's
+size from `--progress`) and by FLAC level 12 (each decoded back to the same samples):
+- speech: an interview, "Carl Rosen on the legacy of UE Hall" (`CarlRosenInterviewOnly.wav`, 16-bit
+  stereo, 44.1 kHz);
+- jazz: "Denny Zeitlin Odyssey mix" (16-bit stereo, 44.1 kHz);
+- orchestra: Musopen's premix of Brahms's Symphony No. 1, left channel (24-bit mono, 96 kHz);
+- and, for comparison, the same 8 MB of Music-Martian/03 as above.
+
+| Piece | LZMA2 | The rope (its wave) | Taken by the packer | Wave fitted, 8 back | FLAC |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| Martian/03 (electronic) | 6,211,704 | 4,781,958 (`L32 W1 S1 P2 K1`) | 4,473,548 (mixing) | 3,032,515 | 2,894,624 |
+| Speech | 3,700,929 | 3,788,488 (`L16 W1 S1 P2 K0`) | 3,356,322 (mixing) | 2,684,089 | 2,463,881 |
+| Jazz | 7,164,309 | 5,903,111 (`L32 W1 S1 P2 K0`) | 5,864,151 (mixing) | 5,029,644 | 4,885,475 |
+| Orchestra, 24-bit | 6,746,797 | 6,551,902 (`L8 W6758 S3 P1 K0`) | 5,657,580 (mixing) | (not run: 24-bit) | 4,402,356 |
+
+(Bytes for 8,000,078-byte WAVs, the orchestra's 8,000,100. The fitted wave is the estimate of
+`wave_fitted.py`, not a made file.)
+
+- The rope beats LZMA2 on the music (electronic 23.0%, jazz 17.6%, the orchestra 2.9% smaller) and
+  loses on speech (2.4% larger): it is not only electronic music, but it needs a steady signal.
+- On these 8 MB pieces mixing beats the rope on all four, and FLAC beats both: the packer's choice is
+  20 to 54% larger than FLAC (Martian/03 54.5%, speech 36.2%, jazz 20.0%, the orchestra 28.5%).
+- The rope reads values of 8, 16 or 32 bits, so 24-bit sound is read as bytes in rows; it gains
+  little there.
+- The fitted wave comes within 3.0% (jazz) to 8.9% (speech) of FLAC.
