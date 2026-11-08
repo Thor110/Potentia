@@ -1,17 +1,13 @@
-# IDEAS 19.128 to 19.130, and the WAVs' recipe (8 November 2026)
+# Changes (commit fb47b03, 8 November 2026)
 
-One commit on top of 54e10f0 (the roundings zip): ff449d7.
+Replace these files in the repository (paths from its root):
 
-- **IDEAS §19.128, noise run through a file, measured:** the best of 65,536 seeds over 64 KB of a
-  WAV matched 341 bytes, against 256 on average. Clipping them saves 2,728 bits; saying where they
-  were costs 3,094. On random bytes it's the same, so it can't gain on any file. The script is
-  tools/bench/noise_match.py.
-- **IDEAS §19.129:** the rope's waves of one file tried on every thread. This is cheap in memory
-  since the memory pass. Not built.
-- **IDEAS §19.130, Edward's notes:**
-  - the main menu's estimate looks out of place;
-  - Optimise Search stays, guided by the priority: a path per data type and per priority. Not built.
-- **docs/ROPE-POST.md:**
-  - the WAVs' recipe in full (`L16 W2 S1 P3 T1`: the rope alone, the two channels predicting each
-    other, quiet and loud passages coded apart);
-  - the two ideas measured against it.
+- Sieve/tools/bench/trim_passes.py (new): measures trimming what the wave predicts exactly.
+- Sieve/results/rope-trim-2026-11-08.md (new): the results.
+- Sieve/docs/IDEAS.md: §19.131 added.
+- Sieve/docs/ROPE-POST.md: the trimming result in section 4; "Its relatives" in section 3 names the
+  closer relatives a prior-art search found (CALIC, WebP lossless, MPEG-4 ALS, ZPAQ) and narrows what
+  the post claims as new.
+
+Trimming, in short: one trim takes 0.15 to 0.69% off the rope's T1 code on three WAVs and x-ray, and
+4.36% on mr; a second pass or a noise pass loses. Not built.

@@ -29,8 +29,9 @@ The steps of the design, in the order Edward took them:
    what is left, the survivors, is counted and ranked exactly, so a survivor is named by its number
    among them.
 5. **Filtering across the dimensions.** A file that is exactly an item of another line (a page as
-   its text, a picture as its PNG) is named on that line, and each line's filters can draw on the
-   others.
+   its text, a picture as its PNG) is named on that line, and a line's filters can set aside what
+   belongs to another line (`not-other-line-v1` on the pages line: a melody or a mesh written out as
+   text; `not-an-item-v1` on the binary line: a file that is exactly another line's item).
 6. **And then the finding that this saves almost nothing.** Section 2.
 
 None of this is new as mathematics: naming a file by its place among all files of its kind is
@@ -91,15 +92,19 @@ as a short text, for example `L16 W2 S1 P3 K0 T1`:
 - `P`: the prediction: none (the rope alone); the value before; the mean of before and above;
   before + above − diagonal; or (P4) the median edge detector of LOCO-I, as JPEG-LS uses it.
 - `K`: keep. Values at the start, a third, the centre, two thirds and the end are kept as they are,
-  and a straight rope is drawn between them: what is predicted is the difference from that line.
+  and a straight rope is drawn between them. With `P0` the rope is the prediction; with a
+  neighbour predictor it stands in only where a value has no neighbour.
 - Columns (`C1`, `C2`), groups of columns sharing a table (`G1`), the byte above as context (`A1`),
-  and (`T1`) the leftovers split by how busy each value's neighbourhood is (|a − c| + |b − c|, in
-  eight bands), each band with its own table.
+  and (`T1`) the leftovers split by how busy each value's neighbourhood is (|a − c| + |b − c| against
+  the bounds 2 to 128: eight bands, and a ninth for a value with no such neighbours), each band with
+  its own tables.
 
 What is left, `(value − prediction) mod 2^L`, is cut into byte planes and coded by rANS, one table
-for each plane (or column, group or band). **The search** (`rope_search`) tries the parameters in a
-fixed order (no wave; the value before at each width; the line widths found from the file's own
-repeats; every phase and step; columns; keep) and keeps the smallest estimated code. Decoding is one
+for each plane (or column, group or band). Taken mod 2^L, a signed sample read as unsigned costs
+nothing where it wraps. **The search** (`rope_search`) tries the parameters in a fixed order (no wave;
+the value before, at each value length; then for each value length, lines of one value and up to four
+widths found from the file's own repeats, with every phase and step, and columns; last, the best with
+keep) and keeps the smallest estimated code. Decoding is one
 pass: predict, add the leftover, next.
 
 **An example.** The Vitruvian picture as 1,233,700 bytes of grey pixels: the search finds
@@ -108,8 +113,9 @@ diagonal), and codes it in 832,146 bytes, where LZMA2 takes 865,400. As colour p
 `L8 W3 S1 P3 K0` (each colour from the one beside it and the same colour a pixel before) codes it in
 494,774 against LZMA2's 623,717 (SPECIFICATIONS, rope-wave-v1).
 
-**The WAVs' recipe, in full.** Every WAV the rope won in section 4 but one took `L16 W2 S1 P3 T1`
-(the other `L32 W1 S1 P2 K1`), and the rope alone carries it: its code is a stream of its own, kept
+**The WAVs' recipe, in full.** Six of the seven WAVs the rope won in section 4 took `L16 W2 S1 P3`
+with `T1` (two of them with keep, `K1`), the seventh `L32 W1 S1 P2 K1`; and the rope alone carries
+each: its code is a stream of its own, kept
 as it is, with no LZMA2 over it. Read as 16-bit values in lines of two, a line is one stereo frame,
 left then right:
 - the left sample has no value before it in its line, so it is predicted from the line above, the
@@ -117,19 +123,30 @@ left then right:
 - the right sample is predicted from before + above − diagonal: the left sample of this frame, plus
   the right of the frame before, less the left of the frame before. That is the right channel's last
   value moved by as much as the left channel just moved: the two channels predict each other;
-- `T1` splits what is left by how busy each sample's neighbourhood is (|a − c| + |b − c|, in eight
-  bands, quiet passages apart from loud ones), and each band's two byte planes get a table of their
-  own, coded by rANS.
+- `T1` splits what is left by how busy each sample's neighbourhood is (|a − c| + |b − c|, nine bands,
+  quiet passages apart from loud ones), and each band's two byte planes get a table of their own,
+  coded by rANS.
 
 The search found this itself: it tried the value widths, line widths from the file's repeats (2 for
 stereo), every predictor and step, and kept the smallest.
 
-**Its relatives.** Predicting from neighbours and coding the residual is the family of PNG's
-filters, the gradient and median predictors of LOCO-I / JPEG-LS, FLAC's fixed predictors and
-7-Zip's Delta filter; finding a record's width echoes PAQ's record model; the kept values with
-straight lines between them are piecewise-linear detrending. What is Sieve's own: these held in one
-searched parameter language, chosen per file by the search, with the anchors-and-rope baseline, and
-weighed file by file against LZMA2, pieces and mixing, so it is used only where it wins.
+**Its relatives.** Each part of the rope has a relative, some close:
+- predicting from neighbours and coding the residual: PNG's filters, the gradient and median
+  predictors of LOCO-I / JPEG-LS, FLAC's fixed predictors, 7-Zip's Delta filter;
+- `T1`'s bands: CALIC (Wu and Memon, 1997) sorts its residuals by an estimate of local error energy
+  built from gradients, cut into eight contexts; JPEG-LS quantises local gradients into contexts too;
+- the encoder choosing a predictor and writing its choice in the file: WebP lossless, whose encoder
+  picks one of 14 predictors for each block;
+- one channel predicted from the other: FLAC's side channel and MPEG-4 ALS's inter-channel prediction;
+- the file carrying what its decoder must do: ZPAQ, whose archives hold their decoder as a program;
+- finding a record's width: PAQ's record model;
+- the kept values with straight lines between them: piecewise-linear detrending.
+
+No part is new on its own. What we have not found elsewhere is the whole: these held in one short
+parameter text, searched per file over value width, line width, step and predictor, with the
+anchors-and-rope baseline, and weighed file by file against LZMA2, pieces and mixing, so that it is
+used only where it wins. (Searched on 8 November 2026: the codecs above, encode.su, and tools built
+on the Library of Babel; a closer relative may exist that we did not find.)
 
 ## 4. What it does, measured
 
@@ -147,18 +164,23 @@ seven 16-bit stereo WAVs, searched by the rope, each against LZMA2's estimate of
 | Music-Martian/05 Track05.wav | 54,869,852 | 49,639,244 (90.5%) | 41,564,208 (75.8%) | `L16 W2 S1 P3 K1 T1` |
 | **All seven** | **375,901,652** | **332,949,383 (88.6%)** | **276,730,651 (73.6%)** | |
 
-The rope's code is 83.1% of LZMA2's on them, and it decodes at near LZMA2's speed: the whole release
-(1,426,355,971 bytes) made with nothing mixed came to 1,016,369,457 bytes, 5.34% under 7z, and
-installed in 30.1 s (Proof/STATISTICS.md). Silesia's `mr`, a medical scan: 2,314,195 bytes by the
+The rope's code is 83.1% of LZMA2's on them, and it decodes in one pass: the whole release
+(1,426,355,971 bytes) made with nothing mixed (v32, Prioritise Decoding Speed, on Edward's machine;
+the WAVs by the rope, 73.5% of them) came to 1,016,369,457 bytes, 5.34% under 7z, and installed in
+30.1 s, against 210.3 s made for size with mixing (Proof/STATISTICS.md). Silesia's `mr`, a medical scan: 2,314,195 bytes by the
 rope against LZMA2's 2,735,555 (METHODS §3). A sine of 16-bit values with noise, 6,003 bytes: 4,583
 against LZMA2's 5,324.
 
-**Two ideas measured against it** (IDEAS §19.127, §19.128). Rounding a file's place and keeping
+**Three ideas measured against it** (IDEAS §19.127, §19.128, §19.131). Rounding a file's place and keeping
 the rounding in a table of common roundings: the leftovers repeat across files only as silence and
 runs of small values, and coding each leftover byte given the one before does better with no table
 (2.2 to 2.7% of these WAVs, a gain the rope does not yet take). Noise run through a file, its
 matching bytes clipped out: a seed matches one byte in 256 whatever the file, and saying which costs
-more than clipping them saves, on the WAV as on random bytes.
+more than clipping them saves, on the WAV as on random bytes. Trimming out the values the wave
+predicts exactly, and putting them back in order when decoding: the decoder needs a yes/no for
+each value, and coded given the yes/nos before them and the value's band they take 0.15 to 0.69% off
+the rope's `T1` code on three WAVs and x-ray, and 4.36% on `mr`, where a third of the values are
+exact and come in runs; a second pass or a noise pass loses (results/rope-trim-2026-11-08.md).
 
 **Where it loses.** Text is not smooth: on prose and code the rope's line wave comes to 1.74 to 2.54
 times LZMA2's, and Sieve does not search it there (results/weighing-order-2026-11-02.md). On
@@ -166,11 +188,12 @@ programs, a game's map, a tar of programs and screenshots, its test on a file's 
 to 3.71 times LZMA2's (results/rope-probe-2026-11-02.md). And the test can be wrong: the eighth WAV
 (Music-Martian/02, 57,339,452 bytes) came to 1.25 times LZMA2's on its first 256 KiB, so the rope
 was not searched on it, and it was mixed instead (43,716,129); the test is a shortcut, and that is
-its cost. With Try every way, the shortcut is off.
+its cost. With Try every way ticked itself, the shortcut is off (where Optimise Search turns Try
+every way on for a file, it stays).
 
-**What it costs.** The search: on MAPS.WoW (160,890,897 bytes) about 1,020 s, where LZMA2's estimate
-takes seconds (Proof/STATISTICS.md, MAPS.WoW). Decoding: one pass, near LZMA2's speed, against
-mixing's second or so a megabyte.
+**What it costs.** The search: on MAPS.WoW (160,890,897 bytes) about 1,020 s (Proof/STATISTICS.md,
+MAPS.WoW). Decoding: one pass, a prediction and a table lookup a value, against mixing's about 1.2 s a
+megabyte (results/balanced-2026-11-07.md).
 
 ## 5. To try it
 

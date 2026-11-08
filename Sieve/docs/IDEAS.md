@@ -6818,3 +6818,19 @@ the same, as the waves and their order are. Not built.
   mixing searched only where its saving could clear Balanced's bar). Today the table was measured for
   size, and Balanced and Speed reuse it with their own limits on what mixing may take. Not built.
 
+**19.131 Trimming what the wave predicts exactly (Edward, 8 November 2026; measured the same day).**
+His idea: the values the wave predicts exactly are trimmed out and the file shrinks; decoding runs
+the wave again in order and puts each back where it came from; passes may repeat over what is left,
+by a second wave or by noise from a seed. To put them back the decoder needs a yes/no for every
+value, so a trim costs those plus the kept leftovers. *Measured* (results/rope-trim-2026-11-08.md,
+`tools/bench/trim_passes.py`, every variant costed by one adaptive coder): against the bands the WAVs'
+recipe uses (`T1`), one trim, its yes/nos coded given the eight before and the band, saves 0.31 to
+0.69% on three WAVs, 0.15% on x-ray and 4.36% on `mr` (a third of whose values the wave predicts
+exactly, in runs). It adds to order-1 coding of the planes (against order 0: trim + order 1, 1.52 to
+3.70% off the WAVs; order 1 alone 0.88 to 2.60%). A second wave over the kept values loses 5 to 7%
+(they sit apart in the file), and a noise pass loses 27 to 116% (noise matches one 16-bit value in
+65,536 and turns the kept leftovers into noise). The control gains nothing. By its cost the trim is
+a flag per value coded in context, as JPEG-LS's run mode and the significance flags of H.264 and
+HEVC are, so it is not new as a method. Verdict: one pass, with the order-1 rope if that is built;
+no second or noise pass. Not built.
+
