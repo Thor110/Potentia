@@ -6796,6 +6796,14 @@ the file is, so which bytes it matched is itself as much to write down as the by
 a few more matches, about as many as the seed's own bits pay for. Verdict: it cannot gain on any
 file; what the rope does instead is predict the bytes from the file's own neighbours, where a match
 is likely, not one in 256.
+*More seeds* (Edward, 8 November 2026; `tools/bench/noise_seeds.c`, the best seed at every power of
+two, its saving under the block's own byte table, its places as a bitmap at its entropy, and its own
+bits). On 4,096 bytes of Music-Martian/03, up to 2^28 (268 million) seeds: the best matched 30 bytes
+at 2^8 seeds and 42 at 2^28, and lost 33 to 79 bits at every count. On 4,096 random bytes, 26 to 44
+matches, 25 to 32 bits lost. On 65,536 bytes up to 2^22 seeds: the WAV lost 891 to 1,055 bits,
+random bytes 370 to 374. Each doubling of the seeds finds about as many extra matches as its extra
+bit of seed pays for, so the loss stays where it is however many seeds are tried. (The rope itself
+runs no noise: its `P` chooses the predictor.)
 
 **19.129 The rope's search on every thread (Edward, 8 November 2026).** His idea: run a rope pass
 on each thread, tallying the bytes each wave would leave, and keep the best. The search now tries
