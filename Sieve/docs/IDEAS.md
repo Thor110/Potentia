@@ -6773,3 +6773,14 @@ against. (Its licence, GPLv3, would combine with Sieve's AGPLv3.) Kept for:
   under 400 MB. The ideas in order: a model of x86 instructions, text by dictionary, more SSE layers.
   *Built since (7 November 2026), the first:* v34's `E1`, the x86 instruction model: eleven programs
   4.0% to 7.9% smaller (results/x86-instructions-2026-11-07.md); `ls` 27% over cmix, from 36%.
+
+**19.127 Rounding a file's place, with a table of common roundings (Edward, 7 November 2026; measured
+8 November).** His idea: round a place to something short and keep what the rounding loses in a
+lookup table, or tables of tables, of common roundings shipped as a setting; or round with
+high-entropy noise. *Measured* (results/rope-roundings-2026-11-08.md): what a rounding would have to
+restore is the rope's leftovers, and across files they repeat only as silence and runs of small
+values. A table of 16-byte chunks saves 1.3 to 1.9% of three WAVs before its own size (about 200 MB)
+is charged; shorter chunks lose; noise never hits. The same structure taken without a table, each
+leftover byte coded given the one before, saves 2.2 to 2.7%. Verdict: no table of roundings; a rope
+version coding by the byte before is worth building (a new format version).
+
