@@ -58,6 +58,11 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s);
 // How long walking 10^log10_units units at one a second would take: "~10^115.4 years", "3 years",
 // "40 seconds"; for the main menu's estimate and the setup menu's survivors.
 std::string walk_time_text(double log10_units);
+std::string walk_time_short(double log10_units); // the same in a few characters, for the map: "~10^115y"
+// Each line's size and the time to walk it at one unit a second, binary first then the doors in
+// order: (line, "BINARY  title*files<=32B = ~10^122.9  ->  ~10^115.4 years"). Shown under each
+// line in the setup menu's map (until 9 November 2026, on the main menu), printed by --menu shots.
+std::vector<std::pair<int, std::string>> walk_estimate_lines(const Settings& s);
 
 // The view distance (Settings > Graphics): the tiles drawn and kept in the item cache either side
 // of the one you are in, as many behind as ahead, and the rooms either side of yours whose items

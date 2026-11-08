@@ -997,9 +997,10 @@ $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst 
 # The catalogue (DO: CATALOGUE, Left from ENCRYPT): the recipes counted as sieve cipher --catalogue
 # counts them, and the opening recipe's two layers placed among them.
 $H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | tr -d '\r' | q "^cipher: the recipe has 2 layer(s): one of the recipes of its depth, named by 260 bits$"
-# The main menu's completion estimate (IDEAS §19.49): a line for each of the eleven dimensions,
-# binary first, each with its size and the time to walk it at one a second.
-$H --main-menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
+# The completion estimate (IDEAS §19.49; the setup menu's map since 9 November 2026, the main menu's
+# before): a line for each of the eleven dimensions, binary first, each with its size and the time to
+# walk it at one a second.
+$H --menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
 test "$(grep -c '^estimate: ' main-estimate.txt)" = 11
 q "^estimate: BINARY  title\*files<=" main-estimate.txt
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"

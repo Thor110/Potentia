@@ -6877,3 +6877,32 @@ paths"): (a), as v34 draft's `flac` (results/flac-way-2026-11-08.md).* WoWRevive
 speed (48 s), each installed in about 7 s and given back byte for byte; the rope took 276,730,651.
 (b) and AIFF not yet.
 
+
+**19.133 Notes for the next stretch (Edward, 9 November 2026; noted, nothing built; to discuss
+before moving forward).**
+- *The ceiling (answered):* training-v3's top probability is 65,281/65,536, not 65,535 or 65,534. It
+  is not a rule of its own but what the floor leaves: the other 255 bytes each hold at least 1/65,536,
+  so one byte can have at most 65,536 − 255. (Q16's "1" is 65,536, not 65,535.) No measured run ever
+  gave one byte all of it, and the cap costs nothing apart from the floor; it only matters in a
+  saturated corpus.
+- *A larger model,* trained locally by Edward on a corpus of his choosing (§19.122's needs: the
+  floor, built; QK-norm; a measured curve for size against data).
+- *The training routine reading more kinds of file:* documents converted to text (PDF, HTML, Word,
+  e-books), and where it serves, pictures and sound converted to what a model of that kind reads
+  (the image line's pixels, the audio line's samples), each conversion recorded in the run so it
+  trains again the same.
+- *Wider arithmetic:* values are now 64-bit with 16 fractional bits (Q16), held to ±128; weights are
+  digits of 2 to 8 bits. A model "expanded or layered" to higher precision: wider fractions (Q32),
+  wider ranges, 128-bit sums (the update's product already is), perhaps BigUint where speed allows;
+  each a training version of its own, so recorded runs stay exact.
+- *A better interface* for training and model parameters (the harness's settings).
+- *A real model on the AI state space:* how near an exact integer interval of rotation comes to a
+  capable model, and the shortest address that names one: its data length, rotation, item,
+  dimension, filter settings, model parameters. A thought to test: a trained model's shortest exact
+  description may be its training run (recipe, corpus, order), which Sieve already records and
+  replays bit for bit, rather than its weights.
+- *Filtering the PCM audio line,* and the filters of every line improved where they can be.
+- *The main menu:* its readouts at the top are good but crowd it. *Done the same day:* they left
+  the main menu; each line's time to walk is now a figure under its column in Start Sieve's map
+  ("~10^115y"), with its size and bits, from the same settings (Edward: "just the start sieve menu
+  might be best ... it doesn't really need its own dedicated window").

@@ -776,7 +776,31 @@ std::string walk_time_text(double log10_units)
     return trf("main.est.seconds", {fixed(std::pow(10.0, std::max(0.0, log10_units)), 0)});
 }
 
+// The same, short enough for a column of the map: "~10^115y", "47y", "35s"; "-" where it cannot open.
+std::string walk_time_short(double log10_units)
+{
+    if (!std::isfinite(log10_units)) return "-";
+    const double log10_y = log10_units - std::log10(31556952.0);
+    if (log10_y >= 4) return "~10^" + fixed(log10_y, 0) + "y";
+    if (log10_y >= 0) return fixed(std::pow(10.0, log10_y), 0) + "y";
+    return fixed(std::pow(10.0, std::max(0.0, log10_units)), 0) + "s";
+}
+
 // (menu_ink(), the colour a line's name is written in on black: dimensions.hpp.)
+
+std::vector<std::pair<int, std::string>> walk_estimate_lines(const Settings& s)
+{
+    const auto sizes = line_sizes_of(s);
+    std::vector<std::pair<int, std::string>> out;
+    for (int k = 0; k < kLines; ++k)
+    {
+        const int i = k == 0 ? kBinaryLine : k - 1; // binary (the last door) first, then the doors in order
+        const LineSize& z = sizes[size_t(i)];
+        const std::string time = walk_time_text(std::isfinite(z.bits) ? z.bits * std::log10(2.0) : z.bits);
+        out.emplace_back(i, trf("main.est.line", {tr(kDimensions[i].theme.key), z.units, time}));
+    }
+    return out;
+}
 
 bool Menu::too_large() const
 {
@@ -2092,7 +2116,7 @@ void Menu::render()
     const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
-    const float label = map_y + 38, top = map_y + 136, bottom = H - 60, span = bottom - top, min_bar = 12;
+    const float label = map_y + 38, top = map_y + 148, bottom = H - 60, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, map_y, tr("map.title"), 1, white);
@@ -2133,6 +2157,8 @@ void Menu::render()
             text(r_, x, label + 46, clip(trf("map.bits", {fixed(z.bits, 0)})), 1, th.edge);
             text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, z.bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, th.edge);
             text(r_, x, label + 70, clip(z.padding ? trf("map.empty_slots", {std::to_string(z.padding)}) : tr("map.whole_tiles")), 1, th.edge);
+            // (walked at one unit a second: the main menu's estimate until 9 November 2026)
+            text(r_, x, label + 94, clip(walk_time_short(std::isfinite(z.bits) ? z.bits * std::log10(2.0) : z.bits)), 1, th.edge);
             if (z.bits > too_large_bits()) text(r_, x, label - 14, clip(tr("map.too_large")), 1, white);
             // Slow: a unit of it takes more than a quarter of the time allowed to open, measured here.
             else if (const Budget mb = machine_budget(); line_ms(i, mb) > mb.ms_per_unit_at_limit / 4) text(r_, x, label - 14, clip(tr("map.slow")), 1, grey);

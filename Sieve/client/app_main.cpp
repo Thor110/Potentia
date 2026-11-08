@@ -1234,7 +1234,6 @@ int run(const Args& a)
         mm.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "main menu: language " << language_code() << ", font " << font_name() << "\n";
-        for (const auto& [line, text] : mm.estimate_lines()) std::cout << "estimate: " << text << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
@@ -1256,6 +1255,7 @@ int run(const Args& a)
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
+        for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();

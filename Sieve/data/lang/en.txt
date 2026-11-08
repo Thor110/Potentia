@@ -14,13 +14,11 @@ language.name = English
 ; ---- main menu
 main.title = Potentia : Sieve : Gallery of Babel Dimensions
 main.subtitle = Every possible page, picture, melody, sound, film, book, track, movie, mesh, world, AI model and file, on one endless corridor of shelves.
-main.est.heading = Every unit of each line, walked at one a second, would take:
 main.est.line = {0}  {1}  ->  {2}
 main.est.years_power = ~10^{0} years
 main.est.years = {0} years
 main.est.seconds = {0} seconds
 main.est.cannot_open = (its units are too large to open)
-main.est.more = ... and {0} more dimensions (a taller window shows them)
 item.start = Start Sieve
 item.settings = Settings
 item.exit = Exit Sieve
@@ -275,7 +273,7 @@ setup.footer2.in_game = type to edit the key   F or the magnifying glass: a line
 setup.too_large = A line is too large for this machine to open (one address would need over a gigabyte).
 
 ; ---- the map
-map.title = MAP  (length = size in bits; one copy each)
+map.title = MAP  (length = size in bits; one copy each; y: years to walk every unit at one a second)
 map.scale = scale: the longest line fills the height ({0} bits)
 map.scale.broken = scale: {0} bits fill the height; a line far longer is drawn broken
 map.units = {0} units
