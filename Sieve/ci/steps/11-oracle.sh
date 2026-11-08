@@ -559,7 +559,7 @@ for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-
 # or the LZMA SDK (which it has not), it names as not made again, and so leaves the tree unchecked.
 python sieve_ref.py unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
 cmp a21/stored.zip a21_oracle/stored.zip
-[ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): " a21_oracle.txt)" -eq 5 ]
+[ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): " a21_oracle.txt)" -eq 5 ]
 $SI a21.sieve --to a21_si --yes > /dev/null
 diff -r a21_inst a21_si
 # v22 (25 October 2026): a RAR made again by the machine's own rar, where it gives the archive back
@@ -670,7 +670,7 @@ $S locate png25 --installer png25.sieve --items --optimise-archives --compressed
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
 diff -r png25 png25_inst
-python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): " | grep -q "^2$"
+python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): " | grep -q "^2$"
 $S locate png25 --installer png24.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v24 2>&1 | tr -d '\r' > png24.txt
 if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 # v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
@@ -1318,7 +1318,7 @@ diff -r j32 j32_inst
 $SI j32.sieve --to j32_si --yes > /dev/null
 diff -r j32 j32_si
 python sieve_ref.py unpack j32.sieve --to j32_oracle > j32o.txt
-[ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32o.txt)" -eq 7 ]
+[ "$(grep -c "^not made again by the oracle (.*brunsli or packMP3): .*\.jpg; " j32o.txt)" -eq 7 ]
 cmp j32/VAULT.md j32_oracle/VAULT.md
 $S locate j32 --v31 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
 if grep -q "sieve-manifest-v32\|^jpegs " j32v31.txt; then exit 1; fi
@@ -1334,7 +1334,7 @@ diff -r j32p_inst j32p_si
 [ "$(wc -c < j32p_inst/vitruvian-man.jpg)" -lt "$(wc -c < j32/vitruvian-man.jpg)" ]
 for f in audio book door filters picture-in-hand vitruvian; do cmp j32/$f.jpg j32p_inst/$f.jpg; done
 python sieve_ref.py unpack j32p.sieve --to j32p_oracle > j32po.txt
-[ "$(grep -c "^not made again by the oracle (.*brunsli): .*\.jpg; " j32po.txt)" -eq 7 ]
+[ "$(grep -c "^not made again by the oracle (.*brunsli or packMP3): .*\.jpg; " j32po.txt)" -eq 7 ]
 # v32, too: with permanent, a PNG installed as the same picture re-saved at its
 # smallest ("pngr <filter> <strategy> <split> <head size> <inner size>"), never as its rows alone.
 # Four of the repository's small PNGs (the oracle filters each row in Python, slowly): each
@@ -1671,6 +1671,29 @@ diff -r z34 z34_si
 python sieve_ref.py unpack z34.sieve --to z34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*records.bin"
 $S locate z34 --installer z34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > z34v33.txt
 if grep -q "^zlib " z34v33.txt; then exit 1; fi
+# MP3 (v34 draft, 8 November 2026, Edward: "lets focus on making the decoder safe for MP3"):
+# tests/mp3/tone.mp3 (two sine tones, LAME) carried as packMP3 codes it ("pmp <inner size>") and given
+# back byte for byte by Sieve and sieve-install; the oracle reads the listing and says it is not made
+# again by it (no packMP3); without the draft, not opened. Then packMP3's decoder given 2,000 damaged
+# forms of the MP3 (sieve_mp3_check, built with the tests): each refused or decoded, none ending the
+# program (it was made safe for damaged input: results/mp3-pmp-2026-11-08.md).
+rm -rf m34 m34_inst m34_si m34_oracle
+mkdir m34
+cp ../tests/mp3/tone.mp3 m34/
+$S locate m34 --installer m34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > m34.txt
+grep -q "^mp3       1 MP3(s) carried as packMP3 codes them" m34.txt
+grep -q "	pmp [0-9]* .*	tone.mp3$" m34.txt
+$S install m34.sieve --to m34_inst > /dev/null
+diff -r m34 m34_inst
+$SI m34.sieve --to m34_si --yes > /dev/null
+diff -r m34 m34_si
+python sieve_ref.py unpack m34.sieve --to m34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (.*packMP3): tone.mp3"
+$S locate m34 --installer m34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > m34v33.txt
+if grep -q "^mp3 \|	pmp " m34v33.txt; then exit 1; fi
+# (packMP3's decoder given 2,000 damaged forms of the MP3, where the build has the test program)
+if [ -x ../build/sieve_mp3_check ] || [ -x ../build/sieve_mp3_check.exe ]; then
+  ../build/sieve_mp3_check ../tests | tr -d '\r' | grep -q ", 0 failures$"
+fi
 # PCX pictures (v34 draft, 8 November 2026): written here by Pillow (RGB, grey with its palette after
 # the pixels, colour-mapped, and an odd width whose plane lines are padded to an even length), carried
 # as their pixels, planes interleaved ("pcx <skeleton size> <inner size>"), opened whatever they come

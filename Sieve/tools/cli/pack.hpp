@@ -105,6 +105,7 @@ struct PackReport
     size_t tiffs_opened = 0; // v34 draft: TIFFs as skeletons and what their strips hold
     size_t zlib_opened = 0; // v34 draft: files of other kinds whose zlib streams were opened
     size_t pcxs_opened = 0; // v34 draft: PCX pictures carried as their pixels
+    size_t mp3s_opened = 0; // v34 draft: MP3s carried as packMP3 codes them
     size_t sounds_to_flac = 0, flacs_recoded = 0; // Sound as FLAC: files installed as .flac, FLACs re-coded, their bytes before and after
     uint64_t sound_flac_was = 0, sound_flac_now = 0;
     size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC

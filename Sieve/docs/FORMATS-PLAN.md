@@ -35,8 +35,7 @@ Three ways a format can be taken, as now:
    libtiff, ImageMagick and Photoshop, which of them are given back.
 3a. **Built 8 November 2026: zlib streams inside any file, PCX; measured and not built: PSD,
    run-length TGA** (results/zlib-pcx-2026-11-08.md).
-4. **Measured 8 November 2026: worth 10.6% to 14.4%, licence fits (packMP3, LGPL v3), not built:
-   its decoder crashed on 264 of 300 fuzzed streams** (results/mp3-dds-ico-2026-11-08.md). **MP3 (temporary).** Its Huffman-coded frames can be recoded by a better model and made again
+4. **Built 8 November 2026, after packMP3's decoder was made safe** (results/mp3-pmp-2026-11-08.md). **MP3 (temporary).** Its Huffman-coded frames can be recoded by a better model and made again
    exactly (packMP3 and similar tools do this). Before anything: a coder whose licence fits Sieve's,
    and whether it gives back every MP3 exactly. To measure on MP3s from LAME and others.
 5. **Built 8 November 2026: tags and 3 to 8 channels** (WavPack, Monkey's Audio, TTA and ALAC still

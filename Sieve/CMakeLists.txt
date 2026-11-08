@@ -431,6 +431,20 @@ if(MSVC)
 else()
     target_compile_options(sieve_brunsli PRIVATE -w)
 endif()
+# packMP3 (Matthias Stirner, LGPL v3, third_party_licenses/packmp3): an MP3's Huffman-coded data
+# recoded by a model made for it and given back byte for byte (v34 draft, `pmp`). Its source is kept in
+# third_party/packmp3 (its last commit, e61c119, 27 April 2020), changed by Sieve where its decoder
+# trusted what it read (each change marked "Sieve"; results/mp3-pmp-2026-11-08.md), built as a library
+# (BUILD_LIB). Seen by the rest of Sieve only through tools/cli/mp3_glue.hpp.
+add_library(sieve_packmp3 STATIC third_party/packmp3/packmp3.cpp third_party/packmp3/huffmp3.cpp third_party/packmp3/aricoder.cpp
+            third_party/packmp3/bitops.cpp tools/cli/mp3_glue.cpp)
+target_compile_definitions(sieve_packmp3 PRIVATE BUILD_LIB _CRT_SECURE_NO_WARNINGS)
+target_include_directories(sieve_packmp3 PRIVATE third_party/packmp3 tools)
+if(MSVC)
+    target_compile_options(sieve_packmp3 PRIVATE /w)
+else()
+    target_compile_options(sieve_packmp3 PRIVATE -w)
+endif()
 # libFLAC 1.4.3 (BSD 3-clause, third_party_licenses/flac): v34 draft's "flac", a WAV's samples carried
 # as FLAC codes them and made again byte for byte. Its library alone (no programs, C++ library,
 # Ogg, examples, tests or documents), static, by its own CMake; its other targets are left out of
@@ -535,7 +549,7 @@ target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units a
 add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/tiff_codec.cpp tools/cli/pcx_rle.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli FLAC)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli sieve_packmp3 FLAC)
 target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
 target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)
@@ -618,6 +632,11 @@ if(SIEVE_BUILD_TESTS)
     add_executable(sieve_tests tests/test_core.cpp)
     target_link_libraries(sieve_tests PRIVATE sieve_core)
     add_test(NAME core COMMAND sieve_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    # packMP3's decoder given damaged forms of an MP3 (tests/test_mp3.cpp): none may end the program.
+    add_executable(sieve_mp3_check tests/test_mp3.cpp)
+    target_include_directories(sieve_mp3_check PRIVATE tools)
+    target_link_libraries(sieve_mp3_check PRIVATE sieve_packmp3)
+    add_test(NAME mp3 COMMAND sieve_mp3_check ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     # The corridor at the two ends of its tile size (2 and 4096): a program of its own, since the
     # size is latched by the first line built and sieve_tests builds them at 128.
     add_executable(sieve_tile_tests tests/test_tiles.cpp)

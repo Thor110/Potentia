@@ -45,10 +45,12 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
 - **Compressed TIFFs opened, 8 November 2026** (third): `tiff`, a new recipe: deflate, LZW and
   PackBits strips made again exactly (libtiff's coders written for Sieve), the predictor undone; 18
   ImageMagick TIFFs 36.9% smaller together, one 0.5% larger (results/tiff-compressed-2026-11-08.md).
-- **MP3 measured, DDS's shape, 8 November 2026**: packMP3 would make MP3s 10.6% to 14.4% smaller and
-  its licence fits, but its decoder crashed on 264 of 300 fuzzed streams, so it is not built; an
-  uncompressed DDS's shape read from its header for mixing (8.5% on one texture)
-  (results/mp3-dds-ico-2026-11-08.md).
+- **MP3, 8 November 2026** (Edward: "lets focus on making the decoder safe for MP3"): `pmp`, an MP3
+  carried as packMP3 codes it, 10.6% to 14.4% smaller on five LAME MP3s; packMP3's decoder made safe
+  for damaged input first (it crashed on 264 of 300 damaged streams; now refuses them), its source kept
+  in third_party/packmp3 with each change marked (results/mp3-pmp-2026-11-08.md).
+- **DDS's shape, 8 November 2026**: an uncompressed DDS's shape read from its header for mixing (8.5%
+  on one texture) (results/mp3-dds-ico-2026-11-08.md).
 - **Sound as FLAC keeps tags, 8 November 2026**: a WAV's LIST INFO and an AIFF's NAME, AUTH, ANNO and
   (c) written as the .flac's Vorbis comments; 3 to 8 channels where the WAV's channel mask is FLAC's
   own order.

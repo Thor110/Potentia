@@ -6968,8 +6968,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif", "flac", "tiff", "pcx"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4, "flac": 3, "tiff": 3, "pcx": 3}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif", "flac", "tiff", "pcx", "pmp"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4, "flac": 3, "tiff": 3, "pcx": 3, "pmp": 2}
 
 
 def listing_from_bytes(b, v32=False):
@@ -7668,6 +7668,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a WAV's recipe Sieve does not write")
             remakes[i] = ("flac", int(skel), size)
             size = int(n)
+        if v34 and way.startswith("pmp "):
+            # "pmp <inner size> <way>" (SPECIFICATIONS v34, a draft): an MP3 made again from packMP3's
+            # form of it, by packMP3 (which the oracle has not): the recipe read and checked, the file not made.
+            _, n, way = way.split(" ", 2)
+            if not re.fullmatch(r"[1-9][0-9]*", n) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: an MP3's recipe Sieve does not write")
+            remakes[i] = ("pmp", size)
+            size = int(n)
         if v34 and way.startswith("pcx "):
             # "pcx <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft): a PCX made again
             # from its pixels, planes interleaved, and its header (pcx_make).
@@ -7994,7 +8003,7 @@ def cmd_unpack_v7(args, data):
     for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
         if r[0] == "spn":  # (v33 draft) made below, once its members are
             continue
-        if r[0] in ("stb", "jbr"):  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
+        if r[0] in ("stb", "jbr", "pmp"):  # (v34 draft, "pmp": an MP3's packMP3 form, not made here: no packMP3)  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
             unchecked.add(i)
             continue
         if r[0] == "gif":  # v34 draft: each frame's indices coded as compress codes them
@@ -8107,7 +8116,7 @@ def cmd_unpack_v7(args, data):
         # oracle has: their skeletons (or recipes) and data were read and checked, but not the files
         # themselves, nor the tree.
         for k in sorted(unchecked):
-            print(f"not made again by the oracle (preflate, the LZMA SDK, stb_image_write or brunsli): {files[k][0]}; the tree's SHA-256 not checked")
+            print(f"not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): {files[k][0]}; the tree's SHA-256 not checked")
     else:
         h = hashlib.sha256()
         for k, ((path, size, sha, way), b) in enumerate(zip(files, got)):

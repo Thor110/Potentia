@@ -9,6 +9,7 @@
 #include "cli/flac_wav.hpp"
 #include "cli/tiff_codec.hpp"
 #include "cli/pcx_rle.hpp"
+#include "cli/mp3_glue.hpp"
 #include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
 
@@ -2582,6 +2583,17 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
             throw std::runtime_error("an unfiltered PNG's recipe this Sieve does not know: " + recipe);
         return deflate_skeleton_remake(png_unfiltered_sk_inner(inner, skeleton, n, bpp, h), size_t(skeleton));
     }
+    if (recipe.rfind("pmp ", 0) == 0)
+    {
+        // "pmp <inner size>" (v34 draft): an MP3 made again from packMP3's form of it (mp3_glue.hpp).
+        unsigned long long size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "pmp %llu%c", &size, &extra) != 1 || size != inner.size())
+            throw std::runtime_error("an MP3's recipe this Sieve does not know: " + recipe);
+        std::vector<uint8_t> mp3 = pmp_to_mp3(inner);
+        if (past_inner_limit(mp3.size())) throw std::runtime_error("an MP3 larger than this install allows");
+        return mp3;
+    }
     if (recipe.rfind("pcx ", 0) == 0)
     {
         // "pcx <skeleton size> <inner size>" (v34 draft): a PCX made again from its pixels, its planes
@@ -4190,7 +4202,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0, mp3s_opened = 0;
     // (v34 draft: an opened TIFF's shape, its pixels' width and bytes a pixel, for mixing to weigh)
     std::map<std::string, std::pair<uint32_t, uint32_t>> tiff_shapes;
     uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
@@ -5208,6 +5220,24 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 }
                 return carried;
             };
+            // v34 draft: an MP3, with temporary, as packMP3 codes it (mp3_glue.hpp), where that gives it
+            // back exactly and comes out clearly under the MP3 as it is (64 bytes and 0.5%).
+            if (temporary_ok && instructions_on && is_mp3(b))
+                if (auto pmp = [&] {
+                        const timings::Scope tm("pack.mp3");
+                        return mp3_to_pmp(b);
+                    }())
+                {
+                    const uint64_t as_one = as_is_of();
+                    if (archives_always || pmp->size() + 64 + as_one / 200 < as_one)
+                    {
+                        ++mp3s_opened;
+                        ManifestEntry r = e;
+                        r.remake = "pmp " + std::to_string(pmp->size());
+                        add_file(r, std::move(*pmp), std::move(b), e.sha256);
+                        continue;
+                    }
+                }
             // v34 draft: a PCX, with temporary, as its pixels (planes interleaved) and its header
             // (pcx_rle.hpp), where they come out clearly under the PCX as it is.
             if (temporary_ok && instructions_on && is_pcx(b))
@@ -5810,6 +5840,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     r.tiffs_opened = tiffs_opened;
     r.zlib_opened = zlib_opened;
     r.pcxs_opened = pcxs_opened;
+    r.mp3s_opened = mp3s_opened;
     r.sound_flac_was = sound_flac_was;
     r.sound_flac_now = sound_flac_now;
     r.wav_bytes = wav_bytes;
@@ -7161,7 +7192,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         return x.member && x.remake.rfind("jbr ", 0) == 0 && slash != std::string::npos && with_skm.count(x.path.substr(0, slash));
     };
     m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
-                return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || x.remake.rfind("tiff ", 0) == 0 || x.remake.rfind("pcx ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
+                return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || x.remake.rfind("tiff ", 0) == 0 || x.remake.rfind("pcx ", 0) == 0 || x.remake.rfind("pmp ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
             });
     m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
@@ -7301,6 +7332,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.pdfs_opened)
             o << "pdfs      " << r.pdfs_opened << " PDF(s) carried as their skeletons and what their streams hold, made again exactly on installing\n";
+        if (r.mp3s_opened)
+            o << "mp3       " << r.mp3s_opened << " MP3(s) carried as packMP3 codes them, made again exactly on installing\n";
         if (r.pcxs_opened)
             o << "pcx       " << r.pcxs_opened << " PCX picture(s) carried as their pixels, made again exactly on installing\n";
         if (r.zlib_opened)
