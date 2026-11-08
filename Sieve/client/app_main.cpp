@@ -140,9 +140,13 @@ const char* kUsage =
     "                      way chosen for each file by its kind ([locator] optimise_search)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
-    "  --sound-to-flac     the File Locator's Sound as FLAC ticked, for this run (v34 draft): a WAV, AIFF,\n"
-    "                      RF64, Wave64, .au or CAF installed as .flac ([locator] sound_to_flac); WavPack,\n"
-    "                      Monkey's Audio, TTA and ALAC too, through ffmpeg, where the FLAC is smaller\n"
+    "  --sound-temporary   the File Locator's Sound as FLAC: Temporary, for this run (v34 draft; the default,\n"
+    "                      [locator] sound): only sound Sieve makes again byte for byte (WAV and the like as\n"
+    "                      FLAC, MP3 as packMP3 codes it), an archive's too\n"
+    "  --sound-permanent   Sound as FLAC: Permanent, for this run: also installed as .flac where smaller (WAV\n"
+    "                      and the like; WavPack, Monkey's Audio, TTA and ALAC through ffmpeg); a FLAC re-coded\n"
+    "                      (--sound-to-flac is the same)\n"
+    "  --sound-off         Sound as FLAC: Off, for this run: sound left to the ways every file has\n"
     "  --more-formats      the File Locator's More formats ticked, for this run: the comparison with\n"
     "                      gzip, bzip2, zstd, brotli and lz4 beside zip and 7z (slower)\n"
     "  --priority WHAT     the File Locator's Size, Balanced or Decoding speed, for this run: size, balanced\n"
@@ -915,10 +919,17 @@ int run(const Args& a)
         app.locator_every_wave = on;
         app.save(app_path);
     });
-    // Sound as FLAC ([locator] sound_to_flac; --sound-to-flac for this run): v34 draft's.
-    sieve::cli::set_sound_to_flac(app.locator_sound_flac || a.has("sound-to-flac"));
-    FileLocator::remember_sound_flac(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
-        app.locator_sound_flac = on;
+    // Sound as FLAC ([locator] sound; --sound-temporary, --sound-permanent (--sound-to-flac) or
+    // --sound-off for this run): v34 draft's.
+    {
+        sieve::cli::SoundMode mode = sieve::cli::sound_mode_named(app.locator_sound).value_or(sieve::cli::SoundMode::temporary);
+        if (a.has("sound-off")) mode = sieve::cli::SoundMode::off;
+        else if (a.has("sound-permanent") || a.has("sound-to-flac")) mode = sieve::cli::SoundMode::permanent;
+        else if (a.has("sound-temporary")) mode = sieve::cli::SoundMode::temporary;
+        sieve::cli::set_sound_mode(mode);
+    }
+    FileLocator::remember_sound_flac(shot ? std::function<void(sieve::cli::SoundMode)>() : [&app, app_path](sieve::cli::SoundMode mode) {
+        app.locator_sound = sieve::cli::sound_mode_name(mode);
         app.save(app_path);
     });
     FileLocator::remember_optimise(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {

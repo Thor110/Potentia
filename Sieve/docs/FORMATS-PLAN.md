@@ -10,8 +10,15 @@ is built, as these were: no gain is claimed here that was not measured.
 Three ways a format can be taken, as now:
 - **temporary**: carried as what it holds and made again byte for byte on installing (only where
   Sieve's maker gives the file back exactly; checked before it is chosen);
-- **permanent** (or Sound as FLAC): installed as the same content in other bytes, asked for by name;
+- **permanent** (or Sound as FLAC's permanent): installed as the same content in other bytes, asked for by name;
 - **the packer's choice alone**: no format change, a better way chosen for the file's bytes.
+
+Edward (9 November 2026): "temporary wouldn't repack formats we can't reproduce byte for byte, it
+would have to just compress them as best it can, then in the future if those formats can be
+reproduced byte for byte we can add them in accordingly; permanent would repack formats regardless."
+So a format joins temporary only when Sieve gives it back exactly; until then temporary carries it as
+its bytes and permanent may repack it. Sound has its own switch for this (docs/FORMATS.md, *Sound*),
+and sound inside an archive goes through it first.
 
 ## In order of what each could be worth
 

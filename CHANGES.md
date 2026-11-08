@@ -1,28 +1,38 @@
-# Sound as FLAC: WavPack, Monkey's Audio, TTA, ALAC (9 November 2026)
+# Sound as FLAC: temporary / permanent / off (9 November 2026)
 
-With Sound as FLAC ticked (`--sound-to-flac`, v34 draft), a `.wv`, `.ape`, `.tta` or ALAC `.m4a` is
-decoded by ffmpeg (the one set in the hallway's Settings or by `--ffmpeg`), its tags and cover kept,
-coded again by libFLAC at the priority's effort, and installed as `name.flac` where that is smaller.
-Checked first: no ffmpeg error (CRCs), 16 to 24-bit integer sound, and the FLAC's samples' MD5 equal
-to the source's. Without ffmpeg these files are left as they are and the listing says:
-"N WavPack, Monkey's Audio, TTA or ALAC file(s) left as they are: ... (link ffmpeg in the hallway's
-Settings, or give --ffmpeg PATH)".
+As agreed: the sound switch alone decides how sound is taken (the archives' boxes no longer do), with
+the v34 draft on.
 
-Measured (results/lossless-sound-2026-11-09.md): a 54.7 MB WAV's WavPack, TTA and ALAC (ffmpeg's
-encoders) became 27.7 MB FLACs (from 28.7, 27.9 and 29.2 MB). Monkey's Audio beat FLAC at every level
-on that track, so such files mostly stay as they are.
+- Temporary (the default): only what Sieve gives back byte for byte. WAV, AIFF, RF64, Wave64, .au, CAF
+  as FLAC plus the rest of the file ("flac"); MPEG-1 MP3 as packMP3's form ("pmp"). Everything else
+  (FLAC, WavPack, Monkey's Audio, TTA, ALAC, MPEG-2/2.5 MP3) carried as its bytes, the best way found,
+  until Sieve can give it back exactly.
+- Permanent: temporary's, plus installed as name.flac where smaller (WAV family; WavPack, Monkey's
+  Audio, TTA, ALAC through ffmpeg); a FLAC re-coded. Asked for by name; packing warns.
+- Off: sound left to the ways every file has.
 
-Files:
-- new: Sieve/tools/cli/lossless_sound.hpp/.cpp, Sieve/results/lossless-sound-2026-11-09.md
-- Sieve/tools/cli/media_decode.hpp/.cpp: ffmpeg_run (output, errors, exit status)
-- Sieve/tools/cli/pack.cpp/.hpp, locate.cpp, help.cpp; client/app_main.cpp, app_settings.cpp (texts)
-- Sieve/CMakeLists.txt: lossless_sound.cpp in sieve_compare, which now links sieve_lines
-- Sieve/ci/steps/08-ffmpeg.sh: a new block at its end
-- Sieve/docs/FORMATS.md, NEXT-VERSION.md, FORMATS-PLAN.md (also: MPEG-2/2.5 MP3s noted as still to
-  do, a coder to track down or build)
+Command line: --sound-temporary, --sound-permanent (--sound-to-flac still works), --sound-off. File
+Locator: W is now a button going round "Sound as FLAC: Temporary / Permanent / Off" (read aloud the
+same). Settings: [locator] sound = temporary|permanent|off (an old sound_to_flac = 1 is read as
+permanent).
 
-Checked here: unit suite; the new step 08 block; installed FLACs' samples equal their sources' (16
-and 24-bit WavPack, TTA, ALAC, Monkey's Audio); tags and an ALAC cover kept; damaged and 8-bit files
-left as they are.
+Archives chained to sound: a zip, 7z or tar made again from its skeleton (archives' temporary) now
+carries its WAV and MP3 members as flac / pmp, so the archive still comes back byte for byte; the
+tar's weighing counts them so. An archive installed as its contents (archives' permanent) has its
+sound files taken as any file (so with sound permanent, pack/b.wav becomes pack/b.flac). Reader,
+sieve-install and the oracle accept flac and pmp members (SPECIFICATIONS v34); the oracle now makes
+members before their archive.
 
-Please run: build, CI step 08 (needs ffmpeg) and the usual full CI.
+Also: the File Locator's layout counted rows without the Compare box, so with the draft on the "took"
+line overlapped the Tailor button; fixed.
+
+Docs: FORMATS.md has a new section, "Sound: every format, and where it goes" (each format under
+temporary, permanent and off, and why); MANUAL.md, SPECIFICATIONS.md, NEXT-VERSION.md, FORMATS-PLAN.md
+(the rule: a format joins temporary only when Sieve gives it back exactly), help, settings text.
+
+Checked here: unit suite (4/4); new CI step 11 block (temporary default, off, zip members flac+pmp by
+Sieve and sieve-install, a tar's flac member by the oracle, permanent .flac inside an archive); step
+11's existing MP3, PCX, FLAC, AIFF, RF64, Sound as FLAC, tags and float blocks; step 08's block; the
+hallway's W read aloud through all three.
+
+Please run: build, the full CI (steps 08, 10, 11 touched).

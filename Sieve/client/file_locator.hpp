@@ -16,6 +16,7 @@
 #include "dialogs.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/locate.hpp"
+#include "cli/pack.hpp"
 #include "cli/weigh.hpp"
 
 #include <SDL3/SDL.h>
@@ -119,10 +120,10 @@ public:
     // Try every way chosen for each file by its kind, from what was measured, in place of its box
     // (sieve::cli::optimise_search). Set once, at start.
     static void remember_optimise(std::function<void(bool)> changed);
-    // "Sound as FLAC" ([locator] sound_to_flac, off unless ticked; Edward, 8 November 2026; v34 draft):
-    // a WAV, AIFF, RF64, Wave64, .au or CAF installed as a .flac file of the same samples
-    // (sieve::cli::sound_to_flac). Set once, at start.
-    static void remember_sound_flac(std::function<void(bool)> changed);
+    // "Sound as FLAC" ([locator] sound; Edward, 8 and 9 November 2026; v34 draft): one button that goes
+    // round Temporary (the default: only sound made again byte for byte), Permanent (also installed as
+    // .flac where smaller) and Off (sieve::cli::SoundMode, pack.hpp). Set once, at start.
+    static void remember_sound_flac(std::function<void(sieve::cli::SoundMode)> changed);
     // Size, Balanced or Decoding speed ([locator] priority, Balanced unless changed; one button that
     // goes round the three), kept between runs: what the packer weighs ways by (sieve::Priority,
     // mix.hpp). Its state is the packer's own (sieve::priority).
@@ -179,7 +180,7 @@ private:
         int made_archives = 0; // the Compressed formats boxes it was made with (1 temporary, 2 permanent)
         bool made_every = false;    // Try every way, as it was when they were made
         bool made_optimise = false; // Optimise Search, as it was when they were made
-        bool made_sound_flac = false; // Sound as FLAC, as it was when they were made
+        sieve::cli::SoundMode made_sound_flac = sieve::cli::SoundMode::temporary; // Sound as FLAC, as it was when they were made
         int made_priority = 0; // Size, Balanced or Decoding speed, as it was (sieve::Priority)
     };
     bool in_world() const { return bool(host_.go); }

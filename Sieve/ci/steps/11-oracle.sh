@@ -2020,6 +2020,67 @@ for f in flacs:
     fch, fbits, total, got = flac_decode(open(os.path.join(out, f), "rb").read(), f)
     assert (fch, fbits) == (ch, 24) and got == want, f
 PY
+# Sound as FLAC's three ways (9 November 2026): the switch alone decides sound, not the archives'
+# boxes. Temporary, the default: a WAV and an MP3 carried as `flac` and `pmp` with no box ticked,
+# given back byte for byte; off: neither. With the archives' temporary, a zip holding a WAV and an MP3
+# made again from its skeleton, its WAV member carried as `flac` and its MP3 as `pmp`, the zip given
+# back byte for byte by Sieve and sieve-install; and a tar of a WAV and a text, its WAV member made
+# again first, then the tar from it, by the oracle too (which has no preflate for a zip). With the
+# archives' permanent and the sound's, a zip's WAV installed as a .flac in its folder.
+rm -rf sm34 sm34z sm34_inst sm34o_inst sm34z_inst sm34z_si sm34w sm34w_oracle sm34p_inst
+mkdir sm34 sm34z sm34w
+python - sm34 <<'PY'
+import math, os, random, struct, sys, zipfile
+out = sys.argv[1]
+rng = random.Random(34)
+def wav(n):
+    data = b"".join(struct.pack("<hh", int(6000 * math.sin(k / 9.0) + rng.randint(-300, 300)), int(5000 * math.sin(k / 13.0) + rng.randint(-300, 300))) for k in range(n))
+    f = struct.pack("<HHIIHH", 1, 2, 22050, 22050 * 4, 4, 16)
+    body = b"WAVE" + b"fmt " + struct.pack("<I", len(f)) + f + b"data" + struct.pack("<I", len(data)) + data
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+open(os.path.join(out, "tune.wav"), "wb").write(wav(60000))
+open(os.path.join(out, "other.wav"), "wb").write(wav(50000))
+PY
+cp ../tests/mp3/tone.mp3 sm34/
+$S locate sm34 --installer sm34.sieve --items --v34-draft 2>&1 | tr -d '\r' > sm34.txt
+grep -q "^sound     2 file(s) of sound" sm34.txt
+grep -q "^mp3       1 MP3(s) carried as packMP3 codes them" sm34.txt
+$S install sm34.sieve --to sm34_inst > /dev/null
+diff -r sm34 sm34_inst
+$S locate sm34 --installer sm34o.sieve --items --v34-draft --sound-off 2>&1 | tr -d '\r' > sm34o.txt
+if grep -q "^sound \|^mp3 \|	flac \|	pmp " sm34o.txt; then exit 1; fi
+$S install sm34o.sieve --to sm34o_inst > /dev/null
+diff -r sm34 sm34o_inst
+if $S locate sm34 --installer x.sieve --items --v34-draft --sound-off --sound-permanent 2> /dev/null; then exit 1; fi
+python - sm34 sm34z/pack.zip sm34w/waves.tar <<'PY'
+import os, sys, zipfile
+src = sys.argv[1]
+with zipfile.ZipFile(sys.argv[2], "w", zipfile.ZIP_DEFLATED) as z:
+    for n in ("tune.wav", "tone.mp3"):
+        z.write(os.path.join(src, n), n)
+import io, tarfile
+with tarfile.open(sys.argv[3], "w", format=tarfile.USTAR_FORMAT) as t:
+    t.add(os.path.join(src, "other.wav"), "other.wav")
+    notes = "".join("line %d of the notes\n" % k for k in range(300)).encode()
+    info = tarfile.TarInfo("notes.txt")
+    info.size, info.mtime = len(notes), 1700000000
+    t.addfile(info, io.BytesIO(notes))
+PY
+$S locate sm34z --installer sm34z.sieve --items --v34-draft --compressed-temporary 2>&1 | tr -d '\r' > sm34z.txt
+grep -q "	flac [0-9]* [0-9]* .*	pack.zip/1$" sm34z.txt
+grep -q "	pmp [0-9]* .*	pack.zip/2$" sm34z.txt
+$S install sm34z.sieve --to sm34z_inst > /dev/null
+diff -r sm34z sm34z_inst
+$SI sm34z.sieve --to sm34z_si --yes > /dev/null
+diff -r sm34z sm34z_si
+$S locate sm34w --installer sm34w.sieve --items --v34-draft --compressed-temporary 2>&1 | tr -d '\r' > sm34w.txt
+grep -q "	flac [0-9]* [0-9]* .*	waves.tar/1$" sm34w.txt
+python sieve_ref.py unpack sm34w.sieve --to sm34w_oracle > /dev/null
+diff -r sm34w sm34w_oracle
+$S locate sm34z --installer sm34p.sieve --items --v34-draft --compressed-permanent --sound-permanent 2>&1 | tr -d '\r' > sm34p.txt
+$S install sm34p.sieve --to sm34p_inst > /dev/null
+test -f sm34p_inst/pack/tune.flac
+cmp sm34/tone.mp3 sm34p_inst/pack/tone.mp3
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
 # modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.

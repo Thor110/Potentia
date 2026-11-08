@@ -2499,8 +2499,12 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             {
                 if (e.path.rfind(under, 0) != 0) continue;
                 // (A member of a text's spans may be a JPEG carried as its brunsli form: the one
-                // recipe a member has. v34 draft: an archive's or a PDF's member too.)
-                if (e.dir || e.member || (!e.remake.empty() && !((spn || m.v34) && e.remake.rfind("jbr ", 0) == 0)))
+                // recipe a member has. v34 draft: an archive's or a PDF's member too; and an archive's
+                // member may be sound by a way that gives it back exactly, "flac" or "pmp", 9 November
+                // 2026: made again first, as every recipe is, before the archive is made from it.)
+                const bool member_recipe = e.remake.rfind("jbr ", 0) == 0 ? (spn || m.v34)
+                                                                          : !spn && m.v34 && (e.remake.rfind("flac ", 0) == 0 || e.remake.rfind("pmp ", 0) == 0);
+                if (e.dir || e.member || (!e.remake.empty() && !member_recipe))
                     throw std::runtime_error("manifest: " + e.path + " is not a member as Sieve writes one");
                 e.member = true;
                 ++found;

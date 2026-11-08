@@ -1103,12 +1103,20 @@ const std::vector<Page>& pages()
                                      "make it again. Only where given by name; packing warns, naming each file installed so.\n"
                                      "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
                                      "smallest, a JPEG with tables made for its values (else made again exactly)."},
-          {"--sound-to-flac", "Sound as FLAC (v34 draft, with --v34-draft): a WAV, AIFF, RF64, Wave64, .au or CAF of 1 or 2\n"
-                              "channels, up to 24 bits, at a rate FLAC's streamable subset holds, installed as a .flac file of\n"
-                              "the same samples (name.flac), which any player opens; its other chunks (tags) are left out.\n"
-                              "libFLAC works as hard as --priority says. Only where given by name; packing warns, naming each.\n"
-                              "A WavPack, Monkey's Audio, TTA or ALAC (.m4a) file too, of 16 to 24 bits, decoded by ffmpeg\n"
-                              "(--ffmpeg), its tags and cover kept, where its FLAC is smaller; without ffmpeg, left as it is."},
+          {"--sound-temporary", "Sound as FLAC, temporary (v34 draft, with --v34-draft; the default): only what Sieve makes\n"
+                                "again byte for byte on installing. A WAV, AIFF, RF64, Wave64, .au or CAF carried as its\n"
+                                "samples coded by FLAC and the rest of the file; an MP3 (MPEG-1 Layer III) as packMP3 codes\n"
+                                "it. Inside an archive opened too (--compressed-temporary or -permanent). Any other sound\n"
+                                "(FLAC, WavPack, Monkey's Audio, TTA, ALAC, MPEG-2 MP3s) carried as its bytes, the best way\n"
+                                "found for them. This switch alone decides sound, not the archives' boxes."},
+          {"--sound-permanent", "Sound as FLAC, permanent (v34 draft): as temporary, and also installed as the same samples\n"
+                                "in other bytes where that is smaller: a WAV, AIFF, RF64, Wave64, .au or CAF of 16 to 24\n"
+                                "bits as name.flac (its LIST INFO or NAME/AUTH/ANNO tags kept); a WavPack, Monkey's Audio,\n"
+                                "TTA or ALAC (.m4a) as name.flac, decoded by ffmpeg (--ffmpeg; without it, left as it is),\n"
+                                "its tags and cover kept; a FLAC re-coded. libFLAC works as hard as --priority says. It\n"
+                                "changes what is installed: only where given by name; packing warns, naming each."},
+          {"--sound-to-flac", "The same as --sound-permanent (its name before 9 November 2026)."},
+          {"--sound-off", "Sound as FLAC off (v34 draft): sound left to the ways every file has."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},

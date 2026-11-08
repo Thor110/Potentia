@@ -33,7 +33,7 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   Measured: results/flac-way-2026-11-08.md. AIFF and AIFF-C (uncompressed) by the same recipe,
   8 November 2026 (CI: four opened, a float AIFF-C and one with COMM after SSND left alone). RF64
   and BW64, Wave64, Sun's .au and Apple's CAF the same day, by the same recipe (CI: six more opened).
-- **Sound as FLAC, built 8 November 2026** (Edward: "repack audio to FLAC"): `--sound-to-flac`, the
+- **Sound as FLAC, built 8 November 2026** (Edward: "repack audio to FLAC"; now its permanent way, below): `--sound-to-flac`, the
   File Locator's box (W) while the draft is on: sound installed as `name.flac` (FLAC's streamable subset,
   1 or 2 channels, up to 24 bits), and FLAC files re-coded at the priority's effort, their tags kept.
   Not a format change: a `.flac` is carried as any file is. CI step 11 checks ten sound files so and
@@ -51,6 +51,17 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   in third_party/packmp3 with each change marked (results/mp3-pmp-2026-11-08.md).
 - **DDS's shape, 8 November 2026**: an uncompressed DDS's shape read from its header for mixing (8.5%
   on one texture) (results/mp3-dds-ico-2026-11-08.md).
+- **Sound as FLAC's three ways, 9 November 2026** (Edward: "temporary wouldn't repack formats we
+  can't reproduce byte for byte ... permanent would repack formats regardless"; "chain archives to
+  sound"): one switch alone decides sound, no longer the Compressed formats boxes: **temporary**, the
+  default (the `flac` and `pmp` ways, made again byte for byte; any other sound as its bytes, until
+  Sieve can give it back exactly), **permanent** (also installed as `.flac` where smaller; asked for
+  by name) and **off**. `--sound-temporary`, `--sound-permanent` (`--sound-to-flac`), `--sound-off`;
+  the File Locator's W goes round the three; `[locator] sound` (an older `sound_to_flac = 1` is read
+  as permanent). Sound inside an archive goes through it first: a member of an archive made again
+  from its skeleton may now carry `flac` or `pmp` (SPECIFICATIONS v34; the reader and the oracle
+  allow it); a file of an archive installed as its contents is taken as any file. Every sound format
+  and where it goes: docs/FORMATS.md, *Sound*.
 - **Sound as FLAC for WavPack, Monkey's Audio, TTA and ALAC, 9 November 2026**: decoded by ffmpeg
   (run as its own process), tags and covers kept, installed as .flac where smaller, the samples'
   MD5s checked equal; without ffmpeg, left as they are and the listing says so

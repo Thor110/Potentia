@@ -7581,8 +7581,10 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: an archive's members not counted as Sieve counts them")
             mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
             if len(mine) != int(n) or any(k in members for k in mine) or any(files[k][3].startswith("skm ") for k in mine) or \
-                    any(files[k][3].split(" ")[0] in RECIPE_WORDS and not (v34 and files[k][3].startswith("jbr ")) for k in mine):
-                sys.exit(f"{path} does not list the members its recipe counts")  # (v34 draft: a member may be a JPEG as its brunsli form)
+                    any(files[k][3].split(" ")[0] in RECIPE_WORDS and not (v34 and files[k][3].split(" ")[0] in ("jbr", "flac", "pmp")) for k in mine):
+                # (v34 draft: a member may be a JPEG as its brunsli form; 9 November 2026, sound by a way that
+                # gives it back exactly, "flac" or "pmp", made again before the archive is made from it)
+                sys.exit(f"{path} does not list the members its recipe counts")
             for k in mine:
                 members[k] = i
         if v33 and way.startswith("spn "):
@@ -8000,7 +8002,9 @@ def cmd_unpack_v7(args, data):
             got[i] = b"\n".join(l for j, l in enumerate(base) if mask[j // 8] >> (j % 8) & 1)
     import zlib
     unchecked = set()  # v21: files made again by preflate or the LZMA SDK, which the oracle has not
-    for i, r in remakes.items():  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
+    # (an archive made from its members last, after every member's own recipe: v34 draft, a member
+    # may be sound, "flac" or "pmp", made again before the archive is made from it)
+    for i, r in sorted(remakes.items(), key=lambda ir: ir[1][0] == "skm"):  # v14: xz remade by Python's lzma, as the xz program writes; v17: gzip by zlib
         if r[0] == "spn":  # (v33 draft) made below, once its members are
             continue
         if r[0] in ("stb", "jbr", "pmp"):  # (v34 draft, "pmp": an MP3's packMP3 form, not made here: no packMP3)  # v25: its pixels given, at their size; the PNG not made (no stb_image_write here); v32: the JPEG's brunsli form, the JPEG not made (no brunsli here)
@@ -8035,8 +8039,8 @@ def cmd_unpack_v7(args, data):
             continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
-            if r[0] == "skm" and any(k in remakes and remakes[k][0] == "jbr" for k in members if members[k] == i):
-                unchecked.add(i)  # (v34 draft: a member a JPEG as its brunsli form, not made here, so neither is its archive)
+            if r[0] == "skm" and any(k in remakes and remakes[k][0] in ("jbr", "pmp") for k in members if members[k] == i):
+                unchecked.add(i)  # (v34 draft: a member a JPEG as its brunsli form, or an MP3 as packMP3's, not made here, so neither is its archive)
                 continue
             inner = got[i] + b"".join(got[k] for k in sorted(members) if members[k] == i) if r[0] == "skm" else got[i]  # v31: its members after it
             made = skeleton_remake(inner, skel, files[i][0])

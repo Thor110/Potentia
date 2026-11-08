@@ -8,7 +8,9 @@ Sieve as an engine that measures every method on every format, and picks the bes
 ## The three methods
 
 The File Locator's **Compressed formats** boxes (`--compressed-temporary`,
-`--compressed-permanent`), off unless ticked:
+`--compressed-permanent`), off unless ticked, for archives, compressed files and pictures; and, for
+sound alone, the **Sound as FLAC** button (v34 draft: temporary unless changed; below, *Sound: every
+format, and where it goes*). The same three methods in each:
 
 | Method | What happens to a compressed file | What is installed |
 | :--- | :--- | :--- |
@@ -66,23 +68,62 @@ say so.
 | cab, ISO, LHA, cpio, ar (`.deb`), WARC | libarchive | not made again | its folder | |
 | tar (`.tar`, or a POSIX or GNU tar by its `ustar` mark) | Sieve | from its skeleton (its headers and padding) and its files, each its own way (v31's `skm`; since 1 November 2026) | its folder (libarchive) | it compresses nothing, which is why the boxes are "Archive and compressed formats"; a program inside goes through the x86 filter |
 | **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
-| **WAV** (plain integer PCM: 8, 16, 24 or 32 bits, 1 to 8 channels; floating point of 32 or 64 bits whose values are whole 24-bit steps) | Sieve, libFLAC | v34 draft: its samples as libFLAC 1.4.3 codes them, the rest of the file as it was (`flac`); how hard libFLAC works follows the priority (Size, Balanced, Decoding speed) | as temporary, or Sound as FLAC (below) | floating-point WAVs of other values (a fraction of a step, -0), and one whose data chunk is cut short, as their bytes |
+| **WAV** (plain integer PCM: 8, 16, 24 or 32 bits, 1 to 8 channels; floating point of 32 or 64 bits whose values are whole 24-bit steps) | Sieve, libFLAC | v34 draft: its samples as libFLAC 1.4.3 codes them, the rest of the file as it was (`flac`); how hard libFLAC works follows the priority (Size, Balanced, Decoding speed) | as temporary, or Sound as FLAC's permanent (below) | floating-point WAVs of other values (a fraction of a step, -0), and one whose data chunk is cut short, as their bytes |
 | **AIFF**, **AIFF-C** (`.aif`, `.aiff`, `.aifc`: plain samples, 8 to 32 bits; AIFF-C uncompressed, `NONE`, `twos` or `sowt`; `fl32` and `fl64` as a float WAV) | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`), its skeleton an AIFF's | as temporary | compressed AIFF-C, floats of other values, and one whose COMM comes after its SSND, as their bytes |
 | **RF64**, **BW64** (WAVs past 4 GiB), **Wave64** (`.w64`), Sun's **`.au`** (`.snd`), Apple's **CAF** (`.caf`): plain samples, 8 to 32 bits, or floats as a float WAV | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`); an `.au`'s or a CAF's samples may run to the end of the file, their count the FLAC stream's | as temporary | compressed ones (an `.au` in mu-law, a CAF in AAC) and floats of other values, as their bytes |
-| **FLAC** (`.flac`) | libFLAC | as its bytes (a FLAC is coded already) | with **Sound as FLAC** (below): re-coded at the priority's effort where 0.5% smaller, its tags, pictures and cue sheet kept, its padding and seek table dropped | Ogg FLAC, or a FLAC after an ID3 tag, as its bytes |
-
-**Sound as FLAC** (v34 draft; `--sound-to-flac`, the File Locator's box W, `[locator] sound_to_flac`; off unless ticked, as it changes what is installed): a WAV, AIFF, RF64, Wave64, `.au` or CAF of 1 or 2 channels (or more, below), up to 24 bits (or floats of whole 24-bit steps, installed as 24-bit FLAC of those steps), at a rate FLAC's streamable subset holds, installed as `name.flac`, the same samples, which any player opens; a WAV's LIST INFO tags and an AIFF's NAME, AUTH, ANNO and `(c) ` chunks kept as Vorbis comments (TITLE, ARTIST, ALBUM, COMMENT, DATE, GENRE, TRACKNUMBER, COPYRIGHT, in UTF-8); 3 to 8 channels where a WAVE_FORMAT_EXTENSIBLE file's channel mask is FLAC's own order for so many; its other chunks are not kept. Where `name.flac` is already taken (a namesake in the folder), the file is carried as temporary carries it. A FLAC file is re-coded as above. Packing warns, naming each file.
-
-Sound as FLAC also takes **WavPack** (`.wv`), **Monkey's Audio** (`.ape`), **TTA** (`.tta`) and **Apple Lossless** (ALAC in an `.m4a` of one sound track), 9 November 2026: each decoded by ffmpeg (run as its own process; `--ffmpeg`, the hallway's `[paths] ffmpeg`), its tags and cover pictures kept, coded again by libFLAC at the priority's effort, and installed as `name.flac` only where that is smaller than the file. Before it is chosen: ffmpeg reports no error decoding it (WavPack's, Monkey's Audio's and TTA's CRCs checked; ALAC carries none), it is 16 to 24-bit integer sound, and the MD5 of the FLAC's samples is the MD5 of the file's. 8-bit, floating-point and 32-bit files, WavPack's lossy hybrid and DSD files, and every such file where there is no ffmpeg, are installed as they are (the listing says how many waited for ffmpeg). Monkey's Audio usually makes smaller files than FLAC, so most stay as they are (results/lossless-sound-2026-11-09.md).
+| **FLAC** (`.flac`) | libFLAC | as its bytes (a FLAC is coded already) | with **Sound as FLAC**'s permanent (below): re-coded at the priority's effort where 0.5% smaller, its tags, pictures and cue sheet kept, its padding and seek table dropped | Ogg FLAC, or a FLAC after an ID3 tag, as its bytes |
 | **TIFF**, compressed (`.tif`, `.tiff`: deflate, LZW or PackBits strips or tiles, with or without the horizontal predictor) | Sieve, preflate | v34 draft: `tiff`, its strips carried as their pixels and made again as libtiff codes them (deflate through preflate), the predictor undone (results/tiff-compressed-2026-11-08.md) | as temporary | JPEG-in-TIFF, CCITT fax, LZMA and Zstandard strips, and strips that overlap, as their bytes |
-| **MP3** (`.mp3`: MPEG-1 Layer III, with or without ID3 tags) | packMP3 (made safe for damaged input by Sieve) | v34 draft: `pmp`, packMP3's form of it, made again exactly (results/mp3-pmp-2026-11-08.md) | as temporary | MPEG-2 and 2.5 MP3s, and any packMP3 does not give back exactly, as their bytes |
+| **MP3** (`.mp3`: MPEG-1 Layer III, with or without ID3 tags) | packMP3 (made safe for damaged input by Sieve) | v34 draft, under Sound as FLAC (below): `pmp`, packMP3's form of it, made again exactly (results/mp3-pmp-2026-11-08.md) | as temporary | MPEG-2 and 2.5 MP3s, and any packMP3 does not give back exactly, as their bytes |
 | **DDS** (`.dds`), uncompressed | Sieve | v34 draft: the packer reads its width and bytes a pixel from its header for mixing (no format change; results/mp3-dds-ico-2026-11-08.md) | as it is | BC-compressed DDS mixed as its bytes |
 | **PCX** (`.pcx`: 8 bits a plane, 1, 3 or 4 planes) | Sieve | v34 draft: `pcx`, its pixels (planes interleaved) and its header, the runs coded again as the specification codes them (results/zlib-pcx-2026-11-08.md) | as temporary | 1-, 2- and 4-bit PCX, and runs that cross plane lines, as their bytes |
 | **Files holding zlib streams** (git packs, WOFF fonts, SWF, others) | Sieve, preflate | v34 draft: each stream carried as what it holds and made again by preflate, the file by `sk` (results/zlib-pcx-2026-11-08.md) | as temporary | streams with a preset dictionary, and raw deflate without a zlib header (outside zip and gzip), as their bytes |
 | **PDF** (`.pdf`) | Sieve, preflate | v34 draft: a skeleton and members (v31's `skm`): its `/FlateDecode` streams made again by preflate from what they hold, its `/DCTDecode` JPEGs as their brunsli form (results/pdf-2026-11-08.md) | as temporary | JBIG2, JPX and chained filters stay in the skeleton |
 | **JPEG** | brunsli | v32: from its brunsli form (`jbr`) | v32: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
 
+Sound (the WAV, AIFF, RF64, Wave64, `.au`, CAF, FLAC and MP3 rows above, and WavPack, Monkey's Audio, TTA and ALAC) is taken by Sound as FLAC's own three ways, not by the Compressed formats boxes: see *Sound: every format, and where it goes*, below.
+
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.
+
+## Sound: every format, and where it goes
+
+Edward, 9 November 2026: "temporary wouldn't repack formats we can't reproduce byte for byte, it
+would have to just compress them as best it can, then in the future if those formats can be
+reproduced byte for byte we can add them in accordingly; permanent would repack formats regardless."
+Sound has its own switch, which alone decides how sound is taken (the Compressed formats boxes do
+not), with the v34 draft on (`--v34-draft`): the File Locator's **Sound as FLAC** button (W; it goes
+round Temporary, Permanent and Off), `[locator] sound` in the hallway's settings, or for one run
+`--sound-temporary`, `--sound-permanent` (or `--sound-to-flac`, its older name) and `--sound-off`.
+
+- **Temporary** (the default): only what Sieve makes again byte for byte on installing. Every
+  installed file is the file that was packed.
+- **Permanent**: temporary's, and also installed as the same samples in other bytes where that is
+  smaller (a `.flac` in the file's place). It changes what is installed, so it is asked for by
+  name, and packing warns, naming each file. What it does not repack (not smaller, not a format it
+  reads, `name.flac` already taken) is taken as temporary takes it.
+- **Off**: sound is left to the ways every file has (LZMA2, the rope, mixing), installed byte for byte.
+
+Each way is chosen only where it comes out clearly smaller than the file carried as it is (by 64
+bytes and 0.5% on the estimate; a sound file over 8 MiB weighed first on eight stretches of it).
+Sound **inside an archive** passes through the same switch first: a member of an archive made again
+from its skeleton (a zip, a 7z, a tar, under the Compressed formats' temporary) by temporary's ways,
+so the archive is still made again byte for byte; a file of an archive installed as its contents
+(the Compressed formats' permanent) as the switch says for any file.
+
+| Format | Temporary (the default) | Permanent | Off |
+| :--- | :--- | :--- | :--- |
+| **WAV**, **AIFF**, **AIFF-C** (uncompressed), **RF64**, **BW64**, **Wave64**, Sun's **`.au`**, Apple's **CAF**: plain integer samples, 8 to 32 bits, 1 to 8 channels; floats whose values are whole 24-bit steps | its samples coded by libFLAC and the rest of the file kept (`flac`), made again byte for byte | installed as `name.flac` where smaller: 1 or 2 channels (3 to 8 in FLAC's own order), up to 24 bits, a rate FLAC's streamable subset holds; a WAV's LIST INFO and an AIFF's NAME, AUTH, ANNO and `(c) ` kept as Vorbis comments, its other chunks not; else as temporary | as its bytes |
+| **MP3**, MPEG-1 Layer III (with or without ID3 tags) | packMP3's form of it (`pmp`), made again byte for byte | as temporary (nothing smaller installs as an MP3) | as its bytes |
+| **MP3**, MPEG-2 and 2.5 Layer III | as its bytes: no coder yet gives these back exactly (docs/FORMATS-PLAN.md) | as its bytes | as its bytes |
+| **FLAC** | as its bytes (already coded) | re-coded by libFLAC where 0.5% smaller, its tags, pictures and cue sheet kept, its padding and seek table dropped | as its bytes |
+| **WavPack** (`.wv`), **Monkey's Audio** (`.ape`), **TTA** (`.tta`), **ALAC** (an `.m4a` of one ALAC track) | as its bytes: Sieve cannot yet make these back byte for byte (their bytes are their own encoder's, at its version and settings); each joins temporary when it can | decoded by ffmpeg (its own process; `--ffmpeg`, the hallway's `[paths] ffmpeg`) and installed as `name.flac` where smaller, its tags and cover kept. Checked first: no error from ffmpeg (WavPack's, Monkey's Audio's and TTA's CRCs; ALAC has none), 16 to 24-bit integer sound, the FLAC's samples' MD5 the file's. 8-bit, floating-point and 32-bit files, WavPack's lossy hybrid and DSD, as their bytes; with no ffmpeg, all as their bytes, and the listing says how many waited for it | as its bytes |
+| **Ogg FLAC**, a FLAC after an ID3 tag, compressed AIFF-C, an `.au` in mu-law or A-law, a CAF in AAC, floats of other values | as its bytes | as its bytes | as its bytes |
+| **Lossy sound and video**: AAC, Vorbis, Opus, WMA, the sound in a video | as its bytes | as its bytes | as its bytes |
+
+How hard libFLAC works follows the priority: Size, Balanced, Decoding speed
+(results/flac-way-2026-11-08.md). Monkey's Audio usually makes smaller files than FLAC, so under
+permanent most stay as they are (results/lossless-sound-2026-11-09.md). What reads them: Sieve and
+`sieve-install` make `flac` and `pmp` again; the oracle (`reference/sieve_ref.py`) makes `flac` again
+and lists `pmp` (it has no packMP3). Permanent's `.flac` files are plain files.
 
 ## Pictures: every format, and what each part of Sieve does with it
 

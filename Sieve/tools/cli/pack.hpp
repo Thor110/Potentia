@@ -194,12 +194,28 @@ void set_compressed_modes(bool temporary, bool permanent);
 bool compressed_temporary();
 bool compressed_permanent();
 
-// Sound as FLAC (v34 draft, 8 November 2026, Edward: "repack audio to FLAC"): a WAV, AIFF, RF64,
-// Wave64, .au or CAF installed as a .flac file of the same samples, in FLAC's streamable subset, its
-// name's extension .flac. It changes what is installed, so it is asked for by name (--sound-to-flac, or
-// the File Locator's box); off unless asked.
-void set_sound_to_flac(bool on);
-bool sound_to_flac();
+// Sound as FLAC (v34 draft; 8 November 2026, Edward: "repack audio to FLAC"; three ways, 9 November:
+// "temporary wouldn't repack formats we can't reproduce byte for byte ... permanent would repack
+// formats regardless"), which alone decides how sound is taken, an archive's sound included:
+// - temporary (the default): only what Sieve makes again byte for byte on installing. A WAV, AIFF,
+//   RF64, Wave64, .au or CAF carried as its samples coded by FLAC and its skeleton ("flac"); an
+//   MPEG-1 Layer III MP3 as packMP3 codes it ("pmp"). Any other sound is carried as its bytes, the
+//   best way found for them; a format joins this list when Sieve can give it back exactly.
+// - permanent: also installed as other bytes of the same samples where that is smaller. A WAV,
+//   AIFF, RF64, Wave64, .au or CAF, WavPack, Monkey's Audio, TTA or ALAC installed as name.flac; a
+//   FLAC re-coded. It changes what is installed, so it is asked for by name (--sound-permanent, or
+//   --sound-to-flac as before; the File Locator's box). What it does not repack is taken as temporary.
+// - off: sound left to the ways any file has.
+enum class SoundMode
+{
+    off,
+    temporary,
+    permanent
+};
+void set_sound_mode(SoundMode mode);
+SoundMode sound_mode();
+const char* sound_mode_name(SoundMode mode); // "off", "temporary", "permanent"
+std::optional<SoundMode> sound_mode_named(const std::string& name);
 
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,

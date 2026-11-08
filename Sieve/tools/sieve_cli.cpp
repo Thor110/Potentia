@@ -2454,9 +2454,12 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     // installer's cab was installed as its files from encode.su).
     const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
     set_compressed_modes(temporary || !permanent, permanent);
-    // --sound-to-flac (v34 draft, 8 November 2026): Sound as FLAC, a WAV, AIFF, RF64, Wave64, .au or CAF
-    // installed as a .flac file of the same samples (it changes what is installed: asked for by name).
-    set_sound_to_flac(a.has("sound-to-flac"));
+    // Sound as FLAC (v34 draft; three ways, 9 November 2026: pack.hpp's SoundMode): --sound-temporary
+    // (the default: only what Sieve gives back byte for byte), --sound-permanent or --sound-to-flac (also
+    // installed as .flac where smaller: it changes what is installed, so asked for by name), --sound-off.
+    if (int(a.has("sound-temporary")) + int(a.has("sound-permanent") || a.has("sound-to-flac")) + int(a.has("sound-off")) > 1)
+        throw std::invalid_argument("give one of --sound-temporary, --sound-permanent (--sound-to-flac) and --sound-off");
+    set_sound_mode(a.has("sound-off") ? SoundMode::off : a.has("sound-permanent") || a.has("sound-to-flac") ? SoundMode::permanent : SoundMode::temporary);
     // --progress: what the packer says as it goes (each file's ways weighed and the one taken, each
     // step's new best), to standard error with the seconds since the start, as the hallway's Keep a
     // log writes it (2 November 2026: so a run's reasons are seen without the hallway).
