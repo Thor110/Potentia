@@ -1596,6 +1596,112 @@ static bool tar_header_ok(const uint8_t* h)
     return digits && sum == want;
 }
 
+// v34 draft (8 November 2026, Edward: "make a start on listing out and implementing all formats"): a
+// PDF as a skeleton and members, as v31 carries a tar ("skm"; a reader since v31 reads it): its text
+// kept in the skeleton as it is; each stream filtered by /FlateDecode alone (128 bytes of deflate or
+// more) made again by preflate from what it holds, which is a member; each by /DCTDecode alone with a
+// /Length written as a number, a JPEG, carried as it is as a member, so it goes the way any JPEG
+// goes (its brunsli form, temporary). A stream of any other filter (JBIG2, JPX, LZW, several filters)
+// stays in the skeleton as it is. Nothing where no stream is opened.
+struct PdfSkeleton
+{
+    DeflateSkeleton sk;
+    std::vector<sieve::install::InMemory> members;
+    uint64_t jpeg_bytes = 0, deflated = 0;
+};
+
+bool is_pdf(const std::vector<uint8_t>& b) { return b.size() >= 8 && std::memcmp(b.data(), "%PDF-", 5) == 0; }
+
+std::optional<PdfSkeleton> pdf_skeleton(const std::vector<uint8_t>& b)
+{
+    if (!is_pdf(b)) return std::nullopt;
+    PdfSkeleton p;
+    const size_t n = b.size();
+    size_t kept = 0; // the end of what the skeleton holds already
+    auto member = [&](std::vector<uint8_t> bytes) {
+        sieve::install::InMemory m;
+        m.bytes = std::move(bytes);
+        p.members.push_back(std::move(m));
+    };
+    for (size_t i = 0; i + 8 < n; ++i)
+    {
+        if (b[i] != 's' || std::memcmp(b.data() + i, "stream", 6) != 0 || (i > 0 && b[i - 1] == 'd')) continue; // (not "endstream")
+        const size_t eol = b[i + 6] == '\r' && b[i + 7] == '\n' ? 2 : b[i + 6] == '\n' ? 1 : 0;
+        if (!eol) continue;
+        // Its dictionary: from the last "obj" before it, at most 64 KiB back, to the keyword.
+        const size_t back = i > 65536 ? i - 65536 : 0;
+        size_t obj = std::string::npos;
+        for (size_t k = i; k >= back + 3; --k)
+            if (std::memcmp(b.data() + k - 3, "obj", 3) == 0)
+            {
+                obj = k;
+                break;
+            }
+        if (obj == std::string::npos || obj < kept) continue;
+        const std::string dict(b.begin() + std::ptrdiff_t(obj), b.begin() + std::ptrdiff_t(i));
+        if (dict.find("/Filter") == std::string::npos || dict.find("endobj") != std::string::npos) continue;
+        auto only = [&](const char* name) {
+            // the one filter named: "/Filter /Name" or "/Filter [/Name]", no other filter beside it
+            const size_t f = dict.find("/Filter");
+            size_t at = f + 7;
+            while (at < dict.size() && (dict[at] == ' ' || dict[at] == '\r' || dict[at] == '\n' || dict[at] == '\t')) ++at;
+            const bool array = at < dict.size() && dict[at] == '[';
+            if (array)
+                for (++at; at < dict.size() && (dict[at] == ' ' || dict[at] == '\r' || dict[at] == '\n'); ++at) {}
+            const std::string want = std::string("/") + name;
+            if (dict.compare(at, want.size(), want) != 0) return false;
+            at += want.size();
+            if (at < dict.size() && std::isalnum(uint8_t(dict[at]))) return false;
+            while (at < dict.size() && (dict[at] == ' ' || dict[at] == '\r' || dict[at] == '\n')) ++at;
+            return !array || (at < dict.size() && dict[at] == ']');
+        };
+        const size_t start = i + 6 + eol;
+        if (only("FlateDecode"))
+        {
+            // zlib's two bytes, the deflate, its four bytes of Adler-32
+            if (start + 6 > n || (b[start] & 0x0F) != 8 || (uint32_t(b[start]) << 8 | b[start + 1]) % 31 != 0 || (b[start + 1] & 0x20)) continue;
+            size_t used = 0;
+            if (!inflate_raw(b.data() + start + 2, n - start - 2, &used) || used < 128 || start + 2 + used + 4 > n) continue;
+            const size_t before = p.sk.data.size();
+            p.sk.literal(b.data() + kept, start + 2 - kept);
+            if (!p.sk.deflated(b.data() + start + 2, used))
+            {
+                // (preflate could not: the stream stays in the skeleton as it is; what was written for
+                // the literal before it stays, and the deflate joins the next literal)
+                kept = start + 2;
+                continue;
+            }
+            member(std::vector<uint8_t>(p.sk.data.begin() + std::ptrdiff_t(before), p.sk.data.end()));
+            p.deflated += used;
+            kept = start + 2 + used;
+            i = kept - 1;
+        }
+        else if (only("DCTDecode"))
+        {
+            const size_t l = dict.find("/Length");
+            if (l == std::string::npos) continue;
+            size_t at = l + 7;
+            while (at < dict.size() && dict[at] == ' ') ++at;
+            uint64_t len = 0;
+            size_t digits = 0;
+            for (; at < dict.size() && std::isdigit(uint8_t(dict[at])) && digits < 12; ++at, ++digits) len = len * 10 + uint64_t(dict[at] - '0');
+            // (a number, not a reference: "/Length 12 0 R")
+            size_t look = at;
+            while (look < dict.size() && dict[look] == ' ') ++look;
+            if (!digits || (look < dict.size() && std::isdigit(uint8_t(dict[look]))) || len < 1024 || start + len > n || b[start] != 0xFF || b[start + 1] != 0xD8) continue;
+            p.sk.literal(b.data() + kept, start - kept);
+            p.sk.stored(b.data() + start, size_t(len));
+            member(std::vector<uint8_t>(b.begin() + std::ptrdiff_t(start), b.begin() + std::ptrdiff_t(start + len)));
+            p.jpeg_bytes += len;
+            kept = start + size_t(len);
+            i = kept - 1;
+        }
+    }
+    if (p.members.empty()) return std::nullopt;
+    p.sk.literal(b.data() + kept, n - kept);
+    return p;
+}
+
 bool is_tar(const std::vector<uint8_t>& b)
 {
     return b.size() >= 1024 && std::memcmp(b.data() + 257, "ustar", 5) == 0 && tar_header_ok(b.data());
@@ -3690,7 +3796,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0;
     uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
@@ -4679,6 +4785,40 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const uint64_t as_one = std::min(as_is_of(), shared + unfiltered);
                 return apart + 64 + as_one / 200 < as_one;
             };
+            // v34 draft: a PDF, with temporary, as its skeleton and members (pdf_skeleton): where its
+            // skeleton, what its deflate streams hold (LZMA2 or mixing), and its JPEGs (each as its
+            // brunsli form, where brunsli gives it back, else as it is) come out clearly under the PDF
+            // as it is. Checked to give the PDF back before it is kept.
+            if (members_on && temporary_ok && instructions_on && is_pdf(b))
+                if (auto pdf = [&] {
+                        const timings::Scope t("pack.pdf.open");
+                        return pdf_skeleton(b);
+                    }())
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = pdf->sk.inner(skeleton);
+                    std::vector<uint8_t> opened;
+                    uint64_t jpegs = 0;
+                    for (const auto& in : pdf->members)
+                        if (in.bytes.size() >= 2 && in.bytes[0] == 0xFF && in.bytes[1] == 0xD8)
+                        {
+                            const auto form = jpeg_to_brunsli(in.bytes);
+                            jpegs += form && form->size() < in.bytes.size() ? form->size() : in.bytes.size();
+                        }
+                        else opened.insert(opened.end(), in.bytes.begin(), in.bytes.end());
+                    const uint64_t apart = estimate(std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton))) +
+                                           (opened.empty() ? 0 : std::min(estimate(opened), mixed_estimate(opened))) + jpegs + 16 * pdf->members.size();
+                    const uint64_t as_one = as_is_of();
+                    if ((archives_always || apart + 64 + as_one / 200 < as_one) && deflate_skeleton_remake(whole, skeleton) == b)
+                    {
+                        ++pdfs_opened;
+                        progress(e.path + ", a PDF of " + std::to_string(b.size()) + " bytes, opened: " + std::to_string(pdf->members.size()) + " stream(s), " +
+                                 std::to_string(pdf->deflated) + " bytes of deflate and " + std::to_string(pdf->jpeg_bytes) + " of JPEG (about " + std::to_string(apart) +
+                                 " bytes packed, against " + std::to_string(as_one) + ")");
+                        if (pdf->members.size() >= 2 ? as_members(whole, skeleton, pdf->members) : single("pdf", std::move(whole), "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size()), e.path, 40))
+                            continue;
+                    }
+                }
             // A tar, with temporary: made again exactly from its skeleton, its files carried as its
             // members, each its own way (tar_skeleton), where that is smaller. Checked to give the tar
             // back before it is kept.
@@ -4787,7 +4927,11 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         // member carried with a recipe of its own.)
         std::unordered_set<std::string> texts_with_spans;
         for (const ManifestEntry* f : files)
+        {
             if (f->remake.rfind("spn ", 0) == 0) texts_with_spans.insert(f->path);
+            // (v34 draft: an archive's or a PDF's members as well, its JPEGs each as its brunsli form)
+            if (instructions_on && f->remake.rfind("skm ", 0) == 0) texts_with_spans.insert(f->path);
+        }
         auto in_spans = [&](const ManifestEntry& f) {
             const size_t slash = f.path.rfind('/');
             return slash != std::string::npos && texts_with_spans.count(f.path.substr(0, slash)) > 0;
@@ -5176,6 +5320,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     r.wavs_opened = wavs_opened;
     r.sounds_to_flac = sounds_to_flac;
     r.flacs_recoded = flacs_recoded;
+    r.pdfs_opened = pdfs_opened;
     r.sound_flac_was = sound_flac_was;
     r.sound_flac_now = sound_flac_now;
     r.wav_bytes = wav_bytes;
@@ -6515,7 +6660,17 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     };
     // v34 (draft): a GIF made again from its indices; a program mixed with the x86 instruction model (E1).
     auto e1_in = [](const std::string& w) { return w.rfind("mix4 ", 0) == 0 && Mix4Params::parse(w.substr(5)).instructions; };
-    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || e1_in(x.way); });
+    // (and v34 where a skeleton's member, not a text's spans', is a JPEG as its brunsli form)
+    std::unordered_set<std::string> with_skm;
+    for (const ManifestEntry& x : m.entries)
+        if (x.remake.rfind("skm ", 0) == 0) with_skm.insert(x.path);
+    auto skm_jpeg = [&](const ManifestEntry& x) {
+        const size_t slash = x.path.rfind('/');
+        return x.member && x.remake.rfind("jbr ", 0) == 0 && slash != std::string::npos && with_skm.count(x.path.substr(0, slash));
+    };
+    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
+                return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
+            });
     m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
     m.v32 = m.v32 || m.v33;
@@ -6652,6 +6807,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
+        if (r.pdfs_opened)
+            o << "pdfs      " << r.pdfs_opened << " PDF(s) carried as their skeletons and what their streams hold, made again exactly on installing\n";
         if (r.sounds_to_flac || r.flacs_recoded)
             o << "as flac   " << r.sounds_to_flac << " file(s) of sound installed as .flac files of the same samples, " << r.flacs_recoded
               << " FLAC file(s) re-coded (Sound as FLAC), " << r.sound_flac_was << " bytes as they were, " << r.sound_flac_now << " as FLAC\n";

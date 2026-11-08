@@ -15,12 +15,15 @@ Three ways a format can be taken, as now:
 
 ## In order of what each could be worth
 
-1. **PDF's deflate streams (temporary).** A PDF's pages, fonts and pictures are mostly `FlateDecode`
+1. **Built 8 November 2026** (results/pdf-2026-11-08.md). **PDF's deflate streams (temporary).** A PDF's pages, fonts and pictures are mostly `FlateDecode`
    streams. preflate (already in Sieve, for zip and gzip) can carry each as what it holds and make the
    deflate again exactly, as the zip route does; the PDF itself as a skeleton. Sieve carries PDFs as
    their bytes today. To measure: the share of a PDF in deflate streams, and what mixing makes of
    them opened, on the repository's own PDF (wotw-man-english-v1.pdf in WoWRevived) and a few more.
-2. **Sound in companded or floating-point samples (temporary).** A WAV or `.au` in mu-law or A-law (8
+2. **Measured 8 November 2026: mu-law and A-law not worth it** (Sieve's mixing on the 8-bit codes made
+   1,026,561 and 162,491 bytes of two files where FLAC on the widened samples made 1,614,712 and
+   236,962); **floats of whole 24-bit steps worth it** (FLAC 21% to 24% under Sieve's ways), built next.
+   **Sound in companded or floating-point samples (temporary).** A WAV or `.au` in mu-law or A-law (8
    bits a sample, formats 7 and 6; `.au` encodings 1 and 27): each code maps to one linear value and
    back, so the samples can be widened to 16 bits, coded by FLAC, and narrowed again exactly. A float
    WAV or AIFF-C (`fl32`) whose every value is a whole number over 2^23 (common where the float came

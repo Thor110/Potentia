@@ -101,6 +101,7 @@ struct PackReport
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
     uint64_t jpeg_was = 0, jpeg_now = 0;
     size_t gifs_opened = 0, gif_frames = 0; // v34 draft: GIFs carried as their indices, and their frames
+    size_t pdfs_opened = 0; // v34 draft: PDFs as skeletons and members
     size_t sounds_to_flac = 0, flacs_recoded = 0; // Sound as FLAC: files installed as .flac, FLACs re-coded, their bytes before and after
     uint64_t sound_flac_was = 0, sound_flac_now = 0;
     size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC

@@ -7580,8 +7580,9 @@ def cmd_unpack_v7(args, data):
             if not n.isdigit():
                 sys.exit(f"{path}: an archive's members not counted as Sieve counts them")
             mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
-            if len(mine) != int(n) or any(k in members for k in mine) or any(files[k][3].startswith("skm ") for k in mine):
-                sys.exit(f"{path} does not list the members its recipe counts")
+            if len(mine) != int(n) or any(k in members for k in mine) or any(files[k][3].startswith("skm ") for k in mine) or \
+                    any(files[k][3].split(" ")[0] in RECIPE_WORDS and not (v34 and files[k][3].startswith("jbr ")) for k in mine):
+                sys.exit(f"{path} does not list the members its recipe counts")  # (v34 draft: a member may be a JPEG as its brunsli form)
             for k in mine:
                 members[k] = i
         if v33 and way.startswith("spn "):
@@ -7997,6 +7998,9 @@ def cmd_unpack_v7(args, data):
             continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
+            if r[0] == "skm" and any(k in remakes and remakes[k][0] == "jbr" for k in members if members[k] == i):
+                unchecked.add(i)  # (v34 draft: a member a JPEG as its brunsli form, not made here, so neither is its archive)
+                continue
             inner = got[i] + b"".join(got[k] for k in sorted(members) if members[k] == i) if r[0] == "skm" else got[i]  # v31: its members after it
             made = skeleton_remake(inner, skel, files[i][0])
             if made is None:

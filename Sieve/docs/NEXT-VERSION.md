@@ -38,6 +38,10 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   1 or 2 channels, up to 24 bits), and FLAC files re-coded at the priority's effort, their tags kept.
   Not a format change: a `.flac` is carried as any file is. CI step 11 checks ten sound files so and
   a FLAC re-coded (its tag kept, its 8 KiB of padding gone), each decoded by the oracle's own reader.
+- **PDFs opened, 8 November 2026** (docs/FORMATS-PLAN.md, first): a PDF as a skeleton and members
+  (v31's `skm`): its deflate streams through preflate, its JPEGs as members, which may now be carried
+  as their brunsli form (the one change a reader sees). Three arXiv papers 41% to 49% smaller, the
+  WoWRevived manual 18.1%; making slower where many streams are searched (results/pdf-2026-11-08.md).
 - **Pictures' shapes from their headers, 8 November 2026**: a BMP, uncompressed TGA, binary PNM or
   uncompressed TIFF of plain pixels offers mixing its header's shape, and its rows as one byte a
   pixel, weighed on its start; the packer's choice alone (mix-v4's `I`). 24 pictures 0.62% smaller,

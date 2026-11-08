@@ -1540,6 +1540,56 @@ python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
 diff -r g34 g34_oracle
 $S locate g34 --installer g34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
 if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi
+# The v34 draft's PDF (8 November 2026, Edward: "make a start on listing out and implementing all
+# formats"): a PDF as a skeleton and members, as v31 carries a tar ("skm"): its deflate streams made
+# again by preflate from what they hold, its JPEGs carried as they are, each a member carried its own
+# way. A PDF written here: eight pages whose content streams are deflated by zlib, and the repository's
+# door.jpg as a /DCTDecode picture. Given back byte for byte by Sieve and sieve-install, its listing
+# read by the oracle; without the draft, not opened.
+rm -rf p34
+mkdir p34
+python - p34/pages.pdf ../web/test-site/src/pictures/door.jpg <<'PY'
+import sys, zlib
+jpeg = open(sys.argv[2], "rb").read()
+objs = []
+def obj(body): objs.append(body); return len(objs)
+pages = []
+img = obj(b"<< /Type /XObject /Subtype /Image /Width 800 /Height 450 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + str(len(jpeg)).encode() + b" >>\nstream\n" + jpeg + b"\nendstream")
+for k in range(8):
+    text = b"".join(b"BT /F1 11 Tf 72 %d Td (Line %d of page %d: the rope, the wave and the sieve.) Tj ET\n" % (720 - 14 * j, j, k) for j in range(48))
+    z = zlib.compress(text + b"q 200 0 0 112 72 40 cm /Im0 Do Q\n")
+    c = obj(b"<< /Length " + str(len(z)).encode() + b" /Filter /FlateDecode >>\nstream\n" + z + b"\nendstream")
+    pages.append(c)
+font = obj(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+kids = []
+first = len(objs) + 1
+root_pages = first + 8
+for c in pages:
+    kids.append(obj(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] /Contents %d 0 R /Resources << /Font << /F1 %d 0 R >> /XObject << /Im0 %d 0 R >> >> >>" % (root_pages, c, font, img)))
+assert obj(b"<< /Type /Pages /Kids [" + b" ".join(b"%d 0 R" % k for k in kids) + b"] /Count 8 >>") == root_pages
+cat = obj(b"<< /Type /Catalog /Pages %d 0 R >>" % root_pages)
+out, offs = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"), []
+for i, body in enumerate(objs, 1):
+    offs.append(len(out))
+    out += b"%d 0 obj\n" % i + body + b"\nendobj\n"
+x = len(out)
+out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1) + b"".join(b"%010d 00000 n \n" % o for o in offs)
+out += b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, cat, x)
+open(sys.argv[1], "wb").write(out)
+PY
+$S locate p34 --installer p34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > p34.txt
+grep -q "^pdfs      1 PDF(s) carried as their skeletons" p34.txt
+grep -q "	skm 9 [0-9]* .*pages.pdf$" p34.txt
+rm -rf p34_inst p34_si p34_oracle
+$S install p34.sieve --to p34_inst > /dev/null
+diff -r p34 p34_inst
+$SI p34.sieve --to p34_si --yes > /dev/null
+diff -r p34 p34_si
+# (the oracle has no preflate: it reads the listing and every member, and says the PDF is not made
+# again by it, as it says of a zip's deflate)
+python sieve_ref.py unpack p34.sieve --to p34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*pages.pdf"
+$S locate p34 --installer p34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > p34v33.txt
+if grep -q "^pdfs " p34v33.txt; then exit 1; fi
 # The v34 draft's FLAC way (8 November 2026, Edward: "make a start on that, use the three levels as
 # the size/balanced/speed paths"): a WAV carried as its samples coded by libFLAC and the rest of the
 # file as it was ("flac <skeleton size> <inner size>"). Six WAVs written here: 8-bit mono of an odd

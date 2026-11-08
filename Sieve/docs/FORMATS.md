@@ -72,6 +72,7 @@ say so.
 | **FLAC** (`.flac`) | libFLAC | as its bytes (a FLAC is coded already) | with **Sound as FLAC** (below): re-coded at the priority's effort where 0.5% smaller, its tags, pictures and cue sheet kept, its padding and seek table dropped | Ogg FLAC, or a FLAC after an ID3 tag, as its bytes |
 
 **Sound as FLAC** (v34 draft; `--sound-to-flac`, the File Locator's box W, `[locator] sound_to_flac`; off unless ticked, as it changes what is installed): a WAV, AIFF, RF64, Wave64, `.au` or CAF of 1 or 2 channels, up to 24 bits, at a rate FLAC's streamable subset holds, installed as `name.flac`, the same samples, which any player opens; its other chunks (a WAV's LIST tags) are not kept. Where `name.flac` is already taken (a namesake in the folder), the file is carried as temporary carries it. A FLAC file is re-coded as above. Packing warns, naming each file.
+| **PDF** (`.pdf`) | Sieve, preflate | v34 draft: a skeleton and members (v31's `skm`): its `/FlateDecode` streams made again by preflate from what they hold, its `/DCTDecode` JPEGs as their brunsli form (results/pdf-2026-11-08.md) | as temporary | JBIG2, JPX and chained filters stay in the skeleton |
 | **JPEG** | brunsli | v32: from its brunsli form (`jbr`) | v32: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
 
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.

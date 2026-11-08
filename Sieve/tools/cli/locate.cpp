@@ -2493,8 +2493,8 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             {
                 if (e.path.rfind(under, 0) != 0) continue;
                 // (A member of a text's spans may be a JPEG carried as its brunsli form: the one
-                // recipe a member has.)
-                if (e.dir || e.member || (!e.remake.empty() && !(spn && e.remake.rfind("jbr ", 0) == 0)))
+                // recipe a member has. v34 draft: an archive's or a PDF's member too.)
+                if (e.dir || e.member || (!e.remake.empty() && !((spn || m.v34) && e.remake.rfind("jbr ", 0) == 0)))
                     throw std::runtime_error("manifest: " + e.path + " is not a member as Sieve writes one");
                 e.member = true;
                 ++found;

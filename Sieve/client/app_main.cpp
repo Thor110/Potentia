@@ -140,6 +140,8 @@ const char* kUsage =
     "                      way chosen for each file by its kind ([locator] optimise_search)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
+    "  --sound-to-flac     the File Locator's Sound as FLAC ticked, for this run (v34 draft): a WAV, AIFF,\n"
+    "                      RF64, Wave64, .au or CAF installed as .flac ([locator] sound_to_flac)\n"
     "  --more-formats      the File Locator's More formats ticked, for this run: the comparison with\n"
     "                      gzip, bzip2, zstd, brotli and lz4 beside zip and 7z (slower)\n"
     "  --priority WHAT     the File Locator's Size, Balanced or Decoding speed, for this run: size, balanced\n"
