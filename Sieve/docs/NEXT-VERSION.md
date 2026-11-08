@@ -51,6 +51,10 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   in third_party/packmp3 with each change marked (results/mp3-pmp-2026-11-08.md).
 - **DDS's shape, 8 November 2026**: an uncompressed DDS's shape read from its header for mixing (8.5%
   on one texture) (results/mp3-dds-ico-2026-11-08.md).
+- **Sound as FLAC for WavPack, Monkey's Audio, TTA and ALAC, 9 November 2026**: decoded by ffmpeg
+  (run as its own process), tags and covers kept, installed as .flac where smaller, the samples'
+  MD5s checked equal; without ffmpeg, left as they are and the listing says so
+  (results/lossless-sound-2026-11-09.md).
 - **Sound as FLAC keeps tags, 8 November 2026**: a WAV's LIST INFO and an AIFF's NAME, AUTH, ANNO and
   (c) written as the .flac's Vorbis comments; 3 to 8 channels where the WAV's channel mask is FLAC's
   own order.

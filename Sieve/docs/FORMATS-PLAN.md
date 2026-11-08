@@ -38,8 +38,18 @@ Three ways a format can be taken, as now:
 4. **Built 8 November 2026, after packMP3's decoder was made safe** (results/mp3-pmp-2026-11-08.md). **MP3 (temporary).** Its Huffman-coded frames can be recoded by a better model and made again
    exactly (packMP3 and similar tools do this). Before anything: a coder whose licence fits Sieve's,
    and whether it gives back every MP3 exactly. To measure on MP3s from LAME and others.
-5. **Built 8 November 2026: tags and 3 to 8 channels** (WavPack, Monkey's Audio, TTA and ALAC still
-   to do). **Sound as FLAC, further.** A WAV's LIST INFO tags and an AIFF's NAME and ANNO chunks written as
+   **Still to do: MPEG-2 and MPEG-2.5 Layer III** (22.05, 24 and 16 kHz; 11.025, 12 and 8 kHz),
+   which packMP3 does not code: they are carried as their bytes, and Edward's check names them
+   ("file is MPEG-2.5 LAYER III, not supported"; his M.A.S.H..mp3 is one, 16 kbit/s at 11,025 Hz).
+   A coder for them is to be tracked down or built (Edward, 9 November 2026): a decoder and an
+   encoder giving back every such MP3 exactly. packMP3 would need, for them, one granule a frame
+   (not two), the shorter side info (an 8-bit main data start, 9-bit scalefactor compression, no
+   sharing between granules), MPEG-2's scalefactor partitions (and those for intensity stereo, whose
+   lengths reach 5 bits), the bands of the six lower rates, MPEG-2's bitrate and frame-size tables,
+   and its own PMP header's version; then hardened and fuzzed as its MPEG-1 decoder was. ffmpeg does
+   not stand in: it decodes to sound, and its encoding again never gives the MP3's bytes back.
+5. **Built 8 November 2026: tags and 3 to 8 channels; 9 November 2026: WavPack, Monkey's Audio, TTA
+   and ALAC through ffmpeg** (results/lossless-sound-2026-11-09.md). **Sound as FLAC, further.** A WAV's LIST INFO tags and an AIFF's NAME and ANNO chunks written as
    FLAC's Vorbis comments, so a repack keeps them; more than 2 channels where the WAV's channel mask
    is FLAC's own order; WavPack, Monkey's Audio, TTA and ALAC files decoded and installed as FLAC (their
    decoders' licences to check: WavPack's is BSD).

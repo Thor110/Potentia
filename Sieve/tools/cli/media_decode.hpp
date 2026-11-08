@@ -95,6 +95,16 @@ bool looks_like_mpeg_audio(std::span<const uint8_t> head);
 
 // Whether the ffmpeg found can encode with this encoder (by `ffmpeg -encoders`, asked once per ffmpeg).
 bool ffmpeg_has_encoder(const std::string& name);
+// Runs the ffmpeg found with these arguments (after "-hide_banner -nostdin"): what it wrote to its
+// standard output and to its standard error, and its exit status. (ffmpeg 6.1 exits with 0 after a
+// decoding error, a CRC's among them: at "-v error", anything in `err` is the sign of one.) Throws
+// only where there is no ffmpeg to run.
+struct FfmpegRun
+{
+    std::string out, err;
+    int status = -1;
+};
+FfmpegRun ffmpeg_run(const std::vector<std::string>& args);
 // Runs ffmpeg from one file to another, with options before the input and before the output;
 // throws with what ffmpeg said if it fails.
 void ffmpeg_convert(const std::vector<std::string>& input_options, const std::string& input, const std::vector<std::string>& output_options,

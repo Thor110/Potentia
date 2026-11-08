@@ -2942,7 +2942,7 @@ std::string changed_files_warning(const Manifest& m)
              (pictures.size() == 1 ? " installed re-saved, the same picture in other bytes: " : " installed re-saved, the same pictures in other bytes: ") + list(pictures) + ".";
     if (!sounds.empty())
         w += std::string(w.empty() ? "" : " ") + (sounds.size() == 1 ? "A file of sound here is" : std::to_string(sounds.size()) + " files of sound here are") +
-             " installed as .flac (or a FLAC re-coded), the same samples in other bytes (a WAV's or AIFF's other chunks, such as tags, left out; a FLAC's tags kept): " + list(sounds) +
+             " installed as .flac (or a FLAC re-coded), the same samples in other bytes (a WAV's or AIFF's other chunks, such as tags, left out; the tags of a FLAC, WavPack, Monkey's Audio, TTA or ALAC kept): " + list(sounds) +
              ". Untick Sound as FLAC (--sound-to-flac) to install them as they are.";
     if (!archives.empty() || !pictures.empty()) w += " Untick Archive and compressed formats: permanent (--compressed-permanent) to install every file as it is.";
     return w;

@@ -546,10 +546,10 @@ target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_ima
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
 # (client/unpack_7z.cpp too: "Optimise Archive Formats" reads a 7z's contents with the installer's
 # own decoder.)
-add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/tiff_codec.cpp tools/cli/pcx_rle.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/lossless_sound.cpp tools/cli/tiff_codec.cpp tools/cli/pcx_rle.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli sieve_packmp3 FLAC)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli sieve_packmp3 FLAC sieve_lines)
 target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
 target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)

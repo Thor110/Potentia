@@ -107,6 +107,7 @@ struct PackReport
     size_t pcxs_opened = 0; // v34 draft: PCX pictures carried as their pixels
     size_t mp3s_opened = 0; // v34 draft: MP3s carried as packMP3 codes them
     size_t sounds_to_flac = 0, flacs_recoded = 0; // Sound as FLAC: files installed as .flac, FLACs re-coded, their bytes before and after
+    size_t lossless_need_ffmpeg = 0; // Sound as FLAC: WavPack, Monkey's Audio, TTA or ALAC files left as they are, with no ffmpeg to read them
     uint64_t sound_flac_was = 0, sound_flac_now = 0;
     size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC
     uint64_t wav_bytes = 0;  // (their bytes)

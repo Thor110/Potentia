@@ -257,11 +257,13 @@ private:
 };
 
 // Runs a program and reads all it writes to its standard output.
-std::string run(const std::vector<std::string>& args, const fs::path* err = nullptr)
+std::string run(const std::vector<std::string>& args, const fs::path* err = nullptr, int* status = nullptr)
 {
     Pipe p(args, err);
     std::string out, l;
     while (p.line(l)) out += l + "\n";
+    const int st = p.close();
+    if (status) *status = st;
     return out;
 }
 
@@ -826,6 +828,18 @@ void ffmpeg_convert(const std::vector<std::string>& input_options, const std::st
         const std::string e = read_text(err.path);
         throw std::runtime_error("ffmpeg could not write '" + output + "'" + (e.empty() ? std::string() : ": " + e));
     }
+}
+
+FfmpegRun ffmpeg_run(const std::vector<std::string>& args)
+{
+    const std::string exe = ffmpeg_or_throw("cannot run ffmpeg", "reads WAV, AIFF and FLAC");
+    const TempFile err(".txt");
+    std::vector<std::string> cmd = {exe, "-hide_banner", "-nostdin"};
+    cmd.insert(cmd.end(), args.begin(), args.end());
+    FfmpegRun r;
+    r.out = run(cmd, &err.path, &r.status);
+    r.err = read_text(err.path);
+    return r;
 }
 
 bool looks_like_mpeg_audio(std::span<const uint8_t> h)

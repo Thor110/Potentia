@@ -7,6 +7,8 @@
 #include "cli/jpeg_glue.hpp"
 #include "cli/gif_lzw.hpp"
 #include "cli/flac_wav.hpp"
+#include "cli/lossless_sound.hpp"
+#include "cli/media_decode.hpp"
 #include "cli/tiff_codec.hpp"
 #include "cli/pcx_rle.hpp"
 #include "cli/mp3_glue.hpp"
@@ -4202,7 +4204,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0, mp3s_opened = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, lossless_need_ffmpeg = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0, mp3s_opened = 0;
     // (v34 draft: an opened TIFF's shape, its pixels' width and bytes a pixel, for mixing to weigh)
     std::map<std::string, std::pair<uint32_t, uint32_t>> tiff_shapes;
     uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
@@ -4424,6 +4426,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             bool done = false;
             std::optional<WavOpened> opened;                  // temporary's "flac"
             std::optional<std::vector<uint8_t>> as_flac, recoded; // Sound as FLAC's
+            std::string lossless_why;                         // (why a WavPack, APE, TTA or ALAC was not)
         };
         std::vector<SoundAhead> sound_ahead(bytes.size());
         const int sound_effort = priority() == Priority::size ? 2 : priority() == Priority::balanced ? 1 : 0;
@@ -4432,7 +4435,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             const timings::Scope t("pack.flac.ahead");
             std::vector<size_t> sounds;
             for (size_t k = 0; k < bytes.size(); ++k)
-                if (is_sound(bytes[k]) || (flac_files && is_flac(bytes[k]))) sounds.push_back(k);
+                if (is_sound(bytes[k]) || (flac_files && (is_flac(bytes[k]) || *lossless_sound_name(bytes[k])))) sounds.push_back(k);
             std::atomic<uint64_t> held{0};
             for_each_index(sounds.size(), pack_threads(), [&](size_t i) {
                 const std::vector<uint8_t>& f = bytes[sounds[i]];
@@ -4440,6 +4443,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 SoundAhead& a = sound_ahead[sounds[i]];
                 if (flac_files && is_flac(f)) a.recoded = flac_recoded(f, sound_effort);
                 if (flac_files && is_sound(f)) a.as_flac = sound_as_flac(f, sound_effort);
+                else if (flac_files && *lossless_sound_name(f)) a.as_flac = lossless_as_flac(f, sound_effort, &a.lossless_why);
                 if (temporary_ok && is_sound(f)) a.opened = wav_open(f, sound_effort);
                 a.done = true;
             });
@@ -4736,15 +4740,28 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 continue;
             }
             // Sound as FLAC: installed as a .flac file of the same samples, where one can be made that
-            // any player opens and is smaller than the file, under a name nothing else takes.
-            if (flac_files && is_sound(b))
+            // any player opens and is smaller than the file, under a name nothing else takes. (A
+            // WavPack, Monkey's Audio, TTA or ALAC file too, decoded by ffmpeg: cli/lossless_sound.hpp.)
+            const char* lossless = flac_files && !is_sound(b) ? lossless_sound_name(b) : "";
+            if (flac_files && (is_sound(b) || *lossless))
             {
                 std::optional<std::vector<uint8_t>> f;
-                if (sound_ahead[this_file].done) f = std::move(sound_ahead[this_file].as_flac);
+                std::string why;
+                if (sound_ahead[this_file].done)
+                {
+                    f = std::move(sound_ahead[this_file].as_flac);
+                    why = sound_ahead[this_file].lossless_why;
+                }
                 else
                 {
                     const timings::Scope t("pack.flac.file");
-                    f = sound_as_flac(b, sound_effort);
+                    f = *lossless ? lossless_as_flac(b, sound_effort, &why) : sound_as_flac(b, sound_effort);
+                }
+                if (*lossless && !f && why == "needs ffmpeg")
+                {
+                    if (!lossless_need_ffmpeg++)
+                        progress(e.path + ", " + lossless + ", left as it is: Sound as FLAC reads " + lossless + " through ffmpeg, and " + ffmpeg_missing() +
+                                 " (set one in the hallway's Settings, or give --ffmpeg PATH)");
                 }
                 const size_t slash = e.path.find_last_of('/'), dot = e.path.find_last_of('.');
                 const std::string name = (dot != std::string::npos && (slash == std::string::npos || dot > slash) ? e.path.substr(0, dot) : e.path) + ".flac";
@@ -4755,7 +4772,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     sound_flac_was += b.size();
                     sound_flac_now += f->size();
                     m.changed_on_packing.push_back(e.path + " (as " + name + ")");
-                    progress(e.path + ", " + sound_name(b) + " of " + std::to_string(b.size()) + " bytes, installed as " + name + ", " + std::to_string(f->size()) +
+                    progress(e.path + ", " + (*lossless ? lossless : sound_name(b)) + " of " + std::to_string(b.size()) + " bytes, installed as " + name + ", " + std::to_string(f->size()) +
                              " bytes, the same samples");
                     ManifestEntry c = e;
                     c.path = name;
@@ -5835,6 +5852,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     r.gifs_opened = gifs_opened;
     r.wavs_opened = wavs_opened;
     r.sounds_to_flac = sounds_to_flac;
+    r.lossless_need_ffmpeg = lossless_need_ffmpeg;
     r.flacs_recoded = flacs_recoded;
     r.pdfs_opened = pdfs_opened;
     r.tiffs_opened = tiffs_opened;
@@ -7343,6 +7361,8 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.sounds_to_flac || r.flacs_recoded)
             o << "as flac   " << r.sounds_to_flac << " file(s) of sound installed as .flac files of the same samples, " << r.flacs_recoded
               << " FLAC file(s) re-coded (Sound as FLAC), " << r.sound_flac_was << " bytes as they were, " << r.sound_flac_now << " as FLAC\n";
+        if (r.lossless_need_ffmpeg)
+            o << "as flac   " << r.lossless_need_ffmpeg << " WavPack, Monkey's Audio, TTA or ALAC file(s) left as they are: Sound as FLAC reads them through ffmpeg, which was not found (link ffmpeg in the hallway's Settings, or give --ffmpeg PATH)\n";
         if (r.wavs_opened)
             o << "sound     " << r.wavs_opened << " file(s) of sound (WAV, AIFF, RF64, Wave64, .au, CAF), " << r.wav_bytes << " bytes, carried as their samples coded by FLAC, made again exactly on installing ("
               << kGifManifestVersion << ")\n";
