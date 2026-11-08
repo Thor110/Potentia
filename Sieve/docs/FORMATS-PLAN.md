@@ -20,33 +20,38 @@ Three ways a format can be taken, as now:
    deflate again exactly, as the zip route does; the PDF itself as a skeleton. Sieve carries PDFs as
    their bytes today. To measure: the share of a PDF in deflate streams, and what mixing makes of
    them opened, on the repository's own PDF (wotw-man-english-v1.pdf in WoWRevived) and a few more.
-2. **Measured 8 November 2026: mu-law and A-law not worth it** (Sieve's mixing on the 8-bit codes made
-   1,026,561 and 162,491 bytes of two files where FLAC on the widened samples made 1,614,712 and
-   236,962); **floats of whole 24-bit steps worth it** (FLAC 21% to 24% under Sieve's ways), built next.
+2. **Built 8 November 2026: floats** (results/float-sound-2026-11-08.md). **Measured: mu-law and A-law
+   not worth it** (Sieve's mixing on the 8-bit codes made 1,026,561 and 162,491 bytes of two files
+   where FLAC on the widened samples made 1,614,712 and 236,962).
    **Sound in companded or floating-point samples (temporary).** A WAV or `.au` in mu-law or A-law (8
    bits a sample, formats 7 and 6; `.au` encodings 1 and 27): each code maps to one linear value and
    back, so the samples can be widened to 16 bits, coded by FLAC, and narrowed again exactly. A float
    WAV or AIFF-C (`fl32`) whose every value is a whole number over 2^23 (common where the float came
    from 24-bit integers): carried as those integers through FLAC, else as it is. To measure: FLAC on
    the widened samples against the rope and mixing on the bytes; how many float files are so.
-3. **TIFF compressed (temporary).** Deflate (8, 32946) through preflate as above; LZW (5) made again as
+3. **Built 8 November 2026** (results/tiff-compressed-2026-11-08.md). **TIFF compressed (temporary).** Deflate (8, 32946) through preflate as above; LZW (5) made again as
    the GIF route makes GIFs, where libtiff's coder gives it back; PackBits (32773) where its runs are
    the greedy ones. Then each picture's pixels mixed with its header's shape. To measure: TIFFs from
    libtiff, ImageMagick and Photoshop, which of them are given back.
-4. **MP3 (temporary).** Its Huffman-coded frames can be recoded by a better model and made again
+3a. **Built 8 November 2026: zlib streams inside any file, PCX; measured and not built: PSD,
+   run-length TGA** (results/zlib-pcx-2026-11-08.md).
+4. **Measured 8 November 2026: worth 10.6% to 14.4%, licence fits (packMP3, LGPL v3), not built:
+   its decoder crashed on 264 of 300 fuzzed streams** (results/mp3-dds-ico-2026-11-08.md). **MP3 (temporary).** Its Huffman-coded frames can be recoded by a better model and made again
    exactly (packMP3 and similar tools do this). Before anything: a coder whose licence fits Sieve's,
    and whether it gives back every MP3 exactly. To measure on MP3s from LAME and others.
-5. **Sound as FLAC, further.** A WAV's LIST INFO tags and an AIFF's NAME and ANNO chunks written as
+5. **Built 8 November 2026: tags and 3 to 8 channels** (WavPack, Monkey's Audio, TTA and ALAC still
+   to do). **Sound as FLAC, further.** A WAV's LIST INFO tags and an AIFF's NAME and ANNO chunks written as
    FLAC's Vorbis comments, so a repack keeps them; more than 2 channels where the WAV's channel mask
    is FLAC's own order; WavPack, Monkey's Audio, TTA and ALAC files decoded and installed as FLAC (their
    decoders' licences to check: WavPack's is BSD).
 6. **Run-length pictures (temporary).** TGA RLE, BMP RLE8 and RLE4, PCX: their runs undone, made again
    where the encoder's choice of runs is the plain greedy one. To measure: which encoders' files are
    given back (ffmpeg's TGA, GIMP's, Paint's BMP).
-7. **Game and texture formats.** DDS (uncompressed: its header's shape for mixing, as above; BC1 to
+7. **Built 8 November 2026: uncompressed DDS's shape; BC1 measured as carried well already**
+   (results/mp3-dds-ico-2026-11-08.md). **Game and texture formats.** DDS (uncompressed: its header's shape for mixing, as above; BC1 to
    BC7 blocks: their endpoints and indices apart), WAD and PAK lumps listed as files (carried each its
    own way, as a tar's members are), and WoWRevived's own DAT where its layout is known.
-8. **Containers holding these.** An AVI or MOV holding PCM sound: its sound through FLAC and the rest
+8. **Measured 8 November 2026: ICO already carried well; AVI and MOV not measured.** **Containers holding these.** An AVI or MOV holding PCM sound: its sound through FLAC and the rest
    as it is (only where the sound is plain samples; WoWRevived's film packets were not); ICO and CUR,
    which hold PNGs or BMPs, opened as those.
 

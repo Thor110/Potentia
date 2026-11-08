@@ -30,7 +30,7 @@ EDGE = [0, 1, 2, 3, 7, 8, 13, 16, 31, 32, 63, 64, 127, 128, 255, 256, 4095, 4096
         2**20, 2**24, 2**31 - 1, 2**31, 2**32 - 1, 2**32, 2**32 + 1, 2**40, 2**53, 2**62, 2**63 - 1, 2**63, 2**64 - 1]
 WAYS = ["raw", "x86", "rope L8 W1 S1 P1 K0", "rope L8 W4096 S4 P3 K9", "pieces z1 r1 rope L8 W1 S1 P1 K0", "mix4 B16", "mix4 B30",
         "mix4 B22 I0x3", "mix4 B22 I65535x4 P256", "mix4 B16 D60", "mix4 B16 F80 W1", "mixt B16 T99999999", "mixn", "runs", "copy 0", "copy 99999",
-        "delta 0 1", "delta 1 99999999", "gif 254 13 13 raw", "gif 1 271 192271 raw", "flac 12 13 raw", "flac 80 95211 raw", "spn 1 10 raw", "skm 2 10 raw", "skr 10 2 1 1 13 raw",
+        "delta 0 1", "delta 1 99999999", "gif 254 13 13 raw", "gif 1 271 192271 raw", "flac 12 13 raw", "flac 80 95211 raw", "tiff 10 20 raw", "tiff 0 4096 raw", "tiff 453 43463 raw", "pcx 129 7042 raw", "pcx 128 128 raw", "pcx 999999 18561 raw", "spn 1 10 raw", "skm 2 10 raw", "skr 10 2 1 1 13 raw",
         "pngr 5 0 33 33 40 raw", "stb 9 0 1 1 1 1 raw", "jbr 10 raw", "sk 10 20 raw", "xz 6 1 10 raw", "gz 9 8 0 10 raw", "zst 1.5.6 3 0 0 10 raw",
         "lz4 1 4 0 0 0 0 10 raw", "br 11 24 10 raw", "lzma 9e 10 raw", "bz2 9 10 raw", "item 0 0", "lines 0"]
 PATHS = ["../x", "a/../../b", "/abs", "C:\\x", "con.txt", "a//b", "", ".", "a\\..\\..\\b", "x" * 300, "a/b/" * 40 + "c", "aux", "dir/"]

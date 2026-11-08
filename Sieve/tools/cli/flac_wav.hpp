@@ -26,7 +26,10 @@
 // for chunk names, 64-bit sizes), Sun's .au (a 24-byte head, big-endian samples) and Apple's CAF
 // ("lpcm" samples, either order). An .au or a CAF may leave its samples' size unwritten, the samples
 // running to the end of the file: its skeleton then ends where they start, and the FLAC stream says
-// how many there are. FLAC's decoding is integer arithmetic, so the same FLAC stream
+// how many there are. And floating-point samples (32 or 64 bits: a WAV of format 3, AIFF-C "fl32" or
+// "fl64", an .au of encoding 6 or 7, a CAF so flagged), where every value is a whole number n over 2^23
+// (as a float made from 16- or 24-bit integers is): FLAC codes the numbers at 24 bits, and each is
+// written back as that float, bit for bit, by integer arithmetic (8 November 2026). FLAC's decoding is integer arithmetic, so the same FLAC stream
 // always gives the same samples, on any machine; the opener makes the WAV again and compares before
 // it is ever chosen.
 //
@@ -68,9 +71,11 @@ struct WavOpened
 std::optional<WavOpened> wav_open(const std::vector<uint8_t>& b, int effort);
 
 // A .flac file of b's samples, for installing in b's place ("Sound as FLAC", Edward, 8 November 2026):
-// FLAC's streamable subset (any player opens it), b's own rate, one or two channels, at most 24 bits;
-// checked to give back b's samples exactly. What else b holds (its other chunks) is not kept. Nothing
-// where b is not so.
+// FLAC's streamable subset (any player opens it), b's own rate, at most 24 bits, one or two channels or
+// 3 to 8 whose WAVE_FORMAT_EXTENSIBLE channel mask is FLAC's own order; checked to give back b's
+// samples exactly. A WAV's LIST INFO tags and an AIFF's NAME, AUTH, ANNO and "(c) " chunks are kept
+// as Vorbis comments (TITLE, ARTIST, ALBUM, COMMENT, DATE, GENRE, TRACKNUMBER, COPYRIGHT); its other
+// chunks are not. Nothing where b is not so.
 std::optional<std::vector<uint8_t>> sound_as_flac(const std::vector<uint8_t>& b, int effort);
 
 // Whether b starts as a FLAC file does ("fLaC").

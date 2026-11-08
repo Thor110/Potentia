@@ -1590,6 +1590,128 @@ diff -r p34 p34_si
 python sieve_ref.py unpack p34.sieve --to p34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*pages.pdf"
 $S locate p34 --installer p34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > p34v33.txt
 if grep -q "^pdfs " p34v33.txt; then exit 1; fi
+# Compressed TIFFs (v34 draft, 8 November 2026, Edward: "work through all of the things on that
+# list"): written here by Pillow, through the libtiff it carries: LZW with and without the horizontal
+# predictor, deflate with it, PackBits, 16-bit grey (LZW, predictor), and three pages in one file; all
+# six opened ("tiff <skeleton size> <inner size>") and given back byte for byte by Sieve and
+# sieve-install. The oracle makes the LZW and PackBits ones again itself (its own coders, from the
+# specification), and says the deflate one is not made again by it (no preflate). Opened whatever
+# they come to (SIEVE_ARCHIVES_ALWAYS: pictures this small, 96 by 64, so that the oracle's mixing is
+# quick, may not pay); an uncompressed TIFF, and one whose strips overlap, left to the other ways;
+# without the draft, none.
+pip_add "pillow==12.0.0"
+rm -rf t34 t34_inst t34_si t34_oracle
+mkdir t34
+python - t34 <<'PY'
+import os, random, struct, sys
+from PIL import Image
+out = sys.argv[1]
+rng = random.Random(5)
+w, h = 96, 64
+px = bytes(min(255, max(0, (x * 255 // w + y // 2 + rng.randint(-6, 6)) % 256)) for y in range(h) for x in range(w) for c in range(3))
+im = Image.frombytes("RGB", (w, h), px)
+im.save(os.path.join(out, "lzw.tif"), compression="tiff_lzw")
+im.save(os.path.join(out, "lzw-pred.tif"), compression="tiff_lzw", tiffinfo={317: 2})
+im.save(os.path.join(out, "deflate-pred.tif"), compression="tiff_adobe_deflate", tiffinfo={317: 2})
+im.save(os.path.join(out, "packbits.tif"), compression="packbits")
+im.save(os.path.join(out, "plain.tif"), compression="raw")
+g = Image.frombytes("I;16", (w, h), b"".join(struct.pack("<H", (x * 200 + y * 50 + rng.randint(0, 40)) & 0xFFFF) for y in range(h) for x in range(w)))
+g.save(os.path.join(out, "grey16-lzw-pred.tif"), compression="tiff_lzw", tiffinfo={317: 2})
+im.save(os.path.join(out, "pages.tif"), compression="tiff_lzw", save_all=True, append_images=[im.rotate(90, expand=True), im.convert("L")])
+# strips that overlap: the LZW TIFF's second strip said to start where its first does
+b = bytearray(open(os.path.join(out, "lzw.tif"), "rb").read())
+ifd = struct.unpack_from("<I", b, 4)[0]
+for k in range(struct.unpack_from("<H", b, ifd)[0]):
+    tag, typ, cnt, val = struct.unpack_from("<HHII", b, ifd + 2 + 12 * k)
+    if tag == 273:
+        struct.pack_into("<I", b, val + 4, struct.unpack_from("<I", b, val)[0])
+open(os.path.join(out, "overlap.tif"), "wb").write(bytes(b))
+PY
+SIEVE_ARCHIVES_ALWAYS=1 $S locate t34 --installer t34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > t34.txt
+grep -q "^tiffs     6 TIFF(s) carried as their skeletons" t34.txt
+for f in lzw.tif lzw-pred.tif deflate-pred.tif packbits.tif grey16-lzw-pred.tif pages.tif; do grep -q "	tiff [0-9]* [0-9]* .*	$f$" t34.txt; done
+for f in plain.tif overlap.tif; do if grep -q "	tiff .*$f$" t34.txt; then exit 1; fi; done
+$S install t34.sieve --to t34_inst > /dev/null
+diff -r t34 t34_inst
+$SI t34.sieve --to t34_si --yes > /dev/null
+diff -r t34 t34_si
+python sieve_ref.py unpack t34.sieve --to t34_oracle 2>&1 | tr -d '\r' > t34_oracle.txt
+grep -q "^not made again by the oracle (preflate.*deflate-pred.tif" t34_oracle.txt
+for f in lzw.tif lzw-pred.tif packbits.tif grey16-lzw-pred.tif pages.tif plain.tif overlap.tif; do cmp t34/$f t34_oracle/$f; done
+SIEVE_ARCHIVES_ALWAYS=1 $S locate t34 --installer t34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > t34v33.txt
+if grep -q "^tiffs \|	tiff " t34v33.txt; then exit 1; fi
+# zlib streams inside a file of any other kind (v34 draft, 8 November 2026): a file of records, each
+# a little binary head and a zlib stream (levels 1, 6 and 9, as a git pack's objects or a WOFF's
+# tables are), carried with its streams opened by "sk" (v21) and given back byte for byte by Sieve and
+# sieve-install; the oracle reads it and says it is not made again by it (no preflate). A file whose
+# zlib header starts a stream cut short is left as it is; without the draft, neither is opened.
+rm -rf z34 z34_inst z34_si z34_oracle
+mkdir z34
+python - z34 <<'PY'
+import os, random, struct, sys, zlib
+out = sys.argv[1]
+rng = random.Random(9)
+words = "sieve keeps every byte of what it carries and makes it again exactly as it was".split()
+recs = []
+for k in range(60):
+    text = " ".join(rng.choice(words) for _ in range(rng.randint(40, 400))).encode()
+    recs.append(struct.pack(">HI", k, len(text)) + zlib.compress(text, (1, 6, 9)[k % 3]))
+open(os.path.join(out, "records.bin"), "wb").write(b"RECS" + b"".join(recs))
+bad = zlib.compress(b" ".join(w.encode() for w in words) * 40, 9)
+open(os.path.join(out, "cut.bin"), "wb").write(b"HEAD" + bytes(rng.randrange(256) for _ in range(2000)) + bad[:len(bad) // 2])
+PY
+$S locate z34 --installer z34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > z34.txt
+grep -q "^zlib      1 file(s) carried with the zlib streams inside them opened" z34.txt
+grep -q "	sk [0-9]* [0-9]* .*	records.bin$" z34.txt
+if grep -q "	sk .*	cut.bin$" z34.txt; then exit 1; fi
+$S install z34.sieve --to z34_inst > /dev/null
+diff -r z34 z34_inst
+$SI z34.sieve --to z34_si --yes > /dev/null
+diff -r z34 z34_si
+python sieve_ref.py unpack z34.sieve --to z34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*records.bin"
+$S locate z34 --installer z34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > z34v33.txt
+if grep -q "^zlib " z34v33.txt; then exit 1; fi
+# PCX pictures (v34 draft, 8 November 2026): written here by Pillow (RGB, grey with its palette after
+# the pixels, colour-mapped, and an odd width whose plane lines are padded to an even length), carried
+# as their pixels, planes interleaved ("pcx <skeleton size> <inner size>"), opened whatever they come
+# to (SIEVE_ARCHIVES_ALWAYS: pictures this small may not pay); given back byte for byte by Sieve,
+# sieve-install and the oracle, which codes them itself. One whose runs cross from one plane line to
+# the next (as no writer measured does) is left as it is; without the draft, none is opened.
+rm -rf x34 x34_inst x34_si x34_oracle
+mkdir x34
+python - x34 <<'PY'
+import os, random, sys
+from PIL import Image
+out = sys.argv[1]
+rng = random.Random(3)
+def picture(w, h):
+    return Image.frombytes("RGB", (w, h), bytes(min(255, (x * 7 + y * 3) % 256 // 32 * 32 + rng.choice((0, 0, 0, 9))) for y in range(h) for x in range(w) for c in range(3)))
+im = picture(96, 64)
+im.save(os.path.join(out, "rgb.pcx"))
+im.convert("L").save(os.path.join(out, "grey.pcx"))
+im.convert("P").save(os.path.join(out, "mapped.pcx"))
+picture(95, 40).save(os.path.join(out, "odd.pcx"))
+# a run across two plane lines: one grey line's last byte and the next line's first, coded as one run
+w, h = 8, 4
+head = bytearray(128)
+head[0:4] = bytes([0x0A, 5, 1, 8])
+head[8:10], head[10:12] = (w - 1).to_bytes(2, "little"), (h - 1).to_bytes(2, "little")
+head[65], head[66:68] = 1, w.to_bytes(2, "little")
+body = bytes([0xC0 | 12, 7]) + bytes([0xC0 | 20, 9])
+open(os.path.join(out, "across.pcx"), "wb").write(bytes(head) + body)
+PY
+SIEVE_ARCHIVES_ALWAYS=1 $S locate x34 --installer x34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > x34.txt
+grep -q "^pcx       4 PCX picture(s) carried as their pixels" x34.txt
+for f in rgb.pcx grey.pcx mapped.pcx odd.pcx; do grep -q "	pcx [0-9]* [0-9]* .*	$f$" x34.txt; done
+if grep -q "	pcx .*	across.pcx$" x34.txt; then exit 1; fi
+$S install x34.sieve --to x34_inst > /dev/null
+diff -r x34 x34_inst
+$SI x34.sieve --to x34_si --yes > /dev/null
+diff -r x34 x34_si
+python sieve_ref.py unpack x34.sieve --to x34_oracle > /dev/null
+diff -r x34 x34_oracle
+SIEVE_ARCHIVES_ALWAYS=1 $S locate x34 --installer x34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > x34v33.txt
+if grep -q "^pcx \|	pcx " x34v33.txt; then exit 1; fi
 # The v34 draft's FLAC way (8 November 2026, Edward: "make a start on that, use the three levels as
 # the size/balanced/speed paths"): a WAV carried as its samples coded by libFLAC and the rest of the
 # file as it was ("flac <skeleton size> <inner size>"). Six WAVs written here: 8-bit mono of an odd
@@ -1729,7 +1851,7 @@ for f in flacs:
     stem = f[:-5]
     orig = [g for g in sorted(os.listdir(src)) if g.rsplit(".", 1)[0] == stem][0]
     b = open(os.path.join(src, orig), "rb").read()
-    ch, bits, at, size, big, unsigned8 = wav_walk(b, orig)
+    ch, bits, at, size, big, unsigned8, _ = wav_walk(b, orig)
     nb = bits // 8
     size = len(b) - at if size is None else size
     raw = b[at:at + size]
@@ -1765,6 +1887,115 @@ from sieve_ref import flac_decode
 a, b = open(sys.argv[1], "rb").read(), open(sys.argv[2], "rb").read()
 assert len(b) < len(a) - 8000 and b"TITLE=Tones" in b
 assert flac_decode(a, "a")[3] == flac_decode(b, "b")[3]
+PY
+# Sound as FLAC keeps tags (8 November 2026): a WAV's LIST INFO (its title in Latin-1, its artist)
+# installed as a .flac whose Vorbis comments say them, in UTF-8; a WAV of six channels in FLAC's own
+# order (its channel mask 0x3F) installed as a .flac of six; one of four in another order (0x0F) left
+# as it is.
+rm -rf tg34 tg34_inst
+mkdir tg34
+python - tg34 <<'PY'
+import math, os, struct, sys
+out = sys.argv[1]
+def chunk(cid, body): return cid + struct.pack("<I", len(body)) + body + (b"\0" if len(body) & 1 else b"")
+def wav(ch, mask, data, extra=b""):
+    f = struct.pack("<HHIIHHHHI", 0xFFFE, ch, 22050, 22050 * ch * 2, ch * 2, 16, 22, 16, mask) + bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+    body = b"WAVE" + chunk(b"fmt ", f) + chunk(b"data", data) + extra
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+def tone(n, ch): return b"".join(struct.pack("<h", int(8000 * math.sin(k / (7 + c)))) for k in range(n) for c in range(ch))
+info = chunk(b"LIST", b"INFO" + chunk(b"INAM", "Caf\u00e9 tune\0".encode("latin-1")) + chunk(b"IART", b"Sieve CI\0"))
+open(os.path.join(out, "tagged.wav"), "wb").write(wav(2, 3, tone(6000, 2), info))
+open(os.path.join(out, "six.wav"), "wb").write(wav(6, 0x3F, tone(3000, 6)))
+open(os.path.join(out, "four.wav"), "wb").write(wav(4, 0x0F, tone(3000, 4)))
+PY
+$S locate tg34 --installer tg34.sieve --items --v34-draft --sound-to-flac 2>&1 | tr -d '\r' > tg34.txt
+$S install tg34.sieve --to tg34_inst > /dev/null
+test -f tg34_inst/tagged.flac
+test -f tg34_inst/six.flac
+cmp tg34/four.wav tg34_inst/four.wav
+python - tg34_inst <<'PY'
+import os, sys
+sys.path.insert(0, ".")
+from sieve_ref import flac_decode
+d = sys.argv[1]
+t = open(os.path.join(d, "tagged.flac"), "rb").read()
+assert "TITLE=Caf\u00e9 tune".encode() in t and b"ARTIST=Sieve CI" in t
+assert flac_decode(open(os.path.join(d, "six.flac"), "rb").read(), "six")[0] == 6
+PY
+# Floating-point sound (8 November 2026, Edward: "work through all of the things on that list"): a
+# file of 32- or 64-bit floats whose every value is a whole number over 2^23 (as a float made from
+# 24-bit or 16-bit integers is) carried as those numbers through FLAC at 24 bits; written here as a
+# WAV of format 3, a WAVE_FORMAT_EXTENSIBLE float WAV, a WAV of doubles, an AIFF-C "fl32", an .au of
+# encoding 6 and a little-endian CAF, all six opened; a float WAV with one -0 in it, and one with a
+# value half a step off, both left to the other ways. Given back byte for byte by Sieve, sieve-install
+# and the oracle; and as Sound as FLAC, each .flac's samples the floats' numbers.
+rm -rf fl34 fl34_inst fl34_si fl34_oracle fl34f_inst
+mkdir fl34
+python - fl34 <<'PY'
+import math, os, random, struct, sys
+out = sys.argv[1]
+rng = random.Random(11)
+def tone(n, ch):
+    v, ph = [], 0.0
+    for k in range(n):
+        ph += 2 * math.pi * (220 + 90 * math.sin(k / 9000)) / 22050
+        v.extend(max(-8388608, min(8388607, int(3000000 * math.sin(ph + c) + rng.gauss(0, 3000)))) for c in range(ch))
+    return v
+def chunk(cid, body, o="<"): return cid + struct.pack(o + "I", len(body)) + body + (b"\0" if len(body) & 1 else b"")
+def wav(ch, bits, data, ext=False, tag=3):
+    if ext:
+        f = struct.pack("<HHIIHHHHI", 0xFFFE, ch, 22050, 22050 * ch * bits // 8, ch * bits // 8, bits, 22, bits, 3) + bytes([3, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+    else:
+        f = struct.pack("<HHIIHHH", tag, ch, 22050, 22050 * ch * bits // 8, ch * bits // 8, bits, 0)
+    body = b"WAVE" + chunk(b"fmt ", f) + chunk(b"fact", struct.pack("<I", len(data) // (ch * bits // 8))) + chunk(b"data", data)
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+def f32(v, o="<"): return b"".join(struct.pack(o + "f", x / 8388608) for x in v)
+v = tone(8000, 2)
+open(os.path.join(out, "float-24.wav"), "wb").write(wav(2, 32, f32(v)))
+open(os.path.join(out, "float-ext.wav"), "wb").write(wav(2, 32, f32(v), ext=True))
+w = [x >> 8 << 8 for x in tone(4000, 1)]  # 16-bit steps, as doubles
+open(os.path.join(out, "double-16.wav"), "wb").write(wav(1, 64, b"".join(struct.pack("<d", x / 8388608) for x in w)))
+e, m = 14 + 16383, 22050 << (63 - 14)
+comm = struct.pack(">hIh", 2, len(v) // 2, 32) + struct.pack(">HQ", e, m) + b"fl32" + b"\x0532-bit float\0"
+body = b"AIFC" + chunk(b"FVER", struct.pack(">I", 0xA2805140), ">") + chunk(b"COMM", comm, ">") + chunk(b"SSND", bytes(8) + f32(v, ">"), ">")
+open(os.path.join(out, "float.aifc"), "wb").write(b"FORM" + struct.pack(">I", len(body)) + body)
+open(os.path.join(out, "float-be.au"), "wb").write(b".snd" + struct.pack(">IIIII", 24, 0xFFFFFFFF, 6, 22050, 2) + f32(v, ">"))
+desc = struct.pack(">d4sIIIII", 22050.0, b"lpcm", 3, 8, 1, 2, 32)
+open(os.path.join(out, "float-le.caf"), "wb").write(b"caff\0\x01\0\0" + b"desc" + struct.pack(">q", len(desc)) + desc + b"data" + struct.pack(">q", 4 + 4 * len(v)) + bytes(4) + f32(v))
+z = f32(v[:2000])
+open(os.path.join(out, "minus-zero.wav"), "wb").write(wav(2, 32, z[:400] + struct.pack("<f", -0.0) + z[404:]))
+open(os.path.join(out, "half-step.wav"), "wb").write(wav(2, 32, z[:400] + struct.pack("<f", 0.5 / 8388608) + z[404:]))
+PY
+$S locate fl34 --installer fl34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > fl34.txt
+grep -q "^sound     6 file(s) of sound (WAV, AIFF, RF64, Wave64, .au, CAF), " fl34.txt
+for f in float-24.wav float-ext.wav double-16.wav float.aifc float-be.au float-le.caf; do grep -q "	flac [0-9]* [0-9]* .*$f$" fl34.txt; done
+for f in minus-zero.wav half-step.wav; do if grep -q "	flac .*$f$" fl34.txt; then exit 1; fi; done
+$S install fl34.sieve --to fl34_inst > /dev/null
+diff -r fl34 fl34_inst
+$SI fl34.sieve --to fl34_si --yes > /dev/null
+diff -r fl34 fl34_si
+python sieve_ref.py unpack fl34.sieve --to fl34_oracle > /dev/null
+diff -r fl34 fl34_oracle
+$S locate fl34 --installer fl34f.sieve --items --v34-draft --sound-to-flac 2>&1 | tr -d '\r' > fl34f.txt
+grep -q "^as flac   6 file(s) of sound installed as .flac files of the same samples" fl34f.txt
+$S install fl34f.sieve --to fl34f_inst > /dev/null
+python - fl34 fl34f_inst <<'PY'
+import os, struct, sys
+sys.path.insert(0, ".")
+from sieve_ref import wav_walk, flac_decode
+src, out = sys.argv[1], sys.argv[2]
+flacs = sorted(f for f in os.listdir(out) if f.endswith(".flac"))
+assert len(flacs) == 6, flacs
+for f in flacs:
+    orig = [g for g in sorted(os.listdir(src)) if g.rsplit(".", 1)[0] == f[:-5]][0]
+    b = open(os.path.join(src, orig), "rb").read()
+    ch, bits, at, size, big, _, flt = wav_walk(b, orig)
+    assert flt, orig
+    size = len(b) - at if size is None else size
+    code = ("<>"[big]) + ("f" if bits == 32 else "d")
+    want = [round(x * 8388608) for x in struct.unpack(code[0] + str(size // (bits // 8)) + code[1], b[at:at + size])]
+    fch, fbits, total, got = flac_decode(open(os.path.join(out, f), "rb").read(), f)
+    assert (fch, fbits) == (ch, 24) and got == want, f
 PY
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own

@@ -32,13 +32,55 @@ struct Layout
     bool rate_true = true;  // the rate read is the file's own (else a label given FLAC)
     bool to_end = false;    // the samples run to the end of the file, their size not written (.au, CAF):
                             // in a skeleton, nothing after them, and their size the FLAC stream's
+    bool flt = false;       // IEEE floating point of 32 or 64 bits (8 November 2026): carried as FLAC of 24
+                            // bits, where every value is a whole number over 2^23 (float_sample)
+    uint32_t mask = 0;      // a WAVE_FORMAT_EXTENSIBLE file's channel mask (0: none given)
 };
 
 bool bits_ok(uint32_t bits) { return bits == 8 || bits == 16 || bits == 24 || bits == 32; }
+bool float_bits_ok(uint32_t bits) { return bits == 32 || bits == 64; }
+bool bits_ok(const Layout& l) { return l.flt ? float_bits_ok(l.bits) : bits_ok(l.bits); }
+// The bits a sample has in the FLAC stream: a float's 24, else the file's own.
+uint32_t coded_bits(const Layout& l) { return l.flt ? 24 : l.bits; }
+
+// A floating-point sample (`u` its bits, 32 or 64 of them) as the whole number n it is n / 2^23 of,
+// -2^23 <= n < 2^23, read by integer arithmetic alone; nothing where it is not one (a fraction of a
+// step, out of range, -0, a subnormal, an infinity or not a number). Every such n is written back as
+// one float alone (int_float), so the file is given back bit for bit.
+std::optional<int32_t> float_sample(uint64_t u, uint32_t bits)
+{
+    if (u == 0) return 0;
+    const uint32_t man_bits = bits == 32 ? 23 : 52, exp_bits = bits == 32 ? 8 : 11;
+    const int bias = bits == 32 ? 127 : 1023;
+    const bool negative = (u >> (bits - 1)) & 1;
+    const int exp = int((u >> man_bits) & ((uint64_t(1) << exp_bits) - 1));
+    const uint64_t m = (u & ((uint64_t(1) << man_bits) - 1)) | uint64_t(1) << man_bits;
+    if (exp == 0 || exp == (1 << exp_bits) - 1) return std::nullopt;
+    // n = m * 2^(exp - bias - man_bits + 23): a whole number where the shift right leaves no bits
+    const int shift = bias + int(man_bits) - 23 - exp;
+    if (shift < 0 || shift > int(man_bits) || (m & ((uint64_t(1) << shift) - 1)) != 0) return std::nullopt;
+    const uint64_t a = m >> shift;
+    if (negative ? a > (uint64_t(1) << 23) : a >= (uint64_t(1) << 23)) return std::nullopt;
+    return negative ? -int32_t(a) : int32_t(a);
+}
+
+// n / 2^23 as a float of 32 or 64 bits, by integer arithmetic alone.
+uint64_t int_float(int32_t n, uint32_t bits)
+{
+    if (n == 0) return 0;
+    const uint32_t man_bits = bits == 32 ? 23 : 52;
+    const int bias = bits == 32 ? 127 : 1023;
+    const uint64_t a = n < 0 ? uint64_t(-int64_t(n)) : uint64_t(n);
+    int e = 63;
+    while (!((a >> e) & 1)) --e; // (a's top bit: 0 to 23)
+    const uint64_t man = (a << (man_bits - uint32_t(e))) & ((uint64_t(1) << man_bits) - 1);
+    return uint64_t(n < 0) << (bits - 1) | uint64_t(e - 23 + bias) << man_bits | man;
+}
 
 // A WAV's "fmt " chunk's body (WAV, RF64, Wave64 alike): plain integer PCM, format 1, or 0xFFFE whose
 // sub-format is PCM's GUID; 1 to 8 channels; 8, 16, 24 or 32 bits; a block of the channels times the
-// bytes a sample; a rate FLAC can hold.
+// bytes a sample; a rate FLAC can hold. Or IEEE floating point: format 3, or 0xFFFE whose sub-format
+// is its GUID; 32 or 64 bits.
 bool wav_fmt(const uint8_t* c, uint64_t size, Layout& l)
 {
     if (size < 16) return false;
@@ -50,11 +92,17 @@ bool wav_fmt(const uint8_t* c, uint64_t size, Layout& l)
     if (tag == 0xFFFE)
     {
         static const uint8_t pcm[16] = {1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71};
-        if (size < 40 || le16(c + 16) < 22 || std::memcmp(c + 24, pcm, 16) != 0) return false;
+        static const uint8_t flt[16] = {3, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71};
+        if (size < 40 || le16(c + 16) < 22) return false;
+        l.mask = le32(c + 20);
+        if (std::memcmp(c + 24, flt, 16) == 0) l.flt = true;
+        else if (std::memcmp(c + 24, pcm, 16) != 0) return false;
     }
+    else if (tag == 3)
+        l.flt = true;
     else if (tag != 1)
         return false;
-    return l.channels >= 1 && l.channels <= 8 && bits_ok(l.bits) && align == l.channels * (l.bits / 8) && FLAC__format_sample_rate_is_valid(l.rate);
+    return l.channels >= 1 && l.channels <= 8 && bits_ok(l) && align == l.channels * (l.bits / 8) && FLAC__format_sample_rate_is_valid(l.rate);
 }
 
 // A WAV's chunks (or RF64's, BW64's) walked from byte 12 to the data chunk: one "fmt " before it;
@@ -138,7 +186,8 @@ std::optional<Layout> walk_w64(const uint8_t* p, size_t n)
 
 // An AIFF's (or AIFF-C's) chunks walked from byte 12 to its SSND chunk: one COMM before it, 1 to 8
 // channels, 8, 16, 24 or 32 bits a sample, at least one sample frame, AIFF-C's samples not
-// compressed ("NONE" or "twos", big-endian; "sowt", little-endian); every chunk before it whole within
+// compressed ("NONE" or "twos", big-endian; "sowt", little-endian) or floating point ("fl32" or "FL32",
+// 32 bits; "fl64" or "FL64", 64; big-endian); every chunk before it whole within
 // the n bytes; SSND's offset within them. Its samples are its frames times its block, from SSND's
 // eight bytes of offset and block size and the offset's bytes after them. Nothing if not so.
 std::optional<Layout> walk_aiff(const uint8_t* p, size_t n)
@@ -177,10 +226,14 @@ std::optional<Layout> walk_aiff(const uint8_t* p, size_t n)
             if (!FLAC__format_sample_rate_is_valid(l.rate)) l.rate = 44100, l.rate_true = false;
             if (aifc)
             {
-                if (std::memcmp(c + 26, "sowt", 4) == 0) l.big = false;
-                else if (std::memcmp(c + 26, "NONE", 4) != 0 && std::memcmp(c + 26, "twos", 4) != 0) return std::nullopt;
+                const uint8_t* k = c + 26;
+                if (std::memcmp(k, "sowt", 4) == 0) l.big = false;
+                else if (std::memcmp(k, "fl32", 4) == 0 || std::memcmp(k, "FL32", 4) == 0) l.flt = true, l.bits = 32;
+                else if (std::memcmp(k, "fl64", 4) == 0 || std::memcmp(k, "FL64", 4) == 0) l.flt = true, l.bits = 64;
+                else if (std::memcmp(k, "NONE", 4) != 0 && std::memcmp(k, "twos", 4) != 0) return std::nullopt;
+                if (l.flt && be16(c + 14) != l.bits) return std::nullopt;
             }
-            if (l.channels < 1 || l.channels > 8 || !bits_ok(l.bits) || frames == 0) return std::nullopt;
+            if (l.channels < 1 || l.channels > 8 || !bits_ok(l) || frames == 0) return std::nullopt;
         }
         const uint64_t next = uint64_t(at) + 8 + size + (size & 1);
         if (next > n) return std::nullopt;
@@ -191,7 +244,8 @@ std::optional<Layout> walk_aiff(const uint8_t* p, size_t n)
 
 // Sun's .au: ".snd", then four big-endian numbers of four bytes: where the samples start (24 or more),
 // their size (0xFFFFFFFF: to the end of the file), the encoding (2, 3, 4, 5: linear PCM of 8, 16, 24,
-// 32 bits, signed, big-endian), the rate; then the channels (1 to 8). The bytes between are kept.
+// 32 bits, signed, big-endian; 6, 7: floating point of 32, 64 bits), the rate; then the channels (1
+// to 8). The bytes between are kept.
 std::optional<Layout> walk_au(const uint8_t* p, size_t n)
 {
     if (n < 24) return std::nullopt;
@@ -200,9 +254,10 @@ std::optional<Layout> walk_au(const uint8_t* p, size_t n)
     const uint64_t offset = be32(p + 4), size = be32(p + 8), encoding = be32(p + 12);
     l.rate = be32(p + 16);
     l.channels = be32(p + 20);
-    if (offset < 24 || offset > n || encoding < 2 || encoding > 5 || l.channels < 1 || l.channels > 8) return std::nullopt;
+    if (offset < 24 || offset > n || encoding < 2 || encoding > 7 || l.channels < 1 || l.channels > 8) return std::nullopt;
     if (!FLAC__format_sample_rate_is_valid(l.rate)) l.rate = 44100, l.rate_true = false;
-    l.bits = uint32_t(encoding - 1) * 8;
+    l.flt = encoding >= 6;
+    l.bits = l.flt ? (encoding == 6 ? 32 : 64) : uint32_t(encoding - 1) * 8;
     l.samples_at = size_t(offset);
     l.to_end = size == 0xFFFFFFFFu;
     l.data = l.to_end ? n - offset : size;
@@ -212,9 +267,9 @@ std::optional<Layout> walk_au(const uint8_t* p, size_t n)
 
 // Apple's CAF: "caff", version 1, flags 0; then chunks of a type (four bytes) and a size (eight,
 // big-endian, signed), from byte 8, to the data chunk: one "desc" before it, 32 bytes or more: the
-// rate (a double), "lpcm", its flags (bit 1 floating point: refused; bit 2 little-endian), bytes a
-// packet (the channels times the bytes a sample), one frame a packet, 1 to 8 channels, 8, 16, 24 or 32
-// bits. The data chunk's samples follow its four bytes of edit count; its size counts them, or is -1
+// rate (a double), "lpcm", its flags (bit 1 floating point, of 32 or 64 bits; bit 2 little-endian),
+// bytes a packet (the channels times the bytes a sample), one frame a packet, 1 to 8 channels, 8, 16,
+// 24 or 32 bits. The data chunk's samples follow its four bytes of edit count; its size counts them, or is -1
 // where they run to the end of the file.
 std::optional<Layout> walk_caf(const uint8_t* p, size_t n)
 {
@@ -249,9 +304,10 @@ std::optional<Layout> walk_caf(const uint8_t* p, size_t n)
             l.channels = be32(d + 24);
             l.bits = be32(d + 28);
             l.big = !(flags & 2);
+            l.flt = flags & 1;
             l.rate_true = rate >= 1 && rate <= 1048575 && rate == double(uint32_t(rate));
             l.rate = l.rate_true ? uint32_t(rate) : 44100;
-            if (std::memcmp(d + 8, "lpcm", 4) != 0 || (flags & 1) || frames != 1 || l.channels < 1 || l.channels > 8 || !bits_ok(l.bits) ||
+            if (std::memcmp(d + 8, "lpcm", 4) != 0 || frames != 1 || l.channels < 1 || l.channels > 8 || !bits_ok(l) ||
                 packet != l.channels * (l.bits / 8))
                 return std::nullopt;
         }
@@ -289,6 +345,15 @@ std::optional<Layout> walk(const uint8_t* p, size_t n)
     }
 }
 
+uint64_t raw_at(const uint8_t* p, const Layout& l)
+{
+    const uint32_t bytes = l.bits / 8;
+    uint64_t u = 0;
+    for (uint32_t k = 0; k < bytes; ++k) u |= uint64_t(p[l.big ? bytes - 1 - k : k]) << (8 * k);
+    return u;
+}
+
+// (an integer sample; a float's is float_sample's)
 int32_t sample_at(const uint8_t* p, const Layout& l)
 {
     const uint32_t bytes = l.bits / 8;
@@ -301,7 +366,7 @@ int32_t sample_at(const uint8_t* p, const Layout& l)
 void put_sample(std::vector<uint8_t>& o, int32_t v, const Layout& l)
 {
     const uint32_t bytes = l.bits / 8;
-    const uint32_t u = bytes == 1 && l.unsigned8 ? uint32_t(v + 128) : uint32_t(v);
+    const uint64_t u = l.flt ? int_float(v, l.bits) : bytes == 1 && l.unsigned8 ? uint32_t(v + 128) : uint32_t(v);
     for (uint32_t k = 0; k < bytes; ++k) o.push_back(uint8_t(u >> (8 * (l.big ? bytes - 1 - k : k))));
 }
 
@@ -363,7 +428,8 @@ void source_metadata(const FLAC__StreamDecoder*, const FLAC__StreamMetadata* m, 
     // The stream must say what the skeleton's chunks say: the same channels, bits and samples.
     // (where the skeleton does not say how many, the samples running to its end, the stream does)
     if (s->l.to_end && !s->info) s->l.data = i.total_samples * block;
-    if (s->info || i.channels != s->l.channels || i.bits_per_sample != s->l.bits || i.total_samples == 0 || i.total_samples * block != s->l.data) s->bad = true;
+    if (s->info || i.channels != s->l.channels || i.bits_per_sample != coded_bits(s->l) || i.total_samples == 0 || i.total_samples * block != s->l.data)
+        s->bad = true;
     s->info = true;
 }
 FLAC__StreamDecoderWriteStatus source_write(const FLAC__StreamDecoder*, const FLAC__Frame* f, const FLAC__int32* const ch[], void* c)
@@ -371,14 +437,14 @@ FLAC__StreamDecoderWriteStatus source_write(const FLAC__StreamDecoder*, const FL
     auto* s = static_cast<Source*>(c);
     const uint32_t bytes = s->l.bits / 8;
     const uint64_t frame = uint64_t(f->header.blocksize) * s->l.channels * bytes;
-    if (!s->info || s->bad || f->header.channels != s->l.channels || f->header.bits_per_sample != s->l.bits || s->written + frame > s->l.data ||
+    if (!s->info || s->bad || f->header.channels != s->l.channels || f->header.bits_per_sample != coded_bits(s->l) || s->written + frame > s->l.data ||
         (*s->too_big)(s->out->size() + size_t(frame)))
     {
         s->bad = true;
         return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
     }
     // (each sample within its bits, as the specification and the oracle hold it)
-    const int64_t lo = -(int64_t(1) << (s->l.bits - 1)), hi = (int64_t(1) << (s->l.bits - 1)) - 1;
+    const int64_t lo = -(int64_t(1) << (coded_bits(s->l) - 1)), hi = (int64_t(1) << (coded_bits(s->l) - 1)) - 1;
     for (uint32_t k = 0; k < f->header.blocksize; ++k)
         for (uint32_t j = 0; j < s->l.channels; ++j)
         {
@@ -478,12 +544,16 @@ std::optional<std::vector<uint8_t>> encode_frames(uint32_t channels, uint32_t bi
 }
 
 // The samples of b (laid out as l says) coded by libFLAC.
+// Floats: only where every one is a whole number over 2^23 (looked at first, in one pass).
 std::optional<std::vector<uint8_t>> encode(const std::vector<uint8_t>& b, const Layout& l, int effort, bool subset)
 {
     const uint32_t bytes = l.bits / 8;
+    if (l.flt)
+        for (const uint8_t *q = b.data() + l.samples_at, *end = q + l.data; q < end; q += bytes)
+            if (!float_sample(raw_at(q, l), l.bits)) return std::nullopt;
     const uint8_t* p = b.data() + l.samples_at;
-    return encode_frames(l.channels, l.bits, l.rate, l.data / (l.channels * bytes), effort, subset, [&](FLAC__int32* out, size_t n) {
-        for (size_t k = 0; k < n; ++k, p += bytes) out[k] = sample_at(p, l);
+    return encode_frames(l.channels, coded_bits(l), l.rate, l.data / (l.channels * bytes), effort, subset, [&](FLAC__int32* out, size_t n) {
+        for (size_t k = 0; k < n; ++k, p += bytes) out[k] = l.flt ? *float_sample(raw_at(p, l), l.bits) : sample_at(p, l);
     });
 }
 
@@ -657,14 +727,134 @@ std::optional<std::vector<uint8_t>> flac_recoded(const std::vector<uint8_t>& b, 
     return out;
 }
 
+namespace {
+
+// FLAC's own order of 3 to 8 channels as a WAV's channel mask (RFC 9639, 9.1.3).
+constexpr uint32_t kFlacOrder[9] = {0, 0, 0, 0x7, 0x33, 0x37, 0x3F, 0x70F, 0x63F};
+
+// Text as UTF-8: as it is where it is UTF-8 already, else read as Latin-1; its NULs at the end and its
+// spaces at either end dropped.
+std::string utf8_of(const uint8_t* p, size_t n)
+{
+    while (n && (p[n - 1] == 0 || p[n - 1] == ' ')) --n;
+    while (n && *p == ' ') ++p, --n;
+    std::string t(reinterpret_cast<const char*>(p), n);
+    bool utf8 = true;
+    for (size_t i = 0; i < n && utf8;)
+    {
+        const uint8_t c = p[i];
+        const size_t k = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        if (!k || c == 0 || i + k > n) utf8 = false;
+        for (size_t j = 1; j < k && utf8; ++j) utf8 = (p[i + j] >> 6) == 2;
+        i += k ? k : 1;
+    }
+    if (utf8) return t;
+    std::string o;
+    for (size_t i = 0; i < n; ++i)
+        if (p[i] < 0x80) o += char(p[i]);
+        else o += char(0xC0 | (p[i] >> 6)), o += char(0x80 | (p[i] & 0x3F));
+    return o;
+}
+
+// A WAV's LIST INFO tags, or an AIFF's NAME, AUTH, ANNO and "(c) " chunks, as Vorbis comments
+// ("TITLE=...", as FLAC players read them); none where it has none.
+std::vector<std::string> sound_tags(const std::vector<uint8_t>& b)
+{
+    std::vector<std::string> tags;
+    const size_t n = b.size();
+    auto add = [&](const char* key, const uint8_t* p, size_t k) {
+        const std::string v = utf8_of(p, k);
+        if (!v.empty()) tags.push_back(std::string(key) + "=" + v);
+    };
+    const int kind = sound_kind(b.data(), n);
+    if (kind == 1 && std::memcmp(b.data(), "RIFF", 4) == 0)
+        for (size_t at = 12; at + 8 <= n;)
+        {
+            const uint8_t* c = b.data() + at;
+            const uint64_t size = le32(c + 4);
+            if (at + 8 + size > n) break;
+            if (std::memcmp(c, "LIST", 4) == 0 && size >= 4 && std::memcmp(c + 8, "INFO", 4) == 0)
+                for (size_t s = at + 12; s + 8 <= at + 8 + size;)
+                {
+                    const uint8_t* t = b.data() + s;
+                    const uint64_t k = le32(t + 4);
+                    if (s + 8 + k > at + 8 + size) break;
+                    static const char* const map[][2] = {{"INAM", "TITLE"},   {"IART", "ARTIST"},   {"IPRD", "ALBUM"}, {"ICMT", "COMMENT"},
+                                                         {"ICRD", "DATE"},    {"IGNR", "GENRE"},    {"ITRK", "TRACKNUMBER"},
+                                                         {"IPRT", "TRACKNUMBER"}, {"ICOP", "COPYRIGHT"}};
+                    for (const auto& m : map)
+                        if (std::memcmp(t, m[0], 4) == 0) add(m[1], t + 8, size_t(k));
+                    s += 8 + k + (k & 1);
+                }
+            at += 8 + size + (size & 1);
+        }
+    else if (kind == 2)
+        for (size_t at = 12; at + 8 <= n;)
+        {
+            const uint8_t* c = b.data() + at;
+            const uint64_t size = be32(c + 4);
+            if (at + 8 + size > n) break;
+            static const char* const map[][2] = {{"NAME", "TITLE"}, {"AUTH", "ARTIST"}, {"ANNO", "COMMENT"}, {"(c) ", "COPYRIGHT"}};
+            for (const auto& m : map)
+                if (std::memcmp(c, m[0], 4) == 0) add(m[1], c + 8, size_t(size));
+            at += 8 + size + (size & 1);
+        }
+    return tags;
+}
+
+// A FLAC file with a Vorbis comment block of these tags after its STREAMINFO.
+std::optional<std::vector<uint8_t>> with_tags(const std::vector<uint8_t>& f, const std::vector<std::string>& tags)
+{
+    const auto blocks = flac_blocks(f);
+    if (!blocks || blocks->first.empty()) return std::nullopt;
+    auto le = [](std::vector<uint8_t>& o, uint32_t v) {
+        for (int k = 0; k < 4; ++k) o.push_back(uint8_t(v >> (8 * k)));
+    };
+    std::vector<uint8_t> body;
+    const std::string vendor = "Sieve";
+    le(body, uint32_t(vendor.size()));
+    body.insert(body.end(), vendor.begin(), vendor.end());
+    le(body, uint32_t(tags.size()));
+    for (const std::string& t : tags)
+    {
+        le(body, uint32_t(t.size()));
+        body.insert(body.end(), t.begin(), t.end());
+    }
+    if (body.size() >= (1u << 24)) return std::nullopt;
+    std::vector<std::vector<uint8_t>> keep{blocks->first[0]};
+    std::vector<uint8_t> vc{4, uint8_t(body.size() >> 16), uint8_t(body.size() >> 8), uint8_t(body.size())};
+    vc.insert(vc.end(), body.begin(), body.end());
+    keep.push_back(std::move(vc));
+    for (size_t k = 1; k < blocks->first.size(); ++k)
+        if ((blocks->first[k][0] & 0x7F) != 4) keep.push_back(blocks->first[k]);
+    std::vector<uint8_t> out{'f', 'L', 'a', 'C'};
+    for (size_t k = 0; k < keep.size(); ++k)
+    {
+        keep[k][0] = uint8_t((keep[k][0] & 0x7F) | (k + 1 == keep.size() ? 0x80 : 0));
+        out.insert(out.end(), keep[k].begin(), keep[k].end());
+    }
+    out.insert(out.end(), f.begin() + std::ptrdiff_t(blocks->second), f.end());
+    return out;
+}
+
+} // namespace
+
 std::optional<std::vector<uint8_t>> sound_as_flac(const std::vector<uint8_t>& b, int effort)
 {
     const auto l = layout_of(b);
-    // (a .flac file any player opens: FLAC's streamable subset, its own rate, one or two channels, at
-    // most 24 bits)
-    if (!l || !l->rate_true || !FLAC__format_sample_rate_is_subset(l->rate) || l->channels > 2 || l->bits > 24) return std::nullopt;
+    // (a .flac file any player opens: FLAC's streamable subset, its own rate, at most 24 bits; one or
+    // two channels, or 3 to 8 where the file's channel mask is FLAC's own order for so many)
+    if (!l || !l->rate_true || !FLAC__format_sample_rate_is_subset(l->rate) || coded_bits(*l) > 24) return std::nullopt;
+    if (l->channels > 2 && l->mask != kFlacOrder[l->channels]) return std::nullopt;
     auto flac = encode(b, *l, effort, true);
     if (!flac || !gives_back(*flac, skeleton_of(b, *l), b)) return std::nullopt;
+    // (its tags kept, as Vorbis comments: 8 November 2026)
+    if (const std::vector<std::string> tags = sound_tags(b); !tags.empty())
+    {
+        auto tagged = with_tags(*flac, tags);
+        if (!tagged || decode_whole(*tagged).has_value() == false) return std::nullopt;
+        flac = std::move(tagged);
+    }
     return flac;
 }
 

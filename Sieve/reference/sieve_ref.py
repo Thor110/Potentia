@@ -6968,8 +6968,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif", "flac"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4, "flac": 3}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif", "flac", "tiff", "pcx"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4, "flac": 3, "tiff": 3, "pcx": 3}
 
 
 def listing_from_bytes(b, v32=False):
@@ -7668,6 +7668,24 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a WAV's recipe Sieve does not write")
             remakes[i] = ("flac", int(skel), size)
             size = int(n)
+        if v34 and way.startswith("pcx "):
+            # "pcx <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft): a PCX made again
+            # from its pixels, planes interleaved, and its header (pcx_make).
+            _, skel, n, way = way.split(" ", 3)
+            if not (all(re.fullmatch(r"0|[1-9][0-9]*", x, re.ASCII) for x in (skel, n)) and 128 <= int(skel) <= int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: a PCX's recipe Sieve does not write")
+            remakes[i] = ("pcx", int(skel), size)
+            size = int(n)
+        if v34 and way.startswith("tiff "):
+            # "tiff <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft): a TIFF made again
+            # from its skeleton and what its strips hold, as "sk" with kinds 6, 7 and 8.
+            _, skel, n, way = way.split(" ", 3)
+            if not (all(re.fullmatch(r"0|[1-9][0-9]*", x, re.ASCII) for x in (skel, n)) and int(skel) <= int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: a TIFF's recipe Sieve does not write")
+            remakes[i] = ("tiff", int(skel), size)
+            size = int(n)
         if v32 and way.startswith("skr "):
             # "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>" (SPECIFICATIONS
             # v32): a PNG made again exactly from its skeleton (as "sk"), its rows carried
@@ -7996,6 +8014,16 @@ def cmd_unpack_v7(args, data):
                 continue
             got[i] = made
             continue
+        if r[0] == "pcx":  # v34 draft: its planes coded line by line
+            got[i] = pcx_make(got[i], r[1], files[i][0])
+            continue
+        if r[0] == "tiff":  # v34 draft: as "sk", its strips coded as libtiff codes them
+            made = skeleton_remake(got[i], r[1], files[i][0], tiff=True)
+            if made is None:
+                unchecked.add(i)
+                continue
+            got[i] = made
+            continue
         if r[0] in ("sk", "skm"):  # v21: the skeleton read and checked; made again where it is bytes and data alone
             _, skel, size = r
             if r[0] == "skm" and any(k in remakes and remakes[k][0] == "jbr" for k in members if members[k] == i):
@@ -8242,7 +8270,7 @@ def wav_walk(w, path):
                 break
             if rf64 and size == 0xFFFFFFFF:
                 size = ds64
-            return fmt[0], fmt[1], at + 8, size, False, True
+            return fmt[0], fmt[1], at + 8, size, False, True, fmt[2]
         if cid == b"fmt ":
             c = w[at + 8:at + 8 + size]
             if fmt is not None or len(c) < size or wav_fmt(c) is None:
@@ -8262,17 +8290,21 @@ W64_DATA = bytes.fromhex("64617461f3acd3118cd100c04f8edb8a")
 
 
 def wav_fmt(c):
-    """A WAV's (RF64's, Wave64's) fmt chunk's body: (channels, bits), or None where it is not plain
-    integer PCM as SPECIFICATIONS v34's "flac" takes it."""
+    """A WAV's (RF64's, Wave64's) fmt chunk's body: (channels, bits, whether floating point), or None
+    where it is not plain integer PCM (format 1, or 0xFFFE with PCM's GUID; 8 to 32 bits) or IEEE
+    floating point (format 3, or 0xFFFE with its GUID; 32 or 64 bits) as SPECIFICATIONS v34's "flac"
+    takes it."""
     if len(c) < 16:
         return None
     tag, ch, rate, _, align, bits = struct.unpack("<HHIIHH", c[:16])
-    pcm = bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
-    if tag == 0xFFFE and not (len(c) >= 40 and int.from_bytes(c[16:18], "little") >= 22 and c[24:40] == pcm):
+    guid = bytes([0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+    if tag == 0xFFFE:
+        if not (len(c) >= 40 and int.from_bytes(c[16:18], "little") >= 22 and c[26:40] == guid and c[24:26] in (b"\1\0", b"\3\0")):
+            return None
+        tag = c[24]
+    if tag not in (1, 3) or not 1 <= ch <= 8 or bits not in ((32, 64) if tag == 3 else (8, 16, 24, 32)) or align != ch * bits // 8 or not 1 <= rate <= 1048575:
         return None
-    if tag not in (1, 0xFFFE) or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or align != ch * bits // 8 or not 1 <= rate <= 1048575:
-        return None
-    return ch, bits
+    return ch, bits, tag == 3
 
 
 def w64_walk(w, path):
@@ -8286,7 +8318,7 @@ def w64_walk(w, path):
         if g == W64_DATA:
             if fmt is None:
                 break
-            return fmt[0], fmt[1], at + 24, size - 24, False, True
+            return fmt[0], fmt[1], at + 24, size - 24, False, True, fmt[2]
         if g == W64_FMT:
             c = w[at + 24:at + size]
             if fmt is not None or len(c) < size - 24 or wav_fmt(c) is None:
@@ -8302,21 +8334,22 @@ def w64_walk(w, path):
 def au_walk(w, path):
     """Sun's .au: ".snd" and five big-endian numbers of four bytes: where its samples start (24 or
     more, within the skeleton), their size (0xFFFFFFFF: to the end, the stream's count), the encoding
-    (2 to 5: linear PCM of 8 to 32 bits), the rate, the channels (1 to 8). Its samples big-endian and
-    signed; their size None where it runs to the end."""
+    (2 to 5: linear PCM of 8 to 32 bits; 6, 7: floating point of 32, 64), the rate, the channels (1
+    to 8). Its samples big-endian and signed; their size None where it runs to the end."""
     if len(w) < 24:
         sys.exit(f"{path}: an .au's skeleton Sieve does not write")
     offset, size, enc, _, ch = struct.unpack(">IIIII", w[4:24])
-    if offset < 24 or offset > len(w) or not 2 <= enc <= 5 or not 1 <= ch <= 8:
+    if offset < 24 or offset > len(w) or not 2 <= enc <= 7 or not 1 <= ch <= 8:
         sys.exit(f"{path}: an .au's skeleton Sieve does not write")
-    return ch, (enc - 1) * 8, offset, None if size == 0xFFFFFFFF else size, True, False
+    bits = {6: 32, 7: 64}.get(enc, (enc - 1) * 8)
+    return ch, bits, offset, None if size == 0xFFFFFFFF else size, True, False, enc >= 6
 
 
 def caf_walk(w, path):
     """Apple's CAF: "caff", version 1, flags 0; chunks of a type and an eight-byte big-endian size
     from byte 8, to the data chunk: one "desc" before it (32 bytes or more: the rate, "lpcm", flags
-    without bit 1, floating point; bit 2 little-endian; bytes a packet the channels times the bytes a
-    sample; one frame a packet; 1 to 8 channels; 8 to 32 bits). The samples after the data chunk's
+    bit 1 floating point (32 or 64 bits), bit 2 little-endian; bytes a packet the channels times the
+    bytes a sample; one frame a packet; 1 to 8 channels; 8 to 32 bits). The samples after the data chunk's
     four bytes of edit count, its size counting them, or -1: to the end, the stream's count."""
     if len(w) < 8 or w[4:8] != b"\0\x01\0\0":
         sys.exit(f"{path}: a CAF's skeleton Sieve does not write")
@@ -8326,12 +8359,12 @@ def caf_walk(w, path):
         if cid == b"data":
             if desc is None or at + 16 > len(w):
                 break
-            ch, bits, big = desc
+            ch, bits, big, flt = desc
             if size == (1 << 64) - 1:
-                return ch, bits, at + 16, None, big, False
+                return ch, bits, at + 16, None, big, False, flt
             if size < 4:
                 break
-            return ch, bits, at + 16, size - 4, big, False
+            return ch, bits, at + 16, size - 4, big, False, flt
         if size >= 1 << 62:
             break
         if cid == b"desc":
@@ -8339,9 +8372,10 @@ def caf_walk(w, path):
             if desc is not None or size < 32 or len(d) < size:
                 break
             fid, flags, packet, frames, ch, bits = struct.unpack(">4sIIIII", d[8:32])
-            if fid != b"lpcm" or flags & 1 or frames != 1 or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or packet != ch * bits // 8:
+            flt = bool(flags & 1)
+            if fid != b"lpcm" or frames != 1 or not 1 <= ch <= 8 or bits not in ((32, 64) if flt else (8, 16, 24, 32)) or packet != ch * bits // 8:
                 break
-            desc = (ch, bits, not flags & 2)
+            desc = (ch, bits, not flags & 2, flt)
         nxt = at + 12 + size
         if nxt > len(w):
             break
@@ -8353,7 +8387,8 @@ def aiff_walk(w, path):
     """SPECIFICATIONS v34 (a draft), "flac": an AIFF's (or AIFF-C's) chunks walked from byte 12,
     sizes big-endian, a pad byte after an odd one, to its SSND chunk: one COMM before it (18 bytes or
     more, 22 for AIFF-C) with 1 to 8 channels, 8, 16, 24 or 32 bits a sample (signed) and at least one
-    sample frame; AIFF-C's compression "NONE" or "twos" (big-endian) or "sowt" (little-endian); SSND
+    sample frame; AIFF-C's compression "NONE" or "twos" (big-endian) or "sowt" (little-endian), or
+    "fl32"/"FL32" or "fl64"/"FL64" (floating point, big-endian, its sample size 32 or 64); SSND
     8 bytes or more, its samples after its offset and block size (four bytes each) and the offset's
     bytes, the frames times the channels times the bytes a sample of them."""
     aifc = w[8:12] == b"AIFC"
@@ -8366,22 +8401,27 @@ def aiff_walk(w, path):
             offset = int.from_bytes(w[at + 8:at + 12], "big")
             if at + 16 + offset > len(w):
                 break
-            ch, frames, bits, big = comm
-            return ch, bits, at + 16 + offset, frames * ch * (bits // 8), big, False
+            ch, frames, bits, big, flt = comm
+            return ch, bits, at + 16 + offset, frames * ch * (bits // 8), big, False, flt
         if cid == b"COMM":
             c = w[at + 8:at + 8 + size]
             if comm is not None or size < (22 if aifc else 18) or len(c) < size:
                 break
             ch, frames, bits = struct.unpack(">HIH", c[:8])
-            big = True
+            big, flt = True, False
             if aifc:
-                if c[18:22] == b"sowt":
+                k = c[18:22]
+                if k == b"sowt":
                     big = False
-                elif c[18:22] not in (b"NONE", b"twos"):
+                elif k in (b"fl32", b"FL32", b"fl64", b"FL64"):
+                    flt = True
+                    if bits != (32 if k[2:] == b"32" else 64):
+                        break
+                elif k not in (b"NONE", b"twos"):
                     break
-            if not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or frames == 0:
+            if not 1 <= ch <= 8 or bits not in ((32, 64) if flt else (8, 16, 24, 32)) or frames == 0:
                 break
-            comm = (ch, frames, bits, big)
+            comm = (ch, frames, bits, big, flt)
         nxt = at + 8 + size + (size & 1)
         if nxt > len(w):
             break
@@ -8572,16 +8612,29 @@ def flac_decode(f, path):
     return ch, bps, total, out
 
 
+def flac_float(n, bits):
+    """The float of 32 or 64 bits that is n / 2^23 (n a whole number, -2^23 <= n < 2^23), its bits as
+    a number: 0 for 0; else the sign, the exponent of n's top bit less 23 (with the format's bias),
+    and the bits below n's top bit, at the top of the mantissa."""
+    if n == 0:
+        return 0
+    man, bias = (23, 127) if bits == 32 else (52, 1023)
+    a = abs(n)
+    e = a.bit_length() - 1
+    return (n < 0) << (bits - 1) | (e - 23 + bias) << man | ((a << (man - e)) & ((1 << man) - 1))
+
+
 def flac_wav_make(inner, skel, path):
     """SPECIFICATIONS v34 (a draft), "flac": a WAV or an AIFF made again from its samples, a FLAC
     stream, and after them its skeleton (the file with its samples taken out). The skeleton walked
     (wav_walk, aiff_walk) to its samples; the stream's samples written there, a WAV's little-endian
     and 8-bit ones unsigned (128 added), an AIFF's big-endian (AIFF-C "sowt" little-endian) and
-    signed; then the rest of the skeleton."""
+    signed; then the rest of the skeleton. A floating-point file's stream is of 24 bits: each sample n
+    written as the float n / 2^23 (flac_float), of the file's 32 or 64 bits."""
     if not 12 <= skel < len(inner):
         sys.exit(f"{path}: a WAV's recipe Sieve does not write")
     s, f = inner[len(inner) - skel:], inner[:len(inner) - skel]
-    ch, bits, at, size, big, unsigned8 = wav_walk(s, path)
+    ch, bits, at, size, big, unsigned8, flt = wav_walk(s, path)
     nb = bits // 8
     fch, fbits, total, samples = flac_decode(f, path)
     if size is None:  # (an .au's or a CAF's samples to the end: nothing after them; as many as the stream holds)
@@ -8590,9 +8643,12 @@ def flac_wav_make(inner, skel, path):
         size = total * ch * nb
     if size == 0 or size % (ch * nb):
         sys.exit(f"{path}: a sound file's skeleton Sieve does not write")
-    if fch != ch or fbits != bits or total * ch * nb != size:
+    if fch != ch or fbits != (24 if flt else bits) or total * ch * nb != size:
         sys.exit(f"{path}: a FLAC stream that is not its sound file's samples")
-    if nb == 1 and unsigned8:
+    if flt:
+        order = "big" if big else "little"
+        data = b"".join(flac_float(v, bits).to_bytes(nb, order) for v in samples)
+    elif nb == 1 and unsigned8:
         data = bytes(v + 128 for v in samples)
     else:
         order = "big" if big else "little"
@@ -8698,7 +8754,180 @@ def pngr_make(inner, filt, strat, split, head, path):
     return h[:split] + chunk + h[split:]
 
 
-def skeleton_remake(inner, skel, path):
+def pcx_make(inner, skel, path):
+    """SPECIFICATIONS v34 (a draft), "pcx": a PCX made again from its pixels (each line's planes
+    interleaved, pixel by pixel) and its skeleton (a byte naming the coder, 0 or 1, the 128-byte header,
+    then whatever followed the pixels). Coder 1, where the picture (bytes 4 and 5 to 8 and 9) is
+    narrower than a plane line: its width coded as below, then each byte after it alone (0xC1 first
+    where it is 0xC0 or more). The header: 0x0A, a version of 0 to 5, encoding 1, 8 bits a plane, 1, 3 or 4 planes (byte
+    65), the bytes of a plane line (bytes 66 and 67, 1 or more), the rows from its window (bytes 6
+    and 7 to 10 and 11, little-endian, the last no less than the first); the pixels exactly the rows
+    times the planes times the bytes of a plane line. Each plane line coded alone: the longest run of
+    one byte (up to 63) as 0xC0 plus its length, then the byte, where it is longer than one or the
+    byte is 0xC0 or more; else the byte."""
+    coder, s, px = inner[len(inner) - skel] if skel else 0, inner[len(inner) - skel + 1:], inner[:len(inner) - skel]
+    if skel < 129 or len(s) < 128 or coder > 1 or s[0] != 0x0A or s[1] > 5 or s[2] != 1 or s[3] != 8 or s[65] not in (1, 3, 4):
+        sys.exit(f"{path}: a PCX's skeleton Sieve does not write")
+    planes, bpl = s[65], int.from_bytes(s[66:68], "little")
+    y0, y1 = int.from_bytes(s[6:8], "little"), int.from_bytes(s[10:12], "little")
+    x0, x1 = int.from_bytes(s[4:6], "little"), int.from_bytes(s[8:10], "little")
+    width = x1 - x0 + 1 if x1 >= x0 else 0
+    if not bpl or y1 < y0 or len(px) != (y1 - y0 + 1) * planes * bpl or (coder == 1 and width >= bpl):
+        sys.exit(f"{path}: a PCX's skeleton Sieve does not write")
+    out, line = bytearray(s[:128]), planes * bpl
+    for r in range(0, len(px), line):
+        for k in range(planes):
+            whole = px[r + k:r + line:planes]
+            row, pad = (whole[:width], whole[width:]) if coder == 1 else (whole, b"")
+            i = 0
+            while i < len(row):
+                j = i
+                while j < len(row) and row[j] == row[i] and j - i < 63:
+                    j += 1
+                if j - i > 1 or row[i] >= 0xC0:
+                    out.append(0xC0 | (j - i))
+                out.append(row[i])
+                i = j
+            for c in pad:
+                out += bytes([0xC1, c]) if c >= 0xC0 else bytes([c])
+    return bytes(out + s[128:])
+
+
+def tiff_lzw(data):
+    """SPECIFICATIONS v34 (a draft), "tiff", kind 6: a strip's bytes as libtiff's LZW codes them. Codes
+    most significant bit first, 9 bits wide to start; a clear code (256) first; the longest string in
+    the table taken and its code written, then that string one byte longer given the next free code
+    (258 on); then, where the next free code is 4,094, a clear code (at the width then) and the table
+    emptied; else where it is past what the width holds, a bit wider; else where 10,000 bytes or more
+    have been read since the last look (counted from the strip's start, never reset), the ratio of the
+    bytes read to the bits written since the last clear, times 256 (whole numbers, rounded down; past
+    0x7FFFFF bytes, the bytes over the bits' 256ths), where no more than the last a clear code and the
+    table emptied (the last forgotten), else kept as the last. At the end, the string left, the same
+    look at the next free code one on (a clear code, or a bit wider), the end code (257), and the bits
+    left over to a whole byte."""
+    out, acc, nacc = bytearray(), 0, 0
+    width, free, incount, outcount, checkpoint, ratio = 9, 258, 0, 0, 10000, 0
+    table = {}
+
+    def put(code):
+        nonlocal acc, nacc, outcount
+        acc, nacc, outcount = (acc << width) | code, nacc + width, outcount + width
+        while nacc >= 8:
+            out.append((acc >> (nacc - 8)) & 0xFF)
+            nacc -= 8
+        acc &= (1 << nacc) - 1
+
+    def clear():
+        nonlocal width, free, incount, outcount, ratio
+        table.clear()
+        ratio, incount, outcount, free = 0, 0, 0, 258
+        put(256)
+        width = 9
+
+    ent = None
+    if data:
+        put(256)
+        ent, incount = data[0], 1
+    for c in data[1:]:
+        incount += 1
+        k = (ent, c)
+        if k in table:
+            ent = table[k]
+            continue
+        put(ent)
+        ent = c
+        table[k] = free
+        free += 1
+        if free == 4094:
+            clear()
+        elif free > (1 << width) - 1:
+            width += 1
+        elif incount >= checkpoint:
+            checkpoint = incount + 10000
+            if incount > 0x7FFFFF:
+                r = outcount >> 8
+                r = 0x7FFFFFFF if r == 0 else incount // r
+            else:
+                r = (incount << 8) // outcount
+            if r <= ratio:
+                clear()
+            else:
+                ratio = r
+    if ent is not None:
+        put(ent)
+        free += 1
+        if free == 4094:
+            put(256)
+            width = 9
+        elif free > (1 << width) - 1:
+            width += 1
+    put(257)
+    if nacc:
+        out.append((acc << (8 - nacc)) & 0xFF)
+    return bytes(out)
+
+
+def tiff_packbits(data, row):
+    """SPECIFICATIONS v34 (a draft), "tiff", kind 7: a strip's bytes as libtiff's PackBits codes them,
+    each row of `row` bytes (the last shorter) alone: runs of a byte (2 to 128) as 1 - n and the
+    byte; other bytes as literals of up to 128, their count less one first; where a literal is
+    followed by a run of two and then a single byte, the three joined into the literal while it stays
+    under 128 bytes (libtiff's PackBitsEncode, followed step by step)."""
+    out = bytearray()
+    for r0 in range(0, len(data), row):
+        bp, end, state, last = r0, min(r0 + row, len(data)), 0, 0  # states: 0 base, 1 literal, 2 run, 3 literal then run
+        while bp < end:
+            b = data[bp]
+            n = 1
+            bp += 1
+            while bp < end and data[bp] == b:
+                n, bp = n + 1, bp + 1
+            while True:
+                if state == 3:
+                    if n == 1 and out[-2] == 0xFF and out[last] < 126:
+                        out[last] += 2
+                        state = 0 if out[last] == 127 else 1
+                        out[-2] = out[-1]
+                    else:
+                        state = 2
+                    continue
+                if n > 1:
+                    if state == 1:
+                        state = 3
+                    elif state == 0:
+                        state = 2
+                    if n > 128:
+                        out += bytes([0x81, b])
+                        n -= 128
+                        continue
+                    out += bytes([(1 - n) & 0xFF, b])
+                elif state == 1:
+                    out[last] += 1
+                    if out[last] == 127:
+                        state = 0
+                    out.append(b)
+                else:
+                    last = len(out)
+                    out += bytes([0, b])
+                    state = 1
+                break
+    return bytes(out)
+
+
+def tiff_predict(px, row, stride, form):
+    """SPECIFICATIONS v34 (a draft), "tiff", kind 8: rows of `row` bytes differenced, each sample (1:
+    a byte; 2: two, little-endian; 3: two, big-endian) less the one `stride` samples before it in its
+    row, modulo 2^bits."""
+    nb, order = (1, "little") if form == 1 else (2, "little" if form == 2 else "big")
+    out = bytearray(px)
+    for r0 in range(0, len(px), row):
+        v = [int.from_bytes(px[r0 + k:r0 + k + nb], order) for k in range(0, row, nb)]
+        d = v[:stride] + [(v[k] - v[k - stride]) & ((1 << (8 * nb)) - 1) for k in range(stride, len(v))]
+        out[r0:r0 + row] = b"".join(x.to_bytes(nb, order) for x in d)
+    return bytes(out)
+
+
+def skeleton_remake(inner, skel, path, tiff=False):
     """v21's skeleton (SPECIFICATIONS §12.2) read from the inner bytes and checked whole: a varint of
     its segments' count, each segment 0 bytes as they are, 1 data stored, 2 a deflate (preflate's
     difference after it), 3 LZMA2 or 4 LZMA (their settings after it), the data after the skeleton
@@ -8748,6 +8977,36 @@ def skeleton_remake(inner, skel, path):
                     for l in lengths:
                         piece, at_piece = joined[at_piece:at_piece + l], at_piece + l
                         out += struct.pack(">I", l) + b"IDAT" + piece + struct.pack(">I", zlib.crc32(b"IDAT" + piece) & 0xFFFFFFFF)
+                continue
+            if tiff and kind in (6, 7, 8):
+                # (v34 draft, "tiff") a strip as libtiff codes it: 6 LZW; 7 PackBits, its row's bytes
+                # after; 8 differenced first: the row's bytes, the stride, the sample's form (1 to 3),
+                # then the coding's own kind (2, 6 or 7), the same count and its own settings
+                row = stride = form = 0
+                coding, diff = kind, None
+                if kind == 8:
+                    row, stride = varint(), varint()
+                    if at[0] + 2 > len(sk):
+                        sys.exit(f"{path}: its skeleton ends early")
+                    form, coding = sk[at[0]], sk[at[0] + 1]
+                    at[0] += 2
+                    if not row or not 1 <= stride <= row or form not in (1, 2, 3) or coding not in (2, 6, 7) or varint() != n or n % row or row % (1 if form == 1 else 2):
+                        sys.exit(f"{path}: a TIFF strip's differencing Sieve does not write")
+                if coding == 2:
+                    d = varint()
+                    if d > len(sk) - at[0]:
+                        sys.exit(f"{path}: its skeleton ends early")
+                    at[0] += d
+                prow = varint() if coding == 7 else 0
+                if coding == 7 and not prow:
+                    sys.exit(f"{path}: a TIFF strip's rows Sieve does not write")
+                un = take_data(n)
+                if kind == 8:
+                    un = tiff_predict(un, row, stride, form)
+                if coding == 2:
+                    whole = False
+                elif whole:
+                    out += tiff_lzw(un) if coding == 6 else tiff_packbits(un, prow)
                 continue
             if kind == 0:
                 if n > len(sk) - at[0]:

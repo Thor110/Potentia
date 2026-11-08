@@ -296,14 +296,14 @@ set(SIEVE_ARCHIVE_INCLUDE ${libarchive_SOURCE_DIR}/libarchive)
 # preflate (Apache 2.0, third_party_licenses/preflate), Dirk Steinke's: any deflate stream (a zip's,
 # a gzip's, whoever made it) split into what it holds and a small difference from its own deflate,
 # and made again exactly from the two. Pinned to its last commit (it has no releases), its library's
-# files built here unchanged but for one guard (below); two headers its files assume are given them
+# files built here unchanged but for two guards (below); two headers its files assume are given them
 # on the command line, as newer compilers no longer bring them in.
 FetchContent_Declare(preflate
     GIT_REPOSITORY https://github.com/deus-libri/preflate.git
     GIT_TAG 609eefaa96ac6c51d7b1a3fb29e0ed94d0f3623e
     SOURCE_SUBDIR support) # (no CMakeLists.txt there: fetched, not built by its own CMake)
 FetchContent_MakeAvailable(preflate)
-# One change to preflate, Sieve's only one (Edward, 7 November 2026; results/fuzz-2026-11-06.md):
+# Two changes to preflate. The first (Edward, 7 November 2026; results/fuzz-2026-11-06.md):
 # ArithmeticDecoder::decodeBits shifts by a count read from the instructions, so damaged ones can ask
 # for 32 bits, a shift C++ leaves undefined, and a count of 31 or 32 can leave the step 0, which then
 # divides. Valid streams never ask for more than about 16 bits (deflate's lengths and distances).
@@ -322,6 +322,61 @@ if(SIEVE_PREFLATE_DONE EQUAL -1)
     endif()
     string(REPLACE "${SIEVE_PREFLATE_OLD}" "${SIEVE_PREFLATE_NEW}" SIEVE_PREFLATE_TEXT "${SIEVE_PREFLATE_TEXT}")
     file(WRITE ${SIEVE_PREFLATE_CODER} "${SIEVE_PREFLATE_TEXT}")
+endif()
+# A second guard (8 November 2026, the reader fuzzed with a file whose zlib streams preflate opened,
+# results/zlib-pcx-2026-11-08.md): preflate's token predictor trusts the instructions to stay within
+# what the stream holds: a stored block's length, a block's count of tokens and a corrected reference's
+# length and distance are read from them and never weighed against the bytes left (nor a corrected
+# length against deflate's 3 to 258: one of 0 had its matching compare 4 GiB past the buffer), so
+# damaged ones moved its cursor past the end and its matching read outside the buffer (a crash, under
+# AddressSanitizer, in prefixCompare). Patched, each is checked and a damaged stream fails, as one
+# whose prediction fails does: valid streams never ask for more than they hold.
+set(SIEVE_PREFLATE_TOKENS ${preflate_SOURCE_DIR}/preflate_token_predictor.cpp)
+file(READ ${SIEVE_PREFLATE_TOKENS} SIEVE_PREFLATE_TEXT)
+string(REPLACE "\r\n" "\n" SIEVE_PREFLATE_TEXT "${SIEVE_PREFLATE_TEXT}")
+string(FIND "${SIEVE_PREFLATE_TEXT}" "SIEVE_PATCHED" SIEVE_PREFLATE_DONE)
+if(SIEVE_PREFLATE_DONE EQUAL -1)
+    # (in its decoding alone, decodeBlock to the end of the file: each text as preflate has it there,
+    # once, and what it becomes; configuring stops if one is not there)
+    string(FIND "${SIEVE_PREFLATE_TEXT}" "PreflateTokenBlock PreflateTokenPredictor::decodeBlock(" SIEVE_PREFLATE_FROM)
+    if(SIEVE_PREFLATE_FROM EQUAL -1)
+        message(FATAL_ERROR "preflate's token predictor is not as Sieve's patch expects (${SIEVE_PREFLATE_TOKENS})")
+    endif()
+    string(SUBSTRING "${SIEVE_PREFLATE_TEXT}" 0 ${SIEVE_PREFLATE_FROM} SIEVE_PREFLATE_HEAD)
+    string(SUBSTRING "${SIEVE_PREFLATE_TEXT}" ${SIEVE_PREFLATE_FROM} -1 SIEVE_PREFLATE_TEXT)
+    macro(sieve_preflate_guard old new)
+        string(FIND "${SIEVE_PREFLATE_TEXT}" "${old}" SIEVE_PREFLATE_AT)
+        string(FIND "${SIEVE_PREFLATE_TEXT}" "${old}" SIEVE_PREFLATE_AT_LAST REVERSE)
+        if(SIEVE_PREFLATE_AT EQUAL -1 OR NOT SIEVE_PREFLATE_AT EQUAL SIEVE_PREFLATE_AT_LAST)
+            message(FATAL_ERROR "preflate's token predictor is not as Sieve's patch expects (${SIEVE_PREFLATE_TOKENS})")
+        endif()
+        string(REPLACE "${old}" "${new}" SIEVE_PREFLATE_TEXT "${SIEVE_PREFLATE_TEXT}")
+    endmacro()
+    sieve_preflate_guard([=[
+    hash.updateHash(block.uncompressedLen);
+]=] [=[
+    if (block.uncompressedLen > state.availableInputSize()) { predictionFailure = true; return PreflateTokenBlock(); } // SIEVE_PATCHED
+    hash.updateHash(block.uncompressedLen);
+]=])
+    sieve_preflate_guard([=[
+    PreflateToken predictedToken = predictToken();
+]=] [=[
+    if (state.availableInputSize() == 0) { predictionFailure = true; return PreflateTokenBlock(); } // SIEVE_PATCHED
+    PreflateToken predictedToken = predictToken();
+]=])
+    sieve_preflate_guard([=[
+      predictedToken.len = newLen;
+]=] [=[
+      if (newLen < 3 || newLen > 258) { predictionFailure = true; return PreflateTokenBlock(); } // SIEVE_PATCHED
+      predictedToken.len = newLen;
+]=])
+    sieve_preflate_guard([=[
+    if (predictedToken.len == 258) {
+]=] [=[
+    if (predictedToken.len > state.availableInputSize() || predictedToken.dist > state.currentInputPos()) { predictionFailure = true; return PreflateTokenBlock(); } // SIEVE_PATCHED
+    if (predictedToken.len == 258) {
+]=])
+    file(WRITE ${SIEVE_PREFLATE_TOKENS} "${SIEVE_PREFLATE_HEAD}${SIEVE_PREFLATE_TEXT}")
 endif()
 set(SIEVE_PREFLATE_SOURCES)
 foreach(f block_decoder block_reencoder block_trees complevel_estimator constants decoder hash_chain info parameter_estimator
@@ -477,7 +532,7 @@ target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_ima
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
 # (client/unpack_7z.cpp too: "Optimise Archive Formats" reads a 7z's contents with the installer's
 # own decoder.)
-add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/tiff_codec.cpp tools/cli/pcx_rle.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
 target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli FLAC)

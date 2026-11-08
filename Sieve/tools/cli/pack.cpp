@@ -7,6 +7,8 @@
 #include "cli/jpeg_glue.hpp"
 #include "cli/gif_lzw.hpp"
 #include "cli/flac_wav.hpp"
+#include "cli/tiff_codec.hpp"
+#include "cli/pcx_rle.hpp"
 #include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
 
@@ -1296,6 +1298,49 @@ struct DeflateSkeleton
         data.insert(data.end(), sub.data.begin(), sub.data.end());
         ++segments;
     }
+    // v34 draft, under "tiff" alone (tiff_codec.hpp): a TIFF's strip made again as libtiff codes it,
+    // from what it holds: kind 6, LZW (the bytes it holds' count); kind 7, PackBits (the count, then
+    // the bytes of a row, each row coded alone). False where libtiff's coder does not give back the
+    // strip's n bytes exactly.
+    bool tiff_lzw(const uint8_t* p, size_t n, const std::vector<uint8_t>& un)
+    {
+        if (tiff_lzw_encode(un.data(), un.size()) != std::vector<uint8_t>(p, p + n)) return false;
+        head.push_back(6);
+        sk_put_varint(head, un.size());
+        data.insert(data.end(), un.begin(), un.end());
+        ++segments;
+        return true;
+    }
+    bool tiff_packbits(const uint8_t* p, size_t n, const std::vector<uint8_t>& un, size_t row)
+    {
+        if (row == 0 || tiff_packbits_encode(un.data(), un.size(), row) != std::vector<uint8_t>(p, p + n)) return false;
+        head.push_back(7);
+        sk_put_varint(head, un.size());
+        sk_put_varint(head, row);
+        data.insert(data.end(), un.begin(), un.end());
+        ++segments;
+        return true;
+    }
+    // Kind 8: a strip whose bytes were differenced (TIFF's predictor 2) before kind 2's, 6's or 7's
+    // coding: its pixels carried as they are, the rows' bytes, the pixel's samples (stride), the sample's
+    // form (1: 8 bits; 2: 16, little-endian; 3: 16, big-endian), then the coding's own segment, whose
+    // count is the same. `un` what that coding holds (differenced): false where it is not whole rows.
+    bool tiff_predicted(int kind, const std::vector<uint8_t>& un, size_t row, size_t stride, int form, const std::vector<uint8_t>& params)
+    {
+        std::vector<uint8_t> px = un;
+        if (!tiff_unpredict(px, row, stride, form == 1 ? 1 : 2, form == 3)) return false;
+        head.push_back(8);
+        sk_put_varint(head, px.size());
+        sk_put_varint(head, row);
+        sk_put_varint(head, stride);
+        head.push_back(uint8_t(form));
+        head.push_back(uint8_t(kind));
+        sk_put_varint(head, px.size());
+        head.insert(head.end(), params.begin(), params.end());
+        data.insert(data.end(), px.begin(), px.end());
+        ++segments;
+        return true;
+    }
     // The inner bytes: the segments' count, the segments, then the data; and how long the skeleton is.
     std::vector<uint8_t> inner(size_t& skeleton) const
     {
@@ -1309,7 +1354,8 @@ struct DeflateSkeleton
 };
 
 // A file made again from its skeleton and data (inner: the skeleton's `skeleton` bytes, then the data).
-std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, size_t skeleton)
+// `tiff`: the recipe is "tiff" (v34 draft), whose skeleton may hold kinds 6, 7 and 8 too.
+std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, size_t skeleton, bool tiff = false)
 {
     if (skeleton > inner.size()) throw std::runtime_error("a deflate skeleton longer than what holds it");
     size_t at = 0, data = skeleton;
@@ -1353,6 +1399,50 @@ std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, 
                     const uint32_t crc = uint32_t(crc32(0, out.data() + name_at, uInt(out.size() - name_at)));
                     for (int b = 3; b >= 0; --b) out.push_back(uint8_t(crc >> (8 * b)));
                 }
+                continue;
+            }
+            if (tiff && (kind == 6 || kind == 7 || kind == 8))
+            {
+                // (v34 draft) a TIFF's strip, by libtiff's coding (tiff_codec.hpp)
+                auto row_of = [&]() {
+                    const uint64_t r = sk_get_varint(sk, at);
+                    if (r == 0 || r > (uint64_t(1) << 32)) throw std::runtime_error("a TIFF strip's rows this Sieve does not write");
+                    return size_t(r);
+                };
+                size_t row = 0, stride = 0;
+                int form = 0, coding = kind;
+                std::vector<uint8_t> diff;
+                if (kind == 8)
+                {
+                    row = row_of();
+                    const uint64_t st = sk_get_varint(sk, at);
+                    if (at + 2 > sk.size()) throw std::runtime_error("a deflate skeleton ends early");
+                    form = sk[at++];
+                    coding = sk[at++];
+                    if (st == 0 || st > row || form < 1 || form > 3 || (coding != 2 && coding != 6 && coding != 7) || sk_get_varint(sk, at) != n ||
+                        n % row != 0 || row % size_t(form == 1 ? 1 : 2) != 0)
+                        throw std::runtime_error("a TIFF strip's differencing this Sieve does not write");
+                    stride = size_t(st);
+                }
+                if (coding == 2)
+                {
+                    const uint64_t d = sk_get_varint(sk, at);
+                    if (d > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
+                    diff.assign(sk.begin() + std::ptrdiff_t(at), sk.begin() + std::ptrdiff_t(at + d));
+                    at += size_t(d);
+                }
+                const size_t prow = coding == 7 ? row_of() : 0;
+                const size_t from = take_data(n);
+                std::vector<uint8_t> un(inner.begin() + std::ptrdiff_t(from), inner.begin() + std::ptrdiff_t(from + n));
+                if (kind == 8) tiff_predict(un, row, stride, form == 1 ? 1 : 2, form == 3);
+                std::vector<uint8_t> raw;
+                if (coding == 2)
+                {
+                    if (!preflate_join(un, diff, raw)) throw std::runtime_error("preflate could not make a deflate stream again");
+                }
+                else
+                    raw = coding == 6 ? tiff_lzw_encode(un.data(), un.size()) : tiff_packbits_encode(un.data(), un.size(), prow);
+                out.insert(out.end(), raw.begin(), raw.end());
                 continue;
             }
             if (kind == 0)
@@ -1700,6 +1790,277 @@ std::optional<PdfSkeleton> pdf_skeleton(const std::vector<uint8_t>& b)
     if (p.members.empty()) return std::nullopt;
     p.sk.literal(b.data() + kept, n - kept);
     return p;
+}
+
+// v34 draft (8 November 2026): a TIFF whose strips or tiles are compressed (deflate, 8 or 32946;
+// LZW, 5; PackBits, 32773) carried as what they hold, made again exactly ("tiff <skeleton size>
+// <inner size>": DeflateSkeleton's kinds, and 6, 7 and 8, tiff_codec.hpp): every image of the file
+// (its IFDs, from the first, by each one's next) walked, each strip or tile whose coding gives it back
+// opened, every other byte (the header, the IFDs, strips not opened) as it is. Where the strips were
+// differenced (predictor 2, 8 or 16 bits a sample, whole rows), carried undone: the pixels themselves,
+// for mixing to weigh as a picture of the image's width (or its tiles').
+struct TiffSkeleton
+{
+    DeflateSkeleton sk;
+    uint32_t width = 0, pixel = 0; // the largest image's shape as carried (its tiles' width where tiled)
+    uint64_t opened = 0, held = 0; // strips or tiles opened, and the bytes they hold
+};
+
+bool is_tiff(const std::vector<uint8_t>& b)
+{
+    return b.size() >= 8 && ((b[0] == 'I' && b[1] == 'I' && b[2] == 42 && b[3] == 0) || (b[0] == 'M' && b[1] == 'M' && b[2] == 0 && b[3] == 42));
+}
+
+std::optional<TiffSkeleton> tiff_skeleton(const std::vector<uint8_t>& b)
+{
+    if (!is_tiff(b)) return std::nullopt;
+    const size_t n = b.size();
+    const bool big = b[0] == 'M';
+    auto u16 = [&](uint64_t at) -> uint32_t { return big ? uint32_t(b[size_t(at)]) << 8 | b[size_t(at) + 1] : uint32_t(b[size_t(at)]) | uint32_t(b[size_t(at) + 1]) << 8; };
+    auto u32 = [&](uint64_t at) -> uint32_t { return big ? u16(at) << 16 | u16(at + 2) : u16(at) | u16(at + 2) << 16; };
+    struct Unit
+    {
+        uint64_t at = 0, size = 0;
+        uint32_t compression = 1, predictor = 1, stride = 1, bits = 8;
+        uint64_t row = 0, rows = 0; // the row's bytes, and the rows it holds
+    };
+    std::vector<Unit> units;
+    TiffSkeleton t;
+    uint64_t best_area = 0;
+    std::set<uint64_t> seen;
+    for (uint64_t ifd = u32(4); ifd != 0 && seen.size() < 256;)
+    {
+        if (ifd + 2 > n || !seen.insert(ifd).second) return std::nullopt;
+        const uint32_t count = u16(ifd);
+        if (ifd + 2 + uint64_t(count) * 12 + 4 > n) return std::nullopt;
+        uint64_t width = 0, height = 0, bits = 8, spp = 1, compression = 1, planar = 1, predictor = 1, rps = ~uint32_t(0), tw = 0, tl = 0;
+        std::vector<uint64_t> offsets, counts;
+        bool bad = false;
+        auto values = [&](uint64_t e, std::vector<uint64_t>& v) {
+            const uint32_t type = u16(e + 2), cnt = u32(e + 4);
+            const uint64_t size = type == 3 ? 2 : type == 4 ? 4 : 0;
+            if (!size || cnt == 0 || cnt > (1u << 24)) return void(bad = true);
+            const uint64_t at = size * cnt <= 4 ? e + 8 : u32(e + 8);
+            if (at + size * cnt > n) return void(bad = true);
+            for (uint32_t k = 0; k < cnt; ++k) v.push_back(type == 3 ? u16(at + 2 * k) : u32(at + 4 * k));
+        };
+        for (uint32_t k = 0; k < count; ++k)
+        {
+            const uint64_t e = ifd + 2 + uint64_t(k) * 12;
+            const uint32_t tag = u16(e), type = u16(e + 2);
+            const uint64_t one = type == 3 ? u16(e + 8) : u32(e + 8);
+            switch (tag)
+            {
+            case 256: width = one; break;
+            case 257: height = one; break;
+            case 258:
+            {
+                std::vector<uint64_t> v;
+                values(e, v);
+                if (!v.empty()) bits = v[0];
+                for (const uint64_t x : v) bad = bad || x != bits;
+                break;
+            }
+            case 259: compression = one; break;
+            case 277: spp = one; break;
+            case 278: rps = one; break;
+            case 284: planar = one; break;
+            case 317: predictor = one; break;
+            case 322: tw = one; break;
+            case 323: tl = one; break;
+            case 273:
+            case 324: values(e, offsets); break;
+            case 279:
+            case 325: values(e, counts); break;
+            default: break;
+            }
+        }
+        const uint64_t next = u32(ifd + 2 + uint64_t(count) * 12);
+        ifd = next;
+        if (bad || offsets.size() != counts.size() || offsets.empty() || width == 0 || height == 0 || spp == 0 || spp > 16 || bits == 0 || bits > 64 ||
+            (planar != 1 && planar != 2) || (compression != 5 && compression != 8 && compression != 32946 && compression != 32773))
+            continue;
+        const bool tiled = tw != 0 || tl != 0;
+        if (tiled && (tw == 0 || tl == 0 || tw > (1u << 24) || tl > (1u << 24))) continue;
+        const uint64_t across = tiled ? tw : width, per = planar == 1 ? spp : 1;
+        const uint64_t row = (across * per * bits + 7) / 8;
+        if (row == 0 || row > (uint64_t(1) << 31)) continue;
+        const uint64_t strips_per_plane = tiled ? 0 : (height + std::min<uint64_t>(rps, height) - 1) / std::min<uint64_t>(std::max<uint64_t>(rps, 1), height);
+        for (size_t k = 0; k < offsets.size(); ++k)
+        {
+            Unit u;
+            u.at = offsets[k];
+            u.size = counts[k];
+            u.compression = uint32_t(compression);
+            u.predictor = uint32_t(predictor);
+            u.stride = uint32_t(per);
+            u.bits = uint32_t(bits);
+            u.row = row;
+            if (tiled) u.rows = tl;
+            else
+            {
+                const uint64_t r = std::max<uint64_t>(std::min<uint64_t>(rps, height), 1), in_plane = strips_per_plane ? k % strips_per_plane : 0;
+                u.rows = std::min<uint64_t>(r, height > in_plane * r ? height - in_plane * r : 0);
+            }
+            if (u.size == 0 || u.at > n || u.size > n - u.at || u.rows == 0) continue;
+            units.push_back(u);
+        }
+        const uint64_t pixel = per * bits / 8;
+        if (width * height > best_area && bits % 8 == 0 && pixel >= 1 && pixel <= 4 && across >= 2 && across <= (1u << 24))
+        {
+            best_area = width * height;
+            t.width = uint32_t(across);
+            t.pixel = uint32_t(pixel);
+        }
+    }
+    std::sort(units.begin(), units.end(), [](const Unit& x, const Unit& y) { return x.at < y.at; });
+    for (size_t k = 1; k < units.size(); ++k)
+        if (units[k].at < units[k - 1].at + units[k - 1].size) return std::nullopt; // (overlapping strips: left as it is)
+    size_t kept = 0;
+    for (const Unit& u : units)
+    {
+        const uint8_t* p = b.data() + u.at;
+        const size_t len = size_t(u.size), expect = size_t(std::min<uint64_t>(u.row * u.rows, uint64_t(1) << 31));
+        const bool differenced = u.predictor == 2 && (u.bits == 8 || u.bits == 16);
+        const int form = u.bits == 8 ? 1 : big ? 3 : 2;
+        auto predicted = [&](int kind, const std::vector<uint8_t>& un, const std::vector<uint8_t>& params) {
+            return differenced && un.size() % u.row == 0 && t.sk.tiff_predicted(kind, un, size_t(u.row), u.stride, form, params);
+        };
+        bool done = false;
+        if (u.compression == 5)
+        {
+            if (auto un = tiff_lzw_decode(p, len, expect + 4096); un && tiff_lzw_encode(un->data(), un->size()) == std::vector<uint8_t>(p, p + len))
+            {
+                t.sk.literal(b.data() + kept, size_t(u.at) - kept);
+                kept = size_t(u.at);
+                done = predicted(6, *un, {}) || t.sk.tiff_lzw(p, len, *un);
+                if (done) t.held += un->size();
+            }
+        }
+        else if (u.compression == 32773)
+        {
+            if (auto un = tiff_packbits_decode(p, len, expect))
+            {
+                std::vector<uint8_t> params;
+                sk_put_varint(params, size_t(u.row));
+                if (tiff_packbits_encode(un->data(), un->size(), size_t(u.row)) == std::vector<uint8_t>(p, p + len))
+                {
+                    t.sk.literal(b.data() + kept, size_t(u.at) - kept);
+                    kept = size_t(u.at);
+                    done = predicted(7, *un, params) || t.sk.tiff_packbits(p, len, *un, size_t(u.row));
+                    if (done) t.held += un->size();
+                }
+            }
+        }
+        else if (len > 6 && (p[0] & 0x0F) == 8 && (uint32_t(p[0]) << 8 | p[1]) % 31 == 0 && !(p[1] & 0x20))
+        {
+            // zlib's two bytes, the deflate, its Adler-32 after (left in the skeleton)
+            size_t used = 0;
+            if (inflate_raw(p + 2, len - 2, &used) && used >= 16)
+            {
+                t.sk.literal(b.data() + kept, size_t(u.at) + 2 - kept);
+                const std::vector<uint8_t> raw(p + 2, p + 2 + used);
+                std::vector<uint8_t> un, diff;
+                if (differenced && preflate_split(raw, un, diff))
+                {
+                    std::vector<uint8_t> params;
+                    sk_put_varint(params, diff.size());
+                    params.insert(params.end(), diff.begin(), diff.end());
+                    done = predicted(2, un, params);
+                    if (done) t.held += un.size();
+                }
+                if (!done)
+                {
+                    const size_t before = t.sk.data.size();
+                    done = t.sk.deflated(p + 2, used);
+                    if (done) t.held += t.sk.data.size() - before;
+                }
+                if (done)
+                {
+                    ++t.opened;
+                    kept = size_t(u.at) + 2 + used;
+                }
+                else
+                    kept = size_t(u.at) + 2; // (the literal before it written; the stream joins the next)
+                continue;
+            }
+        }
+        if (done)
+        {
+            ++t.opened;
+            kept = size_t(u.at + u.size);
+        }
+        else if (kept < u.at)
+        {
+            t.sk.literal(b.data() + kept, size_t(u.at) - kept);
+            kept = size_t(u.at);
+        }
+    }
+    if (t.opened == 0) return std::nullopt;
+    t.sk.literal(b.data() + kept, n - kept);
+    return t;
+}
+
+// v34 draft (8 November 2026): the zlib streams inside any file (a git pack's objects, a WOFF font's
+// tables, an SWF, a game's or a program's data) found and carried as what they hold, the file made
+// again exactly by "sk" (v21, which every reader since reads): each place where a zlib header
+// (deflate, a window of 32 KiB or less, its check right, no preset dictionary) starts a stream that
+// zlib reads to its end, its Adler-32 right, holding 64 bytes or more; its deflate made again by
+// preflate, the header and the Adler-32 left as bytes. Searched on from the stream's end.
+struct ZlibStreams
+{
+    DeflateSkeleton sk;
+    uint64_t streams = 0, held = 0;
+};
+
+// A zlib stream at p: its bytes (header to Adler-32) and what it holds, counted; nothing where zlib
+// does not read one to its end, or it holds over 256 MiB.
+static std::optional<std::pair<size_t, uint64_t>> zlib_probe(const uint8_t* p, size_t n)
+{
+    z_stream z{};
+    if (inflateInit2(&z, 15) != Z_OK) return std::nullopt;
+    uint8_t buf[16384];
+    z.next_in = const_cast<Bytef*>(p);
+    z.avail_in = uInt(std::min<size_t>(n, size_t(1) << 30));
+    uint64_t made = 0;
+    int r = Z_OK;
+    while (r == Z_OK)
+    {
+        z.next_out = buf;
+        z.avail_out = sizeof buf;
+        r = inflate(&z, Z_NO_FLUSH);
+        made += sizeof buf - z.avail_out;
+        if (made > (uint64_t(256) << 20)) r = Z_DATA_ERROR;
+    }
+    const size_t used = size_t(z.total_in);
+    inflateEnd(&z);
+    if (r != Z_STREAM_END) return std::nullopt;
+    return std::make_pair(used, made);
+}
+
+std::optional<ZlibStreams> zlib_streams(const std::vector<uint8_t>& b)
+{
+    const size_t n = b.size();
+    ZlibStreams z;
+    size_t kept = 0;
+    for (size_t i = 0; i + 8 < n; ++i)
+    {
+        const uint8_t c = b[i], f = b[i + 1];
+        if ((c & 0x0F) != 8 || (c >> 4) > 7 || ((uint32_t(c) << 8) | f) % 31 != 0 || (f & 0x20)) continue;
+        const auto got = zlib_probe(b.data() + i, n - i);
+        if (!got || got->second < 64 || got->first < 8) continue;
+        z.sk.literal(b.data() + kept, i + 2 - kept);
+        kept = i + 2;
+        const size_t before = z.sk.data.size();
+        if (!z.sk.deflated(b.data() + i + 2, got->first - 6)) continue; // (left as bytes: it joins the next literal)
+        z.held += z.sk.data.size() - before;
+        ++z.streams;
+        kept = i + got->first - 4;
+        i = i + got->first - 1;
+    }
+    if (z.streams == 0) return std::nullopt;
+    z.sk.literal(b.data() + kept, n - kept);
+    return z;
 }
 
 bool is_tar(const std::vector<uint8_t>& b)
@@ -2221,6 +2582,26 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
             throw std::runtime_error("an unfiltered PNG's recipe this Sieve does not know: " + recipe);
         return deflate_skeleton_remake(png_unfiltered_sk_inner(inner, skeleton, n, bpp, h), size_t(skeleton));
     }
+    if (recipe.rfind("pcx ", 0) == 0)
+    {
+        // "pcx <skeleton size> <inner size>" (v34 draft): a PCX made again from its pixels, its planes
+        // interleaved, and its header (pcx_rle.hpp).
+        unsigned long long skeleton = 0, size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "pcx %llu %llu%c", &skeleton, &size, &extra) != 2 || size != inner.size() || skeleton > size)
+            throw std::runtime_error("a PCX's recipe this Sieve does not know: " + recipe);
+        return pcx_remake(inner, size_t(skeleton));
+    }
+    if (recipe.rfind("tiff ", 0) == 0)
+    {
+        // "tiff <skeleton size> <inner size>" (v34 draft): a TIFF made again from its skeleton and what
+        // its strips hold, as "sk" with kinds 6, 7 and 8 (tiff_codec.hpp).
+        unsigned long long skeleton = 0, size = 0;
+        char extra = 0;
+        if (std::sscanf(recipe.c_str(), "tiff %llu %llu%c", &skeleton, &size, &extra) != 2 || size != inner.size() || skeleton > size)
+            throw std::runtime_error("a TIFF's recipe this Sieve does not know: " + recipe);
+        return deflate_skeleton_remake(inner, size_t(skeleton), true);
+    }
     if (recipe.rfind("sk ", 0) == 0)
     {
         // "sk <skeleton size> <inner size>" (v21): a gzip, zip or 7z made again from its skeleton and the
@@ -2604,7 +2985,7 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
 // 8, 24 or 32 bits; rows padded to four bytes, so only where they need none), an uncompressed TGA
 // (colour-mapped, true-colour or grey; its size exactly its header's, its ID, its colour map and its
 // pixels, with or without the TGA 2 footer), a binary PNM (P5, P6; 8 or 16 bits) and an uncompressed
-// TIFF (one plane, its strips one after another). Measured: a 800 by 450 photograph as a BMP, whose
+// TIFF (one plane, its strips one after another), and an uncompressed DDS. Measured: a 800 by 450 photograph as a BMP, whose
 // shape guessed from its bytes was 1,618 wide, mixed in 205,787 bytes; as a TGA, PPM or PNG, 800 wide,
 // about 193,400 (results/plain-pictures-2026-11-08.md).
 static std::optional<std::pair<uint32_t, uint32_t>> header_shape(const std::vector<uint8_t>& b)
@@ -2672,6 +3053,17 @@ static std::optional<std::pair<uint32_t, uint32_t>> header_shape(const std::vect
         if (strips == 1 && offset + width * height * spp * bits / 8 > n) return std::nullopt;
         return std::pair<uint32_t, uint32_t>{uint32_t(width), uint32_t(spp * bits / 8)};
     }
+    // DDS (8 November 2026), uncompressed: "DDS ", a header of 124 bytes, its pixel format RGB (flag
+    // 0x40) or luminance (0x20000), not a FourCC's, of 8, 16, 24 or 32 bits; its rows (a pitch, where it
+    // gives one, of exactly the width's bytes) from byte 128, the largest image first.
+    if (n >= 128 && std::memcmp(b.data(), "DDS ", 4) == 0 && le32(4) == 124 && le32(76) == 32)
+    {
+        const uint32_t flags = le32(8), h = le32(12), w = le32(16), pitch = le32(20), pf = le32(80), bits = le32(88);
+        if ((pf & 0x4) || !(pf & (0x40 | 0x20000)) || (bits != 8 && bits != 16 && bits != 24 && bits != 32) || h == 0) return std::nullopt;
+        if ((flags & 0x8) && pitch != uint64_t(w) * (bits / 8)) return std::nullopt;
+        if (128 + uint64_t(w) * h * (bits / 8) > n || !ok(w, bits / 8)) return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{w, bits / 8};
+    }
     // TGA: no mark of its own, so its size must be exactly what its header says.
     if (n >= 18 && (b[1] == 0 || b[1] == 1) && (b[2] == 1 || b[2] == 2 || b[2] == 3))
     {
@@ -2707,6 +3099,8 @@ static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::stri
         return std::pair<uint32_t, uint32_t>{uint32_t(row / c), uint32_t(c)};
     }
     unsigned long long block = 0;
+    if (recipe.rfind("pcx ", 0) == 0 && std::sscanf(recipe.c_str(), "pcx %llu %llu%c", &skeleton, &n, &extra) == 2 && n == size && skeleton <= n)
+        return pcx_shape(bytes, size_t(skeleton)); // (v34 draft: its pixels, planes interleaved)
     if (recipe.rfind("gif ", 0) == 0 && std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &n, &extra) == 3 && n == size)
         if (const auto w = gif_width(bytes, size_t(skeleton)); w && *w <= (1u << 24)) return std::pair<uint32_t, uint32_t>{*w, 1};
     return std::nullopt;
@@ -3796,7 +4190,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0;
+    // (v34 draft: an opened TIFF's shape, its pixels' width and bytes a pixel, for mixing to weigh)
+    std::map<std::string, std::pair<uint32_t, uint32_t>> tiff_shapes;
     uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
@@ -4789,6 +5185,75 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             // skeleton, what its deflate streams hold (LZMA2 or mixing), and its JPEGs (each as its
             // brunsli form, where brunsli gives it back, else as it is) come out clearly under the PDF
             // as it is. Checked to give the PDF back before it is kept.
+            // v34 draft: what a picture's pixels come to, `w` wide and `c` bytes a pixel (0 wide: LZMA2's
+            // estimate alone): LZMA2's estimate, or mixing's as a picture of that shape where it is less
+            // (on 8 stretches of whole rows, its gain over LZMA2 there applied to the whole, as
+            // mixed_estimate), but not under Prioritise Decoding Speed, which mixes nothing.
+            auto picture_estimate = [&](const std::vector<uint8_t>& px, uint32_t w, uint32_t c) -> uint64_t {
+                uint64_t carried = estimate(px);
+                if (w && c && !prioritise_decoding() && px.size() >= (size_t(64) << 10))
+                {
+                    const size_t row = size_t(w) * c, rows = std::max<size_t>(2, (size_t(128) << 10) / row);
+                    std::vector<uint8_t> sample;
+                    for (size_t k = 0; k < 8 && px.size() >= rows * row; ++k)
+                    {
+                        const size_t at = (px.size() / row - rows) * k / 7 * row;
+                        sample.insert(sample.end(), px.begin() + std::ptrdiff_t(at), px.begin() + std::ptrdiff_t(at + rows * row));
+                    }
+                    if (!sample.empty())
+                    {
+                        const double code = double(mix4_code(sample, mix4_for(sample.size(), w, c)).size()), lz = double(std::max<uint64_t>(1, estimate(sample)));
+                        carried = std::min(carried, uint64_t(double(carried) * std::min(1.0, code / lz)));
+                    }
+                }
+                return carried;
+            };
+            // v34 draft: a PCX, with temporary, as its pixels (planes interleaved) and its header
+            // (pcx_rle.hpp), where they come out clearly under the PCX as it is.
+            if (temporary_ok && instructions_on && is_pcx(b))
+                if (auto o = pcx_open(b))
+                {
+                    const size_t pixels = o->inner.size() - o->skeleton;
+                    const uint64_t apart = picture_estimate(std::vector<uint8_t>(o->inner.begin(), o->inner.begin() + std::ptrdiff_t(pixels)), o->width, o->planes) +
+                                           o->skeleton;
+                    const uint64_t as_one = as_is_of();
+                    if (archives_always || apart + 64 + as_one / 200 < as_one)
+                    {
+                        ++pcxs_opened;
+                        ManifestEntry r = e;
+                        r.remake = o->recipe;
+                        add_file(r, std::move(o->inner), std::move(b), e.sha256);
+                        continue;
+                    }
+                }
+            // v34 draft: a TIFF whose strips are compressed (deflate, LZW, PackBits), with temporary, as
+            // its skeleton and what its strips hold (tiff_skeleton): where LZMA2's estimate of that, or
+            // mixing's of its pixels as a picture of its width (on 8 stretches of whole rows, as
+            // mixed_estimate), comes out clearly under the TIFF as it is. Checked to give it back first.
+            if (temporary_ok && instructions_on && is_tiff(b))
+                if (auto t = [&] {
+                        const timings::Scope ts("pack.tiff.open");
+                        return tiff_skeleton(b);
+                    }())
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = t->sk.inner(skeleton);
+                    const std::vector<uint8_t> px(whole.begin() + std::ptrdiff_t(skeleton), whole.end());
+                    const uint64_t carried = picture_estimate(px, t->width, t->pixel);
+                    const uint64_t apart = estimate(std::vector<uint8_t>(whole.begin(), whole.begin() + std::ptrdiff_t(skeleton))) + carried;
+                    const uint64_t as_one = as_is_of();
+                    if ((archives_always || apart + 64 + as_one / 200 < as_one) && deflate_skeleton_remake(whole, skeleton, true) == b)
+                    {
+                        ++tiffs_opened;
+                        progress(e.path + ", a TIFF of " + std::to_string(b.size()) + " bytes, opened: " + std::to_string(t->opened) + " strip(s) holding " +
+                                 std::to_string(t->held) + " bytes (about " + std::to_string(apart) + " bytes packed, against " + std::to_string(as_one) + ")");
+                        if (t->width) tiff_shapes[e.path] = {t->width, t->pixel};
+                        ManifestEntry r = e;
+                        r.remake = "tiff " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                        add_file(r, std::move(whole), std::move(b), e.sha256);
+                        continue;
+                    }
+                }
             if (members_on && temporary_ok && instructions_on && is_pdf(b))
                 if (auto pdf = [&] {
                         const timings::Scope t("pack.pdf.open");
@@ -4849,6 +5314,27 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     size_t skeleton = 0;
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
+                }
+            // v34 draft: the zlib streams inside a file of any other kind (zlib_streams), with temporary:
+            // carried as what they hold ("sk", v21) where that is clearly smaller (worth), checked to
+            // give the file back first.
+            if (temporary_ok && instructions_on && b.size() >= 1024)
+                if (auto z = [&] {
+                        const timings::Scope tz("pack.zlib.scan");
+                        return zlib_streams(b);
+                    }())
+                {
+                    size_t skeleton = 0;
+                    std::vector<uint8_t> whole = z->sk.inner(skeleton);
+                    if (worth(whole, 40) && deflate_skeleton_remake(whole, skeleton) == b)
+                    {
+                        ++zlib_opened;
+                        progress(e.path + ": " + std::to_string(z->streams) + " zlib stream(s) inside it opened, holding " + std::to_string(z->held) + " bytes");
+                        ManifestEntry r = e;
+                        r.remake = "sk " + std::to_string(skeleton) + " " + std::to_string(whole.size());
+                        add_file(r, std::move(whole), std::move(b), e.sha256);
+                        continue;
+                    }
                 }
             if (try_spans()) continue;
             add_file(e, std::move(b), {}, e.sha256);
@@ -5321,6 +5807,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     r.sounds_to_flac = sounds_to_flac;
     r.flacs_recoded = flacs_recoded;
     r.pdfs_opened = pdfs_opened;
+    r.tiffs_opened = tiffs_opened;
+    r.zlib_opened = zlib_opened;
+    r.pcxs_opened = pcxs_opened;
     r.sound_flac_was = sound_flac_was;
     r.sound_flac_now = sound_flac_now;
     r.wav_bytes = wav_bytes;
@@ -5602,7 +6091,10 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
                 std::optional<std::pair<uint32_t, uint32_t>> known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
                 // (v34 draft: a picture of plain pixels, its shape from its own header)
-                const bool from_header = !known && instructions_on && !program && files[i]->remake.empty() && (known = header_shape(bytes[i]));
+                bool from_header = !known && instructions_on && !program && files[i]->remake.empty() && (known = header_shape(bytes[i]));
+                // (v34 draft: an opened TIFF's pixels, their shape from its tags)
+                if (!known && instructions_on && !program && files[i]->remake.rfind("tiff ", 0) == 0)
+                    if (const auto ts = tiff_shapes.find(files[i]->path); ts != tiff_shapes.end()) known = ts->second, from_header = true;
                 bool e1_allowed = true; // (v34 draft: E1 for a program; under Balanced weighed against mixing without it)
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
                                    uint32_t primer = 0) {
@@ -6669,7 +7161,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         return x.member && x.remake.rfind("jbr ", 0) == 0 && slash != std::string::npos && with_skm.count(x.path.substr(0, slash));
     };
     m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
-                return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
+                return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || x.remake.rfind("tiff ", 0) == 0 || x.remake.rfind("pcx ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
             });
     m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
@@ -6809,6 +7301,12 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.pdfs_opened)
             o << "pdfs      " << r.pdfs_opened << " PDF(s) carried as their skeletons and what their streams hold, made again exactly on installing\n";
+        if (r.pcxs_opened)
+            o << "pcx       " << r.pcxs_opened << " PCX picture(s) carried as their pixels, made again exactly on installing\n";
+        if (r.zlib_opened)
+            o << "zlib      " << r.zlib_opened << " file(s) carried with the zlib streams inside them opened (git packs, WOFF fonts, SWF...), made again exactly on installing\n";
+        if (r.tiffs_opened)
+            o << "tiffs     " << r.tiffs_opened << " TIFF(s) carried as their skeletons and what their strips hold, made again exactly on installing\n";
         if (r.sounds_to_flac || r.flacs_recoded)
             o << "as flac   " << r.sounds_to_flac << " file(s) of sound installed as .flac files of the same samples, " << r.flacs_recoded
               << " FLAC file(s) re-coded (Sound as FLAC), " << r.sound_flac_was << " bytes as they were, " << r.sound_flac_now << " as FLAC\n";

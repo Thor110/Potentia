@@ -38,6 +38,24 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   1 or 2 channels, up to 24 bits), and FLAC files re-coded at the priority's effort, their tags kept.
   Not a format change: a `.flac` is carried as any file is. CI step 11 checks ten sound files so and
   a FLAC re-coded (its tag kept, its 8 KiB of padding gone), each decoded by the oracle's own reader.
+- **Floating-point sound, 8 November 2026** (docs/FORMATS-PLAN.md, second): float WAV, AIFF-C,
+  .au and CAF whose every sample is a whole 24-bit step carried through FLAC by the `flac` recipe,
+  each float written back bit for bit by integer arithmetic; 21% to 32% smaller on twelve files, made
+  13 to 29 times quicker (results/float-sound-2026-11-08.md).
+- **Compressed TIFFs opened, 8 November 2026** (third): `tiff`, a new recipe: deflate, LZW and
+  PackBits strips made again exactly (libtiff's coders written for Sieve), the predictor undone; 18
+  ImageMagick TIFFs 36.9% smaller together, one 0.5% larger (results/tiff-compressed-2026-11-08.md).
+- **MP3 measured, DDS's shape, 8 November 2026**: packMP3 would make MP3s 10.6% to 14.4% smaller and
+  its licence fits, but its decoder crashed on 264 of 300 fuzzed streams, so it is not built; an
+  uncompressed DDS's shape read from its header for mixing (8.5% on one texture)
+  (results/mp3-dds-ico-2026-11-08.md).
+- **Sound as FLAC keeps tags, 8 November 2026**: a WAV's LIST INFO and an AIFF's NAME, AUTH, ANNO and
+  (c) written as the .flac's Vorbis comments; 3 to 8 channels where the WAV's channel mask is FLAC's
+  own order.
+- **zlib streams inside files, and PCX, 8 November 2026**: any file's zlib streams opened through
+  preflate by `sk` (a git pack 27.8% smaller, WOFF fonts 12.7% and 22.2%); `pcx`, a new recipe, PCX
+  pictures as their pixels (16% to 66% smaller). PSD and run-length TGA measured, not built
+  (results/zlib-pcx-2026-11-08.md).
 - **PDFs opened, 8 November 2026** (docs/FORMATS-PLAN.md, first): a PDF as a skeleton and members
   (v31's `skm`): its deflate streams through preflate, its JPEGs as members, which may now be carried
   as their brunsli form (the one change a reader sees). Three arXiv papers 41% to 49% smaller, the

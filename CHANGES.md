@@ -1,50 +1,79 @@
-# Changes: PDFs opened (v34 draft) and the hallway's usage text
+# Changes: the format list worked through (v34 draft)
 
-Two commits on top of db89863.
+Five commits on top of 24a9871 (your "sieve metrics"). Each format was measured before it was built.
+Every file listed below was installed byte for byte.
 
-## eb7b799: PDFs as a skeleton and members
+## de81c00: floating-point sound, compressed TIFFs
 
-The first item of docs/FORMATS-PLAN.md. With `--v34-draft`, a PDF is carried as a skeleton and
-members, as v31 carries a tar (`skm`):
-- each `/FlateDecode` stream is made again by preflate from what it holds;
-- each `/DCTDecode` JPEG is a member of its own and may be carried as its brunsli form (`jbr`). This
-  is the one change a reader sees: in v34, a skeleton's member may carry `jbr`.
+**Float sound.** Float WAV, AIFF-C fl32/fl64, .au and CAF whose every sample is a whole 24-bit step
+now go through FLAC at 24 bits, by the existing `flac` recipe. The reader turns each sample back into
+its float by integer arithmetic alone, so every machine gives the same bits. The rule was checked
+against IEEE floats for all 16.8 million 32-bit values. On twelve files (two recordings in six
+layouts): 21% to 32% smaller, made 13 to 29 times faster (results/float-sound-2026-11-08.md).
 
-JBIG2, JPX and chained filters stay in the skeleton. A PDF is opened only where it comes out clearly
-smaller, and only after checking that it gives the PDF back exactly.
+**Compressed TIFFs.** A new recipe, `tiff`. Deflate strips go through preflate. LZW and PackBits
+strips are made again by libtiff's own coders, written for Sieve from libtiff 4.7.0's source; its
+licence is permissive, and noted in third_party_licenses/libtiff. The horizontal predictor is undone,
+so mixing sees the pixels at the image's width. On 18 ImageMagick TIFFs: 36.9% smaller together.
+One PackBits scan came out 0.5% larger (results/tiff-compressed-2026-11-08.md).
 
-Measured with Balanced and Optimise Search; every file installed byte for byte
-(results/pdf-2026-11-08.md):
+## c85866a: zlib streams inside any file, PCX
 
-| PDF | Before | After | Change |
-| :--- | ---: | ---: | ---: |
-| arXiv 1512.03385 | 708,231 | 416,529 | −41.2% |
-| arXiv 1706.03762 | 1,030,038 | 527,623 | −48.8% |
-| arXiv 2005.14165 | 5,485,411 | 2,827,052 | −48.5% |
-| archive.org scan (JBIG2, JPX) | 19,247,926 | 19,112,191 | −0.7% |
-| archive.org scan 2 | 5,482,450 | 5,482,450 | not opened |
-| WoWRevived manual | 8,422,844 | 6,894,364 | −18.1% |
+**zlib streams.** Any file that no other route opens is searched for zlib streams. Each is carried
+as what it holds, through preflate, by the existing `sk` recipe, so every reader since v21 can
+install it. Your git pack: 27.8% smaller. Two WOFF fonts: 12.7% and 22.2% smaller.
 
-**Making is slower** where a PDF has many streams. arXiv 2005.14165 took 11 s before and 498 s now,
-mostly the rope's search over its 343 members. The command line has no time limit per file unless
-`--search-per-file` gives one; in the File Locator, the time for a file bounds it.
+**PCX.** A new recipe, `pcx`: the pixels with their planes interleaved, plus the header. ImageMagick
+and Pillow both use the PCX specification's own coder. Five of six PCXs 16% to 66% smaller; the
+sixth wasn't worth opening.
 
-**Other changes:**
-- The oracle reads the listing and every member. It has no preflate, so it reports the PDF as not
-  made again by the oracle, as it does for a zip's deflate.
-- CI step 11 writes an 8-page PDF with a JPEG and checks it through sieve and sieve-install.
+**Measured, not built:**
+- PSD: Photoshop's and ImageMagick's PackBits coders are their own, not libtiff's.
+- Run-length TGA: keeping the packet heads would gain 3% to 6% on photos but lose 17% to 20% on
+  screenshots.
 
-**Sound measured, not built:** mu-law and A-law are not worth it. Sieve's mixing on the 8-bit codes
-beats FLAC on the widened samples (1,026,561 vs 1,614,712 bytes, and 162,491 vs 236,962).
+(results/zlib-pcx-2026-11-08.md)
 
-## f3b7f25: `--sound-to-flac` in the hallway's usage text
+## f7fe4e4: Sound as FLAC keeps tags
 
-This fixes the failure in your CI run: step 11's help check found the option read by the client but
-missing from its usage text. tools/check_help.py now reports 0 missing.
+A WAV's LIST INFO tags and an AIFF's NAME, AUTH, ANNO and (c) chunks are written into the `.flac` as
+Vorbis comments (TITLE, ARTIST, and so on, in UTF-8). WAVs of 3 to 8 channels are installed as
+`.flac` too, where their channel mask is FLAC's own order.
 
-Unit suite: 154,388 checks, 0 failures. The PDF and FLAC blocks of CI step 11 pass here.
+## 5c6d7ea: MP3 measured, DDS, ICO
 
-## Next
+**MP3: not built.** The licence fits: packMP3 is LGPL v3. It made five MP3s 10.6% to 14.4% smaller
+and gave each back exactly. But its decoder crashed on 264 of 300 fuzzed streams under
+AddressSanitizer (buffer overflows and null pointers). In the reader, that would let a crafted
+`.sieve` corrupt the installer's memory. Your call whether it's worth making packMP3's decoder safe
+first (results/mp3-dds-ico-2026-11-08.md).
 
-Float sound whose every value is a whole 24-bit step, through FLAC (WAV, AIFF-C fl32, CAF). It
-measured 21% to 24% under Sieve's ways. After that, compressed TIFF.
+**DDS.** An uncompressed DDS's width is now read from its header for mixing: 8.5% smaller on one
+texture. BC1 textures are already carried well.
+
+**ICO.** Already carried well.
+
+## 71c291d: a crash in preflate fixed (in the reader since v21)
+
+Fuzzing the reader with the zlib test file found one crash. It isn't in the new code: it has been
+there since v21, for zips and gzips. A damaged `.sieve` could make preflate read about 4 GiB past its
+buffer while installing: its token predictor trusted a corrected length (0 in the cases found) and a
+stored block's length taken straight from the instructions.
+
+A second checked patch to the fetched preflate, beside the one from 7 November, makes each such case
+fail as a damaged stream does, so the install refuses it. Your git pack (2,737 streams) and two PDFs
+pack to the same sizes as before and install byte for byte (results/fuzz-2026-11-08.md). Your
+Windows/MSVC build will apply the patch when CMake next configures.
+
+## Checks
+
+- **Unit suite:** 154,388 checks, 0 failures.
+- **CI step 11:** new blocks for float sound, TIFF, zlib streams, PCX and Sound as FLAC tags. The
+  whole step passes here with all of them, before and after the preflate patch (1,691 s and 1,673 s).
+- **Fuzzing,** under AddressSanitizer and UBSan, in three rounds:
+  - TIFF and float seeds: 8,680 runs, no findings.
+  - PCX, zlib and TIFF seeds: 7,964 runs, 6 findings with one cause (the preflate crash above).
+  - The same seeds after the fix: 5,501 runs, no findings.
+- **Not done here:** CI on Windows and macOS, or the benchmark.
+
+Pillow is now installed in CI step 11 (pip_add "pillow==12.0.0") to write the test TIFFs and PCXs.
