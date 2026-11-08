@@ -6842,3 +6842,21 @@ a flag per value coded in context, as JPEG-LS's run mode and the significance fl
 HEVC are, so it is not new as a method. Verdict: one pass, with the order-1 rope if that is built;
 no second or noise pass. Not built.
 
+**19.132 Wave paths through the grid (Edward, 8 November 2026; measured the same day).** His idea: a
+wave of one to n phases is a path that curves through the file laid out as a grid; where a value on
+the path is matched it is cut, the rest kept, and decoding puts them back procedurally; it propagates
+up to n times, the best chosen through seeds and propagation within limits. To decode, every value
+keeps its place in the grid (cut out of the grid itself, every later value would shift column, and in
+a stereo WAV left and right would swap), so the cuts come out of the leftovers, and each pass must be
+a different wave. *Measured* (results/wave-paths-2026-11-08.md; `tools/bench/wave_paths.py`,
+`wave_fitted.py`): Edward's paths (600 shapes) found nothing the waves over every value did not (the
+best shape covered every cell; 0.09% on `mr`); seeded paths did worse. Waves in turn (O3, O2, O2X
+each cutting what the last missed) took 0.45 to 1.82% off the WAVs, nothing elsewhere. Far larger:
+choosing the wave per file (a wave continued from its last three values, 15.39% off Martian/03, but
+7.66% more on Martian/04); coding leftovers by bit length (17.31% off `mr`); and, largest, a wave fitted
+to each block of 4,096 from its last 8 values (12.88 to 36.19% off the WAVs, within 4.4 to 7.0% of
+FLAC). The 5/3 wavelet won only on `x-ray` (15.69%). FLAC level 12 on the seven WAVs the rope carries:
+224,783,126 bytes against the rope's 276,730,651 (81.2%). Verdict: no paths or seeds; the rope's audio
+gains most from a fitted wave and bit-length coding (FLAC's own methods), which would bring it near
+FLAC; a way that codes sound as FLAC does is the option to weigh. Not built.
+

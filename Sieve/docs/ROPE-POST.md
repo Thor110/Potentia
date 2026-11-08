@@ -171,6 +171,15 @@ the WAVs by the rope, 73.5% of them) came to 1,016,369,457 bytes, 5.34% under 7z
 rope against LZMA2's 2,735,555 (METHODS §3). A sine of 16-bit values with noise, 6,003 bytes: 4,583
 against LZMA2's 5,324.
 
+**Against FLAC.** LZMA2 is not made for sound; FLAC is. FLAC (ffmpeg, `-compression_level 12`) on the
+same seven WAVs, each decoded back to the same samples: 224,783,126 bytes, 81.2% of the rope's
+276,730,651, and smaller on every file (72.7% to 85.3% of the rope's code). FLAC fits a predictor to
+each block from up to 32 values back and codes what is left by Rice codes; the rope's waves reach
+one or two values back and code byte planes. Measured on 8 MB of three of the WAVs, a wave fitted to
+each block from 8 values back, with the leftovers coded by bit length, takes 12.88 to 36.19% off the
+rope's recipe and comes within 4.4 to 7.0% of FLAC (results/wave-paths-2026-11-08.md). The rope's
+win on sound is against general compressors, not against an audio codec.
+
 **Three ideas measured against it** (IDEAS §19.127, §19.128, §19.131). Rounding a file's place and keeping
 the rounding in a table of common roundings: the leftovers repeat across files only as silence and
 runs of small values, and coding each leftover byte given the one before does better with no table
