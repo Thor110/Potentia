@@ -9,6 +9,7 @@
 #include "strings.hpp"
 
 #include "cli/compare.hpp"
+#include "cli/draft.hpp"
 #include "cli/items.hpp"
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
@@ -287,6 +288,16 @@ std::function<void(bool)>& kept_optimise()
 } // namespace
 
 void FileLocator::remember_optimise(std::function<void(bool)> changed) { kept_optimise() = std::move(changed); }
+
+namespace {
+std::function<void(bool)>& kept_sound_flac()
+{
+    static std::function<void(bool)> k;
+    return k;
+}
+} // namespace
+
+void FileLocator::remember_sound_flac(std::function<void(bool)> changed) { kept_sound_flac() = std::move(changed); }
 
 namespace {
 struct KeptLog
@@ -989,6 +1000,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_optimise = sieve::cli::optimise_search();
+                r.made_sound_flac = sieve::cli::sound_to_flac();
                 r.made_priority = int(sieve::priority());
                 refine_estimate(5);
             }
@@ -1064,6 +1076,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_archives = boxes;
                 r.made_every = sieve::rope_search_every_wave();
                 r.made_optimise = sieve::cli::optimise_search();
+                r.made_sound_flac = sieve::cli::sound_to_flac();
                 r.made_priority = int(sieve::priority());
                 const std::string plain = r.manifest.text(); // the tree's identity is its v1 manifest's
                 r.sha256 = cli::sha256_hex(std::vector<uint8_t>(plain.begin(), plain.end()));
@@ -1152,7 +1165,8 @@ void FileLocator::save(const std::string& to)
     // Made when it was read, with what is set now: written as it is, nothing packed again (and the
     // graph of how it was made is kept).
     const bool made = r.instructions && r.made_rope_seconds == rope_seconds && r.made_archives == boxes &&
-                      r.made_every == sieve::rope_search_every_wave() && r.made_optimise == sieve::cli::optimise_search() && r.made_priority == int(sieve::priority());
+                      r.made_every == sieve::rope_search_every_wave() && r.made_optimise == sieve::cli::optimise_search() && r.made_sound_flac == sieve::cli::sound_to_flac() &&
+                      r.made_priority == int(sieve::priority());
     start_job(!made);
     {
         std::lock_guard<std::mutex> lock(mx_);
@@ -1288,6 +1302,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
+        case SDLK_W: pressed = sieve::cli::draft_on() ? "sound_flac" : ""; break; // Sound as FLAC, on or off (the v34 draft on)
         case SDLK_P: pressed = "priority"; break; // Size, Balanced, Decoding speed, round the three
         case SDLK_C: pressed = kept_compare().on ? "more" : ""; break; // More formats in the comparison, on or off (the comparison on)
         case SDLK_Z: pressed = "compare"; break;  // Compare with zip and 7z, on or off
@@ -1335,6 +1350,12 @@ void FileLocator::event(const SDL_Event& e)
         const bool on = !sieve::cli::optimise_search();
         sieve::cli::set_optimise_search(on);
         if (kept_optimise()) kept_optimise()(on);
+    }
+    else if (pressed == "sound_flac")
+    {
+        const bool on = !sieve::cli::sound_to_flac();
+        sieve::cli::set_sound_to_flac(on);
+        if (kept_sound_flac()) kept_sound_flac()(on);
     }
     else if (pressed == "every" && !sieve::cli::optimise_search())
     {
@@ -1614,6 +1635,8 @@ void FileLocator::draw(float W, float H)
         }
         else box("temporary", temporary_, tr("loc.temporary"));
         box("permanent", permanent_, tr("loc.permanent"));
+        // (Sound as FLAC: the v34 draft's, shown only while the draft is on)
+        if (sieve::cli::draft_on()) box("sound_flac", sieve::cli::sound_to_flac(), tr("loc.flac"));
         // (Optimise Search, ticked unless unticked: Try every way chosen for each file by its kind,
         // so its own box is shown greyed and not pressed while it is)
         box("optimise", sieve::cli::optimise_search(), tr("loc.optimise"));
@@ -1704,8 +1727,9 @@ void FileLocator::draw(float W, float H)
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
-            for (const char* id : {"loc.temporary", "loc.permanent", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.more"})
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.flac", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.more"})
             {
+                if (std::string(id) == "loc.flac" && !sieve::cli::draft_on()) continue;
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
                 const bool chosen = sieve::cli::optimise_search() && (std::string(id) == "loc.every" || std::string(id) == "loc.temporary");
                 const std::string label = std::string(id) == "loc.priority" ? priority_label() : tr(id) + (chosen ? " " + tr("loc.every.chosen") : std::string());

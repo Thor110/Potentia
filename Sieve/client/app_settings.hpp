@@ -130,6 +130,7 @@ struct AppSettings
     std::string locator_priority = "balanced";
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)
     bool locator_more = false;       // More formats: the comparison with gzip, bzip2, zstd, brotli and lz4 too (0.13.78)
+    bool locator_sound_flac = false; // Sound as FLAC (v34 draft): sound installed as .flac files
     bool locator_optimise = true;    // Optimise Search: Try every way chosen for each file by its kind (ticked unless unticked)
     bool locator_draft = false;      // the next version's draft (cli/draft.hpp; [locator] v33_draft, its name from the version)
     bool locator_log = false;        // Keep a log: each run's reports and times written to a text file

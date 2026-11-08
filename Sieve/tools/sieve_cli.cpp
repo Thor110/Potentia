@@ -2454,6 +2454,9 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
     // installer's cab was installed as its files from encode.su).
     const bool temporary = a.has("compressed-temporary"), permanent = a.has("compressed-permanent");
     set_compressed_modes(temporary || !permanent, permanent);
+    // --sound-to-flac (v34 draft, 8 November 2026): Sound as FLAC, a WAV, AIFF, RF64, Wave64, .au or CAF
+    // installed as a .flac file of the same samples (it changes what is installed: asked for by name).
+    set_sound_to_flac(a.has("sound-to-flac"));
     // --progress: what the packer says as it goes (each file's ways weighed and the one taken, each
     // step's new best), to standard error with the seconds since the start, as the hallway's Keep a
     // log writes it (2 November 2026: so a run's reasons are seen without the hallway).

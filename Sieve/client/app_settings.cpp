@@ -228,6 +228,7 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "compressed_permanent") s.locator_permanent = value == "1";
             else if (key == "search_every_wave") s.locator_every_wave = value == "1";
             else if (key == "optimise_search") s.locator_optimise = value == "1";
+            else if (key == "sound_to_flac") s.locator_sound_flac = value == "1";
             else if (key == "priority" && (value == "size" || value == "balanced" || value == "speed")) s.locator_priority = value;
             else if (key == "prioritise_decoding" && value == "1") s.locator_priority = "speed"; // (an older settings file's box)
             else if (key == "more_formats") s.locator_more = value == "1";
@@ -327,6 +328,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "optimise_archives", (locator_temporary || locator_permanent) ? "1" : "0", "1: either half of Archive and compressed formats ticked (as Archive and Compressed Formats, the one box before v31, read it: both); the next two say which; 0: off"},
         {"locator", "compressed_temporary", locator_temporary ? "1" : "0", "1: Archive and compressed formats: temporary ticked (an archive or a compressed file made again exactly on installing, where Sieve can); 0: off"},
         {"locator", "compressed_permanent", locator_permanent ? "1" : "0", "1: Archive and compressed formats: permanent ticked (an archive or a compressed file carried as what it holds, installed so); 0: off"},
+        {"locator", "sound_to_flac", locator_sound_flac ? "1" : "0", "1: Sound as FLAC ticked (with the v34 draft on): a WAV, AIFF, RF64, Wave64, .au or CAF installed as a .flac file of the same samples, its other chunks left out; 0 (the default): every sound file installed as it is"},
         {"locator", "optimise_search", locator_optimise ? "1" : "0", "1: Optimise Search ticked (the default): Try every way chosen for each file by its kind, from what was measured (off for every file with Prioritise Decoding Speed; else on for a JPEG, a file over 16 MiB or under 4 KiB, off between), its own box unused; 0: Try every way as its box says"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "priority", locator_priority, "size: the smallest; balanced: mixing only where it saves 4% of what it carries (the default); speed: no file mixed (quickest to install, largest)"},

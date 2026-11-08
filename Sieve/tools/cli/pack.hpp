@@ -101,6 +101,8 @@ struct PackReport
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
     uint64_t jpeg_was = 0, jpeg_now = 0;
     size_t gifs_opened = 0, gif_frames = 0; // v34 draft: GIFs carried as their indices, and their frames
+    size_t sounds_to_flac = 0, flacs_recoded = 0; // Sound as FLAC: files installed as .flac, FLACs re-coded, their bytes before and after
+    uint64_t sound_flac_was = 0, sound_flac_now = 0;
     size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC
     uint64_t wav_bytes = 0;  // (their bytes)
     size_t pngs_resaved = 0;             // v32: PNGs installed re-saved at their smallest (permanent), their bytes before and after
@@ -185,6 +187,13 @@ std::pair<bool, const char*> optimised_every_way(std::span<const uint8_t> file);
 void set_compressed_modes(bool temporary, bool permanent);
 bool compressed_temporary();
 bool compressed_permanent();
+
+// Sound as FLAC (v34 draft, 8 November 2026, Edward: "repack audio to FLAC"): a WAV, AIFF, RF64,
+// Wave64, .au or CAF installed as a .flac file of the same samples, in FLAC's streamable subset, its
+// name's extension .flac. It changes what is installed, so it is asked for by name (--sound-to-flac, or
+// the File Locator's box); off unless asked.
+void set_sound_to_flac(bool on);
+bool sound_to_flac();
 
 void add_packed(Manifest& m, const std::filesystem::path& root, PackReport* report = nullptr, const ItemFinder* items = nullptr,
                 bool item_hashes = false, const PlaceCoder* coder = nullptr, double rope_seconds = -1, uint32_t rope_newest = 5,

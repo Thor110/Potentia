@@ -2492,6 +2492,95 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
 // <inner size>", the rows first, then their filter bytes and the skeleton). (v34 draft) A GIF's
 // indices ("gif <sub-block size> <skeleton size> <inner size>", the indices first), one byte a
 // pixel, where every frame is as wide as the first.
+// v34 draft (8 November 2026): a picture of plain pixels' shape from its own header, for mixing to
+// weigh (mix-v4's I, which every reader since v26 reads; the packer's choice alone): its width and its
+// bytes a pixel, where its rows follow one another with nothing between. A BMP (BI_RGB or bitfields;
+// 8, 24 or 32 bits; rows padded to four bytes, so only where they need none), an uncompressed TGA
+// (colour-mapped, true-colour or grey; its size exactly its header's, its ID, its colour map and its
+// pixels, with or without the TGA 2 footer), a binary PNM (P5, P6; 8 or 16 bits) and an uncompressed
+// TIFF (one plane, its strips one after another). Measured: a 800 by 450 photograph as a BMP, whose
+// shape guessed from its bytes was 1,618 wide, mixed in 205,787 bytes; as a TGA, PPM or PNG, 800 wide,
+// about 193,400 (results/plain-pictures-2026-11-08.md).
+static std::optional<std::pair<uint32_t, uint32_t>> header_shape(const std::vector<uint8_t>& b)
+{
+    const size_t n = b.size();
+    auto le16 = [&](size_t at) { return uint32_t(b[at]) | uint32_t(b[at + 1]) << 8; };
+    auto le32 = [&](size_t at) { return le16(at) | le16(at + 2) << 16; };
+    auto ok = [](uint64_t w, uint64_t c) { return w >= 2 && w <= (1u << 24) && c >= 1 && c <= 4; };
+    // BMP
+    if (n >= 54 && b[0] == 'B' && b[1] == 'M' && le32(14) >= 40)
+    {
+        const int32_t w = int32_t(le32(18)), h = int32_t(le32(22));
+        const uint32_t bpp = le16(28), compression = le32(30);
+        if (w > 0 && h != 0 && (bpp == 8 || bpp == 24 || bpp == 32) && (compression == 0 || compression == 3))
+        {
+            const uint64_t stride = (uint64_t(w) * bpp + 31) / 32 * 4;
+            if (stride == uint64_t(w) * bpp / 8 && le32(10) + stride * uint64_t(h < 0 ? -int64_t(h) : h) <= n && ok(uint64_t(w), bpp / 8))
+                return std::pair<uint32_t, uint32_t>{uint32_t(w), bpp / 8};
+        }
+        return std::nullopt;
+    }
+    // Binary PNM: "P5" or "P6", then width, height and the largest value, as decimal numbers between
+    // white space, and one white-space byte before the pixels.
+    if (n >= 8 && b[0] == 'P' && (b[1] == '5' || b[1] == '6'))
+    {
+        size_t at = 2;
+        uint64_t v[3] = {0, 0, 0};
+        for (int k = 0; k < 3; ++k)
+        {
+            while (at < n && (b[at] == ' ' || b[at] == '\t' || b[at] == '\n' || b[at] == '\r')) ++at;
+            if (at >= n || b[at] < '0' || b[at] > '9') return std::nullopt;
+            while (at < n && b[at] >= '0' && b[at] <= '9' && v[k] < (1u << 24)) v[k] = v[k] * 10 + (b[at++] - '0');
+        }
+        if (at >= n) return std::nullopt;
+        const uint64_t per = (b[1] == '6' ? 3 : 1) * (v[2] > 255 ? 2 : 1);
+        if (v[2] < 1 || v[2] > 65535 || at + 1 + v[0] * v[1] * per != n || !ok(v[0], per)) return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{uint32_t(v[0]), uint32_t(per)};
+    }
+    // TIFF, little- or big-endian: its first IFD's width, bits a sample, samples a pixel, compression
+    // 1 (none), one plane, and its strips one after another to the end of the pixels.
+    if (n >= 8 && ((b[0] == 'I' && b[1] == 'I' && b[2] == 42 && b[3] == 0) || (b[0] == 'M' && b[1] == 'M' && b[2] == 0 && b[3] == 42)))
+    {
+        const bool big = b[0] == 'M';
+        auto u16 = [&](size_t at) { return big ? uint32_t(b[at]) << 8 | b[at + 1] : le16(at); };
+        auto u32 = [&](size_t at) { return big ? u16(at) << 16 | u16(at + 2) : le32(at); };
+        const uint64_t ifd = u32(4);
+        if (ifd + 2 > n) return std::nullopt;
+        const uint32_t count = u16(size_t(ifd));
+        if (ifd + 2 + uint64_t(count) * 12 > n) return std::nullopt;
+        uint64_t width = 0, height = 0, bits = 8, spp = 1, compression = 1, planar = 1, strips = 0, offset = 0;
+        for (uint32_t k = 0; k < count; ++k)
+        {
+            const size_t e = size_t(ifd + 2 + uint64_t(k) * 12);
+            const uint32_t tag = u16(e), type = u16(e + 2), cnt = u32(e + 4);
+            const uint64_t value = type == 3 ? u16(e + 8) : u32(e + 8);
+            if (tag == 256) width = value;
+            else if (tag == 257) height = value;
+            else if (tag == 258) bits = cnt <= (type == 3 ? 2u : 1u) ? value : (u32(e + 8) + 2 <= n ? u16(u32(e + 8)) : 0);
+            else if (tag == 259) compression = value;
+            else if (tag == 277) spp = value;
+            else if (tag == 284) planar = value;
+            else if (tag == 273) strips = cnt, offset = value;
+        }
+        if (compression != 1 || planar != 1 || (bits != 8 && bits != 16) || strips == 0 || !ok(width, spp * bits / 8)) return std::nullopt;
+        if (strips == 1 && offset + width * height * spp * bits / 8 > n) return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{uint32_t(width), uint32_t(spp * bits / 8)};
+    }
+    // TGA: no mark of its own, so its size must be exactly what its header says.
+    if (n >= 18 && (b[1] == 0 || b[1] == 1) && (b[2] == 1 || b[2] == 2 || b[2] == 3))
+    {
+        const uint64_t id = b[0], maplen = le16(5), mapbits = b[7], w = le16(12), h = le16(14), bpp = b[16];
+        const uint64_t map = b[1] ? (maplen * mapbits + 7) / 8 : 0;
+        if ((bpp != 8 && bpp != 16 && bpp != 24 && bpp != 32) || w < 2 || h < 1) return std::nullopt;
+        const uint64_t need = 18 + id + map + w * h * (bpp / 8);
+        const bool footer = n >= 26 && need + 26 <= n && std::memcmp(b.data() + n - 18, "TRUEVISION-XFILE.\0", 18) == 0;
+        if (n != need && !footer) return std::nullopt;
+        if (!ok(w, bpp / 8)) return std::nullopt;
+        return std::pair<uint32_t, uint32_t>{uint32_t(w), uint32_t(bpp / 8)};
+    }
+    return std::nullopt;
+}
+
 static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::string& recipe, const std::vector<uint8_t>& bytes)
 {
     const size_t size = bytes.size();
@@ -3149,6 +3238,13 @@ bool compressed_temporary() { return g_compressed_temporary.load(std::memory_ord
 bool compressed_permanent() { return g_compressed_permanent.load(std::memory_order_relaxed); }
 
 namespace {
+std::atomic<bool> g_sound_to_flac{false};
+} // namespace
+
+void set_sound_to_flac(bool on) { g_sound_to_flac = on; }
+bool sound_to_flac() { return g_sound_to_flac.load(std::memory_order_relaxed); }
+
+namespace {
 
 // v25's two ways to make a PNG again exactly, each giving what is carried and its recipe, or nothing:
 // stb_image_write's own PNG (the hallway's screenshots), its pixels and the level and filter that
@@ -3594,8 +3690,8 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         if (copied) png_resaved_by.emplace(sha, x);
         return x;
     };
-    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0;
-    uint64_t wav_bytes = 0;
+    size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0;
+    uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     bool png_made = false;
     rope_newest = std::min<uint32_t>(rope_newest, 6);
@@ -3623,6 +3719,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     const bool asked = optimise_archives; // (a box ticked)
     const bool routed = optimise_search();
     if (routed) optimise_archives = true;
+    // (Sound as FLAC is weighed where archives are: each file, as it is read)
+    const bool flac_files = sound_to_flac() && flac_on;
+    if (flac_files) optimise_archives = true;
     const bool temporary_ok = (asked && compressed_temporary()) || routed, permanent_ok = asked && compressed_permanent();
     // (and only with Optimise Search unticked: while it routes temporary, temporary's box is greyed,
     // so a tick left from before could not be taken back, and a RAR made so warns the person to)
@@ -3749,7 +3848,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const std::vector<uint8_t>& f = bytes[from + k];
                 if (stop_requested()) return;
                 // (not a WAV FLAC will code: it is weighed on a sample first, in the loop)
-                if (optimise_archives && !f.empty() && !(flac_on && temporary_ok && (is_wav(f) || is_aiff(f)))) (void)estimate(f);
+                if (optimise_archives && !f.empty() && !((((flac_on && temporary_ok) || flac_files) && is_sound(f)) || (flac_files && is_flac(f)))) (void)estimate(f);
                 if (spans_on && f.size() >= 256) spans_ahead[from + k] = weigh_spans(f);
                 // A zip, as the loop tries it: its skeleton (preflate on each member's deflate) and whether
                 // it gives the zip back; and a 7z's contents read, LZMA2's estimate of them made (kept by
@@ -3803,6 +3902,34 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             });
             ahead_to = to;
         };
+        // v34 draft: the sound files' FLAC coding, each on its own, on every core, before the loop (a WAV
+        // over 64 MiB is a batch of its own above, so would be coded one at a time): what each will be
+        // asked for, kept while their bytes stay under 512 MiB (any past that is coded in the loop).
+        struct SoundAhead
+        {
+            bool done = false;
+            std::optional<WavOpened> opened;                  // temporary's "flac"
+            std::optional<std::vector<uint8_t>> as_flac, recoded; // Sound as FLAC's
+        };
+        std::vector<SoundAhead> sound_ahead(bytes.size());
+        const int sound_effort = priority() == Priority::size ? 2 : priority() == Priority::balanced ? 1 : 0;
+        if (flac_on && (temporary_ok || flac_files) && optimise_archives && !stop_requested())
+        {
+            const timings::Scope t("pack.flac.ahead");
+            std::vector<size_t> sounds;
+            for (size_t k = 0; k < bytes.size(); ++k)
+                if (is_sound(bytes[k]) || (flac_files && is_flac(bytes[k]))) sounds.push_back(k);
+            std::atomic<uint64_t> held{0};
+            for_each_index(sounds.size(), pack_threads(), [&](size_t i) {
+                const std::vector<uint8_t>& f = bytes[sounds[i]];
+                if (stop_requested() || held.fetch_add(f.size()) + f.size() > (uint64_t(512) << 20)) return;
+                SoundAhead& a = sound_ahead[sounds[i]];
+                if (flac_files && is_flac(f)) a.recoded = flac_recoded(f, sound_effort);
+                if (flac_files && is_sound(f)) a.as_flac = sound_as_flac(f, sound_effort);
+                if (temporary_ok && is_sound(f)) a.opened = wav_open(f, sound_effort);
+                a.done = true;
+            });
+        }
         for (ManifestEntry& e : m.entries)
         {
             if (e.dir)
@@ -3900,7 +4027,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             // remembered, so packing it later does not search again), its names and recipe counted.
             // (v34 draft: a WAV FLAC will code is weighed first on a sample, below, and its whole estimate
             // made only where that is a near thing: 34 of a 55 MB WAV's 38 s went to it, 8 November 2026.)
-            const bool wav_first = flac_on && temporary_ok && (is_wav(b) || is_aiff(b));
+            const bool wav_first = (((flac_on && temporary_ok) || flac_files) && is_sound(b)) || (flac_files && is_flac(b));
             std::optional<uint64_t> as_is_kept;
             auto as_is_of = [&]() -> uint64_t {
                 if (!as_is_kept)
@@ -4094,12 +4221,65 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (!made) add_file(e, std::move(b), {}, e.sha256);
                 continue;
             }
-            if (flac_on && temporary_ok && (is_wav(b) || is_aiff(b)))
+            // Sound as FLAC: installed as a .flac file of the same samples, where one can be made that
+            // any player opens and is smaller than the file, under a name nothing else takes.
+            if (flac_files && is_sound(b))
+            {
+                std::optional<std::vector<uint8_t>> f;
+                if (sound_ahead[this_file].done) f = std::move(sound_ahead[this_file].as_flac);
+                else
+                {
+                    const timings::Scope t("pack.flac.file");
+                    f = sound_as_flac(b, sound_effort);
+                }
+                const size_t slash = e.path.find_last_of('/'), dot = e.path.find_last_of('.');
+                const std::string name = (dot != std::string::npos && (slash == std::string::npos || dot > slash) ? e.path.substr(0, dot) : e.path) + ".flac";
+                if (f && f->size() < b.size() && !taken.count(name) && members_writable({name}, {name}))
+                {
+                    taken.insert(name);
+                    ++sounds_to_flac;
+                    sound_flac_was += b.size();
+                    sound_flac_now += f->size();
+                    m.changed_on_packing.push_back(e.path + " (as " + name + ")");
+                    progress(e.path + ", " + sound_name(b) + " of " + std::to_string(b.size()) + " bytes, installed as " + name + ", " + std::to_string(f->size()) +
+                             " bytes, the same samples");
+                    ManifestEntry c = e;
+                    c.path = name;
+                    if (one) m.root = name;
+                    add_file(c, std::move(*f), {});
+                    continue;
+                }
+            }
+            // Sound as FLAC: a FLAC file re-coded at the priority's effort, its tags kept, where that is
+            // clearly smaller (64 bytes and 0.5%).
+            if (flac_files && is_flac(b))
+            {
+                std::optional<std::vector<uint8_t>> f;
+                if (sound_ahead[this_file].done) f = std::move(sound_ahead[this_file].recoded);
+                else
+                {
+                    const timings::Scope t("pack.flac.recode");
+                    f = flac_recoded(b, sound_effort);
+                }
+                if (f && f->size() + 64 + b.size() / 200 < b.size())
+                {
+                    ++flacs_recoded;
+                    sound_flac_was += b.size();
+                    sound_flac_now += f->size();
+                    m.changed_on_packing.push_back(e.path + " (re-coded)");
+                    progress(e.path + ", a FLAC of " + std::to_string(b.size()) + " bytes, installed re-coded, " + std::to_string(f->size()) + " bytes, the same samples");
+                    add_file(e, std::move(*f), {});
+                    continue;
+                }
+            }
+            if (flac_on && temporary_ok && is_sound(b))
             {
                 std::optional<WavOpened> w;
+                if (sound_ahead[this_file].done) w = std::move(sound_ahead[this_file].opened);
+                else
                 {
                     const timings::Scope t("pack.flac.open");
-                    w = wav_open(b, priority() == Priority::size ? 2 : priority() == Priority::balanced ? 1 : 0);
+                    w = wav_open(b, sound_effort);
                 }
                 // (FLAC's stream is already coded: where it alone is clearly under the WAV's estimate, no
                 // estimate of it is asked for.)
@@ -4129,7 +4309,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     wav_bytes += b.size();
                     ManifestEntry r = e;
                     r.remake = std::move(w->recipe);
-                    progress(e.path + (is_wav(b) ? ", a WAV of " : ", an AIFF of ") + std::to_string(b.size()) + " bytes, its samples coded by FLAC: " + std::to_string(w->inner.size()) + " bytes");
+                    progress(e.path + ", " + std::string(sound_name(b)) + " of " + std::to_string(b.size()) + " bytes, its samples coded by FLAC: " + std::to_string(w->inner.size()) + " bytes");
                     add_file(r, std::move(w->inner), std::move(b), e.sha256);
                     continue;
                 }
@@ -4533,8 +4713,12 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             if (try_spans()) continue;
             add_file(e, std::move(b), {}, e.sha256);
         }
-        if (!m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); }))
+        const bool remade = !m.unpacked.empty() || std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return !x.remake.empty(); });
+        // (Sound as FLAC changes entries too, a name and its bytes, with nothing remade: so taken back)
+        if (remade || sounds_to_flac || flacs_recoded)
         {
+          if (remade)
+          {
             m.archives = true;
             m.remake_gz = std::any_of(entries.begin(), entries.end(), [](const ManifestEntry& x) { return x.remake.rfind("gz ", 0) == 0; });
             // v19: some bzip2 or zstd remade, or carried as its contents.
@@ -4554,6 +4738,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             if (m.v21) m.v20 = true; // v21 is v20 and more
             if (m.v20) m.more_archives = true; // v20 is v19 and more
             if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
+          }
             m.entries.clear();
             bytes.clear();
             original.clear();
@@ -4989,6 +5174,10 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     r.pngs_resaved = pngs_resaved;
     r.gifs_opened = gifs_opened;
     r.wavs_opened = wavs_opened;
+    r.sounds_to_flac = sounds_to_flac;
+    r.flacs_recoded = flacs_recoded;
+    r.sound_flac_was = sound_flac_was;
+    r.sound_flac_now = sound_flac_now;
     r.wav_bytes = wav_bytes;
     r.gif_frames = gif_frames;
     r.png_bytes = png_bytes;
@@ -5266,7 +5455,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 // November 2026: six-colour drawings of 320 by 240 read by the rope as 3 wide.)
                 if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
-                const auto known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
+                std::optional<std::pair<uint32_t, uint32_t>> known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
+                // (v34 draft: a picture of plain pixels, its shape from its own header)
+                const bool from_header = !known && instructions_on && !program && files[i]->remake.empty() && (known = header_shape(bytes[i]));
                 bool e1_allowed = true; // (v34 draft: E1 for a program; under Balanced weighed against mixing without it)
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
                                    uint32_t primer = 0) {
@@ -5333,12 +5524,28 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     if (kw != pw || kc != pc)
                     {
                         const uint64_t as_known = code_of(start, unused, kw, kc).size();
-                        test_said("as a picture " + std::to_string(kw) + " wide, " + std::to_string(kc) + " a pixel (the PNG's own shape)", as_known);
+                        test_said("as a picture " + std::to_string(kw) + " wide, " + std::to_string(kc) + (from_header ? " a pixel (its header's shape)" : " a pixel (the PNG's own shape)"), as_known);
                         if (as_known < ms)
                         {
                             ms = as_known;
                             pw = kw;
                             pc = kc;
+                        }
+                    }
+                    // (v34 draft: and a header's rows as pictures of one byte a pixel, each channel's
+                    // neighbour beside it. On 24 pictures, 6 in four formats, the two shapes made them
+                    // 0.62% smaller together, photographs 2.3% to 8.2%; a screenshot whose start took the
+                    // rows by 1.1% came out 1.26% larger whole, and weighing its middle too lost the
+                    // photographs' gains without saving it: results/plain-pictures-2026-11-08.md.)
+                    if (from_header && kc > 1 && (uint64_t(kw) * kc != pw || pc != 1) && uint64_t(kw) * kc <= (1u << 24))
+                    {
+                        const uint64_t as_rows = code_of(start, unused, kw * kc, 1).size();
+                        test_said("as a picture " + std::to_string(kw * kc) + " wide, 1 a pixel (its header's rows)", as_rows);
+                        if (as_rows < ms)
+                        {
+                            ms = as_rows;
+                            pw = kw * kc;
+                            pc = 1;
                         }
                     }
                 }
@@ -6445,8 +6652,11 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
         if (r.pngs_resaved)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
+        if (r.sounds_to_flac || r.flacs_recoded)
+            o << "as flac   " << r.sounds_to_flac << " file(s) of sound installed as .flac files of the same samples, " << r.flacs_recoded
+              << " FLAC file(s) re-coded (Sound as FLAC), " << r.sound_flac_was << " bytes as they were, " << r.sound_flac_now << " as FLAC\n";
         if (r.wavs_opened)
-            o << "sound     " << r.wavs_opened << " file(s) of sound (WAV, AIFF), " << r.wav_bytes << " bytes, carried as their samples coded by FLAC, made again exactly on installing ("
+            o << "sound     " << r.wavs_opened << " file(s) of sound (WAV, AIFF, RF64, Wave64, .au, CAF), " << r.wav_bytes << " bytes, carried as their samples coded by FLAC, made again exactly on installing ("
               << kGifManifestVersion << ")\n";
         if (r.gifs_opened)
             o << "gifs      " << r.gifs_opened << " GIF(s) carried as their frames' colour indices, " << r.gif_frames << " frames, made again exactly on installing ("

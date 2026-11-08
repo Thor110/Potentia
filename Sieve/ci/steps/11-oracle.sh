@@ -1614,11 +1614,36 @@ s = sound(22050, 1, 1, 22050)  # AIFF-C of floating-point samples: left to the o
 open(os.path.join(out, "float.aifc"), "wb").write(form(b"AIFC", comm(1, 22050, 32, 22050, b"fl32"), ssnd(b"".join(struct.pack(">f", 0.5 * math.sin(k / 9)) for k in range(22050)))))
 s = sound(22050, 1, 12000, 22050)  # its COMM after its SSND: left as it is
 open(os.path.join(out, "comm-last.aiff"), "wb").write(form(b"AIFF", ssnd(b"".join(be(v[0], 2) for v in s)), comm(1, len(s), 16, 22050)))
+# RF64 (its sizes in ds64), Wave64 (GUIDs, 64-bit sizes), Sun's .au (a known size, and one to the
+# end), CAF (big-endian with its size, and little-endian to the end)
+s = sound(22050, 2, 15000, 22050)
+body = b"".join(le(x, 2) for v in s for x in v)
+ds64 = chunk(b"ds64", struct.pack("<QQQI", 0, len(body), len(s), 0))
+open(os.path.join(out, "rf64.wav"), "wb").write(b"RF64" + b"\xff" * 4 + b"WAVE" + ds64 + fmt(2, 22050, 16) + b"data" + b"\xff" * 4 + body)
+guid = lambda h: bytes.fromhex(h)
+def w64chunk(g, b):
+    c = g + struct.pack("<Q", 24 + len(b)) + b
+    return c + b"\0" * (-len(c) % 8)
+fmtbody = struct.pack("<HHIIHH", 1, 1, 48000, 48000 * 3, 3, 24)
+s = sound(12001, 1, 4000000, 48000)
+chunks = w64chunk(guid("666d7420f3acd3118cd100c04f8edb8a"), fmtbody) + w64chunk(guid("64617461f3acd3118cd100c04f8edb8a"), b"".join(le(v[0], 3) for v in s))
+open(os.path.join(out, "mono-24.w64"), "wb").write(guid("726966662e91cf11a5d628db04c10000") + struct.pack("<Q", 40 + len(chunks)) + guid("77617665f3acd3118cd100c04f8edb8a") + chunks)
+s = sound(16000, 1, 9000, 8000)
+data = b"".join(be(v[0], 2) for v in s)
+open(os.path.join(out, "known.au"), "wb").write(b".snd" + struct.pack(">IIIII", 32, len(data), 3, 8000, 1) + b"a note\0\0" + data + b"tail")
+s = sound(16000, 2, 9000, 16000)
+open(os.path.join(out, "to-end.au"), "wb").write(b".snd" + struct.pack(">IIIII", 24, 0xFFFFFFFF, 3, 16000, 2) + b"".join(be(x, 2) for v in s for x in v))
+def caf(chunks): return b"caff\0\x01\0\0" + b"".join(c + struct.pack(">q", len(b)) + b for c, b in chunks)
+def desc(rate, ch, bits, little): return struct.pack(">d4sIIIII", rate, b"lpcm", 2 if little else 0, ch * bits // 8, 1, ch, bits)
+s = sound(22050, 2, 3000000, 44100)
+open(os.path.join(out, "known-be.caf"), "wb").write(caf([(b"desc", desc(44100, 2, 24, False)), (b"data", b"\0" * 4 + b"".join(be(x, 3) for v in s for x in v)), (b"free", b"\0" * 10)]))
+s = sound(22050, 2, 15000, 44100)
+open(os.path.join(out, "to-end-le.caf"), "wb").write(caf([(b"desc", desc(44100, 2, 16, True))]) + b"data" + struct.pack(">q", -1) + b"\0" * 4 + b"".join(be(x, 2, "little") for v in s for x in v))
 PY
 $S locate w34 --installer w34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > w34.txt
-grep -q "^sound     8 file(s) of sound (WAV, AIFF), " w34.txt
+grep -q "^sound     14 file(s) of sound (WAV, AIFF, RF64, Wave64, .au, CAF), " w34.txt
 grep -q "^manifest  sieve-manifest-v34" w34.txt
-for f in eight-bit-mono.wav ext-24.wav int-32.wav stereo-16.wav stereo-16.aiff eight-bit-mono.aiff mono-24.aif sowt.aifc; do grep -q "	flac [0-9]* [0-9]* .*$f$" w34.txt; done
+for f in eight-bit-mono.wav ext-24.wav int-32.wav stereo-16.wav stereo-16.aiff eight-bit-mono.aiff mono-24.aif sowt.aifc rf64.wav mono-24.w64 known.au to-end.au known-be.caf to-end-le.caf; do grep -q "	flac [0-9]* [0-9]* .*$f$" w34.txt; done
 for f in float.wav short-data.wav float.aifc comm-last.aiff; do if grep -q "	flac .*$f$" w34.txt; then exit 1; fi; done
 rm -rf w34_inst w34_si w34_oracle w34s_inst
 $S install w34.sieve --to w34_inst > /dev/null
@@ -1628,11 +1653,69 @@ diff -r w34 w34_si
 python sieve_ref.py unpack w34.sieve --to w34_oracle > /dev/null
 diff -r w34 w34_oracle
 $S locate w34 --installer w34s.sieve --items --compressed-temporary --v34-draft --priority speed 2>&1 | tr -d '\r' > w34s.txt
-grep -q "^sound     8 file(s) of sound " w34s.txt
+grep -q "^sound     14 file(s) of sound " w34s.txt
 $S install w34s.sieve --to w34s_inst > /dev/null
 diff -r w34 w34s_inst
 $S locate w34 --installer w34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > w34v33.txt
 if grep -q "sieve-manifest-v34\|^sound \|	flac " w34v33.txt; then exit 1; fi
+# Sound as FLAC (--sound-to-flac, 8 November 2026): the same folder, each sound file of 1 or 2
+# channels, up to 24 bits, at a rate FLAC's subset holds, installed as name.flac (where no namesake
+# took that name first); each .flac decoded by the oracle's own FLAC reader to its file's samples. Then
+# one of those FLACs given a tag and 8 KiB of padding and packed again: re-coded, the tag kept, the
+# padding gone, the same samples.
+rm -rf w34f_inst f34 f34_inst
+$S locate w34 --installer w34f.sieve --items --v34-draft --sound-to-flac 2>&1 | tr -d '\r' > w34f.txt
+grep -q "^as flac   10 file(s) of sound installed as .flac files of the same samples, 0 FLAC file(s) re-coded" w34f.txt
+grep -q "^warning: 10 files of sound here are installed as .flac" w34f.txt
+$S install w34f.sieve --to w34f_inst > /dev/null
+python - w34 w34f_inst <<'PY'
+import os, sys
+sys.path.insert(0, ".")
+from sieve_ref import wav_walk, flac_decode
+src, out = sys.argv[1], sys.argv[2]
+flacs = sorted(f for f in os.listdir(out) if f.endswith(".flac"))
+assert len(flacs) == 10, flacs
+for f in flacs:
+    stem = f[:-5]
+    orig = [g for g in sorted(os.listdir(src)) if g.rsplit(".", 1)[0] == stem][0]
+    b = open(os.path.join(src, orig), "rb").read()
+    ch, bits, at, size, big, unsigned8 = wav_walk(b, orig)
+    nb = bits // 8
+    size = len(b) - at if size is None else size
+    raw = b[at:at + size]
+    want = [(raw[k] - 128 if unsigned8 else raw[k] - 256 * (raw[k] > 127)) if nb == 1 else int.from_bytes(raw[k:k + nb], "big" if big else "little", signed=True) for k in range(0, len(raw), nb)]
+    fch, fbits, total, got = flac_decode(open(os.path.join(out, f), "rb").read(), f)
+    assert (fch, fbits) == (ch, bits) and got == want, f
+PY
+mkdir f34
+python - w34f_inst/stereo-16.flac f34/tagged.flac <<'PY'
+import struct, sys
+f = open(sys.argv[1], "rb").read()
+assert f[:4] == b"fLaC" and f[4] & 0x7F == 0
+at, heads = 4, []
+while True:  # its metadata blocks, to the last
+    h, ln = f[at], int.from_bytes(f[at + 1:at + 4], "big")
+    heads.append(f[at:at + 4 + ln])
+    at += 4 + ln
+    if h & 0x80:
+        break
+vendor = b"made here"
+comment = struct.pack("<I", len(vendor)) + vendor + struct.pack("<II", 1, 11) + b"TITLE=Tones"
+# STREAMINFO, a comment, 8 KiB of padding (the last block), the frames
+out = b"fLaC" + bytes([0]) + heads[0][1:] + bytes([4]) + len(comment).to_bytes(3, "big") + comment + bytes([0x81]) + (8192).to_bytes(3, "big") + bytes(8192) + f[at:]
+open(sys.argv[2], "wb").write(out)
+PY
+$S locate f34 --installer f34.sieve --items --v34-draft --sound-to-flac 2>&1 | tr -d '\r' > f34.txt
+grep -q "^as flac   0 file(s) of sound installed as .flac files of the same samples, 1 FLAC file(s) re-coded" f34.txt
+$S install f34.sieve --to f34_inst > /dev/null
+python - f34/tagged.flac f34_inst/tagged.flac <<'PY'
+import sys
+sys.path.insert(0, ".")
+from sieve_ref import flac_decode
+a, b = open(sys.argv[1], "rb").read(), open(sys.argv[2], "rb").read()
+assert len(b) < len(a) - 8000 and b"TITLE=Tones" in b
+assert flac_decode(a, "a")[3] == flac_decode(b, "b")[3]
+PY
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
 # modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.

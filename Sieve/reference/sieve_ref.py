@@ -8217,31 +8217,132 @@ def wav_walk(w, path):
     big-endian, whether 8-bit samples are unsigned)."""
     if len(w) >= 12 and w[:4] == b"FORM" and w[8:12] in (b"AIFF", b"AIFC"):
         return aiff_walk(w, path)
-    if len(w) < 12 or w[:4] != b"RIFF" or w[8:12] != b"WAVE":
-        sys.exit(f"{path}: a sound file's skeleton that is neither a WAV's nor an AIFF's")
-    at, fmt = 12, None
+    if len(w) >= 40 and w[:16] == W64_RIFF and w[24:40] == W64_WAVE:
+        return w64_walk(w, path)
+    if w[:4] == b".snd":
+        return au_walk(w, path)
+    if w[:4] == b"caff":
+        return caf_walk(w, path)
+    if len(w) < 12 or w[:4] not in (b"RIFF", b"RF64", b"BW64") or w[8:12] != b"WAVE":
+        sys.exit(f"{path}: a sound file's skeleton of no kind Sieve writes")
+    rf64 = w[:4] != b"RIFF"
+    at, fmt, ds64 = 12, None, None
     while at + 8 <= len(w):
         cid, size = w[at:at + 4], int.from_bytes(w[at + 4:at + 8], "little")
+        if rf64 and at == 12:  # RF64: its "ds64" first, the data chunk's size in it
+            if cid != b"ds64" or size < 28 or at + 8 + size > len(w):
+                break
+            ds64 = int.from_bytes(w[at + 16:at + 24], "little")
         if cid == b"data":
             if fmt is None:
                 break
+            if rf64 and size == 0xFFFFFFFF:
+                size = ds64
             return fmt[0], fmt[1], at + 8, size, False, True
         if cid == b"fmt ":
             c = w[at + 8:at + 8 + size]
-            if fmt is not None or size < 16 or len(c) < size:
+            if fmt is not None or len(c) < size or wav_fmt(c) is None:
                 break
-            tag, ch, rate, _, align, bits = struct.unpack("<HHIIHH", c[:16])
-            pcm = bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
-            if tag == 0xFFFE and not (size >= 40 and int.from_bytes(c[16:18], "little") >= 22 and c[24:40] == pcm):
-                break
-            if tag not in (1, 0xFFFE) or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or align != ch * bits // 8 or not 1 <= rate <= 1048575:
-                break
-            fmt = (ch, bits)
+            fmt = wav_fmt(c)
         nxt = at + 8 + size + (size & 1)
         if nxt > len(w):
             break
         at = nxt
     sys.exit(f"{path}: a WAV's skeleton Sieve does not write")
+
+
+W64_RIFF = bytes.fromhex("726966662e91cf11a5d628db04c10000")
+W64_WAVE = bytes.fromhex("77617665f3acd3118cd100c04f8edb8a")
+W64_FMT = bytes.fromhex("666d7420f3acd3118cd100c04f8edb8a")
+W64_DATA = bytes.fromhex("64617461f3acd3118cd100c04f8edb8a")
+
+
+def wav_fmt(c):
+    """A WAV's (RF64's, Wave64's) fmt chunk's body: (channels, bits), or None where it is not plain
+    integer PCM as SPECIFICATIONS v34's "flac" takes it."""
+    if len(c) < 16:
+        return None
+    tag, ch, rate, _, align, bits = struct.unpack("<HHIIHH", c[:16])
+    pcm = bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+    if tag == 0xFFFE and not (len(c) >= 40 and int.from_bytes(c[16:18], "little") >= 22 and c[24:40] == pcm):
+        return None
+    if tag not in (1, 0xFFFE) or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or align != ch * bits // 8 or not 1 <= rate <= 1048575:
+        return None
+    return ch, bits
+
+
+def w64_walk(w, path):
+    """Sony's Wave64: chunks of a 16-byte GUID and an eight-byte little-endian size (its 24-byte head
+    counted), each padded to eight bytes, from byte 40 to the data chunk; one fmt before it."""
+    at, fmt = 40, None
+    while at + 24 <= len(w):
+        g, size = w[at:at + 16], int.from_bytes(w[at + 16:at + 24], "little")
+        if size < 24:
+            break
+        if g == W64_DATA:
+            if fmt is None:
+                break
+            return fmt[0], fmt[1], at + 24, size - 24, False, True
+        if g == W64_FMT:
+            c = w[at + 24:at + size]
+            if fmt is not None or len(c) < size - 24 or wav_fmt(c) is None:
+                break
+            fmt = wav_fmt(c)
+        nxt = at + ((size + 7) & ~7)
+        if nxt > len(w):
+            break
+        at = nxt
+    sys.exit(f"{path}: a Wave64's skeleton Sieve does not write")
+
+
+def au_walk(w, path):
+    """Sun's .au: ".snd" and five big-endian numbers of four bytes: where its samples start (24 or
+    more, within the skeleton), their size (0xFFFFFFFF: to the end, the stream's count), the encoding
+    (2 to 5: linear PCM of 8 to 32 bits), the rate, the channels (1 to 8). Its samples big-endian and
+    signed; their size None where it runs to the end."""
+    if len(w) < 24:
+        sys.exit(f"{path}: an .au's skeleton Sieve does not write")
+    offset, size, enc, _, ch = struct.unpack(">IIIII", w[4:24])
+    if offset < 24 or offset > len(w) or not 2 <= enc <= 5 or not 1 <= ch <= 8:
+        sys.exit(f"{path}: an .au's skeleton Sieve does not write")
+    return ch, (enc - 1) * 8, offset, None if size == 0xFFFFFFFF else size, True, False
+
+
+def caf_walk(w, path):
+    """Apple's CAF: "caff", version 1, flags 0; chunks of a type and an eight-byte big-endian size
+    from byte 8, to the data chunk: one "desc" before it (32 bytes or more: the rate, "lpcm", flags
+    without bit 1, floating point; bit 2 little-endian; bytes a packet the channels times the bytes a
+    sample; one frame a packet; 1 to 8 channels; 8 to 32 bits). The samples after the data chunk's
+    four bytes of edit count, its size counting them, or -1: to the end, the stream's count."""
+    if len(w) < 8 or w[4:8] != b"\0\x01\0\0":
+        sys.exit(f"{path}: a CAF's skeleton Sieve does not write")
+    at, desc = 8, None
+    while at + 12 <= len(w):
+        cid, size = w[at:at + 4], int.from_bytes(w[at + 4:at + 12], "big")
+        if cid == b"data":
+            if desc is None or at + 16 > len(w):
+                break
+            ch, bits, big = desc
+            if size == (1 << 64) - 1:
+                return ch, bits, at + 16, None, big, False
+            if size < 4:
+                break
+            return ch, bits, at + 16, size - 4, big, False
+        if size >= 1 << 62:
+            break
+        if cid == b"desc":
+            d = w[at + 12:at + 12 + size]
+            if desc is not None or size < 32 or len(d) < size:
+                break
+            fid, flags, packet, frames, ch, bits = struct.unpack(">4sIIIII", d[8:32])
+            if fid != b"lpcm" or flags & 1 or frames != 1 or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or packet != ch * bits // 8:
+                break
+            desc = (ch, bits, not flags & 2)
+        nxt = at + 12 + size
+        if nxt > len(w):
+            break
+        at = nxt
+    sys.exit(f"{path}: a CAF's skeleton Sieve does not write")
 
 
 def aiff_walk(w, path):
@@ -8478,9 +8579,13 @@ def flac_wav_make(inner, skel, path):
     s, f = inner[len(inner) - skel:], inner[:len(inner) - skel]
     ch, bits, at, size, big, unsigned8 = wav_walk(s, path)
     nb = bits // 8
+    fch, fbits, total, samples = flac_decode(f, path)
+    if size is None:  # (an .au's or a CAF's samples to the end: nothing after them; as many as the stream holds)
+        if at != len(s) or total == 0:
+            sys.exit(f"{path}: a sound file's skeleton Sieve does not write")
+        size = total * ch * nb
     if size == 0 or size % (ch * nb):
         sys.exit(f"{path}: a sound file's skeleton Sieve does not write")
-    fch, fbits, total, samples = flac_decode(f, path)
     if fch != ch or fbits != bits or total * ch * nb != size:
         sys.exit(f"{path}: a FLAC stream that is not its sound file's samples")
     if nb == 1 and unsigned8:

@@ -1103,6 +1103,10 @@ const std::vector<Page>& pages()
                                      "make it again. Only where given by name; packing warns, naming each file installed so.\n"
                                      "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
                                      "smallest, a JPEG with tables made for its values (else made again exactly)."},
+          {"--sound-to-flac", "Sound as FLAC (v34 draft, with --v34-draft): a WAV, AIFF, RF64, Wave64, .au or CAF of 1 or 2\n"
+                              "channels, up to 24 bits, at a rate FLAC's streamable subset holds, installed as a .flac file of\n"
+                              "the same samples (name.flac), which any player opens; its other chunks (tags) are left out.\n"
+                              "libFLAC works as hard as --priority says. Only where given by name; packing warns, naming each."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},

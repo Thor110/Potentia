@@ -912,6 +912,12 @@ int run(const Args& a)
         app.locator_every_wave = on;
         app.save(app_path);
     });
+    // Sound as FLAC ([locator] sound_to_flac; --sound-to-flac for this run): v34 draft's.
+    sieve::cli::set_sound_to_flac(app.locator_sound_flac || a.has("sound-to-flac"));
+    FileLocator::remember_sound_flac(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
+        app.locator_sound_flac = on;
+        app.save(app_path);
+    });
     FileLocator::remember_optimise(shot ? std::function<void(bool)>() : [&app, app_path](bool on) {
         app.locator_optimise = on;
         app.save(app_path);

@@ -19,7 +19,14 @@
 // bytes say which it is. Its COMM chunk gives the channels, the sample frames and the bits (8, 16, 24
 // or 32; 8-bit AIFF samples are signed); its SSND chunk's samples follow its offset and block size.
 // AIFF-C is opened where its samples are not compressed: "NONE" or "twos" (big-endian), "sowt"
-// (little-endian). FLAC's decoding is integer arithmetic, so the same FLAC stream
+// (little-endian).
+//
+// Likewise, by the same recipe (8 November 2026, Edward: "work through all of those planned steps and
+// formats"): RF64 and BW64 (a WAV whose sizes past 4 GiB are in its "ds64" chunk), Sony's Wave64 (GUIDs
+// for chunk names, 64-bit sizes), Sun's .au (a 24-byte head, big-endian samples) and Apple's CAF
+// ("lpcm" samples, either order). An .au or a CAF may leave its samples' size unwritten, the samples
+// running to the end of the file: its skeleton then ends where they start, and the FLAC stream says
+// how many there are. FLAC's decoding is integer arithmetic, so the same FLAC stream
 // always gives the same samples, on any machine; the opener makes the WAV again and compares before
 // it is ever chosen.
 //
@@ -43,6 +50,11 @@ bool is_wav(const std::vector<uint8_t>& b);
 // Whether b starts as an AIFF or AIFF-C does ("FORM", four bytes, "AIFF" or "AIFC").
 bool is_aiff(const std::vector<uint8_t>& b);
 
+// Whether b starts as any sound file this carries does: WAV, RF64 or BW64, AIFF or AIFF-C, Wave64,
+// Sun's .au, Apple's CAF; and its name ("WAV", "RF64", "AIFF", "Wave64", ".au", "CAF"; "" for none).
+bool is_sound(const std::vector<uint8_t>& b);
+const char* sound_name(const std::vector<uint8_t>& b);
+
 struct WavOpened
 {
     std::vector<uint8_t> inner; // the FLAC stream, then the skeleton
@@ -54,6 +66,22 @@ struct WavOpened
 // to 32 back, precision searched).
 // The WAV opened, where making it again from what is carried gives back b exactly; else nothing.
 std::optional<WavOpened> wav_open(const std::vector<uint8_t>& b, int effort);
+
+// A .flac file of b's samples, for installing in b's place ("Sound as FLAC", Edward, 8 November 2026):
+// FLAC's streamable subset (any player opens it), b's own rate, one or two channels, at most 24 bits;
+// checked to give back b's samples exactly. What else b holds (its other chunks) is not kept. Nothing
+// where b is not so.
+std::optional<std::vector<uint8_t>> sound_as_flac(const std::vector<uint8_t>& b, int effort);
+
+// Whether b starts as a FLAC file does ("fLaC").
+bool is_flac(const std::vector<uint8_t>& b);
+
+// A FLAC file re-coded (Sound as FLAC): its samples decoded and coded again by libFLAC at the effort
+// asked, in the streamable subset; its own metadata blocks kept (tags, pictures, cue sheet, application
+// blocks) but its padding and seek table (whose points would point into the old frames), after the new
+// STREAMINFO; checked to decode to the same samples. Nothing where b is not so (an Ogg FLAC, a FLAC
+// after an ID3 tag, one past the subset's bits or rates).
+std::optional<std::vector<uint8_t>> flac_recoded(const std::vector<uint8_t>& b, int effort);
 
 // The WAV made again from the FLAC stream and the skeleton (the reader's side: anything not as
 // wav_open writes it is refused, never followed). `too_big` is asked as the samples are written, so

@@ -2928,12 +2928,17 @@ std::string changed_files_warning(const Manifest& m)
                                   : std::to_string(archives.size()) +
                                         " archives or compressed files here are carried as what they hold, and installing gives that in their place, not the files themselves: " +
                                         list(archives) + ". An installer or anything that reads such files will not work from what is installed.";
-    if (!m.changed_on_packing.empty())
-        w += std::string(w.empty() ? "" : " ") +
-             (m.changed_on_packing.size() == 1 ? "A picture here is" : std::to_string(m.changed_on_packing.size()) + " pictures here are") +
-             (m.changed_on_packing.size() == 1 ? " installed re-saved, the same picture in other bytes: " : " installed re-saved, the same pictures in other bytes: ") +
-             list(m.changed_on_packing) + ".";
-    if (!w.empty()) w += " Untick Archive and compressed formats: permanent (--compressed-permanent) to install every file as it is.";
+    // (Sound as FLAC's entries say "path (as name.flac)"; the pictures re-saved are their paths)
+    std::vector<std::string> pictures, sounds;
+    for (const std::string& c : m.changed_on_packing) (c.find(" (as ") != std::string::npos || c.find(" (re-coded)") != std::string::npos ? sounds : pictures).push_back(c);
+    if (!pictures.empty())
+        w += std::string(w.empty() ? "" : " ") + (pictures.size() == 1 ? "A picture here is" : std::to_string(pictures.size()) + " pictures here are") +
+             (pictures.size() == 1 ? " installed re-saved, the same picture in other bytes: " : " installed re-saved, the same pictures in other bytes: ") + list(pictures) + ".";
+    if (!sounds.empty())
+        w += std::string(w.empty() ? "" : " ") + (sounds.size() == 1 ? "A file of sound here is" : std::to_string(sounds.size()) + " files of sound here are") +
+             " installed as .flac (or a FLAC re-coded), the same samples in other bytes (a WAV's or AIFF's other chunks, such as tags, left out; a FLAC's tags kept): " + list(sounds) +
+             ". Untick Sound as FLAC (--sound-to-flac) to install them as they are.";
+    if (!archives.empty() || !pictures.empty()) w += " Untick Archive and compressed formats: permanent (--compressed-permanent) to install every file as it is.";
     return w;
 }
 

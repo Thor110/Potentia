@@ -31,8 +31,17 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   checks it (four WAVs opened, 8 to 32 bits, chunks before and after the data; a float WAV and a
   cut one left alone; Sieve, sieve-install and the oracle; Decoding speed too; none without the draft).
   Measured: results/flac-way-2026-11-08.md. AIFF and AIFF-C (uncompressed) by the same recipe,
-  8 November 2026 (CI: four opened, a float AIFF-C and one with COMM after SSND left alone). Not
-  yet: other sound in plain samples (Sun .au, Wave64, RF64, CAF); a repack that installs `.flac` files.
+  8 November 2026 (CI: four opened, a float AIFF-C and one with COMM after SSND left alone). RF64
+  and BW64, Wave64, Sun's .au and Apple's CAF the same day, by the same recipe (CI: six more opened).
+- **Sound as FLAC, built 8 November 2026** (Edward: "repack audio to FLAC"): `--sound-to-flac`, the
+  File Locator's box (W) while the draft is on: sound installed as `name.flac` (FLAC's streamable subset,
+  1 or 2 channels, up to 24 bits), and FLAC files re-coded at the priority's effort, their tags kept.
+  Not a format change: a `.flac` is carried as any file is. CI step 11 checks ten sound files so and
+  a FLAC re-coded (its tag kept, its 8 KiB of padding gone), each decoded by the oracle's own reader.
+- **Pictures' shapes from their headers, 8 November 2026**: a BMP, uncompressed TGA, binary PNM or
+  uncompressed TIFF of plain pixels offers mixing its header's shape, and its rows as one byte a
+  pixel, weighed on its start; the packer's choice alone (mix-v4's `I`). 24 pictures 0.62% smaller,
+  photographs 2.3% to 8.2%, one screenshot 1.26% larger (results/plain-pictures-2026-11-08.md).
 
 **v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
 MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).

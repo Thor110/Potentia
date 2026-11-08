@@ -1010,6 +1010,8 @@ $H --main-menu --read-aloud --press Down --screenshot ra-main.png | tr -d '\r' |
 $H --menu --read-aloud --press "Down,Down,Down" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
 $H --menu --read-aloud --press "F,Down,Down" --screenshot ra-filters.png | tr -d '\r' | q -E "^read aloud: max-run-v1, (On|Off), Filtered: "
 $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --screenshot ra-locator.png | tr -d '\r' | q "^read aloud: Optimise Search, Off$"
+# Sound as FLAC (v34 draft): its box, W, shown and said only while the draft is on.
+$H --main-menu --v34-draft --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac.png | tr -d '\r' | q "^read aloud: Sound as FLAC, On$"
 # Manual Navigation (IDEAS §19.117): Edward's four bytes turned by hand. A byte typed is one step
 # (its two digits); the log (--manual-logs: Keep a log's folder) holds every step, undos and redos
 # included, each starting where the one before it landed, and the precision changed between them;
