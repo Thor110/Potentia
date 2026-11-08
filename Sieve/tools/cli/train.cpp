@@ -231,7 +231,7 @@ TrainingOutcome train_run(const TrainingRun& run, unsigned threads, const Traini
     auto address = [&]() { return space.hex_of(space.index_of(trainer.digits(), AddressMode::Positional)); };
     const uint64_t steps = run.steps();
     out.result.version = rc.result_version();
-    out.result.trainer = rc.version == 1 ? training::kTrainingVersion : training::kTrainingVersion2;
+    out.result.trainer = training::training_version_name(rc.version);
     out.result.steps = steps;
     // A checkpoint: its hash (v2), and its address where the result keeps them.
     auto checkpoint = [&](uint64_t step, const training::Score& score) {

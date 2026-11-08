@@ -33,6 +33,15 @@ inline constexpr const char* kTrainingVersion = "training-v1";
 // of them fall below Q16 on their way back through deep and wide models) and the learning rate held
 // to 16 + k fractional bits; with k = 0 it trains exactly as v1 does.
 inline constexpr const char* kTrainingVersion2 = "training-v2";
+// training-v3 (9 November 2026; IDEAS §19.119, Edward: "no one can say with absolute certainty that
+// something has no chance of following something else ... 'waffle' may be very unlikely after
+// 'quantised', but that doesn't stop me typing 'quantised waffle'"): v2 with every byte's probability
+// held between a floor and a ceiling, in training as in use. The softmax over the 256 bytes gives
+// byte j  1 + floor(e_j (2^16 - 256) / sum e), so each is at least 1/65,536 (never ruled out) and at
+// most 65,281/65,536 (never certain), and they add to at most 2^16; the gradient follows these
+// probabilities. A model trained so can drive an arithmetic coder, which needs every byte possible.
+inline constexpr const char* kTrainingVersion3 = "training-v3";
+const char* training_version_name(int version); // "training-v1", -v2 or -v3
 
 // The fixed-point functions, exposed for the tests and the specification.
 namespace fx {
@@ -63,8 +72,8 @@ Reading reading_from_string(std::string_view s);
 // How a run trains: its training.ini.
 struct Recipe
 {
-    int version = 2;                   // training-v1 or training-v2 (the default for new runs)
-    uint32_t loss_scale_bits = 0;      // v2: k, the loss scaled by 2^k (0 to 7)
+    int version = 3;                   // training-v1, -v2 or -v3 (the default for new runs)
+    uint32_t loss_scale_bits = 0;      // v2 and v3: k, the loss scaled by 2^k (0 to 7)
     AiShape shape;
     std::string key = "sieve";
     AddressMode start_mode = AddressMode::Scrambled; // where it starts on the line
@@ -191,6 +200,7 @@ private:
     std::vector<int32_t> values_;            // Q16, each weight's digit's value
     int64_t lr_ = 0, momentum_ = 0;
     unsigned shift_ = 0; // training-v2's loss scale, in bits
+    bool floor_ = false; // training-v3: every byte's probability between 1/65,536 and 65,281/65,536
     unsigned threads_ = 1;
     std::unique_ptr<class Pool> pool_;       // the trainer's threads, kept for its life
     void refresh_values();

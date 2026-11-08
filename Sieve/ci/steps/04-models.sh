@@ -130,9 +130,18 @@ q "^probabilities (in 65,536ths): of [0-9]* predictions, the right byte given 0 
 python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
 $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
 # training-v2: a loss scale of 2^5, the oracle training it again to the same result.
-$exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --quiet > /dev/null
+$exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --training-v2 --quiet > /dev/null
 q "^version = training-v2" run-v2/training.ini
 python reference/sieve_ref.py train-replay --run run-v2 | tr -d '\r' | cmp - run-v2/result.txt
+# training-v3 (9 November 2026), the default: every byte's probability held between 1/65,536 and
+# 65,281/65,536 ("quantised waffle"); the oracle trains it again to the same result, and --limits
+# finds no byte given 0 and none given all of it.
+$exe ai-train --record tiny-corp --out run-v3 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --quiet > /dev/null
+q "^version = training-v3" run-v3/training.ini
+python reference/sieve_ref.py train-replay --run run-v3 | tr -d '\r' | cmp - run-v3/result.txt
+$exe ai-train run-v3 --quiet --limits | tr -d '\r' > limits3.txt
+q "^reproduced exactly" limits3.txt
+q "the right byte given 0 in 0 (0.000000%), one byte given all of it in 0 (0.000000%); 0 of [0-9]* bytes' probabilities were 0" limits3.txt
 # Stopped part-way twice and carried on (--resume), a run ends exactly as one never stopped.
 $exe ai-train --record tiny-corp --out run-stop --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 3 --checkpoint-every 4 --stop-after 7 --quiet | tr -d '\r' | q "^stopped at step 7"
 [ -f run-stop.resume ]

@@ -102,8 +102,10 @@ int cmd_ai_train(const Args& a)
             files = std::move(named);
         }
         // The learning rate: as given, or the one suggested for the shape and its windows.
-        // training-v2, its loss scale as given or suggested for the shape; then the learning rate.
-        o.recipe.version = a.has("training-v1") ? 1 : 2;
+        // training-v3 (v2 with every byte's probability floored and capped; --training-v2 and
+        // --training-v1 for the older), its loss scale as given or suggested for the shape; then the
+        // learning rate.
+        o.recipe.version = a.has("training-v1") ? 1 : a.has("training-v2") ? 2 : 3;
         o.recipe.loss_scale_bits = o.recipe.version == 1 ? 0 : a.has("loss-scale-bits") ? a.get_u32("loss-scale-bits", 0) : suggested_loss_scale(o.recipe);
         o.recipe.learning_rate = a.has("learning-rate") ? a.get("learning-rate") : suggested_learning_rate(o.recipe);
         const TrainingEstimate est = estimate_training(o.recipe, files, threads);
@@ -129,7 +131,7 @@ int cmd_ai_train(const Args& a)
     }
     const AiShape& s = run.recipe.shape;
     std::cout << "model: " << s.layers << (s.layers == 1 ? " layer" : " layers") << ", width " << s.width << ", " << s.heads << " heads, "
-              << s.bits << " bits a weight; " << (run.recipe.version == 1 ? "training-v1" : "training-v2, loss scale 2^" + std::to_string(run.recipe.loss_scale_bits))
+              << s.bits << " bits a weight; " << (run.recipe.version == 1 ? std::string("training-v1") : std::string(training::training_version_name(run.recipe.version)) + ", loss scale 2^" + std::to_string(run.recipe.loss_scale_bits))
               << "; learning rate " << run.recipe.learning_rate << ", momentum " << run.recipe.momentum << ", "
               << run.recipe.batch << " windows a step\n";
 

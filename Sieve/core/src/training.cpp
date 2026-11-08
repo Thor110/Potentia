@@ -185,8 +185,8 @@ void Recipe::check() const
 {
     shape.check();
     if (shape.width > 4096) bad("a width up to 4096");
-    if (version != 1 && version != 2) bad("a run of training-v1 or training-v2");
-    if (loss_scale_bits > 7 || (version == 1 && loss_scale_bits != 0)) bad("a loss scale of 0 to 7 bits (training-v2 only)");
+    if (version < 1 || version > 3) bad("a run of training-v1, training-v2 or training-v3");
+    if (loss_scale_bits > 7 || (version == 1 && loss_scale_bits != 0)) bad("a loss scale of 0 to 7 bits (training-v2 and v3 only)");
     const int64_t lr = learning_rate_q(), mo = momentum_q16();
     if (lr < 1 || learning_rate_q16() > kOne) bad("a learning rate from 2^-" + std::to_string(16 + loss_scale_bits) + " to 1");
     if (mo < 0 || mo >= kOne) bad("a momentum below 1");
@@ -195,10 +195,15 @@ void Recipe::check() const
     if (start.empty() || start.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) bad("a start address in hex");
 }
 
+const char* training_version_name(int version)
+{
+    return version == 1 ? kTrainingVersion : version == 2 ? kTrainingVersion2 : kTrainingVersion3;
+}
+
 std::string Recipe::text() const
 {
     std::string t = "[training]\n";
-    t += "version = " + std::string(version == 1 ? kTrainingVersion : kTrainingVersion2) + "\n";
+    t += "version = " + std::string(training_version_name(version)) + "\n";
     t += "layers = " + std::to_string(shape.layers) + "\n";
     t += "width = " + std::to_string(shape.width) + "\n";
     t += "heads = " + std::to_string(shape.heads) + "\n";
@@ -304,7 +309,8 @@ Recipe Recipe::parse(std::string_view text)
         {
             if (v == kTrainingVersion) r.version = 1;
             else if (v == kTrainingVersion2) r.version = 2;
-            else bad("this is training-v1 and training-v2, and the run asks for " + v);
+            else if (v == kTrainingVersion3) r.version = 3;
+            else bad("this is training-v1, training-v2 and training-v3, and the run asks for " + v);
             version = true;
         }
         else if (k == "layers") r.shape.layers = uint32_t(number(v, "layers"));
@@ -450,7 +456,7 @@ Result Result::parse(std::string_view text)
         const std::vector<std::string> f = split(line, ' ');
         if (f[0] == "version" && f.size() == 2)
         {
-            if (f[1] != kTrainingVersion && f[1] != kTrainingVersion2) bad("this result is of " + f[1]);
+            if (f[1] != kTrainingVersion && f[1] != kTrainingVersion2 && f[1] != kTrainingVersion3) bad("this result is of " + f[1]);
             r.trainer = f[1];
         }
         else if (f[0] == "steps" && f.size() == 2) r.steps = number(f[1], "steps");
@@ -493,6 +499,7 @@ struct Trainer::Net
     uint32_t H = 0, A = 0, D = 0, F = 0;
     int64_t isd = 0;    // 1 / sqrt(D), Q16
     unsigned shift = 0; // training-v2: the loss scaled by 2^shift
+    bool floor = false; // training-v3: the bytes' probabilities floored and capped
 
     explicit Net(const AiSpace& space)
     {
@@ -873,6 +880,18 @@ void softmax(const int64_t* z, size_t n, int64_t* p)
     for (size_t i = 0; i < n; ++i) p[i] = (p[i] << 16) / sum;
 }
 
+// training-v3's softmax over the 256 bytes: each 1 + floor(e_j (2^16 - 256) / sum e), so at least 1
+// and at most 2^16 - 255, adding to at most 2^16. (e_j is at most 2^16, the sum at most 2^24: the
+// product fits.)
+void softmax_floored(const int64_t* z, size_t n, int64_t* p)
+{
+    int64_t m = z[0];
+    for (size_t i = 1; i < n; ++i) m = std::max(m, z[i]);
+    int64_t sum = 0;
+    for (size_t i = 0; i < n; ++i) sum += (p[i] = exp_q16(z[i] - m));
+    for (size_t i = 0; i < n; ++i) p[i] = 1 + (p[i] * ((int64_t(1) << 16) - int64_t(n))) / sum;
+}
+
 // The rotary embedding's sines and cosines, Q16, [position][pair].
 struct Rope
 {
@@ -1016,7 +1035,8 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
             continue;
         }
         for (uint32_t t = 0; t < 256; ++t) z[t] = logits[p * 256 + t];
-        softmax(z.data(), 256, probs.data());
+        if (net.floor) softmax_floored(z.data(), 256, probs.data());
+        else softmax(z.data(), 256, probs.data());
         const uint8_t target = uint8_t(ex.target[p]);
         score.prob_sum += uint64_t(probs[target]);
         score.predictions += 1;
@@ -1168,7 +1188,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
 // ---------------------------------------------------------------- the trainer
 
 Trainer::Trainer(const AiSpace& space, const AiSpace::Digits& start, const Recipe& recipe, unsigned threads)
-    : space_(space), digits_(start), lr_(recipe.learning_rate_q()), momentum_(recipe.momentum_q16()), shift_(recipe.loss_scale_bits)
+    : space_(space), digits_(start), lr_(recipe.learning_rate_q()), momentum_(recipe.momentum_q16()), shift_(recipe.loss_scale_bits), floor_(recipe.version >= 3)
 {
     recipe.check();
     if (start.size() != space.weights()) bad("a start of " + std::to_string(space.weights()) + " digits");
@@ -1276,6 +1296,7 @@ Score Trainer::step(const std::vector<std::span<const uint8_t>>& batch)
 {
     Net net(space_);
     net.shift = shift_;
+    net.floor = floor_;
     std::vector<int64_t> grad(values_.size(), 0);
     const Score s = run_batch(net, values_.data(), values_.size(), batch, &grad, *pool_);
     apply(grad);
@@ -1287,6 +1308,7 @@ Score Trainer::step(const std::vector<Example>& batch)
     check_examples(batch);
     Net net(space_);
     net.shift = shift_;
+    net.floor = floor_;
     std::vector<int64_t> grad(values_.size(), 0);
     const Score s = run_examples(net, values_.data(), values_.size(), batch, &grad, *pool_);
     apply(grad);
@@ -1382,6 +1404,7 @@ Score Trainer::evaluate(const std::vector<std::span<const uint8_t>>& windows) co
 {
     Net net(space_);
     net.shift = shift_;
+    net.floor = floor_;
     return run_batch(net, values_.data(), values_.size(), windows, nullptr, *pool_);
 }
 
@@ -1390,6 +1413,7 @@ Score Trainer::evaluate(const std::vector<Example>& batch) const
     check_examples(batch);
     Net net(space_);
     net.shift = shift_;
+    net.floor = floor_;
     return run_examples(net, values_.data(), values_.size(), batch, nullptr, *pool_);
 }
 

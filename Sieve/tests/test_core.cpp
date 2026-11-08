@@ -3803,6 +3803,7 @@ void test_training(const std::string& dir)
                 CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
                 c.space = std::make_unique<AiSpace>(shape, "sieve");
                 Recipe r;
+                r.version = 2; // (training-v2 at a loss scale of 0: training-v1's arithmetic, its vectors)
                 r.shape = shape;
                 r.batch = c.batch = uint32_t(std::stoul(f[2]));
                 r.learning_rate = f[3];
@@ -3832,9 +3833,11 @@ void test_training(const std::string& dir)
     }
     use_vector_kernels(true);
 
-    // training-v2: the loss scaled by 2^k and the rate held to 16 + k bits (one rate below v1's floor).
+    // training-v2: the loss scaled by 2^k and the rate held to 16 + k bits (one rate below v1's floor);
+    // training-v3, the same cases with every byte's probability floored and capped.
+    for (const auto& [vectors, version] : {std::pair<const char*, int>{"vectors_training_v2.tsv", 2}, {"vectors_training_v3.tsv", 3}})
     {
-        std::ifstream in2(dir + "vectors_training_v2.tsv");
+        std::ifstream in2(dir + vectors);
         CHECK(bool(in2));
         std::string key;
         std::unique_ptr<AiSpace> space;
@@ -3861,7 +3864,7 @@ void test_training(const std::string& dir)
                 CHECK(std::sscanf(f[0].c_str(), "L%u/H%u/A%u/B%u", &shape.layers, &shape.width, &shape.heads, &shape.bits) == 4);
                 space = std::make_unique<AiSpace>(shape, "sieve");
                 Recipe r;
-                r.version = 2;
+                r.version = version;
                 r.shape = shape;
                 r.batch = batch = uint32_t(std::stoul(f[2]));
                 r.learning_rate = f[3];
@@ -3884,7 +3887,7 @@ void test_training(const std::string& dir)
             ++rows;
         }
         CHECK(rows == 10);
-        std::cout << "training-v2 vectors checked: " << rows << " steps" << std::endl;
+        std::cout << "training-v" << version << " vectors checked: " << rows << " steps" << std::endl;
     }
     // The update's product, exact past 64 bits.
     CHECK(fx::mul_shift(int64_t(1) << 53, int64_t(1) << 23, 23) == int64_t(1) << 53);
@@ -3901,7 +3904,12 @@ void test_training(const std::string& dir)
     CHECK(Recipe::parse(r.text()).text() == r.text());
     CHECK(Recipe::parse(r.text()).learning_rate_q16() == 33); // round(0.0005 * 65536) = 32.768
     bool refused = false;
-    try { Recipe::parse("[training]\nversion = training-v3\n"); }
+    // (9 November 2026: training-v3, the probabilities floored, is the default and is read back; a
+    // version past it is refused)
+    CHECK(r.version == 3 && Recipe::parse(r.text()).version == 3);
+    std::string v4 = r.text();
+    v4.replace(v4.find("training-v3"), 11, "training-v4");
+    try { Recipe::parse(v4); }
     catch (const std::invalid_argument&) { refused = true; }
     CHECK(refused);
     refused = false;
@@ -4257,6 +4265,7 @@ void test_ai_run_filters(const std::string& dir)
     // The score is the trainer's, and the threshold is exact.
     {
         sieve::training::Recipe r;
+        r.version = 2; // (the filter scores as training-v2's softmax does: its definition, kept)
         r.shape = space.shape();
         const sieve::training::Trainer tr(space, anchor, r, 1);
         const std::vector<std::span<const uint8_t>> w{std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size())};
@@ -5472,6 +5481,7 @@ void test_diffusion_vectors(const std::string& dir)
         const std::span<const uint8_t> win(reinterpret_cast<const uint8_t*>(text.data()), text.size());
         const training::Score a = training::evaluate_model(sp, d, {win});
         training::Recipe recipe;
+        recipe.version = 2; // (evaluate_model scores with training-v2's softmax)
         recipe.shape = shape;
         const training::Trainer t(sp, d, recipe, 1);
         const std::vector<int16_t> target(win.begin() + 1, win.end());

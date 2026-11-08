@@ -547,7 +547,7 @@ const std::vector<Page>& pages()
          "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]\n"
          "  [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
          "  sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--limits] [--quiet]",
-         "A run (training-v1, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
+         "A run (training-v1 to -v3, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
          "one: training.ini (the model's shape, where it starts on the AI line, how it learns, and how it\n"
          "reads its files: the order of every window of bytes it learns from is made from these lines by\n"
          "order-v1, or written out in order.txt), those files (corpus/), and once trained, result.txt (each\n"
@@ -566,10 +566,14 @@ const std::vector<Page>& pages()
           {"--learning-rate X, --momentum X", "How far each step moves the weights (by default the rate suggested for the\n"
                                               "shape and windows, 0.008 / width scaled to the predictions a step, 0.0005 for\n"
                                               "Micro; momentum 0.9)."},
-          {"--loss-scale-bits K", "training-v2's loss scale, 2^K (0 to 7; by default 6 for a width of 64 or more or 4\n"
+          {"--loss-scale-bits K", "training-v2's and v3's loss scale, 2^K (0 to 7; by default 6 for a width of 64 or more or 4\n"
                                   "layers or more, else 0): deeper and wider models' gradients carried K bits\n"
                                   "larger, so fewer fall below what the arithmetic holds."},
           {"--training-v1", "Record the run as training-v1 (no loss scale), as the first runs were."},
+          {"--training-v2", "Record the run as training-v2 (a loss scale; a byte's probability may round to 0).\n"
+                            "New runs are training-v3 (9 November 2026): v2 with every byte's probability held\n"
+                            "between 1/65,536 and 65,281/65,536, in training as in use, so no byte is ever\n"
+                            "ruled out or certain (\"quantised waffle\"), as a model driving a coder needs."},
           {"--batch N", "Windows a step (4; at most 32)."},
           {"--window N", "Bytes a window (65: it predicts 64 of them; at most 513)."},
           {"--epochs N, --seed S", "How many times it reads the corpus (30), and the shuffle's seed (1)."},

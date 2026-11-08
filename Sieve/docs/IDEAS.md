@@ -6477,7 +6477,10 @@ beside the old, so every run recorded so far trains as it did.
   -1), but a model used to compress (mixing, or a model on the AI line packing text) must give every
   byte at least 1/65,536, as an arithmetic coder does. The softmax would give each byte
   `1 + (e_j (2^16 - 256)) div Σe`, so no byte is 0 and they still add to at most 2^16; the gradient
-  then follows that softmax.
+  then follows that softmax. *Built 9 November 2026 as `training-v3`* (Edward: "the AI line's min/max
+  ... caps, enforced during training"), the default for new runs: on the shipped recipe and a larger
+  model, no byte given 0 (from 316 and 1,606 times) and none given all, learning and time the same
+  (results/training-floor-2026-11-09.md). QK-norm is not yet built.
 
 **19.120 After the v33 release: what the pre-release review left (4 November 2026; found and
 measured, nothing built).** Six reviews ran before the release (the changes since the freeze, the

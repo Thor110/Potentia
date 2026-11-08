@@ -4265,6 +4265,14 @@ def tr_softmax(zs):
     return [(e << 16) // total for e in es]
 
 
+def tr_softmax_floored(zs):
+    """training-v3's softmax over the bytes: each 1 + floor(e (2^16 - n) / sum e), never 0, never all."""
+    m = max(zs)
+    es = [tr_exp(z - m) for z in zs]
+    total = sum(es)
+    return [1 + (e * ((1 << 16) - len(zs))) // total for e in es]
+
+
 def tr_pow2_q32(y):
     i = y >> 32
     return 0 if -i >= 62 else (tr_horner(TR_POW2, (y - (i << 32)) >> 2, 30) << 2) >> (-i)
@@ -4288,10 +4296,11 @@ def tr_decimal(text, bits=16):
 
 
 class TrainerRef:
-    def __init__(self, sp, digits, learning_rate, momentum, shift=0):
-        """shift: training-v2's loss scale in bits (0: training-v1)."""
+    def __init__(self, sp, digits, learning_rate, momentum, shift=0, floor=False):
+        """shift: training-v2's loss scale in bits (0: training-v1); floor: training-v3's floored softmax."""
         self.sp, self.digits = sp, list(digits)
         self.shift = shift
+        self.floor = floor
         self.eta, self.mu = tr_decimal(learning_rate, 16 + shift), tr_decimal(momentum)
         self.m = (1 << sp.B) - 1
         self.H, self.A = sp.H, sp.A
@@ -4404,7 +4413,7 @@ class TrainerRef:
             if nxt is None:
                 dx.append([0] * H)
                 continue
-            prob = tr_softmax(logits)
+            prob = tr_softmax_floored(logits) if self.floor else tr_softmax(logits)
             score += prob[nxt]
             count += 1
             dl = [tr_hold((pr - ((1 << 16) if t == nxt else 0)) << self.shift) for t, pr in enumerate(prob)]
@@ -4696,7 +4705,7 @@ def tr_read_ini(text):
             r["file"].append(v.strip())
         else:
             r[k.strip()] = v.strip()
-    assert r.get("version") in ("training-v1", "training-v2"), "a training-v1 or training-v2 run"
+    assert r.get("version") in ("training-v1", "training-v2", "training-v3"), "a training-v1, -v2 or -v3 run"
     return r
 
 
@@ -4705,8 +4714,8 @@ def tr_replay(folder):
     ini = tr_read_ini(open(os.path.join(folder, "training.ini"), encoding="utf-8").read())
     sp = AiSpaceRef(int(ini["layers"]), int(ini["width"]), int(ini["heads"]), int(ini["bits"]), ini["key"])
     mode, _, start = ini["start"].partition(" ")
-    shift = int(ini.get("loss-scale-bits", "0")) if ini["version"] == "training-v2" else 0
-    tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"], shift)
+    shift = int(ini.get("loss-scale-bits", "0")) if ini["version"] in ("training-v2", "training-v3") else 0
+    tr = TrainerRef(sp, sp.digits(int(start, 16), mode), ini["learning-rate"], ini["momentum"], shift, floor=ini["version"] == "training-v3")
     files, order = {}, []
 
     def read(path):
@@ -4784,15 +4793,17 @@ TR2_CASES = (  # shape, window, batch, steps, learning rate, momentum, loss scal
 )
 
 
-def cmd_train_vectors_v2(args):
-    """Steps of training-v2 (the loss scaled by 2^k, the rate held to 16 + k bits)."""
+def cmd_train_vectors_v2(args, v3=False):
+    """Steps of training-v2 (the loss scaled by 2^k, the rate held to 16 + k bits); with v3, of
+    training-v3 (the same, every byte's probability floored and capped)."""
     corpus = open(args.corpus, "rb").read()
-    print("# sieve training vectors v2 (training-v2 over aispace-v1): shape, window, batch, learning rate, momentum,")
+    n = 3 if v3 else 2
+    print("# sieve training vectors v%d (training-v%d over aispace-v1): shape, window, batch, learning rate, momentum," % (n, n))
     print("# loss scale bits, step, score (Q16 sum), predictions, SHA-256 of the digits; start scrambled 0, order")
     print("# from the corpus (tests/training_corpus.txt) as sieve ai-train --record cuts it, seed 1, one epoch")
     for shape, length, batch, steps, eta, mu, shift in TR2_CASES:
         sp = AiSpaceRef(*shape)
-        tr = TrainerRef(sp, sp.digits(0, "scrambled"), eta, mu, shift)
+        tr = TrainerRef(sp, sp.digits(0, "scrambled"), eta, mu, shift, floor=v3)
         order = tr_make_order([("c", len(corpus))], length, 1, 1)
         for k in range(steps):
             ws = [corpus[o:o + n] for _, o, n in order[k * batch:(k + 1) * batch]]
@@ -11562,6 +11573,7 @@ def main():
     s = sub.add_parser("train-vectors")
     s.add_argument("--corpus", required=True)
     s.add_argument("--v2", action="store_true", help="training-v2's vectors")
+    s.add_argument("--v3", action="store_true", help="training-v3's vectors (the probabilities floored and capped)")
     s = sub.add_parser("train-replay")
     s.add_argument("--run", required=True)
     s = sub.add_parser("tensors-fixture")
@@ -11693,7 +11705,7 @@ def main():
     elif args.cmd == "ai-canonical":
         cmd_ai_canonical(args)
     elif args.cmd == "train-vectors":
-        cmd_train_vectors_v2(args) if args.v2 else cmd_train_vectors(args)
+        cmd_train_vectors_v2(args, v3=True) if args.v3 else cmd_train_vectors_v2(args) if args.v2 else cmd_train_vectors(args)
     elif args.cmd == "train-replay":
         cmd_train_replay(args)
     elif args.cmd == "ai-read":
