@@ -1003,6 +1003,13 @@ $H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | t
 $H --menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
 test "$(grep -c '^estimate: ' main-estimate.txt)" = 11
 q "^estimate: BINARY  title\*files<=" main-estimate.txt
+# A line's details (I, or the dots after its name in the map; 9 November 2026): what its figures
+# mean, in words; I again closes it.
+$H --menu --press I --screenshot details.png | tr -d '\r' > details.txt
+q "^details: [A-Z]*: what its figures mean$" details.txt
+q "^details: Walking it: " details.txt
+q "^details: On this machine: " details.txt
+if $H --menu --press "I,I" --screenshot details-closed.png | tr -d '\r' | grep -q "^details: "; then exit 1; fi
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
 # Read aloud (--read-aloud, unsaved; IDEAS §19.74): what would be said is printed, since there is
 # no voice here. The main menu's item, the setup menu's row with its section and value, a filter

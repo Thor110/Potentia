@@ -185,8 +185,16 @@ public:
     // `reference_text`: a text the model was not trained on, for what the guided ordering saves on
     // text (data/metrics/reference-text.txt; empty: not measured, and the list says so).
     std::string metrics_text(const std::string& reference_text = "");
+    // The details window (the dots beside a line's name in the map, or I; Edward, 9 November 2026):
+    // what each of the line's figures in the map is, in words, with more of them. The lines it
+    // shows (each kind: 0 a heading, 1 a figure, 2 its explanation, 3 a warning), for the window and
+    // for scripted shots; empty when it is closed.
+    void open_details(int line) { details_ = line; }
+    int details_open() const { return details_; }
+    std::vector<std::pair<int, std::string>> details_lines();
     void open_filters(int line)
     {
+        details_ = -1;
         overlay_ = line;
         orow_ = 0;
         oscroll_ = 0;
@@ -415,6 +423,10 @@ private:
     int otab_ = 0;     // the filters window's tab: 0 built-in filters, 1 custom filters (plugins), 2 retired filters
     void add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const;
     int overlay_ = -1; // the door of the line whose filters are open (dimensions.hpp), or -1
+    int details_ = -1; // the door of the line whose details are open, or -1
+    SDL_FRect dots_[kLines + 1] = {}; // the details button beside each column's name
+    void render_details(float W, float H);
+    int line_of_row() const; // the line whose settings row is chosen, else the one you will start on
     int orow_ = 0;
     int oscroll_ = 0;
     float wheel_ = 0; // wheel movement not yet whole notches

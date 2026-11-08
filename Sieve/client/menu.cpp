@@ -810,6 +810,138 @@ bool Menu::too_large() const
 }
 
 // Which line, if any, is beyond what this machine can open. -1 if none.
+// The line whose settings row is chosen (its rows: setup_row_of and setup_rows_of, in door order);
+// anywhere else (the GLOBAL rows, and the three at the foot), the line you will start on.
+int Menu::line_of_row() const
+{
+    for (int li = 0; li < kLines; ++li)
+        if (row_ >= setup_row_of(kDimensions[li].media) && row_ < setup_row_of(kDimensions[li].media) + setup_rows_of(kDimensions[li].media))
+            return li;
+    const auto at = std::find(kStartLines.begin(), kStartLines.end(), s_.start_line); // in door order
+    return at == kStartLines.end() ? 0 : int(at - kStartLines.begin());
+}
+
+std::vector<std::pair<int, std::string>> Menu::details_lines()
+{
+    std::vector<std::pair<int, std::string>> out;
+    const int i = details_;
+    if (i < 0) return out;
+    const LineSize z = line_sizes()[size_t(i)];
+    const std::string name = tr(theme_of(i).key);
+    auto add = [&](int kind, const std::string& t) { out.emplace_back(kind, t); };
+    add(0, trf("details.title", {name}));
+    // Its size: the formula and the count it gives.
+    add(1, trf("details.size", {z.units}));
+    add(2, tr("details.size.what"));
+    // Its address: how long the number naming one unit is.
+    const bool finite = std::isfinite(z.bits);
+    if (finite)
+    {
+        add(1, trf("details.bits", {fixed(z.bits, 0), fixed(z.bits * std::log10(2.0), 0)}));
+        add(2, tr("details.bits.what"));
+    }
+    // Walking it, at one unit a second; past the age of the universe, how many times over.
+    const double log10_units = finite ? z.bits * std::log10(2.0) : z.bits;
+    add(1, trf("details.walk", {walk_time_text(log10_units)}));
+    add(2, tr("details.walk.what"));
+    const double log10_years = log10_units - std::log10(31556952.0), log10_universe = std::log10(1.38e10);
+    if (finite && log10_years > log10_universe) add(2, trf("details.walk.universe", {fixed(log10_years - log10_universe, 1)}));
+    // Tiles and padding: how the hallway shelves it.
+    if (finite)
+    {
+        add(1, trf("details.tiles", {fixed(std::max(0.0, log10_units - std::log10(128.0)), 1), "128"}));
+        add(2, tr("details.tiles.what"));
+        add(1, z.padding ? trf("details.slots", {std::to_string(z.padding)}) : tr("details.whole"));
+        add(2, tr(z.padding ? "details.slots.what" : "details.whole.what"));
+    }
+    // Its filters: how many are ticked, and what they leave.
+    {
+        size_t ticked = 0;
+        if (i == kBooksLine)
+            for (const auto& part : cfg_.books.parts) ticked += part.enabled.size();
+        else if (is_composition(i))
+            for (const auto& part : comp_cfg(i).parts) ticked += part.enabled.size();
+        else if (i == kWorldsLine)
+            for (const auto& part : cfg_.worlds.parts) ticked += part.enabled.size();
+        else if (i == kBinaryLine) ticked = cfg_.binary.enabled.size();
+        else if (i == kModelsLine) ticked = cfg_.models.enabled.size();
+        else if (i == kAiLine) ticked = cfg_.ai.enabled.size();
+        else if (unit_at(i) >= 0) ticked = cfg_.lines[unit_at(i)].enabled.size();
+        add(1, ticked ? trf("details.filters", {std::to_string(ticked)}) : tr("details.filters.none"));
+        add(2, tr("details.filters.what"));
+        const StackInfo& info = stack_info(i);
+        if (ticked && info.survivor_bits >= 0)
+            add(1, trf("details.survivors", {fixed(info.survivor_bits, 0), fixed(info.survivor_bits * std::log10(2.0), 1)}));
+        if (ticked && !info.filtered.empty()) add(1, trf("details.removed", {info.filtered}));
+    }
+    // What it costs on this machine.
+    {
+        const Budget b = machine_budget();
+        const double ms = line_ms(i, b);
+        add(1, trf("details.cost", {ms < 0.1 ? tr("details.under") : trf("details.about", {fixed(ms, ms < 10 ? 1 : 0)}), fixed(b.ms_per_unit_at_limit, 0), fixed(line_cache_bytes(i) / 1048576.0, 1),
+                                    fixed(b.cache_bytes / 1048576.0, 0)}));
+        add(2, tr("details.cost.what"));
+        if (finite && z.bits > too_large_bits()) add(3, tr("details.too_large"));
+        else if (line_ms(i, b) > b.ms_per_unit_at_limit / 4) add(3, tr("details.slow"));
+    }
+    return out;
+}
+
+void Menu::render_details(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, red{255, 90, 90, 255};
+    const Theme& th = theme_of(details_);
+    box_ = {600, 70, W - 614, H - 124};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 250);
+    SDL_RenderFillRect(r_, &box_);
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+    SDL_RenderRect(r_, &box_);
+    const SDL_FRect inner{box_.x + 2, box_.y + 2, box_.w - 4, box_.h - 4};
+    SDL_RenderRect(r_, &inner);
+    const float x = box_.x + 14;
+    const size_t cols = size_t(std::max(20.0f, (box_.w - 28) / 8));
+    // (an explanation wrapped at the box's width, on spaces)
+    auto wrapped = [&](const std::string& t) {
+        std::vector<std::string> lines;
+        std::string line;
+        size_t at = 0;
+        while (at < t.size())
+        {
+            const size_t sp = std::min(t.find(' ', at), t.size());
+            const std::string word = t.substr(at, sp - at);
+            if (!line.empty() && text_cells(line) + 1 + text_cells(word) > cols)
+            {
+                lines.push_back(line);
+                line.clear();
+            }
+            line += (line.empty() ? "" : " ") + word;
+            at = sp + 1;
+        }
+        if (!line.empty()) lines.push_back(line);
+        return lines;
+    };
+    float y = box_.y + 10;
+    const float bottom = box_.y + box_.h - 24;
+    for (const auto& [kind, t] : details_lines())
+    {
+        if (kind == 0)
+        {
+            text(r_, x, y, t, 2, menu_ink(th));
+            y += 30;
+            continue;
+        }
+        if (kind == 1) y += 4;
+        for (const std::string& l : wrapped(t))
+        {
+            if (y + 12 > bottom) break;
+            text(r_, x + (kind == 2 ? 12 : 0), y, l, 1, kind == 1 ? white : kind == 3 ? red : grey);
+            y += 12;
+        }
+    }
+    text(r_, x, box_.y + box_.h - 18, tr("details.keys"), 1, grey);
+    if (read_aloud()) announce(trf("details.title", {tr(th.key)}));
+}
+
 int Menu::over_budget() const
 {
     const Budget b = machine_budget();
@@ -1515,6 +1647,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
         const float mx = e.button.x, my = e.button.y;
+        if (details_ >= 0)
+        {
+            if (!inside(box_, mx, my)) details_ = -1;
+            return;
+        }
         if (overlay_ >= 0)
         {
             if (!inside(box_, mx, my)) { save_filters(); overlay_ = -1; return; }
@@ -1532,7 +1669,10 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             return;
         }
         for (int c = 0; c < kLines + 1; ++c)
+        {
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
+            else if (inside(dots_[c], mx, my)) open_details(overlay_of_column(c));
+        }
         return;
     }
     // The wheel over the settings panel scrolls its list (three rows a notch).
@@ -1550,6 +1690,19 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     if (overlay_ >= 0)
     {
         if (e.type == SDL_EVENT_KEY_DOWN) overlay_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        return;
+    }
+    if (details_ >= 0)
+    {
+        // Esc or I closes it; F goes on to the same line's filters; Left and Right step through the lines.
+        if (e.type != SDL_EVENT_KEY_DOWN) return;
+        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_I) details_ = -1;
+        else if (e.key.key == SDLK_F) open_filters(details_);
+        else if (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)
+        {
+            const int c = details_ == kBinaryLine ? 0 : details_ + 1; // its column
+            details_ = overlay_of_column((c + (e.key.key == SDLK_RIGHT ? 1 : kLines - 1)) % kLines);
+        }
         return;
     }
     if (e.type == SDL_EVENT_TEXT_INPUT && row_ == 2)
@@ -1605,23 +1758,14 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         toggle_all_filters(ToggleScope::EveryLine);
         break;
     case SDLK_F:
-    {
-        // The filters of the line whose settings are selected (its rows: setup_row_of and
-        // setup_rows_of, in door order). Anywhere else (the GLOBAL rows, and the three at the
-        // foot), F opens the filters of the line you will start on (the "line" row); F again
-        // closes them.
-        int line = -1;
-        for (int li = 0; li < kLines; ++li)
-            if (row_ >= setup_row_of(kDimensions[li].media) && row_ < setup_row_of(kDimensions[li].media) + setup_rows_of(kDimensions[li].media))
-                line = li;
-        if (line < 0)
-        {
-            const auto at = std::find(kStartLines.begin(), kStartLines.end(), s_.start_line); // in door order
-            line = at == kStartLines.end() ? 0 : int(at - kStartLines.begin());
-        }
-        open_filters(line);
+        // The filters of the line whose settings are selected; anywhere else, of the line you will
+        // start on (line_of_row). F again closes them.
+        open_filters(line_of_row());
         break;
-    }
+    case SDLK_I:
+        // The details of the same line (9 November 2026): what its figures in the map mean.
+        open_details(line_of_row());
+        break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
         // The way in is the last row, chosen like any other: Enter anywhere else does nothing,
@@ -2156,6 +2300,18 @@ void Menu::render()
             SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         }
         text(r_, x + 22, label, tr(th.key), name_scale, th.edge);
+        // The details button, three dots one above another, as tall as the magnifying glass: opens
+        // what this line's figures mean (as I does for the line chosen).
+        {
+            const float dx = x + 22 + text_width(tr(th.key), name_scale) + 3, d = name_scale >= 2 ? 3.0f : 2.0f;
+            dots_[c] = {dx - 2, label - 2, std::max(8.0f, x + pitch - 4 - (dx - 2)), 20};
+            SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
+            for (int k = 0; k < 3; ++k)
+            {
+                const SDL_FRect dot{dx, label + 1 + float(k) * 6, d, d};
+                SDL_RenderFillRect(r_, &dot);
+            }
+        }
         {
             const size_t caret = z.units.find(" = ");
             text(r_, x, label + 22, clip(trf("map.units", {z.units.substr(0, caret)})), 1, th.edge);
@@ -2222,6 +2378,7 @@ void Menu::render()
     }
     if (alpha_open_) render_alphabets(W, H);
     else if (overlay_ >= 0) render_overlay(W, H);
+    else if (details_ >= 0) render_details(W, H);
     else if (read_aloud() && row_ >= 0 && row_ < int(rows.size()))
     {
         // Read aloud (speech.hpp): the row chosen, after the heading of its section, and its value.
