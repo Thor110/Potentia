@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace sieve::cli {
@@ -18,8 +19,9 @@ namespace sieve::cli {
 // sync (FF, then FA or FB).
 bool is_mp3(const std::vector<uint8_t>& b);
 
-// b coded by packMP3, where it codes it and that gives b back exactly; else nothing.
-std::optional<std::vector<uint8_t>> mp3_to_pmp(const std::vector<uint8_t>& b);
+// b coded by packMP3, where it codes it and that gives b back exactly; else nothing, and (where `why`
+// is given) why: "not an MP3's start", "not coded: <packMP3's reason>", or "not given back: <why>".
+std::optional<std::vector<uint8_t>> mp3_to_pmp(const std::vector<uint8_t>& b, std::string* why = nullptr);
 
 // The MP3 made again from packMP3's form (the reader's side): throws where the form is damaged or
 // not packMP3's, never reading outside it.

@@ -5449,8 +5449,10 @@ INTERN inline bool pmp_decode_main_data( aricoder* dec )
 					mod_svb->shift_context( ctx_svb[ch] );
 				} else mod_svb->shift_context( 144 + 1 );
 				c = decode_ari( dec, mod_svb );
-				// Sieve: the small values' bound within the granule (576), whole quadruples after region 2
-				#define SIEVE_SV_CHECK if ( ( granule->sv_bound < granule->region_bound[2] ) || ( granule->sv_bound > 576 ) || ( ( granule->sv_bound - granule->region_bound[2] ) % 4 != 0 ) || ( granule->region_bound[2] < 0 ) ) { sprintf( errormessage, "small values out of bounds" ); errorlevel = 2; delete huffman; return false; }
+				// Sieve: the small values' bound within what packMP3 keeps for them (578: an MP3's last
+				// quadruple may reach two past the granule's 576, as shine's do; its arrays hold 580), whole
+				// quadruples after region 2
+				#define SIEVE_SV_CHECK if ( ( granule->sv_bound < granule->region_bound[2] ) || ( granule->sv_bound > 578 ) || ( ( granule->sv_bound - granule->region_bound[2] ) % 4 != 0 ) || ( granule->region_bound[2] < 0 ) ) { sprintf( errormessage, "small values out of bounds" ); errorlevel = 2; delete huffman; return false; }
 				if ( c <= 144 ) { // for proper files
 					granule->sv_bound = c << 2;
 					if ( granule->region_bound[ 2 ] % 4 == 2 )

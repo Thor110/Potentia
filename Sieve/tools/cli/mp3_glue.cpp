@@ -50,15 +50,27 @@ bool is_mp3(const std::vector<uint8_t>& b)
     return b.size() >= 4 && ((std::memcmp(b.data(), "ID3", 3) == 0) || (b[0] == 0xFF && (b[1] & 0xFE) == 0xFA));
 }
 
-std::optional<std::vector<uint8_t>> mp3_to_pmp(const std::vector<uint8_t>& b)
+std::optional<std::vector<uint8_t>> mp3_to_pmp(const std::vector<uint8_t>& b, std::string* why_out)
 {
-    if (!is_mp3(b)) return std::nullopt;
     std::string why;
+    auto say = [&](const std::string& w) {
+        if (why_out) *why_out = w;
+        return std::nullopt;
+    };
+    if (!is_mp3(b))
+    {
+        // (an MPEG-2 or 2.5 Layer III frame's sync, FF then E2/E3 or F2/F3, named: packMP3 codes MPEG-1 only)
+        if (b.size() >= 4 && b[0] == 0xFF && (b[1] & 0xE6) == 0xE2 && (b[1] & 0x18) != 0x08)
+            return say(std::string("not coded: file is ") + ((b[1] & 0x18) == 0x10 ? "MPEG-2" : "MPEG-2.5") + " LAYER III, not supported");
+        return say("not an MP3's start");
+    }
     auto pmp = convert(b, why);
     // (its own form must start with its magic, so the way back is taken; and give b back exactly)
-    if (!pmp || pmp->size() < 2 || is_mp3(*pmp)) return std::nullopt;
+    if (!pmp || pmp->size() < 2 || is_mp3(*pmp)) return say("not coded: " + (why.empty() ? std::string("packMP3 gave nothing") : why));
+    why.clear();
     auto back = convert(*pmp, why);
-    if (!back || *back != b) return std::nullopt;
+    if (!back) return say("not given back: " + (why.empty() ? std::string("packMP3 gave nothing") : why));
+    if (*back != b) return say("not given back: " + std::to_string(back->size()) + " bytes where the MP3 has " + std::to_string(b.size()));
     return pmp;
 }
 

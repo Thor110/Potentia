@@ -12,8 +12,9 @@ marked "Sieve" in the source. What and why: results/mp3-pmp-2026-11-08.md in Sie
 - packmp3.cpp: a PMP header's count of frames held to 1 to 2^20; region sizes held to 20 bands (as an
   MP3's own side info is); every frame's and granule's side info checked before its main data
   (pmp_check_side_info: region tables 0 to 31 but 4 and 14, region bounds rising, even, within 576,
-  block types, lengths, gains and flags within their fields); the small values' bound within the
-  granule; the main data's size within the bitrate predictor's table, and a decoded bitrate 1 to 14;
+  block types, lengths, gains and flags within their fields); the small values' bound within 578
+  (9 November 2026: first 576, which refused MP3s that shine and other encoders make, whose last
+  quadruple reaches two past the granule; packMP3's arrays hold 580); the main data's size within the bitrate predictor's table, and a decoded bitrate 1 to 14;
   padding and ancillary bits within the 2048 bytes kept for them; the first frame's search ended where
   a file under 4 bytes left nothing to search (it counted to INT_MAX).
 - bitops.cpp (9 November 2026): stdin and stdout no longer switched to binary when a stream opens
