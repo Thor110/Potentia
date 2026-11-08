@@ -66,6 +66,7 @@ say so.
 | cab, ISO, LHA, cpio, ar (`.deb`), WARC | libarchive | not made again | its folder | |
 | tar (`.tar`, or a POSIX or GNU tar by its `ustar` mark) | Sieve | from its skeleton (its headers and padding) and its files, each its own way (v31's `skm`; since 1 November 2026) | its folder (libarchive) | it compresses nothing, which is why the boxes are "Archive and compressed formats"; a program inside goes through the x86 filter |
 | **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
+| **WAV** (plain integer PCM: 8, 16, 24 or 32 bits, 1 to 8 channels) | Sieve, libFLAC | v34 draft: its samples as libFLAC 1.4.3 codes them, the rest of the file as it was (`flac`); how hard libFLAC works follows the priority (Size, Balanced, Decoding speed) | as temporary (a repack to `.flac` files is not yet built) | floating-point WAVs, and one whose data chunk is cut short, as their bytes |
 | **JPEG** | brunsli | v32: from its brunsli form (`jbr`) | v32: **the same coefficients with tables made for them**, from its brunsli form, else made again exactly | normal: as it is |
 
 `sieve-install` extracts every format above (the right-click menu's Extract), one layer at a time.

@@ -376,6 +376,27 @@ if(MSVC)
 else()
     target_compile_options(sieve_brunsli PRIVATE -w)
 endif()
+# libFLAC 1.4.3 (BSD 3-clause, third_party_licenses/flac): v34 draft's "flac", a WAV's samples carried
+# as FLAC codes them and made again byte for byte. Its library alone (no programs, C++ library,
+# Ogg, examples, tests or documents), static, by its own CMake; its other targets are left out of
+# the build. (8 November 2026: on WoWRevived's seven WAVs, 81.2% of the rope's code.)
+set(SIEVE_SAVED_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW) # (its option()s take the values set here)
+foreach(v BUILD_CXXLIBS BUILD_PROGRAMS BUILD_EXAMPLES BUILD_TESTING BUILD_DOCS INSTALL_MANPAGES WITH_OGG
+          INSTALL_PKGCONFIG_MODULES INSTALL_CMAKE_CONFIG_MODULE)
+    set(${v} OFF CACHE BOOL "" FORCE)
+endforeach()
+FetchContent_Declare(flac
+    GIT_REPOSITORY https://github.com/xiph/flac.git
+    GIT_TAG 1.4.3
+    GIT_SHALLOW TRUE)
+FetchContent_GetProperties(flac)
+if(NOT flac_POPULATED)
+    FetchContent_Populate(flac)
+    add_subdirectory(${flac_SOURCE_DIR} ${flac_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
 foreach(t sieve_lz4 sieve_brotli)
     if(MSVC)
         target_compile_options(${t} PRIVATE /w)
@@ -450,10 +471,10 @@ target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_ima
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
 # (client/unpack_7z.cpp too: "Optimise Archive Formats" reads a 7z's contents with the installer's
 # own decoder.)
-add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
+add_library(sieve_compare STATIC tools/cli/compare.cpp tools/cli/compress.cpp tools/cli/pack.cpp tools/cli/png_resave.cpp tools/cli/gif_lzw.cpp tools/cli/flac_wav.cpp tools/cli/train.cpp tools/cli/diffusion_run.cpp tools/cli/model_folder.cpp
     client/unpack_7z.cpp)
 target_include_directories(sieve_compare PUBLIC tools PRIVATE client)
-target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli)
+target_link_libraries(sieve_compare PUBLIC sieve_core sieve_locate PRIVATE sieve_image_io ${SIEVE_ZLIB} ${SIEVE_LZMA} sieve_lzma sieve_lzma_enc sieve_bzip2 ${SIEVE_ZSTD} sieve_lz4 sieve_brotli ${SIEVE_ARCHIVE} sieve_preflate sieve_brunsli FLAC)
 target_include_directories(sieve_compare SYSTEM PRIVATE ${SIEVE_ZSTD_INCLUDE} ${SIEVE_ARCHIVE_INCLUDE})
 target_compile_definitions(sieve_compare PRIVATE LIBARCHIVE_STATIC)
 if(SIEVE_LZMA_INCLUDE)

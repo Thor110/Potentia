@@ -2697,7 +2697,7 @@ int cmd_locate(const Args& a)
         const std::string o = a.get("installer");
         write_raw_address_file(fs::path(std::u8string(o.begin(), o.end())), iraw, a.has("hex"));
         *info << "installer " << o << ": the address of the installer's manifest (" << (!(m.with_contents ? m.packed : inst.packed) ? "v3: the listing, then every file's bytes"
-                                    : (m.with_contents ? m.v34 : inst.v34) ? "v34 (draft): as v33, and GIFs made again from their frames' colour indices"
+                                    : (m.with_contents ? m.v34 : inst.v34) ? "v34 (draft): as v33, GIFs made again from their frames' colour indices, and WAVs from their samples as FLAC codes them"
                                     : (m.with_contents ? m.v33 : inst.v33) ? "v33: as v32, and copies, runs and ramps, binary written as text decoded, pictures mixed as their palette, web text mixed primed on MDN's examples, and mixing's match model's ways and the x86 filter"
                                     : (m.with_contents ? m.v32 : inst.v32) ? "v32: as v31, and files alike carried as their differences, JPEGs and PNGs recoded, mixing's word list counted by use, and a smaller head"
                                     : (m.with_contents ? m.v31 : inst.v31) ? "v31: as v30, and archives made again from their skeleton with their files carried apart"

@@ -23,6 +23,15 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   SPECIFICATIONS §12.2 v34; the oracle reads it; CI step 11 checks it.
 - **Measured** (results/x86-instructions-2026-11-07.md): eleven programs, 98 KB to 11.8 MB, every
   one smaller, 4.0% to 7.9% under v33 (6.3% together); decoding about 35% to 55% slower.
+- **Third piece, built 8 November 2026: `flac`** (Edward: "make a start on that, use the three
+  levels as the size/balanced/speed paths"; IDEAS §19.132). A WAV carried as its samples coded by
+  libFLAC 1.4.3 and the rest of the file as it was, made again byte for byte; libFLAC's level by the
+  priority (Size: 8, prediction 32 back, precision searched; Balanced: 8; Decoding speed: 5).
+  `tools/cli/flac_wav.hpp`; SPECIFICATIONS §12.2 v34; the oracle decodes FLAC itself; CI step 11
+  checks it (four WAVs opened, 8 to 32 bits, chunks before and after the data; a float WAV and a
+  cut one left alone; Sieve, sieve-install and the oracle; Decoding speed too; none without the draft).
+  Measured: results/flac-way-2026-11-08.md. Not yet: AIFF and other sound in plain samples; a
+  repack that installs `.flac` files.
 
 **v33, reopened 3 November 2026 for the web dictionary** (Edward: "Reopen v33 and build it with the
 MDN 64k dictionary"; no v33 release had been made, so nothing made by v33 was outside his tests).

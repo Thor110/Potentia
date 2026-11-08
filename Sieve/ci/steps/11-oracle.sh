@@ -1540,6 +1540,73 @@ python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
 diff -r g34 g34_oracle
 $S locate g34 --installer g34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
 if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi
+# The v34 draft's FLAC way (8 November 2026, Edward: "make a start on that, use the three levels as
+# the size/balanced/speed paths"): a WAV carried as its samples coded by libFLAC and the rest of the
+# file as it was ("flac <skeleton size> <inner size>"). Six WAVs written here: 8-bit mono of an odd
+# length (a pad byte) with a LIST chunk after its data, 16-bit stereo with a JUNK chunk before its
+# format, 24-bit WAVE_FORMAT_EXTENSIBLE, 32-bit mono, all four opened; a floating-point WAV and one
+# whose data chunk says more than the file holds, both left to the other ways. Given back byte for
+# byte by Sieve, sieve-install and the oracle (which decodes FLAC itself); at Decoding speed too;
+# without the draft, none opened.
+rm -rf w34
+mkdir w34
+python - w34 <<'PY'
+import math, os, random, struct, sys
+out = sys.argv[1]
+def chunk(cid, body): return cid + struct.pack("<I", len(body)) + body + (b"\0" if len(body) & 1 else b"")
+def fmt(ch, rate, bits, tag=1, ext=False):
+    align = ch * bits // 8
+    b = struct.pack("<HHIIHH", 0xFFFE if ext else tag, ch, rate, rate * align, align, bits)
+    if ext:
+        b += struct.pack("<HHI", 22, bits, 3) + bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+    return chunk(b"fmt ", b)
+def riff(*chunks):
+    body = b"WAVE" + b"".join(chunks)
+    return b"RIFF" + struct.pack("<I", len(body)) + body
+rng = random.Random(7)
+def sound(n, ch, amp, rate):
+    # a gliding tone with a wandering second voice and some noise: smooth, but never repeating exactly
+    out, ph, ph2 = [], 0.0, 0.0
+    for k in range(n):
+        ph += 2 * math.pi * (300 + 200 * math.sin(k / rate * 1.3)) / rate
+        ph2 += 2 * math.pi * (1100 + 300 * math.sin(k / rate * 0.7)) / rate
+        v = 0.6 * math.sin(ph) + 0.3 * math.sin(ph2)
+        out.append([int(amp * v * (1 - 0.2 * c) + rng.gauss(0, amp / 300)) for c in range(ch)])
+    return out
+def le(v, n): return int.to_bytes(v, n, "little", signed=True)
+s = sound(11025 * 2 + 1, 1, 90, 11025)  # 8-bit mono, odd: a pad byte; a LIST chunk after the data
+open(os.path.join(out, "eight-bit-mono.wav"), "wb").write(riff(fmt(1, 11025, 8), chunk(b"data", bytes(v[0] + 128 for v in s)),
+                                                                chunk(b"LIST", b"INFOISFT\x05\0\0\0Test\0\0")))
+s = sound(44100, 2, 20000, 44100)  # 16-bit stereo, a JUNK chunk before the format
+open(os.path.join(out, "stereo-16.wav"), "wb").write(riff(chunk(b"JUNK", b"\0" * 28), fmt(2, 44100, 16), chunk(b"data", b"".join(le(x, 2) for v in s for x in v))))
+s = sound(24000, 2, 4000000, 48000)  # 24-bit, WAVE_FORMAT_EXTENSIBLE
+open(os.path.join(out, "ext-24.wav"), "wb").write(riff(fmt(2, 48000, 24, ext=True), chunk(b"data", b"".join(le(x, 3) for v in s for x in v))))
+s = sound(22050, 1, 1000000000, 22050)  # 32-bit integer mono
+open(os.path.join(out, "int-32.wav"), "wb").write(riff(fmt(1, 22050, 32), chunk(b"data", b"".join(le(v[0], 4) for v in s))))
+s = sound(22050, 1, 1, 22050)  # floating point (format 3): left to the other ways
+open(os.path.join(out, "float.wav"), "wb").write(riff(fmt(1, 22050, 32, tag=3), chunk(b"data", b"".join(struct.pack("<f", 0.5 * math.sin(k / 9)) for k in range(22050)))))
+s = sound(22050, 2, 9000, 22050)  # a data chunk saying more than the file holds: left as it is
+body = b"".join(le(x, 2) for v in s for x in v)
+open(os.path.join(out, "short-data.wav"), "wb").write(riff(fmt(2, 22050, 16), b"data" + struct.pack("<I", len(body) + 4000) + body))
+PY
+$S locate w34 --installer w34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > w34.txt
+grep -q "^wavs      4 WAV(s), " w34.txt
+grep -q "^manifest  sieve-manifest-v34" w34.txt
+for f in eight-bit-mono ext-24 int-32 stereo-16; do grep -q "	flac [0-9]* [0-9]* .*$f.wav$" w34.txt; done
+for f in float short-data; do if grep -q "	flac .*$f.wav$" w34.txt; then exit 1; fi; done
+rm -rf w34_inst w34_si w34_oracle w34s_inst
+$S install w34.sieve --to w34_inst > /dev/null
+diff -r w34 w34_inst
+$SI w34.sieve --to w34_si --yes > /dev/null
+diff -r w34 w34_si
+python sieve_ref.py unpack w34.sieve --to w34_oracle > /dev/null
+diff -r w34 w34_oracle
+$S locate w34 --installer w34s.sieve --items --compressed-temporary --v34-draft --priority speed 2>&1 | tr -d '\r' > w34s.txt
+grep -q "^wavs      4 WAV(s), " w34s.txt
+$S install w34s.sieve --to w34s_inst > /dev/null
+diff -r w34 w34s_inst
+$S locate w34 --installer w34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > w34v33.txt
+if grep -q "sieve-manifest-v34\|^wavs \|	flac " w34v33.txt; then exit 1; fi
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
 # modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.

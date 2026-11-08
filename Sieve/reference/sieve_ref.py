@@ -6968,8 +6968,8 @@ def v7_item(spec, place, code, path, items_from):
 
 
 ARCHIVE_FORMATS = [None, "xz", "gz", "bz2", "zst", "lz4", "br", "lzma", "lz", "7z", "zip", "rar", "cab", "iso", "lha", "cpio", "ar",
-                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
-RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4}
+                   "warc", "sk", "stb", "skm", "jbr", "pngr", "skr", "spn", "gif", "flac"]  # v20's numbers for the archives' formats (SPECIFICATIONS §12.2), never renumbered
+RECIPE_WORDS = {"xz": 4, "gz": 5, "bz2": 3, "zst": 6, "lz4": 8, "br": 4, "lzma": 3, "sk": 3, "stb": 7, "skm": 3, "jbr": 2, "pngr": 6, "skr": 6, "spn": 3, "gif": 4, "flac": 3}
 
 
 def listing_from_bytes(b, v32=False):
@@ -7658,6 +7658,15 @@ def cmd_unpack_v7(args, data):
                 sys.exit(f"{path}: a GIF's recipe Sieve does not write")
             remakes[i] = ("gif", int(blk), int(skel), size)
             size = int(n)
+        if v34 and way.startswith("flac "):
+            # "flac <skeleton size> <inner size> <way>" (SPECIFICATIONS v34, a draft): a WAV made again
+            # from its samples as FLAC codes them, and its skeleton (flac_wav_make).
+            _, skel, n, way = way.split(" ", 3)
+            if not (all(re.fullmatch(r"0|[1-9][0-9]*", x, re.ASCII) for x in (skel, n)) and 12 <= int(skel) < int(n)) or \
+                    not (way == "raw" or way.startswith("rope ") or way.startswith("pieces ") or way.startswith("mix ") or way.startswith("mix2 ") or way.startswith("mix3 ") or way.startswith("mix4 ") or way.startswith("mixt ") or way == "mixn" or way == "runs"):
+                sys.exit(f"{path}: a WAV's recipe Sieve does not write")
+            remakes[i] = ("flac", int(skel), size)
+            size = int(n)
         if v32 and way.startswith("skr "):
             # "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>" (SPECIFICATIONS
             # v32): a PNG made again exactly from its skeleton (as "sk"), its rows carried
@@ -7972,6 +7981,9 @@ def cmd_unpack_v7(args, data):
         if r[0] == "gif":  # v34 draft: each frame's indices coded as compress codes them
             got[i] = gif_make(got[i], r[2], r[1], files[i][0])
             continue
+        if r[0] == "flac":  # v34 draft: the WAV's samples decoded from FLAC, put back in its skeleton
+            got[i] = flac_wav_make(got[i], r[1], files[i][0])
+            continue
         if r[0] == "pngr":  # v32: the PNG re-saved, by zlib
             got[i] = pngr_make(got[i], r[1], r[2], r[3], r[4], files[i][0])
             continue
@@ -8194,6 +8206,241 @@ def gif_lzw(mcs, px):
     output(ent)
     output(eoi)
     return bytes(out)
+
+
+def wav_walk(w, path):
+    """SPECIFICATIONS v34 (a draft), "flac": a WAV's chunks walked from byte 12 to its data chunk:
+    one "fmt " before it, plain integer PCM (format 1, or 0xFFFE whose sub-format is PCM's GUID), 1
+    to 8 channels, 8, 16, 24 or 32 bits a sample, a block of channels times bytes a sample, a sample
+    rate FLAC can hold (1 to 1,048,575); every chunk before it whole. Returns (channels, bits, where
+    its samples start, its size)."""
+    if len(w) < 12 or w[:4] != b"RIFF" or w[8:12] != b"WAVE":
+        sys.exit(f"{path}: a WAV's skeleton that is not a WAV's")
+    at, fmt = 12, None
+    while at + 8 <= len(w):
+        cid, size = w[at:at + 4], int.from_bytes(w[at + 4:at + 8], "little")
+        if cid == b"data":
+            if fmt is None:
+                break
+            return fmt[0], fmt[1], at + 8, size
+        if cid == b"fmt ":
+            c = w[at + 8:at + 8 + size]
+            if fmt is not None or size < 16 or len(c) < size:
+                break
+            tag, ch, rate, _, align, bits = struct.unpack("<HHIIHH", c[:16])
+            pcm = bytes([1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71])
+            if tag == 0xFFFE and not (size >= 40 and int.from_bytes(c[16:18], "little") >= 22 and c[24:40] == pcm):
+                break
+            if tag not in (1, 0xFFFE) or not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or align != ch * bits // 8 or not 1 <= rate <= 1048575:
+                break
+            fmt = (ch, bits)
+        nxt = at + 8 + size + (size & 1)
+        if nxt > len(w):
+            break
+        at = nxt
+    sys.exit(f"{path}: a WAV's skeleton Sieve does not write")
+
+
+class FlacBits:
+    """FLAC's bits, read most significant first."""
+    def __init__(self, b):
+        self.b, self.pos = b, 0
+
+    def read(self, n):
+        if n == 0:
+            return 0
+        start, end = self.pos >> 3, (self.pos + n + 7) >> 3
+        if end > len(self.b):
+            raise ValueError("past the end")
+        v = int.from_bytes(self.b[start:end], "big")
+        v = (v >> ((end << 3) - self.pos - n)) & ((1 << n) - 1)
+        self.pos += n
+        return v
+
+    def signed(self, n):
+        v = self.read(n)
+        return v - (1 << n) if n and v >> (n - 1) else v
+
+    def unary(self):
+        """Zeros up to a one (the one read too): their count."""
+        n, b = 0, self.b
+        while True:
+            i = self.pos >> 3
+            if i >= len(b):
+                raise ValueError("past the end")
+            left = 8 - (self.pos & 7)
+            v = b[i] & ((1 << left) - 1)
+            if v:
+                z = left - v.bit_length()
+                self.pos += z + 1
+                return n + z
+            n += left
+            self.pos += left
+
+
+def flac_crc(data, poly, width):
+    crc, top, mask = 0, 1 << (width - 1), (1 << width) - 1
+    for byte in data:
+        crc ^= byte << (width - 8)
+        for _ in range(8):
+            crc = ((crc << 1) ^ poly) & mask if crc & top else (crc << 1) & mask
+    return crc
+
+
+def flac_decode(f, path):
+    """FLAC (RFC 9639), as libFLAC writes it for Sieve: "fLaC", its metadata blocks (STREAMINFO
+    first), then frames to the end of the bytes, every frame's CRC-8 and CRC-16 checked, the
+    samples' MD5 checked where STREAMINFO gives one. Returns (channels, bits, total samples a
+    channel, the samples interleaved)."""
+    try:
+        if f[:4] != b"fLaC":
+            raise ValueError("no fLaC")
+        at, info, last = 4, None, False
+        while not last:
+            last, kind, n = f[at] >> 7, f[at] & 0x7F, int.from_bytes(f[at + 1:at + 4], "big")
+            body = f[at + 4:at + 4 + n]
+            if len(body) != n or kind == 127 or (info is None) != (kind == 0):
+                raise ValueError("metadata")
+            if kind == 0:
+                if n != 34:
+                    raise ValueError("STREAMINFO")
+                v = int.from_bytes(body[10:18], "big")
+                info = (v >> 44, ((v >> 41) & 7) + 1, ((v >> 36) & 31) + 1, v & ((1 << 36) - 1), body[18:34])
+            at += 4 + n
+        rate, ch, bps, total, md5 = info
+        r = FlacBits(f)
+        r.pos = at * 8
+        out, done = [], 0
+        while r.pos < len(f) * 8:
+            start = r.pos >> 3
+            if r.read(15) != 0x7FFC:
+                raise ValueError("frame sync")
+            r.read(1)  # blocking strategy
+            bsc, src, chc, ssc = r.read(4), r.read(4), r.read(4), r.read(3)
+            if r.read(1) or bsc == 0 or src == 15 or chc > 10 or ssc == 3:
+                raise ValueError("frame header")
+            first = r.read(8)  # the frame or sample number, coded as UTF-8 codes a number
+            extra = 0
+            while first & (0x80 >> extra):
+                extra += 1
+            if extra == 1 or extra > 7:
+                raise ValueError("frame number")
+            for _ in range(max(extra - 1, 0)):
+                if r.read(8) >> 6 != 2:
+                    raise ValueError("frame number")
+            n = 192 if bsc == 1 else 576 << (bsc - 2) if bsc <= 5 else r.read(8) + 1 if bsc == 6 else r.read(16) + 1 if bsc == 7 else 256 << (bsc - 8)
+            if src == 12:
+                r.read(8)
+            elif src in (13, 14):
+                r.read(16)
+            fbits = {0: bps, 1: 8, 2: 12, 4: 16, 5: 20, 6: 24, 7: 32}[ssc]
+            if flac_crc(f[start:r.pos >> 3], 0x07, 8) != r.read(8):
+                raise ValueError("frame header CRC")
+            nch = chc + 1 if chc < 8 else 2
+            if nch != ch or fbits != bps:
+                raise ValueError("a frame unlike the stream")
+            chans = []
+            for c in range(nch):
+                sb = fbits + (1 if (chc == 8 and c == 1) or (chc == 9 and c == 0) or (chc == 10 and c == 1) else 0)
+                if r.read(1):
+                    raise ValueError("subframe")
+                t = r.read(6)
+                wasted = r.unary() + 1 if r.read(1) else 0
+                sb -= wasted
+                if sb <= 0:
+                    raise ValueError("wasted bits")
+                if t == 0:
+                    x = [r.signed(sb)] * n
+                elif t == 1:
+                    x = [r.signed(sb) for _ in range(n)]
+                elif 8 <= t <= 12 or t >= 32:
+                    order = t - 8 if t < 32 else t - 31
+                    if order > n:
+                        raise ValueError("order")
+                    x = [r.signed(sb) for _ in range(order)]
+                    if t >= 32:
+                        prec = r.read(4) + 1
+                        if prec == 16:
+                            raise ValueError("precision")
+                        shift = r.signed(5)
+                        if shift < 0:
+                            raise ValueError("shift")
+                        coefs = [r.signed(prec) for _ in range(order)]
+                    method, po = r.read(2), r.read(4)
+                    if method > 1 or (n >> po) << po != n or (n >> po) < order:
+                        raise ValueError("residual")
+                    pbits, esc = (4, 15) if method == 0 else (5, 31)
+                    res = []
+                    for p in range(1 << po):
+                        cnt = (n >> po) - (order if p == 0 else 0)
+                        k = r.read(pbits)
+                        if k == esc:
+                            nb = r.read(5)
+                            res.extend(r.signed(nb) for _ in range(cnt))
+                        else:
+                            for _ in range(cnt):
+                                v = (r.unary() << k) | r.read(k)
+                                res.append((v >> 1) ^ -(v & 1))
+                    if t < 32:
+                        fc = [(), (1,), (2, -1), (3, -3, 1), (4, -6, 4, -1)][order]
+                        for e in res:
+                            x.append(e + sum(a * x[-1 - j] for j, a in enumerate(fc)))
+                    else:
+                        for e in res:
+                            x.append(e + (sum(a * x[-1 - j] for j, a in enumerate(coefs)) >> shift))
+                else:
+                    raise ValueError("subframe type")
+                if wasted:
+                    x = [v << wasted for v in x]
+                chans.append(x)
+            r.pos = (r.pos + 7) & ~7
+            if flac_crc(f[start:r.pos >> 3], 0x8005, 16) != r.read(16):
+                raise ValueError("frame CRC")
+            if chc == 8:
+                chans[1] = [a - b for a, b in zip(chans[0], chans[1])]
+            elif chc == 9:
+                chans[0] = [a + b for a, b in zip(chans[0], chans[1])]
+            elif chc == 10:
+                m = [(a << 1) | (b & 1) for a, b in zip(chans[0], chans[1])]
+                chans = [[(a + b) >> 1 for a, b in zip(m, chans[1])], [(a - b) >> 1 for a, b in zip(m, chans[1])]]
+            lo, hi = -(1 << (bps - 1)), (1 << (bps - 1)) - 1
+            for k in range(n):
+                for c in range(nch):
+                    v = chans[c][k]
+                    if not lo <= v <= hi:
+                        raise ValueError("a sample past its bits")
+                    out.append(v)
+            done += n
+    except (ValueError, IndexError, KeyError, TypeError) as e:
+        sys.exit(f"{path}: a FLAC stream Sieve does not write ({e})")
+    if done != total:
+        sys.exit(f"{path}: a FLAC stream with other than the samples it says")
+    if md5 != bytes(16):
+        nb = (bps + 7) // 8
+        h = hashlib.md5()
+        h.update(b"".join(v.to_bytes(nb, "little", signed=True) for v in out))
+        if h.digest() != md5:
+            sys.exit(f"{path}: a FLAC stream whose samples are not its MD5's")
+    return ch, bps, total, out
+
+
+def flac_wav_make(inner, skel, path):
+    """SPECIFICATIONS v34 (a draft), "flac": a WAV made again from its samples, a FLAC stream, and
+    after them its skeleton (the WAV with its data chunk's samples taken out). The skeleton walked
+    (wav_walk) to its data chunk; the stream's samples written there, little-endian, 8-bit ones
+    unsigned (128 added), as many bytes as the chunk's size says; then the rest of the skeleton."""
+    if not 12 <= skel < len(inner):
+        sys.exit(f"{path}: a WAV's recipe Sieve does not write")
+    s, f = inner[len(inner) - skel:], inner[:len(inner) - skel]
+    ch, bits, at, size = wav_walk(s, path)
+    nb = bits // 8
+    if size == 0 or size % (ch * nb):
+        sys.exit(f"{path}: a WAV's skeleton Sieve does not write")
+    fch, fbits, total, samples = flac_decode(f, path)
+    if fch != ch or fbits != bits or total * ch * nb != size:
+        sys.exit(f"{path}: a FLAC stream that is not its WAV's samples")
+    data = bytes(v + 128 for v in samples) if nb == 1 else b"".join(v.to_bytes(nb, "little", signed=True) for v in samples)
+    return s[:at] + data + s[at:]
 
 
 def gif_make(inner, skel, blk, path):

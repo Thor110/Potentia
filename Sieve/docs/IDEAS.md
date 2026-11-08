@@ -6868,4 +6868,9 @@ inside the `.sieve` and installed as the same WAV, every byte (libFLAC is BSD-li
 fetched as the other libraries are); (b) as an opt-in repack (as permanent repacks PNGs), WAVs
 installed as `.flac` files; (c) a film's sound taken apart from its pictures: only worth it where the
 sound is plain samples, as most films' sound is already compressed (AAC, MP3, Opus).
+*Built (8 November 2026, Edward: "make a start on that, use the three levels as the size/balanced/speed
+paths"): (a), as v34 draft's `flac` (results/flac-way-2026-11-08.md).* WoWRevived's seven WAVs:
+222,740,143 bytes at Size (made in 203 s), 223,209,005 at Balanced (52 s), 224,634,367 at Decoding
+speed (48 s), each installed in about 7 s and given back byte for byte; the rope took 276,730,651.
+(b) and AIFF not yet.
 

@@ -101,6 +101,8 @@ struct PackReport
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
     uint64_t jpeg_was = 0, jpeg_now = 0;
     size_t gifs_opened = 0, gif_frames = 0; // v34 draft: GIFs carried as their indices, and their frames
+    size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC
+    uint64_t wav_bytes = 0;  // (their bytes)
     size_t pngs_resaved = 0;             // v32: PNGs installed re-saved at their smallest (permanent), their bytes before and after
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
     size_t member_archives = 0, members = 0; // v31: those archives, and their files
