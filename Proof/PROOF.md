@@ -50,3 +50,4 @@ The four values above are the idea at its simplest. What a `.sieve` file holds i
 - [Filters as data](../Sieve/docs/FILTER-PLUGINS.md): how a filter is written, counted and ranked.
 - [Statistics](STATISTICS.md): every figure measured, and what carried each file.
 - [The oracle](../Sieve/reference/sieve_ref.py): a second decoder in Python, written from the specifications and sharing no code with Sieve.
+- [The rope on a WAV](rope_wav.py): the rope's wave for sound (Sieve's recipe for the WoWRevived music) as one short encoder and decoder in plain Python, checked byte for byte and weighed against FLAC where a `flac` or `ffmpeg` program is found. On 8 MB of WoWRevived's Music-Martian/03 it made 4,752,408 bytes (59.4%), and FLAC 2,905,484 (36.3%): which is why Sieve now carries a WAV as FLAC codes it.

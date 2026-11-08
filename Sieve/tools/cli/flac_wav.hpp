@@ -12,7 +12,14 @@
 // Only plain integer PCM is opened: format 1, or 0xFFFE whose sub-format is PCM; 1 to 8 channels;
 // 8, 16, 24 or 32 bits a sample (8-bit WAVs are unsigned, the rest signed little-endian); a block of
 // channels times bytes a sample; a data chunk of a whole number of blocks, inside the file. Anything
-// else is left to the other ways. FLAC's decoding is integer arithmetic, so the same FLAC stream
+// else is left to the other ways.
+//
+// An AIFF (Apple's, 1988: the same plain samples, each sample's bytes in the other order, in "FORM"
+// chunks with big-endian sizes) is carried the same way, by the same recipe: its skeleton's first
+// bytes say which it is. Its COMM chunk gives the channels, the sample frames and the bits (8, 16, 24
+// or 32; 8-bit AIFF samples are signed); its SSND chunk's samples follow its offset and block size.
+// AIFF-C is opened where its samples are not compressed: "NONE" or "twos" (big-endian), "sowt"
+// (little-endian). FLAC's decoding is integer arithmetic, so the same FLAC stream
 // always gives the same samples, on any machine; the opener makes the WAV again and compares before
 // it is ever chosen.
 //
@@ -32,6 +39,9 @@ namespace sieve::cli {
 
 // Whether b starts as a WAV does ("RIFF", four bytes, "WAVE").
 bool is_wav(const std::vector<uint8_t>& b);
+
+// Whether b starts as an AIFF or AIFF-C does ("FORM", four bytes, "AIFF" or "AIFC").
+bool is_aiff(const std::vector<uint8_t>& b);
 
 struct WavOpened
 {

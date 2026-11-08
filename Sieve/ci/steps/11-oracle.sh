@@ -1588,12 +1588,38 @@ open(os.path.join(out, "float.wav"), "wb").write(riff(fmt(1, 22050, 32, tag=3), 
 s = sound(22050, 2, 9000, 22050)  # a data chunk saying more than the file holds: left as it is
 body = b"".join(le(x, 2) for v in s for x in v)
 open(os.path.join(out, "short-data.wav"), "wb").write(riff(fmt(2, 22050, 16), b"data" + struct.pack("<I", len(body) + 4000) + body))
+# AIFF: chunks with big-endian sizes, samples big-endian and signed (AIFF-C "sowt": little-endian)
+def achunk(cid, body): return cid + struct.pack(">I", len(body)) + body + (b"\0" if len(body) & 1 else b"")
+def ext80(rate):
+    e = rate.bit_length() - 1
+    return struct.pack(">HQ", 16383 + e, rate << (63 - e))
+def comm(ch, frames, bits, rate, kind=None):
+    b = struct.pack(">HIH", ch, frames, bits) + ext80(rate)
+    if kind: b += kind + b"\x0bnot named\0"
+    return achunk(b"COMM", b)
+def form(kind, *chunks):
+    body = kind + b"".join(chunks)
+    return b"FORM" + struct.pack(">I", len(body)) + body
+def ssnd(data): return achunk(b"SSND", b"\0" * 8 + data)
+def be(v, n, order="big"): return int.to_bytes(v, n, order, signed=True)
+s = sound(44100, 2, 20000, 44100)  # 16-bit stereo, a NAME chunk before COMM
+open(os.path.join(out, "stereo-16.aiff"), "wb").write(form(b"AIFF", achunk(b"NAME", b"a tone"), comm(2, len(s), 16, 44100), ssnd(b"".join(be(x, 2) for v in s for x in v))))
+s = sound(11025 * 2 + 1, 1, 90, 11025)  # 8-bit mono, odd: a pad byte; an ANNO chunk after the samples
+open(os.path.join(out, "eight-bit-mono.aiff"), "wb").write(form(b"AIFF", comm(1, len(s), 8, 11025), ssnd(bytes(v[0] & 255 for v in s)), achunk(b"ANNO", b"made here")))
+s = sound(24000, 1, 4000000, 48000)  # 24-bit mono
+open(os.path.join(out, "mono-24.aif"), "wb").write(form(b"AIFF", comm(1, len(s), 24, 48000), ssnd(b"".join(be(v[0], 3) for v in s))))
+s = sound(22050, 2, 15000, 22050)  # AIFF-C "sowt": little-endian samples
+open(os.path.join(out, "sowt.aifc"), "wb").write(form(b"AIFC", achunk(b"FVER", struct.pack(">I", 0xA2805140)), comm(2, len(s), 16, 22050, b"sowt"), ssnd(b"".join(be(x, 2, "little") for v in s for x in v))))
+s = sound(22050, 1, 1, 22050)  # AIFF-C of floating-point samples: left to the other ways
+open(os.path.join(out, "float.aifc"), "wb").write(form(b"AIFC", comm(1, 22050, 32, 22050, b"fl32"), ssnd(b"".join(struct.pack(">f", 0.5 * math.sin(k / 9)) for k in range(22050)))))
+s = sound(22050, 1, 12000, 22050)  # its COMM after its SSND: left as it is
+open(os.path.join(out, "comm-last.aiff"), "wb").write(form(b"AIFF", ssnd(b"".join(be(v[0], 2) for v in s)), comm(1, len(s), 16, 22050)))
 PY
 $S locate w34 --installer w34.sieve --items --compressed-temporary --v34-draft 2>&1 | tr -d '\r' > w34.txt
-grep -q "^wavs      4 WAV(s), " w34.txt
+grep -q "^sound     8 file(s) of sound (WAV, AIFF), " w34.txt
 grep -q "^manifest  sieve-manifest-v34" w34.txt
-for f in eight-bit-mono ext-24 int-32 stereo-16; do grep -q "	flac [0-9]* [0-9]* .*$f.wav$" w34.txt; done
-for f in float short-data; do if grep -q "	flac .*$f.wav$" w34.txt; then exit 1; fi; done
+for f in eight-bit-mono.wav ext-24.wav int-32.wav stereo-16.wav stereo-16.aiff eight-bit-mono.aiff mono-24.aif sowt.aifc; do grep -q "	flac [0-9]* [0-9]* .*$f$" w34.txt; done
+for f in float.wav short-data.wav float.aifc comm-last.aiff; do if grep -q "	flac .*$f$" w34.txt; then exit 1; fi; done
 rm -rf w34_inst w34_si w34_oracle w34s_inst
 $S install w34.sieve --to w34_inst > /dev/null
 diff -r w34 w34_inst
@@ -1602,11 +1628,11 @@ diff -r w34 w34_si
 python sieve_ref.py unpack w34.sieve --to w34_oracle > /dev/null
 diff -r w34 w34_oracle
 $S locate w34 --installer w34s.sieve --items --compressed-temporary --v34-draft --priority speed 2>&1 | tr -d '\r' > w34s.txt
-grep -q "^wavs      4 WAV(s), " w34s.txt
+grep -q "^sound     8 file(s) of sound " w34s.txt
 $S install w34s.sieve --to w34s_inst > /dev/null
 diff -r w34 w34s_inst
 $S locate w34 --installer w34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > w34v33.txt
-if grep -q "sieve-manifest-v34\|^wavs \|	flac " w34v33.txt; then exit 1; fi
+if grep -q "sieve-manifest-v34\|^sound \|	flac " w34v33.txt; then exit 1; fi
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
 # modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.

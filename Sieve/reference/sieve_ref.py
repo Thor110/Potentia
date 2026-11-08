@@ -8212,17 +8212,20 @@ def wav_walk(w, path):
     """SPECIFICATIONS v34 (a draft), "flac": a WAV's chunks walked from byte 12 to its data chunk:
     one "fmt " before it, plain integer PCM (format 1, or 0xFFFE whose sub-format is PCM's GUID), 1
     to 8 channels, 8, 16, 24 or 32 bits a sample, a block of channels times bytes a sample, a sample
-    rate FLAC can hold (1 to 1,048,575); every chunk before it whole. Returns (channels, bits, where
-    its samples start, its size)."""
+    rate FLAC can hold (1 to 1,048,575); every chunk before it whole. An AIFF's (aiff_walk) where the
+    skeleton starts "FORM". Returns (channels, bits, where its samples start, their size, whether
+    big-endian, whether 8-bit samples are unsigned)."""
+    if len(w) >= 12 and w[:4] == b"FORM" and w[8:12] in (b"AIFF", b"AIFC"):
+        return aiff_walk(w, path)
     if len(w) < 12 or w[:4] != b"RIFF" or w[8:12] != b"WAVE":
-        sys.exit(f"{path}: a WAV's skeleton that is not a WAV's")
+        sys.exit(f"{path}: a sound file's skeleton that is neither a WAV's nor an AIFF's")
     at, fmt = 12, None
     while at + 8 <= len(w):
         cid, size = w[at:at + 4], int.from_bytes(w[at + 4:at + 8], "little")
         if cid == b"data":
             if fmt is None:
                 break
-            return fmt[0], fmt[1], at + 8, size
+            return fmt[0], fmt[1], at + 8, size, False, True
         if cid == b"fmt ":
             c = w[at + 8:at + 8 + size]
             if fmt is not None or size < 16 or len(c) < size:
@@ -8239,6 +8242,46 @@ def wav_walk(w, path):
             break
         at = nxt
     sys.exit(f"{path}: a WAV's skeleton Sieve does not write")
+
+
+def aiff_walk(w, path):
+    """SPECIFICATIONS v34 (a draft), "flac": an AIFF's (or AIFF-C's) chunks walked from byte 12,
+    sizes big-endian, a pad byte after an odd one, to its SSND chunk: one COMM before it (18 bytes or
+    more, 22 for AIFF-C) with 1 to 8 channels, 8, 16, 24 or 32 bits a sample (signed) and at least one
+    sample frame; AIFF-C's compression "NONE" or "twos" (big-endian) or "sowt" (little-endian); SSND
+    8 bytes or more, its samples after its offset and block size (four bytes each) and the offset's
+    bytes, the frames times the channels times the bytes a sample of them."""
+    aifc = w[8:12] == b"AIFC"
+    at, comm = 12, None
+    while at + 8 <= len(w):
+        cid, size = w[at:at + 4], int.from_bytes(w[at + 4:at + 8], "big")
+        if cid == b"SSND":
+            if comm is None or size < 8 or at + 16 > len(w):
+                break
+            offset = int.from_bytes(w[at + 8:at + 12], "big")
+            if at + 16 + offset > len(w):
+                break
+            ch, frames, bits, big = comm
+            return ch, bits, at + 16 + offset, frames * ch * (bits // 8), big, False
+        if cid == b"COMM":
+            c = w[at + 8:at + 8 + size]
+            if comm is not None or size < (22 if aifc else 18) or len(c) < size:
+                break
+            ch, frames, bits = struct.unpack(">HIH", c[:8])
+            big = True
+            if aifc:
+                if c[18:22] == b"sowt":
+                    big = False
+                elif c[18:22] not in (b"NONE", b"twos"):
+                    break
+            if not 1 <= ch <= 8 or bits not in (8, 16, 24, 32) or frames == 0:
+                break
+            comm = (ch, frames, bits, big)
+        nxt = at + 8 + size + (size & 1)
+        if nxt > len(w):
+            break
+        at = nxt
+    sys.exit(f"{path}: an AIFF's skeleton Sieve does not write")
 
 
 class FlacBits:
@@ -8425,21 +8468,26 @@ def flac_decode(f, path):
 
 
 def flac_wav_make(inner, skel, path):
-    """SPECIFICATIONS v34 (a draft), "flac": a WAV made again from its samples, a FLAC stream, and
-    after them its skeleton (the WAV with its data chunk's samples taken out). The skeleton walked
-    (wav_walk) to its data chunk; the stream's samples written there, little-endian, 8-bit ones
-    unsigned (128 added), as many bytes as the chunk's size says; then the rest of the skeleton."""
+    """SPECIFICATIONS v34 (a draft), "flac": a WAV or an AIFF made again from its samples, a FLAC
+    stream, and after them its skeleton (the file with its samples taken out). The skeleton walked
+    (wav_walk, aiff_walk) to its samples; the stream's samples written there, a WAV's little-endian
+    and 8-bit ones unsigned (128 added), an AIFF's big-endian (AIFF-C "sowt" little-endian) and
+    signed; then the rest of the skeleton."""
     if not 12 <= skel < len(inner):
         sys.exit(f"{path}: a WAV's recipe Sieve does not write")
     s, f = inner[len(inner) - skel:], inner[:len(inner) - skel]
-    ch, bits, at, size = wav_walk(s, path)
+    ch, bits, at, size, big, unsigned8 = wav_walk(s, path)
     nb = bits // 8
     if size == 0 or size % (ch * nb):
-        sys.exit(f"{path}: a WAV's skeleton Sieve does not write")
+        sys.exit(f"{path}: a sound file's skeleton Sieve does not write")
     fch, fbits, total, samples = flac_decode(f, path)
     if fch != ch or fbits != bits or total * ch * nb != size:
-        sys.exit(f"{path}: a FLAC stream that is not its WAV's samples")
-    data = bytes(v + 128 for v in samples) if nb == 1 else b"".join(v.to_bytes(nb, "little", signed=True) for v in samples)
+        sys.exit(f"{path}: a FLAC stream that is not its sound file's samples")
+    if nb == 1 and unsigned8:
+        data = bytes(v + 128 for v in samples)
+    else:
+        order = "big" if big else "little"
+        data = b"".join(v.to_bytes(nb, order, signed=True) for v in samples)
     return s[:at] + data + s[at:]
 
 

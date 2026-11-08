@@ -3749,7 +3749,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const std::vector<uint8_t>& f = bytes[from + k];
                 if (stop_requested()) return;
                 // (not a WAV FLAC will code: it is weighed on a sample first, in the loop)
-                if (optimise_archives && !f.empty() && !(flac_on && temporary_ok && is_wav(f))) (void)estimate(f);
+                if (optimise_archives && !f.empty() && !(flac_on && temporary_ok && (is_wav(f) || is_aiff(f)))) (void)estimate(f);
                 if (spans_on && f.size() >= 256) spans_ahead[from + k] = weigh_spans(f);
                 // A zip, as the loop tries it: its skeleton (preflate on each member's deflate) and whether
                 // it gives the zip back; and a 7z's contents read, LZMA2's estimate of them made (kept by
@@ -3900,7 +3900,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             // remembered, so packing it later does not search again), its names and recipe counted.
             // (v34 draft: a WAV FLAC will code is weighed first on a sample, below, and its whole estimate
             // made only where that is a near thing: 34 of a 55 MB WAV's 38 s went to it, 8 November 2026.)
-            const bool wav_first = flac_on && temporary_ok && is_wav(b);
+            const bool wav_first = flac_on && temporary_ok && (is_wav(b) || is_aiff(b));
             std::optional<uint64_t> as_is_kept;
             auto as_is_of = [&]() -> uint64_t {
                 if (!as_is_kept)
@@ -4094,7 +4094,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (!made) add_file(e, std::move(b), {}, e.sha256);
                 continue;
             }
-            if (flac_on && temporary_ok && is_wav(b))
+            if (flac_on && temporary_ok && (is_wav(b) || is_aiff(b)))
             {
                 std::optional<WavOpened> w;
                 {
@@ -4129,7 +4129,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     wav_bytes += b.size();
                     ManifestEntry r = e;
                     r.remake = std::move(w->recipe);
-                    progress(e.path + ", a WAV of " + std::to_string(b.size()) + " bytes, its samples coded by FLAC: " + std::to_string(w->inner.size()) + " bytes");
+                    progress(e.path + (is_wav(b) ? ", a WAV of " : ", an AIFF of ") + std::to_string(b.size()) + " bytes, its samples coded by FLAC: " + std::to_string(w->inner.size()) + " bytes");
                     add_file(r, std::move(w->inner), std::move(b), e.sha256);
                     continue;
                 }
@@ -6446,7 +6446,7 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
             o << "pngs      " << r.pngs_resaved << " PNG(s) installed re-saved at their smallest, the same pictures (" << r.png_bytes << " bytes as "
               << r.png_resaved_bytes << "; Archive and Compressed Formats, permanent; " << kDeltaManifestVersion << ")\n";
         if (r.wavs_opened)
-            o << "wavs      " << r.wavs_opened << " WAV(s), " << r.wav_bytes << " bytes, carried as their samples coded by FLAC, made again exactly on installing ("
+            o << "sound     " << r.wavs_opened << " file(s) of sound (WAV, AIFF), " << r.wav_bytes << " bytes, carried as their samples coded by FLAC, made again exactly on installing ("
               << kGifManifestVersion << ")\n";
         if (r.gifs_opened)
             o << "gifs      " << r.gifs_opened << " GIF(s) carried as their frames' colour indices, " << r.gif_frames << " frames, made again exactly on installing ("
