@@ -530,10 +530,29 @@ struct Pieces
 Pieces pieces_of_uncached(const std::vector<uint8_t>& b);
 
 // The cuts made in this run, by the file's SHA-256: the File Locator packs a file and weighs it, and
-// both cut it into pieces; on a 52 MB film each cut took 170 s (IDEAS §19.97). At most four kept, and
-// at most 1 GiB of them; a cut a stop ended is not kept.
+// both cut it into pieces; on a 52 MB film each cut took 170 s (IDEAS §19.97). Only where the cuts
+// fall is kept (a few numbers a run), and the two halves made again from the file's bytes when it is
+// asked for again: keeping the halves held a second copy of every file cut, up to 1 GiB (the memory
+// pass of 7 November 2026). At most 64 kept; a cut a stop ended is not kept.
+struct PiecesKept
+{
+    std::vector<std::pair<char, uint64_t>> list;
+    std::string why;
+};
 std::mutex g_pieces_mx;
-std::vector<std::pair<std::string, std::shared_ptr<const Pieces>>> g_pieces;
+std::vector<std::pair<std::string, PiecesKept>> g_pieces;
+
+// The halves of `b` as `list` cuts it: the LZMA2 side's runs one after another, and the rope's.
+void pieces_halves(const std::vector<uint8_t>& b, Pieces& p)
+{
+    uint64_t pos = 0;
+    for (const auto& [k, len] : p.list)
+    {
+        std::vector<uint8_t>& to = k == 'z' ? p.z : p.r;
+        to.insert(to.end(), b.begin() + std::ptrdiff_t(pos), b.begin() + std::ptrdiff_t(pos + len));
+        pos += len;
+    }
+}
 
 Pieces pieces_of(const std::vector<uint8_t>& b)
 {
@@ -542,20 +561,21 @@ Pieces pieces_of(const std::vector<uint8_t>& b)
     const std::string key = Sha256::hex(h.finish());
     {
         std::lock_guard<std::mutex> lock(g_pieces_mx);
-        for (const auto& [k, p] : g_pieces)
-            if (k == key) return *p;
+        for (const auto& [k, kept] : g_pieces)
+            if (k == key)
+            {
+                Pieces p;
+                p.list = kept.list;
+                p.why = kept.why;
+                pieces_halves(b, p);
+                return p;
+            }
     }
     Pieces p = pieces_of_uncached(b);
     if (stop_requested()) return p;
     std::lock_guard<std::mutex> lock(g_pieces_mx);
-    uint64_t held = b.size();
-    for (const auto& [k, q] : g_pieces) held += q->z.size() + q->r.size();
-    while (!g_pieces.empty() && (g_pieces.size() >= 4 || held > (uint64_t(1) << 30)))
-    {
-        held -= g_pieces.front().second->z.size() + g_pieces.front().second->r.size();
-        g_pieces.erase(g_pieces.begin());
-    }
-    if (held <= (uint64_t(1) << 30)) g_pieces.emplace_back(key, std::make_shared<const Pieces>(p));
+    if (g_pieces.size() >= 64) g_pieces.erase(g_pieces.begin());
+    g_pieces.emplace_back(key, PiecesKept{p.list, p.why});
     return p;
 }
 
@@ -680,13 +700,8 @@ Pieces pieces_of_uncached(const std::vector<uint8_t>& b)
         }
         start += runs[j].second;
     }
-    uint64_t pos = 0;
-    for (const auto& [k, len] : runs)
-    {
-        (k == 'z' ? out.z : out.r).insert((k == 'z' ? out.z : out.r).end(), b.begin() + std::ptrdiff_t(pos), b.begin() + std::ptrdiff_t(pos + len));
-        pos += len;
-    }
     out.list = std::move(runs);
+    pieces_halves(b, out);
     return out;
 }
 
@@ -2487,17 +2502,45 @@ static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::stri
 static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
 static FileWays file_ways_uncached(const std::vector<uint8_t>& bytes, double rope_seconds, uint32_t rope_newest, bool pieces);
 
+struct PatternRuns
+{
+    uint64_t segments = 0;
+    std::vector<uint8_t> code;
+};
+std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b); // (below)
+
 namespace {
 // The ways found for a file, kept for the run by its SHA-256 and the settings that made them: the
 // File Locator packs a file, then weighs it, and the weighing asks for the same ways of the same
 // bytes (on enwik9, 734 s of LZMA2's estimate and the rope's code again). The rope's search was
 // kept already (rope_search); everything else in them follows from it and the bytes, so what is
-// kept is what would be made again. Held to a quarter of the memory free, at most 2 GiB, the oldest
-// let go first; a result a force stop cut short is never kept.
+// kept is what would be made again. Kept without their codes (KeptWays, below), at most 4,096 files'
+// and 64 MiB, the oldest let go first; a result a force stop cut short is never kept.
+// Kept without their codes (the rope's, the pieces' and the runs'): they follow exactly from the
+// bytes and what is kept (the waves, the pieces' cuts), and are made again when asked for, in an
+// encoding's time, not a search's. Keeping them held up to 2 GiB, as much as the files again (the
+// memory pass of 7 November 2026). Their sizes are kept, to check what is made again against.
+struct KeptWays
+{
+    FileWays w; // with rope_code, pieces_z, pieces_code and runs_code empty
+    size_t rope_code = 0, pieces_z = 0, pieces_code = 0, runs_code = 0;
+};
+uint64_t held(const KeptWays& k) { return k.w.pieces_way.size() + k.w.pieces_list.size() * 16 + 512; }
+
+KeptWays kept_of(const FileWays& w)
+{
+    KeptWays k{w, w.rope_code.size(), w.pieces_z.size(), w.pieces_code.size(), w.runs_code.size()};
+    k.w.rope_code = {};
+    k.w.pieces_z = {};
+    k.w.pieces_code = {};
+    k.w.runs_code = {};
+    return k;
+}
+
 struct WaysCache
 {
     std::mutex mx;
-    std::deque<std::pair<std::string, std::shared_ptr<const FileWays>>> kept;
+    std::deque<std::pair<std::string, std::shared_ptr<const KeptWays>>> kept;
     uint64_t bytes = 0;
 };
 WaysCache& ways_cache()
@@ -2505,7 +2548,6 @@ WaysCache& ways_cache()
     static WaysCache c;
     return c;
 }
-uint64_t held(const FileWays& w) { return w.rope_code.size() + w.pieces_z.size() + w.pieces_code.size() + w.pieces_way.size() + 256; }
 
 // What mixing came to, by the file's SHA-256 (mixed_as_found).
 std::mutex g_mixed_mx;
@@ -2537,27 +2579,46 @@ FileWays file_ways(const std::vector<uint8_t>& bytes, double rope_seconds, uint3
     h.update(std::span<const uint8_t>(bytes.data(), bytes.size()));
     const std::string key = Sha256::hex(h.finish()) + t;
     WaysCache& c = ways_cache();
+    std::shared_ptr<const KeptWays> hit;
     {
         std::lock_guard<std::mutex> lock(c.mx);
-        for (const auto& [k, w] : c.kept)
-            if (k == key)
-            {
-                progress("its ways as found a moment ago (the same bytes, the same settings)");
-                return *w;
-            }
+        for (const auto& [k, kw] : c.kept)
+            if (k == key) hit = kw;
+    }
+    if (hit)
+    {
+        // Its codes made again from the bytes and the waves and cuts kept; each must come out its
+        // kept size, or the ways are found afresh.
+        FileWays w = hit->w;
+        if (hit->rope_code) w.rope_code = rope_code(bytes, w.rope);
+        if (hit->runs_code)
+            if (auto pr = pattern_runs(bytes)) w.runs_code = std::move(pr->code);
+        if (hit->pieces_z || hit->pieces_code)
+        {
+            Pieces p;
+            p.list = w.pieces_list;
+            pieces_halves(bytes, p);
+            w.pieces_z = std::move(p.z);
+            w.pieces_code = rope_code(p.r, w.pieces_rope);
+        }
+        if (w.rope_code.size() == hit->rope_code && w.runs_code.size() == hit->runs_code && w.pieces_z.size() == hit->pieces_z &&
+            w.pieces_code.size() == hit->pieces_code)
+        {
+            progress("its ways as found a moment ago (the same bytes, the same settings)");
+            return w;
+        }
     }
     FileWays w = file_ways_uncached(bytes, rope_seconds, rope_newest, pieces);
     if (w.forced || force_requested()) return w;
-    const uint64_t need = held(w), free_now = memory_free();
-    const uint64_t budget = std::min<uint64_t>(uint64_t(2) << 30, free_now ? free_now / 4 : uint64_t(256) << 20);
-    if (need > budget) return w;
+    auto kept = std::make_shared<const KeptWays>(kept_of(w));
+    const uint64_t need = held(*kept);
     std::lock_guard<std::mutex> lock(c.mx);
-    while (!c.kept.empty() && c.bytes + need > budget)
+    while (!c.kept.empty() && (c.kept.size() >= 4096 || c.bytes + need > (uint64_t(64) << 20)))
     {
         c.bytes -= held(*c.kept.front().second);
         c.kept.pop_front();
     }
-    c.kept.emplace_back(key, std::make_shared<const FileWays>(w));
+    c.kept.emplace_back(key, std::move(kept));
     c.bytes += need;
     return w;
 }
@@ -2594,11 +2655,6 @@ void forget_file_ways()
 // length of 0 to say it is a ramp, a byte for the values' width and order (0 to 3 for 1, 2, 4 or 8
 // bytes, plus 4 for big-endian), then the first value and the step, each of that width,
 // little-endian.
-struct PatternRuns
-{
-    uint64_t segments = 0;
-    std::vector<uint8_t> code;
-};
 
 std::optional<PatternRuns> pattern_runs(const std::vector<uint8_t>& b)
 {
@@ -2997,6 +3053,7 @@ static void ways_but_lzma2(FileWays& w, const std::vector<uint8_t>& bytes, doubl
             w.pieces_way = "pieces " + pieces_text(p.list) + " rope " + pr.best.text();
             w.pieces_bytes = estimate(p.z) + w.pieces_code.size() + varint_of(w.pieces_code.size()) + w.pieces_way.size();
             w.pieces_z = std::move(p.z);
+            w.pieces_list = std::move(p.list);
         }
         else w.pieces_said = p.why;
     }
@@ -3157,9 +3214,76 @@ std::pair<bool, const char*> optimised_every_way(std::span<const uint8_t> b)
     return {false, "between 4 KiB and 16 MiB: the same size measured either way"};
 }
 
+namespace {
+void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
+                     double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
+                     bool v20_on, bool v21_on, bool v22_on);
+
+// The instructions read back as installing will, every file decoded and compared (said, and timed:
+// a file carried by mixing takes here what it takes to install; enwik8's, about two minutes, was
+// unaccounted for). Apart from the making, so that none of the making's buffers (every file's bytes,
+// their ways, pieces, scripts and streams, several times what was read) is still held while the
+// instructions and the files they give back are (the memory pass of 7 November 2026).
+void read_back(Manifest& m, PackReport* report)
+{
+    std::vector<uint8_t> whole = m.file();
+    if (report && m.binary)
+    {
+        const size_t carried = m.streams.size() + m.items_carried.size() + (m.roped ? m.rope_carried.size() : 0);
+        report->head_bytes = whole.size() - carried;
+    }
+    // The files' own bytes are let go while the instructions are read back, and taken back from
+    // what reading gives once every file of it is checked against the listing's size and SHA-256,
+    // as installing checks them (an item's "-": the tree's SHA-256, checked as it is read): so the
+    // files are not held twice at the read-back's peak, and the manifest ends as it was.
+    const uint64_t total = m.contents.size();
+    std::vector<uint8_t>().swap(m.contents);
+    progress("reading them back, as installing will: every file decoded and compared");
+    Manifest back = [&] {
+        const timings::Scope t("pack.read-back");
+        return Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()), &whole);
+    }();
+    auto fault = [] { return std::runtime_error("packing the installer did not give its files back (a fault in the packer)"); };
+    if (back.contents.size() != total || back.entries.size() != m.entries.size()) throw fault();
+    std::vector<std::pair<size_t, uint64_t>> at; // each file's entry and where its bytes start
+    uint64_t from = 0;
+    for (size_t k = 0; k < m.entries.size(); ++k)
+    {
+        const ManifestEntry &a = m.entries[k], &b = back.entries[k];
+        if (a.dir != b.dir || a.path != b.path || a.size != b.size || a.sha256 != b.sha256) throw fault();
+        if (a.dir) continue;
+        at.emplace_back(k, from);
+        from += a.size;
+    }
+    if (from != total) throw fault();
+    std::vector<char> wrong(at.size(), 0);
+    for_each_index(at.size(), pack_threads(), [&](size_t i) {
+        const ManifestEntry& e = m.entries[at[i].first];
+        if (m.items && e.sha256 == "-") return;
+        Sha256 h; // (in place: no copy of the file)
+        h.update(std::span<const uint8_t>(back.contents.data() + at[i].second, size_t(e.size)));
+        wrong[i] = Sha256::hex(h.finish()) != e.sha256;
+    });
+    for (const char w : wrong)
+        if (w) throw fault();
+    m.contents = std::move(back.contents);
+}
+} // namespace
+
 void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
                 double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
                 bool v20_on, bool v21_on, bool v22_on)
+{
+    PackReport r;
+    add_packed_made(m, root_in, &r, items, item_hashes, coder, rope_seconds, rope_newest, trim, pieces, optimise_archives, binary, gzip, v20_on, v21_on, v22_on);
+    if (!r.kept_v3) read_back(m, &r);
+    if (report) *report = std::move(r);
+}
+
+namespace {
+void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, const ItemFinder* items, bool item_hashes, const PlaceCoder* coder,
+                     double rope_seconds, uint32_t rope_newest, bool trim, bool pieces, bool optimise_archives, bool binary, bool gzip,
+                     bool v20_on, bool v21_on, bool v22_on)
 {
     const timings::Scope t_all("pack.all");
     // The draft switch on (draft.hpp): where the newest is asked for, the draft's is made.
@@ -4092,7 +4216,8 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
                             std::lock_guard<std::mutex> lock(png_ahead_mx);
                             if (auto it = zip_ahead.find(png_ahead_key(0, b)); it != zip_ahead.end())
                             {
-                                std::optional<ZipAhead> z = std::move(it->second);
+                                std::optional<ZipAhead> z;
+                                z.swap(it->second);
                                 zip_ahead.erase(it);
                                 return z;
                             }
@@ -6195,23 +6320,10 @@ void add_packed(Manifest& m, const fs::path& root_in, PackReport* report, const 
             r.listing_carried = line.size() + m.listing_carried.size();
         }
     }
-    // Read back before it is used: unpacked, every file as it was.
-    const std::vector<uint8_t> whole = m.file();
-    if (m.binary)
-    {
-        const size_t carried = m.streams.size() + m.items_carried.size() + (m.roped ? m.rope_carried.size() : 0);
-        r.head_bytes = whole.size() - carried;
-    }
-    // (Said, and timed: it decodes everything, as installing does, so a file carried by mixing
-    // takes here what it takes to install; enwik8's, about two minutes, was unaccounted for.)
-    progress("reading them back, as installing will: every file decoded and compared");
-    const Manifest back = [&] {
-        const timings::Scope t("pack.read-back");
-        return Manifest::parse(std::string_view(reinterpret_cast<const char*>(whole.data()), whole.size()));
-    }();
-    if (back.contents != m.contents) throw std::runtime_error("packing the installer did not give its files back (a fault in the packer)");
+    // Read back before it is used (read_back, above, once this function's buffers are let go).
     if (report) *report = std::move(r);
 }
+} // namespace
 
 std::string pack_report_text(const PackReport& r, uint64_t original)
 {

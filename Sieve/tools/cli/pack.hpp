@@ -203,6 +203,7 @@ struct FileWays
     std::string pieces_way;          // "pieces z… r… rope <parameters>"
     std::string pieces_said;         // where it has none, why: "not tried", "under 16 KiB", "all 24415 blocks ... went to LZMA2" ...
     std::vector<uint8_t> pieces_z;   // the pieces LZMA2 packs, joined
+    std::vector<std::pair<char, uint64_t>> pieces_list; // where the pieces are cut (pieces_way's runs)
     std::vector<uint8_t> pieces_code; // the rope's code of the rest
     RopeParams pieces_rope;
     uint64_t pieces_bytes = 0;      // LZMA2's estimate of z, the code, its length and the way's longer text

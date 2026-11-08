@@ -315,11 +315,14 @@ std::vector<std::vector<size_t>> segments_of(const std::vector<uint64_t>& positi
 // (the count C2 writes before each group). At most 256 groups: past them a column joins the best.
 // Groups are numbered in the order they start, so each column's number is at most one past the
 // largest before it (what a reader checks). Gives each column's group; `cost` their total.
-std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const std::vector<uint64_t>& n, double per_group, double& cost,
+// (Counts of 64 or 32 bits, the same groups and cost either way: the estimate counts in 32 bits to
+// hold half as much.)
+template <class Count>
+std::vector<uint32_t> group_columns(const std::vector<Count>& counts, const std::vector<uint64_t>& n, double per_group, double& cost,
                                     bool numbers_counted = true)
 {
     const size_t W = n.size();
-    auto cost_of = [&](const uint64_t* c, uint64_t m) {
+    auto cost_of = [&](const auto* c, uint64_t m) {
         if (!m) return 0.0;
         const std::vector<uint64_t> one(c, c + 256);
         return entropy_bytes_v2(one, m) + per_group;
@@ -331,7 +334,7 @@ std::vector<uint32_t> group_columns(const std::vector<uint64_t>& counts, const s
     std::vector<uint64_t> merged(256);
     for (size_t c = 0; c < W; ++c)
     {
-        const uint64_t* col = counts.data() + c * 256;
+        const Count* col = counts.data() + c * 256;
         const double alone = cost_of(col, n[c]);
         double best = gc.size() < 256 ? alone : HUGE_VAL;
         size_t pick = gc.size(); // a group of its own
@@ -911,6 +914,45 @@ double rope_estimate(std::span<const uint8_t> file, const RopeParams& p)
     p.check();
     if (p.columns == 2 && p.above)
     {
+        // Each pair counted as it is met (numbered in that order, as above_pairs numbers them),
+        // without a pair's number kept for every byte, and in 32 bits where the file is under 4 GiB:
+        // the same counts as the coder's, in a fifth of the memory or less (one estimate of a file
+        // with many short lines held 2 KB a pair in 64 bits, hundreds of MB, on every thread
+        // estimating at once; the memory pass of 7 November 2026).
+        if (file.size() < (uint64_t(1) << 32))
+        {
+            std::vector<uint32_t> counts;
+            std::vector<uint64_t> n;
+            std::unordered_map<uint64_t, uint32_t> seen;
+            size_t line = 0, prev = 0, prev_len = 0;
+            bool have_prev = false;
+            for (size_t i = 0; i < file.size(); ++i)
+            {
+                const size_t c = i - line;
+                const uint32_t col = uint32_t(std::min<size_t>(c, p.width - 1));
+                const uint32_t up = have_prev && c < prev_len ? file[prev + c] : 256u;
+                auto it = seen.find(uint64_t(col) * 257 + up);
+                if (it == seen.end())
+                {
+                    it = seen.emplace(uint64_t(col) * 257 + up, uint32_t(seen.size())).first;
+                    counts.resize(counts.size() + 256, 0);
+                    n.push_back(0);
+                }
+                ++counts[size_t(it->second) * 256 + file[i]];
+                ++n[it->second];
+                if (file[i] == 10)
+                {
+                    prev = line;
+                    prev_len = i + 1 - line;
+                    have_prev = true;
+                    line = i + 1;
+                }
+            }
+            if (n.empty()) return 2;
+            double bytes = 0;
+            const std::vector<uint32_t> group = group_columns(counts, n, 3, bytes, false);
+            return bytes + above_cost(group) + 3;
+        }
         uint32_t pairs = 0;
         const std::vector<uint32_t> pair = above_pairs(file, p.width, pairs);
         if (!pairs) return 2;

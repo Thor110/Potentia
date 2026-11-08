@@ -2604,7 +2604,9 @@ int cmd_locate(const Args& a)
         inst = m;
         add_files(inst);
     }
-    const std::vector<uint8_t> ibytes = !installer ? std::vector<uint8_t>{} : m.with_contents ? mbytes : inst.file();
+    // (A reference where the manifest is the installer's, not a third copy of the instructions.)
+    const std::vector<uint8_t> ibytes_own = installer && !m.with_contents ? inst.file() : std::vector<uint8_t>{};
+    const std::vector<uint8_t>& ibytes = installer && m.with_contents ? mbytes : ibytes_own;
     const std::vector<uint8_t> mraw = raw_of_file(mbytes); // (the manifest's address's raw bytes, with no number made)
     // The manifest to --manifest, or to standard output (a v3 manifest's text part only: its
     // files' bytes are no use on a terminal); what it says about itself to standard error when

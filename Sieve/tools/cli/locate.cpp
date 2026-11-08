@@ -1872,7 +1872,7 @@ namespace {
 thread_local bool t_listing_only = false;
 } // namespace
 
-Manifest Manifest::parse(std::string_view whole)
+Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
 {
     // v16: the head in bytes, read back into v15's text (its root's and streams' lines, its lines,
     // the tree's, the rest of its body, "end"), followed by what follows it.
@@ -2049,9 +2049,16 @@ Manifest Manifest::parse(std::string_view whole)
             split = nl + 1;
         }
         if (!body.empty() && body.back() != '\n') throw std::runtime_error("manifest: its body's last line has no line feed");
-        text += body.substr(0, split) + "tree " + tree_hex + "\n" + body.substr(split) + "end\n";
+        // (Sized once, and the parts' copy let go as soon as it is in: a .sieve's streams are most of
+        // it, so a text grown by appending held two or three copies of them at once; installing and
+        // the packer's read-back both come here. The memory pass of 7 November 2026.)
+        const std::string mid = body.substr(0, split) + "tree " + tree_hex + "\n" + body.substr(split) + "end\n";
+        text.reserve(text.size() + mid.size() + tail.size() + (whole.size() - from));
+        text += mid;
         text.append(tail);
+        std::string().swap(tail);
         text.append(whole.substr(from));
+        if (release) std::vector<uint8_t>().swap(*release); // (`whole` is not read after this)
         Manifest m = parse(text);
         m.binary = true;
         m.body_text = v >= 20 && (flags & 0x80);
@@ -3097,16 +3104,16 @@ static Manifest without_members(Manifest m)
 
 Manifest manifest_of_installer_raw(std::vector<uint8_t> raw)
 {
-    const std::vector<uint8_t> bytes = file_of_raw(std::move(raw));
-    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    std::vector<uint8_t> bytes = file_of_raw(std::move(raw));
+    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), &bytes);
     if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
     return without_members(std::move(m));
 }
 
 Manifest manifest_of_installer(const BigUint& address)
 {
-    const auto bytes = file_at(address);
-    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+    auto bytes = file_at(address);
+    Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), &bytes);
     if (!m.with_addresses && !m.with_contents) throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
     return without_members(std::move(m));
 }
@@ -3121,8 +3128,8 @@ Manifest installable_manifest(const fs::path& file, bool hex)
         in.read(head, sizeof head);
         if (in.gcount() == 16 && std::memcmp(head, "sieve-manifest-v", 16) == 0)
         {
-            const auto bytes = read_file_bytes(file);
-            Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+            auto bytes = read_file_bytes(file);
+            Manifest m = Manifest::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), &bytes);
             if (!m.with_addresses && !m.with_contents)
                 throw std::runtime_error("that is a manifest without the files in it (v1): nothing to install from");
             return without_members(std::move(m));

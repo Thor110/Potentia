@@ -29,24 +29,44 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 
 ## At a glance
 
-| What | Original | 7z | `.sieve` | Ratio | Against 7z |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| [Sieve's own release](#the-application-itself) | 45,967,736 | 8,235,077 | 6,470,236 | 7.10:1 | −21.43% |
-| [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% |
-| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,431,896 | 4.67:1 | −17.82% |
-| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% |
-| [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 41,710,177 | 5.08:1 | −13.92% |
-| [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,897,726 | 3.04:1 | −12.99% |
-| [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% |
-| [ALTEngine](#a-game-engine-altengine), a game engine's release (v0.9.4) | 25,694,035 | 7,712,804 | 7,345,022 | 3.50:1 | −4.77% |
-| [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% |
-| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 523,367 | 4.57:1 | −23.71% |
-| [Symphony No. 6, first movement](#music-flac), FLAC | 51,997,326 | 51,944,928 | 51,708,015 | 1.01:1 | −0.46% |
-| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,424,154 | 1.04:1 | −3.30% |
-| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% |
-| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,686 | 1,733:1 | −66.53% |
+| What | Original | 7z | `.sieve` | Ratio | Against 7z | `.sieve` made in | `.sieve` installed in | 7z made in | 7z unpacked in | Timed on |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| [Sieve's own release](#the-application-itself) | 45,967,736 | 8,235,077 | 6,470,236 | 7.10:1 | −21.43% | 265.6 s | 8.8 s | — | — | E |
+| [Sieve's source tree](#sieves-source-tree-against-the-usual-compressors) | 35,396,955 | 6,844,677 | 5,196,966 | 6.81:1 | −24.07% | 224.7 s | 19.4 s | 52.8 s | 1.0 s | L ¹ |
+| [enwik8](#enwik8-the-first-100-mb-of-english-wikipedia), public test data | 100,000,000 | 26,080,445 | 21,431,896 | 4.67:1 | −17.82% | 671.8 s | 119.4 s | 75.7 s | 1.2 s | L ² |
+| [enwik9](#enwik9-the-first-1-gb-of-english-wikipedia), public test data | 1,000,000,000 | 230,120,517 | 185,105,231 | 5.40:1 | −19.56% | 5,627.9 s | 1,102.4 s | 97 s | about 1 s | E |
+| [Silesia](#silesia-the-standard-corpus-of-mixed-files), public test data, 12 files | 211,938,580 | 48,455,266 | 41,710,177 | 5.08:1 | −13.92% | 1,242.1 s | 206.5 s | 61.5 s | 2.7 s | L ² |
+| [MAPS.WoW](#a-game-archive-mapswow), a game's archive | 160,890,897 | 60,791,826 | 52,897,726 | 3.04:1 | −12.99% | 2,684.8 s | 167.8 s | about 18 s | about 1 s | E |
+| [WoWRevived](#a-games-release-wowrevived), a game's release, mostly films and music | 1,426,355,971 | 1,073,748,445 | 1,001,994,144 | 1.42:1 | −6.68% | 4,997.6 s | 210.3 s | 63 s | 4 s | E |
+| [ALTEngine](#a-game-engine-altengine), a game engine's release (v0.9.4) | 25,694,035 | 7,712,804 | 7,345,022 | 3.50:1 | −4.77% | 109.1 s | 14.8 s | — | — | E |
+| [A million digits of pi](#a-million-digits-of-pi) | 1,111,103 | 512,745 | 417,049 | 2.66:1 | −18.66% | 2.8 s | 0.05 s | — | — | E |
+| [Don Quixote](#a-book-don-quixote), plain text | 2,391,678 | 686,020 | 523,367 | 4.57:1 | −23.71% | 18.0 s | 3.2 s | 0.6 s | under 0.1 s | L ² |
+| [Symphony No. 6, first movement](#music-flac), FLAC | 51,997,326 | 51,944,928 | 51,708,015 | 1.01:1 | −0.46% | — | 65.9 s | 6.0 s | 0.2 s | L ³ |
+| [A photograph](#photographs-jpeg), JPEG | 4,587,473 | 4,575,201 | 4,424,154 | 1.04:1 | −3.30% | 62.0 s | 5.6 s, decoding alone | — | — | E |
+| [A Python script](#a-small-script) of 1,597 bytes | 1,597 | 822 | 591 | 2.70:1 | −28.10% | 0.3 s | 0.2 s | under 0.1 s | under 0.1 s | L ² |
+| [Every dimension at every degree](#files-that-are-items-of-sieves-own-lines) | 13,321,756 | 22,961 | 7,686 | 1,733:1 | −66.53% | 5.8 s | 0.4 s | 0.4 s | 0.1 s | L ³ |
 
 "Against 7z" is how much smaller (−) or larger (+) the `.sieve` is than the `.7z` of the same files.
+
+**The times.** Sieve is far slower than 7z, and the table says so: making searches every file's ways,
+and a file carried by mixing installs at about a second a megabyte (the rest install at LZMA2's
+speed or near it). The `.sieve` times are for the figure in the row, made and installed again and
+checked, every file against its SHA-256; installed is decoding with checking and writing. "Timed on":
+**E**, Edward's Windows machine, timed as each section says; **L**, the Linux machine here (4 logical
+processors, 16 GB), 7 November 2026 unless a note says otherwise. "—": not timed for that figure.
+
+1. Sieve's source tree: both timed on 27 October 2026 by `tools/bench/compare.py`, the 7z by py7zr
+   at LZMA2's strongest.
+2. Made again with the current build, for size with Try every way, by `tools/bench/bench_files.py`:
+   the same bytes as the row. 7z here is 7-Zip 23.01 at `-mx9`, solid, on the same files; its sizes
+   differ a little from the 7z column, which is the section's own 7z: enwik8 24,862,427 (the column's
+   is 7-Zip's default, Normal), Silesia 48,758,631 (each file its own `.7z`), Don Quixote 685,951,
+   the script 821.
+3. The FLAC: the row's `.sieve` was made on Edward's machine (its making not timed); it installs in
+   65.9 s here, the same packing (mixed whole). The current build packs it differently (the section
+   says why): 51,783,003 bytes, installed in 1.3 s. 7z here 51,944,904. Every dimension at every
+   degree: made on 3 November 2026 (5.8 s), installed again today (0.4 s); 7z here 26,103 (the
+   column's 22,961 is the section's).
 
 ## The application itself
 
@@ -422,6 +442,25 @@ as its differences from the smaller (a script of 2,087,830 bytes before LZMA2, f
   (318,253,720, 73.5%).
 - **Installing:** the size run decoded in 203.3 s and the decoding-speed run in 22.9 s, each then
   checked and written in about 7 s.
+
+**Made again with v33, Balanced (7 November 2026, Edward's machine, the File Locator's defaults:
+Optimise Search on, Balanced, compressed formats as they are, Keep a log).** 7z and zip timed on the
+same machine:
+
+| | Bytes | Ratio | Of the folder | Against 7z | Made in | Installed in |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| zip | 1,195,044,144 | 1.19:1 | 83.78% | +11.30% | 18 s | 7 s |
+| 7z | 1,073,748,401 | 1.33:1 | 75.28% | | 63 s | 4 s |
+| **`.sieve`, Balanced** | **1,011,234,549** | **1.41:1** | **70.90%** | **−5.82%** | 4,300.1 s | 191.6 s |
+
+- **What carried the large files:** MAPS.WoW mixed (52,897,658 bytes) and MAPS-Larger.WoW as its
+  differences from it; one WAV mixed (Music-Martian/02, 43,716,129) and the other seven by the rope;
+  the two INTROs as pieces. Balanced kept the two mixed files because each saved more than its
+  bar, so they decide the install time: decoded in 188.5 s, checked and written in 2.9 s.
+- **Against v32 for size:** 9,240,405 bytes larger (+0.92%), installed in 191.6 s against 210.3 s.
+- **Where the time went in making:** 780 s of the 4,300 finding files that are alike (their blocks'
+  fingerprints, before any file is searched); the files' own searches and the groups mixed
+  together most of the rest.
 
 ## A game engine: ALTEngine
 

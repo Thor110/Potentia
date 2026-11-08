@@ -364,7 +364,10 @@ struct Manifest
     std::vector<uint8_t> file() const;   // the whole manifest as a file: the text, and for v3 the contents, for v4 the streams
     // v1 to v4; throws if it is none of them. A v4 manifest's streams are unpacked into contents and
     // every file's way followed, so what is installed from it is checked as a v3's is.
-    static Manifest parse(std::string_view whole);
+    // `release`: where the caller's bytes `whole` views are held, to be let go once a compact
+    // instructions' text is made from them (they are not read after), so the two are not held at
+    // once; the caller must not use them after (the memory pass of 7 November 2026).
+    static Manifest parse(std::string_view whole, std::vector<uint8_t>* release = nullptr);
 };
 
 // v5's check on the whole tree: the SHA-256 of, for every file in the listing's order, its path, a
