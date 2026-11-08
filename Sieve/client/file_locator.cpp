@@ -1310,6 +1310,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
         case SDLK_W: pressed = sieve::cli::draft_on() ? "sound_flac" : ""; break; // Sound as FLAC: Temporary, Permanent, Off (the v34 draft on)
+        case SDLK_R: pressed = "defaults"; break; // Reset to defaults
         case SDLK_P: pressed = "priority"; break; // Size, Balanced, Decoding speed, round the three
         case SDLK_C: pressed = kept_compare().on ? "more" : ""; break; // More formats in the comparison, on or off (the comparison on)
         case SDLK_Z: pressed = "compare"; break;  // Compare with zip and 7z, on or off
@@ -1399,6 +1400,45 @@ void FileLocator::event(const SDL_Event& e)
         const sieve::Priority next = p == sieve::Priority::size ? sieve::Priority::balanced : p == sieve::Priority::balanced ? sieve::Priority::speed : sieve::Priority::size;
         sieve::set_priority(next);
         if (kept_priority()) kept_priority()(next);
+    }
+    else if (pressed == "defaults")
+    {
+        // Reset to defaults (Edward, 9 November 2026: "the defaults themselves should aim for the best
+        // it can do"): every box and button below the results as a new settings file has them
+        // (client/app_settings.hpp), each saved as its own press saves it. Archive and compressed
+        // formats unticked (Optimise Search takes temporary where it pays; permanent changes what is
+        // installed, so it is never a default); Optimise Search ticked; Try every way unticked; Sound as
+        // FLAC Temporary; Priority Balanced; Keep a log unticked; Compare with zip and 7z ticked; More
+        // formats unticked; the search for shorter addresses with no limit, a file at a time.
+        temporary_ = permanent_ = false;
+        kept_archives().temporary = kept_archives().permanent = false;
+        if (kept_archives().changed) kept_archives().changed(false, false);
+        sieve::cli::set_optimise_search(true);
+        if (kept_optimise()) kept_optimise()(true);
+        sieve::set_rope_search_every_wave(false);
+        if (kept_every()) kept_every()(false);
+        sieve::cli::set_sound_mode(sieve::cli::SoundMode::temporary);
+        if (kept_sound_flac()) kept_sound_flac()(sieve::cli::SoundMode::temporary);
+        sieve::set_priority(sieve::Priority::balanced);
+        if (kept_priority()) kept_priority()(sieve::Priority::balanced);
+        for (auto* k : {&kept_compare(), &kept_more()})
+        {
+            k->on = k == &kept_compare();
+            if (k->changed) k->changed(k->on);
+        }
+        {
+            KeptLog& k = kept_log();
+            k.on = false;
+            if (k.changed) k.changed(false);
+        }
+        set_search(0, false);
+        {
+            KeptSearch& k = kept_search();
+            k.seconds = 0;
+            k.total = false;
+            if (k.changed) k.changed(0, false);
+        }
+        say(tr("loc.defaults.done"));
     }
     else if (pressed == "temporary" || pressed == "permanent")
     {
@@ -1682,6 +1722,11 @@ void FileLocator::draw(float W, float H)
             bx += text_width(text, 2) + 24 + 12;
         }
         else box("more", kept_more().on, tr("loc.more"));
+        {
+            const std::string text = tr("loc.defaults");
+            if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
+            button("defaults", text, box_y);
+        }
         return box_y;
     };
     if (!busy && r.kind == Result::None && r.error.empty())
@@ -1744,12 +1789,12 @@ void FileLocator::draw(float W, float H)
             if (r.tailored) return r.tailored_filters ? 84.0f : 44.0f;
             int rows = 1;
             float x = 20;
-            for (const char* id : {"loc.temporary", "loc.permanent", "loc.flac", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.compare", "loc.more"})
+            for (const char* id : {"loc.temporary", "loc.permanent", "loc.flac", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.compare", "loc.more", "loc.defaults"})
             {
                 if (std::string(id) == "loc.flac" && !sieve::cli::draft_on()) continue;
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
                 const bool chosen = sieve::cli::optimise_search() && (std::string(id) == "loc.every" || std::string(id) == "loc.temporary");
-                const bool button_only = std::string(id) == "loc.priority" || std::string(id) == "loc.flac";
+                const bool button_only = std::string(id) == "loc.priority" || std::string(id) == "loc.flac" || std::string(id) == "loc.defaults";
                 const std::string label = std::string(id) == "loc.priority" ? priority_label() : std::string(id) == "loc.flac" ? sound_label()
                                                                                                 : tr(id) + (chosen ? " " + tr("loc.every.chosen") : std::string());
                 const float w = text_width(button_only ? label : "[ ] " + label, 2) + 24;

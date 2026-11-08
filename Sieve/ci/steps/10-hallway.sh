@@ -1015,6 +1015,9 @@ $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --sc
 $H --main-menu --v34-draft --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Permanent$"
 $H --main-menu --v34-draft --read-aloud --locate tests/manifest_fixture/a.txt --press "W,W,W" --screenshot ra-flac3.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
 $H --main-menu --v34-draft --sound-off --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac0.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
+# Reset to defaults (R, 9 November 2026): Priority pressed to Size (Balanced, Decoding speed, Size),
+# reset, then pressed once more: Decoding speed, as from Balanced, its default.
+$H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press "P,P,R,P" --screenshot ra-defaults.png | tr -d '\r' | q "^read aloud: Priority: Decoding speed$"
 # Manual Navigation (IDEAS §19.117): Edward's four bytes turned by hand. A byte typed is one step
 # (its two digits); the log (--manual-logs: Keep a log's folder) holds every step, undos and redos
 # included, each starting where the one before it landed, and the precision changed between them;
