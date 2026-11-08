@@ -394,7 +394,13 @@ FetchContent_Declare(flac
 FetchContent_GetProperties(flac)
 if(NOT flac_POPULATED)
     FetchContent_Populate(flac)
+    # (libarchive's ENABLE_WERROR, ON in a Debug build, would reach libFLAC's CMake too, which then adds
+    # GCC's -Werror, an option MSVC refuses: "D8021 invalid numeric argument '/Werror'", Edward's
+    # x64-Debug, 8 November 2026. Off for libFLAC alone; libarchive is configured already.)
+    set(SIEVE_SAVED_ENABLE_WERROR ${ENABLE_WERROR})
+    set(ENABLE_WERROR OFF)
     add_subdirectory(${flac_SOURCE_DIR} ${flac_BINARY_DIR} EXCLUDE_FROM_ALL)
+    set(ENABLE_WERROR ${SIEVE_SAVED_ENABLE_WERROR})
 endif()
 set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
 foreach(t sieve_lz4 sieve_brotli)
