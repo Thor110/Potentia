@@ -83,6 +83,8 @@ private:
     void say(std::string text, bool bad = false); // the status line
     void open_curriculum(const std::string& folder);
     void change_setting(int row, int dir, bool big); // a new run's setting, a step either way
+    void reset_settings();       // R: a new run's settings as they start
+    std::string trial_key() const; // what a step's measurement depends on
     void start_trial();                              // a step measured, for the time estimate
     void scan();
     void select(int row);
@@ -121,6 +123,7 @@ private:
     // A run stopped before its end keeps its state beside it (RUN.resume): the step it stopped at,
     // which Enter carries on from (S starts it over).
     std::optional<uint64_t> saved_step_;
+    unsigned threads_ = 0;   // training's threads (0: as many as the batch can use); the result is the same on any number
     int list_first_ = 0;     // the runs' list: its first row shown (scrolled to keep the chosen row in view)
     bool over_armed_ = false; // START OVER pressed once: a second press throws the saved training away
     std::filesystem::path state_path() const;

@@ -107,7 +107,27 @@ std::string kilobytes(uint64_t bytes)
 
 const char* const kRates[] = {"0.00002", "0.00005", "0.0001", "0.0002", "0.0005", "0.001", "0.002", "0.005", "0.01", "0.02", "0.05", "0.1"};
 const uint32_t kWindows[] = {9, 17, 33, 65, 129, 257, 513};
-constexpr int kSettingRows = 10; // layers, width, heads, bits, learning rate, loss scale, batch, window, epochs, reading
+// A new run's settings, a row each, in this order (their labels: kSettingLabels).
+enum SettingRow
+{
+    kPreset, kLayers, kWidth, kHeads, kBits, kVersion, kRate, kScale, kMomentum, kBatch, kWindow, kEpochs, kReading, kSeed,
+    kCheckpoints, kThreads, kSettingRows
+};
+const char* const kSettingLabels[kSettingRows] = {"harness.set.preset", "harness.set.layers", "harness.set.width",  "harness.set.heads",
+                                                  "harness.set.bits",   "harness.set.version", "harness.set.rate",  "harness.set.scale",
+                                                  "harness.set.momentum", "harness.set.batch", "harness.set.window", "harness.set.epochs",
+                                                  "harness.reading",    "harness.set.seed",    "harness.set.checkpoints", "harness.set.threads"};
+const char* const kMomenta[] = {"0", "0.5", "0.8", "0.9", "0.95", "0.99"};
+const uint32_t kCheckpointSteps[] = {10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000};
+// Shapes to start from (each a width the heads divide into even halves); the line's own shape is
+// the first, and a shape that is none of these shows as "custom".
+struct Preset
+{
+    const char* name;
+    uint32_t layers, width, heads;
+};
+const Preset kPresets[] = {{"harness.preset.tiny", 1, 16, 2}, {"harness.preset.small", 2, 32, 2}, {"harness.preset.medium", 4, 64, 4},
+                           {"harness.preset.large", 8, 128, 8}};
 // A new picture model's settings: layers, width, heads, bits, levels, steps, pictures a step,
 // learning rate, loss scale, training pictures.
 constexpr int kPictureRows = 10;
@@ -413,7 +433,7 @@ void Harness::start_training()
         // (`recent` counts from the last checkpoint, so what it had at the last point is taken off).
         double bits_then = 0;
         uint64_t predictions_then = 0;
-        return sieve::cli::train_run(run, 0, [&, this](uint64_t k, uint64_t n, const sieve::training::Score& recent) {
+        return sieve::cli::train_run(run, threads_, [&, this](uint64_t k, uint64_t n, const sieve::training::Score& recent) {
             std::lock_guard<std::mutex> lock(mu_);
             step_ = k;
             steps_ = n;
@@ -650,7 +670,7 @@ void Harness::open_curriculum(const std::string& folder)
     {
         curriculum_ = sieve::cli::corpus_files(corpus);
         cur_row_ = 0;
-        focus_settings_ = false;
+        focus_settings_ = true; // (the settings first: the files' order is a Tab away)
         set_row_ = 0;
         recipe_ = {};
         recipe_.shape = line_shape_;
@@ -675,8 +695,22 @@ void Harness::change_setting(int row, int dir, bool big)
     auto even_heads = [&](uint32_t h) { return h >= 1 && sh.width % h == 0 && (sh.width / h) % 2 == 0; };
     switch (row)
     {
-    case 0: sh.layers = uint32_t(std::clamp(int(sh.layers) + dir * (big ? 4 : 1), 1, 64)); break;
-    case 1:
+    case kPreset:
+    {
+        // The line's shape, then the presets: the next one either way from the shape as it stands
+        // (the bits a weight kept, as set).
+        const int n = int(std::size(kPresets)) + 1;
+        int at = 0;
+        for (int i = 0; i < int(std::size(kPresets)); ++i)
+            if (sh.layers == kPresets[i].layers && sh.width == kPresets[i].width && sh.heads == kPresets[i].heads) at = i + 1;
+        at = (at + dir + n) % n;
+        const uint32_t bits = sh.bits;
+        if (at == 0) sh = line_shape_;
+        else sh = {kPresets[at - 1].layers, kPresets[at - 1].width, kPresets[at - 1].heads, bits};
+        break;
+    }
+    case kLayers: sh.layers = uint32_t(std::clamp(int(sh.layers) + dir * (big ? 4 : 1), 1, 64)); break;
+    case kWidth:
     {
         // The width in steps of two heads' worth, so the heads still divide it into even halves
         // (Shift: doubled or halved).
@@ -686,7 +720,7 @@ void Harness::change_setting(int row, int dir, bool big)
         sh.width = std::min(w, 4096 / step * step);
         break;
     }
-    case 2:
+    case kHeads:
     {
         // The heads: the next number either way that divides the width into heads of an even size.
         for (int h = int(sh.heads) + dir; h >= 1 && h <= int(sh.width); h += dir)
@@ -697,8 +731,14 @@ void Harness::change_setting(int row, int dir, bool big)
             }
         break;
     }
-    case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
-    case 4:
+    case kBits: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
+    case kVersion:
+        // training-v1 to v3 (v1 has no loss scale: it is set to none, and the suggested one again
+        // with v2 or v3 while it follows the suggestion)
+        rc.version = std::clamp(rc.version + dir, 1, 3);
+        if (rc.version == 1) rc.loss_scale_bits = 0;
+        break;
+    case kRate:
     {
         // The list's rates and the one suggested for this shape (often between two of them), in
         // order: so the suggested rate can be gone back to once moved from.
@@ -715,12 +755,21 @@ void Harness::change_setting(int row, int dir, bool big)
         lr_suggested_ = rc.learning_rate == sieve::cli::suggested_learning_rate(rc);
         return;
     }
-    case 5:
+    case kScale:
+        if (rc.version == 1) return; // (training-v1 has none)
         rc.loss_scale_bits = uint32_t(std::clamp(int(rc.loss_scale_bits) + dir, 0, 7));
         scale_suggested_ = rc.loss_scale_bits == sieve::cli::suggested_loss_scale(rc);
         break;
-    case 6: rc.batch = uint32_t(std::clamp(int(rc.batch) + dir * (big ? 4 : 1), 1, 32)); break;
-    case 7:
+    case kMomentum:
+    {
+        int i = 0;
+        for (int k = 0; k < int(std::size(kMomenta)); ++k)
+            if (std::stod(kMomenta[k]) <= std::stod(rc.momentum) * (1 + 1e-9)) i = k;
+        rc.momentum = kMomenta[std::clamp(i + dir, 0, int(std::size(kMomenta)) - 1)];
+        return;
+    }
+    case kBatch: rc.batch = uint32_t(std::clamp(int(rc.batch) + dir * (big ? 4 : 1), 1, 32)); break;
+    case kWindow:
     {
         int i = 0;
         for (int k = 0; k < int(std::size(kWindows)); ++k)
@@ -728,8 +777,28 @@ void Harness::change_setting(int row, int dir, bool big)
         rc.window = kWindows[std::clamp(i + dir, 0, int(std::size(kWindows)) - 1)];
         break;
     }
-    case 8: rc.epochs = uint32_t(std::clamp(int(rc.epochs) + dir * (big ? 10 : 1), 1, 10000)); break;
-    case 9: act(Action::Reading); return;
+    case kEpochs: rc.epochs = uint32_t(std::clamp(int(rc.epochs) + dir * (big ? 10 : 1), 1, 10000)); break;
+    case kReading: act(Action::Reading); return;
+    case kSeed:
+        // (the order's shuffle: any number from 0; Shift: by 100)
+        rc.seed = dir < 0 && rc.seed < uint64_t(big ? 100 : 1) ? 0 : rc.seed + uint64_t(int64_t(dir) * (big ? 100 : 1));
+        return;
+    case kCheckpoints:
+    {
+        int i = 0;
+        for (int k = 0; k < int(std::size(kCheckpointSteps)); ++k)
+            if (kCheckpointSteps[k] <= rc.checkpoint_every) i = k;
+        rc.checkpoint_every = kCheckpointSteps[std::clamp(i + dir, 0, int(std::size(kCheckpointSteps)) - 1)];
+        return;
+    }
+    case kThreads:
+    {
+        // 0: as many as the batch can use (each step's windows share them); training gives the
+        // same result on any number (training-v1 onwards: its sums are integers, in a fixed order).
+        const int most = int(std::max(1u, std::thread::hardware_concurrency()));
+        threads_ = unsigned(std::clamp(int(threads_) + dir, 0, most));
+        break;
+    }
     default: return;
     }
     // A change of shape, batch or window moves the suggested loss scale and rate, and each with it
@@ -738,15 +807,37 @@ void Harness::change_setting(int row, int dir, bool big)
     if (lr_suggested_) rc.learning_rate = sieve::cli::suggested_learning_rate(rc);
 }
 
+// R: a new run's settings as they start (the AI line's shape, its suggested loss scale and rate,
+// and the recipe's defaults for the rest), the files' order kept.
+void Harness::reset_settings()
+{
+    std::vector<std::string> files = recipe_.files;
+    recipe_ = {};
+    recipe_.files = std::move(files);
+    recipe_.shape = line_shape_;
+    recipe_.loss_scale_bits = sieve::cli::suggested_loss_scale(recipe_);
+    recipe_.learning_rate = sieve::cli::suggested_learning_rate(recipe_);
+    lr_suggested_ = scale_suggested_ = true;
+    threads_ = 0;
+    say(tr("harness.set.reset"));
+}
+
+// What a step's measurement depends on: the shape, the batch, the window and the threads.
+std::string Harness::trial_key() const
+{
+    const sieve::training::Recipe& rc = recipe_;
+    return std::to_string(rc.shape.layers) + "/" + std::to_string(rc.shape.width) + "/" + std::to_string(rc.shape.heads) + "/" +
+           std::to_string(rc.shape.bits) + "/" + std::to_string(rc.batch) + "/" + std::to_string(rc.window) + "/" + std::to_string(threads_);
+}
+
 void Harness::start_trial()
 {
     if (!curriculum_ || trial_) return;
     const sieve::training::Recipe& rc = recipe_;
-    const std::string key = std::to_string(rc.shape.layers) + "/" + std::to_string(rc.shape.width) + "/" + std::to_string(rc.shape.heads) + "/" +
-                            std::to_string(rc.shape.bits) + "/" + std::to_string(rc.batch) + "/" + std::to_string(rc.window);
+    const std::string key = trial_key();
     if (key == measured_for_) return;
     // Nothing is measured that would not fit: a shape past half this computer's memory says so instead.
-    const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_);
+    const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_, threads_);
     if (est.bytes > uint64_t(SDL_GetSystemRAM()) * (uint64_t(1) << 20) / 2)
     {
         measured_for_ = key;
@@ -757,11 +848,11 @@ void Harness::start_trial()
     const sieve::training::Recipe copy = rc;
     const std::vector<sieve::cli::TrainingFile> files = *curriculum_;
     trial_ = std::make_shared<Trial>();
-    std::thread([t = trial_, copy, files] {
+    std::thread([t = trial_, copy, files, threads = threads_] {
         double secs = -1;
         try
         {
-            secs = sieve::cli::measure_training_step(copy, files);
+            secs = sieve::cli::measure_training_step(copy, files, threads);
         }
         catch (const std::exception&)
         {
@@ -841,6 +932,7 @@ void Harness::key(SDL_Keycode k, SDL_Keymod mod)
             if (focus_settings_) change_setting(set_row_, k == SDLK_LEFT ? -1 : 1, shift);
             break;
         case SDLK_M: act(Action::Reading); break;
+        case SDLK_R: reset_settings(); break;
         case SDLK_RETURN:
         case SDLK_KP_ENTER: act(Action::Start); break;
         default: break;
@@ -1332,22 +1424,36 @@ void Harness::render()
         const sieve::training::Recipe& rc = recipe_;
         const sieve::AiShape& sh = rc.shape;
         const std::string suggested = sieve::cli::suggested_learning_rate(rc);
+        // The preset the shape is, if any: the line's own, one of the list, or custom.
+        std::string preset = tr("harness.preset.custom");
+        if (sh.layers == line_shape_.layers && sh.width == line_shape_.width && sh.heads == line_shape_.heads && sh.bits == line_shape_.bits)
+            preset = tr("harness.preset.line");
+        else
+            for (const Preset& p : kPresets)
+                if (sh.layers == p.layers && sh.width == p.width && sh.heads == p.heads) preset = tr(p.name);
         const std::string values[kSettingRows] = {
+            preset,
             std::to_string(sh.layers),
             trf("harness.set.width.value", {std::to_string(sh.width), std::to_string(sh.ffn())}),
             trf("harness.set.heads.value", {std::to_string(sh.heads), std::to_string(sh.width / sh.heads)}),
             trf("harness.set.bits.value", {std::to_string(sh.bits), std::to_string(1u << sh.bits)}),
+            trf(rc.version == 3 ? "harness.set.version.v3" : rc.version == 2 ? "harness.set.version.v2" : "harness.set.version.v1",
+                {sieve::training::training_version_name(rc.version)}),
             rc.learning_rate + "  " + (rc.learning_rate == suggested ? tr("harness.set.suggested") : trf("harness.set.suggest", {suggested})),
-            trf("harness.set.scale.value", {std::to_string(rc.loss_scale_bits), std::to_string(1u << rc.loss_scale_bits)}) + "  " +
-                (rc.loss_scale_bits == sieve::cli::suggested_loss_scale(rc) ? tr("harness.set.suggested")
-                                                                           : trf("harness.set.suggest", {std::to_string(sieve::cli::suggested_loss_scale(rc))})),
+            rc.version == 1 ? tr("harness.set.scale.none")
+                            : trf("harness.set.scale.value", {std::to_string(rc.loss_scale_bits), std::to_string(1u << rc.loss_scale_bits)}) + "  " +
+                                  (rc.loss_scale_bits == sieve::cli::suggested_loss_scale(rc)
+                                       ? tr("harness.set.suggested")
+                                       : trf("harness.set.suggest", {std::to_string(sieve::cli::suggested_loss_scale(rc))})),
+            rc.momentum,
             std::to_string(rc.batch),
             trf("harness.set.window.value", {std::to_string(rc.window), std::to_string(rc.window - 1)}),
             std::to_string(rc.epochs),
-            tr(std::string("harness.reading.") + sieve::training::to_string(rc.reading))};
-        static const char* const kLabels[kSettingRows] = {"harness.set.layers", "harness.set.width", "harness.set.heads", "harness.set.bits",
-                                                         "harness.set.rate", "harness.set.scale", "harness.set.batch", "harness.set.window", "harness.set.epochs",
-                                                         "harness.reading"};
+            tr(std::string("harness.reading.") + sieve::training::to_string(rc.reading)),
+            std::to_string(rc.seed),
+            trf("harness.set.checkpoints.value", {grouped(rc.checkpoint_every)}),
+            threads_ == 0 ? tr("harness.set.threads.all") : std::to_string(threads_)};
+        const char* const* kLabels = kSettingLabels;
         set_rects_.clear();
         for (int i = 0; i < kSettingRows; ++i)
         {
@@ -1366,10 +1472,9 @@ void Harness::render()
             ry += 16;
         }
         // What it will take: worked out from the settings, and a step measured on this computer.
-        const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_);
+        const sieve::cli::TrainingEstimate est = sieve::cli::estimate_training(rc, *curriculum_, threads_);
         const uint64_t ram = uint64_t(SDL_GetSystemRAM()) * (uint64_t(1) << 20);
-        const std::string key = std::to_string(sh.layers) + "/" + std::to_string(sh.width) + "/" + std::to_string(sh.heads) + "/" +
-                                std::to_string(sh.bits) + "/" + std::to_string(rc.batch) + "/" + std::to_string(rc.window);
+        const std::string key = trial_key();
         ry += 6;
         line(tr("harness.est.size"), trf("harness.est.size.value", {grouped(est.weights), grouped(est.steps), std::to_string(est.threads)}));
         const bool too_big = est.bytes > ram / 2;
@@ -1548,8 +1653,9 @@ void Harness::render()
         if (cut == std::string::npos) txt(r_, 16, H - 26, keys, kGrey);
         else
         {
-            txt(r_, 16, H - 42, keys.substr(0, cut), kGrey);
-            txt(r_, 16, H - 26, keys.substr(keys.find_first_not_of(' ', cut)), kGrey);
+            // (below the status line, at H - 46: the two lines closer together, and lower)
+            txt(r_, 16, H - 31, keys.substr(0, cut), kGrey);
+            txt(r_, 16, H - 18, keys.substr(keys.find_first_not_of(' ', cut)), kGrey);
         }
     }
 }

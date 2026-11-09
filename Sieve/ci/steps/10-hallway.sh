@@ -323,16 +323,26 @@ $H --harness --training-dir data/training --script "Return" --screenshot harness
 mkdir -p hruns corp
 cp tests/training_corpus.txt corp/a.txt
 head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
-$H --harness --training-dir hruns --script "N,=corp,Return,Down,Shift+Up,M,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
+$H --harness --training-dir hruns --script "N,=corp,Return,Tab,Down,Shift+Up,M,Return" --screenshot harness-new.png | tr -d '\r' | q "^harness: TRAINED"
 [ -f hruns/corp/result.txt ]
 q "^reading = in-order" hruns/corp/training.ini
 [ "$(grep '^file = ' hruns/corp/training.ini | head -1)" = "file = corpus/b.txt" ]
-# Its settings: the width one step up (two heads' worth, 16 to 20), the learning rate
-# following it, as suggested (0.008 / 20, rounded down: 0.0002).
+# Its settings (which have the keys first, the preset their top row): the width one step up
+# (two heads' worth, 16 to 20), the learning rate following it, as suggested (0.008 / 20, rounded
+# down: 0.0002).
 mkdir -p hruns2
-$H --harness --training-dir hruns2 --script "N,=corp,Return,Tab,Down,Right,Return" --screenshot harness-set.png | tr -d '\r' | q "^harness: TRAINED"
+$H --harness --training-dir hruns2 --script "N,=corp,Return,Down,Down,Right,Return" --screenshot harness-set.png | tr -d '\r' | q "^harness: TRAINED"
 q "^width = 20" hruns2/corp/training.ini
 q "^learning-rate = 0.0002" hruns2/corp/training.ini
+# The settings added on 9 November 2026: training-v1 (two steps left from v3), momentum 0.95, shuffle
+# seed 2, a checkpoint every 50 steps, on one thread; recorded as set, and trained again exactly.
+mkdir -p hruns3
+$H --harness --training-dir hruns3 --script "N,=corp,Return,Down,Down,Down,Down,Down,Left,Left,Down,Down,Down,Right,Down,Down,Down,Down,Down,Right,Down,Left,Down,Right,Return" --screenshot harness-set3.png | tr -d '\r' | q "^harness: TRAINED"
+q "^version = training-v1" hruns3/corp/training.ini
+q "^momentum = 0.95" hruns3/corp/training.ini
+q "^seed = 2" hruns3/corp/training.ini
+q "^checkpoint-every = 50" hruns3/corp/training.ini
+$H --harness --training-dir hruns3 --script "Return" --screenshot harness-set3-again.png | tr -d '\r' | q "^harness: REPRODUCED EXACTLY"
 $H --harness --training-dir hruns --script "g" --screenshot harness-go.png | tr -d '\r' | q "the model the run trained, in hand"
 # The AI line's filters in the hallway: compact (weight-rows-v1), its survivors closed up; and
 # with canonical-model-v1 hiding the rest, GO TO IT stands on the model's canonical form.
