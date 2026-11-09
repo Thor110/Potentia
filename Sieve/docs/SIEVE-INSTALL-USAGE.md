@@ -304,6 +304,18 @@ build's hallway as its setup menu counts them (`hallway --metrics`), so one rele
 with the next. Last, `SHA256SUMS.txt` and a `RELEASE-NOTES.md` draft, which carries the list too.
 GitHub adds the tagged commit's source zip by itself.
 
+**Extensions, beside the release** (9 November 2026; Edward: "the release should carry as little as
+possible realistically ... package stuff like this separately as another sieve file to be extracted
+to the Sieve directory"). What the release leaves out is made by `tools/extend_release.py`
+(`tools\extend_release.bat` on Windows), separately from `make_release`, each as Sieve instructions
+of its own into `Sieve\release\`: so far `voice.sieve`, Sieve's own voice (`voice\lj-speech`: its
+hour of public-domain recordings as FLAC, its pronouncing dictionary and its alignment; 553 files,
+89,674,275 bytes as instructions on 9 November 2026). Install one into a Sieve folder with
+sieve-install, choosing the Sieve folder, or `tools\sieve install voice.sieve --to <the Sieve
+folder>`; it adds its own folder and nothing else. Each is checked as it is made: installed into a
+scratch folder and compared byte for byte, and the voice made to say a sentence from there. Without
+it, Text to Voice speaks in Windows' own voice. Anyone with the whole repository has it already.
+
 **The source, held in the map.** The script also makes `sieve-source.7z`: the Sieve folder's source
 as the last commit has it (`git archive` of the Sieve folder alone, run from the repository's top
 folder), 7-zipped. So it holds exactly what is committed, the release script included, and none
