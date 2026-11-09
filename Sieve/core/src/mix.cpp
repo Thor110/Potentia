@@ -1602,8 +1602,14 @@ namespace {
 std::atomic<const std::atomic<bool>*> g_decode_cancel{nullptr};
 }
 
-DecodeCancelScope::DecodeCancelScope(const std::atomic<bool>* flag) { g_decode_cancel = flag; }
-DecodeCancelScope::~DecodeCancelScope() { g_decode_cancel = nullptr; }
+DecodeCancelScope::DecodeCancelScope(const std::atomic<bool>* flag) : flag_(flag) { g_decode_cancel = flag; }
+// (Cleared only while it is still this scope's flag: one ending after another began leaves the
+// other's in place. Not thread_local: an install's decodes run on threads of their own.)
+DecodeCancelScope::~DecodeCancelScope()
+{
+    const std::atomic<bool>* mine = flag_;
+    g_decode_cancel.compare_exchange_strong(mine, nullptr);
+}
 bool decoding_cancelled()
 {
     const std::atomic<bool>* f = g_decode_cancel.load(std::memory_order_relaxed);

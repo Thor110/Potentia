@@ -1017,9 +1017,10 @@ const std::vector<Page>& pages()
          "stream, and the files carried as they are where LZMA2 makes them no smaller); v13 where a\n"
          "file is cut into pieces, LZMA2 taking what repeats and the rope what is unevenly spread (a\n"
          "phone's photo: its metadata and its picture); v14, v17, v19 and v20 where archives are\n"
-         "optimised (--optimise-archives); and v20 at the newest, the listing's head and body in\n"
-         "bytes rather than text. (--v30 down to --v5 make the older ones. Maps, sites' pages and\n"
-         "tables, training runs and the hallway's saves are made as the newest instructions are too.)\n"
+         "optimised (--optimise-archives); v20 and later, the listing's head and body in bytes\n"
+         "rather than text; and v33 at the newest. (--v32 down to --v5 make the older ones. Maps,\n"
+         "sites' pages and tables, training runs and the hallway's saves are made as the newest\n"
+         "instructions are too.)\n"
          "\n"
          "--weigh weighs every file against its own address: its number among the binary line's\n"
          "survivors, where the settings file's [binary] filters rank and it passes them; and, where\n"
@@ -1042,7 +1043,7 @@ const std::vector<Page>& pages()
           {"--addresses DIR", "A folder: write every file's address as DIR/<its path>.hex."},
           {"--with-addresses", "A folder: a v2 manifest, every file's address in it, in hex."},
           {"--installer OUT.sieve", "A folder (or a file): write the installer, the address of its manifest\n"
-                                    "as raw bytes (--hex: as hex): the newest (v20), as the hallway's File\n"
+                                    "as raw bytes (--hex: as hex): the newest (v33), as the hallway's File\n"
                                     "Locator makes; with --v4 the plain\n"
                                     "installer (the listing, then every file packed by LZMA2); with --v3\n"
                                     "every file's bytes as they are. --manifest then writes that manifest as\n"
@@ -1114,8 +1115,9 @@ const std::vector<Page>& pages()
                                 "(FLAC, WavPack, Monkey's Audio, TTA, ALAC, MPEG-2 MP3s) carried as its bytes, the best way\n"
                                 "found for them. This switch alone decides sound, not the archives' boxes."},
           {"--sound-permanent", "Sound as FLAC, permanent (v34 draft): as temporary, and also installed as the same samples\n"
-                                "in other bytes where that is smaller: a WAV, AIFF, RF64, Wave64, .au or CAF of 16 to 24\n"
-                                "bits as name.flac (its LIST INFO or NAME/AUTH/ANNO tags kept); a WavPack, Monkey's Audio,\n"
+                                "in other bytes where that is smaller: a WAV, AIFF, RF64, Wave64, .au or CAF of up to 24\n"
+                                "bits (8, 16, 24, or floats of whole 24-bit steps) as name.flac (its LIST INFO or\n"
+                                "NAME/AUTH/ANNO tags kept); a WavPack, Monkey's Audio,\n"
                                 "TTA or ALAC (.m4a) as name.flac, decoded by ffmpeg (--ffmpeg; without it, left as it is),\n"
                                 "its tags and cover kept; a FLAC re-coded. libFLAC works as hard as --priority says. It\n"
                                 "changes what is installed: only where given by name; packing warns, naming each."},
@@ -1163,7 +1165,8 @@ const std::vector<Page>& pages()
                               "the other ways (on 23 files and folders, 3.8% larger than size and installed in about a third of\n"
                               "its time; results/balanced-2026-11-07.md); speed, as --prioritise-decoding. None changes\n"
                               "what a reader reads."},
-          {"--prioritise-decoding", "Prioritise Decoding Speed (the File Locator's box): no file carried by mixing, and the\n"
+          {"--prioritise-decoding", "Priority: Decoding speed (the File Locator's Priority button; --priority speed): no\n"
+                                    "file carried by mixing, and the\n"
                                     "files carried together not mixed (v29) nor in groups (v30), mixing's decoding (0.3 to 1 MB/s) being 15 to\n"
                                     "60 times slower than the rope's or LZMA2's; of the other ways, the smallest. Quicker to install, larger. The report says how many\n"
                                     "files mixing was not tried on. Any command that makes instructions takes it."},
@@ -1179,7 +1182,8 @@ const std::vector<Page>& pages()
           {"--v33-draft", "(v33 is the newest now, frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"
                           "not be read by a later Sieve; the File Locator's [locator] " + draft_ini_key() + "): its ways are in docs/NEXT-VERSION.md\n"
-                          "(none yet: begun empty when v33 was frozen, so for now it makes what the newest does)."},
+                          "(so far: GIFs, x86 instructions in mixing, sound through FLAC and packMP3, compressed TIFFs,\n"
+                          "PCX, PDFs and zlib streams)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

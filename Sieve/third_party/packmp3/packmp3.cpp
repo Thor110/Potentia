@@ -2132,9 +2132,17 @@ INTERN bool uncompress_pmp( void )
 	
 	// --- unmute frames and reverse to bad (but bitwise identical) state ---
 	
-	if ( unmute_data_size > 0 ) // unmute all frames up to # found in unmute data first byte
-		for ( mp3Frame* frame = firstframe; n_bad_first < *unmute_data; frame = frame->next, n_bad_first++ )
+	if ( unmute_data_size > 0 ) { // unmute all frames up to # found in unmute data first byte
+		// Sieve (9 November 2026): no more muted frames than there are frames (a damaged form asked
+		// for 200 of 5, and the walk went past the last frame into a null pointer)
+		if ( *unmute_data > g_nframes ) {
+			sprintf( errormessage, "more muted frames than frames" );
+			errorlevel = 2;
+			return false;
+		}
+		for ( mp3Frame* frame = firstframe; frame != NULL && n_bad_first < *unmute_data; frame = frame->next, n_bad_first++ )
 			mp3_unmute_frame( frame );
+	}
 	
 			
 	// --- final checks ---

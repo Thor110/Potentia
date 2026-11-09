@@ -18,7 +18,9 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <string>
+#include <vector>
 #include <thread>
 
 namespace hallway {
@@ -234,6 +236,14 @@ void Harness::act(Action a)
     case Action::RecordPictures: open_pictures(); break;
     case Action::StartOver:
     {
+        // (a run's saved training is thrown away: asked twice, the second press confirming)
+        if (saved_step_ && !over_armed_)
+        {
+            over_armed_ = true;
+            say(trf("harness.over.confirm", {std::to_string(*saved_step_)}));
+            break;
+        }
+        over_armed_ = false;
         std::error_code ec;
         std::filesystem::remove(state_path(), ec);
         saved_step_.reset();
@@ -690,11 +700,18 @@ void Harness::change_setting(int row, int dir, bool big)
     case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
     case 4:
     {
+        // The list's rates and the one suggested for this shape (often between two of them), in
+        // order: so the suggested rate can be gone back to once moved from.
+        std::vector<std::string> rates(std::begin(kRates), std::end(kRates));
+        const std::string suggested = sieve::cli::suggested_learning_rate(rc);
+        auto same = [](const std::string& a, const std::string& b) { return std::abs(std::stod(a) - std::stod(b)) <= std::stod(b) * 1e-9; };
+        if (std::none_of(rates.begin(), rates.end(), [&](const std::string& r) { return same(r, suggested); })) rates.push_back(suggested);
+        std::sort(rates.begin(), rates.end(), [](const std::string& a, const std::string& b) { return std::stod(a) < std::stod(b); });
         int i = 0;
-        for (int k = 0; k < int(std::size(kRates)); ++k)
-            if (std::stod(kRates[k]) <= std::stod(rc.learning_rate) * (1 + 1e-9)) i = k;
-        i = std::clamp(i + dir, 0, int(std::size(kRates)) - 1);
-        rc.learning_rate = kRates[i];
+        for (int k = 0; k < int(rates.size()); ++k)
+            if (std::stod(rates[size_t(k)]) <= std::stod(rc.learning_rate) * (1 + 1e-9)) i = k;
+        i = std::clamp(i + dir, 0, int(rates.size()) - 1);
+        rc.learning_rate = rates[size_t(i)];
         lr_suggested_ = rc.learning_rate == sieve::cli::suggested_learning_rate(rc);
         return;
     }
@@ -757,6 +774,7 @@ void Harness::start_trial()
 
 void Harness::key(SDL_Keycode k, SDL_Keymod mod)
 {
+    if (k != SDLK_S) over_armed_ = false; // (any other key: start over is not confirmed)
     if (prompting_)
     {
         if (k == SDLK_ESCAPE)
@@ -950,7 +968,8 @@ void Harness::change_picture_setting(int row, int dir, bool big)
     case 3: sh.bits = uint32_t(std::clamp(int(sh.bits) + dir, 1, 8)); break;
     case 4: r.setup.levels = uint32_t(std::clamp(int(r.setup.levels) + dir * (big ? 8 : 1), 1, std::max(1, 256 - int(r.setup.colours)))); break; // (at least 1: a palette of 256 or more leaves none)
     case 5:
-        r.steps = big ? (dir > 0 ? r.steps * 2 : std::max(100u, r.steps / 2)) : uint32_t(std::max(100, int(r.steps) + dir * 500));
+        // (at most 2^30: doubled from there it would wrap round to a small number)
+        r.steps = std::min<uint32_t>(1u << 30, big ? (dir > 0 ? r.steps * 2 : std::max(100u, r.steps / 2)) : uint32_t(std::max(100, int(r.steps) + dir * 500)));
         r.checkpoint_every = std::max<uint32_t>(1, r.steps / 10);
         break;
     case 6: r.batch = uint32_t(std::clamp(int(r.batch) + dir * (big ? 4 : 1), 1, 32)); break;
@@ -963,7 +982,7 @@ void Harness::change_picture_setting(int row, int dir, bool big)
         break;
     }
     case 8: r.train.loss_scale_bits = uint32_t(std::clamp(int(r.train.loss_scale_bits) + dir, 0, 7)); break;
-    case 9: pic_count_ = big ? (dir > 0 ? pic_count_ * 2 : std::max(100u, pic_count_ / 2)) : uint32_t(std::max(100, int(pic_count_) + dir * 500)); break;
+    case 9: pic_count_ = std::min<uint32_t>(1u << 30, big ? (dir > 0 ? pic_count_ * 2 : std::max(100u, pic_count_ / 2)) : uint32_t(std::max(100, int(pic_count_) + dir * 500))); break;
     default: break;
     }
 }
@@ -1257,7 +1276,13 @@ void Harness::render()
     txt(r_, 16, top + 8, tr("harness.runs"), kWhite);
     row_rects_.clear();
     float y = top + 28;
-    for (int i = 0; i <= int(entries_.size()); ++i)
+    // The runs, then the three new rows (a run, a picture model, a melody model); scrolled so the
+    // chosen row is always in the frame however many runs the folder holds.
+    const int rows = int(entries_.size()) + 3;
+    const int fits = std::max(1, int((H - top - 60 - 36) / rowH));
+    int& first = list_first_;
+    first = std::clamp(first, std::max(0, row_ - fits + 1), std::max(0, std::min(row_, rows - fits)));
+    for (int i = first; i < rows && i < first + fits; ++i)
     {
         const bool sel = i == row_;
         const SDL_FRect rr{12, y - 3, listW - 8, rowH};
@@ -1272,37 +1297,13 @@ void Harness::render()
             const Entry& e = entries_[size_t(i)];
             txt(r_, 20, y, (e.name + (e.folder ? "/" : "")).substr(0, 38), sel ? kWhite : kGrey);
         }
-        else txt(r_, 20, y, tr("harness.record"), sel ? kAccent : kGrey);
+        else
+            txt(r_, 20, y, tr(i == int(entries_.size()) ? "harness.record" : i == int(entries_.size()) + 1 ? "harness.record.pictures" : "harness.record.melodies"),
+                sel ? kAccent : kGrey);
         y += rowH;
     }
-    {
-        // A second new row: a picture model.
-        const int i = int(entries_.size()) + 1;
-        const bool sel = i == row_;
-        const SDL_FRect rr{12, y - 3, listW - 8, rowH};
-        if (sel)
-        {
-            SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
-            SDL_RenderFillRect(r_, &rr);
-        }
-        row_rects_.push_back({rr, i});
-        txt(r_, 20, y, tr("harness.record.pictures"), sel ? kAccent : kGrey);
-        y += rowH;
-    }
-    {
-        // A third: a melody model.
-        const int i = int(entries_.size()) + 2;
-        const bool sel = i == row_;
-        const SDL_FRect rr{12, y - 3, listW - 8, rowH};
-        if (sel)
-        {
-            SDL_SetRenderDrawColor(r_, 48, 0, 80, 255);
-            SDL_RenderFillRect(r_, &rr);
-        }
-        row_rects_.push_back({rr, i});
-        txt(r_, 20, y, tr("harness.record.melodies"), sel ? kAccent : kGrey);
-        y += rowH;
-    }
+    if (first > 0) txt(r_, listW - 24, top + 8, "^", kGrey);
+    if (first + fits < rows) txt(r_, listW - 24, y, "v", kGrey);
     if (entries_.empty()) txt(r_, 20, y + 8, tr("harness.none"), kDim);
 
     // The run, on the right.
@@ -1535,8 +1536,22 @@ void Harness::render()
         bx += bw + 10;
     }
     txt(r_, 16, H - 46, status_.substr(0, size_t((W - 32) / 8)), status_bad_ ? kBad : kWhite);
-    txt(r_, 16, H - 26, tr(training() ? (djob_.valid() ? "harness.footer.training.pictures" : "harness.footer.training") : prompting_ ? "harness.footer.prompt"
-                           : curriculum_ ? "harness.footer.curriculum" : pic_recipe_ ? "harness.footer.pictures" : "harness.footer"), kGrey);
+    {
+        // The keys: on two lines where one is wider than the window (the runs' list of keys is
+        // about 150 characters, and the window may be 1,024 pixels), broken between two keys.
+        const std::string keys = tr(training() ? (djob_.valid() ? "harness.footer.training.pictures" : "harness.footer.training") : prompting_ ? "harness.footer.prompt"
+                                    : curriculum_ ? "harness.footer.curriculum" : pic_recipe_ ? "harness.footer.pictures" : "harness.footer");
+        const size_t fits = size_t(std::max(1.0f, (W - 32) / 8));
+        size_t cut = std::string::npos;
+        if (keys.size() > fits)
+            for (size_t at = keys.find("   "); at != std::string::npos && at <= fits; at = keys.find("   ", at + 3)) cut = at;
+        if (cut == std::string::npos) txt(r_, 16, H - 26, keys, kGrey);
+        else
+        {
+            txt(r_, 16, H - 42, keys.substr(0, cut), kGrey);
+            txt(r_, 16, H - 26, keys.substr(keys.find_first_not_of(' ', cut)), kGrey);
+        }
+    }
 }
 
 } // namespace hallway

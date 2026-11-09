@@ -65,6 +65,8 @@ archive, was dropped on 27 September 2026: the published map holds the source in
 """
 
 import argparse
+import atexit
+import contextlib
 import hashlib
 import os
 import shutil
@@ -134,6 +136,18 @@ site). The full guide, and the test site, are in the repository: Sieve/web/READM
 def fail(msg):
     print(f"make_release: {msg}", file=sys.stderr)
     sys.exit(1)
+
+
+@contextlib.contextmanager
+def scratch_dir():
+    """A temporary folder, removed afterwards as far as it can be: on Windows a program just run
+    from it may still hold a file for a moment, and tempfile's own folder (before Python 3.10)
+    raises then, after the release was made and checked (review, 9 November 2026)."""
+    tmp = tempfile.mkdtemp()
+    try:
+        yield tmp
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def step(msg):
@@ -354,6 +368,8 @@ def main():
     step("the source: sieve-source.7z")
     source = out / f"{name}-source.7z"
     tree = source_7z(source, sz, out)
+    # (removed however the script ends: a check that fails no longer leaves release/source behind)
+    atexit.register(shutil.rmtree, tree.parent, True)
 
     # 7. source.sieve: the same tree as Sieve instructions of the newest version, installing as the
     # Sieve folder (the 7z beside it is the baseline it is compared with).
@@ -364,7 +380,7 @@ def main():
 
     # 8. Checks: every published file installs back to what it carries.
     step("checks")
-    with tempfile.TemporaryDirectory() as tmp:
+    with scratch_dir() as tmp:
         for i, f in enumerate((instructions, program)):
             dest = Path(tmp) / f"install{i}"
             run([sieve, "install", f, "--to", dest])
@@ -385,10 +401,17 @@ def main():
         lone = alone / program.name
         shutil.copy2(program, lone)
         env = dict(os.environ, TMP=str(alone / "tmp"), TEMP=str(alone / "tmp"), TMPDIR=str(alone / "tmp"))
-        if os.name != "nt" and not env.get("SDL_VIDEO_DRIVER"):
+        # With no window, on Windows too (as the CI runs it, ci/lib.sh): before, a window opened there
+        # for the run (review, 9 November 2026). Ten minutes at most: it installs in seconds.
+        if not env.get("SDL_VIDEO_DRIVER"):
             env["SDL_VIDEO_DRIVER"] = "dummy" if sys.platform == "darwin" else "offscreen"
+        env.setdefault("SDL_RENDER_DRIVER", "software")
         dest = alone / "installed"
-        ran = subprocess.run([str(lone), "--to", str(dest), "--yes"], cwd=alone, env=env, capture_output=True, text=True, errors="replace")
+        try:
+            ran = subprocess.run([str(lone), "--to", str(dest), "--yes"], cwd=alone, env=env, capture_output=True, text=True,
+                                 errors="replace", timeout=600)
+        except subprocess.TimeoutExpired:
+            fail(f"{program.name}, run on its own in an empty folder, had not finished after ten minutes")
         if ran.returncode != 0:
             fail(f"{program.name}, run on its own in an empty folder, did not install:\n{ran.stdout}{ran.stderr}")
         if not a.seven_zip:
@@ -410,12 +433,12 @@ def main():
             fail(f"tools/sieve{EXE} does not find {folder_name} in the folder above it (is the build older than the "
                  f"source? build Release in Visual Studio, then run this again):\n{shown.stdout}{shown.stderr}")
     print(f"   {folder}: hallway{EXE} at the top; sieve, sieve-install and sieve-view in tools/, finding the data above")
-    with tempfile.TemporaryDirectory() as tmp:
+    with scratch_dir() as tmp:
         dest = Path(tmp) / "source"
         run([sieve, "install", source_sieve, "--to", dest])
         if not same_tree(tree, dest):
             fail(f"{source_sieve.name} did not install the source tree as it is")
-    shutil.rmtree(tree.parent)
+    shutil.rmtree(tree.parent, ignore_errors=True)
     print(f"   {source_sieve.name}: installs back to the source tree, every file byte for byte")
 
     # 8b. The metrics list (IDEAS §19.12): how much of each line the reference filters remove, as
@@ -439,13 +462,14 @@ def main():
         if not tests.exists():
             fail(f"sieve_tests{EXE} is not in {build}: build it, or pass --no-record")
         import time
-        with tempfile.TemporaryDirectory() as tmp:
+        with scratch_dir() as tmp:
             unit_out = Path(tmp) / "unit.txt"
             began = time.monotonic()
             with open(unit_out, "w", encoding="utf-8") as f:
                 tested = subprocess.run([str(tests), "tests"], cwd=ROOT, stdout=f, stderr=subprocess.STDOUT)
             seconds = time.monotonic() - began
-            print(unit_out.read_text(encoding="utf-8", errors="replace").rstrip().splitlines()[-1])
+            said = unit_out.read_text(encoding="utf-8", errors="replace").rstrip().splitlines()
+            print(said[-1] if said else "   (the unit tests wrote nothing)")
             if tested.returncode != 0:
                 fail("the unit tests failed: no release is made from a build that fails them")
             run([sys.executable, ROOT / "tools" / "log_metrics.py", "--unit", f"{build.name}={unit_out}",

@@ -12,8 +12,8 @@ figure measured for it and where the measurement is. How a file is weighed, step
 1. Every file is read once, its SHA-256 worked out, and the folder's listing made.
 2. **Copies** (the same bytes as another file anywhere in the folder) are found first and carried
    as copies, so nothing after looks at them again.
-3. **Compressed formats** (archives, PNGs, JPEGs) are opened, where the Compressed formats boxes
-   ask for it, and what they hold is weighed in their place (below).
+3. **Compressed formats** (archives, PNGs, JPEGs) are opened, under the Compressed formats'
+   temporary (taken by Optimise Search, the default) or a box, and what they hold is weighed in their place (below).
 4. **Repeating bytes and patterns** are found next, and carried as counts.
 5. Each other file is weighed: LZMA2 alone; the rope (Sieve's own wave coder); the file cut into
    pieces, LZMA2 and the rope by turns; and mixing (a context-mixing model). The smallest is kept,
@@ -51,17 +51,17 @@ finds or one guessed from the bytes. From v33 a picture of 256 colours or fewer 
 palette (one byte a pixel, then the colours): the hallway's 17 screenshots, 185,088 bytes as
 pictures mixed, 146,999 as palettes (`results/palette-2026-11-02.md`).
 
-**JPEGs** (with a Compressed formats box). Recoded losslessly by brunsli and made again byte for
+**JPEGs** (under the Compressed formats' temporary, taken by Optimise Search, the default, or a box). Recoded losslessly by brunsli and made again byte for
 byte on installing: 15.25% to 21.91% smaller on ten original photos; a 3,844,213-byte photograph
 in 3,085,201 (FORMATS.md, STATISTICS). With *permanent*, the same picture's coefficients get
 tables made for them first (up to 2.2% more on Edward's phone photos: 0.01%, 2.10% and 2.20% on three).
 
-**PNGs** (with a box). Made again from their pixels where stb_image_write wrote them, else from
+**PNGs** (as JPEGs are). Made again from their pixels where stb_image_write wrote them, else from
 their skeleton (preflate gives back the deflate exactly); with *permanent*, the same picture
 re-saved at its smallest: twelve of the repository's PNGs, every one smaller (FORMATS.md).
 
 **Archives** (zip, 7z, tar, gzip, xz, bzip2, zstd, lz4, brotli, lzma, and RAR by the machine's own
-`rar`; with a box). Opened, each file inside carried its own way, and the archive made again exactly
+`rar`; as JPEGs are, but RAR only with a box). Opened, each file inside carried its own way, and the archive made again exactly
 from its skeleton; or with *permanent*, carried as its files (FORMATS.md lists each format).
 
 **Files mostly alike** (over 8 MiB). One carried as its differences from the other: Edward's two

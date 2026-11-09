@@ -121,6 +121,8 @@ private:
     // A run stopped before its end keeps its state beside it (RUN.resume): the step it stopped at,
     // which Enter carries on from (S starts it over).
     std::optional<uint64_t> saved_step_;
+    int list_first_ = 0;     // the runs' list: its first row shown (scrolled to keep the chosen row in view)
+    bool over_armed_ = false; // START OVER pressed once: a second press throws the saved training away
     std::filesystem::path state_path() const;
     std::string verdict_, says_, status_;
     bool status_bad_ = false;

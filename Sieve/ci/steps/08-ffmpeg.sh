@@ -15,6 +15,9 @@ printf '\x1aE\xdf\xa3 not really a video' > fake.webm
 if out=$($exe warp --ffmpeg no-such-ffmpeg --line video --file fake.webm 2>&1); then exit 1; fi
 echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
 if [ "$RUNNER_OS" = "Linux" ] && ! command -v ffmpeg > /dev/null; then sudo apt-get update && sudo apt-get install -y ffmpeg || true; fi
+# (a Linux runner installs it, above: one that could not fails the step rather than skipping its
+# checks with a warning few would read; elsewhere, and run by hand, without one it is skipped)
+if [ "$RUNNER_OS" = "Linux" ] && ! command -v ffmpeg > /dev/null; then echo "step 08: ffmpeg could not be installed on this Linux runner"; exit 1; fi
 if ! command -v ffmpeg > /dev/null; then echo "::warning::step 08: no ffmpeg on this runner, so its videos and other formats were not checked here (only where there is one)"; exit 0; fi
 ffmpeg -hide_banner -version | head -1
 # A lossless video's frame lands exactly where the same frame as a PNG (read by stb_image) does.
@@ -75,8 +78,11 @@ for f in a b c; do
     src=$(ls ll34_was/$f.*)
     test "$(ffmpeg -v error -i "$src" -map 0:a:0 -c:a pcm_s32le -f md5 -)" = "$(ffmpeg -v error -i ll34_inst/$f.flac -map 0:a:0 -c:a pcm_s32le -f md5 -)"
 done
-ffmpeg -hide_banner -i ll34_inst/c.flac 2>&1 | q "s32 (24 bit)"
-ffmpeg -hide_banner -i ll34_inst/b.flac 2>&1 | q "Caf$(printf '\xc3\xa9') tune"
+# (ffmpeg -i with no output always ends with status 1: its report captured, then read)
+c_info=$(ffmpeg -hide_banner -i ll34_inst/c.flac 2>&1 || true)
+q "s32 (24 bit)" <<< "$c_info"
+b_info=$(ffmpeg -hide_banner -i ll34_inst/b.flac 2>&1 || true)
+q "Caf$(printf '\xc3\xa9') tune" <<< "$b_info"
 cmp ll34_was/eight.tta ll34_inst/eight.tta
 cmp ll34_was/broken.wv ll34_inst/broken.wv
 $exe locate ll34 --installer ll34n.sieve --items --v34-draft --sound-to-flac --ffmpeg no-such-ffmpeg 2>&1 | tr -d '\r' > ll34n.txt

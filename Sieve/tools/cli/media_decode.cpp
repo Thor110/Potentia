@@ -162,11 +162,17 @@ public:
         p_ = fd >= 0 ? _fdopen(fd, "rb") : nullptr;
 #else
         int fds[2];
-        if (pipe(fds) != 0) throw std::runtime_error("cannot run ffmpeg");
         // Neither end handed to any other ffmpeg started meanwhile (one would hold this pipe open, and
         // its reader would wait for an end that never comes); the child's own stdout is a copy, open.
+        // (Made close-on-exec as it is made where pipe2 is, so no other thread's spawn can take it in
+        // between: ffmpeg now runs on every thread, review of 9 November 2026; elsewhere, as before.)
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+        if (pipe2(fds, O_CLOEXEC) != 0) throw std::runtime_error("cannot run ffmpeg");
+#else
+        if (pipe(fds) != 0) throw std::runtime_error("cannot run ffmpeg");
         fcntl(fds[0], F_SETFD, FD_CLOEXEC);
         fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+#endif
         posix_spawn_file_actions_t fa;
         posix_spawn_file_actions_init(&fa);
         posix_spawn_file_actions_adddup2(&fa, fds[1], STDOUT_FILENO);

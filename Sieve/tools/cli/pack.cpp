@@ -70,6 +70,7 @@
 #include <fstream>
 #include <future>
 #include <initializer_list>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -327,8 +328,15 @@ std::string first_pass_key(const std::vector<uint8_t>& data, uint32_t dict, bool
 // The kept first pass for these bytes and settings, taken (empty where there is none).
 std::vector<uint8_t> take_first_pass(const std::vector<uint8_t>& data, uint32_t dict, bool x86, uint32_t preset)
 {
+    {
+        // (the bytes are hashed only where a pass is kept, and outside the lock: the hash of a
+        // large stream takes seconds, and other threads keep or take passes meanwhile)
+        std::lock_guard<std::mutex> lock(g_first_mx);
+        if (g_first_code.empty()) return {};
+    }
+    const std::string key = first_pass_key(data, dict, x86, preset);
     std::lock_guard<std::mutex> lock(g_first_mx);
-    if (g_first_code.empty() || g_first_key != first_pass_key(data, dict, x86, preset)) return {};
+    if (g_first_code.empty() || g_first_key != key) return {};
     g_first_key.clear();
     return std::move(g_first_code);
 }
@@ -344,12 +352,15 @@ const ISzAlloc kSdkAlloc = {sdk_alloc, sdk_free};
 std::vector<uint8_t> encode_lzma2_sdk(const std::vector<uint8_t>& data, uint32_t dict, bool x86, int lclppb)
 {
     if (data.empty()) return {};
-    std::vector<uint8_t> in = data;
+    // (Copied only for the x86 filter, which works in place: else the encoder reads the data as it is)
+    std::vector<uint8_t> filtered;
     if (x86)
     {
+        filtered = data;
         UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
-        z7_BranchConvSt_X86_Enc(in.data(), in.size(), 0, &state);
+        z7_BranchConvSt_X86_Enc(filtered.data(), filtered.size(), 0, &state);
     }
+    const std::vector<uint8_t>& in = x86 ? filtered : data;
     CLzma2EncHandle h = Lzma2Enc_Create(&kSdkAlloc, &kSdkAlloc);
     if (!h) throw std::runtime_error("LZMA SDK: out of memory");
     CLzma2EncProps p;
@@ -3151,6 +3162,14 @@ uint64_t held(const KeptWays& k) { return k.w.pieces_way.size() + k.w.pieces_lis
 KeptWays kept_of(const FileWays& w)
 {
     KeptWays k{w, w.rope_code.size(), w.pieces_z.size(), w.pieces_code.size(), w.runs_code.size()};
+    // (LZMA2's figure still to come is waited for here, not kept as its future: the task reads the
+    // caller's bytes, and a copy of its future in the cache would let the caller free them while it
+    // still read: review of 9 November 2026)
+    if (k.w.lzma2_later.valid())
+    {
+        k.w.lzma2 = k.w.lzma2_later.get();
+        k.w.lzma2_later = {};
+    }
     k.w.rope_code = {};
     k.w.pieces_z = {};
     k.w.pieces_code = {};
@@ -3472,8 +3491,9 @@ static uint64_t whole_estimate(const std::vector<uint8_t>& bytes)
     const uint64_t n = code.size(); // (0: abandoned by a force stop, as estimate gives)
     if (n)
     {
+        std::string key = first_pass_key(bytes, dict, false, preset);
         std::lock_guard<std::mutex> lock(g_first_mx);
-        g_first_key = first_pass_key(bytes, dict, false, preset);
+        g_first_key = std::move(key);
         g_first_code = std::move(code);
     }
     return n;
@@ -4382,7 +4402,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const std::vector<uint8_t>& f = bytes[from + k];
                 if (stop_requested()) return;
                 // (not a WAV FLAC will code: it is weighed on a sample first, in the loop)
-                if (optimise_archives && !f.empty() && !((((flac_on && temporary_ok) || flac_files) && is_sound(f)) || (flac_files && is_flac(f)))) (void)estimate(f);
+                // (the same test as the loop's wav_first: review of 9 November 2026, a WAV with the archives'
+                // permanent alone was estimated whole here, 41 s against 19)
+                if (optimise_archives && !f.empty() && !((sound_exact && is_sound(f)) || (flac_files && is_flac(f)))) (void)estimate(f);
                 if (spans_on && f.size() >= 256) spans_ahead[from + k] = weigh_spans(f);
                 // A zip, as the loop tries it: its skeleton (preflate on each member's deflate) and whether
                 // it gives the zip back; and a 7z's contents read, LZMA2's estimate of them made (kept by
@@ -4474,8 +4496,10 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         // from eight stretches of 512 KiB across it, as a WAV's is in the loop).
         // (kept by the bytes' SHA-256, so an archive's weighing and its members' adding code each once)
         std::unordered_map<std::string, std::optional<std::pair<std::string, std::vector<uint8_t>>>> exact_sound_kept;
-        auto exact_sound_of = [&](const std::vector<uint8_t>& f) -> const std::optional<std::pair<std::string, std::vector<uint8_t>>>& {
-            static const std::optional<std::pair<std::string, std::vector<uint8_t>>> none;
+        std::unordered_map<std::string, uint64_t> exact_sound_as_is; // (LZMA2's estimate of each as it is, by the same key)
+        std::optional<std::pair<std::string, std::vector<uint8_t>>> none_sound; // (what a file not sound is: always empty)
+        auto exact_sound_of = [&](const std::vector<uint8_t>& f) -> std::optional<std::pair<std::string, std::vector<uint8_t>>>& {
+            std::optional<std::pair<std::string, std::vector<uint8_t>>>& none = none_sound;
             if (!sound_exact || f.size() < 64 || !(is_sound(f) || (instructions_on && is_mp3(f)))) return none;
             const std::string key = sha256_hex(f);
             if (auto it = exact_sound_kept.find(key); it != exact_sound_kept.end()) return it->second;
@@ -4509,12 +4533,15 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             }
             else
                 as_is = std::min<uint64_t>(as_is, estimate(f));
+            exact_sound_as_is[key] = as_is;
             if (x.second.size() + 104 + as_is / 200 < as_is) kept_one = std::move(x);
             return kept_one;
         };
-        // The same, taken: counted, its bytes moved out (each member is added once).
+        // The same, taken: counted, its bytes moved out of the cache, not copied, and the entry let go
+        // (a second member of the same bytes codes them again: review of 9 November 2026, a tar of
+        // WAVs held every member's FLAC stream twice to the end of the step).
         auto exact_sound = [&](const std::vector<uint8_t>& f) -> std::optional<std::pair<std::string, std::vector<uint8_t>>> {
-            const auto& x = exact_sound_of(f);
+            auto& x = exact_sound_of(f);
             if (!x) return std::nullopt;
             if (x->first.rfind("pmp ", 0) == 0) ++mp3s_opened;
             else
@@ -4522,7 +4549,22 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 ++wavs_opened;
                 wav_bytes += f.size();
             }
-            return x;
+            std::optional<std::pair<std::string, std::vector<uint8_t>>> out = std::move(x);
+            exact_sound_kept.erase(sha256_hex(f));
+            return out;
+        };
+        // Whether a name Sound as FLAC would give a file is free: not taken, and not one with any taken
+        // name where case is ignored or on macOS (review of 9 November 2026: Song.wav beside song.flac
+        // became Song.flac, which Windows and macOS refuse to install beside song.flac).
+        auto name_free = [&](const std::string& name, const std::unordered_set<std::string>& also) {
+            if (taken.count(name) || also.count(name)) return false;
+            const std::unordered_set<std::string>* sets[] = {&taken, &also};
+            for (const std::unordered_set<std::string>* set : sets)
+                for (const std::string& t : *set)
+                    if (t.size() + 8 >= name.size() && name.size() + 8 >= t.size() &&
+                        (names_one_ignoring_case({t, name}) || names_one_on_macos({t, name})))
+                        return false;
+            return true;
         };
         // A file an archive installed as its contents holds: with permanent, installed as name.flac (a
         // FLAC re-coded) where that is smaller and the name is free (not taken, nor one of `names`, the
@@ -4537,7 +4579,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (*lossless && !g && why == "needs ffmpeg") ++lossless_need_ffmpeg;
                 const size_t slash = fe.path.find_last_of('/'), dot = fe.path.find_last_of('.');
                 const std::string name = recode ? fe.path : (dot != std::string::npos && (slash == std::string::npos || dot > slash) ? fe.path.substr(0, dot) : fe.path) + ".flac";
-                if (g && g->size() + (recode ? 64 + f.size() / 200 : 0) < f.size() && (recode || (!taken.count(name) && !names.count(name))))
+                if (g && g->size() + (recode ? 64 + f.size() / 200 : 0) < f.size() && (recode || name_free(name, names)))
                 {
                     (recode ? flacs_recoded : sounds_to_flac) += 1;
                     sound_flac_was += f.size();
@@ -4724,12 +4766,13 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (!permanent_ok || taken.count(name)) return false; // (temporary only: what Sieve cannot make again is left as it is)
                 if (!members_writable({name}, {name})) return false;
                 taken.insert(name);
-                m.unpacked.push_back({format, e.path, name, e.size});
                 ManifestEntry c = e;
                 c.path = name;
                 c.sha256.clear();
-                // (one archive located alone: what it holds is the root; sound in it as Sound as FLAC takes it)
+                // (one archive located alone: what it holds is the root; sound in it as Sound as FLAC takes
+                // it, and the archive listed as holding what is installed, its new name if renamed)
                 const std::string as = add_sound_or_file(c, std::move(*inner), {});
+                m.unpacked.push_back({format, e.path, as, e.size});
                 if (one) m.root = as;
                 return true;
             };
@@ -4888,7 +4931,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 }
                 const size_t slash = e.path.find_last_of('/'), dot = e.path.find_last_of('.');
                 const std::string name = (dot != std::string::npos && (slash == std::string::npos || dot > slash) ? e.path.substr(0, dot) : e.path) + ".flac";
-                if (f && f->size() < b.size() && !taken.count(name) && members_writable({name}, {name}))
+                if (f && f->size() < b.size() && name_free(name, {}) && members_writable({name}, {name}))
                 {
                     taken.insert(name);
                     ++sounds_to_flac;
@@ -5107,17 +5150,21 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         if (single("7z", std::move(whole), r, contents_name(e.path, ".7z"), 40)) continue;
                     }
                 }
-            if (sieve::install::is_7z(b))
+            // (Its contents are read only where permanent lets them be carried: under temporary alone,
+            // contents() would refuse them, and the read is the whole archive decompressed. Read once:
+            // the files v21 read above are used again.)
+            if (permanent_ok && sieve::install::is_7z(b))
             {
-                std::vector<sieve::install::InMemory> all;
-                try
-                {
-                    all = sieve::install::read_7z(b);
-                }
-                catch (const std::exception&)
-                {
-                    all.clear();
-                }
+                std::vector<sieve::install::InMemory> all = std::move(held7z);
+                if (all.empty())
+                    try
+                    {
+                        all = sieve::install::read_7z(b);
+                    }
+                    catch (const std::exception&)
+                    {
+                        all.clear();
+                    }
                 if (contents("7z", std::move(all), ".7z")) continue;
             }
             // v21: a zip made again exactly from its skeleton and the data it holds; else, as before, its contents.
@@ -5156,8 +5203,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         if (single("zip", std::move(whole), r, contents_name(e.path, ".zip"), 40)) continue;
                     }
                 }
-            if (auto all = zip_entries(b))
-                if (contents("zip", std::move(*all), ".zip")) continue;
+            if (permanent_ok)
+                if (auto all = zip_entries(b))
+                    if (contents("zip", std::move(*all), ".zip")) continue;
             // v22: a RAR 5 made again by the machine's own rar, where it gives the archive back byte for
             // byte from its files with their times; carried as its contents, with the recipe. Else, as
             // before, its contents alone.
@@ -5321,14 +5369,16 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (archives_always) return true;
                 // (a member that is sound, at what Sound as FLAC's temporary would carry it as: FLAC's
                 // stream or packMP3's form, coded once and kept for the adding)
-                std::vector<uint8_t> programs, rest, sound_as_is;
-                uint64_t sounds = 0;
+                std::vector<uint8_t> programs, rest;
+                uint64_t sounds = 0, sound_as_is = 0;
                 for (const auto& in : t.members)
                 {
                     if (const auto& x = exact_sound_of(in.bytes))
                     {
                         sounds += x->second.size();
-                        sound_as_is.insert(sound_as_is.end(), in.bytes.begin(), in.bytes.end());
+                        // (its own estimate as it is, made by exact_sound_of: not the members joined again)
+                        const auto it = exact_sound_as_is.find(sha256_hex(in.bytes));
+                        sound_as_is += it == exact_sound_as_is.end() ? in.bytes.size() : it->second;
                         continue;
                     }
                     std::vector<uint8_t>& to = is_program(in.bytes) ? programs : rest;
@@ -5340,7 +5390,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const uint64_t unfiltered = programs.empty() ? 0 : estimate(programs);
                 const uint64_t apart = shared + filtered + sounds + 16 * t.members.size();
                 // (as one: the sound with the rest, as its bytes)
-                const uint64_t as_one = std::min(as_is_of(), shared + unfiltered + (sound_as_is.empty() ? 0 : estimate(sound_as_is)));
+                const uint64_t as_one = std::min(as_is_of(), shared + unfiltered + sound_as_is);
                 return apart + 64 + as_one / 200 < as_one;
             };
             // v34 draft: a PDF, with temporary, as its skeleton and members (pdf_skeleton): where its
@@ -5474,7 +5524,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
-            if (v20)
+            if (v20 && permanent_ok)
             {
                 std::string format;
                 if (auto all = libarchive_entries(b, format))

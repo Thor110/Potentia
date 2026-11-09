@@ -962,7 +962,8 @@ sed 's/^describe.*/describe edited/' data/filters/clean-data-v1.sfilter > build/
 build/sieve filters --plugins > plugins.out
 grep -A1 "broken.sfilter" plugins.out | q "ends with end"
 grep -A1 "clean-edited.sfilter" plugins.out | q "with different contents"
-if build/sieve filters --length 8 | grep -q "^\[.\] clean-data-v1 "; then exit 1; fi
+filters8=$(build/sieve filters --length 8)
+if grep -q "^\[.\] clean-data-v1 " <<< "$filters8"; then exit 1; fi
 rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
 build/sieve filters --length 8 | q "^\[.\] clean-data-v1 "
 # `requires`: ticking tidy-data-v2 alone brings clean-data-v1 and the built-in max-run-v1
@@ -1009,7 +1010,8 @@ $H --menu --press I --screenshot details.png | tr -d '\r' > details.txt
 q "^details: [A-Z]*: what its figures mean$" details.txt
 q "^details: Walking it: " details.txt
 q "^details: On this machine: " details.txt
-if $H --menu --press "I,I" --screenshot details-closed.png | tr -d '\r' | grep -q "^details: "; then exit 1; fi
+closed=$($H --menu --press "I,I" --screenshot details-closed.png | tr -d '\r')
+if grep -q "^details: " <<< "$closed"; then exit 1; fi
 $H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
 # Read aloud (--read-aloud, unsaved; IDEAS §19.74): what would be said is printed, since there is
 # no voice here. The main menu's item, the setup menu's row with its section and value, a filter
@@ -1194,7 +1196,8 @@ if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi
 # The navigator's bearing field: Tab, a bearing, ENTER, and you stand at that angle round
 # the loop (180 degrees is exactly halfway); a bearing of 360 or more is refused.
 $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 | sed -n 1p | q "50.0000000000% along"
-if $H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p | grep -q "went to"; then exit 1; fi
+navangle2=$($H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p)
+if grep -q "went to" <<< "$navangle2"; then exit 1; fi
 start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
 # The corridor end to end and back: nine doors left from pages reach binary (books,
 # audio, tracks, video, movies, models, worlds, AI), which is where the run finishes, and

@@ -103,7 +103,8 @@ build="$(cd "$build" && pwd)"
 # beside them (not its own clutter: CMakeFiles, fetched sources, objects).
 work="$(mktemp -d "$tmp_root/sieve-ci-XXXXXX")"
 echo "copying   the Sieve folder and $build to $work"
-(cd "$here" && tar -cf - --exclude=./build --exclude='./build-*' --exclude=./out --exclude=./release --exclude=./.vs --exclude='./ci/work*' .) | (mkdir -p "$work/Sieve" && cd "$work/Sieve" && tar -xf -)
+(cd "$here" && tar -cf - --exclude=./build --exclude='./build-*' --exclude=./out --exclude=./release --exclude=./.vs --exclude='./ci/work*' .) | (mkdir -p "$work/Sieve" && cd "$work/Sieve" && tar -xf -) \
+    || { echo "copying the Sieve folder to $work failed"; exit 2; }
 mkdir -p "$work/Sieve/build" "$work/logs"
 for e in "$build"/* "$build"/.[!.]*; do
     [ -e "$e" ] || continue

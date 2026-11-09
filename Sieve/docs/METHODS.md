@@ -29,9 +29,10 @@ Each file is given the first of these that applies; the rest go on to §3.
 | A **program** through the **x86 filter**, in an x86 stream of its own | an executable (EXE or ELF) | `not searched (carried as it is; a program, through the x86 filter)` |
 | A **mask of another file's lines** | a text made from another text's lines (a list drawn from it), where the mask packs smaller than the text | `not searched (made from another file's lines (NAME), carried as a mask of them)` |
 | **Carried as it is**, in the lzma2 stream | under 512 bytes, or a copy of another file in the folder (the stream carries a copy for almost nothing) | `not searched (under 512 bytes)`, `not searched (a copy of another file here ...)` |
-| **Compressed formats** (only with the boxes ticked): an archive or compressed file made again exactly from what it holds, or carried as what it holds | see below | the archive's notes on installing |
+| **Compressed formats** (with a box ticked, or temporary's under Optimise Search, the default; RAR only with the box): an archive or compressed file made again exactly from what it holds, or carried as what it holds | see below | the archive's notes on installing |
 
-**Compressed formats.** With **temporary** ticked, an archive is carried as its contents and made
+**Compressed formats.** With **temporary** ticked (or under Optimise Search, the default, for every
+format but RAR), an archive is carried as its contents and made
 again exactly on installing, where Sieve can and that is smaller. With **permanent** ticked, it is
 carried as its contents and installed as them. The kinds:
 
@@ -172,7 +173,7 @@ many as the threads and memory allow, and the result is the same at any thread c
    - It is then mixed whole only where that start came out at least 3% under LZMA2's; and mixed whole,
      it replaces LZMA2 only where it is under LZMA2's estimate by 64 bytes and 0.25% (the estimate
      can come out above the stream as made: five small JPEGs, 2 November 2026).
-   - Not tried for a file under 4 KiB or over 16 MiB, nor with **Prioritise decoding speed** ticked.
+   - Not tried for a file under 4 KiB or over 16 MiB, nor with **Priority: Decoding speed** (the File Locator's Priority button; `--priority speed`).
    - With **Try every way**, every file is mixed whole, of any size, with no test first.
    - Log: in the file's line, `mix4 B22 D60 SIZE [mixing on its first 262144 bytes: as bytes X,
      with the word list Y]`, or `mixing not tried (WHY)`, or `mixing's test on its start X (not 3%
@@ -193,7 +194,7 @@ C2 G1 A1), pieces not cut (...), mix4 B22 D60 21675799 [...]; taken: mix4, 21675
 | **Mixed files weighed against the stream** (1 November 2026, no new way; from v30, after the groups): the files mixed, alone or in groups, carried as they are instead, in the lzma2 stream they would share | where the stream with them comes out smaller (by LZMA2's estimate, by 64 bytes and 0.5%) than the stream without them and their codes; weighed twice, the files that are not pictures, then the pictures; not for one file alone in the stream (Silesia's mozilla taken apart: 13,794,627 bytes to 13,530,583) | `files mixed: X bytes (N files' codes C, the stream S); all in the stream: T; the stream taken` (or `mixing kept`); the report's `weighed   N file(s) mixed carried as they are instead, smaller in the stream they share (T bytes by LZMA2's estimate, against X mixed)` |
 | **The stream mixed** (v29): the files mixed one by one, mixed together instead in the stream with those carried as they are | where the stream with them, mixed whole, comes out smaller than their codes and the stream without them | `the files mixed one by one, mixed together`, `the files carried together, mixed` |
 
-None of them runs with **Prioritise decoding speed** ticked.
+None of them runs with **Priority: Decoding speed**.
 
 ## 5. The streams
 

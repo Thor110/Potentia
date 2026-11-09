@@ -25,8 +25,8 @@ every installed file is checked against its SHA-256 before anything is written.
 default; `--optimise-search`), temporary is taken whether its box is ticked or not, and the box is
 shown greyed: every file above that Sieve can make again exactly is opened where that is clearly
 smaller (by 64 bytes and 0.5% on the estimate; a JPEG where its brunsli form is smaller), else left
-as it is, so nothing comes out larger, and everything installs byte for byte. Prioritise Decoding
-Speed forks it: with it, what an opened file holds is carried by LZMA2 or the rope, never mixed
+as it is, so nothing comes out larger, and everything installs byte for byte. Priority: Decoding
+speed (the File Locator's Priority button; `--priority speed`) forks it: with it, what an opened file holds is carried by LZMA2 or the rope, never mixed
 (quicker to make and to install; without it, a PNG's pixels are mixed as a picture, the smallest and
 the slowest). Never permanent, which changes what is installed; and never a RAR's remaking, which needs the installing machine's own `rar` at a
 version that gives it back: a RAR is opened only where the box is ticked with Optimise Search
@@ -38,7 +38,7 @@ and elsewhere its files are installed in its place, the install saying so.
 *Measured* (6 November 2026, this container, 4 threads; every `.sieve` installed back byte for
 byte; the search with no time limit, as the File Locator's default):
 
-| Folder | Optimise Search before 0.13.78 | Optimise Search now | with Prioritise Decoding Speed too |
+| Folder | Optimise Search before 0.13.78 | Optimise Search now | with Priority: Decoding speed too |
 | :--- | ---: | ---: | ---: |
 | the repository's `Images` (67 PNGs, 25 WebP; 10 MB) | 8,884,242 bytes; made in 60 s, installed in 2 s | 5,574,710 (−37.3%); 349 s, 30 s | 6,367,562 (−28.3%); 309 s, 4 s |
 | the web test site (pages, pictures) | 451,120; 13 s | 382,940 (−15.1%); 1 s | 384,360; 1 s |
@@ -69,8 +69,8 @@ say so.
 | tar (`.tar`, or a POSIX or GNU tar by its `ustar` mark) | Sieve | from its skeleton (its headers and padding) and its files, each its own way (v31's `skm`; since 1 November 2026) | its folder (libarchive) | it compresses nothing, which is why the boxes are "Archive and compressed formats"; a program inside goes through the x86 filter |
 | **PNG** | Sieve, preflate | from its pixels where stb_image_write made it (v25), else from its skeleton (v21) | v32: **the same picture re-saved at its smallest** (`pngr`), else made again exactly; v31: its pixel rows, a flaw (below) | |
 | **WAV** (plain integer PCM: 8, 16, 24 or 32 bits, 1 to 8 channels; floating point of 32 or 64 bits whose values are whole 24-bit steps) | Sieve, libFLAC | v34 draft: its samples as libFLAC 1.4.3 codes them, the rest of the file as it was (`flac`); how hard libFLAC works follows the priority (Size, Balanced, Decoding speed) | as temporary, or Sound as FLAC's permanent (below) | floating-point WAVs of other values (a fraction of a step, -0), and one whose data chunk is cut short, as their bytes |
-| **AIFF**, **AIFF-C** (`.aif`, `.aiff`, `.aifc`: plain samples, 8 to 32 bits; AIFF-C uncompressed, `NONE`, `twos` or `sowt`; `fl32` and `fl64` as a float WAV) | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`), its skeleton an AIFF's | as temporary | compressed AIFF-C, floats of other values, and one whose COMM comes after its SSND, as their bytes |
-| **RF64**, **BW64** (WAVs past 4 GiB), **Wave64** (`.w64`), Sun's **`.au`** (`.snd`), Apple's **CAF** (`.caf`): plain samples, 8 to 32 bits, or floats as a float WAV | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`); an `.au`'s or a CAF's samples may run to the end of the file, their count the FLAC stream's | as temporary | compressed ones (an `.au` in mu-law, a CAF in AAC) and floats of other values, as their bytes |
+| **AIFF**, **AIFF-C** (`.aif`, `.aiff`, `.aifc`: plain samples, 8 to 32 bits; AIFF-C uncompressed, `NONE`, `twos` or `sowt`; `fl32` and `fl64` as a float WAV) | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`), its skeleton an AIFF's | as temporary, or Sound as FLAC's permanent (below) | compressed AIFF-C, floats of other values, and one whose COMM comes after its SSND, as their bytes |
+| **RF64**, **BW64** (WAVs past 4 GiB), **Wave64** (`.w64`), Sun's **`.au`** (`.snd`), Apple's **CAF** (`.caf`): plain samples, 8 to 32 bits, or floats as a float WAV | Sieve, libFLAC | v34 draft: as WAV, by the same recipe (`flac`); an `.au`'s or a CAF's samples may run to the end of the file, their count the FLAC stream's | as temporary, or Sound as FLAC's permanent (below) | compressed ones (an `.au` in mu-law, a CAF in AAC) and floats of other values, as their bytes |
 | **FLAC** (`.flac`) | libFLAC | as its bytes (a FLAC is coded already) | with **Sound as FLAC**'s permanent (below): re-coded at the priority's effort where 0.5% smaller, its tags, pictures and cue sheet kept, its padding and seek table dropped | Ogg FLAC, or a FLAC after an ID3 tag, as its bytes |
 | **TIFF**, compressed (`.tif`, `.tiff`: deflate, LZW or PackBits strips or tiles, with or without the horizontal predictor) | Sieve, preflate | v34 draft: `tiff`, its strips carried as their pixels and made again as libtiff codes them (deflate through preflate), the predictor undone (results/tiff-compressed-2026-11-08.md) | as temporary | JPEG-in-TIFF, CCITT fax, LZMA and Zstandard strips, and strips that overlap, as their bytes |
 | **MP3** (`.mp3`: MPEG-1 Layer III, with or without ID3 tags) | packMP3 (made safe for damaged input by Sieve) | v34 draft, under Sound as FLAC (below): `pmp`, packMP3's form of it, made again exactly (results/mp3-pmp-2026-11-08.md) | as temporary | MPEG-2 and 2.5 MP3s, and any packMP3 does not give back exactly, as their bytes |

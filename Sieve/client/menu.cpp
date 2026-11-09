@@ -901,7 +901,7 @@ void Menu::render_details(float W, float H)
     const float x = box_.x + 14;
     const size_t cols = size_t(std::max(20.0f, (box_.w - 28) / 8));
     // (an explanation wrapped at the box's width, on spaces)
-    auto wrapped = [&](const std::string& t) {
+    auto wrapped = [&](const std::string& t, size_t cols) {
         std::vector<std::string> lines;
         std::string line;
         size_t at = 0;
@@ -931,7 +931,8 @@ void Menu::render_details(float W, float H)
             continue;
         }
         if (kind == 1) y += 4;
-        for (const std::string& l : wrapped(t))
+        // (an indented line has 12 pixels less: a cell and a half, so two cells fewer)
+        for (const std::string& l : wrapped(t, kind == 2 ? cols - 2 : cols))
         {
             if (y + 12 > bottom) break;
             text(r_, x + (kind == 2 ? 12 : 0), y, l, 1, kind == 1 ? white : kind == 3 ? red : grey);

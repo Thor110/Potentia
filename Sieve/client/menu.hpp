@@ -53,10 +53,10 @@ LineSize line_size(uint32_t base, uint64_t length);
 // The AI line's weights for a shape: 256 H (the embedding) + 16 L H^2 (each layer's matrices).
 inline uint64_t ai_weights_of(const Settings& s) { return 256ull * s.ai_width + 16ull * s.ai_layers * s.ai_width * s.ai_width; }
 // Every line's size under these settings, by door (dimensions.hpp): what the setup menu shows
-// beside each line, and the main menu's completion estimate (IDEAS §19.49).
+// beside each line, and each line's walk time in the map (IDEAS §19.49).
 std::array<LineSize, kLines> line_sizes_of(const Settings& s);
 // How long walking 10^log10_units units at one a second would take: "~10^115.4 years", "3 years",
-// "40 seconds"; for the main menu's estimate and the setup menu's survivors.
+// "40 seconds"; for the map's details window and the setup menu's survivors.
 std::string walk_time_text(double log10_units);
 std::string walk_time_short(double log10_units); // the same in a few characters, for the map: "~10^115y"
 // Each line's size and the time to walk it at one unit a second, binary first then the doors in

@@ -385,7 +385,9 @@ rm -f be.ini
 $H --main-menu --settings be.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
 grep -q "^edge_glow = on" be.ini
 if grep -Eq "binary[_-]edge" be.ini; then exit 1; fi
-if $H --help 2>&1 | grep -q "binary-edge"; then exit 1; fi
+# (the help captured first: a hallway that failed to run would print nothing, and pass the check)
+help_text=$($H --help 2>&1)
+if grep -q "binary-edge" <<< "$help_text"; then exit 1; fi
 test -s walk.png
 test -s edge.png
 test -s models.png

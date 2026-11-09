@@ -8106,7 +8106,7 @@ def cmd_unpack_v7(args, data):
     if group is not None and group[1] != len(group[0]):
         sys.exit(f"{group[2]}'s group ends before its files have its bytes")
     for i, (k, script) in sorted(deltas.items()):  # v32: each made from its base as installed
-        if k >= len(files) or k == i or k in deltas or k in members:
+        if k >= len(files) or k == i or k in deltas or k in copies or k in members:
             sys.exit(f"{files[i][0]}: made from a file that is not carried as itself")
         if k in unchecked:
             unchecked.add(i)  # (its base not made here, so neither is it)
@@ -8167,6 +8167,8 @@ def refused_path(p):
     """SPECIFICATIONS §12.2: installing refuses a path that is absolute, names a drive, uses a
     backslash, or has a part that is "." or ".." (or empty, but for a folder's "/" at its end)."""
     if not p or p.startswith("/") or ":" in p or "\\" in p:
+        return True
+    if any(ord(c) < 0x20 or c == "\x7f" for c in p):  # (9 November 2026: control characters and NUL)
         return True
     parts = p.split("/")
     if parts[-1] == "":

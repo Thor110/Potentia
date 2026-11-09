@@ -208,8 +208,12 @@ std::optional<std::pair<std::string, std::string>> name_windows_cannot_hold(cons
         while (!stem.empty() && stem.back() == ' ') stem.pop_back();
         for (char& c : stem)
             if (c >= 'a' && c <= 'z') c = char(c - 'a' + 'A');
-        if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL") return "a device's name (" + stem + ")";
+        if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" || stem == "CONIN$" || stem == "CONOUT$") return "a device's name (" + stem + ")";
         if (stem.size() == 4 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && stem[3] >= '0' && stem[3] <= '9')
+            return "a device's name (" + stem + ")";
+        // (COM and LPT with a superscript one, two or three, which Windows also takes for devices)
+        if (stem.size() == 5 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && static_cast<unsigned char>(stem[3]) == 0xC2 &&
+            (static_cast<unsigned char>(stem[4]) == 0xB9 || static_cast<unsigned char>(stem[4]) == 0xB2 || static_cast<unsigned char>(stem[4]) == 0xB3))
             return "a device's name (" + stem + ")";
         return {};
     };

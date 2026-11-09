@@ -286,7 +286,7 @@ std::optional<Layout> walk_caf(const uint8_t* p, size_t n)
             if (!desc || at + 16 > n) return std::nullopt;
             l.samples_at = at + 16;
             l.to_end = size == ~uint64_t(0);
-            if (!l.to_end && size < 4) return std::nullopt;
+            if (!l.to_end && (size < 4 || size >= (uint64_t(1) << 62))) return std::nullopt;
             l.data = l.to_end ? n - l.samples_at : size - 4;
             l.chunk_end = l.to_end ? n : at + 12 + size;
             return l;
@@ -644,7 +644,10 @@ std::optional<Layout> layout_of(const std::vector<uint8_t>& b)
     const auto l = walk(b.data(), b.size());
     if (!l) return std::nullopt;
     const uint32_t block = l->channels * (l->bits / 8);
-    if (l->data == 0 || l->data % block != 0 || l->samples_at + l->data > std::min<uint64_t>(b.size(), l->chunk_end)) return std::nullopt;
+    // (without adding, so a size the file gives near 2^64 cannot wrap round: review of 9 November 2026,
+    // a CAF whose data chunk said 2^64 - 54 bytes read far past the file)
+    const uint64_t end = std::min<uint64_t>(b.size(), l->chunk_end);
+    if (l->data == 0 || l->data % block != 0 || l->samples_at > end || l->data > end - l->samples_at) return std::nullopt;
     return l;
 }
 
@@ -656,18 +659,24 @@ std::vector<uint8_t> skeleton_of(const std::vector<uint8_t>& b, const Layout& l)
     return s;
 }
 
-// Whether the FLAC stream and the skeleton give back b exactly.
-bool gives_back(std::vector<uint8_t> inner, const std::vector<uint8_t>& skeleton, const std::vector<uint8_t>& b)
+// Whether a FLAC stream followed by its skeleton (`skeleton` bytes) gives back b exactly.
+bool remakes(const std::vector<uint8_t>& inner, size_t skeleton, const std::vector<uint8_t>& b)
 {
-    inner.insert(inner.end(), skeleton.begin(), skeleton.end());
     try
     {
-        return wav_remake(inner, skeleton.size(), [](size_t) { return false; }) == b;
+        return wav_remake(inner, skeleton, [](size_t) { return false; }) == b;
     }
     catch (const std::exception&)
     {
         return false;
     }
+}
+
+// The same, for a FLAC stream and a skeleton held apart (the FLAC itself is kept by the caller).
+bool gives_back(std::vector<uint8_t> inner, const std::vector<uint8_t>& skeleton, const std::vector<uint8_t>& b)
+{
+    inner.insert(inner.end(), skeleton.begin(), skeleton.end());
+    return remakes(inner, skeleton.size(), b);
 }
 
 } // namespace
@@ -679,12 +688,12 @@ std::optional<WavOpened> wav_open(const std::vector<uint8_t>& b, int effort)
     auto flac = encode(b, *l, effort, false);
     if (!flac) return std::nullopt;
     const std::vector<uint8_t> skeleton = skeleton_of(b, *l);
-    // Made again and compared, before it is ever chosen.
-    if (!gives_back(*flac, skeleton, b)) return std::nullopt;
     WavOpened o;
     o.samples = l->data / (l->channels * (l->bits / 8));
     o.inner = std::move(*flac);
     o.inner.insert(o.inner.end(), skeleton.begin(), skeleton.end());
+    // Made again and compared, before it is ever chosen.
+    if (!remakes(o.inner, skeleton.size(), b)) return std::nullopt;
     o.recipe = "flac " + std::to_string(skeleton.size()) + " " + std::to_string(o.inner.size());
     return o;
 }

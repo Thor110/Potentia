@@ -103,7 +103,10 @@ std::optional<Probe> probe(const std::string& report)
     {
         if (r) return std::nullopt; // more than one sound stream
         at += 7;
-        const std::string line = report.substr(at, report.find('\n', at) - at);
+        std::string line = report.substr(at, report.find('\n', at) - at);
+        // (Windows writes ffmpeg's report with \r\n: the last field, the sample format, must not keep
+        // the \r, or every 16-bit file is refused: review of 9 November 2026)
+        line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
         Probe p;
         p.codec = line.substr(0, line.find_first_of(" ,"));
         size_t f = 0;

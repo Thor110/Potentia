@@ -15,11 +15,14 @@ got=$($exe warp --length 32 --mode scrambled "It was the best of times" | tr -d 
 echo "scrambled address: $got"
 test "$got" = "007b30165818bf0311497600aa52996f9395e27"
 test "$($exe read --length 32 --mode scrambled "$got" | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
-$exe dicts
-if $exe dicts | grep -Eq "MISMATCH|MISSING"; then exit 1; fi
+# (captured first: a run that failed would print nothing, and pass the check; and run once)
+dicts_text=$($exe dicts)
+printf '%s\n' "$dicts_text"
+if grep -Eq "MISMATCH|MISSING" <<< "$dicts_text"; then exit 1; fi
 $exe sift --lengths 1-8 --brute-max 4 --pruned-max 5 > /dev/null
-$exe models
-if $exe models | grep -Eq "MISMATCH|MISSING|UNREADABLE"; then exit 1; fi
+models_text=$($exe models)
+printf '%s\n' "$models_text"
+if grep -Eq "MISMATCH|MISSING|UNREADABLE" <<< "$models_text"; then exit 1; fi
 # Alphabets: built in, stacked from Unicode blocks, and a line that can hold a file.
 $exe alphabets > /dev/null
 $exe alphabets --spec greek+cyrillic | tr -d '\r' | q "^symbols   400"

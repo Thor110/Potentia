@@ -260,6 +260,9 @@ public:
     ~DecodeCancelScope();
     DecodeCancelScope(const DecodeCancelScope&) = delete;
     DecodeCancelScope& operator=(const DecodeCancelScope&) = delete;
+
+private:
+    const std::atomic<bool>* flag_;
 };
 bool decoding_cancelled();
 

@@ -41,9 +41,8 @@ public:
     }
     void press(SDL_Keycode key, SDL_Keymod mod); // one key, as if typed (scripting and tests)
     void render();
-    // The completion estimate (IDEAS §19.49): one line a dimension, binary first and then in door
-    // order, each the line's name, its size under the setup menu's settings, and how long walking
-    // every unit at one a second would take. All of them; the menu folds those that do not fit.
+    // (The completion estimate, IDEAS §19.49, each line's walk time, was drawn by the main menu
+    // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
     enum class Screen { Main, Settings, Graphics, Controls, Language, Programs };

@@ -1259,14 +1259,16 @@ else
     $S locate cp_u --installer cp_u.sieve 2>&1 | tr -d '\r' | grep -q "are one name where case is ignored"
     printf one > "cp_ss/stra$(printf '\303\237')e.txt"
     printf two > cp_ss/STRASSE.txt
-    if $S locate cp_ss --installer cp_ss.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
+    said=$($S locate cp_ss --installer cp_ss.sieve 2>&1)
+    if grep -q "one name where case is ignored" <<< "$said"; then exit 1; fi
     # (and the Kelvin sign and k two, as Windows has them: it compares uppercase, one character to
     # one, and the Kelvin sign's is itself; the review of 6 November 2026)
     rm -rf cp_k
     mkdir cp_k
     printf one > cp_k/k.txt
     printf two > "cp_k/$(printf '\342\204\252').txt"
-    if $S locate cp_k --installer cp_k.sieve 2>&1 | grep -q "one name where case is ignored"; then exit 1; fi
+    said=$($S locate cp_k --installer cp_k.sieve 2>&1)
+    if grep -q "one name where case is ignored" <<< "$said"; then exit 1; fi
     # (and é written as one character and as e and a combining accent: one name on macOS alone,
     # which the packer says; installed here, both)
     rm -rf cp_nf cp_nf_s
@@ -1455,9 +1457,12 @@ cmp dq.txt dqf.back
 [ "$(wc -c < dqf.mix)" -lt "$(wc -c < dq4.mix)" ]
 rm -rf f32 f32g f33g
 mkdir f32 f32g
-head -c 9000 ../docs/METHODS.md > f32/methods.md
-head -c 9000 ../docs/METHODS.md > f32g/methods.md
-head -c 7000 ../docs/FORMATS.md > f32g/formats.md
+# (Two texts kept in tests/texts, the start of METHODS.md and FORMATS.md as they were on 8 November
+# 2026: the ways chosen below depend on the bytes, so any edit to the documents could change them.
+# They did on 9 November, when a docs fix made the pair 20 bytes smaller without the match model.)
+cp ../tests/texts/methods-9000.md f32/methods.md
+cp ../tests/texts/methods-9000.md f32g/methods.md
+cp ../tests/texts/formats-7000.md f32g/formats.md
 $S locate f32 --v32 --installer f32.sieve --items 2>&1 | tr -d '\r' > f32.txt
 grep -c "^mix       1 file(s) carried by mixing, mix-v4, 1 with a word list (1 counted by use) ([0-9]* bytes, carried in [0-9]*; sieve-manifest-v32)" f32.txt > /dev/null
 $S locate f32g --v32 --installer f32g.sieve --items 2>&1 | tr -d '\r' > f32g.txt

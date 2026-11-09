@@ -277,6 +277,7 @@ private:
     void report(const std::string& what, double best, double of); // the worker's word, for the line and the graph
     std::string finish_job(); // "took X" (and the estimate), the job ended
     std::optional<std::string> pending_pick_, pending_save_;
+    bool shares_learnt_ = false; // learn_shares changed the kept shares: the frame saves them (under mx_)
     std::optional<std::pair<int, std::string>> pending_install_;
     std::string install_src_; // the installer chosen, while its folder is being chosen
     std::string program_src_; // the .sieve chosen, while its installer program's name is being chosen

@@ -6906,3 +6906,19 @@ before moving forward).**
   the main menu; each line's time to walk is now a figure under its column in Start Sieve's map
   ("~10^115y"), with its size and bits, from the same settings (Edward: "just the start sieve menu
   might be best ... it doesn't really need its own dedicated window").
+
+**19.134 Documents kept up to date from the code (Edward, 9 November 2026; noted, for a session of
+its own).** "we should look at adjusting documentation to be automatically updated from the code
+when building when and where possible". The review of 9 November found 17 places where the
+documents no longer said what the code does (the File Locator's O key missing from its key line,
+training-v2 named as the default after v3, v20 as the newest version, "Prioritise Decoding Speed"
+after it became the Priority button). Two ways, by kind of text:
+- *Generated blocks:* lists and tables written by a build step into marked places in the documents,
+  and a CI check that fails where a committed document differs from what the build would write
+  (the change still committed by hand, so it shows in the diff): the keys of each screen (from
+  data/lang/en.txt), the options of `sieve help` and `hallway --help` (tools/check_help.py already
+  checks every option is named), the newest frozen version and the draft's ways, the default
+  training version, the settings' defaults (app_settings.hpp), and the formats and their routes
+  (FORMATS.md), once those are one table in the code that the packer reads too.
+- *Checked prose:* the explanations stay written by hand, and the CI looks in them for facts that
+  go out of date (a version named as the default, a box that became a button).

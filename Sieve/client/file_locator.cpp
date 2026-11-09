@@ -619,7 +619,8 @@ void FileLocator::learn_shares(bool stopped)
     learn(k.packing, est_pack_share_seen_);
     if (est_weigh_search_ > 0 && est_done_ >= 5)
         learn(k.weighing, std::clamp((since(est_weigh_start_) - est_steps_[5] * est_ratio_) / est_weigh_search_, 0.0, 1.0));
-    if (changed && k.changed) k.changed(k.packing, k.weighing);
+    // (saved by the frame, not here: this runs on the job's thread, and saving writes the settings)
+    if (changed) shares_learnt_ = true;
 }
 
 // Under mx_.
@@ -1500,11 +1501,17 @@ void FileLocator::draw(float W, float H)
     // Hand over whatever the dialogs chose since the last frame.
     {
         std::optional<std::string> pick, to;
+        bool learnt = false;
+        double packing = -1, weighing = -1;
         {
             std::lock_guard<std::mutex> lock(mx_);
             pick.swap(pending_pick_);
             to.swap(pending_save_);
+            std::swap(learnt, shares_learnt_);
+            packing = kept_shares().packing;
+            weighing = kept_shares().weighing;
         }
+        if (learnt && kept_shares().changed) kept_shares().changed(packing, weighing);
         if (pick) analyse(*pick);
         if (to && save_what_ == 3)
         {

@@ -17,6 +17,8 @@ marked "Sieve" in the source. What and why: results/mp3-pmp-2026-11-08.md in Sie
   quadruple reaches two past the granule; packMP3's arrays hold 580); the main data's size within the bitrate predictor's table, and a decoded bitrate 1 to 14;
   padding and ancillary bits within the 2048 bytes kept for them; the first frame's search ended where
   a file under 4 bytes left nothing to search (it counted to INT_MAX).
+- packmp3.cpp (9 November 2026, review): a form saying more muted frames than it has frames refused
+  (the unmute walk went past the last frame into a null pointer).
 - bitops.cpp (9 November 2026): stdin and stdout no longer switched to binary when a stream opens
   (packMP3's own program did; MSVC has no `setmode` by that name, and in Sieve it would change Sieve's
   own console).

@@ -1,3 +1,8 @@
+# Shell scripts keep LF line endings on every platform: Git for Windows set to convert would give
+# them CRLF, and bash then fails on "$'\r': command not found" (the CI's steps). Before the rules
+# below, so pinned data under data/ and tests/ stays byte for byte whatever it is called.
+*.sh text eol=lf
+
 # Pinned data is hashed byte for byte (SHA-256 in the registries and vector files), so Git must
 # never convert its line endings, on any platform. This file works from a subfolder too.
 data/** -text

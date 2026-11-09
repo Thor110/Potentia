@@ -125,6 +125,8 @@ const char* kUsage =
     "  it comes out the same), Settings (graphics, controls, language; saved to sieve-hallway.ini), the\n"
     "  Encryption Engine, Manual Navigation (a file's bytes turned by hand) and Exit Sieve. Start Sieve opens the setup menu\n"
     "  (Esc: back to the main menu): adjust every line's state space and see the lines as a map.\n"
+    "  The three dots after a line's name in the map (or I) open its details: its size, address\n"
+    "  length, walk time, tiles, filters and cost here.\n"
     "  The magnifying glass beside a line's title (or F) opens its filters: tick filters, set\n"
     "  their parameters, and choose the mode: off, mark (failures faint), hide (failures left\n"
     "  out), compact (only survivors, packed together, in every ordering) or excluded (only\n"
@@ -1736,6 +1738,9 @@ int run(const Args& a)
             hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
             hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
             hall->set_fps_counter(app.fps_counter);
+            // (and the view distance and graphics memory, as Settings > Graphics now has them)
+            set_view(app.view_rooms, app.picture_rooms);
+            hall->set_graphics_memory(app.graphics_memory_gb);
             hall->settings_changed();
             SDL_SetWindowRelativeMouseMode(window, false);
         }

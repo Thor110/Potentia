@@ -31,6 +31,8 @@ a result surprises; close it with what explained it.
 - *Next:* `sieve diffuse` and the harness now write the new result beside the recorded one
   (`result-again.txt`), and `sieve diffuse` names the line where the two part: checkpoint 0 is the
   start, before any step; a later checkpoint, a step. If it is seen again, that file says where.
+- *9 November 2026:* Edward trained all four current models again on his machine: each one
+  reproduced. Left open, in case it is seen again.
 
 ## Resolved
 

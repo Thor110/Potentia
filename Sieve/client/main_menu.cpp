@@ -204,7 +204,11 @@ void MainMenu::back()
     case Screen::Settings:
         if (settings_only_) { result_ = Result::Start; done_ = true; return; } // back to the hallway
         screen_ = Screen::Main;
-        row_ = 1;
+        // (back on Settings' own row, wherever it is in the list)
+        row_ = 0;
+        for (const Item& it : items())
+            if (it.id == "settings") break;
+            else ++row_;
         return;
     case Screen::Graphics: screen_ = Screen::Settings; row_ = 0; return;
     case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;

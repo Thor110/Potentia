@@ -58,7 +58,8 @@ std::optional<Rows> read_ihdr(const uint8_t* b, size_t n)
     r.pixel_bytes = bits >= 8 ? bits / 8 : 1;
     r.interlaced = b[28] == 1;
     // The rows with their filter bytes must fit one zlib call (its sizes are 32 bits).
-    if (r.row_bytes * r.height + r.height > 0xFFFFFFFFu) return std::nullopt;
+    // (by division first, so the product cannot wrap round: review of 9 November 2026)
+    if (r.height == 0 || r.row_bytes > (uint64_t(0xFFFFFFFFu) - r.height) / r.height) return std::nullopt;
     return r;
 }
 

@@ -4,7 +4,7 @@ Edward (8 November 2026): "work through all of those planned steps and formats t
 make a plan for any remaining formats we can add afterwards". Done in the v34 draft by then: WAV,
 AIFF and AIFF-C, RF64, Wave64, Sun `.au` and CAF through FLAC (results/flac-way-2026-11-08.md); Sound as
 FLAC, FLAC files re-coded; FLAC on every core; plain pictures' shapes from their headers
-(results/plain-pictures-2026-11-08.md). What is below is not built. Each is to be measured before it
+(results/plain-pictures-2026-11-08.md). What is below is built where it says so; the rest is not. Each is to be measured before it
 is built, as these were: no gain is claimed here that was not measured.
 
 Three ways a format can be taken, as now:
@@ -60,7 +60,8 @@ and sound inside an archive goes through it first.
    FLAC's Vorbis comments, so a repack keeps them; more than 2 channels where the WAV's channel mask
    is FLAC's own order; WavPack, Monkey's Audio, TTA and ALAC files decoded and installed as FLAC (their
    decoders' licences to check: WavPack's is BSD).
-6. **Run-length pictures (temporary).** TGA RLE, BMP RLE8 and RLE4, PCX: their runs undone, made again
+6. **PCX built and run-length TGA measured, not built, 8 November 2026 (3a).** **Run-length pictures
+   (temporary).** BMP RLE8 and RLE4 still to do: their runs undone, made again
    where the encoder's choice of runs is the plain greedy one. To measure: which encoders' files are
    given back (ffmpeg's TGA, GIMP's, Paint's BMP).
 7. **Built 8 November 2026: uncompressed DDS's shape; BC1 measured as carried well already**

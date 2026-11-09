@@ -22,6 +22,7 @@
 #include <system_error>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -35,6 +36,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -485,7 +487,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
             // An item of one of Sieve's lines: made again from its line and its place there.
             const std::string rest = e.way.substr(5);
             const size_t sp = rest.find(' ');
-            const size_t k = sp == std::string::npos ? m.lines.size() : size_t(std::stoull(rest.substr(0, sp)));
+            const size_t k = sp == std::string::npos ? m.lines.size() : size_t(listed_number(rest.substr(0, sp), "an item's line"));
             if (k >= m.lines.size()) throw std::runtime_error("manifest: " + e.path + " names a line it does not list");
             if (!item_maker())
                 throw std::runtime_error("these Sieve instructions carry items of Sieve's lines (" + e.path +
@@ -875,7 +877,8 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     {
         if (!is_delta[i]) continue;
         const size_t k = deltas[i].first;
-        if (k >= files.size() || k == i || is_delta[k] || files[k]->member)
+        // (nor a copy, whose bytes are filled in after: review of 9 November 2026)
+        if (k >= files.size() || k == i || is_delta[k] || copy_from[k] >= 0 || files[k]->member)
             throw std::runtime_error("manifest: " + files[i]->path + " is made from a file that is not carried as itself");
         try
         {
@@ -987,8 +990,8 @@ std::string manifest_path(const fs::path& p, const fs::path& root)
 {
     const std::u8string u = p.lexically_relative(root).generic_u8string();
     std::string out(u.begin(), u.end());
-    if (out.find_first_of("\t\r\n") != std::string::npos)
-        throw std::runtime_error("a path with a tab or a line break in it cannot be listed: " + out);
+    if (std::any_of(out.begin(), out.end(), [](char c) { return static_cast<unsigned char>(c) < 0x20 || c == 0x7F; }))
+        throw std::runtime_error("a path with a control character (a tab, a line break...) in it cannot be listed: " + out);
     return out;
 }
 
@@ -1506,10 +1509,17 @@ std::string listing_from_bytes(std::string_view b, bool v32)
         return std::string(t);
     };
     std::string last, out;
+    // (Each path may take the last one's start, so a short listing could name paths whose text grows
+    // as the square of its records: 223 KB of them took 3.9 GB, review of 9 November 2026. A path is
+    // held to 32,767 bytes, Windows' longest, and all of them to 64 MiB or 200 times the listing.)
+    uint64_t named = 0;
+    const uint64_t most_named = std::max<uint64_t>(uint64_t(64) << 20, uint64_t(b.size()) * 200);
     auto path = [&]() {
         const uint64_t same = get_varint_from(b, at);
         if (same > last.size()) throw std::runtime_error("manifest: its listing shares more of a path than the last had");
         last = last.substr(0, size_t(same)) + text();
+        if (last.size() > 32767) throw std::runtime_error("manifest: its listing names a path longer than any folder holds");
+        if ((named += last.size()) > most_named) throw std::runtime_error("manifest: its listing names more than its size could hold");
         return last;
     };
     std::function<std::string(int)> way = [&](int depth) -> std::string {
@@ -1720,7 +1730,8 @@ Manifest manifest_of_file(const fs::path& file)
     m.root = std::string(name.begin(), name.end());
     ManifestEntry e;
     e.path = m.root;
-    if (e.path.find_first_of("\t\r\n") != std::string::npos) throw std::runtime_error("a name with a tab or a line break in it cannot be listed: " + e.path);
+    if (std::any_of(e.path.begin(), e.path.end(), [](char c) { return static_cast<unsigned char>(c) < 0x20 || c == 0x7F; }))
+        throw std::runtime_error("a name with a control character (a tab, a line break...) in it cannot be listed: " + e.path);
     e.size = uint64_t(fs::file_size(file));
     e.sha256 = vault::hash_checked_file(file, e.path); // read once: its hash, and the vault's check
     m.entries.push_back(e);
@@ -1857,9 +1868,30 @@ void add_contents(Manifest& m, const std::filesystem::path& root_in)
 // absolute path, a drive, a backslash, or a part that is "." or ".." (a name with dots in it is
 // fine; so is one "/" at the end, a folder's). Every path installing writes to, or hands to another
 // program, goes through this when the instructions are read.
+// A path as an error message may show it: a control character written as \xNN, never sent to the
+// terminal as it is (review of 9 November 2026).
+static std::string shown(const std::string& p)
+{
+    std::string out;
+    for (const char c : p)
+        if (static_cast<unsigned char>(c) < 0x20 || c == 0x7F)
+        {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "\\x%02X", unsigned(static_cast<unsigned char>(c)));
+            out += hex;
+        }
+        else
+            out += c;
+    return out;
+}
+
 static bool leaves_folder(const std::string& p)
 {
     if (p.empty() || p[0] == '/' || p.find(':') != std::string::npos || p.find('\\') != std::string::npos) return true;
+    // (9 November 2026, review: a control character or a NUL in a name, which Windows refuses and
+    // which elsewhere could print as a terminal's escape or, at a NUL, name another file)
+    for (const char c : p)
+        if (static_cast<unsigned char>(c) < 0x20 || c == 0x7F) return true;
     for (size_t at = 0; at <= p.size();)
     {
         size_t slash = p.find('/', at);
@@ -2356,7 +2388,7 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             mb.atime = number(f[5]);
             mb.path = f[6];
             // (Its times are set, and it is removed once the RAR is made again: inside its folder.)
-            if (leaves_folder(mb.path)) throw std::runtime_error("manifest: refused path " + mb.path);
+            if (leaves_folder(mb.path)) throw std::runtime_error("manifest: refused path " + shown(mb.path));
             m.unpacked.back().members.push_back(std::move(mb));
             continue;
         }
@@ -2426,8 +2458,18 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
         }
         else throw std::runtime_error("manifest: line " + std::to_string(i + 1) + " is not an entry");
         // Nothing may point outside the folder being installed.
-        if (leaves_folder(e.path)) throw std::runtime_error("manifest: refused path " + e.path);
+        if (leaves_folder(e.path)) throw std::runtime_error("manifest: refused path " + shown(e.path));
         m.entries.push_back(std::move(e));
+    }
+    // One entry a path: a second, or a file and a folder of one name, is refused, as the oracle
+    // refuses it (9 November 2026, review: the second was written over the first).
+    {
+        std::unordered_set<std::string> seen;
+        for (const ManifestEntry& e : m.entries)
+        {
+            const std::string key = !e.path.empty() && e.path.back() == '/' ? e.path.substr(0, e.path.size() - 1) : e.path;
+            if (!seen.insert(key).second) throw std::runtime_error("manifest: " + shown(e.path) + " is listed twice");
+        }
     }
     if (graph_needed && m.graph.empty()) throw std::runtime_error("manifest: v18 without its graph part");
     if (m.minimal)
@@ -2481,7 +2523,7 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
     }
     // The root names the folder made where the installer is pointed (sieve-install, the File
     // Locator): an absolute one, or one climbing out (".."), would put it somewhere else.
-    if (!m.root.empty() && leaves_folder(m.root)) throw std::runtime_error("manifest: refused root " + m.root);
+    if (!m.root.empty() && leaves_folder(m.root)) throw std::runtime_error("manifest: refused root " + shown(m.root));
     // v31: each archive made again from its skeleton and its members: those listed under its own
     // path ("<archive>/<n>"), as many as its recipe says, files and nothing more.
     // v33 draft: a text's spans of binary written as text the same ("spn <members> <skeleton size>").
@@ -2946,8 +2988,8 @@ std::string changed_files_warning(const Manifest& m)
              (pictures.size() == 1 ? " installed re-saved, the same picture in other bytes: " : " installed re-saved, the same pictures in other bytes: ") + list(pictures) + ".";
     if (!sounds.empty())
         w += std::string(w.empty() ? "" : " ") + (sounds.size() == 1 ? "A file of sound here is" : std::to_string(sounds.size()) + " files of sound here are") +
-             " installed as .flac (or a FLAC re-coded), the same samples in other bytes (a WAV's or AIFF's other chunks, such as tags, left out; the tags of a FLAC, WavPack, Monkey's Audio, TTA or ALAC kept): " + list(sounds) +
-             ". Untick Sound as FLAC (--sound-to-flac) to install them as they are.";
+             " installed as .flac (or a FLAC re-coded), the same samples in other bytes (a WAV's or AIFF's other chunks left out, its tags kept as Vorbis comments, as a FLAC's, WavPack's, Monkey's Audio's, TTA's or ALAC's are): " + list(sounds) +
+             ". Set Sound as FLAC to Temporary (--sound-temporary) to install them as they are.";
     if (!archives.empty() || !pictures.empty()) w += " Untick Archive and compressed formats: permanent (--compressed-permanent) to install every file as it is.";
     return w;
 }
@@ -3343,7 +3385,13 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
         names.reserve(files.size());
         for (const auto& f : files) names.push_back(f.first->path);
         refuse_names_one_ignoring_case(names, dest);
-        refuse_names_windows_cannot_hold(names); // (and a name Windows cannot hold would be another file)
+        // (and a name Windows cannot hold would be another file: the folders' and the root's too,
+        // review of 9 November 2026)
+        std::vector<std::string> every = names;
+        for (const ManifestEntry& e : m.entries)
+            if (e.dir) every.push_back(e.path);
+        if (!m.root.empty()) every.push_back(m.root);
+        refuse_names_windows_cannot_hold(every);
     }
     // (Each file's place first, in order: its bytes where they lie in the contents, or read back
     // from its address.)
