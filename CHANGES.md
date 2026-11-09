@@ -1,35 +1,35 @@
-# Changes: the AI Training Harness's new run settings (9 November 2026)
+# Changes: Text to Voice, and an hour of public-domain voice (9 November 2026)
 
-Task 4 on the list: the settings of a new run, in the AI Training Harness.
+## Text to Voice
 
-## What changed
+- A new setting, **Text to Voice** (Settings, Controls, after Read menus aloud; `[controls]
+  text_to_voice` in the settings file; off by default). With it on, each reply of the AI in the
+  CHAT tab (a model of the AI line in hand, or a model file, talked to) is spoken as it comes.
+- For now it speaks with the system's voice, as Read menus aloud does: Windows' own speech; elsewhere
+  the row says "Windows only" and nothing is said. Sieve's own voice is to take its place (below).
+- A reply is bytes, and an untrained model's are mostly not text: what is spoken is its valid UTF-8
+  text, with control bytes and broken sequences left out as spaces.
+- `--text-to-voice` turns it on for one run (not saved); with `--screenshot` the hallway prints the
+  reply spoken ("voice: ..."), as `--read-aloud` prints what is read.
+- CI step 10: a reply spoken, and the setting's row read aloud in Settings, Controls.
 
-- **The settings have the keys first.** A new run's page opens with its settings chosen; Tab
-  still moves to the files' order and back.
-- **Six more rows** (sixteen in all), each changed with Left and Right (Shift: bigger steps):
-  - **preset**: the AI line's shape (as the setup menu has it), or tiny (1 layer, width 16,
-    2 heads), small (2, 32, 2), medium (4, 64, 4) or large (8, 128, 8); the bits a weight kept
-    as set. A shape that is none of these shows as custom.
-  - **training**: training-v1, v2 or v3 (v3 unless another is chosen). v1 has no loss scale, so
-    its row then says so.
-  - **momentum**: 0, 0.5, 0.8, 0.9, 0.95 or 0.99 (0.9 as before).
-  - **shuffle seed**: any number from 0 (Shift: by 100).
-  - **checkpoint every**: 10 to 10,000 steps (100 as before).
-  - **threads**: as many as the batch can use (as before), or 1 up to this computer's. The
-    result is the same on any number; the estimate and the step measured follow the number set.
-- **R** puts the settings back as they start: the AI line's shape, with the loss scale and
-  learning rate suggested for it, and the recipe's defaults for the rest (the files' order kept).
-- The keys at the foot sit lower, so their two lines no longer cover the status line; "seed"'s
-  label is short enough not to run into its value.
+## The voice: an hour of LJ Speech, public domain
 
-## Checked
+`data/anchors/public-domain/voice/lj-speech` (its README says where it is from and how it was made):
 
-- A run recorded with training-v1, momentum 0.95, seed 2, a checkpoint every 50 steps, on one
-  thread: its training.ini says so, and training it again gives "REPRODUCED EXACTLY".
-- CI step 10: the two harness walks changed for the settings having the keys first (a Tab added
-  to reach the files; one Down more for the width, the preset now the top row), and the run above
-  added as a check.
+- The first 547 clips of LJ Speech 1.1 (LJ001-0001 to LJ003-0024): 3,604.5 seconds, one reader
+  (Linda Johnson, for LibriVox), each with its transcript (`metadata.csv`, LJ Speech's own form).
+  Public domain: the books (1884 to 1964) and LibriVox's recordings both.
+- As FLAC (22,050 Hz, 16-bit, mono): 93,580,290 bytes for the folder; the WAVs are 159,150,858.
+  Every FLAC was checked to decode to exactly the samples of its WAV.
+- `manifest.tsv`: each clip's samples and the SHA-256 of its WAV as LJ Speech has it.
+- `tools/fetch_voice.py` makes the same WAVs again, byte for byte, from the dataset's first Parquet
+  shard on Hugging Face (pinned by its SHA-256), and with `--all` the shard's other clips (1,638 in
+  all, about three hours). It needs pyarrow. Checked here: all 547 written, none mismatched.
 
 ## Documents
 
-- MANUAL: the harness's settings, the presets, R, and the settings having the keys first.
+- MANUAL: Text to Voice under Settings, Controls.
+- IDEAS 19.135: Sieve's own voice, in Edward's two steps (a voice of units first, then a trained one).
+
+Not changed: data/anchors/anchors-notes.txt is Edward's own list; the voice is not added to it.

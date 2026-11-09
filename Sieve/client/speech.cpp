@@ -25,6 +25,8 @@ namespace hallway {
 namespace {
 
 std::atomic<bool> g_on{false};
+std::atomic<bool> g_voice_on{false}; // Text to Voice
+std::string g_voiced;                // (under g_mx)
 std::atomic<bool> g_started{false}; // (the voice made, so turning off may cut it short)
 std::mutex g_mx;
 std::string g_last;
@@ -155,6 +157,65 @@ bool speech_available()
 #else
     return false;
 #endif
+}
+
+void set_text_to_voice(bool on)
+{
+    g_voice_on = on;
+#ifdef _WIN32
+    if (!on && g_started) voice().say(" "); // (turned off: a reply being spoken is cut short)
+#endif
+}
+
+bool text_to_voice() { return g_voice_on; }
+
+namespace {
+// A reply as it can be said: valid UTF-8 kept, control bytes and broken sequences as spaces (a
+// model's reply is bytes, and an untrained one's are mostly not text), runs of spaces as one.
+std::string sayable(const std::string& text)
+{
+    std::string out;
+    auto space = [&] {
+        if (!out.empty() && out.back() != ' ') out += ' ';
+    };
+    for (size_t i = 0; i < text.size();)
+    {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        const size_t n = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        bool ok = n > 0 && i + n <= text.size() && (n > 1 || (c >= 0x20 && c != 0x7F));
+        for (size_t k = 1; ok && k < n; ++k) ok = (static_cast<unsigned char>(text[i + k]) & 0xC0) == 0x80;
+        if (!ok || c == ' ')
+        {
+            space();
+            ++i;
+            continue;
+        }
+        out.append(text, i, n);
+        i += n;
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out;
+}
+} // namespace
+
+void speak_reply(const std::string& reply)
+{
+    const std::string text = sayable(reply);
+    if (!g_voice_on || text.empty()) return;
+    {
+        std::lock_guard<std::mutex> lock(g_mx);
+        g_voiced = text;
+        g_last.clear(); // (the menus' next item is said again after it)
+    }
+#ifdef _WIN32
+    if (voice().ok) voice().say(text);
+#endif
+}
+
+std::string last_voiced()
+{
+    std::lock_guard<std::mutex> lock(g_mx);
+    return g_voiced;
 }
 
 void announce(const std::string& text)

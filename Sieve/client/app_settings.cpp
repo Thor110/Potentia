@@ -202,6 +202,7 @@ AppSettings AppSettings::load(const fs::path& path)
             }
             else if (key == "invert_mouse_y") s.invert_mouse_y = on_off(value, false);
             else if (key == "read_aloud") s.read_aloud = on_off(value, false);
+            else if (key == "text_to_voice") s.text_to_voice = on_off(value, false);
         }
         else if (section == "models")
         {
@@ -321,6 +322,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"controls", "mouse_sensitivity", std::to_string(mouse_sensitivity), "percent, 10 to 400"},
         {"controls", "invert_mouse_y", on_off(invert_mouse_y), "on: moving the mouse up looks down"},
         {"controls", "read_aloud", on_off(read_aloud), "on: the item chosen in a menu is read aloud by the system's voice (Windows)"},
+        {"controls", "text_to_voice", on_off(text_to_voice), "on: the AI's replies in the CHAT tab are spoken aloud by the system's voice (Windows), until Sieve's voice model speaks them"},
         {"models", "text_model", text_model, "a model folder CHAT talks with; empty: the model in hand"},
         {"models", "picture_model", picture_model, "a picture model's run folder DRAW uses; empty: the first trained one"},
         {"models", "widen_weights", widen_weights == 2 ? "auto" : on_off(widen_weights == 1), "on: a model file's BF16 and F16 weights widened as they load (twice the memory); off: as stored; auto: widened where the widened model fits in ITEM MEMORY's share of installed memory; the same numbers either way"},

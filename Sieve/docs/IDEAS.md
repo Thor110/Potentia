@@ -6922,3 +6922,21 @@ after it became the Priority button). Two ways, by kind of text:
   (FORMATS.md), once those are one table in the code that the packer reads too.
 - *Checked prose:* the explanations stay written by hand, and the CI looks in them for facts that
   go out of date (a version named as the default, a box that became a button).
+
+**19.135 Sieve's own voice (Edward, 9 November 2026; begun).** "we should also gather some voice
+samples from public domain spaces that can be used to train the new small voice model ... make it a
+setting \"Text to Voice\" on / off ... which allows AI to speak out loud when being spoken to through
+the dimensional line interface". Built the same day: the **Text to Voice** setting (Settings,
+Controls; `[controls] text_to_voice`), speaking the CHAT tab's replies by the system's voice
+(Windows) for now; and the voice, an hour of LJ Speech (public domain: one reader, Linda Johnson,
+for LibriVox; 547 clips with their transcripts) in `data/anchors/public-domain/voice/lj-speech`, with
+`tools/fetch_voice.py` to make its WAVs again from the pinned source, or the shard's three hours.
+Edward's choice of the way, in two steps:
+- *First, a voice of units:* the clips cut into small sounds by their transcripts (diphones: from
+  the middle of one speech sound to the middle of the next), and speech made by joining the units
+  a text needs. Intelligible from the start, with no training run, and exact: the same text gives
+  the same samples. Needs each transcript's sounds (a pronouncing list, or rules) and where each
+  falls in its clip (an alignment), both made once and kept.
+- *Then a trained voice:* a small model in the harness's own training, bit for bit, learning sound
+  (frames of the samples) from text; a harness run type of its own. It may smooth the units' joins
+  before it can speak alone.

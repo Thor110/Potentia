@@ -11,7 +11,7 @@
 //                graphics_memory_gb, view_rooms, picture_rooms, fps_counter
 //   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
 //                merge_cache_pct, unit_time_ms, item_memory_pct
-//   [controls]   mouse_sensitivity, invert_mouse_y, read_aloud
+//   [controls]   mouse_sensitivity, invert_mouse_y, read_aloud, text_to_voice
 //   [models]     text_model, picture_model, widen_weights
 //   [setup]      every line's shape and the GLOBAL settings (Settings::entries, setup.hpp)
 //   [paths]      ffmpeg
@@ -111,6 +111,7 @@ struct AppSettings
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
     bool read_aloud = false; // the menus' chosen item spoken (speech.hpp; Windows)
+    bool text_to_voice = false; // the AI's replies in the CHAT tab spoken (speech.hpp)
     // The models given as files (the setup menu's AI rows): a language model's folder for CHAT,
     // and a picture model's run folder for DRAW. Empty: the model in hand, and the first trained
     // picture model in the training folders.

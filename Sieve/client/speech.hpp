@@ -30,4 +30,13 @@ std::string spoken(const std::string& shown);
 // machine without a voice says nothing (--read-aloud).
 std::string last_announced();
 
+// Text to Voice (Edward, 9 November 2026): the AI's replies in the CHAT tab spoken aloud, by the
+// system's voice where there is one (Windows); Sieve's own voice model is to speak them once one is
+// trained. Off unless Settings, Controls turns it on. Each reply cuts short the one before.
+void set_text_to_voice(bool on);
+bool text_to_voice();
+void speak_reply(const std::string& text);
+// The reply spoken last (empty if none): scripted runs print it, as they print what is read aloud.
+std::string last_voiced();
+
 } // namespace hallway

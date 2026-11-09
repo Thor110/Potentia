@@ -25,6 +25,7 @@
 
 #include "dialogs.hpp"
 #include "gpu_memory.hpp"
+#include "speech.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "cli/locate.hpp"
@@ -223,6 +224,7 @@ void Hallway::talk(const std::string& said)
     talk_ += trf("talk.you", {said}) + "\n" + trf("talk.it", {reply}) + "\n";
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::You, said));
     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::It, reply));
+    speak_reply(reply); // (Text to Voice: said aloud where it is on)
     chat_scroll_ = 0;
 }
 
@@ -306,6 +308,7 @@ void Hallway::talk_file(const std::string& said)
     ChatEntry it = entry_of<ChatEntry>(ChatEntry::Kind::It, *reply);
     it.model = file_model_->name;
     chat_.push_back(std::move(it));
+    speak_reply(*reply); // (Text to Voice)
     chat_scroll_ = 0;
 }
 

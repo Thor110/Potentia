@@ -72,7 +72,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
                 {Kind::Action, "back"}};
-    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Action, "back"}};
+    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
     }
@@ -95,6 +95,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "read_aloud") return speech_available() ? onoff(s_.read_aloud) : tr("value.read_aloud.none");
+    if (it.id == "text_to_voice") return speech_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {
@@ -266,6 +267,11 @@ void MainMenu::change(int dir)
         {
             s_.read_aloud = !s_.read_aloud;
             set_read_aloud(s_.read_aloud);
+        }
+        else if (it.id == "text_to_voice")
+        {
+            s_.text_to_voice = !s_.text_to_voice;
+            set_text_to_voice(s_.text_to_voice);
         }
         save();
         return;

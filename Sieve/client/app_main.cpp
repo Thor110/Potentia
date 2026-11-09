@@ -164,6 +164,7 @@ const char* kUsage =
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --read-aloud        the menus read aloud for this run (not saved); with --screenshot, prints what was said\n"
+    "  --text-to-voice     the CHAT tab's replies spoken for this run (not saved); with --screenshot, prints the last\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
     "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
@@ -815,6 +816,8 @@ int run(const Args& a)
     if (a.has("widen-weights")) app.widen_weights = 1;
     set_read_aloud(app.read_aloud); // the menus read aloud ([controls] read_aloud; speech.hpp)
     if (a.has("read-aloud")) set_read_aloud(true); // for this run only, not saved; scripted pictures print what is said
+    set_text_to_voice(app.text_to_voice); // the CHAT tab's replies spoken ([controls] text_to_voice)
+    if (a.has("text-to-voice")) set_text_to_voice(true); // for this run only, not saved; scripted pictures print the reply spoken
     // How much of installed memory the setup menu's counts may take at once (COUNTING MEMORY), and
     // how much of the filter memory keeps merged automata between counts (MERGE CACHE).
     if (a.has("counting-memory")) app.counting_memory_pct = std::clamp(int(a.get_positive("counting-memory", 50)), 5, 100);
@@ -1395,6 +1398,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
+        if (text_to_voice() && !last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n";
         hall->release_textures();
         hall.reset(); // before SDL goes (its audio stream, its textures)
         return finish();

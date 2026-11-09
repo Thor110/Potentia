@@ -233,6 +233,10 @@ cmp hai.safetensors ai137/model.safetensors
 $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --screenshot ai-talk.png | tr -d '\r' | tee ai-talk.txt | sed -n 1p | q "^AI line, positional"
 q "^you: Hello there" ai-talk.txt
 q "^it: " ai-talk.txt
+# Text to Voice (9 November 2026): the reply spoken, as text that can be said (a machine with no
+# voice says nothing; the scripted run prints it); and its row in Settings, Controls.
+$H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --text-to-voice --screenshot ai-voice.png | tr -d '\r' | q "^voice: "
+$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Return,Down,Down,Down" --screenshot tv-row.png | tr -d '\r' | q "^read aloud: Text to Voice"
 # The chat window (IDEAS §19.13): a file given to the model, two figures drawn with the shipped
 # picture model (its pictures 1 and 2, as `sieve diffuse --make` makes them), and something
 # said; GO TO IT on a figure holds it on the image line, J on a text file opens it on PAGES.
