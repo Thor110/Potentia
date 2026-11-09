@@ -87,8 +87,8 @@ item.read_aloud = Read menus aloud
 help.read_aloud = The item chosen in a menu (the main and pause menus, the setup menu and its filters) is spoken by the system's voice when it changes, with its value; in the File Locator, the button pointed at or pressed and the status line (Windows' own speech).
 value.read_aloud.none = Windows only
 item.text_to_voice = Text to Voice
-help.text_to_voice = The AI's replies in the CHAT tab spoken as they come: by the system's voice (Windows) until Sieve's own voice can speak them.
-value.text_to_voice.none = Windows only
+help.text_to_voice = The AI's replies in the CHAT tab spoken as they come, in Sieve's own voice (or, without its files, Windows' own).
+value.text_to_voice.none = no voice here
 controls.keys.title = KEYS
 controls.keys = W A S D|move\nMouse|look around\nShift|run\nE / left click|take a book off the shelf (you stand still while holding it), or put it back\nT|warp: find a text, picture, notes or book file\nG|go to an address, a percentage or @tile\nM|ordering: positional, scrambled, guided\n- / =|zoom out / in (guided ordering; Shift: 8x)\nWheel, PgUp/PgDn, [ ]|jump 1 (more spun fast), 1000, 1000000 tiles\nHome|back to tile 0, where every line starts\nN / B|next / previous page, or unit of a warped trail\nP|play an audio book you are holding\nMouse, A / D, R|turn a model you are holding, or set it upright again\nF1|the setup menu\nTab|free or capture the mouse\nEsc|put a book back, or free the mouse\nCtrl+Q|quit
 

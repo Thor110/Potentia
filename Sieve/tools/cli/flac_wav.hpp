@@ -81,6 +81,9 @@ std::optional<std::vector<uint8_t>> sound_as_flac(const std::vector<uint8_t>& b,
 // Whether b starts as a FLAC file does ("fLaC").
 bool is_flac(const std::vector<uint8_t>& b);
 
+// A FLAC of one channel of 16-bit samples, decoded (its MD5 checked); nothing for any other.
+std::optional<std::vector<int16_t>> flac_mono16(const std::vector<uint8_t>& f, uint32_t* rate = nullptr);
+
 // A FLAC file re-coded (Sound as FLAC): its samples decoded and coded again by libFLAC at the effort
 // asked, in the streamable subset; its own metadata blocks kept (tags, pictures, cue sheet, application
 // blocks) but its padding and seek table (whose points would point into the old frames), after the new

@@ -1002,6 +1002,7 @@ int run(const Args& a)
     }
     auto finish = [&] {
         player.reset(); // its audio stream goes before SDL does
+        stop_speech();  // and the voice's
         release_fonts(); // glyph textures belong to the renderer
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
@@ -1648,6 +1649,7 @@ int run(const Args& a)
             {
                 SDL_Event e;
                 while (SDL_PollEvent(&e)) hall->handle(e, quit);
+                pump_speech(); // (a reply Sieve's voice has made, played)
                 const Uint64 now = SDL_GetTicksNS();
                 const float dt = std::min(0.1f, float(now - last) / 1e9f);
                 last = now;

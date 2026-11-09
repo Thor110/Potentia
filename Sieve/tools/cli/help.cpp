@@ -705,6 +705,20 @@ const std::vector<Page>& pages()
           {"sieve diffuse figs", "train it again and check"},
           {"sieve diffuse --make figs --count 5 --show-levels", "and make pictures with it"}}},
 
+        {"speak", "Say a text in Sieve's own voice, into a WAV file.",
+         "sieve speak TEXT... [--out FILE.wav] [--voice FOLDER] [--phones]",
+         "Sieve's own voice (IDEAS 19.135): speech joined from small sounds (diphones, from the middle of\n"
+         "one speech sound to the middle of the next) cut from an hour of one reader's recordings, LJ\n"
+         "Speech (public domain; data/anchors/public-domain/voice/lj-speech). The words are read into\n"
+         "speech sounds by CMUdict (data/voice/lj-speech/cmudict.dict, its licence beside it); a number\n"
+         "is said as words, and a word it does not have is spelt out. The same text gives the same\n"
+         "samples. The voice of the hallway's Text to Voice.",
+         {{"--out FILE.wav", "Where the speech goes (spoken.wav): 22,050 samples a second, 16-bit, one channel."},
+          {"--voice FOLDER", "The voice's folder (data/voice/lj-speech, here, above, or beside the program), holding\n"
+                             "alignment.tsv and cmudict.dict; its clips beside it, or in the anchors."},
+          {"--phones", "Print the speech sounds the text is read as (SIL: a pause)."}},
+         {{"sieve speak Hello, and welcome to the gallery.", "say it, into spoken.wav"}}},
+
         {"dicts", "List the registered dictionaries, or hash a new one for registration.",
          "sieve dicts [--hash FILE]",
          "Dictionaries are listed in data/dictionaries/dictionaries.tsv (the build copies the folder\n"
@@ -1496,7 +1510,7 @@ void print_usage()
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
         {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
-        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "version"}},
+        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;
     auto show = [&](const Page& p) {

@@ -38,5 +38,12 @@ bool text_to_voice();
 void speak_reply(const std::string& text);
 // The reply spoken last (empty if none): scripted runs print it, as they print what is read aloud.
 std::string last_voiced();
+// Whether Sieve's own voice is here (its files found: data/voice/lj-speech and its clips); Text to
+// Voice speaks with it where it is, on any system, and with the system's voice (Windows) where not.
+bool sieve_voice_available();
+// Each frame: a reply Sieve's voice has finished making is played (SDL audio, on the frame's thread).
+void pump_speech();
+// Before SDL goes: the voice's audio stream let go.
+void stop_speech();
 
 } // namespace hallway

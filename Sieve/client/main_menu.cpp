@@ -95,7 +95,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "mouse_sensitivity") return std::to_string(s_.mouse_sensitivity) + "%";
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "read_aloud") return speech_available() ? onoff(s_.read_aloud) : tr("value.read_aloud.none");
-    if (it.id == "text_to_voice") return speech_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
+    if (it.id == "text_to_voice") return speech_available() || sieve_voice_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {

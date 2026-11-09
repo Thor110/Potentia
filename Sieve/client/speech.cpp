@@ -2,6 +2,12 @@
 #include "speech.hpp"
 #include "strings.hpp"
 
+#include "cli/voice.hpp"
+
+#include <SDL3/SDL.h>
+#include <memory>
+#include <vector>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -102,7 +108,129 @@ Voice& voice()
 }
 #endif
 
+// Sieve's own voice (cli/voice.hpp): loaded the first time it speaks, on a thread of its own, which
+// makes each reply's samples there; the frame takes them and plays them (pump_speech), so SDL's
+// audio is only ever touched from the frame's thread. The newest reply only: one cuts short the last.
+struct SieveVoice
+{
+    std::mutex mx;
+    std::condition_variable cv;
+    std::string next;
+    bool pending = false, quit = false;
+    std::vector<int16_t> ready;
+    bool has_ready = false;
+    std::unique_ptr<sieve::cli::Voice> voice;
+    bool tried = false;
+    std::thread worker;
+
+    ~SieveVoice()
+    {
+        {
+            std::lock_guard<std::mutex> lock(mx);
+            quit = true;
+        }
+        cv.notify_one();
+        if (worker.joinable()) worker.join();
+    }
+    void say(const std::string& text)
+    {
+        {
+            std::lock_guard<std::mutex> lock(mx);
+            next = text;
+            pending = true;
+            if (!worker.joinable()) worker = std::thread([this] { run(); });
+        }
+        cv.notify_one();
+    }
+    void run()
+    {
+        for (;;)
+        {
+            std::string text;
+            {
+                std::unique_lock<std::mutex> lock(mx);
+                cv.wait(lock, [this] { return pending || quit; });
+                if (quit) return;
+                text = std::move(next);
+                pending = false;
+            }
+            if (!tried)
+            {
+                tried = true;
+                try
+                {
+                    voice = sieve::cli::Voice::find();
+                }
+                catch (const std::exception& e)
+                {
+                    SDL_Log("Text to Voice: %s", e.what());
+                }
+            }
+            if (!voice) continue;
+            std::vector<int16_t> pcm = voice->speak(text);
+            std::lock_guard<std::mutex> lock(mx);
+            ready = std::move(pcm);
+            has_ready = true;
+        }
+    }
+};
+
+SieveVoice& sieve_voice()
+{
+    static SieveVoice v;
+    return v;
+}
+
+SDL_AudioStream* g_voice_stream = nullptr;
+
 } // namespace
+
+bool sieve_voice_available()
+{
+    static const bool there = [] {
+        try
+        {
+            return sieve::cli::Voice::where().has_value();
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    }();
+    return there;
+}
+
+void pump_speech()
+{
+    std::vector<int16_t> pcm;
+    {
+        SieveVoice& v = sieve_voice();
+        std::lock_guard<std::mutex> lock(v.mx);
+        if (!v.has_ready) return;
+        pcm = std::move(v.ready);
+        v.has_ready = false;
+    }
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) return;
+    if (!g_voice_stream)
+    {
+        const SDL_AudioSpec spec{SDL_AUDIO_S16, 1, int(sieve::cli::Voice::kRate)};
+        g_voice_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+        if (!g_voice_stream) return;
+    }
+    SDL_ClearAudioStream(g_voice_stream); // (the reply before, cut short)
+    SDL_PutAudioStreamData(g_voice_stream, pcm.data(), int(pcm.size() * sizeof(int16_t)));
+    SDL_FlushAudioStream(g_voice_stream);
+    SDL_ResumeAudioStreamDevice(g_voice_stream);
+}
+
+void stop_speech()
+{
+    if (g_voice_stream)
+    {
+        SDL_DestroyAudioStream(g_voice_stream);
+        g_voice_stream = nullptr;
+    }
+}
 
 void set_read_aloud(bool on)
 {
@@ -165,6 +293,7 @@ void set_text_to_voice(bool on)
 #ifdef _WIN32
     if (!on && g_started) voice().say(" "); // (turned off: a reply being spoken is cut short)
 #endif
+    if (!on && g_voice_stream) SDL_ClearAudioStream(g_voice_stream);
 }
 
 bool text_to_voice() { return g_voice_on; }
@@ -206,6 +335,12 @@ void speak_reply(const std::string& reply)
         std::lock_guard<std::mutex> lock(g_mx);
         g_voiced = text;
         g_last.clear(); // (the menus' next item is said again after it)
+    }
+    // Sieve's own voice where it is here; else the system's (Windows).
+    if (sieve_voice_available())
+    {
+        sieve_voice().say(text);
+        return;
     }
 #ifdef _WIN32
     if (voice().ok) voice().say(text);

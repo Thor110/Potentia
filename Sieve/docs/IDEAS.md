@@ -6940,3 +6940,7 @@ Edward's choice of the way, in two steps:
 - *Then a trained voice:* a small model in the harness's own training, bit for bit, learning sound
   (frames of the samples) from text; a harness run type of its own. It may smooth the units' joins
   before it can speak alone.
+- *The voice of units, built the same day* (`tools/cli/voice.hpp`, `sieve speak`; Edward: CMUdict for
+  the words, espeak-ng for the alignment): 1,022 diphones, 33,750 takes, from 503 aligned clips. An
+  offline recogniser understood 76.7% of the words of 60 sentences in it, against 90.3% in espeak-ng's
+  voice (results/voice-units-2026-11-09.md). Text to Voice speaks with it wherever its files are.

@@ -1,35 +1,51 @@
-# Changes: Text to Voice, and an hour of public-domain voice (9 November 2026)
+# Changes: Sieve's own voice, of units (9 November 2026)
 
-## Text to Voice
+Edward's choice: a voice of units first (a trained one after), CMUdict for the words, espeak-ng for
+the alignment. Measured in `results/voice-units-2026-11-09.md`.
 
-- A new setting, **Text to Voice** (Settings, Controls, after Read menus aloud; `[controls]
-  text_to_voice` in the settings file; off by default). With it on, each reply of the AI in the
-  CHAT tab (a model of the AI line in hand, or a model file, talked to) is spoken as it comes.
-- For now it speaks with the system's voice, as Read menus aloud does: Windows' own speech; elsewhere
-  the row says "Windows only" and nothing is said. Sieve's own voice is to take its place (below).
-- A reply is bytes, and an untrained model's are mostly not text: what is spoken is its valid UTF-8
-  text, with control bytes and broken sequences left out as spaces.
-- `--text-to-voice` turns it on for one run (not saved); with `--screenshot` the hallway prints the
-  reply spoken ("voice: ..."), as `--read-aloud` prints what is read.
-- CI step 10: a reply spoken, and the setting's row read aloud in Settings, Controls.
+## The voice
 
-## The voice: an hour of LJ Speech, public domain
+- **`tools/cli/voice.hpp/.cpp`**: speech joined from diphones (the middle of one speech sound to the
+  middle of the next) cut from the anchors' hour of LJ Speech: 1,022 diphones, 33,750 takes, from
+  503 aligned clips. A text is read into speech sounds by CMUdict (numbers as words; a word it lacks
+  spelt out); for each pair of sounds a take is chosen, all at once, by how smoothly it joins its
+  neighbours (takes next to each other in a recording join at no cost) and how usual its length is;
+  each join is lined up on the waveform (up to 5 ms) and crossfaded (3 ms). The same text gives the
+  same samples.
+- **How well it is understood:** an offline recogniser (whisper.cpp, base.en) got 76.7% of the words
+  of 60 sentences not in the recordings (a word error rate of 23.3%), against 90.3% for espeak-ng's
+  own voice. Every change tried on the way is in the results, with its rate.
+- **`sieve speak TEXT [--out FILE.wav] [--phones]`**: says a text into a WAV (22,050 Hz, 16-bit,
+  mono). About 2.6 s on this machine, almost all of it loading the voice; 228 MB at its peak.
+- **Text to Voice** now speaks in Sieve's own voice wherever its files are, on any system: loaded the
+  first time it speaks, on a thread of its own, each reply played through SDL by the frame. Without
+  its files, Windows' voice as before; the setting's row says "no voice here" where there is neither.
+- `flac_wav`: `flac_mono16`, a FLAC of one 16-bit channel decoded (MD5 checked), for the clips.
 
-`data/anchors/public-domain/voice/lj-speech` (its README says where it is from and how it was made):
+## Its data
 
-- The first 547 clips of LJ Speech 1.1 (LJ001-0001 to LJ003-0024): 3,604.5 seconds, one reader
-  (Linda Johnson, for LibriVox), each with its transcript (`metadata.csv`, LJ Speech's own form).
-  Public domain: the books (1884 to 1964) and LibriVox's recordings both.
-- As FLAC (22,050 Hz, 16-bit, mono): 93,580,290 bytes for the folder; the WAVs are 159,150,858.
-  Every FLAC was checked to decode to exactly the samples of its WAV.
-- `manifest.tsv`: each clip's samples and the SHA-256 of its WAV as LJ Speech has it.
-- `tools/fetch_voice.py` makes the same WAVs again, byte for byte, from the dataset's first Parquet
-  shard on Hugging Face (pinned by its SHA-256), and with `--all` the shard's other clips (1,638 in
-  all, about three hours). It needs pyarrow. Checked here: all 547 written, none mismatched.
+- `data/voice/lj-speech/cmudict.dict`: CMUdict, unchanged (135,166 lines; BSD-style licence, kept
+  beside it and in `third_party_licenses/cmudict`, listed in the licences' README).
+- `data/voice/lj-speech/alignment.tsv`: where each speech sound lies in each clip (503 clips).
+- `tools/voice/align_voice.py` makes the alignment again, byte for byte (checked), from the WAVs
+  `tools/fetch_voice.py` gives; it needs espeak-ng (a build-time tool only, through its library;
+  GPL, never linked into Sieve or shipped) and numpy. Its check: fricatives' zero-crossing rate is
+  above vowels' in 95.2% of pairs as aligned, 62.9% and 57.4% with it moved 100 ms either way.
+- The build copies `data/voice` beside the programs; the clips are found in the anchors, above a
+  build inside the repository.
+
+## Checked
+
+- Unit suite: 154,460 checks, 0 failures. `tools/check_help.py`: nothing missing.
+- CI step 10: a text read into its sounds (`--phones`, "42" as "forty two"), said, and said the same
+  again, sample for sample.
 
 ## Documents
 
-- MANUAL: Text to Voice under Settings, Controls.
-- IDEAS 19.135: Sieve's own voice, in Edward's two steps (a voice of units first, then a trained one).
+- MANUAL (Text to Voice), `sieve help speak`, IDEAS 19.135 (the voice of units, built), the voice
+  folder's README, results/voice-units-2026-11-09.md and the 60 test sentences beside it.
 
-Not changed: data/anchors/anchors-notes.txt is Edward's own list; the voice is not added to it.
+## For you to decide
+
+- **The release** does not carry the clips (93.6 MB): there, Text to Voice falls back to Windows'
+  voice. Carrying them would put Sieve's voice in the release, at that size.

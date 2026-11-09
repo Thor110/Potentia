@@ -681,6 +681,16 @@ bool gives_back(std::vector<uint8_t> inner, const std::vector<uint8_t>& skeleton
 
 } // namespace
 
+std::optional<std::vector<int16_t>> flac_mono16(const std::vector<uint8_t>& f, uint32_t* rate)
+{
+    const auto d = decode_whole(f);
+    if (!d || d->channels != 1 || d->bits != 16) return std::nullopt;
+    if (rate) *rate = d->rate;
+    std::vector<int16_t> out(d->samples.size());
+    for (size_t i = 0; i < out.size(); ++i) out[i] = int16_t(d->samples[i]);
+    return out;
+}
+
 std::optional<WavOpened> wav_open(const std::vector<uint8_t>& b, int effort)
 {
     const auto l = layout_of(b);

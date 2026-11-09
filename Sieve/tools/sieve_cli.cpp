@@ -20,6 +20,8 @@
 // Run "sieve help", "sieve help <command>" or "sieve help lines" for explanations and examples.
 
 #include "cli/delta.hpp"
+#include "cli/voice.hpp"
+#include "sieve/paths.hpp"
 #include "cli/args.hpp"
 #include "cli/book.hpp"
 #include "cli/compare.hpp"
@@ -1458,6 +1460,29 @@ int cmd_alphabets(const Args& a)
 }
 
 // ---------------------------------------------------------------- models
+
+// sieve speak TEXT: Sieve's own voice (tools/cli/voice.hpp) says it, into a WAV file.
+int cmd_speak(const Args& a)
+{
+    if (a.positional.empty()) throw std::runtime_error("speak needs the words to say (see: sieve help speak)");
+    std::string text;
+    for (const std::string& p : a.positional) text += (text.empty() ? "" : " ") + p;
+    const auto voice = cli::Voice::find(sieve::from_u8(a.get("voice")));
+    if (a.has("phones"))
+    {
+        for (const std::string& p : voice->phones(text)) std::cout << p << " ";
+        std::cout << "\n";
+    }
+    const std::vector<int16_t> pcm = voice->speak(text);
+    const std::string out = a.get("out", "spoken.wav");
+    const std::vector<uint8_t> wav = cli::wav_of(pcm, cli::Voice::kRate);
+    std::ofstream f(sieve::from_u8(out), std::ios::binary);
+    f.write(reinterpret_cast<const char*>(wav.data()), std::streamsize(wav.size()));
+    if (!f) throw std::runtime_error("cannot write " + out);
+    std::cout << "said in " << pcm.size() << " samples (" << std::fixed << std::setprecision(2) << double(pcm.size()) / cli::Voice::kRate
+              << " s) from " << voice->diphones() << " diphones' " << voice->takes() << " takes: " << out << "\n";
+    return 0;
+}
 
 int cmd_models()
 {
@@ -3189,7 +3214,7 @@ bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
-           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site";
+           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
 
 } // namespace
@@ -3334,6 +3359,7 @@ int main(int argc, char** argv)
         if (a.command == "compress") return cmd_compress(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();
+        if (a.command == "speak") return cmd_speak(a);
         if (a.command == "train") return cmd_train(a);
         if (a.command == "measure") return cmd_measure(a);
         if (a.command == "filters") return cmd_filters(a);
