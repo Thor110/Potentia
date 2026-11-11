@@ -86,6 +86,12 @@ if(MSVC)
 else()
     target_compile_options(sieve_core PUBLIC -Wall -Wextra -Wpedantic)
 endif()
+# Warnings in Sieve's own code as errors (review, 9 November 2026: nothing failed a build on a new
+# warning). Off unless asked; the Linux CI asks (GCC, where the build is clean of them).
+option(SIEVE_WERROR "Warnings in Sieve's own code are errors" OFF)
+if(SIEVE_WERROR)
+    target_compile_options(sieve_core PUBLIC $<IF:$<CXX_COMPILER_ID:MSVC>,/WX,-Werror>)
+endif()
 
 # ---------------------------------------------------------------- command-line tool
 # Image file I/O wraps stb_image (third-party, public domain). It lives in its own library so
@@ -129,6 +135,21 @@ if(ZLIB_LIBRARY STREQUAL "ZLIB::ZLIBSTATIC")
     unset(ZLIB_LIBRARY_RELEASE CACHE)
     unset(ZLIB_LIBRARY_DEBUG CACHE)
 endif()
+# A fetched dependency checked to be the commit it was pinned to (review, 9 November 2026: a tag can
+# be moved, and the same tag then gives other source). Where its folder is a Git checkout and Git is
+# here; a source folder given another way (FETCHCONTENT_SOURCE_DIR_<NAME>) is the giver's to vouch for.
+function(sieve_pinned name dir commit)
+    find_package(Git QUIET)
+    if(GIT_FOUND AND EXISTS "${dir}/.git")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${dir}" rev-parse HEAD
+                        OUTPUT_VARIABLE head OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE failed ERROR_QUIET)
+        if(NOT failed AND NOT head STREQUAL commit)
+            message(FATAL_ERROR "${name}: fetched commit ${head}, but Sieve is pinned to ${commit}. Its tag may have moved: "
+                                "check the source, then update the pin in CMakeLists.txt.")
+        endif()
+    endif()
+endfunction()
+
 find_package(ZLIB QUIET)
 find_package(LibLZMA QUIET)
 if(NOT ZLIB_FOUND OR SIEVE_FETCH_COMPRESSION)
@@ -142,6 +163,7 @@ if(NOT ZLIB_FOUND OR SIEVE_FETCH_COMPRESSION)
         GIT_TAG v1.3.2
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(zlib)
+    sieve_pinned(zlib "${zlib_SOURCE_DIR}" da607da739fa6047df13e66a2af6b8bec7c2a498) # v1.3.2
     set(SIEVE_ZLIB ZLIB::ZLIBSTATIC)
 else()
     set(SIEVE_ZLIB ZLIB::ZLIB)
@@ -164,6 +186,7 @@ if(NOT LIBLZMA_FOUND OR SIEVE_FETCH_COMPRESSION)
         GIT_TAG v5.8.1
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(xz)
+    sieve_pinned(xz "${xz_SOURCE_DIR}" a522a226545730551f7e7c2685fab27cf567746c) # v5.8.1
     set(SIEVE_LZMA liblzma)
     # Built inside this project, xz's liblzma target keeps its header folder to itself (it is
     # only exported when installed), so its users are given it here. A system with its own
@@ -185,6 +208,7 @@ FetchContent_Declare(bzip2
     GIT_TAG bzip2-1.0.8
     GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(bzip2)
+sieve_pinned(bzip2 "${bzip2_SOURCE_DIR}" 6a8690fc8d26c815e798c588f796eabe9d684cf0) # bzip2-1.0.8
 add_library(sieve_bzip2 STATIC
     ${bzip2_SOURCE_DIR}/blocksort.c ${bzip2_SOURCE_DIR}/huffman.c ${bzip2_SOURCE_DIR}/crctable.c ${bzip2_SOURCE_DIR}/randtable.c
     ${bzip2_SOURCE_DIR}/compress.c ${bzip2_SOURCE_DIR}/decompress.c ${bzip2_SOURCE_DIR}/bzlib.c)
@@ -209,6 +233,7 @@ FetchContent_Declare(zstd
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR build/cmake)
 FetchContent_MakeAvailable(zstd)
+sieve_pinned(zstd "${zstd_SOURCE_DIR}" f8745da6ff1ad1e7bab384bd1f9d742439278e99) # v1.5.7
 set(SIEVE_ZSTD libzstd_static)
 set(SIEVE_ZSTD_INCLUDE ${zstd_SOURCE_DIR}/lib)
 # lz4 1.10.0 (BSD 2-clause, third_party_licenses/lz4; the library's own licence, its lib folder's:
@@ -220,6 +245,7 @@ FetchContent_Declare(lz4
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR lib) # (no CMakeLists.txt there: fetched, not built by its own CMake)
 FetchContent_MakeAvailable(lz4)
+sieve_pinned(lz4 "${lz4_SOURCE_DIR}" ebb370ca83af193212df4dcbadcc5d87bc0de2f0) # v1.10.0
 add_library(sieve_lz4 STATIC ${lz4_SOURCE_DIR}/lib/lz4.c ${lz4_SOURCE_DIR}/lib/lz4hc.c ${lz4_SOURCE_DIR}/lib/lz4frame.c
     ${lz4_SOURCE_DIR}/lib/xxhash.c)
 target_include_directories(sieve_lz4 SYSTEM PUBLIC ${lz4_SOURCE_DIR}/lib)
@@ -231,6 +257,7 @@ FetchContent_Declare(brotli
     GIT_SHALLOW TRUE
     SOURCE_SUBDIR c/include) # (as lz4: fetched, not built by its own CMake)
 FetchContent_MakeAvailable(brotli)
+sieve_pinned(brotli "${brotli_SOURCE_DIR}" db24a98aed38a16de78cc05ca15cdd8dc2a0d92d) # v1.2.1
 file(GLOB SIEVE_BROTLI_SOURCES ${brotli_SOURCE_DIR}/c/common/*.c ${brotli_SOURCE_DIR}/c/dec/*.c ${brotli_SOURCE_DIR}/c/enc/*.c)
 add_library(sieve_brotli STATIC ${SIEVE_BROTLI_SOURCES})
 target_include_directories(sieve_brotli SYSTEM PUBLIC ${brotli_SOURCE_DIR}/c/include)
@@ -289,6 +316,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 FetchContent_MakeAvailable(libarchive)
+sieve_pinned(libarchive "${libarchive_SOURCE_DIR}" 0c48412be2d94afe1859a807ea7896a18d8900bd) # v3.8.10
 set(CMAKE_BUILD_TYPE "${SIEVE_SAVED_BUILD_TYPE}")
 set(BUILD_SHARED_LIBS ${SIEVE_SAVED_BUILD_SHARED_LIBS})
 set(SIEVE_ARCHIVE archive_static)
@@ -463,6 +491,7 @@ FetchContent_Declare(flac
 FetchContent_GetProperties(flac)
 if(NOT flac_POPULATED)
     FetchContent_Populate(flac)
+    sieve_pinned(flac "${flac_SOURCE_DIR}" 28e4f0528c76b296c561e922ba67d43751990599) # 1.4.3
     # (libarchive's ENABLE_WERROR, ON in a Debug build, would reach libFLAC's CMake too, which then adds
     # GCC's -Werror, an option MSVC refuses: "D8021 invalid numeric argument '/Werror'", Edward's
     # x64-Debug, 8 November 2026. Off for libFLAC alone; libarchive is configured already.)
@@ -668,6 +697,7 @@ if(SIEVE_BUILD_CLIENT)
             GIT_TAG release-3.2.30
             GIT_SHALLOW TRUE)
         FetchContent_MakeAvailable(SDL3)
+        sieve_pinned(SDL3 "${sdl3_SOURCE_DIR}" f5e5f6588921eed3d7d048ce43d9eb1ff0da0ffc) # release-3.2.30
     endif()
 
     # WIN32: a Windows program, so no console window opens behind it (app_main.cpp attaches to

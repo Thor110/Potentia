@@ -99,6 +99,36 @@ std::string megabytes(uint64_t bytes)
     return b;
 }
 
+// a before b, the runs of digits in them compared as numbers (leading zeros aside), the rest byte by
+// byte, and the whole names as they are where that ties.
+bool natural_less(const std::string& a, const std::string& b)
+{
+    size_t i = 0, j = 0;
+    auto digit = [](char c) { return c >= '0' && c <= '9'; };
+    while (i < a.size() && j < b.size())
+    {
+        if (digit(a[i]) && digit(b[j]))
+        {
+            size_t ei = i, ej = j;
+            while (ei < a.size() && digit(a[ei])) ++ei;
+            while (ej < b.size() && digit(b[ej])) ++ej;
+            size_t si = i, sj = j;
+            while (si + 1 < ei && a[si] == '0') ++si;
+            while (sj + 1 < ej && b[sj] == '0') ++sj;
+            if (ei - si != ej - sj) return ei - si < ej - sj;
+            if (const int c = a.compare(si, ei - si, b, sj, ej - sj)) return c < 0;
+            i = ei;
+            j = ej;
+            continue;
+        }
+        if (a[i] != b[j]) return static_cast<unsigned char>(a[i]) < static_cast<unsigned char>(b[j]);
+        ++i;
+        ++j;
+    }
+    if ((i < a.size()) != (j < b.size())) return j < b.size();
+    return a < b;
+}
+
 std::string kilobytes(uint64_t bytes)
 {
     if (bytes >= (uint64_t(1) << 20)) return megabytes(bytes);
@@ -168,7 +198,8 @@ void Harness::scan()
         else if (e.is_directory() && sieve::cli::is_diffusion_run(p)) entries_.push_back({p, u8(p.filename()), true, true});
         else if (e.is_regular_file() && p.extension() == ".sieve") entries_.push_back({p, u8(p.filename()), false});
     }
-    std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) { return a.name < b.name; });
+    // (in natural order: the numbers in names as numbers, so run2 comes before run10)
+    std::sort(entries_.begin(), entries_.end(), [](const Entry& a, const Entry& b) { return natural_less(a.name, b.name); });
 }
 
 void Harness::select(int row)

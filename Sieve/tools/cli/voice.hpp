@@ -6,8 +6,9 @@
 //   every one in the recordings, found by the alignment (data/voice/lj-speech/alignment.tsv: each
 //   clip's phones and where each starts and ends, made once by tools/voice/align_voice.py).
 // - A text is read into phones by CMUdict (data/voice/lj-speech/cmudict.dict; its licence beside
-//   it): its words looked up, a number said as words, a word it does not have spelt out letter by
-//   letter; a pause at each comma or full stop.
+//   it): its words looked up, a number said as words; a word it does not have as a word it has with
+//   an ending (printers: printer, -s), else by letter-to-sound rules learnt from it (lts.tsv); a
+//   pause at each comma or full stop.
 // - For each pair of phones in turn, one of its takes is chosen: the ones whose joins are smoothest
 //   (the spectrum at the end of one against the start of the next; two takes that were next to each
 //   other in the recording join at no cost), and of a usual length, all chosen at once (Viterbi).

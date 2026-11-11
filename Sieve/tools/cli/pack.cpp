@@ -2513,8 +2513,37 @@ std::vector<uint8_t> lzma_alone_pack(const std::vector<uint8_t>& in, uint32_t pr
 
 } // namespace
 
+// Whether every word of a recipe after its name is a number as the packer writes one: digits alone,
+// no leading zero, one space between (the oracle's 0|[1-9][0-9]*); sscanf("%llu") alone takes "+300",
+// "0300" and leading spaces (review, 9 November 2026). The first `signed_words` may begin with a minus
+// (pngr's filter and strategy, -1 for none); `suffix` may end the first word (lzma's 9e).
+static bool plain_words(const std::string& recipe, int signed_words = 0, char suffix = 0)
+{
+    const size_t start = recipe.find(' ');
+    if (start == std::string::npos || start + 1 >= recipe.size()) return false;
+    int word = 0;
+    for (size_t i = start + 1; i <= recipe.size(); ++word)
+    {
+        const size_t end = std::min(recipe.find(' ', i), recipe.size());
+        std::string w = recipe.substr(i, end - i);
+        if (word < signed_words && w.size() > 1 && w[0] == '-') w.erase(0, 1);
+        if (word == 0 && suffix && !w.empty() && w.back() == suffix) w.pop_back();
+        if (w.empty() || w.find_first_not_of("0123456789") != std::string::npos || (w.size() > 1 && w[0] == '0')) return false;
+        if (end == recipe.size()) return true;
+        i = end + 1;
+    }
+    return false;
+}
+
 std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector<uint8_t>& inner)
 {
+    {
+        const std::string name = recipe.substr(0, recipe.find(' '));
+        static const char* const kNumbers[] = {"jbr", "gif", "flac", "skr", "pmp", "pcx", "tiff", "sk", "lz4", "br", "bz2"};
+        const bool numbers = std::find_if(std::begin(kNumbers), std::end(kNumbers), [&](const char* n) { return name == n; }) != std::end(kNumbers);
+        if ((numbers && !plain_words(recipe)) || (name == "pngr" && !plain_words(recipe, 2)) || (name == "lzma" && !plain_words(recipe, 0, 'e')))
+            throw std::runtime_error("a recipe with a number not written as Sieve writes one: " + recipe);
+    }
     if (recipe.rfind("jbr ", 0) == 0)
     {
         // "jbr <form size>" (v32): a JPEG made again from its brunsli form.
@@ -2530,13 +2559,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
         // skeleton and its frames' colour indices, each frame's LZW coded as compress codes it (gif_lzw.hpp).
         // (each number as the packer writes one, digits alone and no leading zero, as the oracle reads
         // it: sscanf alone took "+255". Review, 6 November 2026.)
-        bool plain = recipe.size() > 4;
-        for (size_t i = 4; i < recipe.size(); ++i)
-        {
-            const char c = recipe[i];
-            const bool starts = recipe[i - 1] == ' ';
-            if (c == ' ' ? starts || i + 1 == recipe.size() : c < '0' || c > '9' || (starts && c == '0' && i + 1 < recipe.size() && recipe[i + 1] != ' ')) plain = false;
-        }
+        const bool plain = plain_words(recipe);
         unsigned long long block = 0, skeleton = 0, size = 0;
         char extra = 0;
         if (!plain || std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &size, &extra) != 3 || size != inner.size() || block < 1 || block > 255 ||
@@ -2548,13 +2571,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     {
         // "flac <skeleton size> <inner size>" (v34 draft): a WAV made again from its samples, as FLAC
         // codes them, and its skeleton (flac_wav.hpp). Each number digits alone, no leading zero.
-        bool plain = recipe.size() > 5;
-        for (size_t i = 5; i < recipe.size(); ++i)
-        {
-            const char c = recipe[i];
-            const bool starts = recipe[i - 1] == ' ';
-            if (c == ' ' ? starts || i + 1 == recipe.size() : c < '0' || c > '9' || (starts && c == '0' && i + 1 < recipe.size() && recipe[i + 1] != ' ')) plain = false;
-        }
+        const bool plain = plain_words(recipe);
         unsigned long long skeleton = 0, size = 0;
         char extra = 0;
         if (!plain || std::sscanf(recipe.c_str(), "flac %llu %llu%c", &skeleton, &size, &extra) != 2 || size != inner.size() || skeleton < 12 || skeleton >= size)
@@ -7070,11 +7087,25 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     }
 
     // The streams: the programs; then every file carried as it is, and then the masks, in order.
+    // (v34 draft, 11 November 2026: with two programs or more, the x86 filter restarted at each one,
+    // from its own start, so a program and a copy of it changed in a few places stay alike for LZMA2;
+    // over the whole stream, each call's address counts from the stream's start, and the copy's all
+    // differ. Two 200,000-byte programs, one with 10 bytes changed: 45,348 bytes as one stream,
+    // 35,246 restarted at each; two builds of sieve-install three days apart: 4,054,294 and
+    // 3,994,999. results/x86-restart-2026-11-11.md.)
+    const size_t programs = size_t(std::count_if(files.begin(), files.end(), [](const ManifestEntry* f) { return f->way == "x86"; }));
+    const bool x86_each = draft_on() && binary && programs >= 2;
     std::vector<uint8_t> x86, plain;
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way == "x86")
         {
+            const size_t at = x86.size();
             x86.insert(x86.end(), bytes[i].begin(), bytes[i].end());
+            if (x86_each)
+            {
+                UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
+                z7_BranchConvSt_X86_Enc(x86.data() + at, bytes[i].size(), 0, &state);
+            }
             ++r.x86;
             r.x86_bytes += bytes[i].size();
         }
@@ -7152,7 +7183,8 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     m.lzma2 = {0, plain.size(), std::max(dictionary_for(plain.size()), plain.empty() ? 0 : floor)};
     // v17's packing: LZMA2's settings chosen for each stream (older versions are made as they were).
     const bool tune = gzip && binary;
-    std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, true, 9 | LZMA_PRESET_EXTREME, tune, true),
+    // (each program filtered already, where x86_each: the stream's own filter left off)
+    std::vector<uint8_t> px = pack_stream(x86, m.x86.dictionary, !x86_each, 9 | LZMA_PRESET_EXTREME, tune, true),
                          pp = pack_stream(plain, m.lzma2.dictionary, false, 9 | LZMA_PRESET_EXTREME, tune, true);
     {
         // (the kept first pass let go, taken or not)
@@ -7167,7 +7199,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     if (px.empty() && !x86.empty())
     {
         progress("force stopped: the programs packed at LZMA2's quickest");
-        px = encode_lzma2(x86, m.x86.dictionary, true, 0, -1, 0, false);
+        px = encode_lzma2(x86, m.x86.dictionary, !x86_each, 0, -1, 0, false);
     }
     const bool pp_abandoned = pp.empty() && !plain.empty();
     if (pp_abandoned && !(trim && m.compact)) pp = encode_lzma2(plain, m.lzma2.dictionary, false, 0, -1, 0, false);
@@ -7392,9 +7424,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         const size_t slash = x.path.rfind('/');
         return x.member && x.remake.rfind("jbr ", 0) == 0 && slash != std::string::npos && with_skm.count(x.path.substr(0, slash));
     };
-    m.v34 = m.binary && std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
+    m.v34 = m.binary && (x86_each || std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) {
                 return x.remake.rfind("gif ", 0) == 0 || x.remake.rfind("flac ", 0) == 0 || x.remake.rfind("tiff ", 0) == 0 || x.remake.rfind("pcx ", 0) == 0 || x.remake.rfind("pmp ", 0) == 0 || e1_in(x.way) || skm_jpeg(x);
-            });
+            }));
     m.v33 = m.v34 || (m.binary && ((!m.lzma2.mixed.empty() && match_ways(Mix4Params::parse(m.lzma2.mixed))) ||
                          std::any_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& x) { return ways_in(x.way) || x.remake.rfind("spn ", 0) == 0; })));
     m.v32 = m.v32 || m.v33;

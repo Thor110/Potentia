@@ -2206,3 +2206,25 @@ diff -r cabt cabt_i
 SIEVE_ARCHIVES_ALWAYS=1 $S locate cabt --installer cabtp.sieve --optimise-archives --compressed-permanent 2>&1 | tr -d '\r' > cabtp_l.txt
 grep -q "^unpacked" cabtp_l.txt
 grep -q "^warning: An archive or compressed file here is carried as what it holds, and installing gives that in its place, not the file itself: test_read_format_cab_1.cab" cabtp_l.txt
+# Entries out of order (SPECIFICATIONS §12.1: sorted by their paths' bytes) are refused by the C++
+# reader as by the oracle (review, 9 November 2026: C++ installed them); in order, both read on.
+printf 'sieve-manifest-v12\nroot r\nstream lzma2 2 2 0\ntree b56042fb32681582a3e46f38d4d156e0ec908caa89e8fd579d100eea2bc940a8\nf\t1\traw\ty.txt\nf\t1\traw\tx.txt\nend\nab' > order12.manifest
+rm -rf order12_out order12_ref
+if $S install order12.manifest --to order12_out > order12.txt 2>&1; then exit 1; fi
+grep -q "entries out of order" order12.txt
+if python sieve_ref.py unpack order12.manifest --to order12_ref > order12_ref.txt 2>&1; then exit 1; fi
+grep -q "entries out of order" order12_ref.txt
+# The x86 filter restarted at each program (v34 draft, 11 November 2026): a program and a copy of it
+# with ten bytes changed, much smaller than as v33, and installed the same by Sieve and the oracle.
+mkdir -p x86pair
+head -c 200000 $S > x86pair/a
+python -c "import random; b=bytearray(open('x86pair/a','rb').read()); r=random.Random(7); [b.__setitem__(i, (b[i]+1+r.randrange(255))%256) for i in r.sample(range(len(b)),10)]; open('x86pair/b','wb').write(b)"
+$S locate x86pair --installer x86pair33.sieve > /dev/null
+$S locate x86pair --installer x86pair34.sieve --v34-draft | tr -d '\r' > x86pair34.txt
+grep -q "sieve-manifest-v34" x86pair34.txt
+[ "$(stat -c%s x86pair34.sieve 2>/dev/null || wc -c < x86pair34.sieve)" -lt "$(( $(stat -c%s x86pair33.sieve 2>/dev/null || wc -c < x86pair33.sieve) * 9 / 10 ))" ]
+rm -rf x86pair_i x86pair_o
+$S install x86pair34.sieve --to x86pair_i > /dev/null
+diff -r x86pair x86pair_i
+python sieve_ref.py unpack x86pair34.sieve --to x86pair_o > /dev/null
+diff -r x86pair x86pair_o

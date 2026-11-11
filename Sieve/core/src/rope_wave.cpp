@@ -11,6 +11,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
+#include <limits>
+#include <vector>
 #include <map>
 #include <mutex>
 #include <stdexcept>
@@ -317,33 +320,87 @@ std::vector<std::vector<size_t>> segments_of(const std::vector<uint64_t>& positi
 // largest before it (what a reader checks). Gives each column's group; `cost` their total.
 // (Counts of 64 or 32 bits, the same groups and cost either way: the estimate counts in 32 bits to
 // hold half as much.)
+// x·log2(x) for x ≥ 1 in units of 2^-16 bit, by integer arithmetic alone: the same on every machine
+// and compiler, where std::log2 need not be correctly rounded (review, 9 November 2026: two machines
+// could choose different, both valid, column groups for one file). log2 by repeated squaring of the
+// mantissa (16 fraction bits); below 65,536 from a table made the same way.
+int64_t xlog2x_q16(uint64_t x)
+{
+    auto log2_q16 = [](uint64_t v) -> int64_t {
+        int e = 0;
+        while (e < 63 && (v >> (e + 1))) ++e;
+        // the mantissa as Q30 in [1, 2): squared, it fits 64 bits
+        uint64_t m = e >= 30 ? v >> (e - 30) : v << (30 - e);
+        int64_t r = int64_t(e) << 16;
+        for (int bit = 15; bit >= 0; --bit)
+        {
+            m = (m * m) >> 30;
+            if (m >= (uint64_t(1) << 31))
+            {
+                m >>= 1;
+                r |= int64_t(1) << bit;
+            }
+        }
+        return r;
+    };
+    static const std::vector<int64_t> table = [&] {
+        std::vector<int64_t> t(65536, 0);
+        for (uint64_t i = 1; i < t.size(); ++i) t[i] = int64_t(i) * log2_q16(i);
+        return t;
+    }();
+    if (x < table.size()) return table[x];
+    return int64_t(x) * log2_q16(x);
+}
+
+// entropy_bytes_v2, exact: in units of 2^-19 byte (2^-16 bit).
+int64_t entropy_q19(const uint64_t* counts, uint64_t n)
+{
+    size_t k = 0;
+    int64_t sum = 0;
+    for (size_t b = 0; b < 256; ++b)
+        if (counts[b])
+        {
+            ++k;
+            sum += xlog2x_q16(counts[b]);
+        }
+    constexpr int64_t kByte = int64_t(1) << 19;
+    if (k <= 1) return (1 + int64_t(k) * 4) * kByte;
+    // n·log2 n - Σ c·log2 c bits; the table (a gap and a frequency for each byte present), the stream's
+    // length and two words, as entropy_bytes counts them
+    return (xlog2x_q16(n) - sum) + (1 + int64_t(k) * 4 + 3 + 8) * kByte;
+}
+
 template <class Count>
 std::vector<uint32_t> group_columns(const std::vector<Count>& counts, const std::vector<uint64_t>& n, double per_group, double& cost,
                                     bool numbers_counted = true)
 {
     const size_t W = n.size();
-    auto cost_of = [&](const auto* c, uint64_t m) {
-        if (!m) return 0.0;
-        const std::vector<uint64_t> one(c, c + 256);
-        return entropy_bytes_v2(one, m) + per_group;
+    // (costs exact, in 2^-19 byte: the groups chosen are the same on every machine)
+    constexpr double kUnit = double(int64_t(1) << 19);
+    const int64_t per_group_q = std::llround(per_group * kUnit);
+    std::vector<uint64_t> one(256);
+    auto cost_of = [&](const auto* c, uint64_t m) -> int64_t {
+        if (!m) return 0;
+        for (size_t b = 0; b < 256; ++b) one[b] = uint64_t(c[b]);
+        return entropy_q19(one.data(), m) + per_group_q;
     };
     std::vector<std::vector<uint64_t>> gc;
     std::vector<uint64_t> gn;
-    std::vector<double> gcost;
+    std::vector<int64_t> gcost;
     std::vector<uint32_t> group(W, 0);
     std::vector<uint64_t> merged(256);
     for (size_t c = 0; c < W; ++c)
     {
         const Count* col = counts.data() + c * 256;
-        const double alone = cost_of(col, n[c]);
-        double best = gc.size() < 256 ? alone : HUGE_VAL;
+        const int64_t alone = cost_of(col, n[c]);
+        int64_t best = gc.size() < 256 ? alone : std::numeric_limits<int64_t>::max();
         size_t pick = gc.size(); // a group of its own
-        double best_cost = alone;
+        int64_t best_cost = alone;
         for (size_t g = 0; g < gc.size(); ++g)
         {
             for (size_t b = 0; b < 256; ++b) merged[b] = gc[g][b] + col[b];
-            const double m = cost_of(merged.data(), gn[g] + n[c]);
-            const double d = m - gcost[g];
+            const int64_t m = cost_of(merged.data(), gn[g] + n[c]);
+            const int64_t d = m - gcost[g];
             if (d < best || (d == best && pick == gc.size()))
             {
                 best = d;
@@ -365,8 +422,9 @@ std::vector<uint32_t> group_columns(const std::vector<Count>& counts, const std:
         }
         group[c] = uint32_t(pick);
     }
-    cost = 0;
-    for (const double g : gcost) cost += g;
+    int64_t total = 0;
+    for (const int64_t g : gcost) total += g;
+    cost = double(total) / kUnit;
     if (numbers_counted)
         for (size_t c = 0; c < W; ++c) cost += group[c] < 128 ? 1 : 2; // each column's group number
     return group;

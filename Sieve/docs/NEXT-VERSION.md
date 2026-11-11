@@ -77,6 +77,13 @@ dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
   (v31's `skm`): its deflate streams through preflate, its JPEGs as members, which may now be carried
   as their brunsli form (the one change a reader sees). Three arXiv papers 41% to 49% smaller, the
   WoWRevived manual 18.1%; making slower where many streams are searched (results/pdf-2026-11-08.md).
+- **The x86 filter restarted at each program, 11 November 2026** (found measuring IDEAS §19.114's
+  scattered substitutions): in a v34 listing the x86 stream's filter starts again at each program, so
+  a program and a near copy of it stay alike for LZMA2. Two 200,000-byte programs, one with 10 bytes
+  changed: 44,928 bytes as v33, 34,945 so (-22.2%); with 1,000 changed, 47,240 and 37,556; two builds
+  of sieve-install three days apart, LZMA2's sizes 4,054,294 and 3,994,999 (-1.46%). A v34 draft
+  listing made before it with two programs or more is refused, and is to be made again
+  (results/x86-restart-2026-11-11.md; CI step 11 checks it).
 - **Pictures' shapes from their headers, 8 November 2026**: a BMP, uncompressed TGA, binary PNM or
   uncompressed TIFF of plain pixels offers mixing its header's shape, and its rows as one byte a
   pixel, weighed on its start; the packer's choice alone (mix-v4's `I`). 24 pictures 0.62% smaller,

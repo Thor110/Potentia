@@ -363,13 +363,16 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     // to code) and the x86 stream holds programs, the x86 stream is decoded on a thread of its own
     // meanwhile, so its time is no longer added to the mixing's.
     std::vector<uint8_t> x86, plain;
+    // v34: the x86 filter restarted at each program (SPECIFICATIONS §12.2 v34): the stream decoded
+    // without it here, and each program's own bytes unfiltered from their own start as it is taken.
+    const bool x86_each = m.v34;
     if (!m.lzma2.mixed.empty() && m.x86.packed > 0 && pack_threads() > 1)
     {
         std::exception_ptr fault;
         std::thread beside([&] {
             try
             {
-                x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+                x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, !x86_each);
             }
             catch (...)
             {
@@ -390,7 +393,7 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
     }
     else
     {
-        x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, true);
+        x86 = unpack_stream(all.subspan(0, size_t(m.x86.packed)), m.x86, !x86_each);
         plain = unpack_stream(all.subspan(size_t(m.x86.packed)), m.lzma2, false);
     }
     std::vector<ManifestEntry*> files;
@@ -480,7 +483,15 @@ std::vector<uint8_t> unpack_v4(Manifest& m)
                 throw std::runtime_error("manifest: " + e.path + " is remade from what no way gives");
             e.size = std::stoull(inner);
         }
-        if (e.way == "x86") bytes[i] = take(x86, xa, e.size, e.path);
+        if (e.way == "x86")
+        {
+            bytes[i] = take(x86, xa, e.size, e.path);
+            if (x86_each)
+            {
+                UInt32 state = Z7_BRANCH_CONV_ST_X86_STATE_INIT_VAL;
+                z7_BranchConvSt_X86_Dec(bytes[i].data(), bytes[i].size(), 0, &state);
+            }
+        }
         else if (e.way == "raw") bytes[i] = take(plain, pa, e.size, e.path);
         else if (m.items && e.way.rfind("item ", 0) == 0)
         {
@@ -2470,6 +2481,33 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             const std::string key = !e.path.empty() && e.path.back() == '/' ? e.path.substr(0, e.path.size() - 1) : e.path;
             if (!seen.insert(key).second) throw std::runtime_error("manifest: " + shown(e.path) + " is listed twice");
         }
+    }
+    // SPECIFICATIONS §12.1 and §12.2: entries sorted by their paths' bytes, as the oracle checks it
+    // (review of 9 November 2026: C++ installed a listing out of order that the oracle refused), but
+    // for two that keep an archive's own order and are left out of it: an archive's or a text's
+    // members (v31's "skm", v33's "spn": the files under its path), and the contents of an archive
+    // carried as its contents (the entries under its folder; where the archive was the whole of what
+    // was read, its contents are the whole listing, and nothing is left to check).
+    {
+        std::vector<std::string> owners;
+        for (const ManifestEntry& e : m.entries)
+            if (e.remake.rfind("skm ", 0) == 0 || e.remake.rfind("spn ", 0) == 0) owners.push_back(e.path + "/");
+        std::vector<std::string> held;
+        for (const auto& u : m.unpacked) held.push_back(u.folder + "/");
+        auto under = [](const std::string& p, const std::vector<std::string>& tops) {
+            return std::any_of(tops.begin(), tops.end(), [&](const std::string& t) { return p.compare(0, t.size(), t) == 0; });
+        };
+        const bool whole = std::any_of(held.begin(), held.end(), [&](const std::string& h) {
+            return std::none_of(m.entries.begin(), m.entries.end(), [&](const ManifestEntry& e) { return e.path.compare(0, h.size(), h) == 0; });
+        });
+        const std::string* last = nullptr;
+        if (!whole)
+            for (const ManifestEntry& e : m.entries)
+            {
+                if (under(e.path, owners) || under(e.path, held)) continue;
+                if (last && *last > e.path) throw std::runtime_error("manifest: entries out of order: " + shown(e.path) + " after " + shown(*last));
+                last = &e.path;
+            }
     }
     if (graph_needed && m.graph.empty()) throw std::runtime_error("manifest: v18 without its graph part");
     if (m.minimal)

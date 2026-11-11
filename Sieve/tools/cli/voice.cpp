@@ -148,7 +148,12 @@ struct Voice::Impl
     std::vector<std::vector<int16_t>> clips;
     std::map<std::pair<std::string, std::string>, std::vector<Take>> units;
     std::unordered_map<std::string, std::vector<std::string>> dict;
+    std::unordered_map<std::string, std::vector<std::string>> rules; // letter to sound (lts.tsv)
     size_t takes = 0;
+
+    // A word CMUdict does not have: a word it has and its ending (printers: printer, -s), else the
+    // letter-to-sound rules, else (no rules here) its letters spelt out.
+    std::vector<std::string> unknown(const std::string& word) const;
 
     const std::vector<Take>* find(const std::string& a, const std::string& b) const
     {
@@ -182,6 +187,23 @@ std::unique_ptr<Voice> Voice::load(const fs::path& folder, const fs::path& clips
             std::vector<std::string> ph;
             while (ss >> p) ph.push_back(plain(p));
             if (!ph.empty()) I.dict.emplace(word, std::move(ph));
+        }
+    }
+    // The letter-to-sound rules (tools/voice/learn_lts.py), where they are: "abc[d]efg<TAB>phones".
+    {
+        std::ifstream in(folder / "lts.tsv");
+        std::string line;
+        while (in && std::getline(in, line))
+        {
+            if (line.empty() || line[0] == '#') continue;
+            const size_t tab = line.find('\t');
+            if (tab == std::string::npos) continue;
+            std::istringstream ss(line.substr(tab + 1));
+            std::vector<std::string> ph;
+            std::string p;
+            while (ss >> p)
+                if (p != "-") ph.push_back(p);
+            I.rules.emplace(line.substr(0, tab), std::move(ph));
         }
     }
     // The alignment: each clip's phones, in order, with their starts and ends.
@@ -295,6 +317,80 @@ std::unique_ptr<Voice> Voice::find(const fs::path& given)
     return load(w->first, w->second);
 }
 
+std::vector<std::string> Voice::Impl::unknown(const std::string& word) const
+{
+    std::string w; // (its letters alone)
+    for (const char c : word)
+        if (c >= 'a' && c <= 'z') w += c;
+    if (w.empty()) return {};
+    if (auto it = dict.find(w); it != dict.end()) return it->second;
+    // A word CMUdict has, with an ending (measured: 58.6% of 2,000 words held out said exactly as
+    // CMUdict says them, against 55.0% by the rules alone; results/voice-units-2026-11-09.md).
+    static const std::vector<std::string> kVoiced = {"B", "D", "G", "V", "DH", "Z", "ZH", "JH", "M", "N", "NG", "L", "R", "W", "Y",
+                                                     "AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"};
+    auto voiced = [&](const std::string& p) { return std::find(kVoiced.begin(), kVoiced.end(), p) != kVoiced.end(); };
+    auto s_end = [&](std::vector<std::string> p) {
+        const std::string& l = p.back();
+        if (l == "S" || l == "Z" || l == "SH" || l == "ZH" || l == "CH" || l == "JH") p.insert(p.end(), {"IH", "Z"});
+        else p.push_back(voiced(l) ? "Z" : "S");
+        return p;
+    };
+    auto ed_end = [&](std::vector<std::string> p) {
+        const std::string& l = p.back();
+        if (l == "T" || l == "D") p.insert(p.end(), {"IH", "D"});
+        else p.push_back(voiced(l) ? "D" : "T");
+        return p;
+    };
+    const std::pair<const char*, int> kEnds[] = {{"s", 0}, {"es", 0}, {"ed", 1}, {"d", 1}, {"ing", 2}, {"er", 3}, {"ers", 4}, {"ly", 5}};
+    for (const auto& [suffix, kind] : kEnds)
+    {
+        const std::string suf = suffix;
+        if (w.size() <= suf.size() + 2 || w.compare(w.size() - suf.size(), suf.size(), suf) != 0) continue;
+        const std::string stem = w.substr(0, w.size() - suf.size());
+        const std::vector<std::string>* base = nullptr;
+        for (const std::string& st : {stem, stem + "e"})
+            if (!base)
+                if (auto it = dict.find(st); it != dict.end()) base = &it->second;
+        if (!base && stem.size() > 1 && stem[stem.size() - 1] == stem[stem.size() - 2])
+            if (auto it = dict.find(stem.substr(0, stem.size() - 1)); it != dict.end()) base = &it->second;
+        if (!base && stem.back() == 'i')
+            if (auto it = dict.find(stem.substr(0, stem.size() - 1) + "y"); it != dict.end()) base = &it->second;
+        if (!base) continue;
+        std::vector<std::string> p = *base;
+        switch (kind)
+        {
+        case 0: return s_end(p);
+        case 1: return ed_end(p);
+        case 2: p.insert(p.end(), {"IH", "NG"}); return p;
+        case 3: p.push_back("ER"); return p;
+        case 4: p.insert(p.end(), {"ER", "Z"}); return p;
+        default: p.insert(p.end(), {"L", "IY"}); return p;
+        }
+    }
+    std::vector<std::string> out;
+    if (!rules.empty())
+    {
+        // Each letter by its longest context written: three letters each side, then two and three,
+        // two and two, one and two, one and one, none and one, the letter alone (each inside the last).
+        static const std::pair<int, int> kContexts[] = {{3, 3}, {2, 3}, {2, 2}, {1, 2}, {1, 1}, {0, 1}, {0, 0}};
+        const std::string pw = "###" + w + "###";
+        for (size_t i = 0; i < w.size(); ++i)
+            for (const auto& [l, r] : kContexts)
+            {
+                const std::string key = pw.substr(3 + i - size_t(l), size_t(l)) + "[" + w[i] + "]" + pw.substr(4 + i, size_t(r));
+                if (auto it = rules.find(key); it != rules.end())
+                {
+                    out.insert(out.end(), it->second.begin(), it->second.end());
+                    break;
+                }
+            }
+        return out;
+    }
+    for (const char c : w) // (no rules here: its letters)
+        if (auto it = dict.find(std::string(1, c)); it != dict.end()) out.insert(out.end(), it->second.begin(), it->second.end());
+    return out;
+}
+
 std::vector<std::string> Voice::phones(const std::string& text) const
 {
     const Impl& I = *impl_;
@@ -305,8 +401,8 @@ std::vector<std::string> Voice::phones(const std::string& text) const
             out.insert(out.end(), it->second.begin(), it->second.end());
             return;
         }
-        for (const char c : w) // (not in the dictionary: its letters)
-            if (auto it = I.dict.find(std::string(1, c)); it != I.dict.end()) out.insert(out.end(), it->second.begin(), it->second.end());
+        const std::vector<std::string> said = I.unknown(w); // (not in the dictionary)
+        out.insert(out.end(), said.begin(), said.end());
     };
     std::string word;
     auto flush = [&] {

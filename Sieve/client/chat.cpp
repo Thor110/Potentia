@@ -1147,6 +1147,19 @@ void Hallway::chat_command(const std::string& line)
         chat_save_log(path);
         return;
     }
+    if (verb == "say") // the rest of the line said aloud, in Sieve's own voice (Text to Voice or not)
+    {
+        std::string words = line.substr(std::min(line.size(), line.find("say") + 3));
+        words.erase(0, std::min(words.size(), words.find_first_not_of(' ')));
+        if (words.empty())
+        {
+            chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, tr("chat.say.what")));
+            return;
+        }
+        say_now(words);
+        chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chat.say.said", {words})));
+        return;
+    }
     if (verb == "prompt") // what a model given as a file is told, word for word
     {
         chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, system_prompt()));

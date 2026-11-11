@@ -75,3 +75,31 @@ Loaded, it holds every clip's samples (159 MB as 16-bit samples): `sieve speak` 
 
 The joins are where it is lost: what is heard between takes. The trained voice of IDEAS 19.135 is
 to learn sound from text; before it can speak alone, it may smooth the units' joins.
+
+## Words CMUdict does not have (11 November 2026)
+
+They were spelt out, letter by letter. Now (`tools/voice/learn_lts.py`, `data/voice/lj-speech/lts.tsv`):
+a word CMUdict has with an ending (s, es, ed, d, ing, er, ers, ly; a doubled last letter or y as i
+allowed: running, cities), else letter-to-sound rules learnt from CMUdict (each word's letters aligned
+to its phones, then each letter's phones in contexts of up to three letters either side, the longest
+written used; 59,611 rules once those a shorter context already gives are dropped, which changes no
+answer). Measured on 2,000 words held out of CMUdict, learnt from the rest (stress left out, as the
+voice leaves it out):
+
+| Way | Said exactly as CMUdict says them | Phones wrong |
+| --- | ---: | ---: |
+| A known word and its ending alone (where one fits: 1,060 of 2,000) | 30.6% of all | |
+| The two words it might be made of, too | (in the line above) | |
+| The rules alone | 55.0% | 10.3% |
+| **A known word and its ending first (472 of 2,000), else the rules** | **58.6%** | |
+
+The 60 test sentences have no word CMUdict lacks, so their error rate is unchanged.
+
+## Three hours of units instead of one (11 November 2026)
+
+All 1,638 clips of LJ Speech's first shard (`tools/fetch_voice.py --all`, about three hours) aligned
+the same way (1,504 aligned, 134 left out): 1,128 diphones, 105,111 takes. The 60 sentences, the
+prototype with joins lined up (as Sieve's voice): **19.8% (96 of 484)**, against 23.3% from the hour.
+Not taken: it needs the two more hours' clips beside the hour's in the repository or the voice
+extension (about twice the hour's 93.6 MB again, at the hour's rate), and the voice's loading and
+memory would grow about threefold. It is there to take if wanted.

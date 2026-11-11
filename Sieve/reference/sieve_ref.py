@@ -7513,7 +7513,9 @@ def cmd_unpack_v7(args, data):
             sys.exit("a stream unpacks to the wrong size")
         return out
 
-    x86 = decode(payload[:sx[0]], sx[1], sx[2], True)
+    # (v34 draft, 11 November 2026: the x86 filter restarted at each program, from its own start; the
+    # stream decoded without it, and each program's bytes unfiltered as they are taken, below.)
+    x86 = decode(payload[:sx[0]], sx[1], sx[2], not v34)
     # v12: the lzma2 stream carried as it is at dictionary 0.
     if mixed_stream:  # v29: mixed by mix-v4 (never a picture's parameters)
         if " I" in mixed_stream:
@@ -7801,6 +7803,8 @@ def cmd_unpack_v7(args, data):
         # open until its total is used, which it must be before the next group and at the end.)
         if way == "x86":
             got[i], xa = x86[xa:xa + size], xa + size
+            if v34:
+                got[i] = x86_filter(got[i], encoding=False)
         elif way == "raw":
             got[i], pa = plain[pa:pa + size], pa + size
         elif v33 and way.startswith("copy "):

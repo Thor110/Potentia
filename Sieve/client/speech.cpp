@@ -109,16 +109,41 @@ Voice& voice()
 #endif
 
 // Sieve's own voice (cli/voice.hpp): loaded the first time it speaks, on a thread of its own, which
-// makes each reply's samples there; the frame takes them and plays them (pump_speech), so SDL's
-// audio is only ever touched from the frame's thread. The newest reply only: one cuts short the last.
+// makes each text's samples and plays them, through an SDL audio stream (SDL3's streams may be used
+// from any thread; SDL's audio is started on the main thread, when a setting turns a voice on). The
+// newest text only: one cuts short the last. Menus read aloud and the AI's replies share it.
+std::mutex g_stream_mx;                  // the stream, and whether SDL is still there for it
+SDL_AudioStream* g_voice_stream = nullptr;
+bool g_stream_stopped = false;           // stop_speech has run: no stream is opened again
+
+void play(const std::vector<int16_t>& pcm)
+{
+    std::lock_guard<std::mutex> lock(g_stream_mx);
+    if (g_stream_stopped || !SDL_WasInit(SDL_INIT_AUDIO)) return;
+    if (!g_voice_stream)
+    {
+        const SDL_AudioSpec spec{SDL_AUDIO_S16, 1, int(sieve::cli::Voice::kRate)};
+        g_voice_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+        if (!g_voice_stream) return;
+    }
+    SDL_ClearAudioStream(g_voice_stream); // (what was being said, cut short)
+    SDL_PutAudioStreamData(g_voice_stream, pcm.data(), int(pcm.size() * sizeof(int16_t)));
+    SDL_FlushAudioStream(g_voice_stream);
+    SDL_ResumeAudioStreamDevice(g_voice_stream);
+}
+
+void hush()
+{
+    std::lock_guard<std::mutex> lock(g_stream_mx);
+    if (g_voice_stream) SDL_ClearAudioStream(g_voice_stream);
+}
+
 struct SieveVoice
 {
     std::mutex mx;
     std::condition_variable cv;
     std::string next;
     bool pending = false, quit = false;
-    std::vector<int16_t> ready;
-    bool has_ready = false;
     std::unique_ptr<sieve::cli::Voice> voice;
     bool tried = false;
     std::thread worker;
@@ -167,10 +192,7 @@ struct SieveVoice
                 }
             }
             if (!voice) continue;
-            std::vector<int16_t> pcm = voice->speak(text);
-            std::lock_guard<std::mutex> lock(mx);
-            ready = std::move(pcm);
-            has_ready = true;
+            play(voice->speak(text));
         }
     }
 };
@@ -180,8 +202,6 @@ SieveVoice& sieve_voice()
     static SieveVoice v;
     return v;
 }
-
-SDL_AudioStream* g_voice_stream = nullptr;
 
 } // namespace
 
@@ -200,31 +220,13 @@ bool sieve_voice_available()
     return there;
 }
 
-void pump_speech()
-{
-    std::vector<int16_t> pcm;
-    {
-        SieveVoice& v = sieve_voice();
-        std::lock_guard<std::mutex> lock(v.mx);
-        if (!v.has_ready) return;
-        pcm = std::move(v.ready);
-        v.has_ready = false;
-    }
-    if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) return;
-    if (!g_voice_stream)
-    {
-        const SDL_AudioSpec spec{SDL_AUDIO_S16, 1, int(sieve::cli::Voice::kRate)};
-        g_voice_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
-        if (!g_voice_stream) return;
-    }
-    SDL_ClearAudioStream(g_voice_stream); // (the reply before, cut short)
-    SDL_PutAudioStreamData(g_voice_stream, pcm.data(), int(pcm.size() * sizeof(int16_t)));
-    SDL_FlushAudioStream(g_voice_stream);
-    SDL_ResumeAudioStreamDevice(g_voice_stream);
-}
+// (Sieve's voice plays on its own thread now; kept for the frame's call, which has nothing to do.)
+void pump_speech() {}
 
 void stop_speech()
 {
+    std::lock_guard<std::mutex> lock(g_stream_mx);
+    g_stream_stopped = true;
     if (g_voice_stream)
     {
         SDL_DestroyAudioStream(g_voice_stream);
@@ -232,9 +234,19 @@ void stop_speech()
     }
 }
 
+namespace {
+// SDL's audio, started on the main thread (where the settings are set) for Sieve's voice to play through.
+void start_audio()
+{
+    if (sieve_voice_available() && SDL_WasInit(SDL_INIT_VIDEO) && !SDL_WasInit(SDL_INIT_AUDIO)) SDL_InitSubSystem(SDL_INIT_AUDIO);
+}
+} // namespace
+
 void set_read_aloud(bool on)
 {
     g_on = on;
+    if (on) start_audio();
+    else hush();
     {
         std::lock_guard<std::mutex> lock(g_mx);
         g_last.clear(); // (turned on, the item chosen is said at once)
@@ -283,7 +295,7 @@ bool speech_available()
 #ifdef _WIN32
     return true;
 #else
-    return false;
+    return sieve_voice_available();
 #endif
 }
 
@@ -293,7 +305,8 @@ void set_text_to_voice(bool on)
 #ifdef _WIN32
     if (!on && g_started) voice().say(" "); // (turned off: a reply being spoken is cut short)
 #endif
-    if (!on && g_voice_stream) SDL_ClearAudioStream(g_voice_stream);
+    if (on) start_audio();
+    else hush();
 }
 
 bool text_to_voice() { return g_voice_on; }
@@ -329,8 +342,14 @@ std::string sayable(const std::string& text)
 
 void speak_reply(const std::string& reply)
 {
-    const std::string text = sayable(reply);
-    if (!g_voice_on || text.empty()) return;
+    if (g_voice_on) say_now(reply);
+}
+
+void say_now(const std::string& words)
+{
+    const std::string text = sayable(words);
+    if (text.empty()) return;
+    start_audio();
     {
         std::lock_guard<std::mutex> lock(g_mx);
         g_voiced = text;
@@ -360,6 +379,12 @@ void announce(const std::string& text)
         std::lock_guard<std::mutex> lock(g_mx);
         if (text == g_last) return;
         g_last = text;
+    }
+    // Sieve's own voice where it is here; else the system's (Windows).
+    if (sieve_voice_available())
+    {
+        sieve_voice().say(text);
+        return;
     }
 #ifdef _WIN32
     if (voice().ok) voice().say(text);

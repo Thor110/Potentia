@@ -711,7 +711,8 @@ const std::vector<Page>& pages()
          "one speech sound to the middle of the next) cut from an hour of one reader's recordings, LJ\n"
          "Speech (public domain; data/anchors/public-domain/voice/lj-speech). The words are read into\n"
          "speech sounds by CMUdict (data/voice/lj-speech/cmudict.dict, its licence beside it); a number\n"
-         "is said as words, and a word it does not have is spelt out. The same text gives the same\n"
+         "is said as words, and a word it does not have by rules learnt from it (lts.tsv). The same text\n"
+         "gives the same\n"
          "samples. The voice of the hallway's Text to Voice.",
          {{"--out FILE.wav", "Where the speech goes (spoken.wav): 22,050 samples a second, 16-bit, one channel."},
           {"--voice FOLDER", "The voice's folder (data/voice/lj-speech, here, above, or beside the program), holding\n"

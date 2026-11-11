@@ -45,6 +45,7 @@ EXTENSIONS = {
         ("voice/lj-speech/alignment.tsv", "data/voice/lj-speech/alignment.tsv"),
         ("voice/lj-speech/cmudict.dict", "data/voice/lj-speech/cmudict.dict"),
         ("voice/lj-speech/cmudict-LICENSE.txt", "data/voice/lj-speech/cmudict-LICENSE.txt"),
+        ("voice/lj-speech/lts.tsv", "data/voice/lj-speech/lts.tsv"),
         ("voice/lj-speech/clips", "data/anchors/public-domain/voice/lj-speech/clips"),
         ("voice/lj-speech/RECORDINGS.md", "data/anchors/public-domain/voice/lj-speech/README.md"),
         ("voice/lj-speech/metadata.csv", "data/anchors/public-domain/voice/lj-speech/metadata.csv"),

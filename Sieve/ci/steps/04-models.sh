@@ -129,6 +129,11 @@ q "^limits met: 0 of [0-9]* activations held at +-128 (0.000000%), 0 of [0-9]* g
 q "^probabilities (in 65,536ths): of [0-9]* predictions, the right byte given 0 in " limits.txt
 python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
 $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
+# The same run on 2 to 8 threads, each giving the result again, byte for byte (ODDITIES: a run once
+# said NOT REPRODUCED on Edward's machine and never again; a race between threads would show here).
+for t in 2 3 4 5 6 7 8; do
+    $exe ai-train data/training/universalbibliothek.sieve --threads $t --quiet | tr -d '\r' | q "^reproduced exactly"
+done
 # training-v2: a loss scale of 2^5, the oracle training it again to the same result.
 $exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --training-v2 --quiet > /dev/null
 q "^version = training-v2" run-v2/training.ini

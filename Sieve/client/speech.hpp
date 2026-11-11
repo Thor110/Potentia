@@ -1,7 +1,7 @@
 // Sieve hallway -- reading the menus aloud (IDEAS 19.74, 6 November 2026): the item chosen in a
-// menu spoken when it changes, as a screen reader would, by the system's own speech (Windows'
-// SAPI voice, which every Windows has). Off unless Settings, Controls turns it on. Elsewhere there
-// is no voice yet, and nothing is said.
+// menu spoken when it changes, as a screen reader would, in Sieve's own voice (cli/voice.hpp) where
+// its files are, on any system (11 November 2026); without them, by Windows' own speech (SAPI).
+// Off unless Settings, Controls turns it on.
 #pragma once
 
 #include <string>
@@ -36,6 +36,8 @@ std::string last_announced();
 void set_text_to_voice(bool on);
 bool text_to_voice();
 void speak_reply(const std::string& text);
+// `text` said now, whatever the settings (CHAT's /say): by Sieve's voice, else Windows'.
+void say_now(const std::string& text);
 // The reply spoken last (empty if none): scripted runs print it, as they print what is read aloud.
 std::string last_voiced();
 // Whether Sieve's own voice is here (its files found: data/voice/lj-speech and its clips); Text to

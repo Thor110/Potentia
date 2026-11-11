@@ -236,6 +236,8 @@ q "^it: " ai-talk.txt
 # Text to Voice (9 November 2026): the reply spoken, as text that can be said (a machine with no
 # voice says nothing; the scripted run prints it); and its row in Settings, Controls.
 $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --text-to-voice --screenshot ai-voice.png | tr -d '\r' | q "^voice: "
+# CHAT's /say: the words said aloud whatever the setting (11 November 2026).
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/say Hello from the gallery" --training-dir data/training --screenshot chat-say.png | tr -d '\r' | q "^voice: Hello from the gallery$"
 $H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Return,Down,Down,Down" --screenshot tv-row.png | tr -d '\r' | q "^read aloud: Text to Voice"
 # Sieve's own voice (results/voice-units-2026-11-09.md): a text read into its speech sounds by
 # CMUdict (a number as words), said, and said the same again, sample for sample.
@@ -245,6 +247,8 @@ q "from 1022 diphones' 33750 takes" speak.txt
 build/sieve speak Hello, 42 times. --out speak2.wav > /dev/null
 cmp speak1.wav speak2.wav
 [ "$(wc -c < speak1.wav)" -gt 20000 ]
+# A word CMUdict lacks, by the letter-to-sound rules learnt from it (data/voice/lj-speech/lts.tsv).
+build/sieve speak Marshalsea --phones --out speak3.wav | tr -d '\r' | q "^SIL M AA R SH AH L S IY SIL $"
 # The chat window (IDEAS §19.13): a file given to the model, two figures drawn with the shipped
 # picture model (its pictures 1 and 2, as `sieve diffuse --make` makes them), and something
 # said; GO TO IT on a figure holds it on the image line, J on a text file opens it on PAGES.

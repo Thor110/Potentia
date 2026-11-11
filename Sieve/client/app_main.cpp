@@ -1399,7 +1399,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        if (text_to_voice() && !last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n";
+        if (!last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n"; // (Text to Voice's reply, or CHAT's /say)
         hall->release_textures();
         hall.reset(); // before SDL goes (its audio stream, its textures)
         return finish();
