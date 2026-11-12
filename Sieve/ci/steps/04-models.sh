@@ -119,6 +119,15 @@ $exe catalogue encoding | tr -d '\r' | q "^beneath    2 entries: encoding-base64
 $exe catalogue --search base64 | tr -d '\r' | q "^encoding-base64 "
 $exe catalogue file-flac | tr -d '\r' | q "^lineage    file-flac sound data information$"
 $exe catalogue file-flac | tr -d '\r' | q "^recognised first bytes 66 4C 61 43$"
+# Catalogue entries kept as .sieve (IDEAS 19.185): packed, then read from the folder as loose ones are,
+# decoded once into the cache; the same entries, the same versions.
+rm -rf packed-catalogue
+mkdir packed-catalogue
+$exe catalogue --pack data/catalogue --out packed-catalogue/catalogue.sieve | tr -d '\r' | q "^packed    .*: 3 entries$"
+$exe catalogue --folder packed-catalogue --check | tr -d '\r' | q "^\([0-9]*\) of \1 entries read back and reach information$"
+$exe catalogue --folder data/catalogue encoding-base64 | tr -d '\r' | grep "^version" > loose-version.txt
+$exe catalogue --folder packed-catalogue encoding-base64 | tr -d '\r' | grep "^version" > packed-version.txt
+cmp loose-version.txt packed-version.txt
 # Stage 4 of the catalogue: figures measured as formats are used, kept in SIEVE_STATS (ci/lib.sh). The
 # imports above are on their importers' entries; a file measured (packed alone, installed back and
 # checked) is on its kind's, and nothing but its kind and figures is kept.

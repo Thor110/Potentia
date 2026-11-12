@@ -23,6 +23,14 @@ Map map_of_instructions(const Manifest& m, const std::string& name);
 // rather than instructions read as the map of their tree.
 Map read_map_file(const std::filesystem::path& file, bool* is_map = nullptr);
 
+// The same, kept in memory once read (IDEAS 19.185), by the file's path, size and time written: the
+// same file again is not decoded again, and a file changed is. Safe from any thread.
+Map read_map_file_cached(const std::filesystem::path& file, bool* is_map = nullptr);
+// Every map in a folder (.sieve and .map) read into that memory on a thread of its own, so that maps
+// are decoded ahead of their first use (the hallway starts it as it opens). A map that does not read
+// is left for the reader to report. Returns at once; a second call for the same folder does nothing.
+void prefetch_maps(const std::filesystem::path& folder);
+
 // Whether a file is an older map file (it begins "sieve-map-v").
 bool is_old_map_file(const std::filesystem::path& file);
 

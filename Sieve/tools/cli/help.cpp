@@ -314,7 +314,8 @@ const std::vector<Page>& pages()
 
         {"catalogue", "The catalogue of formats: every format Sieve knows, as one web leading up to information.",
          "sieve catalogue [ID] [--kind KIND] [--search TEXT] [--path A,B] [--check] [--folder DIR]\n"
-         "       sieve catalogue --measure FILE|FOLDER [--machine NAME] [--stats-folder DIR] [--no-stats] | --measured",
+         "       sieve catalogue --measure FILE|FOLDER [--machine NAME] [--stats-folder DIR] [--no-stats] | --measured\n"
+         "       sieve catalogue --pack FOLDER --out FILE.sieve",
          "Stage 1 of the catalogue of formats (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md): the file\n"
          "kinds Sieve recognises, the model importers, the built-in alphabets, the Unicode blocks and\n"
          "Sieve's own formats, gathered from the code itself, under a first layer of general entries\n"
@@ -336,6 +337,8 @@ const std::vector<Page>& pages()
           {"--machine NAME", "What to call this machine in the records (else SIEVE_MACHINE, else unnamed)."},
           {"--stats-folder DIR", "Where the records are kept (else SIEVE_STATS, else your Sieve data folder)."},
           {"--no-stats", "Measure, but keep nothing."},
+          {"--pack FOLDER", "Pack a folder of entries (.format files) as one .sieve, to --out FILE; every entry checked first (IDEAS 19.185)."},
+          {"--out FILE", "Where --pack writes the .sieve."},
           {"--kind KIND", "List only one kind: general, file, importer, alphabet, script or sieve."},
           {"--path A,B", "The shortest chain of links between two entries."},
           {"--check", "Check that every entry reads back from its text and reaches information; exit 1 if one does not."},

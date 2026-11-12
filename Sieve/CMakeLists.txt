@@ -130,6 +130,7 @@ add_library(sieve_lines STATIC
     tools/cli/media_decode.cpp
     tools/cli/models.cpp
     tools/cli/plugins.cpp
+    tools/cli/sieve_cache.cpp
     tools/cli/tailor.cpp
     tools/cli/weigh.cpp)
 target_include_directories(sieve_lines PUBLIC tools)

@@ -7,6 +7,12 @@
 #include <fstream>
 #include <iterator>
 #include <random>
+#include <vector>
+#include <algorithm>
+#include <thread>
+#include <set>
+#include <mutex>
+#include <map>
 #include <stdexcept>
 
 namespace sieve::cli {
@@ -77,8 +83,117 @@ Map read_map_file(const fs::path& file, bool* is_map)
     return map_of_instructions(m, std::string(stem.begin(), stem.end()));
 }
 
+namespace {
+
+struct MapMemo
+{
+    std::mutex m;
+    struct Kept
+    {
+        uint64_t size = 0;
+        fs::file_time_type when{};
+        Map map;
+        bool is_map = false;
+    };
+    std::map<std::string, Kept> kept;
+};
+MapMemo& map_memo()
+{
+    static MapMemo memo;
+    return memo;
+}
+
+// The prefetching threads, joined before the program ends (declared after the memory, so they are
+// joined first as statics are destroyed).
+struct Prefetches
+{
+    std::mutex m;
+    std::set<std::string> started;
+    std::vector<std::thread> threads;
+    ~Prefetches()
+    {
+        for (auto& t : threads)
+            if (t.joinable()) t.join();
+    }
+};
+Prefetches& prefetches()
+{
+    (void)map_memo(); // (made first, so destroyed after the threads are joined)
+    static Prefetches p;
+    return p;
+}
+
+} // namespace
+
+Map read_map_file_cached(const fs::path& file, bool* is_map)
+{
+    std::error_code ec;
+    const uint64_t size = fs::file_size(file, ec);
+    const fs::file_time_type when = fs::last_write_time(file, ec);
+    const std::string key = fs::absolute(file, ec).string();
+    MapMemo& memo = map_memo();
+    {
+        std::lock_guard<std::mutex> lock(memo.m);
+        if (const auto it = memo.kept.find(key); it != memo.kept.end() && it->second.size == size && it->second.when == when)
+        {
+            if (is_map) *is_map = it->second.is_map;
+            return it->second.map;
+        }
+    }
+    bool im = false;
+    Map read = read_map_file(file, &im); // (outside the lock: a large map decodes while others are asked for)
+    {
+        std::lock_guard<std::mutex> lock(memo.m);
+        memo.kept[key] = {size, when, read, im};
+    }
+    if (is_map) *is_map = im;
+    return read;
+}
+
+void prefetch_maps(const fs::path& folder)
+{
+    Prefetches& p = prefetches();
+    std::lock_guard<std::mutex> lock(p.m);
+    std::error_code ec;
+    if (!p.started.insert(fs::absolute(folder, ec).string()).second) return;
+    try
+    {
+        p.threads.emplace_back([folder] {
+            std::error_code e2;
+            std::vector<fs::path> files;
+            for (const auto& e : fs::directory_iterator(folder, e2))
+                if (e.is_regular_file() && (e.path().extension() == ".sieve" || e.path().extension() == ".map")) files.push_back(e.path());
+            std::sort(files.begin(), files.end());
+            for (const auto& f : files)
+                try
+                {
+                    (void)read_map_file_cached(f);
+                }
+                catch (const std::exception&)
+                {
+                    // (said by whoever reads it, when it is read)
+                }
+        });
+    }
+    catch (const std::system_error&)
+    {
+        // no thread to be had: each map is read when it is first needed, as before
+    }
+}
+
 void write_map_instructions(const Map& map, const fs::path& out, double search_per_file)
 {
+    struct Forget // (whatever happens, the copy kept in memory is not the file any more: dropped)
+    {
+        const fs::path& f;
+        ~Forget()
+        {
+            std::error_code ec;
+            const std::string key = fs::absolute(f, ec).string();
+            std::lock_guard<std::mutex> lock(map_memo().m);
+            map_memo().kept.erase(key);
+        }
+    } forget{out};
     // The held files, laid out as a folder named as the map's root, then packed as that folder's
     // instructions are; the map's text is their graph part.
     std::random_device rd;

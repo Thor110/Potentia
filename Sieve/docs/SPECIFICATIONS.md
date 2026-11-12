@@ -803,7 +803,7 @@ An entry of the catalogue of formats is text (`core/include/sieve/catalogue.hpp`
 - then, where given and in this order, `recognised HOW` (how a program tells it), `sieve WHAT` (what Sieve does with it) and `source WHERE` (where it came from).
 
 Nothing else, and in that order: an entry not in this canonical form is refused. Its version is the SHA-256 of its text; a change is a new version of the same id.
-- **Where entries come from:** gathered from Sieve's code (the file kinds, the importers, the alphabets and Unicode blocks, Sieve's own formats, and a general layer above them), and written by hand as files `data/catalogue/<ID>.format` (carriage returns ignored), each named by its id. An id twice, or a link to an entry that is not there, is refused.
+- **Where entries come from:** gathered from Sieve's code (the file kinds, the importers, the alphabets and Unicode blocks, Sieve's own formats, and a general layer above them), and written by hand as files `data/catalogue/<ID>.format` (carriage returns ignored), each named by its id. A catalogue folder may also hold `.sieve` files whose files are such entries: each is decoded (once, into the cache, checked against its index at every start) and its entries read exactly as loose ones (IDEAS §19.185). An id twice, or a link to an entry that is not there, is refused.
 - **The wiki principle:** every entry reaches `information` by its `part-of` links; `sieve catalogue --check` and the unit tests check it for every entry.
 
 ### 12.0n A character's save (`sieve-save-v1`, as built; IDEAS §19.183)

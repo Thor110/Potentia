@@ -1,38 +1,36 @@
-# Filters kept as .sieve: saved packed, decoded at start-up, cached (12 November 2026)
+# Catalogue entries and maps kept as .sieve, decoded at start-up and cached (12 November 2026)
 
-On top of 9d300ae ("sieve catalog"). Unzip at the repository root; nothing to delete by hand. No new
-source files, so CMake need not be re-run.
+On top of 2ed4757 ("sieve filters update"). Unzip at the repository root; nothing to delete by hand.
+**Re-run CMake**: one new source file, tools/cli/sieve_cache.cpp.
 
-## What it does (IDEAS 19.185; docs/FILTER-PLUGINS.md section 21)
+## What it does (IDEAS 19.185)
 
-- **The Filter Designer saves each filter as `<id>-vN.sieve`** in the filters folder: the .sfilter and
-  the word and tagged lists it reads, packed together as Sieve packs a folder, read back and every
-  member checked before it is written. (Its loose lists are still written beside it, for other
-  filters.) A loose .sfilter or a .sieve of a name, either, counts as that version taken.
-- **At start-up every .sieve in a filters folder is decoded once into the cache**
-  (`<plugin cache>/sfilters/<the .sieve's SHA-256>/`, with an index of each member's SHA-256 and size),
-  checked again at every start and decoded again where anything differs; its filters load exactly as
-  loose ones, with the same SHA-256. The hallway loads plugins as it starts, so they are decoded and
-  cached ahead of use.
-- A damaged .sieve (or one unfolding past 64 MiB, or holding no .sfilter) is listed by
-  `sieve filters --plugins` with why, never skipped. `--plugins` marks packed ones `(packed)`.
-- `sieve filters --pack FOLDER --out FILE.sieve` packs any filter and its lists the same way;
-  `sieve filters --plugin FILE.sieve` and the Designer's `--design FILE.sieve` open packed filters.
-- Measured: function-words-v2 and its tagged list, 1,024,539 bytes as two files, 99,974 as one .sieve.
-- Loose .sfilter files load as before; the repository's reference filters stay loose (the oracle reads them).
+- **One piece for all of Sieve's own .sieve files** (tools/cli/sieve_cache.hpp): a .sieve decoded once
+  into the cache, `<plugin cache>/<kind>/<its SHA-256>/`, with an index of every member's SHA-256 and
+  size checked at every start. Filters (kind `sfilters`) now use it, and so do catalogue entries.
+- **Catalogue entries as .sieve.** A catalogue folder (`catalogue`, `languages`, or `--folder DIR`)
+  may hold `.sieve` files of `.format` entries; each is decoded into the cache (kind `catalogue`) and
+  its entries read exactly as loose ones, with the same versions. `sieve catalogue --pack FOLDER
+  --out FILE.sieve` packs one, every entry read and checked first. One that does not decode is left out
+  with a warning saying why. The command line and the hallway share one lookup (catalogue_folders).
+- **Maps decoded ahead of time.** Maps are already .sieve (IDEAS 19.93). The hallway now decodes every
+  map in its `maps` folder as it starts, on a thread of its own, and keeps them in memory (by path,
+  size and time), so the Node Graph Viewer opens on them without waiting; writing a map drops its copy.
+- **At hallway start-up:** filters (as before), the catalogue's .sieve files and the maps are all
+  decoded and cached before first use; the map thread starts only once decoding's word lists are set.
+- Measured: data/catalogue and data/languages, 7,912 bytes as loose files (with their READMEs), are 840 and 1,163 bytes
+  as one .sieve each, and give all 194 entries from a release-shaped folder with no loose entries.
 
 ## Files
 
-- tools/cli/locate.hpp, locate.cpp: `files_of_manifest` (a .sieve's files in memory, checked as
-  installing checks them, nothing written).
-- tools/cli/plugins.hpp, plugins.cpp: the loader reads .sieve; decoded_filter_sieve, pack_filter_sieve,
-  sfilters_in_sieve, sfilter_file.
-- client/designer_model.cpp (saving), client/designer.cpp (opening), tools/sieve_cli.cpp (--pack,
-  --plugin, --plugins), tools/cli/help.cpp.
-- ci/steps/10-hallway.sh: the Designer's save is a .sieve; a filter packed, loaded with its SHA-256,
-  run, then one bit changed and refused.
-- docs: FILTER-PLUGINS section 21, MANUAL, IDEAS 19.185.
+- New: tools/cli/sieve_cache.hpp, tools/cli/sieve_cache.cpp.
+- Changed: CMakeLists.txt, .gitignore, tools/cli/plugins.cpp (uses sieve_cache), tools/cli/map_sieve.hpp
+  and .cpp (read_map_file_cached, prefetch_maps), client/app_main.cpp (start-up), client/menu.cpp
+  (catalogue_folders), client/node_graph.cpp (cached maps), tools/sieve_cli.cpp (catalogue --pack,
+  --folder with .sieve), tools/cli/help.cpp, ci/steps/04-models.sh (a packed catalogue read with the
+  same versions); docs: SPECIFICATIONS 12.0m, MANUAL, FILTER-PLUGINS 21, IDEAS 19.185.
 
 ## Not yet
 
-Catalogue entries and maps kept the same way; a release shipping the reference filters packed.
+The repository's own entries and filters stay loose (read and reviewed as text); a release could ship
+them packed.

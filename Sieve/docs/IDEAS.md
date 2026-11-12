@@ -7608,4 +7608,10 @@ state space".
   creation and they would be cached for use, decoded on startup to be cached ahead of time"):* the
   Designer saves each filter with its lists as one `.sieve`; at start-up every `.sieve` in the filters
   folder is decoded once into the cache, checked at every start, and loaded as a loose filter is
-  (docs/FILTER-PLUGINS.md section 21). Catalogue entries and maps kept the same way: not yet.
+  (docs/FILTER-PLUGINS.md section 21). *And catalogue entries and maps (the same day, Edward: "carry on
+  with catalogue and map .sieve loading next"):* a catalogue folder may hold its entries as `.sieve`
+  (`sieve catalogue --pack`), decoded at start-up into the cache by the same piece the filters use
+  (tools/cli/sieve_cache.hpp) and read as loose entries; maps, `.sieve` since §19.93, are decoded as the
+  hallway starts, on a thread of their own, and kept in memory for the Node Graph Viewer. The
+  repository's own entries stay loose (they are read and reviewed as text); a release may ship them
+  packed.

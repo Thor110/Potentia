@@ -93,3 +93,6 @@ data/fonts/unifont.hex
 # The catalogue's measured figures when a CI step runs in this folder (ci/lib.sh sets SIEVE_STATS).
 /sieve-stats/
 /measure.txt
+/packed-catalogue/
+/loose-version.txt
+/packed-version.txt

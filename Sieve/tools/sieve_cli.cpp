@@ -29,6 +29,7 @@
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
 #include "cli/raid_socket.hpp"
+#include "cli/sieve_cache.hpp"
 #include "cli/image_io.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
@@ -1390,23 +1391,24 @@ int cmd_catalogue(const Args& a)
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
     // data/catalogue and data/languages in the Sieve folder, else beside the program (where the build
     // copies them): one web (IDEAS 19.183). --folder DIR reads that one folder instead.
-    std::vector<std::string> folders;
-    if (a.has("folder")) folders.push_back(a.get("folder"));
-    else
-        for (const char* name : {"catalogue", "languages"})
-        {
-            std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
-            if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / name), where.push_back(exe / ".." / "data" / name); // (a release keeps sieve in tools/, the folders above it)
-            for (const auto& w : where)
-            {
-                std::error_code ec;
-                if (std::filesystem::is_directory(w, ec))
-                {
-                    folders.push_back(w.string());
-                    break;
-                }
-            }
-        }
+    // (and the decoded copy of each .sieve of entries in them: IDEAS 19.185, cli/sieve_cache.hpp)
+    std::vector<std::string> folders, folder_notes;
+    if (a.has("folder")) folders = catalogue_folder(sieve::from_u8(a.get("folder")), &folder_notes);
+    else folders = catalogue_folders(&folder_notes);
+    for (const auto& n : folder_notes) std::cerr << "warning: left out " << n << "\n";
+    if (a.has("pack"))
+    {
+        // Entries kept as one .sieve (IDEAS 19.185): every .format in the folder read and checked first,
+        // then packed, read back and written; a catalogue folder decodes it at start-up and reads its
+        // entries as loose ones (cli/sieve_cache.hpp).
+        if (!a.has("out")) throw std::invalid_argument("--pack FOLDER needs --out FILE.sieve");
+        const std::filesystem::path folder = sieve::from_u8(a.get("pack")), out = sieve::from_u8(a.get("out"));
+        const auto entries = sieve::read_format_folder(folder.string());
+        if (entries.empty()) throw std::invalid_argument("--pack: no .format entries in " + a.get("pack"));
+        pack_folder_sieve(folder, out, kCatalogueSieveRoof);
+        std::cout << "packed    " << a.get("out") << " (" << std::filesystem::file_size(out) << " bytes): " << entries.size() << (entries.size() == 1 ? " entry" : " entries") << "\n";
+        return 0;
+    }
     const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folders);
     auto find = [&](const std::string& id) -> const sieve::FormatEntry* {
         for (const auto& e : all)

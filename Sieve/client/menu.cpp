@@ -34,6 +34,7 @@
 #include "cli/compare.hpp"
 
 #include "sieve/format_stats.hpp"
+#include "cli/sieve_cache.hpp"
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -2248,21 +2249,10 @@ void Menu::cat_init()
     cat_ready_ = true;
     // The code's entries and the hand-written ones (data/catalogue, data/languages: one web), here,
     // else beside the program.
-    std::vector<std::string> folders;
-    for (const char* name : {"catalogue", "languages"})
-    {
-        std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
-        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / name), where.push_back(exe / ".." / "data" / name); // (a release keeps sieve in tools/, the folders above it)
-        for (const auto& w : where)
-        {
-            std::error_code ec;
-            if (std::filesystem::is_directory(w, ec))
-            {
-                folders.push_back(w.string());
-                break;
-            }
-        }
-    }
+    // (and the decoded copy of each .sieve of entries in them: IDEAS 19.185, cli/sieve_cache.hpp)
+    std::vector<std::string> notes;
+    const std::vector<std::string> folders = sieve::cli::catalogue_folders(&notes);
+    if (!notes.empty()) cat_note_ = notes.front();
     try
     {
         cat_ = sieve::format_catalogue_with(folders);

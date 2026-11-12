@@ -265,7 +265,7 @@ void Hallway::graph_list()
         try
         {
             bool is_map = false;
-            g.map = cli::read_map_file(f, &is_map);
+            g.map = cli::read_map_file_cached(f, &is_map); // (decoded at start-up, ahead of this: app_main.cpp)
             g.tree_only = !is_map;
             g.root = root_of_map_file(f, g.map);
             g.ready = true;

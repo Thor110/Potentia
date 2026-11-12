@@ -1135,5 +1135,9 @@ loose and packed is one plugin.
 - **Measured** on `function-words-v2` and its tagged list (1,024,539 bytes as two files): 99,974 bytes
   as one `.sieve`.
 - **Not yet.** The reference filters in `data/filters/` stay loose, as the oracle reads them; a release
-  could ship them packed. Catalogue entries and maps kept the same way are the next step of §19.185.
+  could ship them packed.
+- **The same for the catalogue and maps** (built the same day): the cached decoding is one piece,
+  `tools/cli/sieve_cache.hpp`, shared with the catalogue's entries (`sieve catalogue --pack`, the
+  cache's `catalogue/`); maps, already `.sieve`, are decoded at the hallway's start on a thread and kept
+  in memory (`cli/map_sieve.hpp`: `prefetch_maps`).
 

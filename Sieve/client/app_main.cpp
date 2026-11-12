@@ -6,6 +6,8 @@
 #include "win_console.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/plugins.hpp"
+#include "cli/map_sieve.hpp"
+#include "cli/sieve_cache.hpp"
 #include "cipher_screen.hpp"
 #include "manual_nav.hpp"
 #include "designer.hpp"
@@ -843,6 +845,11 @@ int run(const Args& a)
                                    std::filesystem::path("data") / "training"});
     // Sieve instructions that carry items of Sieve's lines (sieve-manifest-v5) are made again here.
     sieve::cli::use_item_maker();
+    // Sieve's own files kept as .sieve, decoded now and cached ahead of their first use (IDEAS 19.185):
+    // the catalogue's entries (in the cache, as the filters are), and the maps (in memory, on a thread
+    // of their own, so the window opens without waiting for them; started once what decoding reads is set).
+    (void)sieve::cli::catalogue_folders();
+    sieve::cli::prefetch_maps(sieve::cli::executable_dir() / "maps");
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
     const AppSettings loaded = app; // (as the file has them: what the options below are for this run only)
