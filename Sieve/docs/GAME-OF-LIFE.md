@@ -5,7 +5,8 @@ from the game of life, or how the rules from Conway's game of life might be turn
 filter: pick some random bytes, fire them off, have them alter values as they go through the bytes
 with a +1/-1 type schema ... making sure to wrap the value around". "Probably the most chaotic one I
 can think of for sure, perhaps even useless." This page keeps what has been tried and measured, and
-what is still to try. Nothing here is in Sieve: it is the shortcut seed's exploratory work
+what is still to try. (Life over noise pictures through time, as a view and a countable filter on
+the movies line rather than a way to shorten files: IDEAS §19.141.) Nothing here is in Sieve: it is the shortcut seed's exploratory work
 (`tools/shortcut_gliders.py`), measured as the rest is.
 
 ## How it works

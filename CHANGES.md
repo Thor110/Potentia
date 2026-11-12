@@ -1,8 +1,16 @@
 # Changes since 1eedaf3 "sieve ideas" (12 November 2026)
 
-One commit: 84d4054 "Every idea triaged; the tactile Sieve; where ideas go next". Documentation only; no code changed.
+Two commits, documentation only; no code changed. This zip includes the earlier triage zip's files, so it replaces it.
 
-- **Sieve/docs/IDEAS-TRIAGE.md (new):** every idea in IDEAS.md (569, entries with several ideas split) given a kind (technical, metaphorical, both, process), a status and a verdict, each with its reason from the entry's own text. Counts: 183 done, 204 workable, 72 workable but large, 14 waiting on Edward, 49 unworkable, 31 not wanted, 16 metaphor only. The unworkable ones and those waiting on Edward are gathered at the top.
-- **Sieve/docs/IDEAS.md:** §19.140, the tactile Sieve (braille, touch and sensation screens, for the disabled throughout time; why the interface is kept simple), and a pointer to it in §19.74.
-- **Sieve/docs/ROADMAP.md:** "Next: the ideas filtered": the four-step plan, step 1 done, and where ideas go from here: workable ones onto the ROADMAP a few at a time; worked-through ones moved whole into docs/ideas/ (IMPLEMENTED.md, DEPRECATED.md, WORK-DONE.md), with a pointer left at each old number in IDEAS.md.
-- **Sieve/docs/VOICES.md:** 23 of Edward's lines found by the triage, his speech on filtering the ideas among them, added to the candidates block. The rest of the file is untouched.
+**84d4054 "Every idea triaged; the tactile Sieve; where ideas go next"**
+- **Sieve/docs/IDEAS-TRIAGE.md (new):** every idea in IDEAS.md given a kind, a status and a verdict, with its reason from the entry's own text.
+- **Sieve/docs/IDEAS.md:** §19.140, the tactile Sieve.
+- **Sieve/docs/ROADMAP.md:** "Next: the ideas filtered": the plan, and where ideas go from here.
+- **Sieve/docs/VOICES.md:** 23 of Edward's lines added to the candidates block.
+
+**Second commit: "Done ideas moved to docs/ideas; Life over noise through time"**
+- **Sieve/docs/ideas/IMPLEMENTED.md (new):** 39 entries whose every idea is done (none partly built, none naming anything still to do), moved whole from IDEAS.md under IDEAS.md's own section headings; their links point up a folder. IDEAS.md keeps a one-line pointer at each number ("*Done; moved whole to ideas/IMPLEMENTED.md*"), so every "IDEAS §N" reference still leads to them. IDEAS.md is 577 lines shorter.
+- Left in IDEAS.md for now: entries done only in part (§19.71, §19.90, §19.97, §19.123 and others), §9's framing, and §17 (for DEPRECATED.md next).
+- **Sieve/docs/IDEAS.md §19.141:** the Game of Life over noise pictures through time. It is temporary (a view), temporal (each generation a frame; a rule gradient across frames), and causal (the first frame names the film, so a `life-causal-v1` filter on the movies line would count exactly). Nothing measured yet.
+- **Sieve/docs/GAME-OF-LIFE.md:** a pointer to §19.141.
+- **Sieve/docs/IDEAS-TRIAGE.md, ROADMAP.md:** the move recorded, and §19.141 added (570 ideas).

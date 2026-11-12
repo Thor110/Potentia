@@ -21,18 +21,18 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 | Verdict | Ideas |
 | --- | ---: |
 | done | 183 |
-| workable | 204 |
+| workable | 205 |
 | workable, large | 72 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
 | metaphor only | 16 |
-| **all** | **569** |
+| **all** | **570** |
 
 | Kind | Ideas |
 | --- | ---: |
 | technical | 419 |
-| both | 86 |
+| both | 87 |
 | process | 44 |
 | metaphorical | 20 |
 
@@ -46,6 +46,7 @@ Edward, 12 November 2026: "moving forward the ideas will slowly get filtered ont
   - `DEPRECATED.md`: the *unworkable* and *not wanted* ones, each with its reason and measurement, so they are not tried again unknowingly.
   - `WORK-DONE.md`: a dated log of what was built and measured, one line each, as a chart across time.
   Each entry is moved whole, not shortened, and IDEAS.md keeps a one-line pointer at its old number, so no reference breaks.
+- **First move done (12 November 2026):** 39 entries whose every idea is done, none partly built and none naming anything still to do, are now in [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md). Entries done in part (§19.71, §19.90, §19.97, §19.123 and others) stay until their rest is; §9's framing stays where it is read; §17 waits for `DEPRECATED.md`.
 - **IDEAS.md** then holds only what is open: workable, large, waiting on Edward.
 
 
@@ -734,3 +735,4 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.139e | Remove write control from internet protocol | both | noted only | workable | "Noted as said." One reading: content named by hash (as IPFS and BitTorrent do), so controlling a server does not control a name's content. |
 | 19.140a | Interface kept simple for other senses | both | built | done | Deliberate: few elements, each with a name, value and place, and nothing shown by colour or position alone. Strings are in language files and menus are read aloud. |
 | 19.140b | Braille, haptic and touch rendering | technical | open | workable, large | Workable now: colour-blindness pass (2.4), hallway panel read-aloud, a "describe this unit" key, braille through screen readers (liblouis). Haptic screens later, as hardware comes. |
+| 19.141 | Game of Life over noise, through time | both | noted only | workable | A view and a countable filter, not a way to shorten files: each frame follows the last, so the first frame names the film (`life-causal-v1` on the movies line). |

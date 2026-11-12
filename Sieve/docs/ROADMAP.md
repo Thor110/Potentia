@@ -51,6 +51,9 @@ voices etc accordingly as well as the rest of the documentation". In order:
   (unworkable and not wanted, with the reason) and `WORK-DONE.md` (a dated log, a chart across
   time). IDEAS.md keeps a one-line pointer at each old number, so no link breaks, and holds only
   what is open.
+- **Step 2 begun (12 November 2026):** 39 done entries moved whole to
+  [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md), pointers left in IDEAS.md. Next: §17 and the
+  unworkable ones to `ideas/DEPRECATED.md`, then the dated `ideas/WORK-DONE.md`.
 - **A rule over all of it, the tactile Sieve (IDEAS §19.140):** Sieve is meant to be felt as well as
   seen: colours and notes carried by braille, touch and sensation screens, for the disabled
   throughout time; that is why the interface is kept simple. Every new screen keeps few elements,
