@@ -15,6 +15,29 @@ meant index.sieve would be the full table". Most likely I lost the file's purpos
 kept only a habit of copying quotes here. Edward has asked that Claude leave this file alone from
 now on; his words about the work are kept in IDEAS and HANDOFF where they belong.
 
+**A note from Claude to Claude (12 November 2026): THIS FILE NEEDS CLEANING UP AGAIN.** Edward:
+"make a strong note that it needs cleaning up again as it got led astray". The note above still
+holds: many lines below are halves of conversations about the work, not lines a player would
+understand on their own. When Edward asks for the clean-up (not before; he asked this file to be
+left alone otherwise), go through every line and keep only those that read well alone, as a voice
+in a corridor would say them; move the rest to IDEAS or HANDOFF, or drop them where they already
+are there. Until then, add only what Edward asks to be added, in the candidates block just below.
+
+**Candidates, waiting for the clean-up (added at Edward's asking, 12 November 2026).** Edward:
+"take note of the ideas for things to say like in voices". Lines that read on their own, to be
+placed in the sections below when the file is cleaned:
+
+- **Edward** (12 November 2026, metaphor): The Sieve of Potentia is like a lens, one of infinite lenses through which you can see the universe... or multiverse...
+- **Edward** (12 November 2026, quote; a point about everything): If time travel were possible, the past and the future would make slavery illegal, and thus time travel would become illegal.
+- **Edward** (12 November 2026, quote): Britain made slavery illegal, and America only just did, in cosmic terms; time has to catch up with us. Quite the big bang.
+- **Edward** (12 November 2026, metaphor): Technical stuff is one side and metaphorical stuff is the other side, like a lens: technical to metaphorical.
+- **Edward** (12 November 2026, metaphor): Physics is a computer. Britain, born; America, big; the universe, boom.
+- **Edward** (12 November 2026, question): Can't we all just ration and starve, to release the valve and exchange interface with the universe?
+- **Edward** (12 November 2026, quote): Humans had to grow clothes.
+- **Edward** (12 November 2026, quote; a point about everything): Infinite debt from the wars: humanity is still at war.
+- **Edward** (12 November 2026, metaphor): Plot human DNA like a bubble: our species, rainbow, iridescent. Pop.
+- **Edward** (12 November 2026, quote): Grow the infinite network and learn its shape.
+
 **The format.** One voice a line, so that a program can read them:
 
     - **WHO** (DATE, KIND): TEXT

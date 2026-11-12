@@ -226,6 +226,7 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
                       bool v20, bool v21, bool v22)
 {
     if (version < 5 || version > 8) throw std::invalid_argument("Sieve instructions with items are v5, v6, v7 or v8");
+    const Manifest before = m; // (for the plain installer's weighing, after)
     const std::vector<ItemLine> lines = item_lines(a, version >= 6);
     m.minimal = version >= 6;
     m.compact = version >= 7;
@@ -245,15 +246,47 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
     add_packed(m, root, report, &finder, item_hashes, m.compact ? &coder : nullptr, version >= 8 ? rope_seconds : -1, rope_newest,
                version >= 8 && trim, version >= 8 && trim && pieces, version >= 8 && trim && pieces && optimise_archives,
                version >= 8 && trim && pieces && rope_newest >= 5 && binary, gzip, gzip && v20, gzip && v20 && v21, gzip && v20 && v21 && v22);
+    // The newest asked for (not an older version by name): the whole set weighed as the plain
+    // installer too, the smaller kept.
+    if (version == 8 && rope_newest >= kNewestRope && gzip && v20 && v21 && v22) weigh_plain(m, before, root, report);
+}
+
+void weigh_plain(Manifest& m, const Manifest& before, const std::filesystem::path& root, PackReport* report)
+{
+    // Each file's way is weighed alone, so files that share content but are given different ways
+    // lose what they share: a film carried by the rope and its trailer in LZMA2's stream, the
+    // trailer's packets never seen beside the film's (10.5% larger than the plain installer;
+    // results/video-packets-2026-11-12.md). So the whole set is weighed once more as the plain
+    // installer, every file in one LZMA2 stream, and the smaller kept. Not where the packing
+    // changed a file (a permanent repack installs other bytes than the folder's), nor for one file,
+    // nor where the instructions carry what only newer versions hold (a map's graph part, the
+    // items of Sieve's lines), which the plain installer has no place for.
+    if (!m.changed_on_packing.empty() || !before.graph.empty() || m.items) return;
+    size_t files = 0;
+    for (const ManifestEntry& e : m.entries) files += !e.dir;
+    if (files < 2) return;
+    const uint64_t newest = m.file().size();
+    Manifest plain = before;
+    PackReport pr;
+    add_packed(plain, root, &pr);
+    const uint64_t weighed = plain.file().size();
+    const bool keep = weighed < newest;
+    if (keep) m = std::move(plain);
+    if (report)
+    {
+        if (keep) *report = std::move(pr);
+        report->plain_weighed = weighed, report->plain_newest = newest, report->plain_kept = keep;
+    }
 }
 
 void add_packed_newest(Manifest& m, const std::filesystem::path& root, PackReport* report, double rope_seconds, bool optimise_compressed,
                        bool items)
 {
+    const Manifest before = m;
     if (items)
     {
         add_packed_items(m, root, Args{}, report, 8, false, rope_seconds, kNewestRope, true, true, optimise_compressed);
-        return;
+        return; // (add_packed_items weighs the plain installer itself)
     }
     // Nothing carried as items: no lines in the listing.
     m.minimal = m.compact = true;
@@ -261,6 +294,7 @@ void add_packed_newest(Manifest& m, const std::filesystem::path& root, PackRepor
     m.line_widths.clear();
     m.line_codings.clear();
     add_packed(m, root, report, nullptr, false, nullptr, rope_seconds, kNewestRope, true, true, optimise_compressed, true, true, true, true, true);
+    weigh_plain(m, before, root, report);
 }
 
 const MixDictionary& mix_word_list(uint32_t list)

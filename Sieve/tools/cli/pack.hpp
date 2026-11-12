@@ -87,6 +87,10 @@ struct PackReport
     bool v32 = false;                    // v32: some file carried as its differences from another
     bool v33 = false;                    // v33: as the manifest's (locate.hpp)
     bool v34 = false;                    // v34 (draft): as the manifest's
+    // The whole set weighed once more as the plain installer (every file in one LZMA2 stream),
+    // after the newest was made (12 November 2026): its bytes and the newest's, and which was kept.
+    uint64_t plain_weighed = 0, plain_newest = 0;
+    bool plain_kept = false;
     size_t deltas = 0;                   // v32: files carried so, their bytes, and their scripts' bytes
     uint64_t delta_bytes = 0, delta_scripts = 0;
     size_t copies = 0;                   // v33 draft: files carried as copies of another, and their bytes

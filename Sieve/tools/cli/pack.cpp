@@ -7651,6 +7651,9 @@ std::string pack_report_text(const PackReport& r, uint64_t original)
       << r.x86_bytes << " bytes), " << r.raw << " file(s) as they are (" << r.raw_bytes << " bytes), " << r.derived
       << " derived from another's lines (" << r.derived_bytes << " bytes, as " << r.mask_bytes << " bytes of masks)\n";
     for (const auto& [d, b] : r.derivations) o << "          " << d << ": lines of " << b << "\n";
+    if (r.plain_weighed)
+        o << "plain     the whole set weighed as the plain installer too (every file in one LZMA2 stream): " << r.plain_weighed << " bytes, against "
+          << r.plain_newest << (r.plain_kept ? "; the plain installer kept, as smaller\n" : "; the newest kept\n");
     return o.str();
 }
 

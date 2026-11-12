@@ -77,6 +77,12 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
                       bool item_hashes = false, double rope_seconds = 0, uint32_t rope_newest = kNewestRope, bool trim = true,
                       bool pieces = true, bool optimise_archives = false, bool binary = true,
                       bool gzip = true, bool v20 = true, bool v21 = true, bool v22 = true);
+// After the newest instructions are made (`before` is the manifest as it was before packing): the
+// whole set packed once more as the plain installer (every file in one LZMA2 stream, sieve-manifest-v4),
+// and that kept where it is smaller, so files that share content are never carried worse than
+// LZMA2 alone carries them together. Skipped for one file, where the packing changed a file, and
+// where the instructions carry a map's graph or items of Sieve's lines.
+void weigh_plain(Manifest& m, const Manifest& before, const std::filesystem::path& root, PackReport* report);
 // Instructions of the newest version for a folder, for whatever makes them other than `sieve
 // locate` and the File Locator (maps, sites, training runs, the hallway's saves): with `items`, the
 // items of Sieve's default lines carried as their places; the rope searched `rope_seconds` a file

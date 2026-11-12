@@ -5516,6 +5516,9 @@ them, or streaming them into a cache, as the game asks for them.
   game's other engines (the original through DOSBox, and any variant), one sieved copy of the
   player's own files serving all of them. *Alien Trilogy* is also the first target of the game
   dimension: a full map of the game across its engines, ALTEngine among them (GAME.md §11).
+  ALTEngine already strips unnecessary bytes from the game files, with more planned, and reading
+  assets from `.sieve`s is planned in it. The aim: one hallway of game engines, a dimension that
+  folds in on itself throughout time (GAME.md §11).
 
 **19.105 A gigabyte's instructions, read and made in proportion (Edward, 28 October 2026; built).**
 Edward's WoWRevived release (1,426,355,971 bytes, mostly films and music already compressed;
@@ -6329,7 +6332,9 @@ taken up:
   trailer cut from it, 90% of the trailer is packets seen before. It also found a gap in the
   packer: Sieve's newest was 10.5% larger than its own plain installer on that pair, the film's
   frames carried by the rope in a stream apart, so what the trailer shares with it was lost; a
-  whole-set plain weighing before writing would close it (no new version; for Edward to decide). That says whether the packet route is worth
+  whole-set plain weighing before writing would close it (no new version; for Edward to decide).
+  *Built the same day (Edward: "yes build the whole-set plain weighing fix"):* the pair now 3,449,600
+  bytes, level with 7-Zip; sets with no shared content keep the newest. That says whether the packet route is worth
   building, before any encoder is involved.
   *Measured (7 November 2026), WoWRevived English v1.1.2's eight MP4s:* every packet hashed with
   `ffprobe -show_packets -show_data_hash sha256`, no frame decoded. 43,969 packets, 617,099,672
@@ -7093,3 +7098,64 @@ important points in time that should be worked on in unison".
   build, until Sieve becomes an operating system and a game engine. Both are milestones, to be
   worked on together, where the format may be made anew around what they need. Each draft version
   (v34 now) is held to the same rule: it adds to what is read, and takes nothing away.
+
+**19.138 Time, slavery and war (Edward, 12 November 2026; an aside, noted as he gave it).** His
+words: "if britain made slavery illegal and america only just ( in cosmic terms ) made it illegal,
+then time has to catch up with us. quite the big bang." And: "if time travel were possible, the past
+and the future would make slavery illegal and thus time travel would become illegal. thus the wars,
+the time war (dr who reference) and more, like the infinite ballooning debt caused by both world wars
+and the wars throughout time and space across the multiverse."
+- *Edward, after:* "was all just a thought as I am a fan of the old dr who from when I was young".
+  A thought, kept as one; the story pool of GAME.md §11 is where thoughts like it can live.
+- *The dates, for reference:* Britain abolished the slave trade in 1807 and slavery in most of its
+  colonies by the Slavery Abolition Act of 1833 (in force from 1834); the United States abolished
+  it by the Thirteenth Amendment, ratified in 1865.
+- *Where it touches the project:* §19.136's aim (history fixed in place by its witnesses) is the
+  same intuition from the other side: a past that cannot be rewritten. Two of the lines are kept as
+  candidates in VOICES.md, waiting for its clean-up.
+
+**19.139 Technical to metaphorical, a lens on Edward's notes; and distributed computing, a DNA
+dimension, an infinite RAID (Edward, 12 November 2026; noted, nothing built).** His framing:
+"overall a way to streamline information and the universe plus ramblings of ideas things can always
+go one way or the other but technical stuff is one side and metaphorical stuff is the other side
+which can be reused in voices.md, like a lens, technical to metaphorical." So his notes are sorted
+the same way from now on: what could be built goes here, with notes; what is said for its own sake
+goes to VOICES.md's candidates (waiting for its clean-up), as a line a voice in the corridors could
+say. Some notes are both, and are kept in both.
+
+*The technical side.*
+- **Distributed computing.** "I was considering the idea of distributed computing ... Initially the
+  idea of logs being submitted through PRs but that could be weaponised. Secondly specifically
+  looking for good results users find. But I don't know if I like the idea overall. I know that
+  generally I would prefer all of humanity used distributed computing systems similar to the p2p
+  prime calculator that can utilise your background resources when idle or prompted."
+  - *The model he names* is the Great Internet Mersenne Prime Search (GIMPS) and its kin (BOINC,
+    Folding@home): idle machines given small, checkable pieces of a large search, each result
+    verified before it counts.
+  - *Why logs through pull requests could be weaponised:* anyone could submit anything, so results
+    would need checking before they count. Sieve's results check themselves: a unit's address and a
+    file's hash are verified by anyone in milliseconds, so a "good result" (a survivor of a stack,
+    a shorter address, a better model run that replays bit for bit) can be submitted as its
+    address and checked rather than trusted, as GIMPS checks a prime by a second run.
+  - *What it would search:* filter surveys over many settings, the rope's or a model's search
+    spaces, training runs (each replayable). Undecided, as Edward says: noted for when he decides.
+- **A DNA dimension.** "dna dimension and the colour of humanity / plot human dna like a bubble - our
+  species / rainbow / iridescent / pop". A line of DNA sequences (four symbols, A C G T) holds every
+  genome of its length, as the pages line holds every page; humanity's genomes are a cluster in it,
+  plotted as a bubble whose colours show how people vary. *A caution for when it is taken up:* a
+  person's DNA is among the most private data there is; only public, consented sets (the human
+  reference genome, the 1000 Genomes Project's) and summaries of variation, never anyone's own
+  genome, belong in it.
+- **An infinite RAID.** "random off shoot computer idea / grow the infinite network and learn its
+  shape". Storage spread across many machines with redundancy (as RAID spreads it across disks),
+  growing as machines join, its shape (who holds what, how far apart) learnt as it grows. Sieve's
+  part would be what it already has: every piece named by its hash and checked on arrival, so a
+  piece from anyone is as good as from anywhere (§19.136's witnesses are the same copies).
+- **"remove write control from the internet protocol".** Noted as said. One reading, in Sieve's
+  terms: content named by its hash rather than by where it is (as IPFS and BitTorrent do), so no one
+  controls a name's content by controlling a server: the bytes either match the name or they do not.
+
+*The metaphorical side* (kept as candidates in VOICES.md): "physics = computer britain born =
+america big = universe = boom"; "cant we all just ration and starve to release the valve and
+exchange interface with the universe"; "humans had to grow clothes lol"; "infinite debt from the
+wars = humanity still at war" (with §19.138).

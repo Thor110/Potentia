@@ -51,3 +51,22 @@ does not happen: newest 10,342,984 bytes, plain 10,372,911, 7-Zip 10,359,216.
   Sieve writes (never larger, readable by every Sieve since v4), so it is for Edward to decide.
   Narrower remedies: keep a file whose rope gain is under some share in LZMA2's stream, where what
   other files share can reach it.
+
+## Built (12 November 2026, Edward: "yes build the whole-set plain weighing fix")
+
+`weigh_plain` (tools/cli/items.cpp), after the newest is made by `sieve locate --installer`, the
+File Locator and everything that makes instructions of the newest version: the set packed once more
+as the plain installer and the smaller kept, for two files or more where no file was changed by
+packing. The report says it in a `plain` line. No new version: the plain installer is read by every
+Sieve since v4.
+
+| | Before | After |
+| --- | ---: | ---: |
+| The film and trailer | 3,811,383 | **3,449,600** (the plain installer kept; 7-Zip 3,449,028) |
+| The game-like set (95 files) | 10,342,984 | 10,342,984 (the newest kept; plain 10,372,911); made in 49.8 s against 44.5 s |
+| Two text files of 25 bytes | 89 | 89 (plain 223) |
+| The manual and IDEAS | 178,933 | 178,933 (plain 229,337) |
+| Ten small meshes | 1,191 | 1,191 (plain 2,188) |
+
+Both kept files install back byte for byte. The cost is one more LZMA2 pass over the set while
+making: 12% longer on the game-like set.

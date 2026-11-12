@@ -488,6 +488,73 @@ whatever engine variants exist like the original through dosbox etc".
   none of them (as with every game here, WoW's included); the map, the engines' settings and the
   sieved layout are what is shared, and a player's own files fill them.
 
+- *ALTEngine's side (Edward, 12 November 2026):* "altengine itself would need adjusting to stream
+  assets in and out of the sieve format, but that has been planned for and the altengine itself
+  already strips unnecessary bytes out of the game files with plans to strip even more in the long
+  run". So the stripping is begun in the engine itself, and reading `.sieve`s is planned there;
+  results/stream-layouts-2026-11-12.md measured the layout it can use (one small `.sieve` a file:
+  +0.21% in size, a file in 18 ms).
+- *One hallway of game engines (Edward, 12 November 2026):* "the aim would be to have one hallway of
+  game engines as a dimension that folds in on itself throughout time". A dimension whose rooms are
+  engines, each version of each engine a place along it (the original, its ports, ALTEngine and
+  every commit of it), so walking it walks through time. It folds in on itself because the
+  engines play the same games: a game's room is reached from every engine that runs it, and an
+  engine's own history (its commits, §19.137's lens on itself) runs back along the same hallway.
+
+- *The first cabinet, and a spectrum of games (Edward, 12 November 2026):* "alien trilogy arcade
+  cabinet would be first in the game dimension".
+  - *Streamed as you go:* "it could theoretically stream a games assets in on a need by need basis
+    as you go to play it or get near the cabinet / each cabinet with loading screens and messages
+    appropiately or accordingly". Each cabinet's files come in as the player nears it (the layout
+    measured in results/stream-layouts-2026-11-12.md: a file in milliseconds), and the cabinet
+    shows a loading screen and says what it is fetching meanwhile.
+  - *Its two ends:* "one end would be games to infinity number and the starting point would be sieve
+    of potentia / alien trilogy and more", and "wowrevived and other community projects would fit
+    in at the other end". The dimension starts at Sieve itself and *Alien Trilogy*, runs out to
+    every game there could be (the games line's numbers, without end), and holds community
+    projects such as WoWRevived along the way.
+  - *From an ISO, if it is ever abandonware:* "if we could work with archive.org and if alien trilogy
+    ever gets ruled abandonware then it could be streamed from its iso accordingly". Until then the
+    files are the player's own copy (above).
+  - *A map of its releases, as deltas:* "eventually being packed down into a map of its files across
+    its releases and mapped as deltas instead of full file releases". One release kept whole, every
+    other as its differences from it (Sieve's `delta` and `copy` ways, file by file), so the
+    releases together cost little more than one. "shifting between maps would allow them to be
+    restored without having to store them all": choosing a release on the map makes its files from
+    the one kept, "allowing quick and easy access to things like different language audio and or
+    video between games".
+
+- *A pool of story, and messages left at the end (Edward, 12 November 2026):* "all the fun story
+  stuff people can talk about throughout the dimensions for the game idea, just meant to be a pool
+  of ideas you know, with so many and new ones popping up all the time, it would be the kind of
+  thing and the kind of place or space where people leave their own message once they complete the
+  game but it might have to be tied to who they are as a person with a real physical to digital id
+  connection or verification because history needs guarantees to be history, not speculation".
+  - *The pool:* every idea and story thread (Edward's asides among them, IDEAS §19.138 and §19.139,
+    and VOICES.md's lines once cleaned) is material the dimensions' voices can draw on; it grows
+    as new ones come.
+  - *Messages left by those who finish:* each one kept as a record of its own, named by its hash and
+    witnessed (IDEAS §19.136), so it can never be changed afterwards.
+  - *Tied to a real person:* so the record says who left it, not just what was said. Notes for when
+    it is designed: it must be the person's choice, and what is published should be the least that
+    proves it (an attestation from a verifier that "a verified person left this", or a name they
+    choose to show), never an identity document itself; laws on personal data (the UK's and the EU's
+    GDPR) apply to whatever is kept.
+- *Games already free, at one end, to preserve time (Edward, 12 November 2026):* "for games that are
+  truly already deemed abandoneware if there are any, that can be taken note of already and they
+  can be plugged in to one end of a system to preserve time".
+  - *A caution first:* "abandonware" is not a legal status. A game no longer sold is usually still
+    under copyright. The safe end of the system is games their rights holders have released to be
+    given away (freeware), or under an open licence, each checked against its own terms before it
+    is carried. (In the United States, libraries and archives also have a narrow exemption to
+    preserve games whose servers have shut, which is how archive.org's collections run.)
+  - *A starting list, to be checked against each publisher's terms:* Revolution Software's *Beneath a
+    Steel Sky* and *Lure of the Temptress*, *Flight of the Amazon Queen* and *Dreamweb* (released as
+    freeware, distributed with ScummVM's permission); EA's *Command & Conquer* (the first), *Red
+    Alert* and *Tiberian Sun* (released free in 2007 to 2010); Bethesda's *The Elder Scrolls:
+    Arena* and *Daggerfall* (released free in 2004 and 2009). Each would be one of the first
+    cabinets, its files mapped and its releases as deltas, as above.
+
 **Graphics that scale, from pixels to NURBS (Edward, 12 November 2026; extends IDEAS §19.47).** His
 words: "I wanted games to scale from pixels through voxels and across tris / quads and nerbs with
 stable diffusion and the like to have a graphics scaling algorithm for 3d models etc". One game's
