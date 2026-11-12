@@ -468,6 +468,40 @@ Notes:
   program: the binary line's executables (with an emulator of their own machine, §4) and the AI
   line's models (run it, look at its activations, unfold its weights as tensors).
 
+**The first target: *Alien Trilogy*, and ALTEngine (Edward, 12 November 2026).** His words: "alien
+trilogy will probably be the first target for that game, we will want to aim for a full map or range
+of that game with my engine reimplementation amongst the mix". And: "ALTEngine is already quite far
+along, nearly done in-fact, when it is done it will be the first to get the sieve treatment where we
+strip it of any last remaining unnecessary data and stream its assets in and out of its engine and
+whatever engine variants exist like the original through dosbox etc".
+- *A full map of one game:* every way *Alien Trilogy* exists, laid out as one map (the node graph's
+  map format, §19.38): the original as released (run through DOSBox), its other releases, and
+  Edward's own engine reimplementation, ALTEngine, among them; each a place, and the lenses above
+  (run, console, source) open on each. The game's data is the same across them, so the map is of
+  one set of assets seen through many engines.
+- *The Sieve treatment, ALTEngine first:* when it is done, its files sieved (IDEAS §19.104): the
+  last unnecessary data stripped, and its assets streamed in and out of the engine as it asks for
+  them, from a `.sieve` or a cache, rather than unpacked whole. The same streamed assets then feed
+  the other engines of the map (the original through DOSBox, and any other variant), so one sieved
+  copy serves every engine that plays it.
+- *Whose data:* the assets are the player's own copy of the game. Sieve and the repository carry
+  none of them (as with every game here, WoW's included); the map, the engines' settings and the
+  sieved layout are what is shared, and a player's own files fill them.
+
+**Graphics that scale, from pixels to NURBS (Edward, 12 November 2026; extends IDEAS §19.47).** His
+words: "I wanted games to scale from pixels through voxels and across tris / quads and nerbs with
+stable diffusion and the like to have a graphics scaling algorithm for 3d models etc". One game's
+look as a scale, each step a setting rather than a different asset:
+- *pixels* (2D, as the image line's units), *voxels* (the same, in three dimensions), *triangles*
+  and *quads* (meshes, as the models line's), and *NURBS* (smooth surfaces, the highest);
+- a *graphics scaling algorithm* to move a 3D model along it, up as well as down: down is exact
+  (a mesh sampled to voxels, voxels to pixels), up is where learned models come in (Stable
+  Diffusion and the like for textures and detail, as Sieve's own picture models are trained in
+  the harness), each step recorded so the same model at the same setting looks the same on every
+  machine;
+- *Alien Trilogy* is a good first case: its sprites and low-polygon levels are the low end of the
+  scale, and ALTEngine is where a higher setting could be tried against the original.
+
 **Questions for Edward:** whether a games line belongs in the hallway at all, or only the cabinets
 of §4; how it is reached (a door of its own, the halfway room of §4, or found through the game
 line); and whether the console's first size (32 × 32, one bit, 256 bytes) is the right one to start

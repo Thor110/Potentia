@@ -2994,7 +2994,9 @@ tab next to CHAT, variable, mappable and savable, and adjustable to other models
 engine as a free-flowing, dynamic building and creation system.
 - *Bodies:* procedural skeletons and bones, boxes, gravity and kinematics, destruction.
 - *Scale:* from voxels to triangles, quads and other forms, all the way up to layering with
-  DLSS 5.
+  DLSS 5. *(12 November 2026, Edward: "from pixels through voxels and across tris / quads and
+  nerbs with stable diffusion and the like to have a graphics scaling algorithm for 3d models";
+  noted in GAME.md §11, with Alien Trilogy as the first case.)*
 - *Rules:* Conway's Game of Life, noise and much more.
 - *The aim:* theoretically, to create all games ever. It starts with models and content, and
   eventually reaches form and function.
@@ -5501,6 +5503,11 @@ them, or streaming them into a cache, as the game asks for them.
   Each of those that changes what is written needs a new version, so it waits for the pause to end.
 - *What to record:* the game's files, their sizes, 7z and Sieve both ways (size, and time to first
   file and to all), and the engine's load time from the folder against from the `.sieve`.
+- *12 November 2026 (Edward):* ALTEngine is nearly done, and will be the first to get the Sieve
+  treatment: its last unnecessary data stripped, and its assets streamed in and out of it and of the
+  game's other engines (the original through DOSBox, and any variant), one sieved copy of the
+  player's own files serving all of them. *Alien Trilogy* is also the first target of the game
+  dimension: a full map of the game across its engines, ALTEngine among them (GAME.md §11).
 
 **19.105 A gigabyte's instructions, read and made in proportion (Edward, 28 October 2026; built).**
 Edward's WoWRevived release (1,426,355,971 bytes, mostly films and music already compressed;
