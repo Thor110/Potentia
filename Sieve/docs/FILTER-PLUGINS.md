@@ -394,6 +394,13 @@ versioned and checked by the oracle alike.
   filter as parts, its file, testing and saving). Three panels: the filter list (built-in and
   custom tabs, the chosen one described; R requires it, Enter opens a custom one here); the canvas
   of nodes; the test panel.
+- **Heard as it is tested** (12 November 2026, IDEAS 19.19). On an audio line (`notes104`,
+  `notes*`, and `pcm*`, tested on 8-bit sound at 8 kHz) the survivors the test shows are played:
+  the first when a test's result comes in, the next with P in the test panel. The Media Player's M
+  opens the designer on a melody filter to start from (`Doc::new_melody`: notes from middle C up an
+  octave). `hallway --designer --design-melody --script F5` does the same for scripts and CI, and
+  prints `designer played: N (...)`, how many it played and the last message (playing, or why it
+  could not, where there is no sound device).
 - **Nodes.** ENTRY: REQUIRES, each prerequisite with a **+** that opens a SETTINGS node for what it
   pins (Left/Right steps a number or cycles a choice; Delete unpins, back to "its own") and **+ add a
   filter it requires** (then choose in the list). HEADER (id, version, author, origin, lines,
@@ -1067,3 +1074,36 @@ and the oracle at four lengths.
 - *moby-grammar-v2* (imperatives, punctuation): needs the rule search re-run on the corpus, which is
   not in the repository.
 - *A category for plugins*, and ticking a category at once in the setup menu.
+
+## 20. Plugins for the PCM sound line, and the sound filters measured on speech (12 November 2026)
+
+The sound line (`--note-set pcm`) has three built-in filters (§19): `sound-peak-v1`, `sound-step-v1`
+and `silence-run-v1`. Plugins can now be written for it too: `symbols pcm*` binds to every PCM line,
+`BASE` is the number of sample values (a sample's signed value is `d - BASE * (d >= BASE / 2)`), and
+on a line of several channels the stack hands a plugin one channel at a time, as it hands a melody
+filter one voice. The oracle's `plugin --note-set pcm --bits B --channels C` now reads such lines
+the same way (CI step 11 compares them on 1-, 3- and 8-bit lines of one to three channels), and the
+Filter Designer offers `pcm*`, tested on 8-bit sound and played as it is tested (§12).
+
+**`pcm-quiet-ends-v1`** (`data/filters`): the first and last samples within `quiet` percent (5) of
+full scale of silence, so a unit begins and ends as a clip of recorded sound does rather than cut
+in the middle of a wave. Three states; it keeps 10^-2.59 of the line (8-bit, one second).
+
+**The sound filters on real speech.** The 653 one-second windows of every fifth clip of the
+anchors' hour of LJ Speech, at 8 kHz and 8 bits (ffmpeg's resampling), judged by the filters' own
+integer rules:
+
+| Filter and setting | Speech kept |
+| :--- | ---: |
+| `sound-peak-v1`, `percent=90` (the default) | 100% |
+| `sound-peak-v1`, `percent=50` | 80.2% |
+| `sound-step-v1`, `percent=50` (the default) | 100% |
+| `sound-step-v1`, `percent=37` | 99.5% |
+| `sound-step-v1`, `percent=30` | 97.7% |
+| `sound-step-v1`, `percent=25` | 93.3% |
+| `sound-step-v1`, `percent=20` | 81.0% |
+| `sound-step-v1`, `percent=12` | 32.2% |
+| `pcm-quiet-ends-v1`, `quiet=5` (the default) | 62.5% of windows cut anywhere in speech; a clip that starts and ends between words passes |
+
+So at 8 kHz speech moves fast from sample to sample (a fricative is nearly noise): `sound-step-v1`
+could be set to 30% and keep 97.7% of it. Its default (50%) keeps all of it.

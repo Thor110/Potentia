@@ -85,6 +85,9 @@ struct Doc
     // Starting points: a token filter over one dictionary, and a small table.
     static Doc new_tokens();
     static Doc new_table();
+    // A melody filter to start from (opened from the Media Player): every note line's notes from
+    // middle C up an octave, rests free, as a table over the line's constants.
+    static Doc new_melody();
 };
 
 // What the test panel shows, worked out from the file at one length.
@@ -96,6 +99,7 @@ struct TestResult
     bool counted = false;       // the table fitted the budget
     std::string survivors, excluded;
     std::vector<std::string> samples; // survivors by rank, as text
+    std::vector<std::vector<uint32_t>> sample_units; // the same, as digits (to be played on an audio line)
     std::shared_ptr<const sieve::Dfa> dfa;
     sieve::FilterLine line;
 };

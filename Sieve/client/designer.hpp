@@ -28,10 +28,13 @@
 
 namespace hallway {
 
+class Synth;
+
 class Designer
 {
 public:
-    Designer(SDL_Window* window, SDL_Renderer* renderer, const std::string& open_file = {});
+    // `melody`: start from a melody filter (Doc::new_melody), as the Media Player opens it.
+    Designer(SDL_Window* window, SDL_Renderer* renderer, const std::string& open_file = {}, bool melody = false);
     ~Designer();
     enum class Result { Back, Quit };
     Result run();
@@ -41,6 +44,7 @@ public:
     void render();
     const design::Doc& doc() const { return doc_; }
     const std::string& status() const { return status_; }
+    size_t played() const { return played_; } // survivors played (an audio line's)
 
 private:
     enum class Area { List, Canvas, Test };
@@ -93,6 +97,11 @@ private:
     std::string path_;      // the file it came from, if any
     bool dirty_ = false;
     std::string status_;
+    // On an audio line, the survivors the test shows are played (IDEAS 19.19: "heard as they are
+    // tested"): the first when a test's result comes in, the next with each P.
+    std::unique_ptr<Synth> synth_;
+    size_t played_ = 0;
+    void play_survivor(bool first);
     Area area_ = Area::Canvas;
     // The canvas.
     std::vector<Field> fields_;

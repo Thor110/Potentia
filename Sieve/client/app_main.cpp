@@ -175,7 +175,8 @@ const char* kUsage =
     "                      --cipher-in FILE takes a file's bytes as the input, --cipher-out FILE saves the output\n"
     "  --designer          with --screenshot: a picture of the filter designer; --design FILE opens a\n"
     "                      plugin, --script \"Down,Right,=text,Return\" runs keys and typed text, and\n"
-    "                      --design-out FILE writes the filter as the designer would save it\n"
+    "                      --design-out FILE writes the filter as the designer would save it;\n"
+    "                      --design-melody starts it on a melody filter, as the Media Player's M does\n"
     "  --no-music          no background music this run (the Media Player is still there, silent)\n"
     "  --media-player      with --screenshot: a silent music player, so --press can open the Media\n"
     "                      Player from the pause menu (Escape, then Down to it, Return)\n"
@@ -1128,7 +1129,7 @@ int run(const Args& a)
     {
         // A picture of the filter designer (for documentation and testing): --design FILE opens a
         // plugin in it; --script runs keys and typed text ("Down,Right,=some words,Return").
-        Designer d(window, renderer, a.get("design"));
+        Designer d(window, renderer, a.get("design"), a.has("design-melody"));
         // --busy: the picture while the first test is still running (the progress window).
         const bool busy = a.has("busy");
         if (!busy) d.settle();
@@ -1158,6 +1159,7 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         if (busy) d.settle(); // never leave the worker running as the program ends
         std::cout << "designer: " << d.doc().name() << "\n";
+        if (d.played()) std::cout << "designer played: " << d.played() << " (" << d.status() << ")\n";
         if (!d.status().empty()) std::cout << "status: " << d.status() << "\n";
         if (a.has("design-out"))
         {
@@ -1709,7 +1711,7 @@ int run(const Args& a)
             if (hall->request() == Hallway::Request::Designer)
             {
                 hall->clear_request();
-                Designer designer(window, renderer);
+                Designer designer(window, renderer, {}, hall->take_designer_melody());
                 if (designer.run() == Designer::Result::Quit) break;
                 SDL_SetWindowRelativeMouseMode(window, false);
                 continue;

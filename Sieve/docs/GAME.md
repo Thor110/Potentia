@@ -378,3 +378,97 @@ conversation reproducible, which is the thesis again.
 - **An NPC can use the same interface as an automated player:** the scripted keys and walks the
   harness already uses (`--press`, `--walk`, `--warp`). Running real AI through the space would
   then test the same paths the tests do.
+
+## 11. The video game dimension: a design to decide on (Claude, 12 November 2026)
+
+IDEAS §19.11 asks how a video game dimension comes into the hallway, and leaves it open. This is
+one design, written for Edward to take, change or set aside. Nothing is built. It sits beside the
+game line of §4 (cabinets that launch the player's own emulators), not in place of it.
+
+**The idea: a line of games, as there is a line of pages.** Every page that could be written has a
+place on the pages line. In the same way, every game that fits a fixed small machine would have a
+place on a games line. A unit is a short program for one fixed, original, deterministic virtual
+console; its number is the game; the hallway's cabinets play it. Nothing is stored and nothing is
+anyone else's: the line holds every game of its size, the way the library holds every book, and
+the filters find the ones that do something.
+
+**The console (to be specified as `game-vm-v1`, SPECIFICATIONS §3).** Small enough to fill a line,
+large enough to make a game:
+- *Program:* the unit's digits are its bytes (256 by default; `--length` sets it, as every line's
+  length does). It is read-only; a separate RAM of 256 bytes starts at zero.
+- *Screen:* 32 × 32 pixels, 1 bit a pixel by default, a palette as the image line's (the screen's
+  size and palette are the line's resolution settings, §19.6's "every resolution a setting").
+- *Input:* four directions and one button, read as a byte each frame.
+- *Instructions:* a short set of one- and two-byte instructions (load, store, add, compare, jump,
+  plot, read input, wait for the next frame), every byte meaning something, so no program is
+  malformed. Every one is defined on every value: no undefined behaviour and nothing a program can
+  reach outside its machine.
+- *Time:* a fixed budget of instructions a frame (say 1,000) and 30 frames a second. A program that
+  runs out of budget simply carries on in the next frame. The same program and the same keys give
+  the same frames on every machine, so a game's frames are a function of its address and its input,
+  as a figure is of its model and seed.
+- *Sound:* one square-wave voice set by an instruction, through the synth the hallway already has.
+
+**Filters (judge-only, like the AI line's `canonical-model`).** Whether a program draws or responds
+is decidable here, because time is bounded: run it for N frames and look. But it cannot be counted
+the way an automaton counts, so the games line would mark and hide, not compact.
+- `game-draws-v1`: the screen is not blank after N frames.
+- `game-moves-v1`: the screen changes after its first frames (not one still picture).
+- `game-responds-v1`: different input gives different frames (it is a game, not a film).
+- `not-a-pattern-v1` and `not-a-file-v1` as on every line.
+Measured first: the share of random programs that pass each (no figure is guessed here).
+
+**In the hallway.** The games line's rooms hold cabinets instead of shelves; each cabinet's screen
+shows its unit's first frames as an attract loop. Taking one in hand plays it full size with the
+keyboard; G goes to it; the item page shows its address, the filters it passed, its cost, and the
+program as an annotated listing. The same `/unit game HEX` and `/random game` commands as CHAT's
+other lines. A favourite game is kept as its address, like a favourite melody.
+
+**Resolution as a spectrum (§4a).** The console is one point on a scale. A larger screen, more
+colours, more RAM and a longer program are a different line (another `game-vm` setting), so "from
+the lowest resolution to the highest" is a row of lines, each holding every game of its size. A
+trained model could later steer which programs are drawn (as the guided text line does), which is
+where §19.20's game that makes itself would meet this one.
+
+**How it relates to §4.** The game line of §4 stays as designed: cabinets dressed for real systems,
+blank until linked to the player's own emulator. The games line is Sieve's own, needs no emulator,
+and holds only programs of its own console, so it raises none of §4's legal questions. Either
+could be the door the other is found through.
+
+**A first step (a session or two), if Edward wants it:**
+1. `game-vm-v1` specified and built in the core, with `sieve game ADDRESS --frames N --keys ...
+   --gif OUT` to run a unit and save its frames.
+2. The share of random programs that draw, move and respond, measured.
+3. The three filters, then the line in the hallway with cabinets.
+
+**Lenses (Edward, 12 November 2026).** His extension: "an extension of the game dimension engine,
+it would have a mode to toggle from executable through console as well as source folder,
+everything becomes like a lens". One game, one address, seen through a switch of modes, each a
+lens on the same unit rather than a different thing:
+- *executable:* the program run, frames on the cabinet's screen, played with the keys;
+- *console:* the machine itself, open while it runs: its program counter, registers, RAM and the
+  instruction it is on, stepped a frame or an instruction at a time;
+- *source folder:* the program as a folder of readable files (its listing, annotated; its
+  sprites as pictures; its sounds as melodies; its data as text), which an edit changes and the
+  unit changes with it, so editing is moving along the line.
+Notes:
+- **It is what Sieve already does with every unit,** made a mode of one screen. A page is text and
+  also a number; a file is bytes, a place on the binary line and (J) an item; a model is digits, a
+  mesh and a world. The lens toggle is that idea given a key: the unit stays put and the view
+  changes, and each view's own edits are steps on the same line.
+- **Each lens is exact both ways.** The source folder must compile back to the very bytes it was
+  read from (as a `.sieve` installs to the bytes it was made from), so a folder that does not is
+  refused, not rounded; the console view is the machine's whole state, so a game can be paused,
+  inspected and resumed with nothing lost.
+- **Lenses could cross lines:** the sprites lens is the image line's view of the game's bytes, the
+  sound lens the audio line's, the listing the pages line's. A game is then where the other lines
+  meet, and the toggle walks between them (§4a's "everything at every resolution" as views rather
+  than copies).
+- **And beyond games:** the same toggle (run, inspect, unfold as source) fits any unit that is a
+  program: the binary line's executables (with an emulator of their own machine, §4) and the AI
+  line's models (run it, look at its activations, unfold its weights as tensors).
+
+**Questions for Edward:** whether a games line belongs in the hallway at all, or only the cabinets
+of §4; how it is reached (a door of its own, the halfway room of §4, or found through the game
+line); and whether the console's first size (32 × 32, one bit, 256 bytes) is the right one to start
+from.

@@ -1368,6 +1368,8 @@ public:
     enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture, Cipher };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
+    // Asked for by the Media Player's M: the designer opened on a melody filter (IDEAS 19.19).
+    bool take_designer_melody() { return std::exchange(designer_melody_, false); }
     // The item in hand as I asked the Encryption Engine to take it (its bytes as F would save
     // them, and its name), once: empty when the engine was opened from the pause menu.
     std::optional<std::pair<std::vector<uint8_t>, std::string>> take_cipher_item()
@@ -1390,6 +1392,7 @@ private:
     bool pause_open_ = false, pause_confirm_ = false;
     int pause_row_ = 0;
     Request request_ = Request::None;
+    bool designer_melody_ = false;
     std::optional<std::pair<std::vector<uint8_t>, std::string>> cipher_item_; // for take_cipher_item
     std::vector<SDL_FRect> pause_rects_; // the rows as last drawn, for the pointer
 
@@ -1578,6 +1581,9 @@ private:
     {
         enum class Kind { Hand, File, Run, Draw } kind = Kind::Hand;
         std::string name; // a run's or picture model's name in the training folders, or its path
+        // A picture or melody stage steered by the filters (IDEAS 19.37, 12 November 2026): the
+        // first of its tries whose unit passes the stack ticked for its line (`steer NAME`).
+        bool steer = false;
     };
     // Every model a stage can be, in the order Left and Right go through them.
     std::vector<ChainStage> chain_choices();

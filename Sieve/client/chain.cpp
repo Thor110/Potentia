@@ -47,6 +47,10 @@ Entry entry_of(typename Entry::Kind kind, std::string text)
 
 constexpr size_t kChainReply = 80; // bytes a text model of the AI line writes at a stage, at most
 constexpr const char* kChainHeader = "sieve-chain-v1";
+// v2 (12 November 2026): v1 with `steer NAME`, a picture or melody stage steered by the filters.
+// A chain with no steered stage is still written as v1.
+constexpr const char* kChainHeader2 = "sieve-chain-v2";
+constexpr uint32_t kSteerTries = 256; // the tries a steered stage makes before it gives up
 
 // The trained text runs in these folders, by name (a folder with a training.ini, or a .sieve file);
 // a name in an earlier folder hides the same name in a later one.
@@ -124,7 +128,7 @@ std::string Hallway::chain_stage_name(const ChainStage& s)
     case ChainStage::Kind::File:
         return text_model_path_.empty() ? tr("chain.file.none") : trf("chain.file", {u8(from_u8(text_model_path_).filename())});
     case ChainStage::Kind::Run: return trf("chain.run", {s.name});
-    case ChainStage::Kind::Draw: return trf("chain.draw", {s.name});
+    case ChainStage::Kind::Draw: return trf(s.steer ? "chain.steer" : "chain.draw", {s.name});
     }
     return std::string();
 }
@@ -145,11 +149,12 @@ void Hallway::chain_defaults()
 
 std::string Hallway::chain_text() const
 {
-    const auto word = [](ChainStage::Kind k) {
-        return k == ChainStage::Kind::File ? "file" : k == ChainStage::Kind::Run ? "run" : k == ChainStage::Kind::Draw ? "draw" : "hand";
+    const auto word = [](const ChainStage& s) {
+        return s.kind == ChainStage::Kind::File ? "file" : s.kind == ChainStage::Kind::Run ? "run" : s.kind == ChainStage::Kind::Draw ? (s.steer ? "steer" : "draw") : "hand";
     };
-    std::string t = std::string(kChainHeader) + "\n";
-    for (const ChainStage& s : chain_) t += std::string(word(s.kind)) + (s.name.empty() ? "" : " " + s.name) + "\n";
+    const bool v2 = std::any_of(chain_.begin(), chain_.end(), [](const ChainStage& s) { return s.kind == ChainStage::Kind::Draw && s.steer; });
+    std::string t = std::string(v2 ? kChainHeader2 : kChainHeader) + "\n";
+    for (const ChainStage& s : chain_) t += std::string(word(s)) + (s.name.empty() ? "" : " " + s.name) + "\n";
     return t;
 }
 
@@ -157,8 +162,9 @@ void Hallway::chain_parse(const std::string& text)
 {
     std::istringstream in(text);
     std::string line;
-    if (!std::getline(in, line) || (line != kChainHeader && line != std::string(kChainHeader) + "\r"))
-        throw std::runtime_error(trf("chain.not_a_chain", {kChainHeader}));
+    if (std::getline(in, line) && !line.empty() && line.back() == '\r') line.pop_back();
+    const bool v2 = line == kChainHeader2;
+    if (line != kChainHeader && !v2) throw std::runtime_error(trf("chain.not_a_chain", {kChainHeader}));
     std::vector<ChainStage> stages;
     while (std::getline(in, line))
     {
@@ -171,6 +177,7 @@ void Hallway::chain_parse(const std::string& text)
         else if (word == "file") s.kind = ChainStage::Kind::File;
         else if (word == "run" && !name.empty()) s.kind = ChainStage::Kind::Run;
         else if (word == "draw" && !name.empty()) s.kind = ChainStage::Kind::Draw;
+        else if (word == "steer" && v2 && !name.empty()) s.kind = ChainStage::Kind::Draw, s.steer = true;
         else throw std::runtime_error(trf("chain.bad_line", {line}));
         s.name = name;
         stages.push_back(std::move(s));
@@ -205,23 +212,68 @@ void Hallway::chain_run(const std::string& input)
             {
                 ChatEntry e;
                 e.kind = ChatEntry::Kind::Picture;
+                std::string steer_note; // a steered stage: which try passed, or why it could not steer
+                bool steer_failed = false;
                 busy(tr("chat.drawing"), [&] {
                     std::shared_ptr<cli::PictureModel>& m = chain_picture_models_[st.name];
                     if (!m) m = std::make_shared<cli::PictureModel>(cli::load_picture_model(picture_model_path(st.name)));
                     e.model = m->name;
+                    const sieve::diffusion::Setup& su = m->recipe.setup;
+                    const auto space = cli::unit_space_of(m->recipe);
                     // Its noise from what it was given: a picture's worth of cells from splitmix64
                     // seeded with the seed (each next() mod B, cell after cell), as a run's k-th
-                    // noise is drawn from seed 1; and made with that seed.
-                    const sieve::diffusion::Setup& su = m->recipe.setup;
-                    sieve::diffusion::SplitMix g(seed);
-                    std::vector<uint32_t> noise(su.cells());
-                    for (auto& c : noise) c = uint32_t(g.next() % su.colours);
-                    e.cells = sieve::diffusion::make_picture(*m->space, m->digits, su, noise, seed);
+                    // noise is drawn from seed 1; and made with that seed. Steered, try k uses
+                    // seed + k, and the first whose unit passes the line's stack is kept.
+                    auto make = [&](uint64_t sd) {
+                        sieve::diffusion::SplitMix g(sd);
+                        std::vector<uint32_t> noise(su.cells());
+                        for (auto& c : noise) c = uint32_t(g.next() % su.colours);
+                        return sieve::diffusion::make_picture(*m->space, m->digits, su, noise, sd);
+                    };
+                    if (!st.steer) e.cells = make(seed);
+                    else
+                    {
+                        // The line the model's units belong to, as the hallway has it: its stack
+                        // judges them only when it is the same shape.
+                        const LineKind kind = m->recipe.audio() ? LineKind::Audio : LineKind::Image;
+                        const Line& l = unit_line(kind);
+                        const FilterStack& fs = stacks_[size_t(line_of(kind))];
+                        if (l.space.symbols_id() != space.symbols_id() || l.space.unit_length() != space.unit_length())
+                        {
+                            steer_note = trf("chain.steer.shape", {space.symbols_id(), l.space.symbols_id()});
+                            steer_failed = true;
+                            return;
+                        }
+                        if (fs.empty())
+                        {
+                            steer_note = tr("chain.steer.no_filters");
+                            steer_failed = true;
+                            return;
+                        }
+                        for (uint32_t k = 0; k < kSteerTries; ++k)
+                        {
+                            std::vector<uint32_t> cells = make(seed + k);
+                            if (!fs.passes(cells)) continue;
+                            e.cells = std::move(cells);
+                            steer_note = trf("chain.steer.kept", {std::to_string(k + 1)});
+                            return;
+                        }
+                        steer_note = trf("chain.steer.none", {std::to_string(kSteerTries)});
+                        steer_failed = true;
+                    }
+                });
+                if (steer_failed)
+                {
+                    chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chain.failed", {tag, steer_note})));
+                    return;
+                }
+                {
+                    std::shared_ptr<cli::PictureModel>& m = chain_picture_models_[st.name];
                     e.width = m->recipe.setup.width, e.height = m->recipe.setup.height, e.palette = m->recipe.palette;
                     if (m->recipe.audio()) e.symbols = m->recipe.symbols;
                     e.address = cli::unit_space_of(m->recipe).address_of(e.cells, AddressMode::Positional);
-                });
-                e.title = tag;
+                }
+                e.title = steer_note.empty() ? tag : tag + " (" + steer_note + ")";
                 const std::string rows = unit_rows(e);
                 if (!chat_show_unit(std::move(e))) return; // the vault withheld it: the chain stops there
                 carried = rows;
@@ -310,9 +362,15 @@ bool Hallway::chain_key(const SDL_KeyboardEvent& k)
         for (int i = 0; i < int(all.size()); ++i)
             if (all[size_t(i)].kind == s.kind && all[size_t(i)].name == s.name) at = i;
         const int m = int(all.size());
+        const bool steer = s.steer;
         s = all[size_t(((at + (k.key == SDLK_RIGHT ? 1 : -1)) % m + m) % m)];
+        s.steer = steer && s.kind == ChainStage::Kind::Draw;
         return true;
     }
+    case SDLK_F:
+        // A picture or melody stage steered by the filters, or not.
+        if (n && chain_[size_t(chain_sel_)].kind == ChainStage::Kind::Draw) chain_[size_t(chain_sel_)].steer = !chain_[size_t(chain_sel_)].steer;
+        return true;
     case SDLK_N:
     case SDLK_INSERT:
         chain_.insert(chain_.begin() + (n ? chain_sel_ + 1 : 0), n ? chain_[size_t(chain_sel_)] : chain_choices().front());
@@ -449,7 +507,9 @@ void Hallway::draw_chain(float x, float top, float w, float bottom)
     if (!chain_.empty())
     {
         const ChainStage& s = chain_[size_t(std::clamp(chain_sel_, 0, int(chain_.size()) - 1))];
-        const char* what = s.kind == ChainStage::Kind::Draw ? "chain.what.draw" : s.kind == ChainStage::Kind::File ? "chain.what.file" : "chain.what.text";
+        const char* what = s.kind == ChainStage::Kind::Draw ? (s.steer ? "chain.what.steer" : "chain.what.draw")
+                           : s.kind == ChainStage::Kind::File ? "chain.what.file"
+                                                              : "chain.what.text";
         for (const std::string& l : wrap_words(trf("chain.selected", {std::to_string(chain_sel_ + 1), chain_stage_name(s)}) + " " + tr(what),
                                                size_t(std::max(8.0f, w / 8))))
         {

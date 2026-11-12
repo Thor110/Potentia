@@ -154,6 +154,18 @@ for p in "" "gap=0" "mode=far" "mode=any,gap=5"; do
     diff plugin.oracle plugin.engine
   done
 done
+# A plugin for the PCM sound line (pcm*, 12 November 2026): on lines of 1, 3 and 8 bits and one to
+# three channels, each channel judged on its own, the engine and the oracle count and rank alike.
+for spec in "pcm-quiet-ends-v1:" "pcm-quiet-ends-v1:quiet=0" "pcm-quiet-ends-v1:quiet=50"; do
+  f=${spec%%:*}; p=${spec#*:}
+  for opt in "--bits 8" "--bits 3 --channels 3" "--bits 1 --channels 2"; do
+    for L in 1 2 5; do
+      python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set pcm $opt --length $L ${p:+--params $p} > plugin.oracle
+      $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set pcm $opt --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
+      diff plugin.oracle plugin.engine
+    done
+  done
+done
 # The notes2 family: the note plugins on sets of other ranges and durations, one to three
 # voices, each voice judged on its own (counts to the power of the voices, ranks by voice).
 for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --durations EQH"; do

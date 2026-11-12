@@ -6077,7 +6077,7 @@ def plugin_base(symbols, base=None):
         return NOTES_BASE
     if symbols.startswith("palette:"):
         return PALETTE_SIZES[symbols[8:]]
-    if symbols == "notes3*":  # the notes3 set's own (cmd_plugin)
+    if symbols in ("notes3*", "pcm*"):  # the line's own (cmd_plugin)
         return base
     if base is None:
         raise PluginError(f"give --base for symbols {symbols}")
@@ -6673,6 +6673,12 @@ def cmd_plugin(args):
         # one voice's line; a unit is voices x --length, each voice judged on its own
         notes = NoteSet2(note2_midi(args.low or "C3"), note2_midi(args.high or "C6"), args.durations, args.voices)
         base, voices = notes.base, notes.voices
+    elif args.note_set == "pcm":
+        # sound itself (pcm*): BASE is 2^bits, a sample's digit its value in two's complement; a
+        # unit is --length samples a channel, and each channel is judged on its own, as a voice is
+        if not head["symbols"].startswith("pcm"):
+            raise SystemExit(f"{head['name']} is for {head['symbols']}, not a pcm line")
+        base, voices = 1 << args.bits, args.channels
     elif args.note_set == "notes3" or head["symbols"] == "notes3*":
         # the same for notes3: base LONGEST * (1 + PITCHES * LEVELS)
         notes = Notes3(_n3_midi(args.low or "C-1"), _n3_midi(args.high or "G9"), args.tpq, args.longest, args.levels, args.voices, 120, [0])
@@ -11619,6 +11625,9 @@ def main():
     s.add_argument("--tpq", type=int, default=4)  # notes3
     s.add_argument("--longest", type=int, default=16)
     s.add_argument("--levels", type=int, default=8)
+    s.add_argument("--rate", type=int, default=8000)  # pcm (the rate changes no count)
+    s.add_argument("--bits", type=int, default=8)
+    s.add_argument("--channels", type=int, default=1)
     s = sub.add_parser("chunks")
     s.add_argument("file")
     s = sub.add_parser("manifest")

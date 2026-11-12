@@ -300,6 +300,16 @@ $H --no-menu --line ai --walk "0,0" --take --chat --chain-file pm.chain --talk "
 q "^chain 1/3, figures-2x32: fff83c0780e2f83ec70b81fff$" chainpm.txt
 q "^chain 2/3, melodies-2x64: 758454efa87a3b3fcbb9dbf5afc$" chainpm.txt
 q "^chain 3/3, figures-2x32: fff4bc570790ba3e5f034afff$" chainpm.txt
+# A stage steered by the filters (sieve-chain-v2, 12 November 2026): with row-runs-v1 ticked on the
+# image line (10x10 mono, the figures model's own shape), its tries go seed, seed + 1, ... and the
+# first that passes is kept; the same every time. F in the CHAIN tab steers a stage, saved as v2.
+printf '[image]\nmode = mark\nfilters = row-runs-v1\n' > steer.ini
+printf 'sieve-chain-v2\nsteer figures-2x32\ndraw figures-2x32\n' > steer.chain
+$H --no-menu --line ai --walk "0,0" --take --chat --chain-file steer.chain --filters steer.ini --talk "/chain hello" --training-dir data/training --screenshot chain-steer.png | tr -d '\r' > chainsteer.txt
+q "^chain 1/2, figures-2x32, steered by the filters (steered: try 130 passed the line's filters): fff87c0781e1f00e1e01e3fff$" chainsteer.txt
+q "^chain 2/2, figures-2x32: fff87f0f61e1605ece07e9fff$" chainsteer.txt
+$H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,F" --chain-save chain2.chain --training-dir data/training --screenshot chain-tab2.png | q "saved chain-tab2.png"
+printf 'sieve-chain-v2\nrun universalbibliothek\nsteer figures-2x32\ndraw melodies-2x64\ndraw type-2x32\n' | cmp - chain2.chain
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
 printf '[models]\ntext_model =\npicture_model =\n' > models.ini
 downs=$(python -c "print(','.join(['Down']*46))")
@@ -1161,6 +1171,15 @@ diff rt.a rt.b
 rm tests/plugins/roundtrip-v1.sfilter
 rm -f build/filters/designed-words-v*.sfilter
 $H --designer --script "Ctrl+N,Down,Return,Ctrl+Backspace,=designed-words,Return,Ctrl+S" --screenshot designer3.png | q "status: saved to .*designed-words-v1.sfilter"
+# A melody filter, as the Media Player's M opens it, heard as it is tested (IDEAS 19.19): F5 plays the
+# first survivor, P in the test panel the next (or says why not, where the machine has no sound);
+# and a filter of sound itself (pcm*) tested and played the same way.
+$H --designer --design-melody --script F5,Tab,P --screenshot designer-melody.png > dmel.txt
+q "^designer: my-melody-v1" dmel.txt
+q "^designer played: 2 (" dmel.txt
+$H --designer --design data/filters/pcm-quiet-ends-v1.sfilter --script F5 --screenshot designer-pcm.png > dpcm.txt
+q "^designer: pcm-quiet-ends-v1" dpcm.txt
+q "^designer played: 1 (" dpcm.txt
 build/sieve filters --plugins | q "^loaded   designed-words-v1"
 build/sieve filters --plugin build/filters/designed-words-v1.sfilter --length 6 --relations | q "the same rule as words-data-v1  -- a duplicate"
 $H --designer --design build/filters/designed-words-v1.sfilter --script "Down,Down,Down,Down,Down,Down,Down,Return,=!,Return,Ctrl+S" --screenshot designer4.png | q "save as version 2"

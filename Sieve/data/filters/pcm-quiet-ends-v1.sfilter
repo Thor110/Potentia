@@ -1,0 +1,29 @@
+sieve-filter-v2
+; The first and last samples within `quiet` percent of full scale of silence, so a sound begins and
+; ends as recorded sound in a clip does (from and to quiet) rather than cut in the middle of a wave.
+; The samples between are free.
+id        pcm-quiet-ends
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   pcm*
+describe  The first and last samples near silence (within quiet percent of full scale).
+param     quiet  int  5  0  100  how near silence the first and last samples must be, in percent of full scale
+
+; State 0: the start (the first sample must be quiet). State 1: the last sample was quiet. State 2:
+; it was not.
+states    3
+start     0
+accept    1
+for d 0 {BASE - 1}
+  if {abs(d - BASE * (d >= BASE / 2)) * 100 <= quiet * (BASE / 2)}
+    t 0 @{d} 1
+    t 1 @{d} 1
+    t 2 @{d} 1
+  else
+    t 1 @{d} 2
+    t 2 @{d} 2
+  fi
+done
+end

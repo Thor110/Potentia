@@ -10,6 +10,7 @@
 
 #include "font.hpp"
 #include "music.hpp"
+#include "synth.hpp"
 #include "strings.hpp"
 
 #include "cli/dictionaries.hpp"
@@ -91,9 +92,10 @@ std::vector<std::string> split_lines(const std::string& s)
 
 } // namespace
 
-Designer::Designer(SDL_Window* window, SDL_Renderer* renderer, const std::string& open_file_path) : window_(window), r_(renderer)
+Designer::Designer(SDL_Window* window, SDL_Renderer* renderer, const std::string& open_file_path, bool melody)
+    : window_(window), r_(renderer)
 {
-    doc_ = design::Doc::new_tokens();
+    doc_ = melody ? design::Doc::new_melody() : design::Doc::new_tokens();
     if (!open_file_path.empty()) open_file(open_file_path);
     dirty_ = false; // nothing is compiled until asked for (F5) or needed (Save)
 }
@@ -287,6 +289,7 @@ void Designer::build()
         std::vector<std::string> o = sieve::alphabet_ids();
         o.push_back(sieve::kNotesSymbolsId);
         o.push_back("notes*"); // every note line (v2)
+        o.push_back("pcm*");   // every line of sound itself (v2), tested on 8-bit sound
         for (const auto& p : sieve::palette_ids()) o.push_back("palette:" + p);
         o.push_back("any");
         cycle(o, doc_.symbols, dir, doc_.symbols);
@@ -473,6 +476,28 @@ void Designer::request_test()
     if (stale()) retest_ = true;
 }
 
+void Designer::play_survivor(bool first)
+{
+    if (result_.line.kind != "audio" || result_.sample_units.empty()) return;
+    if (first) played_ = 0;
+    const size_t i = played_ % result_.sample_units.size();
+    ++played_;
+    if (!synth_) synth_ = std::make_unique<Synth>();
+    const std::vector<uint32_t>& u = result_.sample_units[i];
+    std::string err;
+    try
+    {
+        if (sieve::is_pcm_symbols(result_.line.symbols_id)) err = synth_->play_sound(sieve::pcm_format_of(result_.line.symbols_id), u);
+        else err = synth_->play(sieve::note_set_of(result_.line.symbols_id), u);
+    }
+    catch (const std::exception& e)
+    {
+        err = e.what();
+    }
+    status_ = err.empty() ? trf("designer.test.playing", {std::to_string(i + 1), std::to_string(result_.sample_units.size())})
+                          : trf("designer.test.play_failed", {err});
+}
+
 void Designer::poll()
 {
     if (job_running_ && job_.valid() && job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
@@ -485,6 +510,7 @@ void Designer::poll()
         done_ok_ = result_.error.empty();
         done_msg_ = done_ok_ ? trf("designer.popup.tested", {fmt_seconds(s)}) : trf("designer.popup.failed", {fmt_seconds(s)});
         done_at_ = std::chrono::steady_clock::now();
+        if (done_ok_ && result_.line.kind == "audio") play_survivor(true);
     }
     if (rel_running_ && rel_job_.valid() && rel_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
     {
@@ -811,6 +837,7 @@ void Designer::key(SDL_Keycode k, SDL_Keymod mod)
         constexpr int kItems = 5; // length, test now, text to judge, relations, save
         if (k == SDLK_UP) test_sel_ = (test_sel_ + kItems - 1) % kItems;
         else if (k == SDLK_DOWN) test_sel_ = (test_sel_ + 1) % kItems;
+        else if (k == SDLK_P) play_survivor(false);
         else if (test_sel_ == 0 && (k == SDLK_LEFT || k == SDLK_RIGHT))
         {
             const int64_t step = shift ? 10 : 1;
@@ -1288,7 +1315,7 @@ void Designer::draw_test(float x, float y, float w, float h)
         {
             wrap(trf("designer.test.survivors", {result_.survivors}), kGood, 3);
             wrap(trf("designer.test.excluded", {result_.excluded}), kGrey, 3);
-            line(tr("designer.test.samples"), kGrey);
+            line(tr(result_.line.kind == "audio" ? "designer.test.samples_heard" : "designer.test.samples"), kGrey);
             for (const auto& s : result_.samples) line("  " + s, SDL_Color{200, 200, 200, 255});
         }
         else line(tr("designer.test.judge_only"), kGrey);

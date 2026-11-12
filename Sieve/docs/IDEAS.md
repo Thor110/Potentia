@@ -2059,6 +2059,12 @@ game line of GAME.md §4 (arcade cabinets) was meant to be woven through the sto
 dimension of discs (a copy of the CD model, as the tracks line has, for CDs and DVDs), and perhaps a
 place in each room for an arcade cabinet or a computer. Or it forms and evolves around the rest,
 from the lowest resolution to the highest (§19.6). Utility comes first; this stays open.
+*A design to decide on (12 November 2026), GAME.md §11:* a games line, each unit a short program for
+one fixed, original virtual console, every game of that size with an address, filters that judge
+whether one draws, moves and responds; cabinets in its rooms play them. Nothing built.
+*Lenses (Edward, 12 November 2026):* "a mode to toggle from executable through console as well as
+source folder, everything becomes like a lens": one game seen run, as its machine's state, or
+unfolded as a folder of source, each exact both ways (GAME.md §11).
 
 **19.12 A metrics list, made with every release (Edward, 12 October 2026).** Edward wants an
 automated list, made each build and issued as a text file with the installer, of how much each
@@ -2251,6 +2257,11 @@ Player in the main menu, it could hold a sub-node system for designing audio and
 the Filter Designer's nodes, but on melodies, heard as they are tested (each change plays a melody
 the filter keeps). The Media Player already has its own stack of audio filters for each mode; a
 designer inside it would make new ones there, saved as plugins like any other.
+*Built (12 November 2026):* the Media Player's M opens the Filter Designer on a melody filter (notes
+from middle C up an octave, as a table over the line's constants), and on an audio line each test
+plays a survivor (the first when the result comes in, the next with P), for note lines and, with
+`symbols pcm*` now offered, for sound itself; Esc comes back to the Media Player. Not yet: the
+designer drawn inside the Media Player's own window, rather than opened over it.
 
 **19.20 A text game that makes itself, and grows to 3D (Edward, 12 October 2026).** His idea,
 with the chat window now able to show figures: a text-based game could create itself, then scale
@@ -2974,6 +2985,9 @@ tab next to CHAT, variable, mappable and savable, and adjustable to other models
   - *Branches:* a graph rather than a line, with one stage feeding two, kept in the node graph's
     map format so chains and maps are one system (§19.38).
   - *Steering:* a picture stage that keeps only the survivors of the line's filters (§19.37).
+    *Built (12 November 2026, `sieve-chain-v2`):* `steer NAME` (F in the CHAIN tab) tries seed,
+    seed + 1, ... up to 256 and keeps the first unit the line's ticked filters pass; with
+    `row-runs-v1` on the 10x10 image line, the figures model's first passing try was the 130th.
   - *Larger models* as stages, once they can be given as files of other kinds.
 
 **19.47 An engine that could make every game (Edward, 13 October 2026).** His idea: the game
@@ -6245,6 +6259,10 @@ first):
 6. *Grammar and capitals* (moby-grammar, sentence-shape): a part-of-speech context in mixing, 1% to 3%
    on English at a guess.
 7. *Melodies* (key, melody-*): a MIDI model; tiny files, negligible.
+*Where 2 to 7 stand (12 November 2026):* 2 built (mix-v4's `P`); 3 measured on text pairs (338
+bytes for 10 changes against an ideal of 29) and, through it, the x86 filter restarted per program
+(v34 draft, results/x86-restart-2026-11-11.md); 4 to 7 are each a model in mixing, so a mix version
+of their own, left for the compression research of the long plan's stage 6.
 The filters' exact counters as coders: NearRanker (3 above) is the one that would serve; the Mobius
 counts add nothing over `runs`, the palette and composition rankers nothing over mixing and rANS.
 
@@ -6908,6 +6926,10 @@ before moving forward).**
   description may be its training run (recipe, corpus, order), which Sieve already records and
   replays bit for bit, rather than its weights.
 - *Filtering the PCM audio line,* and the filters of every line improved where they can be.
+  *12 November 2026:* the sound line's filters (`sound-peak`, `sound-step`, `silence-run`) measured
+  on an hour of real speech (FILTER-PLUGINS.md §20: their defaults keep all of it; `sound-step` at
+  30% would keep 97.7%); plugins can now be written for it (`symbols pcm*`, one channel at a time,
+  the oracle agreeing), `pcm-quiet-ends-v1` added, and the Filter Designer tests and plays them.
 - *The main menu:* its readouts at the top are good but crowd it. *Done the same day:* they left
   the main menu; each line's time to walk is now a figure under its column in Start Sieve's map
   ("~10^115y"), with its size and bits, from the same settings (Edward: "just the start sieve menu

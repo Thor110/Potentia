@@ -14,11 +14,10 @@ Synth::~Synth() { stop(); }
 
 void Synth::stop()
 {
-    if (stream_)
-    {
-        SDL_DestroyAudioStream(stream_);
-        stream_ = nullptr;
-    }
+    // (Once SDL's audio is shut down it has freed every stream itself: a synth that outlives it, as
+    // the filter designer's may when a scripted run ends, only forgets its own.)
+    if (stream_ && SDL_WasInit(SDL_INIT_AUDIO)) SDL_DestroyAudioStream(stream_);
+    stream_ = nullptr;
 }
 
 std::string Synth::play(const sieve::NoteSet& set, const std::vector<uint32_t>& notes)

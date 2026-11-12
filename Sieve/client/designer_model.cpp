@@ -308,6 +308,22 @@ Doc Doc::new_table()
     return d;
 }
 
+Doc Doc::new_melody()
+{
+    Doc d;
+    d.id = "my-melody";
+    d.form = "table";
+    d.format = 2;
+    d.lines = {"audio"};
+    d.symbols = "notes*";
+    d.describe = "Notes from middle C up an octave; rests free.";
+    d.params = {Param{"low", "int", "60", "0", "127", "the lowest note (MIDI; 60 is middle C)"},
+                Param{"high", "int", "72", "0", "127", "the highest note (MIDI)"}};
+    d.table = {"states    1", "start     0", "accept    0", "for d 0 {DURATIONS - 1}", "  t 0 @{d} 0", "  for p 1 {PITCHES}",
+               "    if {LOW + p - 1 >= low && LOW + p - 1 <= high}", "      t 0 @{p * DURATIONS + d} 0", "    fi", "  done", "done"};
+    return d;
+}
+
 // ---------------------------------------------------------------- testing
 
 sieve::FilterLine test_line(const std::string& symbols, uint32_t length)
@@ -319,6 +335,13 @@ sieve::FilterLine test_line(const std::string& symbols, uint32_t length)
         l.kind = "audio";
         l.symbols_id = sieve::kNotesSymbolsId;
         l.base = sieve::kNoteSymbols;
+        return l;
+    }
+    if (symbols == "pcm*") // sound itself: tested on 8-bit samples (8 kHz, one channel)
+    {
+        l.kind = "audio";
+        l.symbols_id = "pcm/8000/8/C1";
+        l.base = 256;
         return l;
     }
     if (symbols.rfind("palette:", 0) == 0)
@@ -350,8 +373,11 @@ std::string unit_text(const sieve::FilterLine& l, const std::vector<uint32_t>& u
         for (uint32_t c : u) s += l.alphabet->symbol(c);
         return "\"" + sieve::utf8_encode(s) + "\"";
     }
+    // Sound's samples as their values (two's complement), other digits as they are.
+    const bool pcm = l.symbols_id.rfind("pcm/", 0) == 0;
     std::string s;
-    for (uint32_t c : u) s += (s.empty() ? "" : ",") + std::to_string(c);
+    for (uint32_t c : u)
+        s += (s.empty() ? "" : ",") + std::to_string(pcm && c >= l.base / 2 ? int64_t(c) - int64_t(l.base) : int64_t(c));
     return s;
 }
 
@@ -476,7 +502,11 @@ TestResult test(const Doc& d, uint32_t length, Progress* progress)
                     if (ks.empty() || !(ks.back() == k)) ks.push_back(k);
                 }
                 say("picking survivors by rank");
-                for (const auto& k : ks) r.samples.push_back(unit_text(r.line, rk.unrank(k)));
+                for (const auto& k : ks)
+                {
+                    r.sample_units.push_back(rk.unrank(k));
+                    r.samples.push_back(unit_text(r.line, r.sample_units.back()));
+                }
             }
         }
     }

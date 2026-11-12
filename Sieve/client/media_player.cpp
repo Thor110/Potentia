@@ -385,6 +385,13 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
     case SDLK_F: media_act(K::Save, quit); break;
     case SDLK_V: media_act(K::Favourite, quit); break;
     case SDLK_N: media_act(K::Next, quit); break;
+    case SDLK_M:
+        // A melody filter made in the Filter Designer (IDEAS 19.19), which plays what it keeps as
+        // it is tested; the application opens it over this hallway and comes back here.
+        request_ = Request::Designer;
+        designer_melody_ = true;
+        quit = true;
+        break;
     default: break;
     }
 }
