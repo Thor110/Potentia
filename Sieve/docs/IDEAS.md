@@ -6983,3 +6983,37 @@ Edward's choice of the way, in two steps:
   the words, espeak-ng for the alignment): 1,022 diphones, 33,750 takes, from 503 aligned clips. An
   offline recogniser understood 76.7% of the words of 60 sentences in it, against 90.3% in espeak-ng's
   voice (results/voice-units-2026-11-09.md). Text to Voice speaks with it wherever its files are.
+
+**19.136 A core aim: history constrained, and fraud made impossible throughout time (Edward, 12
+November 2026).** His words: "a core aim of the system is to constrain human history and make fraud
+impossible throughout time".
+
+*Notes.*
+- **What the system already gives towards it.**
+  - *Every thing has one exact name:* every unit and every file has one address on its line, and
+    every record is named by its SHA-256 (manifests, anchors, runs, results, chains, the release).
+  - *Every result can be made again:* packing, installing, training, drawing and steering are
+    integer arithmetic, so the same inputs give the same bytes on every machine.
+  - *So a record cannot be changed quietly:* once its name is known, a changed copy has a
+    different one. A training run's whole history (recipe, corpus, order) replays to the same
+    model, the thesis of GAME.md §1, so what a model became is checkable rather than claimed.
+- **What makes it hold "throughout time": witnesses.** An address or a hash proves nothing alone,
+  because whoever changes a file can work out the changed file's name just as cheaply (§0: "a
+  bijective address is not a tamper seal"). It holds once the name is fixed somewhere the changer
+  cannot reach: published, copied and held by many people, in many places, at a known time. Then a
+  record can be shown unchanged since that time, by anyone, with no one to trust. That is why
+  links that state hashes, the site's table and the crawler (§4.6, Edward's decision against
+  signing keys) matter: they are the witnesses. The more independent copies of the names there
+  are, the less any one party can rewrite them.
+- **Where the line falls.** This makes a record *tamper-evident*: changing it after it is
+  witnessed is caught. It cannot make a record *true*: a false claim, witnessed, is a faithfully
+  kept false claim. Fraud of the first kind (altering the past) can be made impossible to hide.
+  Fraud of the second kind (lying at the time) is constrained instead: every claim is tied to an
+  exact, replayable record, so it can be checked, and checking it costs anyone the same small work.
+- **Towards it, from what is planned:**
+  - *the source tree across computing* (GAME.md §11): every version of every program named and
+    linked, its descent recorded;
+  - *the maps of verified anchors* (§4): what is known to be real, by name;
+  - *published name lists:* the names of everything a release, a run or a map holds, each list
+    itself named and published, so a later list can show what was there before it. A chain of
+    those is history fixed in place, a little at a time.
