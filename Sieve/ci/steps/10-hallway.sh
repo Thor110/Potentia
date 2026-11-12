@@ -360,12 +360,12 @@ for spec in "seed=1 limbs=4 joints=3 branches=0 symmetry=bilateral head=yes" "se
 done
 printf 'not a character\n' > pdim/characters/bad.character
 touch pdim/s.ini
-$H --menu --settings pdim/s.ini --press "\`,PageDown" --screenshot pdim-yours.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 2 characters)"
+$H --menu --settings pdim/s.ini --press "\`,PageDown,PageDown" --screenshot pdim-yours.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 2 characters)"
 $H --no-menu --character-store pdim/characters --screenshot pdim-hall.png | tr -d '\r' | q "^personal dimension: 2 characters, 1 left out"
 # The playground (IDEAS 19.152): P fills it along the seed walk from the default character; K keeps the
 # second in a fresh store, by its SHA-256.
 mkdir -p play && touch play/s.ini
-$H --menu --settings play/s.ini --press "\`,PageDown,P,Down,K" --screenshot play.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 1 characters)"
+$H --menu --settings play/s.ini --press "\`,PageDown,PageDown,P,Down,K" --screenshot play.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 1 characters)"
 test -f play/characters/768169973d3190fd9cfa2c16eab7161e944d50ec85ba469411fc306ee0fc4d5d.character
 # Importing a model (IDEAS 19.159, .obj first): a cube into the first sphere, the same character each run.
 printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\nf 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 2 6 7 3\nf 3 7 8 4\nf 5 1 4 8\n' > cube.obj
@@ -399,6 +399,16 @@ $H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
+# LANGUAGE beside CHARACTER (IDEAS 19.183): the languages your character speaks, by family (Arabic,
+# Hebrew; English, French...; Japanese; Korean; Chinese), ticked with Space and kept in the settings
+# file, read back on the next start as part of the same save (sieve-save-v1).
+rm -f speaks.ini
+$H --menu --settings speaks.ini --press "\`,PageDown,Down,Down,Down,Space,Down,Down,Down,Down,Down,Down,Down,Down,Space" --screenshot speaks.png | tr -d '\r' > speaks.txt
+q "^right-hand panel: open (LANGUAGE)$" speaks.txt
+q "^speaks: language-french,language-korean$" speaks.txt
+save=$(sed -n 's/^save: //p' speaks.txt)
+grep -q "^speaks = language-french,language-korean" speaks.ini
+$H --menu --settings speaks.ini --press "\`" --screenshot speaks2.png | tr -d '\r' | q "^save: $save$"
 # The System Viewer (IDEAS 19.183): on the main menu after Personal Dimensions, its two systems, and S
 # in the panel turning from FORMATS to LANGUAGE (the five families, writing and information round
 # "language"); a language leads to the scripts it is written in.

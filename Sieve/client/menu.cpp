@@ -1788,12 +1788,17 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         }
         else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN)
         {
-            side_page_ = (side_page_ + (e.key.key == SDLK_PAGEUP ? 2 : 1)) % 3; // CHARACTER, YOURS, CATALOGUE
+            // In the order the tabs stand: CHARACTER, LANGUAGE, YOURS, SYSTEMS (pages 0, 3, 1, 2).
+            static const int kOrder[] = {0, 3, 1, 2};
+            int at = 0;
+            while (at < 4 && kOrder[at] != side_page_) ++at;
+            side_page_ = kOrder[(at + (e.key.key == SDLK_PAGEUP ? 3 : 1)) % 4];
             if (side_page_ == 1) yours_read();
-            if (side_page_ == 2) cat_init();
+            if (side_page_ == 2 || side_page_ == 3) cat_init();
         }
         else if (side_page_ == 1) yours_key(e.key.key);
         else if (side_page_ == 2) cat_key(e.key.key);
+        else if (side_page_ == 3) speak_key(e.key.key);
         else char_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
         return;
     }
@@ -2051,6 +2056,7 @@ void Menu::char_init()
                 // The whole character (its spheres and held models too, on one line with ';').
                 char_ = sieve::read_character(app_->character);
                 char_settings_ = char_.settings;
+                speaks_from_settings();
                 if (!app_->character_animation.empty())
                     char_anim_ = stored_animation(animation_store_dir(app_path_), app_->character_animation);
                 return;
@@ -2061,7 +2067,35 @@ void Menu::char_init()
             }
     }
     char_ = sieve::unfold_character(char_settings_);
+    speaks_from_settings();
 }
+
+// The languages your character speaks, from the settings file ([character] speaks: ids, by commas).
+void Menu::speaks_from_settings()
+{
+    speaks_.clear();
+    if (!app_) return;
+    const std::string& v = app_->character_speaks;
+    for (size_t i = 0; i <= v.size();)
+    {
+        const size_t c = std::min(v.find(',', i), v.size());
+        if (c > i) speaks_.push_back(v.substr(i, c - i));
+        i = c + 1;
+    }
+    std::sort(speaks_.begin(), speaks_.end());
+    speaks_.erase(std::unique(speaks_.begin(), speaks_.end()), speaks_.end());
+}
+
+sieve::CharacterSave Menu::character_save() const
+{
+    sieve::CharacterSave s;
+    s.character = char_.id();
+    if (char_anim_) s.animation = char_anim_->id();
+    for (const auto& id : speaks_) s.speak(id, true);
+    return s;
+}
+
+std::string Menu::save_line() const { return character_save().id(); }
 
 void Menu::char_store()
 {
@@ -2071,6 +2105,11 @@ void Menu::char_store()
     const std::string t = char_.text();
     app_->character = !char_.given && char_.holds.empty() ? t.substr(0, t.find('\n')) : char_.one_line();
     // The animation it plays, kept in the store and named by its SHA-256.
+    {
+        std::string v;
+        for (const auto& id : speaks_) v += (v.empty() ? "" : ",") + id;
+        app_->character_speaks = v;
+    }
     app_->character_animation.clear();
     if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
     app_->character_drawing = char_draw_;
@@ -2357,7 +2396,7 @@ void Menu::render_catalogue(float x, float top, float bottom)
     cat_door_ = n ? std::clamp(cat_door_, 0, n - 1) : 0;
     float y = top + 40;
     const size_t cols = size_t((kSideW - 28) / 8);
-    text(r_, x + 14, y, fit_cells(trf("side.cat.count", {std::to_string(cat_.size())}), cols), 1, grey);
+    text(r_, x + 14, y, fit_cells(tr(cat_system_ ? "side.cat.system.language" : "side.cat.system.formats") + "  " + trf("side.cat.count", {std::to_string(cat_.size())}), cols), 1, grey);
     y += 18;
     // The ring: as many doors as fit (24), a window round the chosen one when there are more.
     y += 18; // (room for the line saying which doors are shown, when not all of them are)
@@ -2417,6 +2456,121 @@ void Menu::render_catalogue(float x, float top, float bottom)
     }
     if (n && y <= bottom - 50) text(r_, x + 14, y, fit_cells(trf("side.cat.door", {doors[size_t(cat_door_)].id}), cols), 1, white), y += 14;
     if (!cat_note_.empty() && y <= bottom - 36) text(r_, x + 14, y, fit_cells(cat_note_, cols), 1, warm);
+}
+
+// ---------------------------------------------------------------- LANGUAGE (IDEAS 19.183)
+
+// The languages of the language catalogue, by family, in the order shown.
+std::vector<const sieve::FormatEntry*> Menu::speak_rows() const
+{
+    std::vector<const sieve::FormatEntry*> rows;
+    for (const auto& e : cat_)
+        if (e.kind == "language") rows.push_back(&e);
+    auto family = [](const sieve::FormatEntry* e) {
+        for (const auto& l : e->links)
+            if (l.type == "part-of") return l.to;
+        return std::string();
+    };
+    std::stable_sort(rows.begin(), rows.end(), [&](const sieve::FormatEntry* a, const sieve::FormatEntry* b) {
+        const std::string fa = family(a), fb = family(b);
+        return fa != fb ? fa < fb : a->name < b->name;
+    });
+    return rows;
+}
+
+void Menu::speak_key(SDL_Keycode key)
+{
+    cat_init();
+    const auto rows = speak_rows();
+    const int n = int(rows.size());
+    if (!n) return;
+    switch (key)
+    {
+    case SDLK_UP: speak_row_ = (speak_row_ + n - 1) % n; return;
+    case SDLK_DOWN: speak_row_ = (speak_row_ + 1) % n; return;
+    case SDLK_SPACE:
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER:
+    case SDLK_RIGHT:
+    case SDLK_LEFT:
+    {
+        // Spoken or not: the choice is part of your character's save, kept as soon as it is made.
+        const std::string& id = rows[size_t(std::clamp(speak_row_, 0, n - 1))]->id;
+        const auto at = std::lower_bound(speaks_.begin(), speaks_.end(), id);
+        if (at != speaks_.end() && *at == id) speaks_.erase(at);
+        else speaks_.insert(at, id);
+        char_store();
+        return;
+    }
+    default: return;
+    }
+}
+
+void Menu::render_speaks(float x, float top, float bottom)
+{
+    cat_init();
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, warm{230, 200, 120, 255};
+    const size_t cols = size_t((kSideW - 28) / 8);
+    float y = top + 40;
+    const auto rows = speak_rows();
+    speak_row_ = rows.empty() ? 0 : std::clamp(speak_row_, 0, int(rows.size()) - 1);
+    std::string spoken;
+    for (const auto& id : speaks_)
+        for (const auto* e : rows)
+            if (e->id == id) spoken += (spoken.empty() ? "" : ", ") + e->name;
+    text(r_, x + 14, y, fit_cells(trf("side.speaks.count", {std::to_string(speaks_.size()), spoken.empty() ? tr("side.speaks.none") : spoken}), cols), 1, white);
+    y += 14;
+    text(r_, x + 14, y, fit_cells(trf("side.speaks.save", {character_save().id().substr(0, 16)}), cols), 1, grey);
+    y += 22;
+    // The list, by family, scrolled so the chosen row is in view (as YOURS is).
+    struct Line
+    {
+        std::string s;
+        SDL_Color c;
+        int row;
+    };
+    std::vector<Line> lines;
+    std::string last;
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+        std::string fam;
+        for (const auto& l : rows[i]->links)
+            if (l.type == "part-of")
+            {
+                fam = l.to;
+                break;
+            }
+        if (fam != last)
+        {
+            std::string fname = fam;
+            for (const auto& e : cat_)
+                if (e.id == fam) fname = e.name;
+            lines.push_back({fname, warm, -1});
+            last = fam;
+        }
+        const bool on = int(i) == speak_row_, ticked = std::binary_search(speaks_.begin(), speaks_.end(), rows[i]->id);
+        std::string code = rows[i]->recognised;
+        if (const size_t p = code.find("ISO 639-1 "); p != std::string::npos) code = code.substr(p + 10, code.find(';', p) - p - 10);
+        lines.push_back({fit_cells(std::string(on ? "> " : "  ") + (ticked ? "[x] " : "[ ] ") + rows[i]->name + "  (" + code + ")", cols), on ? white : ticked ? white : grey, int(i)});
+    }
+    const float room = std::max(14.0f, (bottom - 40) - y);
+    const float content = float(lines.size()) * 14;
+    float chosen = 0;
+    for (size_t k = 0; k < lines.size(); ++k)
+        if (lines[k].row == speak_row_) chosen = float(k) * 14;
+    side_scroll_max_ = std::max(0.0f, content - room);
+    if (chosen < side_scroll_) side_scroll_ = chosen;
+    if (chosen + 14 > side_scroll_ + room) side_scroll_ = chosen + 14 - room;
+    side_scroll_ = std::clamp(side_scroll_, 0.0f, side_scroll_max_);
+    const SDL_Rect clip{int(x), int(y), int(kSideW), int(room)};
+    SDL_SetRenderClipRect(r_, &clip);
+    for (size_t k = 0; k < lines.size(); ++k)
+    {
+        const float ly = y + float(k) * 14 - side_scroll_;
+        if (ly + 14 > y && ly < y + room) text(r_, x + 14, ly, lines[k].s, 1, lines[k].c);
+    }
+    SDL_SetRenderClipRect(r_, nullptr);
+    side_scrollbar(x, y, room, side_scroll_, side_scroll_max_, content);
 }
 
 void Menu::open_yours()
@@ -3170,11 +3324,11 @@ void Menu::render_side(float W, float H)
     SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
     SDL_RenderLine(r_, x, 0, x, H);
     // The pages' names: one now, more as the systems come.
-    static const char* const kPages[] = {"side.page.character", "side.page.yours", "side.page.catalogue"};
+    static const char* const kPages[] = {"side.page.character", "side.page.yours", "side.page.catalogue", "side.page.speaks"};
     float px = x + 14;
-    for (int i = 0; i < int(std::size(kPages)); ++i)
+    for (const int i : {0, 3, 1, 2}) // (the order the tabs stand in)
     {
-        const std::string name = tr(i == 2 && cat_system_ == 1 ? "side.page.language" : kPages[i]);
+        const std::string name = tr(kPages[i]);
         text(r_, px, top + 12, name, 1, i == side_page_ ? white : grey);
         if (i == side_page_)
         {
@@ -3193,6 +3347,12 @@ void Menu::render_side(float W, float H)
     {
         render_catalogue(x, top, bottom);
         text(r_, x + 14, bottom - 22, tr("side.cat.footer"), 1, grey);
+        return;
+    }
+    if (side_page_ == 3)
+    {
+        render_speaks(x, top, bottom);
+        text(r_, x + 14, bottom - 22, tr("side.speaks.footer"), 1, grey);
         return;
     }
     // A file chosen in a dialog since the last frame: saved or opened now.
@@ -3243,6 +3403,7 @@ void Menu::render_side(float W, float H)
                         sieve::Raid raid(drives);
                         const std::string v = raid.put("your character", char_.text());
                         if (char_anim_) raid.put("your character's animation", char_anim_->text());
+                        raid.put("your save", character_save().text()); // everything chosen, named together
                         char_note_ += "; " + trf("side.char.raid", {v.substr(0, 12)});
                     }
                     catch (const std::exception& e)

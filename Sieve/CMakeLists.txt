@@ -48,6 +48,7 @@ add_library(sieve_core STATIC
     core/src/animation.cpp
     core/src/raid.cpp
     core/src/catalogue.cpp
+    core/src/save.cpp
     core/src/json.cpp
     core/src/safetensors.cpp
     core/src/weights.cpp

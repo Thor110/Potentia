@@ -7508,8 +7508,14 @@ language language tab for character creation".
   other. The language catalogue's first entries are in data/languages: thirteen languages (English,
   Welsh, French, German, Spanish, Greek, Russian, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean) in
   five families, each with its ISO 639 codes and linked to the scripts it is written in; the two
-  catalogues are one web of 187 entries. Not yet: the LANGUAGE page on the CHARACTER side, where a
-  character chooses what it speaks.
+  catalogues are one web of 187 entries.
+- *The LANGUAGE page, built the same day (Edward: "spoken language selection as with any other number
+  of systems like this that get tacked onto character creation become a part of the save data and thus
+  the infinite raid format"):* beside CHARACTER, the languages by family, ticked with Space; kept in
+  the settings file and part of the character's save, `sieve-save-v1` (SPECIFICATIONS §12.0n): the
+  character, its animation and its languages named together by one SHA-256, each system that joins
+  character creation adding a line of its own; kept in the RAID as "your save" where its drives are
+  set. The panel's tabs: CHARACTER, LANGUAGE, YOURS, SYSTEMS.
 
 **19.184 A recorder and replay for every game, and a film studio built in (Edward, 12 November
 2026).** His words: "note down a save recorder and playback system like that used in MGO2PC and other

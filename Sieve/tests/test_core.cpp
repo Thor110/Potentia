@@ -22,6 +22,7 @@
 #include "sieve/animation.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/catalogue.hpp"
+#include "sieve/save.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
@@ -7202,6 +7203,29 @@ void test_raid()
     fs::remove_all(root, ec);
 }
 
+// A character's save (sieve-save-v1, IDEAS 19.183): the character, its animation and its languages,
+// named together; the languages kept in order, each once; read back the same.
+void test_save()
+{
+    CharacterSave s;
+    s.character = unfold_character(CharacterSettings{}).id();
+    s.speak("language-welsh", true);
+    s.speak("language-english", true);
+    s.speak("language-welsh", true); // twice: still once
+    CHECK(s.speaks == (std::vector<std::string>{"language-english", "language-welsh"}));
+    CHECK(s.text() == "sieve-save-v1\ncharacter " + s.character + "\nspeaks language-english\nspeaks language-welsh\n");
+    CHECK(read_save(s.text()).id() == s.id());
+    const std::string before = s.id();
+    s.speak("language-welsh", false);
+    CHECK(s.id() != before && s.speaks.size() == 1);
+    s.animation = std::string(64, 'a');
+    CHECK(read_save(s.text()).animation == s.animation);
+    CHECK(throws([] { (void)read_save("sieve-save-v1\ncharacter x\n"); }));
+    CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks z\nspeaks a\n"); }));          // out of order
+    CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks a\nspeaks a\n"); }));          // twice
+    CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks a\nanimation " + std::string(64, 'c') + "\n"); }));
+}
+
 // The catalogue of formats, stage 1 (IDEAS 19.165): gathered from the code; ids unique; every link
 // names an entry; every entry reaches "information" (the wiki principle); one entry pinned.
 void test_catalogue()
@@ -7322,6 +7346,7 @@ void run_all(int argc, char** argv)
     RUN(test_character());
     RUN(test_raid());
     RUN(test_catalogue());
+    RUN(test_save());
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());

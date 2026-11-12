@@ -806,6 +806,10 @@ Nothing else, and in that order: an entry not in this canonical form is refused.
 - **Where entries come from:** gathered from Sieve's code (the file kinds, the importers, the alphabets and Unicode blocks, Sieve's own formats, and a general layer above them), and written by hand as files `data/catalogue/<ID>.format` (carriage returns ignored), each named by its id. An id twice, or a link to an entry that is not there, is refused.
 - **The wiki principle:** every entry reaches `information` by its `part-of` links; `sieve catalogue --check` and the unit tests check it for every entry.
 
+### 12.0n A character's save (`sieve-save-v1`, as built; IDEAS §19.183)
+
+Everything chosen in character creation, named together (`core/include/sieve/save.hpp`): `sieve-save-v1`, then `character SHA-256` (the character, any version), then `animation SHA-256` where it has one, then `speaks ID` for each language it speaks (entries of the language catalogue, `data/languages`), in the order of their ids, each once; every line ending in a line feed. Its identity is the SHA-256 of that text, so a change to any part of it is a new version. Every system that joins character creation adds a line of its own, in a later version. The setup menu keeps the languages in the settings file (`[character] speaks`), and where `[raid] drives` is set, Ctrl+S on the CHARACTER page keeps the save in the infinite RAID as a version of "your save", beside the character and its animation.
+
 ### 12.1a The bytes256 alphabet
 
 `bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.

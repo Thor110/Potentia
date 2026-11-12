@@ -1332,12 +1332,21 @@ int run(const Args& a)
             menu.render();
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
-        if (menu.side_open() && menu.side_page() == 2) std::cout << "right-hand panel: open (CATALOGUE)\ncatalogue: " << menu.catalogue_line() << "\n";
+        if (menu.side_open() && menu.side_page() == 3)
+        {
+            std::string sp;
+            for (const auto& id : menu.speaks()) sp += (sp.empty() ? "" : ",") + id;
+            std::cout << "right-hand panel: open (LANGUAGE)\nspeaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";
+        }
+        else if (menu.side_open() && menu.side_page() == 2) std::cout << "right-hand panel: open (CATALOGUE)\ncatalogue: " << menu.catalogue_line() << "\n";
         else if (menu.side_open() && menu.side_page() == 1) std::cout << "right-hand panel: open (YOURS, " << menu.yours_count() << " characters)\n";
         else if (menu.side_open())
         {
             std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
             if (!menu.animation_line().empty()) std::cout << "animation: " << menu.animation_line() << "\n";
+            std::string sp;
+            for (const auto& id : menu.speaks()) sp += (sp.empty() ? "" : ",") + id;
+            std::cout << "speaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";
             if (!menu.character_note().empty()) std::cout << "note: " << menu.character_note() << "\n";
         }
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends

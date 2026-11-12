@@ -19,6 +19,7 @@
 #include "sieve/character.hpp"
 #include "sieve/animation.hpp"
 #include "sieve/catalogue.hpp"
+#include "sieve/save.hpp"
 #include "character_store.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
@@ -481,6 +482,15 @@ private:
     void cat_init();
     void cat_key(SDL_Keycode key);
     void render_catalogue(float x, float top, float bottom);
+    // LANGUAGE (page 3): the languages your character speaks, ticked from the language catalogue;
+    // part of its save (sieve-save-v1, sieve/save.hpp).
+    std::vector<std::string> speaks_;
+    int speak_row_ = 0;
+    std::vector<const sieve::FormatEntry*> speak_rows() const;
+    void speak_key(SDL_Keycode key);
+    void render_speaks(float x, float top, float bottom);
+    void speaks_from_settings();
+    sieve::CharacterSave character_save() const;
     // The right-hand panel's scrolling (YOURS), mirroring the settings panel's.
     float side_scroll_ = 0, side_scroll_max_ = 0;
     int side_row_shown_ = -1;
@@ -532,6 +542,8 @@ public:
     // the entry you stand at. --catalogue ID opens it there.
     void open_catalogue(const std::string& id);
     std::string catalogue_line() const;           // "ID: N doors" of the entry you stand at, for the readout
+    std::string save_line() const;                // the save's SHA-256 (sieve-save-v1), for the readout
+    const std::vector<std::string>& speaks() const { return speaks_; }
     std::string animation_line() const;           // "ID FRAMES BONES" of the animation playing, or empty
     const std::string& character_note() const { return char_note_; } // the line under the CHARACTER page's rows
     void obj_chosen(const std::string& path);
