@@ -115,6 +115,9 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, metaphor): This landscape carves its own canyons and grooves in its digital realm.
 - **Edward** (12 November 2026, quote): All information becomes communicable amongst the noise.
 - **Edward** (12 November 2026, quote): The Sieve of Potentia, for sieving information to its Kolmogorov complexity limit, if possible and where applicable.
+- **Edward** (12 November 2026, quote; a point about everything): It really does just unpack itself, this system! It folds out from a simple ruleset and creates itself procedurally: one barrier, one wall, reveals or illuminates another, and each element of the system appears to create itself. Fascinating.
+- **Edward** (12 November 2026, rule): It also locks a core component of my system behind a licence that will enforce and encourage charitable works, as well as democratic debate and intervention.
+- **Edward** (12 November 2026, metaphor; a point about everything): It turns it into an infinite, aesthetically warping, n-dimensional state space that configures and tracks all information across all time, even throughout the chaotic nature of the moral landscape, by triggering a natural-born limit to tie democracy to itself through eternal debate.
 
 **Longer pieces.** Whole paragraphs and speeches, for a speaker to give at a chosen moment or on a chosen path, are kept in [SPEECHES.md](SPEECHES.md), not here.
 

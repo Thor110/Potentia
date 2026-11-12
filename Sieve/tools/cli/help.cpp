@@ -309,6 +309,29 @@ const std::vector<Page>& pages()
          {{"sieve import teapot.obj", "8 of 1,857 vertices, 9 of 3,552 faces kept"},
           {"sieve import --formats", "every importer and its roof"}}},
 
+        {"raid", "The infinite RAID, stage 1: saves kept on several folders, verified and repaired.",
+         "sieve raid put FILE|get ID --out FILE|list|verify|repair --drives A,B,... [--copies N] [--name NAME]",
+         "Keeps any save (a game's save file, a character, a dimension's file) on several folders the\n"
+         "person chooses: a spare drive, a phone's storage, a second disk (IDEAS 19.176). Each save is\n"
+         "cut into chunks of 1 MiB, each named by its SHA-256 and kept on N of the folders (2 unless\n"
+         "--copies says otherwise); a small manifest, kept in every folder, lists a version's chunks,\n"
+         "and its SHA-256 is the version's id. Storing a save again under its name makes a new version\n"
+         "that names the one before, so every save keeps its history. Nothing is trusted: verify checks\n"
+         "every chunk against its name, and repair writes again every copy that is damaged or missing\n"
+         "from a folder that holds a good one. Local only: nothing leaves the machine.",
+         {{"put FILE", "Keep a file (under --name NAME, else its file name); says its version id."},
+          {"get ID", "Write a version (its id, or a name for its latest) to --out FILE, every chunk checked."},
+          {"list", "Every version kept, by name, oldest first."},
+          {"verify", "Check every chunk and manifest; exit 1 if anything is damaged, short or lost."},
+          {"repair", "Make it whole again from the good copies, and say what could not be."},
+          {"--drives A,B,...", "The folders (made members the first time)."},
+          {"--copies N", "How many folders each chunk goes on (default 2)."},
+          {"--name NAME", "The save's name, for put."},
+          {"--out FILE", "Where get writes."}},
+         {{"sieve raid put game.sav --drives D:/raid,E:/raid", "keep a save on two drives"},
+          {"sieve raid verify --drives D:/raid,E:/raid", "check every piece"},
+          {"sieve raid get game.sav --out back.sav --drives D:/raid,E:/raid", "its latest version back"}}},
+
         {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
          "sieve dimensions [ID]",
          "The catalogue of dimensions (IDEAS 19.162): the hallway's lines, the characters and their\n"
@@ -1546,7 +1569,7 @@ void print_usage()
         {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
-        {"Other lines", {"mesh", "import", "dimensions", "world", "ai", "ai-train", "diffuse"}},
+        {"Other lines", {"mesh", "import", "dimensions", "raid", "world", "ai", "ai-train", "diffuse"}},
         {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;

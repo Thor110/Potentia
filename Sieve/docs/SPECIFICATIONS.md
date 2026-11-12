@@ -787,6 +787,14 @@ An animation is B bones and F frames at 30 frames a second (`core/include/sieve/
 - **Kept:** the hallway's store keeps an animation as `animations/<SHA-256>.animation` beside the settings file, and `[character] animation` names it by that SHA-256; a file that is missing, refused, or not what its name says is left out.
 - **From glTF:** each animation sampled at 30 a second (keys held before the first and after the last; LINEAR rotations slerped, STEP held, CUBICSPLINE keys joined by straight lines), each joint's turn the change of its world rotation from rest. Translation, scale and morph-weight channels are counted and named as left out; frames past 300 are cut and said.
 
+### 12.0l The infinite RAID, stage 1 (`sieve-raid-v1`, as built; IDEAS §19.176)
+
+A store for any save, kept on several folders (drives) the person chooses; local only (`core/include/sieve/raid.hpp`).
+- **A folder** holds `sieve-raid` (`sieve-raid-v1 id=` and 32 random hex digits, written once when it joins), `chunks/` and `manifests/`.
+- **Chunks:** a save is cut into chunks of 1 MiB (the last shorter), each kept as `chunks/AB/<SHA-256>`. Each goes on `copies` folders (2 by default; all if fewer): the folders ranked by SHA-256 of the chunk's name followed by the folder's id, highest first, so a chunk's place does not depend on the order the folders are given in.
+- **Manifests:** `sieve-raid-manifest-v1`, then `name NAME`, `size BYTES`, `previous SHA-256` (or `none`), and `chunk SHA-256 LENGTH` lines in order, each line ending in a line feed; its SHA-256 is the version's id, and it is kept in every folder as `manifests/<id>.manifest`. A save stored again under its name names the latest version of that name as its previous; the same bytes again add nothing.
+- **Checked, never trusted:** every chunk and manifest is checked against its name when read. Verify counts copies that are damaged, chunks on fewer folders than asked, and chunks with no good copy (lost); repair writes again every damaged or missing copy and manifest from a good one, best homes first. A lost chunk cannot be repaired, and reading a version that needs it is refused rather than given wrong.
+
 ### 12.1a The bytes256 alphabet
 
 `bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.

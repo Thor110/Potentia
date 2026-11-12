@@ -68,6 +68,7 @@
 #include "sieve/modelspace.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
+#include "sieve/raid.hpp"
 #include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/aispace.hpp"
@@ -1114,6 +1115,86 @@ ObjMesh read_obj(const std::string& path)
     {
         throw std::invalid_argument(path + ": " + e.what());
     }
+}
+
+// sieve raid: the infinite RAID, stage 1 (IDEAS 19.176): saves kept on several folders, every piece
+// named by its SHA-256, verified and repaired.
+int cmd_raid(const Args& a)
+{
+    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify or repair");
+    if (!a.has("drives")) throw std::invalid_argument("give the folders with --drives A,B,...");
+    std::vector<std::filesystem::path> drives;
+    {
+        const std::string d = a.get("drives");
+        for (size_t i = 0; i <= d.size();)
+        {
+            const size_t c = std::min(d.find(',', i), d.size());
+            if (c > i) drives.emplace_back(d.substr(i, c - i));
+            i = c + 1;
+        }
+    }
+    sieve::Raid raid(drives, a.has("copies") ? a.get_u32("copies", 2) : 2);
+    const std::string what = a.positional[0];
+    auto report = [](const sieve::RaidReport& r, const char* found = "") {
+        std::cout << "folders   " << r.folders << "\n"
+                  << "saves     " << r.manifests << " versions, " << r.chunks << " chunks, " << r.good_copies << " good copies\n"
+                  << "damaged   " << r.damaged << "\n"
+                  << "short     " << r.missing << " (chunks on fewer folders than asked)\n"
+                  << "lost      " << r.lost << " (no good copy anywhere)\n";
+        if (r.repaired) std::cout << "repaired  " << r.repaired << " copies written\n";
+        for (const auto& n : r.notes) std::cout << "  " << n << "\n";
+        std::cout << found << (r.whole() ? "whole\n" : "not whole\n");
+    };
+    if (what == "put")
+    {
+        if (a.positional.size() < 2) throw std::invalid_argument("give the file to keep");
+        const std::string path = a.positional[1];
+        std::ifstream in(path, std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + path);
+        const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const std::string name = a.has("name") ? a.get("name") : std::filesystem::path(path).filename().string();
+        const auto before = raid.latest(name);
+        const std::string id = raid.put(name, bytes);
+        std::cout << "kept      " << name << " (" << bytes.size() << " bytes) as " << id << (before && *before == id ? " (unchanged: already the latest)" : "") << "\n";
+        return 0;
+    }
+    if (what == "get")
+    {
+        if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give a version id (or a name, for its latest) and --out FILE");
+        std::string v = a.positional[1];
+        if (v.size() != 64)
+        {
+            const auto l = raid.latest(v);
+            if (!l) throw std::invalid_argument("no save named " + v);
+            v = *l;
+        }
+        const std::string bytes = raid.get(v);
+        std::ofstream out(a.get("out"), std::ios::binary);
+        out.write(bytes.data(), std::streamsize(bytes.size()));
+        if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+        std::cout << "wrote     " << a.get("out") << " (" << bytes.size() << " bytes, version " << v << ")\n";
+        return 0;
+    }
+    if (what == "list")
+    {
+        for (const auto& m : raid.list())
+            std::cout << m.id() << "  " << m.size << " bytes  " << m.chunks.size() << " chunks  " << m.name << (m.previous.empty() ? "" : "  (after " + m.previous.substr(0, 12) + ")") << "\n";
+        return 0;
+    }
+    if (what == "verify")
+    {
+        const auto r = raid.verify();
+        report(r);
+        return r.whole() ? 0 : 1;
+    }
+    if (what == "repair")
+    {
+        report(raid.repair(), "found     ");
+        const auto after = raid.verify();
+        std::cout << "after     " << (after.whole() ? "whole" : "still not whole") << "\n";
+        return after.whole() ? 0 : 1;
+    }
+    throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair)");
 }
 
 // sieve dimensions: every dimension, built or planned, with its address, roof and links (IDEAS 19.162).
@@ -3310,7 +3391,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
@@ -3446,6 +3527,7 @@ int main(int argc, char** argv)
         if (a.command == "mesh") return cmd_mesh(a);
         if (a.command == "import") return cmd_import(a);
         if (a.command == "dimensions") return cmd_dimensions(a);
+        if (a.command == "raid") return cmd_raid(a);
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "rope") return cmd_rope(a);

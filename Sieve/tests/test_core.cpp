@@ -20,6 +20,7 @@
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
 #include "sieve/animation.hpp"
+#include "sieve/raid.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
@@ -58,6 +59,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <random>
@@ -7115,6 +7117,62 @@ void test_character()
     CHECK(unfold_character(p).id() == "42f354a2d11c87a26cc0c2d877c9ba21efed1ba648abff66e39379334ec48293");
 }
 
+// The infinite RAID, stage 1 (IDEAS 19.176): saves on several folders, every piece checked by its
+// name; damage found by verify and mended by repair; a chunk with no good copy said to be lost.
+void test_raid()
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / ("sieve-raid-test-" + std::to_string(std::random_device{}()));
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const std::vector<fs::path> drives = {root / "a", root / "b", root / "c"};
+    std::string bytes;
+    std::mt19937 rng(11);
+    for (size_t i = 0; i < kRaidChunk * 2 + 12345; ++i) bytes.push_back(char(rng() & 0xFF));
+    std::string v1, v2;
+    {
+        Raid raid(drives);
+        v1 = raid.put("game.sav", bytes);
+        CHECK(raid.put("game.sav", bytes) == v1); // the same bytes again: nothing new
+        CHECK(raid.get(v1) == bytes);
+        bytes[5] ^= 1;
+        v2 = raid.put("game.sav", bytes);
+        CHECK(v2 != v1 && raid.latest("game.sav") == v2);
+        const auto all = raid.list();
+        CHECK(all.size() == 2 && all[0].id() == v1 && all[1].previous == v1 && all[1].chunks.size() == 3);
+        CHECK(raid.verify().whole() && raid.verify().chunks == 4); // the first chunk changed, the other two shared
+        CHECK(throws([&] { (void)raid.put("two\nlines", bytes); }));
+    }
+    {
+        // Opened again: the folders keep their ids, so the chunks are where they were.
+        Raid raid(drives);
+        const auto homes = raid.homes(read_raid_manifest(raid.list()[1].text()).chunks[0].first);
+        CHECK(homes.size() == 3);
+        // Damage one copy of a chunk and delete one copy of another; take a manifest out of one folder.
+        const auto m = raid.list()[1];
+        const std::string c0 = m.chunks[0].first, c1 = m.chunks[1].first;
+        const auto h0 = raid.homes(c0), h1 = raid.homes(c1);
+        auto path = [&](size_t d, const std::string& h) { return drives[d] / "chunks" / h.substr(0, 2) / h; };
+        std::ofstream(path(h0[0], c0), std::ios::binary) << "damaged";
+        fs::remove(path(h1[1], c1), ec);
+        fs::remove(drives[2] / "manifests" / (v1 + ".manifest"), ec);
+        const RaidReport r = raid.verify();
+        CHECK(!r.whole() && r.damaged == 1 && r.missing == 2 && r.lost == 0);
+        CHECK(raid.get(v2) == bytes); // still readable: a good copy of everything remains
+        const RaidReport fixed = raid.repair();
+        CHECK(fixed.repaired >= 3 && raid.verify().whole());
+        // Both copies of a chunk gone: lost, said so, and get refuses rather than give wrong bytes.
+        fs::remove(path(h0[0], c0), ec);
+        fs::remove(path(h0[1], c0), ec);
+        const RaidReport gone = raid.verify();
+        CHECK(gone.lost == 1 && !gone.whole());
+        CHECK(throws([&] { (void)raid.get(v2); }));
+    }
+    CHECK(throws([] { (void)read_raid_manifest("sieve-raid-manifest-v1\nname x\nsize 2\nprevious none\nchunk " + std::string(64, 'a') + " 1\n"); }));
+    CHECK(throws([] { (void)Raid(std::vector<std::filesystem::path>{}); }));
+    fs::remove_all(root, ec);
+}
+
 // `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole
 // suite): only the tests whose call names one of them (as part of it: "mix" runs test_mix to
 // test_mix4); `--list` names them all and runs none.
@@ -7157,6 +7215,7 @@ void run_all(int argc, char** argv)
     RUN(test_audio());
     RUN(test_midi_read());
     RUN(test_character());
+    RUN(test_raid());
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());

@@ -65,6 +65,22 @@ q "^skeleton  3 joints, as sieve-character-v3 22807d23fa4d9b7abfb2895e2e97448ad1
 q "^animation 0 \"wave\": 31 frames (1.03 s), 3 bones, sieve-animation-v1 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.txt
 tr -d '\r' < arm.character | q "^s 2 1 0 8192 0 1024 joint$"
 tr -d '\r' < arm.animation | q "^f 30 808080 8080c0 8080c0$"
+# The infinite RAID, stage 1 (IDEAS 19.176): a save kept on three folders, two copies of each chunk;
+# one copy damaged and one folder's manifest taken away are found by verify (exit 1), mended by
+# repair, and the save comes back byte for byte.
+rm -rf raid1 raid2 raid3
+python -c "import random; random.seed(5); open('save.bin','wb').write(bytes(random.getrandbits(8) for _ in range(2200000)))"
+D=raid1,raid2,raid3
+$exe raid put save.bin --drives $D | tr -d '\r' | q "^kept      save.bin (2200000 bytes) as "
+$exe raid verify --drives $D | tr -d '\r' | q "^whole$"
+c=$(find raid1 raid2 raid3 -path '*/chunks/*' -type f | sort | sed -n 1p) # (folder ids are random, so any folder may hold it)
+printf 'damaged' > "$c"
+rm -f raid2/manifests/*.manifest
+if $exe raid verify --drives $D > raid-verify.txt; then exit 1; fi
+tr -d '\r' < raid-verify.txt | q "^damaged   1$"
+$exe raid repair --drives $D | tr -d '\r' | q "^after     whole$"
+$exe raid get save.bin --out save-back.bin --drives $D > /dev/null
+cmp save.bin save-back.bin
 # The catalogue of dimensions: DNA links to research, and research is linked from DNA.
 $exe dimensions | tr -d '\r' | q "^research   planned"
 $exe dimensions research | tr -d '\r' | q "^linked by .*dna"

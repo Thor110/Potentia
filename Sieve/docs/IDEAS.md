@@ -7264,3 +7264,78 @@ implementations and manifestations for varying species".
   to digital (pressing a key, a gesture, a command), with the language that names it and the body or
   device that performs it, for every species. It links the characters, species, languages and
   animation dimensions. Planned only; in the catalogue as `interaction`.
+
+**19.175 A music visualiser of near endless rings, a lens into sound (Edward, 12 November 2026).** His
+words: "an idea for a music visualiser, a circle or visualiser standard with near infinite rings of
+colour that blend music through notes and tones and instruments and voices and more, so it would look
+like a circular rainbow of colours that move and shift with the visualisation that can be zoomed into
+layers as a lens into sound itself", and "this would be an extension of the media player, something
+that could be opened as music plays and used to reverse engineer all audio down into its base
+waveforms and audio types in theory".
+- *What it is:* a circular view in the media player, opened while music plays: rings from the centre
+  outwards, each a band of the sound (low notes in, high out, or one ring an instrument or a voice),
+  its colour the note's place in the octave (a colour wheel of the twelve notes), its brightness how
+  loud it is now, so the whole turns and shifts with the music.
+- *Zoomed as a lens:* zooming in opens a ring into finer rings: a band into its notes, a note into its
+  overtones, down to the waveform itself; the same unfolding as the guided zoom on a line.
+- *Reverse-engineering sound:* the end of the zoom is the sound's own parts: which waveforms and which
+  kinds of sound make it up. For Sieve's own melodies (the notes lines, §3.2-3.4) the notes are known
+  exactly, so the rings can be exact; for recorded sound it is an analysis (a spectrum over time),
+  and separating instruments and voices is a hard problem that the rings would show only as well as
+  the analysis allows.
+- *A first step that could be built:* the rings for Sieve's own notes lines in the media player, the
+  colour wheel of notes and the loudness of each, before any recorded sound.
+
+**19.176 The distributed infinite RAID: a plan (Edward, 12 November 2026).** His words: "we also need to
+work on implementing this distributed infinite raid system as an attempt to create a distributed
+compute resource to help people preserve their video games saves across all games and dimensions etc".
+Built so far: the local store (§19.154: characters and animations, each named by its SHA-256). In
+stages, each usable alone:
+1. *(Built 12 November 2026: `sieve raid`, `sieve-raid-v1`, SPECIFICATIONS §12.0l; damage, missing copies
+   and lost chunks found, mended where a good copy remains, a lost one refused rather than read
+   wrong.)* *A store for any save, on several drives (local, no network):* a save of any game or dimension cut
+   into chunks, each named by its SHA-256, and a small manifest per save version listing its chunks;
+   the same store kept on two or more folders (drives) the person chooses, each chunk on at least two;
+   `verify` checks every chunk against its name, `repair` copies a missing or damaged one from a
+   folder that has it. Every piece can be checked, so no copy needs to be trusted.
+2. *Saves as deltas:* each new version of a save kept as its changes from the one before (the delta
+   way, v32), so a long history costs little; any version made again from its manifest.
+3. *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
+   chunks by name to others and asks for the ones it lacks; a chunk is accepted only if it hashes to
+   its name, so nothing can be changed on the way. Before this is built, Edward's decisions: whether
+   others' saves are stored encrypted (so a helper cannot read them), how much space each person
+   gives, and how machines find one another.
+4. *Compute as well as storage:* the same opt-in network sharing work: the filters run across all
+   dimensions at once (§19.173), each machine taking a part and every result checked.
+
+**19.177 The infinite RAID under a licence of its own: profit shares to charity, set democratically
+(Edward, 12 November 2026). A decision to make before the RAID is released.** His words: "can we lock
+down the infinite raid save system under a separate licence a licence that says no one can use it in
+profit systems or for a profit motive without giving X/Y share of their profits to charity with both X
+and Y being a democratically declared and debated topic for equalising all business enterprises that
+could benefit from the system", "make a strong note of that somewhere as it is inevitably its own
+system within the state space that can unfold and hook into all games and platforms across all
+systems", and "it also locks a core component of my system behind a licence that will enforce and
+encourage charitable works as well as democratic debate and intervention".
+- **The intent:** anyone may use the RAID for nothing where there is no profit; whoever uses it for
+  profit gives a share of that profit to charity, the share (X of Y) set and revised by open,
+  democratic debate, so every business that gains from it is held to the same rule.
+- **Where things stand (checked 12 November 2026):** all of Potentia, Sieve included, is under the GNU
+  AGPL v3 (LICENSE at the root; Sieve/README.md). The RAID's code (core/include/sieve/raid.hpp,
+  core/src/raid.cpp, `sieve raid`) was written that day and is in local commits only: it has not been
+  published, so no copy of it is yet out under the AGPL.
+- **Why it needs care:** the AGPL forbids adding restrictions to the code it covers, and lets anyone
+  who receives it remove any that are added (its sections 7 and 10). So a charity-share term cannot sit
+  on top of the AGPL for the same code; the RAID would have to be released under the new licence
+  instead, as a part of its own (its own folder or library), and the parts it is joined with in one
+  program would have to allow that. As the author of Sieve's own code, Edward can license his code
+  as he chooses; code by others (third_party/) keeps its own licences.
+- **What it would not be:** a licence that limits use for profit is not "open source" as the Open
+  Source Initiative defines it (no restriction by field of use); it is a source-available licence, as
+  others with non-commercial terms are. That is a choice, not a fault, but worth knowing.
+- **What it needs, in order:** (1) Edward's decision; (2) the licence drafted by a lawyer, since
+  whether a profit-share-to-charity term can be enforced, and how "profit" and "use" are defined,
+  depend on the law where it is used; (3) the democratic mechanism defined in it (who votes, how often
+  X and Y can change, which charities qualify, how it is checked), or the licence will be too vague to
+  hold; (4) the RAID's code moved to its own folder with that licence before it is published.
+- **Until then:** the RAID's code stays in local commits, unpublished.
