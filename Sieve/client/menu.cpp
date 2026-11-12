@@ -47,6 +47,7 @@
 #include "sieve/guided.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/importers.hpp"
+#include "sieve/raid.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -2947,6 +2948,28 @@ void Menu::render_side(float W, float H)
                     k << char_.text();
                 }
                 char_note_ += "; " + trf("side.char.stored", {char_.id().substr(0, 12)});
+                // The infinite RAID (IDEAS 19.176), where its drives are set: your character as a new
+                // version of "your character", every piece on two of the drives, so its history is kept.
+                if (app_ && !app_->raid_drives.empty())
+                    try
+                    {
+                        std::vector<std::filesystem::path> drives;
+                        const std::string& d = app_->raid_drives;
+                        for (size_t i = 0; i <= d.size();)
+                        {
+                            const size_t c = std::min(d.find(',', i), d.size());
+                            if (c > i) drives.push_back(path_utf8(d.substr(i, c - i)));
+                            i = c + 1;
+                        }
+                        sieve::Raid raid(drives);
+                        const std::string v = raid.put("your character", char_.text());
+                        if (char_anim_) raid.put("your character's animation", char_anim_->text());
+                        char_note_ += "; " + trf("side.char.raid", {v.substr(0, 12)});
+                    }
+                    catch (const std::exception& e)
+                    {
+                        char_note_ += "; " + trf("side.char.raid_failed", {e.what()});
+                    }
             }
         }
         if (load) load_character(*load);

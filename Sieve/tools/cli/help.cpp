@@ -318,7 +318,10 @@ const std::vector<Page>& pages()
          "and its SHA-256 is the version's id. Storing a save again under its name makes a new version\n"
          "that names the one before, so every save keeps its history. Nothing is trusted: verify checks\n"
          "every chunk against its name, and repair writes again every copy that is damaged or missing\n"
-         "from a folder that holds a good one. Local only: nothing leaves the machine.",
+         "from a folder that holds a good one. Local only: nothing leaves the machine.\n"
+         "\n"
+         "The infinite RAID save and data preservation system was designed by Edward James Gordon\n"
+         "(Potentia). GNU AGPL v3 with an attribution term (docs/RAID-NOTICE.md).",
          {{"put FILE", "Keep a file (under --name NAME, else its file name); says its version id."},
           {"get ID", "Write a version (its id, or a name for its latest) to --out FILE, every chunk checked."},
           {"list", "Every version kept, by name, oldest first."},

@@ -7139,8 +7139,9 @@ void test_raid()
         v2 = raid.put("game.sav", bytes);
         CHECK(v2 != v1 && raid.latest("game.sav") == v2);
         const auto all = raid.list();
-        CHECK(all.size() == 2 && all[0].id() == v1 && all[1].previous == v1 && all[1].chunks.size() == 3);
-        CHECK(raid.verify().whole() && raid.verify().chunks == 4); // the first chunk changed, the other two shared
+        const size_t pieces = raid_cut(bytes).size();
+        CHECK(all.size() == 2 && all[0].id() == v1 && all[1].previous == v1 && all[1].chunks.size() == pieces);
+        CHECK(raid.verify().whole() && raid.verify().chunks == pieces + 1); // the first chunk changed, the rest shared
         CHECK(throws([&] { (void)raid.put("two\nlines", bytes); }));
     }
     {
@@ -7169,6 +7170,32 @@ void test_raid()
         CHECK(throws([&] { (void)raid.get(v2); }));
     }
     CHECK(throws([] { (void)read_raid_manifest("sieve-raid-manifest-v1\nname x\nsize 2\nprevious none\nchunk " + std::string(64, 'a') + " 1\n"); }));
+    // Stage 2: cuts made by the content. Every piece between 16 KiB and 256 KiB (the last may be
+    // shorter), and ten bytes inserted near the start move only the pieces up to the first cut that
+    // the content makes again, so a new version shares the rest.
+    {
+        std::string data;
+        std::mt19937 g(21);
+        for (int i = 0; i < 3 << 20; ++i) data.push_back(char(g() & 0xFF));
+        const auto cuts = raid_cut(data);
+        size_t total = 0;
+        for (size_t k = 0; k < cuts.size(); ++k)
+        {
+            CHECK(cuts[k].first == total && cuts[k].second <= kRaidCutMax && (k + 1 == cuts.size() || cuts[k].second >= kRaidCutMin));
+            total += cuts[k].second;
+        }
+        CHECK(total == data.size() && cuts.size() > 12 && cuts.size() < 192);
+        std::string edited = data;
+        edited.insert(100, "0123456789");
+        std::set<std::string> before, after;
+        for (const auto& [at, n] : cuts) before.insert(Sha256::hex(Sha256::hash(data.substr(at, n))));
+        size_t shared = 0;
+        const auto cuts2 = raid_cut(edited);
+        for (const auto& [at, n] : cuts2) shared += before.count(Sha256::hex(Sha256::hash(edited.substr(at, n))));
+        CHECK(shared + 2 >= cuts2.size()); // at most two pieces new
+        CHECK(raid_cut(data) == cuts);      // the same bytes, the same cuts
+        CHECK(raid_cut(std::string()).empty());
+    }
     CHECK(throws([] { (void)Raid(std::vector<std::filesystem::path>{}); }));
     fs::remove_all(root, ec);
 }

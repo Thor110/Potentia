@@ -506,6 +506,7 @@ public:
     void skeleton_chosen(const std::string& path);
     void set_animation_frame(int frame) { char_anim_fixed_ = frame; } // --animation-frame N: hold the animation at frame N (for pictures)
     std::string animation_line() const;           // "ID FRAMES BONES" of the animation playing, or empty
+    const std::string& character_note() const { return char_note_; } // the line under the CHARACTER page's rows
     void obj_chosen(const std::string& path);
     void open_yours();                              // the right-hand panel open on YOURS (Personal Dimensions)
 private:

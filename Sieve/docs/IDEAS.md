@@ -7298,13 +7298,18 @@ stages, each usable alone:
    the same store kept on two or more folders (drives) the person chooses, each chunk on at least two;
    `verify` checks every chunk against its name, `repair` copies a missing or damaged one from a
    folder that has it. Every piece can be checked, so no copy needs to be trusted.
-2. *Saves as deltas:* each new version of a save kept as its changes from the one before (the delta
+2. *(Built 12 November 2026: cuts made by the content, `sieve-raid-cut-v2`, 16 to 256 KiB, about 80 KiB
+   on random bytes, 80,971 measured; on a 4 MiB save kept twice, one byte changed added 412,078 bytes
+   where 1 MiB pieces added 2,098,024, and ten bytes inserted near the start 1,000,026 where they
+   added 8,389,648: two pieces new, the first having reached the 256 KiB cap. Characters saved with
+   Ctrl+S kept as versions in the RAID where `[raid] drives` is set.)* *Saves as deltas:* each new version of a save kept as its changes from the one before (the delta
    way, v32), so a long history costs little; any version made again from its manifest.
 3. *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
    chunks by name to others and asks for the ones it lacks; a chunk is accepted only if it hashes to
    its name, so nothing can be changed on the way. Before this is built, Edward's decisions: whether
    others' saves are stored encrypted (so a helper cannot read them), how much space each person
-   gives, and how machines find one another.
+   gives, and how machines find one another. And the lockdown against spam (§19.178): one character per verified identity, with
+   each dimension's own limits.
 4. *Compute as well as storage:* the same opt-in network sharing work: the filters run across all
    dimensions at once (§19.173), each machine taking a part and every result checked.
 
@@ -7339,3 +7344,32 @@ encourage charitable works as well as democratic debate and intervention".
   X and Y can change, which charities qualify, how it is checked), or the licence will be too vague to
   hold; (4) the RAID's code moved to its own folder with that licence before it is published.
 - **Until then:** the RAID's code stays in local commits, unpublished.
+- **Decided the same day (Edward: "if it isnt possible then it isnt possible but at the very least I
+  believe I deserve credit and authorship title of the infinite raid save and data preservation
+  system", and "lawyers aside you are welcome to pick the best fit, ultimately all licences really only
+  boil down to dont be a douchebag and attribute proper authorship"):** Edward had by then published the
+  RAID with the rest under the AGPL. It stays under the AGPL, with the one additional term the AGPL
+  allows and protects (section 7(b)): the attribution "The infinite RAID save and data preservation
+  system was designed by Edward James Gordon (Potentia)" must be kept in its files and shown with the
+  work's notices. The charity share is written as a request, not a condition. Stated at the top of the
+  RAID's source files, in `sieve help raid`, in Sieve/README.md, and in full in docs/RAID-NOTICE.md.
+
+**19.178 The infinite RAID's lockdown against spam: one character, verified identity, limits per
+dimension (Edward, 12 November 2026).** His words: "the infinite raid system could scale through all
+data and users but needs strict lockdown protocols and verification to prevent spamming of data
+overtaking the system during its initial phases or implementation, such as the single character and
+digital id verification lockdown for sieve itself with sub dimension and state spaces or games having
+their own limitations respectively".
+- *Why it matters:* once stage 3 shares storage between machines (§19.176), anyone could fill other
+  people's drives with junk. Every chunk is already checked against its name, so nobody can alter
+  what is stored; what has to be limited is how much each person can ask others to store.
+- *The lockdown, as Edward describes it:* one character per person across Sieve (§19.150), tied to a
+  verified digital identity, so one person cannot become many to claim more space; each sub dimension,
+  state space or game sets its own limits beneath that (how many saves, how large, how often).
+- *What it needs before stage 3 is built:* how identity is verified (and what is kept private: a
+  person's identity need not be visible to those storing their saves, only that it is verified once);
+  the quota per person and per dimension; and what happens to data over its limit (refused when
+  offered, never deleted from its owner). These join the decisions already listed in §19.176
+  (encryption of others' saves, space given, how machines find one another).
+- *Locally, today:* stage 1 and 2 stores are the person's own folders; no limit is needed there, and
+  none is imposed.

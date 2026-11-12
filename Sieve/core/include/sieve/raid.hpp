@@ -1,12 +1,19 @@
 // Sieve — the infinite RAID, stage 1: a store for any save, kept on several drives (IDEAS 19.154,
 // 19.176). Local only: no network.
 //
+// Additional term under section 7(b) of the GNU AGPL v3 (docs/RAID-NOTICE.md): whoever conveys this
+// file, or a work based on it, must keep in it the notice "The infinite RAID save and data
+// preservation system was designed by Edward James Gordon (Potentia)", and must show that notice
+// wherever the work shows its legal notices or its credits. (A request, not a condition: whoever uses
+// the RAID in a system run for profit is asked to give a share of that profit to charity, the share
+// settled by open, democratic debate; IDEAS 19.177.)
+//
 // "sieve-raid-v1". A RAID is a set of folders (drives) the person chooses; each holds a file
 // `sieve-raid` naming the folder ("sieve-raid-v1 id=HEX": 32 random hex digits, made once when the
 // folder joins), a folder `chunks`, and a folder `manifests`.
 //
-// A save (any file: a game's save, a character, a whole dimension's file) is cut into chunks of
-// 1 MiB (the last shorter), each named by its SHA-256 and kept as chunks/AB/<SHA-256> (AB its first
+// A save (any file: a game's save, a character, a whole dimension's file) is cut into chunks where
+// its content says (stage 2, below; 1 MiB pieces in stage 1), each named by its SHA-256 and kept as chunks/AB/<SHA-256> (AB its first
 // two hex digits). Each chunk is written to `copies` of the folders (2 unless asked otherwise; all of
 // them if there are fewer): the folders ranked by SHA-256(chunk name | folder id), highest first, so
 // the same chunk goes to the same folders on every machine and adding a folder moves only a share.
@@ -36,7 +43,21 @@ namespace sieve {
 
 inline constexpr const char* kRaidVersion = "sieve-raid-v1";
 inline constexpr const char* kRaidManifestVersion = "sieve-raid-manifest-v1";
-inline constexpr size_t kRaidChunk = size_t(1) << 20;
+inline constexpr size_t kRaidChunk = size_t(1) << 20; // the longest chunk a manifest may name
+
+// Stage 2 (IDEAS 19.176): where a save is cut, "sieve-raid-cut-v2". The cuts are made by the content
+// itself, so an edit moves only the cuts near it and a new version shares every other chunk with the
+// one before, however the bytes around the edit have shifted. A rolling hash runs over the bytes,
+//     h = (h << 1) + gear[byte]    (64 bits; gear[i] the first 8 bytes, little-endian, of
+//                                   SHA-256("sieve-raid-gear-v1" | the byte i))
+// and a chunk ends after a byte where it is at least kRaidCutMin long and the low 16 bits of h are all
+// 0 (about one in 65,536 places), or where it reaches kRaidCutMax; h starts again from 0 after each
+// cut. So chunks are 16 KiB to 256 KiB, about 80 KiB on bytes that look random. A store written
+// before stage 2 (1 MiB pieces) reads as before; its saves simply share no chunks with later versions.
+inline constexpr size_t kRaidCutMin = size_t(16) << 10, kRaidCutMax = size_t(256) << 10;
+inline constexpr uint64_t kRaidCutMask = 0xFFFF;
+// The cuts of a save, as (offset, length) in order.
+std::vector<std::pair<size_t, size_t>> raid_cut(const std::string& bytes);
 
 struct RaidManifest
 {

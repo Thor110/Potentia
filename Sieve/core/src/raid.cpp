@@ -1,4 +1,11 @@
 // Sieve — the infinite RAID, stage 1 (see raid.hpp).
+//
+// Additional term under section 7(b) of the GNU AGPL v3 (docs/RAID-NOTICE.md): whoever conveys this
+// file, or a work based on it, must keep in it the notice "The infinite RAID save and data
+// preservation system was designed by Edward James Gordon (Potentia)", and must show that notice
+// wherever the work shows its legal notices or its credits. (A request, not a condition: whoever uses
+// the RAID in a system run for profit is asked to give a share of that profit to charity, the share
+// settled by open, democratic debate; IDEAS 19.177.)
 #include "sieve/raid.hpp"
 
 #include "sieve/sha256.hpp"
@@ -58,6 +65,38 @@ fs::path manifest_path(const fs::path& folder, const std::string& id) { return f
 std::string sha_hex(const std::string& bytes) { return Sha256::hex(Sha256::hash(bytes)); }
 
 } // namespace
+
+std::vector<std::pair<size_t, size_t>> raid_cut(const std::string& bytes)
+{
+    // The gear table: entry i is the first 8 bytes, little-endian, of SHA-256("sieve-raid-gear-v1" | i).
+    static const std::vector<uint64_t> gear = [] {
+        std::vector<uint64_t> g(256);
+        for (int i = 0; i < 256; ++i)
+        {
+            const auto d = Sha256::hash(std::string("sieve-raid-gear-v1") + char(i));
+            uint64_t v = 0;
+            for (int k = 7; k >= 0; --k) v = v << 8 | d[size_t(k)];
+            g[size_t(i)] = v;
+        }
+        return g;
+    }();
+    std::vector<std::pair<size_t, size_t>> out;
+    size_t start = 0;
+    uint64_t h = 0;
+    for (size_t i = 0; i < bytes.size(); ++i)
+    {
+        h = (h << 1) + gear[uint8_t(bytes[i])];
+        const size_t len = i + 1 - start;
+        if ((len >= kRaidCutMin && (h & kRaidCutMask) == 0) || len >= kRaidCutMax)
+        {
+            out.push_back({start, len});
+            start = i + 1;
+            h = 0;
+        }
+    }
+    if (start < bytes.size()) out.push_back({start, bytes.size() - start});
+    return out;
+}
 
 std::string RaidManifest::text() const
 {
@@ -159,11 +198,8 @@ std::string Raid::put(const std::string& name, const std::string& bytes)
     RaidManifest m;
     m.name = name;
     m.size = bytes.size();
-    for (size_t at = 0; at < bytes.size(); at += kRaidChunk)
-    {
-        const std::string c = bytes.substr(at, kRaidChunk);
-        m.chunks.push_back({sha_hex(c), c.size()});
-    }
+    const auto cuts = raid_cut(bytes);
+    for (const auto& [at, n] : cuts) m.chunks.push_back({sha_hex(bytes.substr(at, n)), n});
     if (const auto last = latest(name))
     {
         bool same = false;
@@ -173,6 +209,15 @@ std::string Raid::put(const std::string& name, const std::string& bytes)
                 {
                     const RaidManifest prev = read_raid_manifest(*mt);
                     same = prev.size == m.size && prev.chunks == m.chunks;
+                    // Cut another way (a store written before stage 2): the same bytes are still the same save.
+                    if (!same && prev.size == m.size)
+                        try
+                        {
+                            same = get(*last) == bytes;
+                        }
+                        catch (const std::exception&)
+                        {
+                        }
                     break;
                 }
                 catch (const std::exception&)
@@ -185,7 +230,7 @@ std::string Raid::put(const std::string& name, const std::string& bytes)
     const size_t want = std::min<size_t>(copies_, folders_.size());
     for (size_t k = 0; k < m.chunks.size(); ++k)
     {
-        const std::string c = bytes.substr(k * kRaidChunk, kRaidChunk);
+        const std::string c = bytes.substr(cuts[k].first, cuts[k].second);
         const std::string& h = m.chunks[k].first;
         size_t written = 0;
         for (const size_t i : homes(h))

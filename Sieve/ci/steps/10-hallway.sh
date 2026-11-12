@@ -382,6 +382,14 @@ $H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r
 grep -q "^animation = 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.ini
 test -s animations/2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8.animation
 $H --menu --settings arm.ini --press "\`" --screenshot char-arm3.png | tr -d '\r' | q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones"
+# The infinite RAID (IDEAS 19.176): with [raid] drives set, each character saved is also kept there as
+# a new version of "your character", the second naming the first.
+rm -rf raidc1 raidc2
+printf '[raid]\ndrives = raidc1,raidc2\n' > raid.ini
+$H --menu --settings raid.ini --save-character raid-me.character --press "\`" --screenshot raid1.png | tr -d '\r' | q "^note: saved as raid-me.character; in the store as .*; in the RAID as "
+$H --menu --settings raid.ini --save-character raid-me.character --press "\`,G" --screenshot raid2.png > /dev/null
+$exe raid list --drives raidc1,raidc2 | tr -d '\r' | q "  your character  (after "
+$exe raid verify --drives raidc1,raidc2 | tr -d '\r' | q "^whole$"
 # In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt

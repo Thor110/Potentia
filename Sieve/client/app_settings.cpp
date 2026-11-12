@@ -220,6 +220,10 @@ AppSettings AppSettings::load(const fs::path& path)
                 {
                 }
         }
+        else if (section == "raid")
+        {
+            if (key == "drives") s.raid_drives = value;
+        }
         else if (section == "models")
         {
             if (key == "text_model") s.text_model = value;
@@ -355,6 +359,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "animation", character_animation, "the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none"},
         {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
         {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
+        {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
         {"character", "max_hall_scale", std::to_string(character_max_scale), "how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit)"},
         {"locator", "compare", locator_compare ? "1" : "0", "1: Compare with zip and 7z ticked (the default): what zip (deflate 9) and 7z (LZMA2 9e) make of it and of the instructions, beside Sieve's; 0: Sieve's figures alone, quicker on a large folder"},
         {"locator", "more_formats", locator_more ? "1" : "0", "1: More formats ticked: the comparison with gzip, bzip2, zstd, brotli and lz4 too, each the whole as one stream (slower: brotli above all); 0: zip and 7z only"},

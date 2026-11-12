@@ -171,6 +171,8 @@ const char* kUsage =
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
     "  --import-skeleton FILE  with --menu: a glTF's skeleton as your character (sieve-character-v3), its\n"
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
+    "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
+    "                      (also into the store, and into the infinite RAID where [raid] drives is set)\n"
     "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1),\n"
     "                      for this run: in the hallway as it walks beside you (with --character: only so)\n"
     "  --animation-frame N hold the animation at frame N (for a picture), on the CHARACTER page and in the hallway\n"
@@ -1314,6 +1316,7 @@ int run(const Args& a)
         else if (a.has("import-obj")) menu.import_model(a.get("import-obj"));
         if (a.has("import-skeleton")) menu.import_skeleton(a.get("import-skeleton"));
         if (a.has("animation-frame")) menu.set_animation_frame(int(a.get_u32("animation-frame", 0)));
+        if (a.has("save-character")) menu.character_chosen(a.get("save-character"), true); // as Ctrl+S does, saved as the menu is drawn
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1331,6 +1334,7 @@ int run(const Args& a)
         {
             std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
             if (!menu.animation_line().empty()) std::cout << "animation: " << menu.animation_line() << "\n";
+            if (!menu.character_note().empty()) std::cout << "note: " << menu.character_note() << "\n";
         }
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
