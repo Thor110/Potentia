@@ -795,6 +795,17 @@ A store for any save, kept on several folders (drives) the person chooses; local
 - **Manifests:** `sieve-raid-manifest-v1`, then `name NAME`, `size BYTES`, `previous SHA-256` (or `none`), and `chunk SHA-256 LENGTH` lines in order, each line ending in a line feed; its SHA-256 is the version's id, and it is kept in every folder as `manifests/<id>.manifest`. A save stored again under its name names the latest version of that name as its previous; the same bytes again add nothing.
 - **Checked, never trusted:** every chunk and manifest is checked against its name when read. Verify counts copies that are damaged, chunks on fewer folders than asked, and chunks with no good copy (lost); repair writes again every damaged or missing copy and manifest from a good one, best homes first. A lost chunk cannot be repaired, and reading a version that needs it is refused rather than given wrong.
 
+### 12.0m The catalogue of formats (`sieve-format-v1`, as built; IDEAS §19.165)
+
+An entry of the catalogue of formats is text (`core/include/sieve/catalogue.hpp`), one field a line, each line ending in a line feed:
+- `sieve-format-v1`, then `id ID` (lower-case letters, digits, `-`, `.`, `_`; at most 128), `kind KIND` and `name NAME`, each present;
+- then its links, `link TYPE TARGET` (TYPE a lower-case word such as `part-of` or `carried-by`; TARGET an id), in order;
+- then, where given and in this order, `recognised HOW` (how a program tells it), `sieve WHAT` (what Sieve does with it) and `source WHERE` (where it came from).
+
+Nothing else, and in that order: an entry not in this canonical form is refused. Its version is the SHA-256 of its text; a change is a new version of the same id.
+- **Where entries come from:** gathered from Sieve's code (the file kinds, the importers, the alphabets and Unicode blocks, Sieve's own formats, and a general layer above them), and written by hand as files `data/catalogue/<ID>.format` (carriage returns ignored), each named by its id. An id twice, or a link to an entry that is not there, is refused.
+- **The wiki principle:** every entry reaches `information` by its `part-of` links; `sieve catalogue --check` and the unit tests check it for every entry.
+
 ### 12.1a The bytes256 alphabet
 
 `bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.

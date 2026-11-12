@@ -310,17 +310,21 @@ const std::vector<Page>& pages()
           {"sieve import --formats", "every importer and its roof"}}},
 
         {"catalogue", "The catalogue of formats: every format Sieve knows, as one web leading up to information.",
-         "sieve catalogue [ID] [--kind KIND] [--path A,B] [--check]",
+         "sieve catalogue [ID] [--kind KIND] [--search TEXT] [--path A,B] [--check] [--folder DIR]",
          "Stage 1 of the catalogue of formats (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md): the file\n"
          "kinds Sieve recognises, the model importers, the built-in alphabets, the Unicode blocks and\n"
          "Sieve's own formats, gathered from the code itself, under a first layer of general entries\n"
          "(text, image, sound, writing, compression...). Every entry leads by its part-of links up to\n"
          "one root, information; --check says so for each (the wiki principle). With an ID, one entry\n"
-         "as text (sieve-format-v1), its version (the SHA-256 of that text) and its lineage.",
+         "as text (sieve-format-v1), its version (the SHA-256 of that text), its lineage and the\n"
+         "entries beneath it. Entries written by hand join them from data/catalogue (one\n"
+         "<ID>.format file each, as SPECIFICATIONS 12.0m writes the format out).",
          {{"ID", "One entry, such as file-png, script-greek or alphabet-dna4."},
           {"--kind KIND", "List only one kind: general, file, importer, alphabet, script or sieve."},
           {"--path A,B", "The shortest chain of links between two entries."},
-          {"--check", "Check that every entry reaches information; exit 1 if one does not."}},
+          {"--check", "Check that every entry reads back from its text and reaches information; exit 1 if one does not."},
+          {"--search TEXT", "List the entries with TEXT in any field (any case)."},
+          {"--folder DIR", "Where the hand-written entries are (default data/catalogue)."}},
          {{"sieve catalogue --kind file", "the file kinds and what each is part of"},
           {"sieve catalogue file-flac", "one entry, its signature and lineage"},
           {"sieve catalogue --path file-png,alphabet-dna4", "how a PNG and DNA meet"}}},

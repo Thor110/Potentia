@@ -1,6 +1,6 @@
 # Changes since b87b9b4 "sieve state space delta save preservation infinite raid system" (12 November 2026)
 
-Seven commits (8a15014 to a79769b). This zip replaces the stage 2 zip. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stage 1; four ideas noted.
+Nine commits (8a15014 to a044458). This zip replaces the earlier zips since your last push. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stages 1 and 2; five ideas noted.
 
 **Build:** a new core source, `core/src/catalogue.cpp`, is in CMakeLists.txt, so CMake must run again.
 
@@ -29,8 +29,15 @@ Seven commits (8a15014 to a79769b). This zip replaces the stage 2 zip. The RAID'
 - Not yet: the packer's route and the measured figures for each format (stage 4 of the roadmap).
 - **Tests:** `test_catalogue` (ids unique, every link resolves, every entry reaches information, every file kind has an entry, FLAC's entry pinned); the unit suite passes (179,334 checks); CI step 4 passes (143 s).
 
+## The catalogue of formats, stage 2 (a044458)
+- **The specification:** SPECIFICATIONS §12.0m writes `sieve-format-v1` out, and `read_format_entry` checks an entry is in its canonical form (fields in order, an id of lower-case letters, digits, `-`, `.`, `_`).
+- **Entries written by hand:** **Sieve/data/catalogue/** (new), one `<ID>.format` file an entry, for formats the code does not name; the first four are UTF-8, base64, English and staff notation, each saying plainly what Sieve does with it (staff notation: nothing yet). An id that is already there, or a link to an entry that is not, is refused; a README there says how to add one. The catalogue is now 170 entries.
+- **The command:** `sieve catalogue --search TEXT` (any field, any case); an entry now lists the entries beneath it; `--check` also reads every entry back from its text.
+- **Tests:** every entry reads back the same; refusals (out of order, a bad id, a missing line feed, an id twice, a link to nothing, a file named otherwise); a file with Windows line endings is still read. The unit suite passes (180,024 checks); CI step 4 passes (131 s).
+
 ## Ideas
 - **Sieve/docs/IDEAS.md §19.178:** the RAID's lockdown against spam before stage 3 shares storage between machines: one character per verified identity, each dimension's own limits, and what is still to decide (how identity is verified while kept private, the quotas, what happens over a limit).
 - **Sieve/docs/IDEAS.md §19.179:** the RAID between machines as peer to peer with a few known nodes to start from; IP addresses as a first limit (weak, and personal data, so kept as salted hashes), then digital ID, then a character's own record, each step added without removing the one before.
 - **Sieve/docs/IDEAS.md §19.178:** your digital ID structure from Pages/order.pdf noted: the anchor, ten at a time, random groups of ten after 1,000, re-verification on doubt; it is the vouching kind of limit, and a project of its own, whose result (verified or not) the RAID would read.
 - **Sieve/docs/IDEAS.md §19.180:** a decentralised place to talk and keep one's own record, built on the RAID: what it needs, and what has to be decided (who reads what, withdrawing a post, moderation).
+- **Sieve/docs/IDEAS.md §19.181:** implementations side by side (your mesh scaler and your friend's), measured on the same inputs and steered towards their shortest form, with a program's packed size as the measurable bound on its Kolmogorov complexity; applications as entries of the catalogue.

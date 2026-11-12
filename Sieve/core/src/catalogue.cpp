@@ -13,6 +13,10 @@
 #include <cctype>
 #include <cstdio>
 #include <deque>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <stdexcept>
 #include <map>
 #include <set>
 #include <string>
@@ -219,9 +223,30 @@ const FormatEntry* format_by_id(std::string_view id)
     return it == index.end() ? nullptr : &format_catalogue()[it->second];
 }
 
-std::vector<std::string> format_lineage(std::string_view id)
+namespace {
+
+const FormatEntry* find_in(const std::vector<FormatEntry>& all, std::string_view id)
+{
+    for (const auto& e : all)
+        if (e.id == id) return &e;
+    return nullptr;
+}
+
+bool is_id(const std::string& s)
+{
+    if (s.empty() || s.size() > 128) return false;
+    for (const char c : s)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_')) return false;
+    return true;
+}
+
+} // namespace
+
+std::vector<std::string> format_lineage(const std::vector<FormatEntry>& all, std::string_view id)
 {
     // The shortest chain upward by part-of links.
+    std::map<std::string, const FormatEntry*> by;
+    for (const auto& e : all) by[e.id] = &e;
     std::map<std::string, std::string> from;
     std::deque<std::string> todo{std::string(id)};
     from[std::string(id)] = "";
@@ -236,20 +261,22 @@ std::vector<std::string> format_lineage(std::string_view id)
             std::reverse(chain.begin(), chain.end());
             return chain;
         }
-        const FormatEntry* e = format_by_id(at);
-        if (!e) continue;
-        for (const auto& l : e->links)
+        const auto it = by.find(at);
+        if (it == by.end()) continue;
+        for (const auto& l : it->second->links)
             if (l.type == "part-of" && !from.count(l.to)) from[l.to] = at, todo.push_back(l.to);
     }
     return {};
 }
 
-std::vector<std::string> format_path(std::string_view a, std::string_view b)
+std::vector<std::string> format_lineage(std::string_view id) { return format_lineage(format_catalogue(), id); }
+
+std::vector<std::string> format_path(const std::vector<FormatEntry>& all, std::string_view a, std::string_view b)
 {
-    if (!format_by_id(a) || !format_by_id(b)) return {};
+    if (!find_in(all, a) || !find_in(all, b)) return {};
     // Links followed either way.
     std::map<std::string, std::set<std::string>> next;
-    for (const auto& e : format_catalogue())
+    for (const auto& e : all)
         for (const auto& l : e.links) next[e.id].insert(l.to), next[l.to].insert(e.id);
     std::map<std::string, std::string> from;
     std::deque<std::string> todo{std::string(a)};
@@ -269,6 +296,95 @@ std::vector<std::string> format_path(std::string_view a, std::string_view b)
             if (!from.count(n)) from[n] = at, todo.push_back(n);
     }
     return {};
+}
+
+std::vector<std::string> format_path(std::string_view a, std::string_view b) { return format_path(format_catalogue(), a, b); }
+
+FormatEntry read_format_entry(const std::string& text)
+{
+    std::vector<std::string> lines;
+    for (size_t i = 0; i < text.size();)
+    {
+        const size_t e = text.find('\n', i);
+        if (e == std::string::npos) throw std::invalid_argument("its last line has no line feed");
+        lines.push_back(text.substr(i, e - i));
+        i = e + 1;
+    }
+    if (lines.size() < 4 || lines[0] != kFormatVersion) throw std::invalid_argument(std::string("not a format entry: it does not start with ") + kFormatVersion);
+    FormatEntry f;
+    auto field = [&](size_t i, const char* name) {
+        const std::string want = std::string(name) + " ";
+        if (lines[i].rfind(want, 0) != 0) throw std::invalid_argument(std::string("line ") + std::to_string(i + 1) + " is not its " + name);
+        const std::string v = lines[i].substr(want.size());
+        if (v.empty() || v.find('\r') != std::string::npos) throw std::invalid_argument(std::string("its ") + name + " is empty");
+        return v;
+    };
+    f.id = field(1, "id");
+    if (!is_id(f.id)) throw std::invalid_argument("not an id (lower-case letters, digits, '-', '.', '_'): " + f.id);
+    f.kind = field(2, "kind");
+    f.name = field(3, "name");
+    size_t i = 4;
+    for (; i < lines.size() && lines[i].rfind("link ", 0) == 0; ++i)
+    {
+        const std::string rest = lines[i].substr(5);
+        const size_t sp = rest.find(' ');
+        if (sp == std::string::npos || sp == 0) throw std::invalid_argument("not a link: " + lines[i]);
+        FormatLink l{rest.substr(0, sp), rest.substr(sp + 1)};
+        for (const char c : l.type)
+            if (!(c >= 'a' && c <= 'z') && c != '-') throw std::invalid_argument("a link's type is a lower-case word: " + l.type);
+        if (!is_id(l.to)) throw std::invalid_argument("a link's target is not an id: " + l.to);
+        f.links.push_back(std::move(l));
+    }
+    if (i < lines.size() && lines[i].rfind("recognised ", 0) == 0) f.recognised = field(i++, "recognised");
+    if (i < lines.size() && lines[i].rfind("sieve ", 0) == 0) f.sieve = field(i++, "sieve");
+    if (i < lines.size() && lines[i].rfind("source ", 0) == 0) f.source = field(i++, "source");
+    if (i != lines.size()) throw std::invalid_argument("line " + std::to_string(i + 1) + " is out of place: " + lines[i]);
+    if (f.text() != text) throw std::invalid_argument("not in its canonical form");
+    return f;
+}
+
+std::vector<FormatEntry> read_format_folder(const std::string& dir)
+{
+    namespace fs = std::filesystem;
+    std::vector<FormatEntry> out;
+    std::error_code ec;
+    if (!fs::is_directory(fs::path(dir), ec)) return out;
+    std::vector<fs::path> files;
+    for (const auto& e : fs::directory_iterator(fs::path(dir), ec))
+        if (e.path().extension() == ".format") files.push_back(e.path());
+    std::sort(files.begin(), files.end());
+    for (const fs::path& p : files)
+    {
+        std::ifstream in(p, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        // A file written on Windows may have carriage returns; they are not part of the entry.
+        text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+        try
+        {
+            FormatEntry f = read_format_entry(text);
+            if (f.id != p.stem().string()) throw std::invalid_argument("its id is " + f.id + ", not its file's name");
+            out.push_back(std::move(f));
+        }
+        catch (const std::exception& e)
+        {
+            throw std::invalid_argument(p.filename().string() + ": " + e.what());
+        }
+    }
+    return out;
+}
+
+std::vector<FormatEntry> format_catalogue_with(const std::string& dir)
+{
+    std::vector<FormatEntry> all = format_catalogue();
+    for (auto& f : read_format_folder(dir))
+    {
+        if (find_in(all, f.id)) throw std::invalid_argument(f.id + ".format: the id " + f.id + " is already in the catalogue");
+        all.push_back(std::move(f));
+    }
+    for (const auto& e : all)
+        for (const auto& l : e.links)
+            if (!find_in(all, l.to)) throw std::invalid_argument(e.id + " links to " + l.to + ", which is not in the catalogue");
+    return all;
 }
 
 } // namespace sieve

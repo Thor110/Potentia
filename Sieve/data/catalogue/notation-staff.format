@@ -1,0 +1,8 @@
+sieve-format-v1
+id notation-staff
+kind notation
+name Staff notation: Western music written on five lines
+link part-of notation
+link part-of music
+sieve not read; the notes lines carry melodies as note events instead (SPECIFICATIONS 3.2-3.4)
+source written by hand (data/catalogue), 12 November 2026

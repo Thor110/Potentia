@@ -1,0 +1,9 @@
+sieve-format-v1
+id encoding-utf-8
+kind encoding
+name UTF-8: Unicode in one to four bytes a character
+link part-of encoding
+link part-of text
+recognised byte sequences valid as UTF-8; may begin with EF BB BF
+sieve every text Sieve reads and writes is UTF-8 (canon-text-v2 reads it first)
+source written by hand (data/catalogue), 12 November 2026

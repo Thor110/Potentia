@@ -1201,17 +1201,34 @@ int cmd_raid(const Args& a)
 // sieve catalogue: the catalogue of formats, stage 1 (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md).
 int cmd_catalogue(const Args& a)
 {
-    const auto& all = sieve::format_catalogue();
+    // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
+    const std::string folder = a.get("folder", "data/catalogue");
+    const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folder);
+    auto find = [&](const std::string& id) -> const sieve::FormatEntry* {
+        for (const auto& e : all)
+            if (e.id == id) return &e;
+        return nullptr;
+    };
     if (a.has("check"))
     {
-        // The wiki principle: every entry reaches "information" by its part-of links.
+        // Every entry reads back from its own text, and reaches "information" by its part-of links.
         size_t ok = 0;
         for (const auto& e : all)
         {
-            if (!sieve::format_lineage(e.id).empty()) ++ok;
-            else std::cout << "does not reach information: " << e.id << "\n";
+            bool good = !sieve::format_lineage(all, e.id).empty();
+            if (!good) std::cout << "does not reach information: " << e.id << "\n";
+            try
+            {
+                if (sieve::read_format_entry(e.text()).text() != e.text()) good = false;
+            }
+            catch (const std::exception& x)
+            {
+                std::cout << "does not read back: " << e.id << " (" << x.what() << ")\n";
+                good = false;
+            }
+            ok += good;
         }
-        std::cout << ok << " of " << all.size() << " entries reach information\n";
+        std::cout << ok << " of " << all.size() << " entries read back and reach information\n";
         return ok == all.size() ? 0 : 1;
     }
     if (a.has("path"))
@@ -1219,7 +1236,7 @@ int cmd_catalogue(const Args& a)
         const std::string p = a.get("path");
         const size_t comma = p.find(',');
         if (comma == std::string::npos) throw std::invalid_argument("--path A,B: two entries");
-        const auto chain = sieve::format_path(p.substr(0, comma), p.substr(comma + 1));
+        const auto chain = sieve::format_path(all, p.substr(0, comma), p.substr(comma + 1));
         if (chain.empty()) throw std::invalid_argument("no path between " + p.substr(0, comma) + " and " + p.substr(comma + 1) + " (or one is not an entry)");
         for (size_t i = 0; i < chain.size(); ++i) std::cout << (i ? " - " : "") << chain[i];
         std::cout << "\n";
@@ -1227,35 +1244,51 @@ int cmd_catalogue(const Args& a)
     }
     if (!a.positional.empty())
     {
-        const sieve::FormatEntry* e = sieve::format_by_id(a.positional[0]);
+        const sieve::FormatEntry* e = find(a.positional[0]);
         if (!e) throw std::invalid_argument("no entry " + a.positional[0] + " (sieve catalogue lists them)");
         std::cout << e->text();
         std::cout << "version    " << e->version() << "\n";
-        const auto up = sieve::format_lineage(e->id);
         std::cout << "lineage   ";
-        for (const auto& x : up) std::cout << " " << x;
+        for (const auto& x : sieve::format_lineage(all, e->id)) std::cout << " " << x;
         std::cout << "\n";
-        size_t under = 0;
+        std::vector<std::string> under;
         for (const auto& o : all)
             for (const auto& l : o.links)
-                if (l.to == e->id) ++under;
-        std::cout << "beneath    " << under << " entries\n";
+                if (l.to == e->id) under.push_back(o.id + (l.type == "part-of" ? "" : " (" + l.type + ")"));
+        std::cout << "beneath    " << under.size() << " entries";
+        for (size_t i = 0; i < under.size() && i < 40; ++i) std::cout << (i ? ", " : ": ") << under[i];
+        if (under.size() > 40) std::cout << ", ...";
+        std::cout << "\n";
         return 0;
     }
     std::map<std::string, size_t> kinds;
     for (const auto& e : all) ++kinds[e.kind];
-    std::cout << all.size() << " entries:";
-    for (const auto& [k, n] : kinds) std::cout << " " << n << " " << k;
-    std::cout << "\n";
     const std::string only = a.get("kind", "");
+    std::string needle = a.get("search", "");
+    for (char& c : needle) c = char(std::tolower(static_cast<unsigned char>(c)));
+    if (needle.empty())
+    {
+        std::cout << all.size() << " entries:";
+        for (const auto& [k, n] : kinds) std::cout << " " << n << " " << k;
+        std::cout << "\n";
+    }
+    size_t shown = 0;
     for (const auto& e : all)
     {
         if (!only.empty() && e.kind != only) continue;
+        if (!needle.empty())
+        {
+            std::string t = e.text();
+            for (char& c : t) c = char(std::tolower(static_cast<unsigned char>(c)));
+            if (t.find(needle) == std::string::npos) continue;
+        }
         std::string id = e.id, kind = e.kind;
         id.resize(std::max<size_t>(id.size(), 30), ' ');
         kind.resize(9, ' ');
         std::cout << id << " " << kind << " " << e.name << "\n";
+        ++shown;
     }
+    if (!needle.empty()) std::cout << shown << " entries match\n";
     return 0;
 }
 

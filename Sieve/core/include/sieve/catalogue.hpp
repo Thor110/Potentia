@@ -25,6 +25,7 @@
 //     sieve WHAT           (what Sieve does with it)
 //     source WHERE         (where in Sieve it was gathered from)
 // Its SHA-256 is that version of the entry; a change makes a new version, the id staying the same.
+// SPECIFICATIONS 12.0m writes the format out.
 #pragma once
 
 #include <string>
@@ -50,15 +51,32 @@ struct FormatEntry
     std::string version() const; // SHA-256 of the text
 };
 
-// Every entry, gathered from the code (above), in a fixed order: the general layer first, then by
+// Stage 2: an entry's text read back, checked: the version line first; then id (lower-case letters,
+// digits, '-', '.' and '_'), kind and name, each present and on one line; then the links ("link TYPE
+// TARGET", TYPE a lower-case word); then recognised, sieve and source where given, in that order;
+// every line ending in a line feed, nothing else. Throws std::invalid_argument saying what is wrong.
+FormatEntry read_format_entry(const std::string& text);
+
+// Every entry gathered from the code (above), in a fixed order: the general layer first, then by
 // where each was gathered from. Ids are unique.
 const std::vector<FormatEntry>& format_catalogue();
 const FormatEntry* format_by_id(std::string_view id); // null if there is none
 
+// Stage 2: entries written by hand, one a file (<ID>.format) in a folder (data/catalogue), read in the
+// order of their names, each checked as read_format_entry checks it and against its file's name. They
+// join the entries from the code; an id already there is refused. Throws std::invalid_argument naming
+// the file. A folder that is not there gives none.
+std::vector<FormatEntry> read_format_folder(const std::string& dir);
+// The code's entries and a folder's, together (the folder's after), checked as one: ids unique, every
+// link naming an entry. Throws std::invalid_argument.
+std::vector<FormatEntry> format_catalogue_with(const std::string& dir);
+
 // The chain of "part-of" links from an entry up to "information" (the entry first, the root last);
-// empty if it does not reach the root.
+// empty if it does not reach the root. Over the code's entries, or over a given set.
 std::vector<std::string> format_lineage(std::string_view id);
+std::vector<std::string> format_lineage(const std::vector<FormatEntry>& all, std::string_view id);
 // The shortest chain of links between two entries, followed either way (empty if none).
 std::vector<std::string> format_path(std::string_view from, std::string_view to);
+std::vector<std::string> format_path(const std::vector<FormatEntry>& all, std::string_view from, std::string_view to);
 
 } // namespace sieve

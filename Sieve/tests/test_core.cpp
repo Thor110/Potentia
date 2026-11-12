@@ -7235,6 +7235,34 @@ void test_catalogue()
     const auto path = format_path("file-png", "alphabet-dna4");
     CHECK(path.size() >= 3 && path.front() == "file-png" && path.back() == "alphabet-dna4");
     CHECK(format_path("file-png", "nowhere").empty() && !format_by_id("nowhere"));
+    // Stage 2: every entry reads back from its own text, the same entry.
+    for (const auto& e : all) CHECK(read_format_entry(e.text()).text() == e.text());
+    CHECK(throws([] { (void)read_format_entry("sieve-format-v1\nid Bad Id\nkind x\nname y\n"); }));
+    CHECK(throws([] { (void)read_format_entry("sieve-format-v1\nid a\nkind x\nname y\nsieve s\nlink part-of data\n"); })); // out of order
+    CHECK(throws([] { (void)read_format_entry("sieve-format-v1\nid a\nkind x\nname y"); }));                              // no last line feed
+    CHECK(read_format_entry("sieve-format-v1\nid a\nkind x\nname y\nlink part-of data\nsource z\n").links.size() == 1);
+    // The hand-written entries (data/catalogue) join the code's, every one reaching information.
+    const auto with = format_catalogue_with("data/catalogue");
+    CHECK(with.size() > all.size() && std::any_of(with.begin(), with.end(), [](const FormatEntry& e) { return e.id == "encoding-utf-8"; }));
+    for (const auto& e : with) CHECK(!format_lineage(with, e.id).empty());
+    // Refused: an id already in the catalogue, a link to nothing, a file named otherwise.
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / ("sieve-catalogue-test-" + std::to_string(std::random_device{}()));
+    std::error_code ec;
+    auto put = [&](const std::string& name, const std::string& text) {
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        std::ofstream(dir / name, std::ios::binary) << text;
+    };
+    put("file-png.format", "sieve-format-v1\nid file-png\nkind file\nname again\nlink part-of image\n");
+    CHECK(throws([&] { (void)format_catalogue_with(dir.string()); }));
+    put("x.format", "sieve-format-v1\nid x\nkind k\nname n\nlink part-of nothing-here\n");
+    CHECK(throws([&] { (void)format_catalogue_with(dir.string()); }));
+    put("y.format", "sieve-format-v1\nid z\nkind k\nname n\nlink part-of data\n");
+    CHECK(throws([&] { (void)format_catalogue_with(dir.string()); }));
+    put("z.format", "sieve-format-v1\r\nid z\r\nkind k\r\nname n\r\nlink part-of data\r\n"); // written on Windows: still read
+    CHECK(format_catalogue_with(dir.string()).size() == all.size() + 1);
+    fs::remove_all(dir, ec);
 }
 
 // `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole

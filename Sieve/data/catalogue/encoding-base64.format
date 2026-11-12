@@ -1,0 +1,9 @@
+sieve-format-v1
+id encoding-base64
+kind encoding
+name base64: bytes written as 64 printable symbols
+link part-of encoding
+link part-of text
+recognised A-Z a-z 0-9 and + / (or - _ in its URL-safe form), padded with =
+sieve read back to the file it holds where a file is written as base64 text (the vault, the not-written filter, the v33 draft's written way)
+source written by hand (data/catalogue), 12 November 2026

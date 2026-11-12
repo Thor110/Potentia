@@ -7434,3 +7434,29 @@ preserved amongst the information highway".
   encrypted, with the keys the person's), how a person withdraws something they no longer want shown
   (a record can be kept but hidden, which is not the same as deleted, and the law may require
   deletion), and moderation of what others post. Planned only.
+
+**19.181 Implementations side by side, steered towards their shortest form; a mesh scaling system
+(Edward, 12 November 2026).** Someone Edward knows is building a mesh scaling system and asked about
+including it; his answer: "we'll see, was going to roll my own mesh scaling system first, but am more
+than happy for it to be put up against yours in the state space delta balance between efficiency and
+optimisation that should unfold naturally into the most efficient form such a system could take". And
+the idea: "how all applications would roll into a slider or circular catalog which could be used to
+track kolmogorov complexity amongst application types which help to determine state space arrangements
+and code composition across time with the aim of guiding or steering applications towards kolmogorov
+complexity".
+- *Put up against each other:* more than one implementation of the same job (two mesh scalers) kept
+  side by side and measured on the same inputs: what each produces, how fast, how much memory, and how
+  large the program is. The better one is chosen by measurement, as the packer chooses its ways, and
+  each keeps its author's name (§19.177). Someone else's code joins only under a licence that allows
+  it beside the AGPL, and with its author's agreement.
+- *Applications on a slider or a circle:* every application of a kind (mesh scalers, compressors,
+  image viewers) placed on one ring, arranged by what it does, with a measure of how short it is for
+  what it does beside it.
+- *Kolmogorov complexity as the guide:* the true shortest program for a job cannot be computed, only
+  approached from above, so what can be tracked is an upper bound: the size of the smallest
+  implementation found so far that passes the same tests, here a program's size once packed by Sieve.
+  Recorded over time, it shows which code is near the shortest for its job and where there is slack,
+  steering towards the shortest without claiming to have reached it.
+- *Where it lives:* the catalogue of formats (§19.165) already holds entries with their measured
+  figures; applications would be entries of their own kind, linked to the formats they read and write.
+  Planned only.
