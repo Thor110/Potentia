@@ -5507,6 +5507,10 @@ them, or streaming them into a cache, as the game asks for them.
   Each of those that changes what is written needs a new version, so it waits for the pause to end.
 - *What to record:* the game's files, their sizes, 7z and Sieve both ways (size, and time to first
   file and to all), and the engine's load time from the folder against from the `.sieve`.
+- *Measured (12 November 2026, results/stream-layouts-2026-11-12.md):* 95 game-like files (meshes,
+  a font, text, icons, 40 sounds, 30 sprites; 11.5 MB) as one `.sieve` (10,342,984 bytes, the first
+  file in 0.97 s, the time of the whole), one per kind (−0.06%), or one per file (+0.21%, any file
+  in 18 ms, median). So streaming needs no new version: a small `.sieve` a file, named by its hash.
 - *12 November 2026 (Edward):* ALTEngine is nearly done, and will be the first to get the Sieve
   treatment: its last unnecessary data stripped, and its assets streamed in and out of it and of the
   game's other engines (the original through DOSBox, and any variant), one sieved copy of the
@@ -6320,7 +6324,12 @@ taken up:
   (the entropy coding, CABAC in H.264, decoded to its symbols and coded better, then made again
   exactly). Large work for each codec; others have done it for JPEG and MP3, little for video.
 - **To measure first (cheap):** the packets of WoWRevived's films hashed, to count how many bytes are
-  packets seen before in the same or another film. That says whether the packet route is worth
+  packets seen before in the same or another film. *Tool and a first measurement (12 November
+  2026, results/video-packets-2026-11-12.md):* `tools/bench/video_packets.py`; on a film and a
+  trailer cut from it, 90% of the trailer is packets seen before. It also found a gap in the
+  packer: Sieve's newest was 10.5% larger than its own plain installer on that pair, the film's
+  frames carried by the rope in a stream apart, so what the trailer shares with it was lost; a
+  whole-set plain weighing before writing would close it (no new version; for Edward to decide). That says whether the packet route is worth
   building, before any encoder is involved.
   *Measured (7 November 2026), WoWRevived English v1.1.2's eight MP4s:* every packet hashed with
   `ffprobe -show_packets -show_data_hash sha256`, no frame decoded. 43,969 packets, 617,099,672
