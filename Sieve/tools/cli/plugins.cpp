@@ -3,6 +3,8 @@
 #include "cli/plugins.hpp"
 
 #include "cli/dictionaries.hpp"
+#include "cli/items.hpp"
+#include "cli/locate.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
@@ -24,6 +26,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
+using sieve::from_u8;
 using sieve::u8;
 
 std::vector<PluginFile> load()
@@ -33,27 +36,67 @@ std::vector<PluginFile> load()
     folders.push_back(fs::path("data") / "filters"); // running from the repository
     std::vector<fs::path> files;
     std::set<fs::path> seen;
+    std::map<fs::path, std::string> packed_from;                 // a decoded member: the .sieve it came from
+    std::vector<std::pair<std::string, std::string>> refused;     // a .sieve that did not decode, and why
     for (const fs::path& f : folders)
     {
         std::error_code ec;
         if (!fs::is_directory(f, ec)) continue;
         std::vector<fs::path> here;
+        std::vector<fs::path> packed;
         for (const auto& e : fs::directory_iterator(f, ec))
             if (e.path().extension() == ".sfilter") here.push_back(e.path());
+            else if (e.path().extension() == ".sieve") packed.push_back(e.path());
         std::sort(here.begin(), here.end());
+        std::sort(packed.begin(), packed.end());
         for (const fs::path& p : here)
         {
             const fs::path key = fs::weakly_canonical(p, ec);
             if (seen.insert(ec ? p : key).second) files.push_back(p);
         }
+        // Filters kept as .sieve: decoded once into the cache (checked at every start), and their
+        // .sfilter members read from there, so their lists are beside them.
+        for (const fs::path& p : packed)
+        {
+            const fs::path key = fs::weakly_canonical(p, ec);
+            if (!seen.insert(ec ? p : key).second) continue;
+            try
+            {
+                const fs::path dir = decoded_filter_sieve(p);
+                std::vector<fs::path> members;
+                for (const auto& e : fs::recursive_directory_iterator(dir, ec))
+                    if (e.path().extension() == ".sfilter") members.push_back(e.path());
+                std::sort(members.begin(), members.end());
+                if (members.empty()) throw std::runtime_error("it holds no .sfilter");
+                for (const fs::path& m : members)
+                {
+                    files.push_back(m);
+                    packed_from[m] = u8(p);
+                }
+            }
+            catch (const std::exception& e)
+            {
+                refused.push_back({u8(p), e.what()});
+            }
+        }
     }
 
     std::vector<PluginFile> out;
     std::vector<std::shared_ptr<const PluginDef>> defs;
+    for (const auto& [path, why] : refused) // (a .sieve that did not decode: listed with why, never silently)
+    {
+        PluginFile pf;
+        pf.path = path;
+        pf.packed = path;
+        pf.error = why;
+        out.push_back(pf);
+        defs.push_back(nullptr);
+    }
     for (const fs::path& p : files)
     {
         PluginFile pf;
         pf.path = u8(p);
+        if (const auto it = packed_from.find(p); it != packed_from.end()) pf.packed = it->second;
         try
         {
             std::ifstream in(p, std::ios::binary);
@@ -216,6 +259,134 @@ const std::vector<PluginFile>& load_plugins()
         list = load();
     });
     return list;
+}
+
+
+namespace {
+
+std::vector<uint8_t> read_all(const fs::path& p)
+{
+    std::ifstream in(p, std::ios::binary);
+    if (!in) throw std::runtime_error("cannot be read");
+    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// A filters .sieve's members, decoded in memory under the roof, each checked.
+std::vector<std::pair<std::string, std::vector<uint8_t>>> members_of(const std::vector<uint8_t>& raw)
+{
+    DecodeLimit roof(kFilterSieveRoof); // (a few bytes in a filters folder never unfold to gigabytes)
+    // The packer may have mixed a filter's text with Sieve's word lists: what reads them set up first,
+    // as every program does before it installs (plugins load at start-up, before most of it).
+    if (!mix_words()) use_item_maker();
+    const Manifest m = manifest_of_installer_raw(raw);
+    if (!m.with_contents) throw std::runtime_error("it is not instructions that hold their files");
+    return files_of_manifest(m);
+}
+
+} // namespace
+
+std::filesystem::path decoded_filter_sieve(const fs::path& sieve_file)
+{
+    const std::vector<uint8_t> raw = read_all(sieve_file);
+    const std::string sha = Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(raw.data()), raw.size())));
+    const fs::path dir = plugin_cache_dir() / "sfilters" / sha;
+    std::error_code ec;
+    // Decoded before: every member as the index says (its SHA-256 and size), or decoded again.
+    if (std::ifstream idx(dir / "index", std::ios::binary); idx)
+    {
+        bool good = true;
+        size_t n = 0;
+        std::string line;
+        while (good && std::getline(idx, line))
+        {
+            const size_t a = line.find(' '), b = a == std::string::npos ? a : line.find(' ', a + 1);
+            if (b == std::string::npos) { good = false; break; }
+            const std::string want = line.substr(0, a), path = line.substr(b + 1);
+            try
+            {
+                const auto bytes = read_all(dir / from_u8(path));
+                good = std::to_string(bytes.size()) == line.substr(a + 1, b - a - 1) &&
+                       Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) == want;
+            }
+            catch (const std::exception&)
+            {
+                good = false;
+            }
+            ++n;
+        }
+        if (good && n) return dir;
+    }
+    // Decoded now, into a folder beside it, then put in its place whole.
+    const auto members = members_of(raw);
+    const fs::path part = dir.string() + ".part";
+    fs::remove_all(part, ec);
+    fs::create_directories(part, ec);
+    std::string index;
+    for (const auto& [path, bytes] : members)
+    {
+        const fs::path to = part / from_u8(path);
+        fs::create_directories(to.parent_path(), ec);
+        std::ofstream out(to, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+        out.close();
+        if (!out) throw std::runtime_error("cannot write its decoded copy in " + u8(part));
+        index += Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) + " " + std::to_string(bytes.size()) + " " + path + "\n";
+    }
+    {
+        std::ofstream out(part / "index", std::ios::binary);
+        out << index;
+        out.close();
+        if (!out) throw std::runtime_error("cannot write its decoded copy in " + u8(part));
+    }
+    fs::remove_all(dir, ec);
+    fs::rename(part, dir, ec);
+    if (ec) throw std::runtime_error("cannot put its decoded copy in " + u8(dir));
+    return dir;
+}
+
+void pack_filter_sieve(const fs::path& folder, const fs::path& out)
+{
+    Manifest m = walk_folder(folder);
+    add_packed_newest(m, folder, nullptr, 1.0); // (the newest instructions, as the hallway's own saves are made)
+    const std::vector<uint8_t> raw = raw_of_file(m.file());
+    // Read back and checked before it is kept: a filter is never saved as something that will not load.
+    const auto back = members_of(raw);
+    if (back.empty()) throw std::runtime_error("the folder holds no files");
+    const fs::path part = out.string() + ".part";
+    {
+        std::ofstream o(part, std::ios::binary);
+        o.write(reinterpret_cast<const char*>(raw.data()), std::streamsize(raw.size()));
+        o.close();
+        if (!o) throw std::runtime_error("cannot write " + u8(out));
+    }
+    std::error_code ec;
+    fs::rename(part, out, ec);
+    if (ec)
+    {
+        fs::remove(part, ec);
+        throw std::runtime_error("cannot write " + u8(out));
+    }
+}
+
+std::vector<std::pair<std::string, std::string>> sfilters_in_sieve(const fs::path& sieve_file)
+{
+    std::vector<std::pair<std::string, std::string>> out;
+    for (auto& [path, bytes] : members_of(read_all(sieve_file)))
+        if (fs::path(from_u8(path)).extension() == ".sfilter") out.push_back({path, std::string(bytes.begin(), bytes.end())});
+    return out;
+}
+
+fs::path sfilter_file(const fs::path& file)
+{
+    if (file.extension() != ".sieve") return file;
+    const fs::path dir = decoded_filter_sieve(file);
+    std::vector<fs::path> found;
+    std::error_code ec;
+    for (const auto& e : fs::recursive_directory_iterator(dir, ec))
+        if (e.path().extension() == ".sfilter") found.push_back(e.path());
+    if (found.empty()) throw std::runtime_error(u8(file) + " holds no .sfilter");
+    std::sort(found.begin(), found.end());
+    return found.front();
 }
 
 } // namespace sieve::cli

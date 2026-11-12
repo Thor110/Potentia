@@ -1111,6 +1111,20 @@ filters8=$(build/sieve filters --length 8)
 if grep -q "^\[.\] clean-data-v1 " <<< "$filters8"; then exit 1; fi
 rm build/filters/broken.sfilter build/filters/clean-edited.sfilter
 build/sieve filters --length 8 | q "^\[.\] clean-data-v1 "
+# Filters kept as .sieve (IDEAS 19.185): a filter and the word list it reads packed as one, put in the
+# filters folder, decoded at start-up into the cache beside its list and loaded as a loose one is (the
+# same SHA-256); one changed bit, and it is refused with the reason, never skipped silently.
+rm -rf packed-filter
+mkdir packed-filter
+sed 's/^id        function-words$/id        packed-words/' data/filters/function-words-v2.sfilter > packed-filter/packed-words-v2.sfilter
+cp data/filters/function-words-v2.tsv packed-filter/
+build/sieve filters --pack packed-filter --out build/filters/packed-words-v2.sieve | tr -d '\r' | q "^packed    .*: 1 filter, packed-words-v2.sfilter$"
+packed_sha=$(python -c "import hashlib; print(hashlib.sha256(open('packed-filter/packed-words-v2.sfilter','rb').read()).hexdigest()[:16])")
+build/sieve filters --plugins | tr -d '\r' | q "^loaded   packed-words-v2  $packed_sha  .*packed-words-v2.sieve (packed)$"
+build/sieve filters --plugin build/filters/packed-words-v2.sieve --length 4 | tr -d '\r' | q "^sha256 *$packed_sha"
+python -c "b = bytearray(open('build/filters/packed-words-v2.sieve', 'rb').read()); b[len(b) // 2] ^= 1; open('build/filters/packed-words-v2.sieve', 'wb').write(b)"
+build/sieve filters --plugins | tr -d '\r' | q "^REFUSED  ?  -  .*packed-words-v2.sieve (packed)$"
+rm -rf packed-filter build/filters/packed-words-v2.sieve
 # `requires`: ticking tidy-data-v2 alone brings clean-data-v1 and the built-in max-run-v1
 # (at the max_run it pins) into the stack, which still counts, exactly as tidy-data-v1 and
 # max-run-data-v1 did (both retired for them); a different setting is flagged; and a
@@ -1278,8 +1292,8 @@ build/sieve filters --plugin tests/plugins/toy-grammar-v1.sfilter --length 11 | 
 build/sieve filters --plugin tests/plugins/roundtrip-v1.sfilter --length 11 | grep -v "^sha256" > rt.b
 diff rt.a rt.b
 rm tests/plugins/roundtrip-v1.sfilter
-rm -f build/filters/designed-words-v*.sfilter
-$H --designer --script "Ctrl+N,Down,Return,Ctrl+Backspace,=designed-words,Return,Ctrl+S" --screenshot designer3.png | q "status: saved to .*designed-words-v1.sfilter"
+rm -f build/filters/designed-words-v*.sfilter build/filters/designed-words-v*.sieve
+$H --designer --script "Ctrl+N,Down,Return,Ctrl+Backspace,=designed-words,Return,Ctrl+S" --screenshot designer3.png | q "status: saved to .*designed-words-v1.sieve"
 # A melody filter, as the Media Player's M opens it, heard as it is tested (IDEAS 19.19): F5 plays the
 # first survivor, P in the test panel the next (or says why not, where the machine has no sound);
 # and a filter of sound itself (pcm*) tested and played the same way.
@@ -1289,10 +1303,10 @@ q "^designer played: 2 (" dmel.txt
 $H --designer --design data/filters/pcm-quiet-ends-v1.sfilter --script F5 --screenshot designer-pcm.png > dpcm.txt
 q "^designer: pcm-quiet-ends-v1" dpcm.txt
 q "^designer played: 1 (" dpcm.txt
-build/sieve filters --plugins | q "^loaded   designed-words-v1"
-build/sieve filters --plugin build/filters/designed-words-v1.sfilter --length 6 --relations | q "the same rule as words-data-v1  -- a duplicate"
-$H --designer --design build/filters/designed-words-v1.sfilter --script "Down,Down,Down,Down,Down,Down,Down,Return,=!,Return,Ctrl+S" --screenshot designer4.png | q "save as version 2"
-rm build/filters/designed-words-v1.sfilter
+build/sieve filters --plugins | tr -d '\r' | q "^loaded   designed-words-v1  .*designed-words-v1.sieve (packed)$"
+build/sieve filters --plugin build/filters/designed-words-v1.sieve --length 6 --relations | q "the same rule as words-data-v1  -- a duplicate"
+$H --designer --design build/filters/designed-words-v1.sieve --script "Down,Down,Down,Down,Down,Down,Down,Return,=!,Return,Ctrl+S" --screenshot designer4.png | q "save as version 2"
+rm build/filters/designed-words-v1.sieve
 # --timings: the table at exit, on the command line and from the hallway (to its file too).
 build/sieve warp --line text --length 32 --timings "timed" 2>&1 | q "^sieve warp "
 $H --no-menu --timings --settings timed.ini --screenshot timed.png 2>&1 | q "^hallway.item "

@@ -5,6 +5,7 @@
 
 #include "cli/dictionaries.hpp"
 #include "cli/filter_config.hpp"
+#include "cli/plugins.hpp"
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/image.hpp"
@@ -18,6 +19,8 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -622,20 +625,42 @@ std::string save(const Doc& d, uint32_t& next_version)
     {
         return std::string("not saved: ") + e.what();
     }
-    const fs::path file = folder / from_u8(d.file_name());
-    if (fs::exists(file, ec))
+    // Saved as a .sieve holding the filter and the lists it reads (IDEAS 19.185); a loose .sfilter of
+    // the same name, from before, counts as the same version.
+    const fs::path loose = folder / from_u8(d.file_name());
+    const fs::path file = folder / from_u8(d.name() + ".sieve");
+    auto taken = [&](const std::string& name) {
+        return fs::exists(folder / from_u8(name + ".sfilter"), ec) || fs::exists(folder / from_u8(name + ".sieve"), ec) || sieve::find_filter(name);
+    };
+    auto saved_text = [&]() -> std::optional<std::string> {
+        if (fs::exists(file, ec))
+        {
+            try
+            {
+                for (const auto& [name, t] : sieve::cli::sfilters_in_sieve(file))
+                    if (name == d.file_name()) return t;
+            }
+            catch (const std::exception&)
+            {
+            }
+            return std::string(); // (there, but not this filter as it reads: other contents)
+        }
+        if (fs::exists(loose, ec)) return read_file(loose);
+        return std::nullopt;
+    };
+    if (const auto was = saved_text())
     {
-        if (read_file(file) == text) return d.file_name() + " is saved already, exactly as it is";
+        if (*was == text) return d.name() + " is saved already, exactly as it is";
         // A version is never edited: the next one free.
         uint32_t v = d.version + 1;
-        while (fs::exists(folder / from_u8(d.id + "-v" + std::to_string(v) + ".sfilter"), ec) || sieve::find_filter(d.id + "-v" + std::to_string(v))) ++v;
+        while (taken(d.id + "-v" + std::to_string(v))) ++v;
         next_version = v;
-        return d.file_name() + " exists with other contents, and a version is never edited: save as version " + std::to_string(v) + "?";
+        return d.name() + " exists with other contents, and a version is never edited: save as version " + std::to_string(v) + "?";
     }
     if (const sieve::FilterSpec* f = sieve::find_filter(d.name()); f && f->name() == d.name())
     {
         uint32_t v = d.version + 1;
-        while (sieve::find_filter(d.id + "-v" + std::to_string(v)) || fs::exists(folder / from_u8(d.id + "-v" + std::to_string(v) + ".sfilter"), ec)) ++v;
+        while (taken(d.id + "-v" + std::to_string(v))) ++v;
         next_version = v;
         return d.name() + " is a filter already: save as version " + std::to_string(v) + "?";
     }
@@ -670,9 +695,33 @@ std::string save(const Doc& d, uint32_t& next_version)
         if (ec) return "not saved: cannot copy " + u8(from.filename());
     }
     {
-        std::ofstream out(file, std::ios::binary);
-        if (!out) return "not saved: cannot write " + u8(file);
-        out << text;
+        // The filter and its lists gathered in a folder of their own, packed as one .sieve, read back
+        // and checked before it is kept (cli/plugins.hpp: pack_filter_sieve).
+        const fs::path staging = fs::temp_directory_path() / from_u8("sieve-filter-" + d.name() + "-" + std::to_string(std::random_device{}()));
+        fs::remove_all(staging, ec);
+        fs::create_directories(staging, ec);
+        auto put = [&](const std::string& name, const std::string& bytes) {
+            std::ofstream out(staging / from_u8(name), std::ios::binary);
+            out << bytes;
+            out.close();
+            return bool(out);
+        };
+        bool ok = put(d.file_name(), text);
+        for (const auto& [name, words] : d.lists) ok = ok && put(name, words);
+        for (const std::string& f : tag_files(d)) ok = ok && put(f, read_file(folder / from_u8(f)));
+        std::string why;
+        if (ok)
+            try
+            {
+                sieve::cli::pack_filter_sieve(staging, file);
+            }
+            catch (const std::exception& e)
+            {
+                why = e.what();
+            }
+        fs::remove_all(staging, ec);
+        if (!ok) return "not saved: cannot gather it to pack";
+        if (!why.empty()) return "not saved: " + why;
     }
     try
     {

@@ -3402,6 +3402,34 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
     }
 }
 
+std::vector<std::pair<std::string, std::vector<uint8_t>>> files_of_manifest(const Manifest& m)
+{
+    std::vector<std::pair<std::string, std::vector<uint8_t>>> out;
+    size_t at = 0;
+    for (const ManifestEntry& e : m.entries)
+    {
+        if (e.dir) continue;
+        if (e.path.empty() || e.path[0] == '/' || e.path.find('\\') != std::string::npos || e.path.find(':') != std::string::npos ||
+            ("/" + e.path + "/").find("/../") != std::string::npos)
+            throw std::runtime_error("the instructions name a file outside their folder: " + e.path);
+        std::vector<uint8_t> bytes;
+        if (m.with_contents)
+        {
+            if (m.contents.size() - at < e.size) throw std::runtime_error("the instructions end before " + e.path);
+            bytes.assign(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + size_t(e.size)));
+            at += size_t(e.size);
+        }
+        else
+            bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
+        const std::string sha = sha256_hex(bytes);
+        if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
+            throw std::runtime_error("the instructions do not give " + e.path + " (its size or SHA-256 is wrong)");
+        vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever read out
+        out.emplace_back(e.path, std::move(bytes));
+    }
+    return out;
+}
+
 bool install_tree(const Manifest& m, const fs::path& dest, bool force, const InstallProgress& progress, const std::atomic<bool>* cancel,
                   std::vector<InstallNote>* notes, const std::set<std::string>* keep)
 {

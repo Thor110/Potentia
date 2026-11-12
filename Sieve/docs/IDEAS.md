@@ -7603,3 +7603,9 @@ state space".
   own text's SHA-256, so a filter is the same filter packed or not. Nothing is unpacked to disk. Planned
   only; it needs the reader to give a member's bytes without writing them (the installer's decoding,
   kept in memory), and a limit on what a `.sieve` in those folders may unfold to, as the viewer has.
+- *Built for filters (12 November 2026, Edward: "build the .sieve filter loading next, that means the
+  pipeline itself needs to save .sfilters as .sieve files and decode/encode them accordingly during
+  creation and they would be cached for use, decoded on startup to be cached ahead of time"):* the
+  Designer saves each filter with its lists as one `.sieve`; at start-up every `.sieve` in the filters
+  folder is decoded once into the cache, checked at every start, and loaded as a loose filter is
+  (docs/FILTER-PLUGINS.md section 21). Catalogue entries and maps kept the same way: not yet.

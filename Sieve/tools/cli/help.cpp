@@ -1007,7 +1007,8 @@ const std::vector<Page>& pages()
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},
-          {"--plugins", "List the plugin files found, with each one's name and SHA-256, or why it did not load."},
+          {"--plugins", "List the plugin files found, with each one's name and SHA-256, or why it did not load (a filter read from a .sieve: that .sieve)."},
+          {"--pack FOLDER", "Pack a filter and the lists it reads (the folder's files) as one .sieve, to --out FILE, for the filters folder (IDEAS 19.185)."},
           {"--plugin FILE", "Load one plugin file and show its header, its automaton (states as declared and\n"
                             "minimal) and, at the line's length, its survivors, what it excludes, and a few\n"
                             "survivors by rank. The line follows the plugin's symbols unless given."},

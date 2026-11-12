@@ -2244,11 +2244,11 @@ void print_relations(const std::string& self_name, const Dfa& d, const FilterLin
 // report as the oracle's `sieve_ref.py plugin`, line for line, so CI can compare them.
 int cmd_filters_plugin(const Args& a)
 {
-    const std::string file = a.get("plugin");
-    const std::vector<uint8_t> bytes = read_file_bytes(std::filesystem::path(std::u8string(file.begin(), file.end())));
+    // (a filter kept as .sieve is read from its decoded copy, beside its lists: IDEAS 19.185)
+    const std::filesystem::path file_path = sfilter_file(sieve::from_u8(a.get("plugin")));
+    const std::vector<uint8_t> bytes = read_file_bytes(file_path);
     const std::string text(bytes.begin(), bytes.end());
     const std::string sha = Sha256::hex(Sha256::hash(text));
-    const std::filesystem::path file_path(std::u8string(file.begin(), file.end()));
     const std::u8string folder = file_path.parent_path().u8string();
     const auto def = parse_plugin(text, sha, std::string(folder.begin(), folder.end()));
     const PluginHeader& h = plugin_header(*def);
@@ -2549,13 +2549,29 @@ int cmd_check_binary(const Args& a)
 int cmd_filters(const Args& a)
 {
     if (a.has("plugin")) return cmd_filters_plugin(a);
+    if (a.has("pack"))
+    {
+        // A filter and the lists it reads, kept as one .sieve (IDEAS 19.185): packed, read back and
+        // checked before it is written, and loaded from the filters folder as a loose .sfilter is.
+        if (!a.has("out")) throw std::invalid_argument("--pack FOLDER needs --out FILE.sieve");
+        const std::filesystem::path folder = sieve::from_u8(a.get("pack")), out = sieve::from_u8(a.get("out"));
+        if (!std::filesystem::is_directory(folder)) throw std::invalid_argument("--pack: not a folder: " + a.get("pack"));
+        pack_filter_sieve(folder, out);
+        const auto held = sfilters_in_sieve(out);
+        std::cout << "packed    " << a.get("out") << " (" << std::filesystem::file_size(out) << " bytes): " << held.size()
+                  << (held.size() == 1 ? " filter" : " filters");
+        for (const auto& [name, text] : held) std::cout << ", " << name;
+        std::cout << "\n";
+        if (held.empty()) std::cerr << "warning: it holds no .sfilter, so the filters folder will refuse it\n";
+        return 0;
+    }
     if (a.has("plugins"))
     {
         const auto& list = load_plugins();
         if (list.empty()) std::cout << "No plugin files found (a filters folder beside the programs, or data/filters).\n";
         for (const PluginFile& p : list)
             std::cout << (p.error.empty() ? "loaded   " : "REFUSED  ") << (p.name.empty() ? std::string("?") : p.name) << "  "
-                      << (p.sha256.empty() ? std::string("-") : p.sha256.substr(0, 16)) << "  " << p.path
+                      << (p.sha256.empty() ? std::string("-") : p.sha256.substr(0, 16)) << "  " << (p.packed.empty() ? p.path : p.packed + " (packed)")
                       << (p.error.empty() ? std::string() : "\n         " + p.error) << "\n";
         return 0;
     }

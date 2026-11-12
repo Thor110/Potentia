@@ -587,6 +587,13 @@ bool install_tree(const Manifest& m, const std::filesystem::path& dest, bool for
                   const std::atomic<bool>* cancel = nullptr, std::vector<InstallNote>* notes = nullptr,
                   const std::set<std::string>* keep = nullptr);
 
+// The files a v3 (or v2) manifest holds, in memory and nothing written: each cut from the contents
+// (or read back from its address) and checked as install_tree checks it (its size, its SHA-256, the
+// vault), in the manifest's order, with their paths as the manifest writes them. For Sieve's own
+// files kept packed and read where they lie (filters as .sieve, IDEAS 19.185). Throws as install_tree
+// does, and for a path that would leave its folder.
+std::vector<std::pair<std::string, std::vector<uint8_t>>> files_of_manifest(const Manifest& m);
+
 // How long an install took, as `sieve install` and the hallway say it: "decoded in 0.042 s, checked
 // and written in 0.003 s" (decoding: reading the instructions and making every file's bytes from
 // them; then each checked against its SHA-256 and written).

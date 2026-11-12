@@ -111,7 +111,8 @@ void Designer::open_file(const std::string& path)
 {
     try
     {
-        const fs::path p = from_u8(path);
+        // (a filter kept as .sieve opens from its decoded copy, beside its lists: IDEAS 19.185)
+        const fs::path p = sieve::cli::sfilter_file(from_u8(path));
         doc_ = design::Doc::from_text(read_all(p), p.parent_path());
         path_ = path;
         placed_.clear();

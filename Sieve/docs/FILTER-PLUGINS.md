@@ -1108,3 +1108,32 @@ integer rules:
 
 So at 8 kHz speech moves fast from sample to sample (a fricative is nearly noise): `sound-step-v1`
 could be set to 30% and keep 97.7% of it. Its default (50%) keeps all of it.
+
+## 21. Filters kept as .sieve (built 12 November 2026; IDEAS §19.185)
+
+A filter can be kept on disk as Sieve instructions: a `.sieve` holding the `.sfilter` and the lists it
+reads (word lists, tagged lists), packed as Sieve packs any folder. Nothing about the format of a
+filter changes: its identity is still the SHA-256 of its own text, packed or not, so the same filter
+loose and packed is one plugin.
+
+- **Saving.** The Filter Designer saves a new filter (or a new version) as `<id>-v<N>.sieve` in the
+  filters folder: the filter and its lists gathered in a folder of their own, packed (the newest
+  instructions), read back, every member checked, and only then written in place. Its loose lists are
+  written beside it as before, for other filters that read them. A version is never edited: a loose
+  `.sfilter` or a `.sieve` of that name, either one, is the version taken. `sieve filters --pack FOLDER
+  --out FILE.sieve` packs any folder the same way.
+- **Loading, at start-up.** Every `.sieve` in a filters folder is decoded once into the plugin cache,
+  `sfilters/<the .sieve's SHA-256>/`, with an `index` of every member's SHA-256 and size; each later
+  start checks every member against the index and decodes again where anything differs. Each `.sfilter`
+  in it is then loaded exactly as a loose one, reading its lists from beside it. The hallway loads the
+  plugins as it starts, so every packed filter is decoded and cached before it is first used.
+- **Refused, never skipped.** A `.sieve` that does not decode, or that unfolds to more than 64 MiB, or
+  that holds no `.sfilter`, is listed by `sieve filters --plugins` (and the setup menu) with why.
+  `--plugins` names a packed filter by its `.sieve`, marked `(packed)`.
+- **Opened by path.** `sieve filters --plugin FILE.sieve` and the Designer's `--design FILE.sieve` read
+  the decoded copy.
+- **Measured** on `function-words-v2` and its tagged list (1,024,539 bytes as two files): 99,974 bytes
+  as one `.sieve`.
+- **Not yet.** The reference filters in `data/filters/` stay loose, as the oracle reads them; a release
+  could ship them packed. Catalogue entries and maps kept the same way are the next step of §19.185.
+
