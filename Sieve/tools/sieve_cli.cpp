@@ -1202,7 +1202,23 @@ int cmd_raid(const Args& a)
 int cmd_catalogue(const Args& a)
 {
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
-    const std::string folder = a.get("folder", "data/catalogue");
+    // data/catalogue in the Sieve folder, else beside the program (where the build copies it).
+    std::string folder = a.get("folder", "");
+    if (folder.empty())
+    {
+        std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "catalogue"};
+        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / "catalogue"), where.push_back(exe / ".." / "data" / "catalogue");
+        folder = where[0].string();
+        for (const auto& w : where)
+        {
+            std::error_code ec;
+            if (std::filesystem::is_directory(w, ec))
+            {
+                folder = w.string();
+                break;
+            }
+        }
+    }
     const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folder);
     auto find = [&](const std::string& id) -> const sieve::FormatEntry* {
         for (const auto& e : all)

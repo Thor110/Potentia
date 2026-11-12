@@ -7064,8 +7064,9 @@ and cataloging all formats across all dimensions of all things".
 - *The wiki principle:* every entry links to others, and following links from any entry reaches a
   common root, as following the first link on Wikipedia pages is said to lead to Philosophy. The
   catalogue can check this for itself: an entry with no path to the root is an entry not yet linked.
-- *Stage 1 built (12 November 2026):* `sieve catalogue`, 166 entries gathered from the code, all reaching
-  `information` (docs/CATALOGUE-ROADMAP.md).
+- *Stages 1 to 3 built (12 November 2026):* `sieve catalogue` (166 entries from the code, then 170 with
+  the first written by hand in data/catalogue), the format written out (SPECIFICATIONS §12.0m), and the
+  CATALOGUE page of the setup menu: the catalogue as a ring of doors to walk (docs/CATALOGUE-ROADMAP.md).
 - *Dynamically, then procedurally:* first by hand and from what Sieve already knows (its packer's
   routes, importers, alphabets and Unicode blocks), then grown by importers of open registries, each
   stating its licence and its roof.
@@ -7460,3 +7461,45 @@ complexity".
 - *Where it lives:* the catalogue of formats (§19.165) already holds entries with their measured
   figures; applications would be entries of their own kind, linked to the formats they read and write.
   Planned only.
+
+**19.182 The catalogue as another node viewer (Edward, 12 November 2026).** His words: "so in essence
+like the node viewer for items and maps, the catalogue just becomes another node viewer interface that
+helps link all information from all angles to all information from all angles", and, on the CATALOGUE
+page, "it also needs an outline like the other side, which slides in, so that it is its own sliding
+mechanism and has its own scroll bar on the inner side mirroring the other side from two slide in
+interfaces".
+- *One kind of view for every web:* the hallway's node graph (O: items and maps) and the CATALOGUE
+  page's ring of doors show the same thing, nodes and their links, so they can become one viewer that
+  any web plugs into: the catalogue of formats, the dimensions (`sieve dimensions`), maps, characters
+  and species, the RAID's chains of versions. Each web gives its nodes and links; the viewer draws and
+  walks them, from any node to any other.
+- *Built the same day:* the right-hand panel's inner edge drawn full height, as the settings panel's
+  is, and a scroll bar on that inner edge where a page holds more than fits (YOURS scrolls by wheel or
+  by its rows; the CATALOGUE ring shows where its window of doors sits among them all).
+
+**19.183 A catalogue of spoken languages, as a LANGUAGE page for characters (Edward, 12 November
+2026).** On the CATALOGUE page: "the catalogue I believe is a language catalog for character creation so
+the title might be better as language, it is just one catalog amongst many catalogs", and then "then its
+data and styles can be transposed into a formats catalog for speech and it can become the spoken
+language language tab for character creation".
+- *What was built, and its name:* the page built that day is the catalogue of formats (§19.165): file
+  kinds, scripts, alphabets, importers and Sieve's own formats, with one language (English) among 170
+  entries. Its tab is now called FORMATS, one catalogue among the many to come.
+- *The language catalogue:* the same kind of entry (`sieve-format-v1`) and the same ring of doors,
+  filled with spoken languages: each language's family, its scripts (linked to the script entries
+  already there), its sounds (the voice's phonemes, CMUdict's for English), and what Sieve can do with
+  it (dictionaries, the voice). Its own folder of hand-written entries, as data/catalogue is for
+  formats.
+- *A LANGUAGE page for characters:* on the right-hand panel beside CHARACTER, a character chooses the
+  languages it speaks from that catalogue; the choice is kept with the character (a link from it to the
+  language entries, §19.152), so a speaking character (§19.147) knows what it speaks.
+- *Spelling:* British English throughout these documents: "catalogue" is both the noun and the verb;
+  "catalog" is the American spelling.
+- *A System Viewer (Edward, the same day):* "the formats and list it is currently built to represent or
+  view stays and it becomes its own network or node or link map to be displayed or accessed through a
+  similar in hand viewer for systems a System Viewer for the main and pause menu which provides access
+  to language and formats as two already known systems to be charted". So: a **System Viewer** item on
+  the main menu and the pause menu, opening one viewer (the ring of doors, §19.182) over whichever
+  system is chosen; FORMATS (the catalogue of formats, as built) and LANGUAGE (the spoken-language
+  catalogue, above) the first two, each its own web of nodes and links, and more systems (the
+  dimensions, characters and species, the RAID's chains) charted by the same viewer as they come.

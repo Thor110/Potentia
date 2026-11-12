@@ -7,7 +7,7 @@ metrics and recorded stats, pros, cons, etc for all things", where "all informat
 other information one way or another, like the wiki principle where all pages lead to a certain place
 or space"; recorded "dynamically and then procedurally ... across all dimensions of all things".
 
-This is the plan. Stages 1 and 2 are built (below); the rest is not. It is in the catalogue
+This is the plan. Stages 1 and 2 are built, and stage 3 in a first form (below); the rest is not. It is in the catalogue
 of dimensions as `formats` (`sieve dimensions formats`). Every figure the catalogue holds will be
 measured or sourced, as everywhere in Sieve; a pro or con with neither is not recorded.
 
@@ -88,7 +88,11 @@ information, and back down to Welsh).
    read every entry back.)** **The record and the command.** `sieve-format-v1` as a written specification (SPECIFICATIONS), a
    reader in the core, and `sieve catalogue` to list, show, search by any field, follow links, and find
    paths. Unit tests: every entry reads back, every link resolves, every entry reaches the root.
-3. **In the hallway.** The catalogue as a dimension: each entry a door, its links the corridors, the
+3. **(Built 12 November 2026, as a first form: the FORMATS page (at first called CATALOGUE) of the setup menu's right-hand panel,
+   the entry you stand at with its doors in a ring round it, walked by Left/Right, Enter, Backspace and
+   Home; L takes an alphabet or a Unicode block onto the pages line. Not yet: the catalogue as a
+   corridor of the 3D hallway itself, and files' and models' entries leading onto their lines.)**
+   **In the hallway.** The catalogue as a dimension: each entry a door, its links the corridors, the
    formats Sieve can open leading straight onto their lines (a PNG's entry onto the image line, a
    script's onto the pages line over its alphabet, `dna4` onto DNA).
 4. **Measured, as it is used.** Each time Sieve packs, imports or reads a format, its figures can be

@@ -1,6 +1,6 @@
 # Changes since b87b9b4 "sieve state space delta save preservation infinite raid system" (12 November 2026)
 
-Nine commits (8a15014 to a044458). This zip replaces the earlier zips since your last push. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stages 1 and 2; five ideas noted.
+Eleven commits (8a15014 to ce94ca3). This zip replaces the earlier zips since your last push. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stages 1 to 3; seven ideas noted.
 
 **Build:** a new core source, `core/src/catalogue.cpp`, is in CMakeLists.txt, so CMake must run again.
 
@@ -35,9 +35,17 @@ Nine commits (8a15014 to a044458). This zip replaces the earlier zips since your
 - **The command:** `sieve catalogue --search TEXT` (any field, any case); an entry now lists the entries beneath it; `--check` also reads every entry back from its text.
 - **Tests:** every entry reads back the same; refusals (out of order, a bad id, a missing line feed, an id twice, a link to nothing, a file named otherwise); a file with Windows line endings is still read. The unit suite passes (180,024 checks); CI step 4 passes (131 s).
 
+## The catalogue of formats, stage 3 (558d5ad)
+- **FORMATS, the right-hand panel's third page** (PgUp/PgDn to it; Sieve/client/menu.cpp): the catalogue as a ring of doors. The entry you stand at is in the middle, its doors round it: what it is part of in gold, what is part of it in grey, other links in blue. Left/Right choose a door, Enter goes through, Backspace goes back, Home goes to the root; **L** takes an alphabet or a Unicode block straight onto the pages line as its alphabet (at Greek: the pages line becomes Greek, 144 symbols). The doors stand down the ring's two sides, at most 24 at once, with a window round the chosen one where there are more (writing has 104). `--catalogue-entry ID` opens it at an entry; the readout says where you stand and how many doors.
+- **The panel mirrors the settings panel:** its inner edge drawn full height, and a scroll bar on that inner edge wherever a page holds more than fits: YOURS now scrolls (wheel, or its rows, the chosen one kept in view); the ring's bar shows where its window of doors sits.
+- **The hand-written entries** are copied beside the programs when they are built, and both programs look for them there (CMakeLists.txt).
+- **Tests:** CI step 10 walks it (the ring at image, eight doors; through to document; Home; L at Greek) and passes (975 s).
+
 ## Ideas
 - **Sieve/docs/IDEAS.md §19.178:** the RAID's lockdown against spam before stage 3 shares storage between machines: one character per verified identity, each dimension's own limits, and what is still to decide (how identity is verified while kept private, the quotas, what happens over a limit).
 - **Sieve/docs/IDEAS.md §19.179:** the RAID between machines as peer to peer with a few known nodes to start from; IP addresses as a first limit (weak, and personal data, so kept as salted hashes), then digital ID, then a character's own record, each step added without removing the one before.
 - **Sieve/docs/IDEAS.md §19.178:** your digital ID structure from Pages/order.pdf noted: the anchor, ten at a time, random groups of ten after 1,000, re-verification on doubt; it is the vouching kind of limit, and a project of its own, whose result (verified or not) the RAID would read.
 - **Sieve/docs/IDEAS.md §19.180:** a decentralised place to talk and keep one's own record, built on the RAID: what it needs, and what has to be decided (who reads what, withdrawing a post, moderation).
 - **Sieve/docs/IDEAS.md §19.181:** implementations side by side (your mesh scaler and your friend's), measured on the same inputs and steered towards their shortest form, with a program's packed size as the measurable bound on its Kolmogorov complexity; applications as entries of the catalogue.
+- **Sieve/docs/IDEAS.md §19.182:** the catalogue as another node viewer, like the node graph for items and maps: one viewer for every web.
+- **Sieve/docs/IDEAS.md §19.183:** a catalogue of spoken languages as a LANGUAGE page for characters, made the same way as FORMATS; and a System Viewer on the main and pause menus, opening FORMATS and LANGUAGE as the first two systems to chart. Spelling kept British: "catalogue" is the noun and the verb.

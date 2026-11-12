@@ -171,6 +171,8 @@ const char* kUsage =
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
     "  --import-skeleton FILE  with --menu: a glTF's skeleton as your character (sieve-character-v3), its\n"
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
+    "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
+    "                      19.165): the catalogue of formats as a ring of doors\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
     "                      (also into the store, and into the infinite RAID where [raid] drives is set)\n"
     "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1),\n"
@@ -1317,6 +1319,7 @@ int run(const Args& a)
         if (a.has("import-skeleton")) menu.import_skeleton(a.get("import-skeleton"));
         if (a.has("animation-frame")) menu.set_animation_frame(int(a.get_u32("animation-frame", 0)));
         if (a.has("save-character")) menu.character_chosen(a.get("save-character"), true); // as Ctrl+S does, saved as the menu is drawn
+        if (a.has("catalogue-entry")) menu.open_catalogue(a.get("catalogue-entry"));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1329,7 +1332,8 @@ int run(const Args& a)
             menu.render();
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
-        if (menu.side_open() && menu.side_page() == 1) std::cout << "right-hand panel: open (YOURS, " << menu.yours_count() << " characters)\n";
+        if (menu.side_open() && menu.side_page() == 2) std::cout << "right-hand panel: open (CATALOGUE)\ncatalogue: " << menu.catalogue_line() << "\n";
+        else if (menu.side_open() && menu.side_page() == 1) std::cout << "right-hand panel: open (YOURS, " << menu.yours_count() << " characters)\n";
         else if (menu.side_open())
         {
             std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";

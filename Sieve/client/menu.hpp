@@ -18,6 +18,7 @@
 
 #include "sieve/character.hpp"
 #include "sieve/animation.hpp"
+#include "sieve/catalogue.hpp"
 #include "character_store.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
@@ -461,7 +462,28 @@ private:
     float side_ = 0;             // as drawn: 0 out of sight, 1 in its place
     bool side_open_ = false;     // where it is sliding to
     SDL_FRect side_tab_ = {};    // its tab at the right edge, while it is out
-    int side_page_ = 0;          // the page shown (0: CHARACTER)
+    int side_page_ = 0;          // the page shown (0: CHARACTER, 1: YOURS, 2: CATALOGUE)
+    // CATALOGUE: every entry (the code's and data/catalogue's), where you stand, the door chosen, and
+    // the way back.
+    std::vector<sieve::FormatEntry> cat_;
+    bool cat_ready_ = false;
+    std::string cat_at_ = "information";
+    int cat_door_ = 0;
+    std::vector<std::string> cat_back_;
+    std::string cat_note_;
+    struct CatDoor
+    {
+        std::string id;
+        int dir; // 1: up (what it is part of), 0: across (another link), -1: down (what is part of it)
+    };
+    std::vector<CatDoor> cat_doors() const;
+    void cat_init();
+    void cat_key(SDL_Keycode key);
+    void render_catalogue(float x, float top, float bottom);
+    // The right-hand panel's scrolling (YOURS), mirroring the settings panel's.
+    float side_scroll_ = 0, side_scroll_max_ = 0;
+    int side_row_shown_ = -1;
+    void side_scrollbar(float x, float y, float room, float offset, float most, float content);
     // CHARACTER (sieve-character-v1): while the panel is in, it takes the keys: Up/Down choose a
     // setting, Left/Right change it (Shift x10 on the seed), R a random seed; ` or Esc closes it.
     sieve::CharacterSettings char_settings_;
@@ -505,6 +527,10 @@ public:
     void import_skeleton(const std::string& path); // --import-skeleton FILE, and Ctrl+K: a glTF's skeleton as your character, its first animation playing
     void skeleton_chosen(const std::string& path);
     void set_animation_frame(int frame) { char_anim_fixed_ = frame; } // --animation-frame N: hold the animation at frame N (for pictures)
+    // The CATALOGUE page (IDEAS 19.165, stage 3): the catalogue of formats as a ring of doors around
+    // the entry you stand at. --catalogue ID opens it there.
+    void open_catalogue(const std::string& id);
+    std::string catalogue_line() const;           // "ID: N doors" of the entry you stand at, for the readout
     std::string animation_line() const;           // "ID FRAMES BONES" of the animation playing, or empty
     const std::string& character_note() const { return char_note_; } // the line under the CHARACTER page's rows
     void obj_chosen(const std::string& path);

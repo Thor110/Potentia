@@ -655,6 +655,10 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
             $<TARGET_FILE_DIR:sieve>/lang
+    # The catalogue of formats' entries written by hand (docs/CATALOGUE-ROADMAP.md).
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/catalogue
+            $<TARGET_FILE_DIR:sieve>/catalogue
     # Sieve's voice (tools/cli/voice.hpp): its pronunciations and alignment; its clips are found in
     # the anchors (data/anchors/public-domain/voice), above a build inside the repository.
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -755,6 +759,9 @@ if(SIEVE_BUILD_CLIENT)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/dictionaries
                 $<TARGET_FILE_DIR:hallway>/dictionaries
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/catalogue
+                $<TARGET_FILE_DIR:hallway>/catalogue
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/models
                 $<TARGET_FILE_DIR:hallway>/models

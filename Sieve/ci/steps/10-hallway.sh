@@ -390,6 +390,15 @@ $H --menu --settings raid.ini --save-character raid-me.character --press "\`" --
 $H --menu --settings raid.ini --save-character raid-me.character --press "\`,G" --screenshot raid2.png > /dev/null
 $exe raid list --drives raidc1,raidc2 | tr -d '\r' | q "  your character  (after "
 $exe raid verify --drives raidc1,raidc2 | tr -d '\r' | q "^whole$"
+# The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
+# are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
+# Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
+# pages line as its alphabet.
+$H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 5 doors$"
+$H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
+$H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
+q "^catalogue: script-greek: " cat-greek.txt
 # In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt

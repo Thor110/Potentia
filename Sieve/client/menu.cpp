@@ -1711,11 +1711,16 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         }
         return;
     }
-    // The wheel over the settings panel scrolls its list (three rows a notch).
+    // The wheel over the settings panel scrolls its list (three rows a notch); over the right-hand
+    // panel, its page's list.
     if (e.type == SDL_EVENT_MOUSE_WHEEL)
     {
         if (panel_ > 0 && e.wheel.mouse_x < panel_ * kMapX)
             list_scroll_ = std::clamp(list_scroll_ - e.wheel.y * 3 * kRowH, 0.0f, list_scroll_max_);
+        else if (side_open_ && side_page_ == 2)
+            cat_key(e.wheel.y > 0 ? SDLK_LEFT : SDLK_RIGHT); // the catalogue's ring turns a door a notch
+        else if (side_open_)
+            side_scroll_ = std::clamp(side_scroll_ - e.wheel.y * 3 * 14.0f, 0.0f, side_scroll_max_);
         return;
     }
     if (alpha_open_)
@@ -1783,10 +1788,12 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         }
         else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN)
         {
-            side_page_ = (side_page_ + 1) % 2; // CHARACTER, YOURS
+            side_page_ = (side_page_ + (e.key.key == SDLK_PAGEUP ? 2 : 1)) % 3; // CHARACTER, YOURS, CATALOGUE
             if (side_page_ == 1) yours_read();
+            if (side_page_ == 2) cat_init();
         }
         else if (side_page_ == 1) yours_key(e.key.key);
+        else if (side_page_ == 2) cat_key(e.key.key);
         else char_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
         return;
     }
@@ -2193,6 +2200,210 @@ void Menu::import_model(const std::string& path)
     }
 }
 
+// ---------------------------------------------------------------- CATALOGUE (IDEAS 19.165, stage 3)
+
+void Menu::cat_init()
+{
+    if (cat_ready_) return;
+    cat_ready_ = true;
+    // The code's entries and the hand-written ones: data/catalogue here, else beside the program.
+    std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "catalogue"};
+    if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / "catalogue"), where.push_back(exe / ".." / "data" / "catalogue");
+    std::string folder;
+    for (const auto& w : where)
+    {
+        std::error_code ec;
+        if (std::filesystem::is_directory(w, ec))
+        {
+            folder = w.string();
+            break;
+        }
+    }
+    try
+    {
+        cat_ = folder.empty() ? sieve::format_catalogue() : sieve::format_catalogue_with(folder);
+    }
+    catch (const std::exception& e)
+    {
+        cat_ = sieve::format_catalogue(); // the hand-written ones refused: the code's alone, and why
+        cat_note_ = trf("side.cat.refused", {e.what()});
+    }
+}
+
+void Menu::open_catalogue(const std::string& id)
+{
+    cat_init();
+    side_open_ = true;
+    side_ = 1;
+    side_page_ = 2;
+    for (const auto& e : cat_)
+        if (e.id == id)
+        {
+            cat_at_ = id;
+            cat_door_ = 0;
+            return;
+        }
+    cat_note_ = trf("side.cat.none", {id});
+}
+
+// The doors round the entry you stand at: what it is part of first (up), then its other links
+// (across), then the entries that are part of it (down).
+std::vector<Menu::CatDoor> Menu::cat_doors() const
+{
+    std::vector<CatDoor> d;
+    const sieve::FormatEntry* at = nullptr;
+    for (const auto& e : cat_)
+        if (e.id == cat_at_) at = &e;
+    if (!at) return d;
+    for (const auto& l : at->links) d.push_back({l.to, l.type == "part-of" ? 1 : 0});
+    for (const auto& e : cat_)
+        for (const auto& l : e.links)
+            if (l.to == cat_at_) d.push_back({e.id, l.type == "part-of" ? -1 : 0});
+    return d;
+}
+
+std::string Menu::catalogue_line() const
+{
+    const size_t n = cat_doors().size();
+    return cat_at_ + ": " + std::to_string(n) + (n == 1 ? " door" : " doors");
+}
+
+void Menu::cat_key(SDL_Keycode key)
+{
+    cat_init();
+    const auto doors = cat_doors();
+    const int n = int(doors.size());
+    switch (key)
+    {
+    case SDLK_LEFT:
+    case SDLK_UP:
+        if (n) cat_door_ = (cat_door_ + n - 1) % n;
+        return;
+    case SDLK_RIGHT:
+    case SDLK_DOWN:
+        if (n) cat_door_ = (cat_door_ + 1) % n;
+        return;
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER: // through the door
+        if (n && cat_door_ < n)
+        {
+            cat_back_.push_back(cat_at_);
+            cat_at_ = doors[size_t(cat_door_)].id;
+            cat_door_ = 0;
+            cat_note_.clear();
+        }
+        return;
+    case SDLK_BACKSPACE: // back the way you came
+        if (!cat_back_.empty())
+        {
+            cat_at_ = cat_back_.back();
+            cat_back_.pop_back();
+            cat_door_ = 0;
+            cat_note_.clear();
+        }
+        return;
+    case SDLK_HOME: // to the root
+        if (cat_at_ != "information") cat_back_.push_back(cat_at_);
+        cat_at_ = "information";
+        cat_door_ = 0;
+        cat_note_.clear();
+        return;
+    case SDLK_L:
+    {
+        // Onto its line: an alphabet or a Unicode block becomes the pages line's alphabet.
+        std::string alphabet;
+        if (cat_at_.rfind("alphabet-", 0) == 0) alphabet = cat_at_.substr(9);
+        else if (cat_at_.rfind("script-", 0) == 0) alphabet = cat_at_.substr(7);
+        if (alphabet.empty())
+        {
+            cat_note_ = tr("side.cat.no_line");
+            return;
+        }
+        s_.alphabet = alphabet;
+        cat_note_ = trf("side.cat.on_line", {alphabet});
+        return;
+    }
+    default: return;
+    }
+}
+
+// The entry you stand at in the middle, its doors round it in a ring (up warm, down grey, across
+// blue), the chosen one ringed; its fields below.
+void Menu::render_catalogue(float x, float top, float bottom)
+{
+    cat_init();
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, warm{230, 200, 120, 255}, blue{140, 180, 240, 255};
+    const sieve::FormatEntry* at = nullptr;
+    for (const auto& e : cat_)
+        if (e.id == cat_at_) at = &e;
+    if (!at) return;
+    const auto doors = cat_doors();
+    const int n = int(doors.size());
+    cat_door_ = n ? std::clamp(cat_door_, 0, n - 1) : 0;
+    float y = top + 40;
+    const size_t cols = size_t((kSideW - 28) / 8);
+    text(r_, x + 14, y, fit_cells(trf("side.cat.count", {std::to_string(cat_.size())}), cols), 1, grey);
+    y += 18;
+    // The ring: as many doors as fit (24), a window round the chosen one when there are more.
+    y += 18; // (room for the line saying which doors are shown, when not all of them are)
+    const float cx = x + kSideW / 2, ringh = std::max(80.0f, (bottom - 40) - y - 120);
+    const float cy = y + ringh / 2, R = std::max(40.0f, ringh / 2 - 14); // (its height: the room it has)
+    const int shown = std::min(n, 24);
+    const int first = n > shown ? std::clamp(cat_door_ - shown / 2, 0, n - shown) : 0;
+    for (int k = 0; k < shown; ++k)
+    {
+        const int i = first + k;
+        // Down the ring's two sides, from 65 degrees above its middle to 65 below, the first half on the
+        // right and the rest on the left, so no two doors stand side by side at its top or bottom.
+        const int right = (shown + 1) / 2, side_n = k < right ? right : shown - right, at_k = k < right ? k : k - right;
+        const float t = side_n > 1 ? float(at_k) / float(side_n - 1) : 0.5f, sweep = 1.1344640f; // 65 degrees
+        const float a = k < right ? -sweep + 2 * sweep * t : 3.1415927f + sweep - 2 * sweep * t;
+        // An ellipse wider than tall: the labels are wider than they are high, so the doors at the top
+        // and the bottom, which stand side by side, get the room.
+        const float rx = kSideW / 2 - 70, dx = cx + rx * std::cos(a), dy = cy + R * std::sin(a);
+        const CatDoor& d = doors[size_t(i)];
+        const SDL_Color c = d.dir > 0 ? warm : d.dir < 0 ? grey : blue;
+        SDL_SetRenderDrawColor(r_, Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255);
+        SDL_RenderLine(r_, cx, cy, dx, dy);
+        const std::string label = fit_cells(d.id, 14);
+        const float w = text_width(label, 1) + 8;
+        const SDL_FRect door{dx - w / 2, dy - 7, w, 14};
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+        SDL_RenderFillRect(r_, &door);
+        SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, 255);
+        SDL_RenderRect(r_, &door);
+        if (i == cat_door_)
+        {
+            const SDL_FRect ring{door.x - 2, door.y - 2, door.w + 4, door.h + 4};
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+            SDL_RenderRect(r_, &ring);
+        }
+        text(r_, door.x + 4, door.y + 3, label, 1, i == cat_door_ ? white : c);
+    }
+    // The entry itself, in the middle.
+    const std::string name = fit_cells(at->id, 22);
+    text(r_, cx - text_width(name, 1) / 2, cy - 10, name, 1, white);
+    const std::string kind = fit_cells(at->kind, 22);
+    text(r_, cx - text_width(kind, 1) / 2, cy + 4, kind, 1, grey);
+    if (n > shown)
+    {
+        text(r_, x + 14, cy - R - 16, trf("side.cat.window", {std::to_string(first + 1), std::to_string(first + shown), std::to_string(n)}), 1, grey);
+        // The window's place among all the doors, on the inner edge.
+        side_scrollbar(x, cy - R, 2 * R, float(first), float(n - shown), float(n) * 2 * R / float(shown));
+    }
+    // Its fields, and the chosen door.
+    y = cy + ringh / 2 + 6;
+    for (const std::string& line : {at->name, at->recognised.empty() ? std::string() : tr("side.cat.recognised") + " " + at->recognised,
+                                     at->sieve.empty() ? std::string() : tr("side.cat.sieve") + " " + at->sieve})
+    {
+        if (line.empty() || y > bottom - 50) continue;
+        text(r_, x + 14, y, fit_cells(line, cols), 1, grey);
+        y += 14;
+    }
+    if (n && y <= bottom - 50) text(r_, x + 14, y, fit_cells(trf("side.cat.door", {doors[size_t(cat_door_)].id}), cols), 1, white), y += 14;
+    if (!cat_note_.empty() && y <= bottom - 36) text(r_, x + 14, y, fit_cells(cat_note_, cols), 1, warm);
+}
+
 void Menu::open_yours()
 {
     char_init();
@@ -2270,38 +2481,82 @@ void Menu::render_yours(float x, float top, float bottom)
         return (on ? "> " : "  ") + c.id().substr(0, 12) + "  " + std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " " + sieve::symmetry_name(s.symmetry) +
                (c.holds.empty() ? "" : "  " + std::to_string(c.holds.size()) + " held");
     };
+    // The list as lines (text, colour, the row it is, or -1 for a heading), laid out from its top,
+    // then drawn scrolled so the chosen row is in view, cut at the room's edges.
+    struct Line
+    {
+        std::string s;
+        SDL_Color c;
+        int row;
+        float h;
+    };
+    std::vector<Line> lines;
+    const size_t cols = size_t((kSideW - 28) / 8);
     const int np = int(playground_.size());
     if (np)
     {
-        text(r_, x + 14, y, fit_cells(trf("side.yours.playground", {std::to_string(np)}), size_t((kSideW - 28) / 8)), 1, white);
-        y += 16;
-        for (int i = 0; i < np && y < bottom - 40; ++i, y += 14) text(r_, x + 14, y, line_of(playground_[size_t(i)], i == yours_row_), 1, i == yours_row_ ? white : grey);
-        y += 10;
+        lines.push_back({fit_cells(trf("side.yours.playground", {std::to_string(np)}), cols), white, -1, 16});
+        for (int i = 0; i < np; ++i) lines.push_back({line_of(playground_[size_t(i)], i == yours_row_), i == yours_row_ ? white : grey, i, 14});
+        lines.back().h += 10;
     }
-    if (yours_.characters.empty())
-    {
-        text(r_, x + 14, y, tr("side.yours.empty"), 1, grey);
-        return;
-    }
+    if (yours_.characters.empty()) lines.push_back({tr("side.yours.empty"), grey, -1, 14});
     std::string last_species;
-    for (size_t i = 0; i < yours_.characters.size() && y < bottom - 40; ++i)
+    for (size_t i = 0; i < yours_.characters.size(); ++i)
     {
         const sieve::Character& c = yours_.characters[i];
-        const std::string sp = sieve::species_id(c.settings);
+        const std::string sp = c.given ? std::string("given") : sieve::species_id(c.settings);
         if (sp != last_species)
         {
             // A heading for each species: its name, and the settings its members share.
             const auto& s = c.settings;
-            const std::string shape = std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " b" + std::to_string(s.branches) + " " +
-                                      sieve::symmetry_name(s.symmetry) + (s.head ? " head" : " no head");
-            text(r_, x + 14, y, fit_cells(trf("side.yours.species", {sp.substr(0, 12), shape}), size_t((kSideW - 28) / 8)), 1, SDL_Color{180, 180, 120, 255});
-            y += 14;
+            const std::string shape = c.given ? std::string("spheres given") : std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " b" + std::to_string(s.branches) + " " +
+                                                                                  sieve::symmetry_name(s.symmetry) + (s.head ? " head" : " no head");
+            lines.push_back({fit_cells(trf("side.yours.species", {sp.substr(0, 12), shape}), cols), SDL_Color{180, 180, 120, 255}, -1, 14});
             last_species = sp;
         }
         const bool on = np + int(i) == yours_row_;
-        text(r_, x + 14, y, line_of(c, on), 1, on ? white : grey);
-        y += 14;
+        lines.push_back({line_of(c, on), on ? white : grey, np + int(i), 14});
     }
+    const float room = std::max(14.0f, (bottom - 40) - y);
+    float content = 0, chosen_top = 0, chosen_h = 0;
+    for (const Line& l : lines)
+    {
+        if (l.row == yours_row_) chosen_top = content, chosen_h = l.h;
+        content += l.h;
+    }
+    side_scroll_max_ = std::max(0.0f, content - room);
+    if (yours_row_ != side_row_shown_)
+    {
+        if (chosen_top < side_scroll_) side_scroll_ = chosen_top;
+        if (chosen_top + chosen_h > side_scroll_ + room) side_scroll_ = chosen_top + chosen_h - room;
+        side_row_shown_ = yours_row_;
+    }
+    side_scroll_ = std::clamp(side_scroll_, 0.0f, side_scroll_max_);
+    const SDL_Rect clip{int(x), int(y), int(kSideW), int(room)};
+    SDL_SetRenderClipRect(r_, &clip);
+    float ly = y - side_scroll_;
+    for (const Line& l : lines)
+    {
+        if (ly + l.h > y && ly < y + room) text(r_, x + 14, ly, l.s, 1, l.c);
+        ly += l.h;
+    }
+    SDL_SetRenderClipRect(r_, nullptr);
+    side_scrollbar(x, y, room, side_scroll_, side_scroll_max_, content);
+}
+
+// Where a right-hand page's list is, when there is more of it than the room: a thin bar at the
+// panel's inner (left) edge, mirroring the settings panel's at its inner (right) edge.
+void Menu::side_scrollbar(float x, float y, float room, float offset, float most, float content)
+{
+    if (most <= 0 || content <= 0) return;
+    const float track_x = x + 3;
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
+    const SDL_FRect track{track_x, y, 3, room};
+    SDL_RenderFillRect(r_, &track);
+    const float thumb_h = std::max(14.0f, room * room / content);
+    SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
+    const SDL_FRect thumb{track_x, y + (room - thumb_h) * offset / most, 3, thumb_h};
+    SDL_RenderFillRect(r_, &thumb);
 }
 
 void Menu::character_chosen(const std::string& path, bool save)
@@ -2896,8 +3151,11 @@ void Menu::render_side(float W, float H)
     SDL_RenderFillRect(r_, &box);
     SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
     SDL_RenderRect(r_, &box);
+    // Its inner edge, the side it slides in from, drawn full height as the settings panel's is.
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+    SDL_RenderLine(r_, x, 0, x, H);
     // The pages' names: one now, more as the systems come.
-    static const char* const kPages[] = {"side.page.character", "side.page.yours"};
+    static const char* const kPages[] = {"side.page.character", "side.page.yours", "side.page.catalogue"};
     float px = x + 14;
     for (int i = 0; i < int(std::size(kPages)); ++i)
     {
@@ -2914,6 +3172,12 @@ void Menu::render_side(float W, float H)
     {
         render_yours(x, top, bottom);
         text(r_, x + 14, bottom - 22, tr("side.yours.footer"), 1, grey);
+        return;
+    }
+    if (side_page_ == 2)
+    {
+        render_catalogue(x, top, bottom);
+        text(r_, x + 14, bottom - 22, tr("side.cat.footer"), 1, grey);
         return;
     }
     // A file chosen in a dialog since the last frame: saved or opened now.
