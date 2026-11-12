@@ -6835,6 +6835,11 @@ values. A table of 16-byte chunks saves 1.3 to 1.9% of three WAVs before its own
 is charged; shorter chunks lose; noise never hits. The same structure taken without a table, each
 leftover byte coded given the one before, saves 2.2 to 2.7%. Verdict: no table of roundings; a rope
 version coding by the byte before is worth building (a new format version).
+*Looked at again (12 November 2026), before building it:* the files it was measured on are no longer
+the rope's. The packer now carries `mr` (9,970,564 bytes, 1,967,657 packed), `x-ray` (8,474,240 to
+3,614,957) and `sao` (7,251,944 to 4,149,437) by mixing as pictures of their own shape (`mix4 ...
+I512x2`, `I1901x2`, `I12264x1`), and v34's draft carries WAVs as FLAC. So an order-1 rope (and the
+trim of §19.131) would change what Sieve writes almost nowhere: not built.
 
 **19.128 Noise run through a file, its matches clipped out (Edward, 8 November 2026; measured the
 same day).** His idea: noise from a seed propagated through the file, the bytes it matches counted,

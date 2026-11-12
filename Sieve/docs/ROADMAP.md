@@ -1,5 +1,34 @@
 # The plan from here
 
+## The long plan (11 November 2026), and where it stands (12 November 2026)
+
+Edward: "lets lay out a long plan for what we can implement next for hallway and sieve etc utilising
+the ideas to get as much done as we can", then "get as much of all of that list done without me as
+you can". Seven stages, each leaving something finished; the older plan of 31 October follows below.
+**What it is all for:** a format that can name and give back any file exactly, smaller than anything
+else where it can be, and compatible forever (IDEAS §19.137); a hallway that walks every line of it
+and is on its way to being a game and a game engine; an AI line whose every model replays bit for
+bit; and, underneath, records that cannot be quietly changed (§19.136). Every step is measured first,
+and built only where it pays.
+
+| Stage | Items | Where it stands |
+| --- | --- | --- |
+| 1. Loose ends | entry order, recipe digits, rope tie, CI pins and warnings, the repeat loop, harness sort | **Done** |
+| 2. Finish and freeze v34 | x86 filter per program; BMP RLE, AVI/MOV PCM, WAD/PAK; MPEG-2 MP3s; the freeze | x86 restart **built**; the three formats measured too small; MPEG-2 MP3s open; **the freeze is Edward's call** |
+| 3. Sieve's voice | read aloud everywhere; words CMUdict lacks; more recordings; prosody; a trained voice | first two **built**; three hours measured (19.8% against 23.3%), not taken; prosody and the trained voice open |
+| 4. The AI line | training speed; QK-norm; corpora; wider arithmetic; a real model | speed **built** (about twice on four threads); QK-norm measured, not built; documents as text **built**; wider arithmetic and a real model left for Edward |
+| 5. The hallway | chat commands, logs, chains; PCM filters; filter ideas; music filter designer; a game dimension | chains steered **built**; sound plugins and `pcm-quiet-ends` **built**; designer plays what it keeps, Media Player's M **built**; game dimension **designed** (GAME.md §11); chain branches open |
+| 6. Compression research | the rope; shortcut seed, cmix ideas; video, game streaming | rope: all measured, ground now mixing's and FLAC's, nothing to build; seed: its winners built in v33; cmix's SSE retired before, x86 model built; streaming measured (no version needed); packets measured, **whole-set plain weighing built**; mixing models for meshes, code points, grammar and MIDI open |
+| 7. Infrastructure and outreach | docs kept up from the code; the website; the rope post | open; the rope post waits for the v34 freeze |
+
+**What is waiting on Edward:** the v34 freeze; wider arithmetic (a training version); the three hours
+of voice recordings; and the designs to decide on (the games line, GAME.md §11; distributed
+computing, IDEAS §19.139). **What can go on without him:** Stage 7's documentation pass, chain
+branches, prosody in the voice, and the open mixing models, each measured first.
+
+---
+
+
 *Gathered 31 October 2026, for Edward and Claude to look at together; made again the same day as a
 plan, from the work in progress to the best ideas. It is drawn from
 [NEXT-VERSION.md](NEXT-VERSION.md), [IDEAS.md](IDEAS.md) (§19.87 to §19.108), [FORMATS.md](FORMATS.md),

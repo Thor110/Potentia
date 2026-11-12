@@ -31,6 +31,13 @@ nothing was changed on packing, and where no map graph or items are carried. The
 - **Films that share packets** (results/video-packets-2026-11-12.md, `tools/bench/video_packets.py`):
   90% of a trailer was packets already in its film. This is what led to the fix above.
 
+## Stage 6 closed out, and the plan in ROADMAP.md
+
+- **The rope's order-1 coding and trimming** were looked at again before building. `mr`, `x-ray` and
+  `sao` now go to mixing (as pictures), and WAVs to FLAC in v34, so they weren't built (IDEAS
+  §19.127).
+- **ROADMAP.md** now opens with the seven-stage plan, where each stage stands, and what waits on you.
+
 ## Your notes
 
 - **GAME.md §11:**
@@ -53,4 +60,4 @@ nothing was changed on packing, and where no map graph or items are carried. The
 
 ## Commits (local only)
 
-5c8d249, b3f6b2b, 540aac7, 7e21398, 2eb4f77, 0a59872, dd4f388, f7282a2, ea1a8ad, cd09163.
+5c8d249, b3f6b2b, 540aac7, 7e21398, 2eb4f77, 0a59872, dd4f388, f7282a2, ea1a8ad, cd09163, and the commit closing Stage 6.
