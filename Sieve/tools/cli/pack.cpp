@@ -4160,6 +4160,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         // first 4 MiB 5.3% larger, and whole, all three made 3,342,227 bytes against C2's 3,277,334;
         // enwik8 21,870,393 against 21,431,822. On the five Silesia files over 4 MiB where all three
         // win whole (mozilla, osdb, x-ray, sao, ooffice), the first 4 MiB said so too.
+        std::shared_ptr<const std::vector<uint8_t>> carried; // (the whole file's code, where the winner was carried on)
         if (best.recover && f.size() > (size_t(4) << 20) && !stop_requested())
         {
             const size_t more = size_t(4) << 20;
@@ -4168,12 +4169,43 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             c2.table_bits = all.table_bits = mix4_for(first.size()).table_bits;
             c2.candidates = 2;
             size_t sizes[2] = {0, 0};
-            for_each_index(2, pack_threads(), [&](size_t k) { sizes[k] = mix4_code(first, k == 0 ? c2 : all, words).size(); });
+            // (12 November 2026, the mixing speed pass: where the trials' runs are the whole file's own
+            // start, the same parameters and tables and the same bytes, the winner is carried on to the
+            // file's end rather than the whole mixed again from its first byte (Mix4Run): the same code,
+            // 4 MiB less mixed. A program's bytes go through the x86 filter first, and the first 4 MiB
+            // filtered alone must be the whole's first 4 MiB filtered, or this is not done.)
+            bool carry = code_out && !mp.palette && !mp.primer && c2.table_bits == mp.table_bits;
+            std::vector<uint8_t> whole_filtered;
+            std::span<const uint8_t> whole_bytes = f;
+            if (carry && mp.x86)
+            {
+                whole_filtered.assign(f.begin(), f.end());
+                x86_filter(whole_filtered, true);
+                std::vector<uint8_t> first_filtered(first.begin(), first.end());
+                x86_filter(first_filtered, true);
+                carry = std::equal(first_filtered.begin(), first_filtered.end(), whole_filtered.begin());
+                whole_bytes = whole_filtered;
+            }
+            if (carry)
+            {
+                std::optional<Mix4Run> runs[2];
+                for_each_index(2, pack_threads(), [&](size_t k) {
+                    runs[k].emplace(k == 0 ? c2 : all, f.size(), words);
+                    runs[k]->feed(whole_bytes.first(first.size()));
+                    sizes[k] = runs[k]->size_if_ended();
+                });
+                const size_t won = sizes[0] <= sizes[1] ? 0 : 1;
+                runs[1 - won].reset(); // (its tables let go before the rest is mixed)
+                runs[won]->feed(whole_bytes.subspan(first.size()));
+                carried = std::make_shared<const std::vector<uint8_t>>(runs[won]->end());
+            }
+            else
+                for_each_index(2, pack_threads(), [&](size_t k) { sizes[k] = mix4_code(first, k == 0 ? c2 : all, words).size(); });
             if (sizes[0] <= sizes[1]) best.recover = false, best.min_match = 6;
         }
         std::shared_ptr<const std::vector<uint8_t>> kept;
         if (whole) kept = std::make_shared<const std::vector<uint8_t>>(std::move(least_code));
-        if (code_out) *code_out = kept;
+        if (code_out) *code_out = carried ? carried : kept; // (the carried code is this file's alone: not kept by its start below)
         weighed[key] = {best.recover, best.min_match, best.candidates, std::move(kept)};
         return best;
     };
@@ -6355,14 +6387,15 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 // (v34: an opened TIFF's pixels, their shape from its tags)
                 if (!known && instructions_on && !program && files[i]->remake.rfind("tiff ", 0) == 0)
                     if (const auto ts = tiff_shapes.find(files[i]->path); ts != tiff_shapes.end()) known = ts->second, from_header = true;
-                bool e1_allowed = true; // (v34: E1 for a program; under Balanced weighed against mixing without it)
+                // (e1: E1 for a program, v34; under Balanced weighed against mixing without it, below. Given
+                // to each call, not shared, as the two are mixed side by side.)
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
-                                   uint32_t primer = 0) {
+                                   uint32_t primer = 0, bool e1 = true) {
                     if (mix4_on)
                     {
                         Mix4Params base = mix4_for(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
-                        base.instructions = program && instructions_on && e1_allowed; // (v34, E1)
+                        base.instructions = program && instructions_on && e1; // (v34, E1)
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         std::shared_ptr<const std::vector<uint8_t>> made;
@@ -6538,19 +6571,23 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (tried)
                 {
                     std::string mix_way;
-                    std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words, primed);
+                    std::vector<uint8_t> mc;
                     // (Balanced, a program under the v34: E1 decodes about 45% slower than mixing
                     // without it (results/x86-instructions-2026-11-07.md), so it is asked half as much
                     // again, 6% of the file against mixing's 4%: the program mixed without it too, and the
-                    // cheaper of the two, counting each its share, kept. 7 November 2026.)
+                    // cheaper of the two, counting each its share, kept. 7 November 2026. The two mixed side
+                    // by side, each on its own thread (12 November 2026, the mixing speed pass): the same two
+                    // codes, in the time of the longer.)
                     uint64_t floor_here = balanced_floor(bytes[i].size());
                     if (program && instructions_on && priority() == Priority::balanced && !stop_requested())
                     {
                         const uint64_t e1_floor = floor_here * 3 / 2;
-                        e1_allowed = false;
                         std::string plain_way;
-                        std::vector<uint8_t> plain = code_of(bytes[i], plain_way, pw, pc, words, primed);
-                        e1_allowed = true;
+                        std::vector<uint8_t> plain;
+                        for_each_index(2, 2, [&](size_t k) {
+                            if (k == 0) mc = code_of(bytes[i], mix_way, pw, pc, words, primed, true);
+                            else plain = code_of(bytes[i], plain_way, pw, pc, words, primed, false);
+                        });
                         if (plain.size() + floor_here <= mc.size() + e1_floor)
                         {
                             mc = std::move(plain);
@@ -6558,6 +6595,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         }
                         else floor_here = e1_floor;
                     }
+                    else mc = code_of(bytes[i], mix_way, pw, pc, words, primed, true);
                     uint64_t len = mc.size(), vl = 1;
                     while (len >>= 7) ++vl;
                     mixed_said = mix_way + " " + std::to_string(mc.size() + vl) + (tests.empty() ? "" : " [mixing on its first " + std::to_string(sn) + " bytes: " + tests + "]");

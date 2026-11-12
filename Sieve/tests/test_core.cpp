@@ -6198,6 +6198,56 @@ void test_mix3()
 // mix-v4: mix-v2 and mix-v3 without sse-v1's stages (retired): the parameters (text, a picture, a
 // word list, never both of the last two); every shape of file given back each way; the same models
 // as mix-v2's but no SSE, so a different code; three codes pinned by their SHA-256.
+// A mix-v4 run fed in parts (Mix4Run, the mixing speed pass of 12 November 2026): its code is
+// mix4_code's for the same bytes, wherever they are cut, a program's through the x86 filter too; its
+// size before the end is the code's size were it ended there; and what it refuses.
+void test_mix4_run()
+{
+    std::string text;
+    for (int i = 0; i < 2000; ++i) text += "the run is carried on, line " + std::to_string(i * 7919 % 1000) + " of it\n";
+    const std::vector<uint8_t> bytes(text.begin(), text.end());
+    Mix4Params p = Mix4Params::for_size(bytes.size());
+    p.recover = true, p.min_match = 4, p.candidates = 2;
+    const std::vector<uint8_t> whole = mix4_code(bytes, p);
+    for (const size_t cut : {size_t(0), size_t(1), size_t(4096), bytes.size() / 2, bytes.size() - 1, bytes.size()})
+    {
+        Mix4Run r(p, bytes.size());
+        r.feed(std::span<const uint8_t>(bytes).first(cut));
+        if (cut == bytes.size()) CHECK(r.size_if_ended() == whole.size());
+        r.feed(std::span<const uint8_t>(bytes).subspan(cut));
+        CHECK(r.size_if_ended() == whole.size());
+        CHECK(r.end() == whole);
+    }
+    {
+        // The start's size, ended there, is mix4_code's for the start alone (the trial's size).
+        const size_t cut = bytes.size() / 3;
+        Mix4Run r(p, bytes.size());
+        r.feed(std::span<const uint8_t>(bytes).first(cut));
+        CHECK(r.size_if_ended() == mix4_code(std::span<const uint8_t>(bytes).first(cut), p).size());
+    }
+    // A program: the caller filters, the code is mix4_code's with X (and E1).
+    std::vector<uint8_t> prog;
+    std::mt19937 g(41);
+    for (int i = 0; i < 60000; ++i)
+        prog.push_back(i % 5 == 0 ? 0xE8 : uint8_t(g() % 7 == 0 ? g() : 0x48 + i % 3));
+    Mix4Params px = Mix4Params::for_size(prog.size());
+    px.x86 = true, px.instructions = true;
+    std::vector<uint8_t> filtered = prog;
+    x86_filter(filtered, true);
+    Mix4Run rx(px, prog.size());
+    rx.feed(std::span<const uint8_t>(filtered).first(20000));
+    rx.feed(std::span<const uint8_t>(filtered).subspan(20000));
+    CHECK(rx.end() == mix4_code(prog, px));
+    // Refused: more than it was made for, a palette, a primer.
+    CHECK(throws([&] { Mix4Run r(p, 10); r.feed(std::span<const uint8_t>(bytes).first(11)); }));
+    Mix4Params pp = p;
+    pp.palette = 4, pp.width = 16, pp.channels = 3;
+    CHECK(throws([&] { Mix4Run r(pp, 100); }));
+    Mix4Params pw = p;
+    pw.primer = 1;
+    CHECK(throws([&] { Mix4Run r(pw, 100); }));
+}
+
 void test_mix4()
 {
     CHECK(Mix4Params::parse("B22").text() == "B22" && Mix4Params::parse("B20 I949x1").width == 949 && Mix4Params::parse("B16 D60").dictionary == 60);
@@ -7636,6 +7686,7 @@ void run_all(int argc, char** argv)
         RUN(test_mix2());
         RUN(test_mix3());
         RUN(test_mix4());
+        RUN(test_mix4_run());
     }
 }
 

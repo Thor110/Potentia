@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -213,6 +214,27 @@ uint32_t colours_of(std::span<const uint8_t> pixels, uint32_t channels);
 // `words`: the word list the parameters name (nullptr where they name none).
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words = nullptr);
 std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size);
+
+// A mix-v4 run fed a file's bytes in parts and carried on (12 November 2026, the mixing speed pass):
+// fed a file whole, or in parts in order, its end() is mix4_code's code for those bytes, byte for byte
+// (the same model and coder, nothing between the parts). So a trial on a file's start, where its
+// parameters and tables are the whole file's, is carried on to the whole rather than mixed again from
+// its first byte. Bytes as they are coded: a program's through x86_filter first where `x86` is named
+// (the caller filters). Not for a palette (P) or a primer (W). `capacity`: the most bytes it will be fed.
+class Mix4Run
+{
+public:
+    Mix4Run(const Mix4Params& p, uint64_t capacity, const MixDictionary* words = nullptr);
+    ~Mix4Run();
+    Mix4Run(Mix4Run&&) noexcept;
+    Mix4Run& operator=(Mix4Run&&) noexcept;
+    void feed(std::span<const uint8_t> bytes);
+    size_t size_if_ended() const; // the code's size were it ended now (end()'s, after these bytes)
+    std::vector<uint8_t> end();   // the code; the run is spent
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 // Prioritise Decoding Speed (--prioritise-decoding, the File Locator's box, [locator]
 // prioritise_decoding): the packer carries no file by mixing, whose decoding (0.3 to 1 MB/s,

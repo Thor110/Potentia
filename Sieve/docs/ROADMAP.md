@@ -5,7 +5,7 @@
 Edward: "lets lay out a roadmap of tasks moving forward, what is next", then "yes, write it into the
 roadmap then freeze v34". Each step finished before the next, unless said.
 
-1. **Freeze v34**, and with it a speed pass on mixing. v34's draft has gathered since 3 November (GIF,
+1. **Freeze v34** (*frozen 12 November 2026*), and with it a speed pass on mixing (*done the same day: a program of 5.3 MB made in 15.9 s for 22.0 under Size, 13.5 for 27.0 under Balanced, the same bytes; results/mixing-speed-2026-11-12.md*). v34's draft has gathered since 3 November (GIF,
    the x86 instruction model, FLAC and the sound formats, float sound, TIFFs, MP3 through packMP3, PDFs,
    zlib streams, PCX, pictures' shapes, the x86 filter restarted per program: docs/NEXT-VERSION.md).
    Frozen as v32 and v33 were: the draft's ways become what every maker makes, `--v33` makes v33 byte

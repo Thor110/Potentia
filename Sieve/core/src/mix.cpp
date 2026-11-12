@@ -1002,28 +1002,45 @@ std::vector<uint8_t> mix2_code(std::span<const uint8_t> file, const Mix2Params& 
 
 namespace {
 
+// The binary arithmetic coder, fed a file in as many parts as wished (a run carried on: Mix4Run),
+// the code as if fed it in one.
+struct BitCoder
+{
+    std::vector<uint8_t> out;
+    uint32_t x1 = 0, x2 = 0xFFFFFFFFu;
+    template <class Model>
+    void feed(Model& m, std::span<const uint8_t> file)
+    {
+        for (const uint8_t b : file)
+            for (int j = 7; j >= 0; --j)
+            {
+                const int bit = (b >> j) & 1;
+                const uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * uint32_t(m.p())) >> 12);
+                bit ? (x2 = xmid) : (x1 = xmid + 1);
+                m.update(bit);
+                while (((x1 ^ x2) & 0xFF000000u) == 0)
+                {
+                    out.push_back(uint8_t(x2 >> 24));
+                    x1 <<= 8;
+                    x2 = (x2 << 8) | 255;
+                }
+            }
+    }
+    size_t size_if_ended() const { return out.size() + 1; }
+    std::vector<uint8_t> end()
+    {
+        out.push_back(uint8_t((x1 >> 24) + 1));
+        return std::move(out);
+    }
+};
+
 template <class Model>
 std::vector<uint8_t> code_with(Model& m, std::span<const uint8_t> file)
 {
-    std::vector<uint8_t> out;
-    out.reserve(file.size() / 3 + 16);
-    uint32_t x1 = 0, x2 = 0xFFFFFFFFu;
-    for (const uint8_t b : file)
-        for (int j = 7; j >= 0; --j)
-        {
-            const int bit = (b >> j) & 1;
-            const uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * uint32_t(m.p())) >> 12);
-            bit ? (x2 = xmid) : (x1 = xmid + 1);
-            m.update(bit);
-            while (((x1 ^ x2) & 0xFF000000u) == 0)
-            {
-                out.push_back(uint8_t(x2 >> 24));
-                x1 <<= 8;
-                x2 = (x2 << 8) | 255;
-            }
-        }
-    out.push_back(uint8_t((x1 >> 24) + 1));
-    return out;
+    BitCoder c;
+    c.out.reserve(file.size() / 3 + 16);
+    c.feed(m, file);
+    return c.end();
 }
 
 template <class Model>
@@ -1545,6 +1562,46 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
         return code_with(m, filtered);
     }
     return code_with(m, file);
+}
+
+struct Mix4Run::Impl
+{
+    Model2 model;
+    BitCoder coder;
+    uint64_t capacity, fed = 0;
+    Impl(const Mix4Params& p, uint64_t cap, const MixDictionary* words)
+        : model(shape_of(p), cap, p.dictionary ? words : nullptr, false, ways_of(p)), capacity(cap)
+    {
+        coder.out.reserve(size_t(cap / 3 + 16));
+    }
+};
+
+Mix4Run::Mix4Run(const Mix4Params& p, uint64_t capacity, const MixDictionary* words)
+{
+    p.check();
+    if (capacity >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
+    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    if (p.palette || p.primer) bad4("a run carried on is of bytes alone: no palette (P) or primer (W)");
+    impl_ = std::make_unique<Impl>(p, capacity, words);
+}
+Mix4Run::~Mix4Run() = default;
+Mix4Run::Mix4Run(Mix4Run&&) noexcept = default;
+Mix4Run& Mix4Run::operator=(Mix4Run&&) noexcept = default;
+
+void Mix4Run::feed(std::span<const uint8_t> bytes)
+{
+    if (impl_->fed + bytes.size() > impl_->capacity) bad4("more bytes fed to a run than it was made for");
+    impl_->coder.feed(impl_->model, bytes);
+    impl_->fed += bytes.size();
+}
+
+size_t Mix4Run::size_if_ended() const { return impl_->coder.size_if_ended(); }
+
+std::vector<uint8_t> Mix4Run::end()
+{
+    std::vector<uint8_t> code = impl_->coder.end();
+    impl_.reset();
+    return code;
 }
 
 std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size)
