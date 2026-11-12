@@ -7051,3 +7051,36 @@ impossible throughout time".
     one day be recognised again if its bytes turn up; and the exact space bounds even the lost
     exactly: how many places a lost record of a known size could be, and which a filter of what it
     was like would keep.
+
+**19.137 Compatible forever: the project a lens on itself (Edward, 12 November 2026).** His words:
+"ultimately anything that was compatible with sieve is currently compatible and will be forever
+compatible even if we remove compatibility because github exists and the project is on there and
+all its commits can be tracked and built, so it acts like a lens upon itself going backwards in
+time". And: "even if and or when we remove the manifest versions for the cleanest possible manifest
+version and addressing system, we will maintain compatibility with all addressing systems through
+that addressing system". And: "we should aim not to alter it beyond compatibility with previous
+versions until it becomes an operating system though, as well as a game engine, both of those are
+important points in time that should be worked on in unison".
+
+*Notes.*
+- **The history is the reader of last resort.** Every version of the format was written with the
+  code that reads it, in the same commit. A file of any version can always be read by checking out
+  a commit that read it and building it. That is the lenses of GAME.md §11 turned on Sieve itself:
+  the project seen as it was at any commit, run, inspected or unfolded as source.
+- **The clean addressing system keeps the old ones inside it.** When the manifest versions are
+  folded into one clean version, each earlier version stays a name the new system resolves. Old
+  files then keep their addresses, and the new reader can say which commit reads them, or carry
+  that reader within it. Removing a version from the current code removes it from the build, not
+  from the map.
+- **What keeps a commit buildable.**
+  - *Pinned dependencies:* CMakeLists.txt pins each fetched library to a commit and checks it
+    (`sieve_pinned`).
+  - *The oracle:* `reference/sieve_ref.py` reads every version with Python alone.
+  - *Tests of every version:* `tests/` and CI step 11 hold an example of each.
+  - *Where it is weakest:* dependencies fetched from other hosts, and compilers that change. A
+    copy of every pinned source kept with a release (as a `.sieve` of its own, like the voice
+    extension) would close that gap; noted, not built.
+- **The rule until then.** No change that leaves an earlier version unreadable by the current
+  build, until Sieve becomes an operating system and a game engine. Both are milestones, to be
+  worked on together, where the format may be made anew around what they need. Each draft version
+  (v34 now) is held to the same rule: it adds to what is read, and takes nothing away.

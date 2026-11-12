@@ -199,3 +199,14 @@ skeletons and recipes, and names the files it could not make.
 
 The tests hold examples of every version: `tests/` and the CI's step 11 (`ci/steps/11-oracle.sh`),
 which makes `.sieve` files with Sieve and unpacks them with the oracle.
+
+## 7. Compatible forever (Edward, 12 November 2026)
+
+Every `.sieve` that any version of Sieve could read stays readable, even if a later version drops
+it: the repository is public and every commit can be checked out and built, so the reader that
+read it still exists. The history works as a lens on Sieve itself, looking backwards in time. When
+the manifest versions are one day folded into one clean version and one addressing system, that
+system keeps every earlier one reachable through it, by naming the version, and so the commit,
+that reads it. Until Sieve becomes an operating system and a game engine (milestones to be worked
+on together), the format is not changed beyond what keeps every earlier version readable. IDEAS
+§19.137 has the notes.
