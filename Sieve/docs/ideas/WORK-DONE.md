@@ -118,3 +118,4 @@ The log begins with the dated write-ups in `results/` (5 October 2026 onwards). 
 - Triage corrected: 19.130 a was done on 9 November (§19.133); the colour-blindness pass (2.4) was done on 6 November.
 - MANUAL, SPECIFICATIONS and FILTER-PLUGINS checked against the code (IDEAS 19.134): 15 places corrected (door order and colours with worlds and AI, size limits from the machine, ITEM MEMORY, the META tab, the menu walk, the Tools commands, retired data filters).
 - VOICES cleaned, first pass: 62 technical lines and Gemini's two messages moved to [VOICES-STASHED.md](VOICES-STASHED.md), each with where its idea went (IDEAS §19.145).
+- IMPLEMENTED checked against the code (IDEAS §19.145): every entry present, none missing; 13 changed since and noted under each. Build or Buy's comment on its constants corrected.

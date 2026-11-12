@@ -4,9 +4,11 @@ Entries of [IDEAS.md](../IDEAS.md) that are done: built, answered or superseded,
 
 Edward, 12 November 2026: "move ones we have worked through across into a document that isn't front and centre all the time … a work done and an ideas implemented plus deprecated ideas document or set of documents, everything is a range and a lens and everything fits on a chart across time."
 
-How an entry is chosen: every idea in it is marked *done* in [IDEAS-TRIAGE.md](../IDEAS-TRIAGE.md), none only partly built, and its text names nothing still to do. Entries done in part stay in IDEAS.md until the rest is. The first move, 12 November 2026: 39 entries.
+How an entry is chosen: every idea in it is marked *done* in [IDEAS-TRIAGE.md](../IDEAS-TRIAGE.md), none only partly built, and its text names nothing still to do. Entries done in part stay in IDEAS.md until the rest is. The first move, 12 November 2026: 39 entries; 5.6 (the shimmer) the same day, once built.
 
 The section headings are IDEAS.md's own.
+
+**Checked against the code (12 November 2026, IDEAS §19.145).** Every entry here was looked for in the current code and repository: all are present, none missing. Where the code has moved on since an entry was written, a dated italic line under it says how; entries with no such line are present as written. 5.6 was built and checked the same day.
 
 ### 2. Defects and corrections
 
@@ -78,6 +80,9 @@ unbounded.
 every two notches of a run double how far a notch goes, up to 1,024 tiles; a pause or a turn back
 starts again at one tile a notch (client/hallway.cpp).
 
+**5.6 Shimmer on the item under the crosshair.** Small, and it makes the interactable thing obvious.
+*Built 12 November 2026 (`client/hallway.cpp`): the item under the crosshair, already tinted in its line's edge colour, now breathes (its tint between 85 and 135 of 255 over 1.6 s) and a leaning band sweeps across its front every 1.6 s. Shimmer on walking past stays undecided (§10).*
+
 **5.8a The node graph, first version: built** (27 September 2026, SPECIFICATIONS §12.3). Maps
 of verified anchors, one at a time, in 3D, and the item page's SORT tab. Edward's notes on where
 it goes next: maps shipped with a release or offered as optional downloads ("if you want map X,
@@ -114,10 +119,14 @@ of both and has to fit too.
 Neither number is a limit of the design. They describe the machine of the day, and a bigger one
 finds bigger numbers with the same arithmetic.
 
+*Checked against the code, 12 November 2026: present, changed since. An address's length is now bounded by a measured time budget (`--unit-time`, 50 ms at first) and the unit cache by ITEM MEMORY's share of installed memory (25% at first), not a 256th of memory.*
+
 **6.5 Global parameters, and entries per shelf.** *Built.* Items per wall is a setting (a power of
 two from 2 to 4096, default 128), under GLOBAL in the setup menu. It turned out not to need
 versioning: it changes no address, only the (tile, slot) coordinate an address is shown at, so
 "tile N" is a display coordinate tied to the setting, and the address is what gets written down.
+
+*Checked against the code, 12 November 2026: present, changed since. The setup menu's row toggles 128 and 256 (the two that use a whole byte well); the full range, 2 to 4096, is given with `--items-per-wall`.*
 
 ### 7. Features from earlier in the conversation, still standing
 
@@ -146,6 +155,8 @@ point to decide: "Use the tailored filters" from the main menu would save the fi
 hallway built rather than build one at once. Verdict: build. *Built (10 October 2026):* the
 locator is its own class, opened from either place; from the main menu, Use the tailored filters
 saves them for the next hallway.
+
+*Checked against the code, 12 November 2026: present, changed since. The File Locator is now the main menu's second row, after Start Sieve, as the pause menu orders its systems (§19.18), not under Settings.*
 
 **16.4 A file type filter on the binary line.** Filter the binary dimension by file types, read
 from their headers.
@@ -199,6 +210,8 @@ items apart, and on those with one (books, audio, tracks, video, movies, worlds)
 the address, so the titles repeat as well (45 pairs a line) and " (2)" tells the files apart. Each file
 is named, under its line, by three values (the line with its stack, its ordering, its number),
 which is what the next manifest and map schema should carry instead of its bytes (§16.3).
+
+*Checked against the code, 12 November 2026: present, changed since. The sample is now 3,960 items (eleven lines); CI also builds v5 and v6 installers of it and compares them with the oracle.*
 
 ### 18. Edward's ideas of 11 October 2026
 
@@ -259,6 +272,8 @@ a feature can be checked on its own while the full run is kept for the end of a 
 *Built (6 November 2026):* `sieve_tests tests --only NAME[,NAME...]` runs only the tests whose name
 holds one of them, and `--list` names the 80; `--only mix4,rope_wave` is 242 checks in about 4 s here.
 
+*Checked against the code, 12 November 2026: present, changed since. `--only mix4,rope_wave` now runs 274 checks (242 when written); `--list` still gives 80 tests.*
+
 **19.12 A metrics list, made with every release (Edward, 12 October 2026).** Edward wants an
 automated list, made each build and issued as a text file with the installer, of how much each
 line's filters remove, one line a dimension:
@@ -313,6 +328,8 @@ make the systems easier to travel between, more versatile and more usable.
   Navigation System, then the same systems in the same order. The main menu's File Locator has
   Go to it again (the hallway is built and walks to the file; a file longer than the binary line
   still asks twice), and its Media Player builds the hallway with the player open over it.
+
+*Checked against the code, 12 November 2026: present, changed since. The order holds; the Encryption Engine was added after Settings in both menus, and Manual Navigation stands in the main menu only, before Exit.*
 
 **19.42 The web page's Build or Buy (Edward, 13 October 2026).** Built: `Pages/release.html`,
 linked from the index as "Build or Buy (Free If You Build It)".
@@ -379,6 +396,8 @@ over the past few years.
 - *Kept true:* as the project changes, the disclosure changes with it. A new contributor, human or
   model, is added when they contribute.
 
+*Checked against the code, 12 November 2026: present, changed since. Every page carries the disclosure but the two test pages under `Pages/secure/` (added 27 October 2026), which have none.*
+
 **19.67 Folding everything (Edward, 13 October 2026).** His words: they (the filters, rules and
 ideas) are pretty much all intended to be automata, and many are or can be turned into them. So
 it could fold in on all information that could ever exist, through all the light humanity will be
@@ -412,6 +431,8 @@ there." (VOICES.md).
 - **Also on the website:** the AI disclosure is now at the top of every page, and on Build or Buy
   it comes before the buttons to buy or download, which are now at the bottom (Edward: it always
   has to be front and centre).
+
+*Checked against the code, 12 November 2026: present, changed since. The Orbital page's script was removed on 6 November 2026, so its figures are fixed text now; Build or Buy keeps the constants itself (its comment corrected 12 November 2026).*
 
 **19.68 The voices on the website (Edward, 13 October 2026).** His idea: the site can read out a
 random voice from VOICES.md, at the very bottom of Build or Buy, under the donate button, as
@@ -449,6 +470,8 @@ every programming language, interface, address and taxonomy.
   program in any language can read it, and an interface in any language can label it. That is the
   first step towards every address and taxonomy being one map (§19.54).
 
+*Checked against the code, 12 November 2026: present, changed since. Records now name a machine profile (`metrics/machines/`), the CPU, the GPU and the memory, as well as the kind of machine; the host name is still never recorded.*
+
 **19.78 Every figure with its inverse (Edward, 13 October 2026).** His words: "Running Out Of
 Original Things To Say" says how many are used up, but has no counter beside it saying how many
 are left. Always try to give the inverse of a metric, where and when it can be given, to put it in
@@ -478,6 +501,8 @@ perspective.
   *Built for the setup menu's counts (7 November 2026):* a stack's survivors line adds how long
   walking them at one a second would take ("at one a second, ~10^38.3 years to walk them"), the
   same reckoning as the main menu's estimate (§19.49).
+
+*Checked against the code, 12 November 2026: present, changed since. The Orbital page's "Still Reachable" inverse went with its script (6 November 2026); Build or Buy still gives the reachable share.*
 
 **19.93 The `.map` format folded into `.sieve` (Edward, 22 October 2026; built the same day).**
 His thought: update the `.map` format, or replace it with `.sieve` and deprecate it, the
@@ -520,6 +545,8 @@ differences once needed for the 3D node graph perhaps being redundant now.
   a 6-byte and a 3,000-byte file, named only, 271 bytes; the same two named and a 200,000-byte file
   of noise held, sealed, 200,353 bytes.
 
+*Checked against the code, 12 November 2026: present, changed since. Since 27 October 2026 `source.sieve` holds the source tree as plain instructions, not a sealed map; it is still checked by installing the source back from it.*
+
 **19.96 Every dimension at every degree, and the starting page, as `.sieve` (Edward, 22 October
 2026; measured).** His ask: the sample of every dimension at each whole degree (§16.9,
 `hallway --sample-degrees`), "which should be tiny", and "welcome to the sieve" ("1 - 0 - 112",
@@ -541,6 +568,8 @@ installed back byte for byte:
   it writes the newest, and the CI's check compares v5 with `--v4`.)* Made again that day, both
   still v20 (items and LZMA2 are all they use): the sample 7,887 bytes (8,784 before), the
   starting page 159 (162), each installed back byte for byte; Proof/ holds them.
+
+*Checked against the code, 12 November 2026: present, changed since. The two Proof files are now 7,686 and 158 bytes; both install back exactly.*
 
 **19.100 "Create .sieve" in the right-click menu (Edward, 24 October 2026; noted, not to be built
 yet).** "I was thinking about adding create .sieve to the context menu, but that brings with it a
@@ -633,6 +662,8 @@ ideas and current work a look over ... Even come up with your own ideas if you w
   - The installers now refuse a pair of names that are one where case is ignored.
   - The book cover, first counted among other programs' PNGs, was Sieve's own (stb): corrected in
     the results.
+
+*Checked against the code, 12 November 2026: present, changed since. A pair of names that differ only in case is refused only where the target folder ignores case; elsewhere both are written, and packing such a folder warns.*
 
 **19.124 A box for zip and 7z's comparison (Edward, 6 November 2026; built the same day).**
 Edward: "Another checkbox for disabling/enabling the basic zip/7zip comparisons to be added in

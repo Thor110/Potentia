@@ -21,18 +21,18 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 | Verdict | Ideas |
 | --- | ---: |
 | done | 185 |
-| workable | 209 |
-| workable, large | 74 |
+| workable | 211 |
+| workable, large | 78 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
 | metaphor only | 16 |
-| **all** | **578** |
+| **all** | **584** |
 
 | Kind | Ideas |
 | --- | ---: |
-| technical | 419 |
-| both | 95 |
+| technical | 423 |
+| both | 97 |
 | process | 44 |
 | metaphorical | 20 |
 
@@ -744,3 +744,9 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.144 c | Immutable chain of AI and human work | both | noted only | workable, large | Content cannot show its maker; what can be locked is the maker's claim, hashed and witnessed when made (§19.136). |
 | 19.144 d | Doors through doors across dimensions | both | noted only | workable, large | Small lines drawn as rooms of doors, nesting into a graph of rooms (§5.12, §7.13); a view of the same space. |
 | 19.145 | Cross-dimensional lattice of highways; ideas against implementations | both | partly built | workable | The lines, doors, highway dimensions and links make the lattice, with time as an axis kept by hashes; VOICES' technical lines stashed with where each went; next, IMPLEMENTED checked against the code. |
+| 19.146 | Voices heard once per save; a highway for stories and genres | both | noted only | workable | A save keeps the hashes of voices heard and draws only unheard ones; story-specific voices are named by their story; genres as a highway of doors (§19.144). |
+| 19.147 a | Characters that speak, in every language | both | noted only | workable, large | Small AI-line models per language from anchored text; a long road, one language at a time. |
+| 19.147 b | Characters placed by address, fading with distance, spawned by compute | technical | noted only | workable | Placed by seed like everything else; drawing is a level of detail; the budget sets how many. |
+| 19.147 c | Character system from low to high poly | technical | noted only | workable, large | A character record names its parts (body, hat, hair, skins); each part has levels; the machine picks the level. |
+| 19.147 d | One interface to every engine and device | technical | noted only | workable, large | One input layer for every device, one output at any level of detail; the hallway of engines (GAME.md §11). |
+| 19.147 e | Scalable graphics seed and the pre-render barrier | technical | noted only | workable, large | Full geometry, fewer polygons, then impostors where a machine cannot draw live; below that, pictures only. |

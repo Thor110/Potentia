@@ -294,8 +294,7 @@ It also hides the moment the shelf changes side.
 
 **5.5 Accelerating scroll.** *Done; moved whole to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md) (12 November 2026).*
 
-**5.6 Shimmer on the item under the crosshair.** Small, and it makes the interactable thing obvious.
-*Built 12 November 2026 (`client/hallway.cpp`): the item under the crosshair, already tinted in its line's edge colour, now breathes (its tint between 85 and 135 of 255 over 1.6 s) and a leaning band sweeps across its front every 1.6 s. Shimmer on walking past stays undecided (§10).*
+**5.6 Shimmer on the item under the crosshair.** *Done; moved whole to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md) (12 November 2026).*
 
 **5.7 Metadata and links on an item in hand.** When a unit has been catalogued, show what is known
 about it and let its links be followed — a warp at the touch of a hyperlink. This is the feature
@@ -2744,8 +2743,8 @@ or quote goes a long way, and they can be attributed to him and to Claude direct
 filters could lead from one to another, or simply be discussed in plain sight by the AIs, as could
 the commands, and whether they may use them.
 - *Started:* `docs/VOICES.md`, a corpus with one attributed voice a line (who, when, what kind),
-  in a format a program can read. It holds Edward's, Gemini's and Claude's lines so far, and
-  Gemini's two messages whole.
+  in a format a program can read. It holds Edward's, Gemini's and Claude's lines so far;
+  Gemini's two messages and the technical lines moved to `ideas/VOICES-STASHED.md` (§19.145).
 - *In the game:* the corpus packed as a `.sieve` of pages, each voice a page with its
   attribution, and the AIs on the shelves saying them. Choosing a voice by where the player is
   (near a filter's door, a voice about that filter) is a filter on the voices line.
@@ -6451,3 +6450,86 @@ possible within the given time constraints".
   ones to [ideas/DEPRECATED.md](ideas/DEPRECATED.md), and [ideas/WORK-DONE.md](ideas/WORK-DONE.md)
   dates the work. The next pass: each IMPLEMENTED entry checked against the code it names, so the
   record says not only that something was built but that it is still there.
+
+**19.146 Heard once, then logged; voices as a highway for stories (Edward, 12 November 2026).** His
+words: "the kind of thing it would be interesting to hear a character or AI walking through the state
+spaces actually say to you randomly, once you have heard it though it would get logged and recorded so
+that your character and this save doesnt hear it again from any character, unless that line is ever
+reused or becomes story specific which is unlikely to start with but not eventually as it might
+become a cross dimensional highway for story writing and story ideas or story types and categories or
+types of fiction like scif fi or fantasy, genres etc a way to preserve and categorise all things
+across time and simply link the knowns and unknowns through data alone".
+- *Heard once:* each voice is a unit with an address (§19.55: a page of the voices `.sieve`), so a
+  save keeps the set of voices its character has heard, as their hashes. A voice is chosen at random
+  from those not yet heard (by place, as §19.55 says, where a filter applies); once said, it joins the
+  set and no character says it again in that save. When every voice has been heard the hallway falls
+  quiet, or says so, rather than repeat. The set is small: a hash a voice, or a bit a voice in the
+  corpus's order.
+- *Unless reused:* a voice that becomes part of a story is a different use of the same line: a story
+  names the voices it needs, and those are said where the story says, heard or not. The heard-set
+  governs only the random ones.
+- *A highway for stories:* stories, story ideas, story types and genres (science fiction, fantasy and
+  the rest) as one more highway dimension (§19.144): a small set of labels, each a door, with voices,
+  books and story records linked to them as records of who linked them and when. The story pool of
+  GAME.md §11 and the text game that makes itself (§19.20) draw from it.
+- *Knowns and unknowns linked through data alone:* every link is a record between hashes, so what is
+  known (a voice, a book, a story) and what is not yet (a place on a line no one has visited) are tied
+  by addresses alone, with nothing to trust but the bytes and who said what, when (§19.142, §19.145).
+- *Workable now, in order:* (1) the voices `.sieve` built from VOICES.md, one page a voice; (2) the
+  heard-set kept with the save, and random voices drawn from the unheard; (3) genre and story labels
+  as a highway of doors, linked by records.
+
+
+**19.147 Characters that speak, a character system that scales, and one interface for every game
+engine (Edward, 12 November 2026).** His words: "we will also at some point need to implement
+characters or AI which speak and have basic low end scalable language models across every known and
+spoken language through the anchor system", "they should look simple and perhaps fade out as they
+get into the distance but still exist there as their math and location would be bound by the
+rotation of dimensions, they would unfold alongside everything else and appear or spawn based on the
+compute available or the overall size and setting of the state space and or a number of other
+variables", "in the long run this could be computed on a much larger, near infinite (theoretical)
+system to calculate all things", and "we do actually need you to implement a character system, the
+kind of character system that would scale from the low poly pick your hat and hair all the way to the
+super high poly pick your hat and hair and weapon skins etc type system as well as a prelude
+interface to all the game engines and scalable graphics systems needed to update all the video games
+across and throughout time so that we can make a single interface for all of them that works through
+and across all systems from vr to keyboard and mouse or controller and console and scales infinitely
+up or down through graphics and compute in a sense like minecraft being backported to older consoles,
+a scalable graphics vector seed could allow for super high res games to be back scaled and displayed
+in some form some pre rendered others not, on much older platforms, the pre render barrier would be a
+thing".
+- *Characters that speak:* each a small language model of the AI line (exact, replayable, §15),
+  trained per language from anchored text (the anchors are the verified corpus, §4.3, §19.133), with
+  the voices of §19.55 and §19.146 as what they say when not talking with you. "Low end and scalable"
+  is the AI line's shape setting: the smallest model that speaks a language on a small machine, a
+  wider one where there is room. Every known language is a long road: text in each, a font for each
+  script (§2.5), and a model trained for each; the first is the one that exists (universalbibliothek's
+  German, the harness's runs).
+- *Where they are:* a character is placed by its address and the line's rotation, as everything is,
+  so it exists whether drawn or not; drawing is a level of detail. Near: a simple figure; far: fading
+  to an outline, then a mark, then nothing drawn (still there). How many are spawned follows the
+  machine (the setup menu's budgets, §6) and the state space's size and settings; the same seed gives
+  the same characters in the same places on any machine.
+- *A character system that scales:* one character record (a body, a hat, hair, clothes, a weapon,
+  their skins) named by the parts it is made of, as a world is made of models (§14, `worldspace-v1`).
+  Each part has versions from low poly to high poly; the record names the part, and the machine
+  picks the version it can draw. So "pick your hat and hair" is the same choice at every level, and
+  the character is the same character everywhere. The parts are units of the models line; the
+  character is a composition (a `characters` line, like tracks of audio).
+- *One interface to every engine:* the hallway of engines (GAME.md §11): a layer that takes input
+  from any device (keyboard and mouse, controller, VR) as one set of actions, and output to any
+  renderer at any level of detail. A game is reached through it as a lens (§19.11 b).
+- *The scalable graphics seed, and the pre-render barrier:* a scene described once (its models,
+  their parts, the seed of anything generated) can be drawn at the level a machine allows: full
+  geometry where it can, fewer polygons below that, then pictures rendered beforehand (impostors,
+  §19.60 b) where the machine cannot draw it live at all. That last step is the barrier Edward
+  names: below it the old platform shows pictures made elsewhere, not the scene itself, and what is
+  interactive there is only what the pictures allow.
+- *Near-infinite compute:* the rule of §19.4: every system scales, and says where it stops on this
+  machine; on a larger one the same addresses unfold further.
+- *Workable now, in order:* (1) a character record format (`sieve-character-v1`: parts by address,
+  each part's levels), with three levels of a simple body and a few hats and hairs, drawn in the
+  hallway as wireframes; (2) characters placed by seed along a line, drawn with distance fading and
+  counted by the budget; (3) each one given a small model of the AI line to speak with, and the
+  heard-once voices (§19.146); (4) one input layer for keyboard, mouse and controller (SDL already
+  reads controllers); (5) impostors for distant characters.

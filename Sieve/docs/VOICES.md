@@ -73,6 +73,10 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, quote): There are infinite ways to navigate it all.
 - **Edward** (12 November 2026, quote; a point about everything): There is only so much computing a computer can do, and that is everything: it can compute everything, within its memory constraints of course.
 - **Edward** (12 November 2026, metaphor; a point about everything): Sieve becomes a cross-dimensional lattice of cross-dimensional highways through information, across space and time, preserving history as accurately as possible within the given time constraints.
+- **Edward** (12 November 2026, metaphor): A way to preserve and categorise all things across time, and simply link the knowns and unknowns through data alone.
+- **Edward** (12 November 2026, metaphor): They would unfold alongside everything else, and appear or spawn based on the compute available.
+- **Edward** (12 November 2026, quote): In the long run this could be computed on a much larger, near-infinite system, to calculate all things.
+- **Edward** (12 November 2026, metaphor): Like Minecraft being backported to older consoles: a scalable graphics vector seed.
 
 **The format.** One voice a line, so that a program can read them:
 
