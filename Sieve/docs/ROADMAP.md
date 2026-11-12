@@ -1,5 +1,41 @@
 # The plan from here
 
+## The long plan through the ideas (12 November 2026)
+
+Edward: "lay out a long plan moving forward and we will work through all of the ideas accordingly,
+implementing them etc". Step 3 of "Next: the ideas filtered" below: the 279 open ideas that
+[IDEAS-TRIAGE.md](IDEAS-TRIAGE.md) calls workable (207) or workable but large (72), gathered by what
+they touch into stages 8 to 18, after the seven stages of 11 November. Ids are IDEAS.md's.
+
+**How each idea is worked through,** whatever its stage: measured first where it claims a gain; built
+only where it pays; then moved whole to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md) when done or
+[ideas/DEPRECATED.md](ideas/DEPRECATED.md) when it does not pay, with a dated line in
+`ideas/WORK-DONE.md`, and its triage row updated. No change may leave an earlier version unreadable
+(§19.137); every new screen keeps the tactile rule (§19.140). Stages can run side by side; within a
+stage, the first items are the cheapest with the widest reach.
+
+| Stage | What it is | First items | Large ones |
+| --- | --- | --- | --- |
+| 8. The record | docs that match the code; the work-done log; loose notes reconciled | `ideas/WORK-DONE.md`; docs checked from the code (19.134); the loose notes (§10); chat logs (19.9) | none |
+| 9. The tactile Sieve | accessibility, every sense | colour-blindness pass (2.4); text size and contrast (19.74 d); read-aloud for panels; "describe this unit"; key remapping (§10) | braille and haptics (19.140 b); wider scripts and fonts (2.5, §11) |
+| 10. Hallway polish | small things that make it feel finished | shimmer (5.6); warp animation (5.4); held item's links (5.7); see-through panel and the render glitch (§10); presets above START; tabs on every line (19.80 b); completion estimate's place (19.130 a); metrics wall (19.50 b) | none |
+| 11. Hallway shape | how the lines are laid out and seen | one wall of shelves (5.1, §11); junction as a ring and the wheel through forks (5.12); telescope (5.9); sphere and cube views (19.117 d) | rings (5.2); toroidal map (5.8); end-caps (7.13); scene description (5.10) |
+| 12. Filters and lines | what can be set aside and counted | titled lines bottom-up (5.13); `.obj` filter and alphabet (7.3, 7.4); pages on babel29 (§11); lines filtering each other (§12); Optimise all in COST and clash sets (§12); geometry (19.1, 19.7); join filters (§13); Life lens and `life-causal-v1` (19.141); glider guns (19.112 g); a generated line (19.27 a) | predefined stacks (§12); rules between voices and nine tones (§12) |
+| 13. Sound and voice | music, PCM, voices | designer inside the Media Player (19.19); loudness and note sets (§12); PCM filters (19.133 g); film sound apart (19.132 e); voices of the halls (19.55, 19.70 b) | PCM against note sets (§12); track model (19.31 b); trained voice (19.135 c); articulatory voice (19.33) |
+| 14. Compression, the next version | gathered into v35, measured first | BCJ2 (Hdr); headers modelled (Hdr, 19.88 g); rope probe at a second place (19.118); cards as a transform (19.112 e); scattered substitutions (19.114 c); start-test cache (19.120 b); route table per priority (19.130 b); RAPL figures (19.111 i); maps as v5 (16.3); threads (19.99 d, 19.120 c); duplicated code (19.120 g) | JPEGs smaller (19.88 a); mixing as a piece (19.103 b); real-rope rules (19.110 b); mesh, code point, grammar, melody models (19.114 d); coded video (19.116 d) |
+| 15. The AI line | models that replay bit for bit | keep only the hash (§15); shelf budget (§15); byte model on pictures (18.5); deterministic sampling (19.121 e); QK-norm again at size (19.119 a); training interface and readers (19.133 c, e); chain branches (19.46 b); small baked models (19.72) | aispace-v2 (§15, 19.86 e); plug in any model (18.3); diffusion (19.2, 19.17); wider arithmetic (19.133 d); a real model (19.122, 19.133 f); ComfyUI (19.26 a) |
+| 16. Worlds and the games line | models, textures, games | ENTER a world in ghost mode (§14); own models for tracks and movies (§13); prerendered angles (19.60 b); file ingest at its address (7.2) | textures and pinned unwrap (§14); skeletons (19.60 a, 19.85); the games line and lenses (19.6, 19.11 b, c); ingest by game parsers (7.1); decompilation (19.51) |
+| 17. Records, history and the web | the lock in time | first release as anchor (4.3, §10); dedup and the comparison suite (4.2, 4.9); one catalogue by SHA-256 (19.48 c); the PHP `integrity` helper (19.92 g); power savings page (19.111 j); gallery page (19.84) | witnessed hashes against fraud (19.136 a); self-current site maps (19.111 q); the hallway in a browser (19.111 k); the crawler card (19.101) |
+| 18. The far horizon | designs, each Edward's to start | his decision on each | currencies and identity (19.63); distributed computing and the infinite RAID (19.63 d, 19.139 d); Lean (19.57); every PDF read (19.58); progressive ordering (3.1); one model at the centre (19.83) |
+
+**What waits on Edward** (14 ideas, IDEAS-TRIAGE "Waiting on Edward"): the v34 freeze, the games
+line, the rankable canonical form, wider arithmetic, Optimise Search's other kinds, the thumbnail
+icon, and the others listed there. They join a stage when he decides.
+
+**Where to start:** Stage 8 (it makes every later stage cheaper to check), with Stage 9's
+colour-blindness pass and Stage 10's small items beside it, since each is a day or less and touches
+what everyone sees; then Stage 12 and 14 in turn, measured; the large ones one at a time.
+
 ## The long plan (11 November 2026), and where it stands (12 November 2026)
 
 Edward: "lets lay out a long plan for what we can implement next for hallway and sieve etc utilising
@@ -54,6 +90,9 @@ voices etc accordingly as well as the rest of the documentation". In order:
 - **Step 2 begun (12 November 2026):** 39 done entries moved whole to
   [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md), pointers left in IDEAS.md. Next: §17 and the
   unworkable ones to `ideas/DEPRECATED.md`, then the dated `ideas/WORK-DONE.md`.
+- **Step 2 carried on (12 November 2026):** 19 set-aside entries, all of §17 among them, moved whole
+  to [ideas/DEPRECATED.md](ideas/DEPRECATED.md); the colour-blindness pass kept in IDEAS.
+- **Step 3 done (12 November 2026):** the long plan through the ideas, at the top of this file.
 - **A rule over all of it, the tactile Sieve (IDEAS §19.140):** Sieve is meant to be felt as well as
   seen: colours and notes carried by braille, touch and sensation screens, for the disabled
   throughout time; that is why the interface is kept simple. Every new screen keeps few elements,
