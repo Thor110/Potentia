@@ -7,7 +7,7 @@ metrics and recorded stats, pros, cons, etc for all things", where "all informat
 other information one way or another, like the wiki principle where all pages lead to a certain place
 or space"; recorded "dynamically and then procedurally ... across all dimensions of all things".
 
-This is the plan. Stages 1 and 2 are built, and stage 3 in a first form (below); the rest is not. It is in the catalogue
+This is the plan. Stages 1 and 2 are built, and stages 3 and 4 in a first form (below); the rest is not. It is in the catalogue
 of dimensions as `formats` (`sieve dimensions formats`). Every figure the catalogue holds will be
 measured or sourced, as everywhere in Sieve; a pro or con with neither is not recorded.
 
@@ -95,7 +95,13 @@ information, and back down to Welsh).
    **In the hallway.** The catalogue as a dimension: each entry a door, its links the corridors, the
    formats Sieve can open leading straight onto their lines (a PNG's entry onto the image line, a
    script's onto the pages line over its alphabet, `dna4` onto DNA).
-4. **Measured, as it is used.** Each time Sieve packs, imports or reads a format, its figures can be
+4. **(Built 12 November 2026, as a first form: `sieve catalogue --measure FILE|FOLDER` packs each file
+   alone as Sieve does, against LZMA2 (7z's method) and deflate, with the times to make and to install,
+   and installs it back to check the round trip; `sieve import` records what each import kept against
+   what the file held. Each is a `sieve-format-stat-v1` line (SPECIFICATIONS §12.0p) in the person's
+   stats folder, outside the repository, naming no file; `sieve catalogue ID`, `--measured` and the
+   SYSTEMS page add them up. Not yet: the hallway's own packing and imports adding theirs, and figures
+   gathered from many machines.)** **Measured, as it is used.** Each time Sieve packs, imports or reads a format, its figures can be
    added to that entry's `stats` (size against 7z, time to make and to install, what an importer
    kept), so the catalogue fills from use rather than from claims. Translation metrics come the same
    way: a round trip measured (PNG to its pixels and back: lossless; glTF to a held model: 8 of N

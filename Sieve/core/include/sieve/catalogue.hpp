@@ -61,6 +61,9 @@ FormatEntry read_format_entry(const std::string& text);
 // where each was gathered from. Ids are unique.
 const std::vector<FormatEntry>& format_catalogue();
 const FormatEntry* format_by_id(std::string_view id); // null if there is none
+// The entry of a file kind (file-kinds-v1's name: "PNG" is file-png, "?" file-unknown-bytes); a model
+// importer's is "model-" and its format id.
+std::string format_id_of_file_kind(std::string_view kind);
 
 // Stage 2: entries written by hand, one a file (<ID>.format) in a folder (data/catalogue), read in the
 // order of their names, each checked as read_format_entry checks it and against its file's name. They

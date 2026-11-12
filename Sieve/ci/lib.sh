@@ -18,6 +18,10 @@ if ! python -c "import sys; sys.exit(sys.version_info < (3, 8))" > /dev/null 2>&
     fi
 fi
 
+# The catalogue's measured figures (stage 4, sieve/format_stats.hpp) kept in the step's own folder,
+# never in the runner's home: sieve import and sieve catalogue --measure add to them as they run.
+export SIEVE_STATS="${SIEVE_STATS:-$PWD/sieve-stats}"
+
 # SDL with no screen: the drivers the workflow sets for the hallway's steps, unless already set
 # (on a Mac the offscreen driver asks for OpenGL, which a runner has not got).
 sieve_ci_no_display() {

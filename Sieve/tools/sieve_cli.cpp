@@ -72,6 +72,7 @@
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/catalogue.hpp"
+#include "sieve/format_stats.hpp"
 #include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/aispace.hpp"
@@ -1329,6 +1330,61 @@ int cmd_raid(const Args& a)
 }
 
 // sieve catalogue: the catalogue of formats, stage 1 (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md).
+// Stage 4 of the catalogue (IDEAS 19.165): one file measured as Sieve packs it, alone, and the .sieve
+// installed back and checked; its figures added to its kind's entry. Nothing about the file but its kind
+// and sizes is kept.
+void pack_with_items(const Args& a, Manifest& m, const std::filesystem::path& root, PackReport& rep); // (below)
+
+namespace {
+
+sieve::FormatStat measure_one_file(const Args& a, const std::filesystem::path& file, const std::string& machine, std::string& entry)
+{
+    namespace fs = std::filesystem;
+    using clock = std::chrono::steady_clock;
+    const auto bytes = read_file_bytes(file);
+    vault::check_bytes(bytes, sieve::u8(file)); // the vault: a withheld file is never measured
+    entry = sieve::format_id_of_file_kind(file_kind(bytes, bytes.size()));
+    const auto t0 = clock::now();
+    Manifest m = manifest_of_file(file);
+    PackReport rep;
+    pack_with_items(a, m, fs::absolute(file).parent_path(), rep);
+    const std::vector<uint8_t> raw = raw_of_file(m.file());
+    const auto t1 = clock::now();
+    // Installed back into a folder of its own, and checked: install_tree checks every file against its
+    // SHA-256, and the bytes are compared again here.
+    const fs::path into = fs::temp_directory_path() / ("sieve-measure-" + std::to_string(std::random_device{}()));
+    bool same = false;
+    const auto t2 = clock::now();
+    try
+    {
+        const Manifest back = manifest_of_installer_raw(raw);
+        same = install_tree(back, into, true, [](int, size_t, size_t, const std::string&) {});
+        if (same)
+        {
+            same = false;
+            for (const auto& e : fs::recursive_directory_iterator(into))
+                if (e.is_regular_file()) same = read_file_bytes(e.path()) == bytes;
+        }
+    }
+    catch (const std::exception&)
+    {
+        same = false;
+    }
+    const auto t3 = clock::now();
+    std::error_code ec;
+    fs::remove_all(into, ec);
+    auto us = [](auto d) { return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(d).count()); };
+    sieve::FormatStat s;
+    s.date = sieve::format_stats_today();
+    s.machine = machine;
+    s.what = "pack";
+    s.result = same ? "lossless" : "differs";
+    s.figures = {{"bytes", bytes.size()}, {"deflate", deflate_size(bytes)}, {"install-us", us(t3 - t2)}, {"lzma2", lzma2_size(bytes)}, {"make-us", us(t1 - t0)}, {"sieve", raw.size()}};
+    return s;
+}
+
+} // namespace
+
 int cmd_catalogue(const Args& a)
 {
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
@@ -1340,7 +1396,7 @@ int cmd_catalogue(const Args& a)
         for (const char* name : {"catalogue", "languages"})
         {
             std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
-            if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / "data" / name);
+            if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / name), where.push_back(exe / ".." / "data" / name); // (a release keeps sieve in tools/, the folders above it)
             for (const auto& w : where)
             {
                 std::error_code ec;
@@ -1357,6 +1413,62 @@ int cmd_catalogue(const Args& a)
             if (e.id == id) return &e;
         return nullptr;
     };
+    const std::filesystem::path stats = sieve::format_stats_folder(a.get("stats-folder", ""));
+    if (a.has("measure"))
+    {
+        namespace fs = std::filesystem;
+        const std::string machine = sieve::format_stats_machine(a.get("machine", ""));
+        const fs::path where = sieve::from_u8(a.get("measure"));
+        std::vector<fs::path> files;
+        if (fs::is_regular_file(where)) files.push_back(where);
+        else if (fs::is_directory(where))
+        {
+            for (const auto& e : fs::recursive_directory_iterator(where))
+                if (e.is_regular_file()) files.push_back(e.path());
+            std::sort(files.begin(), files.end());
+        }
+        else throw std::invalid_argument("--measure: no file or folder " + a.get("measure"));
+        std::cout << "machine   " << machine << " (--machine NAME, or SIEVE_MACHINE, to name it)\n"
+                  << "kept in   " << sieve::u8(stats) << "\n"
+                  << "entry                bytes        sieve        lzma2      deflate  make ms  install ms  round trip\n";
+        size_t lossless = 0, skipped = 0;
+        for (const auto& f : files)
+        {
+            std::string entry;
+            sieve::FormatStat st;
+            try
+            {
+                st = measure_one_file(a, f, machine, entry);
+            }
+            catch (const std::exception& e) // (withheld by the vault, unreadable: said, and the rest measured)
+            {
+                std::cout << "skipped   " << sieve::u8(f) << ": " << e.what() << "\n";
+                ++skipped;
+                continue;
+            }
+            if (!a.has("no-stats")) sieve::add_format_stat(stats, entry, st);
+            lossless += st.result == "lossless";
+            std::printf("%-17s %12llu %12llu %12llu %12llu %8llu %11llu  %s\n", entry.c_str(), (unsigned long long)st.get("bytes"), (unsigned long long)st.get("sieve"),
+                        (unsigned long long)st.get("lzma2"), (unsigned long long)st.get("deflate"), (unsigned long long)(st.get("make-us") / 1000),
+                        (unsigned long long)(st.get("install-us") / 1000), st.result.c_str());
+        }
+        const size_t measured = files.size() - skipped;
+        std::cout << measured << (measured == 1 ? " file" : " files") << " measured, " << lossless << (lossless == 1 ? " round trip lossless" : " round trips lossless")
+                  << (a.has("no-stats") ? " (not kept: --no-stats)" : "") << "\n";
+        if (skipped) std::cout << skipped << (skipped == 1 ? " file" : " files") << " skipped\n";
+        return lossless == measured ? 0 : 1;
+    }
+    if (a.has("measured"))
+    {
+        const auto ids = sieve::measured_entries(stats);
+        std::cout << ids.size() << " entries measured, kept in " << sieve::u8(stats) << "\n";
+        for (const auto& id : ids)
+        {
+            std::cout << id << "\n";
+            for (const auto& l : sieve::format_stats_summary(sieve::format_stats(stats, id))) std::cout << "  " << l << "\n";
+        }
+        return 0;
+    }
     if (a.has("check"))
     {
         // Every entry reads back from its own text, and reaches "information" by its part-of links.
@@ -1407,6 +1519,12 @@ int cmd_catalogue(const Args& a)
         for (size_t i = 0; i < under.size() && i < 40; ++i) std::cout << (i ? ", " : ": ") << under[i];
         if (under.size() > 40) std::cout << ", ...";
         std::cout << "\n";
+        // Stage 4: what Sieve measured of it on this machine's records (none until measured).
+        size_t skipped = 0;
+        const auto lines = sieve::format_stats_summary(sieve::format_stats(stats, e->id, &skipped));
+        for (const auto& l : lines) std::cout << l << "\n";
+        if (lines.empty()) std::cout << "measured   not yet (sieve catalogue --measure FILE)\n";
+        if (skipped) std::cout << "           " << skipped << " lines of its stats file are not records, and were skipped\n";
         return 0;
     }
     std::map<std::string, size_t> kinds;
@@ -1540,6 +1658,27 @@ int cmd_import(const Args& a)
     else if (a.has("character-out") && m.skeleton.empty())
         throw std::invalid_argument("no skeleton in it to write (a glTF's first skin is read as one)");
     for (const auto& l : m.left_out) std::cout << "left out  " << l << "\n";
+    // Stage 4 of the catalogue: what this import kept, added to its importer's entry (--no-stats: not).
+    if (!a.has("no-stats"))
+    {
+        const sieve::HeldImport h = m.mesh.verts.empty() ? sieve::HeldImport{} : sieve::import_model_for_hold(bytes, beside(path));
+        sieve::FormatStat s;
+        s.date = sieve::format_stats_today();
+        s.machine = sieve::format_stats_machine(a.get("machine", ""));
+        s.what = "import";
+        const uint64_t vk = std::min<uint64_t>(h.vertices_in, sieve::kHeldVertices);
+        s.result = m.left_out.empty() && vk == h.vertices_in && h.faces_kept == h.faces_in ? "whole" : "partial";
+        s.figures = {{"animations", m.sampled.size()}, {"faces-in", h.faces_in}, {"faces-kept", h.faces_kept}, {"joints", m.skeleton.size()},
+                     {"left-out", m.left_out.size()}, {"vertices-in", h.vertices_in}, {"vertices-kept", vk}};
+        try
+        {
+            sieve::add_format_stat(sieve::format_stats_folder(a.get("stats-folder", "")), "model-" + m.format, s);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "warning: its figures were not kept: " << e.what() << "\n";
+        }
+    }
     return 0;
 }
 

@@ -305,12 +305,16 @@ const std::vector<Page>& pages()
          {{"FILE", "The model to read."}, {"--formats", "List the formats read, what each carries and what each leaves out."},
           {"--character-out FILE", "Write the skeleton as a .character file (sieve-character-v3)."},
           {"--animation-out FILE", "Write an animation as a .animation file (sieve-animation-v1)."},
-          {"--which N", "Which animation --animation-out writes, from 0 (default 0)."}},
+          {"--which N", "Which animation --animation-out writes, from 0 (default 0)."},
+          {"--no-stats", "Keep no figures (else what was kept is added to the importer's catalogue entry)."},
+          {"--machine NAME", "What to call this machine in those figures."},
+          {"--stats-folder DIR", "Where those figures are kept (sieve help catalogue)."}},
          {{"sieve import teapot.obj", "8 of 1,857 vertices, 9 of 3,552 faces kept"},
           {"sieve import --formats", "every importer and its roof"}}},
 
         {"catalogue", "The catalogue of formats: every format Sieve knows, as one web leading up to information.",
-         "sieve catalogue [ID] [--kind KIND] [--search TEXT] [--path A,B] [--check] [--folder DIR]",
+         "sieve catalogue [ID] [--kind KIND] [--search TEXT] [--path A,B] [--check] [--folder DIR]\n"
+         "       sieve catalogue --measure FILE|FOLDER [--machine NAME] [--stats-folder DIR] [--no-stats] | --measured",
          "Stage 1 of the catalogue of formats (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md): the file\n"
          "kinds Sieve recognises, the model importers, the built-in alphabets, the Unicode blocks and\n"
          "Sieve's own formats, gathered from the code itself, under a first layer of general entries\n"
@@ -318,14 +322,27 @@ const std::vector<Page>& pages()
          "one root, information; --check says so for each (the wiki principle). With an ID, one entry\n"
          "as text (sieve-format-v1), its version (the SHA-256 of that text), its lineage and the\n"
          "entries beneath it. Entries written by hand join them from data/catalogue (one\n"
-         "<ID>.format file each, as SPECIFICATIONS 12.0m writes the format out).",
-         {{"ID", "One entry, such as file-png, script-greek or alphabet-dna4."},
+         "<ID>.format file each, as SPECIFICATIONS 12.0m writes the format out).\n"
+         "\n"
+         "Stage 4: figures measured, never claimed. --measure packs each file alone as Sieve does, against\n"
+         "LZMA2 (7z's method) and deflate, installs it back and checks it, and adds the figures to its\n"
+         "kind's entry; sieve import adds what each import kept to its importer's entry. They are kept\n"
+         "in your stats folder, outside the repository (SPECIFICATIONS 12.0p: sieve-format-stat-v1), with\n"
+         "no file's name or path: only its kind, the sizes, the times, the date and the machine's name.\n"
+         "An entry shows them added up beneath its lineage.",
+         {{"ID", "One entry, such as file-png, script-greek or alphabet-dna4, with what was measured of it."},
+          {"--measure FILE|FOLDER", "Measure a file, or every file in a folder; exit 1 if a round trip differs."},
+          {"--measured", "Every entry measured so far, with its figures added up."},
+          {"--machine NAME", "What to call this machine in the records (else SIEVE_MACHINE, else unnamed)."},
+          {"--stats-folder DIR", "Where the records are kept (else SIEVE_STATS, else your Sieve data folder)."},
+          {"--no-stats", "Measure, but keep nothing."},
           {"--kind KIND", "List only one kind: general, file, importer, alphabet, script or sieve."},
           {"--path A,B", "The shortest chain of links between two entries."},
           {"--check", "Check that every entry reads back from its text and reaches information; exit 1 if one does not."},
           {"--search TEXT", "List the entries with TEXT in any field (any case)."},
           {"--folder DIR", "Where the hand-written entries are (default data/catalogue)."}},
          {{"sieve catalogue --kind file", "the file kinds and what each is part of"},
+          {"sieve catalogue --measure D:/pictures --machine desk", "measure every file in a folder"},
           {"sieve catalogue file-flac", "one entry, its signature and lineage"},
           {"sieve catalogue --path file-png,alphabet-dna4", "how a PNG and DNA meet"}}},
 

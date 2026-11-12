@@ -1,5 +1,6 @@
 // Sieve — the catalogue of formats, stage 1 (see catalogue.hpp).
 #include "sieve/catalogue.hpp"
+#include "sieve/format_stats.hpp"
 
 #include "sieve/alphabet.hpp"
 #include "sieve/animation.hpp"
@@ -109,10 +110,7 @@ std::vector<FormatEntry> gather()
     for (const std::string& k : file_kinds())
     {
         FormatEntry e;
-        std::string id;
-        for (const char c : k) id += char(std::tolower(static_cast<unsigned char>(c)));
-        if (k == "?") id = "unknown-bytes";
-        e.id = "file-" + id;
+        e.id = format_id_of_file_kind(k);
         e.kind = "file";
         const auto it = kKinds.find(k);
         e.name = it != kKinds.end() ? it->second.first : k;
@@ -211,10 +209,19 @@ std::vector<FormatEntry> gather()
     own(kRaidHeldVersion, "A folder keeping others' sealed chunks", "container", std::string("a file sieve-raid-held: \"") + kRaidHeldVersion + " salt=...\"",
         "sieve raid serve (SPECIFICATIONS 12.0o)");
     own(kFormatVersion, "An entry of this catalogue", "document", std::string("first line \"") + kFormatVersion + "\"", "sieve catalogue");
+    own(kFormatStatVersion, "A figure measured of a format, as it was used", "document", std::string("a line starting \"") + kFormatStatVersion + " date=\"",
+        "sieve catalogue --measure and sieve import (SPECIFICATIONS 12.0p)");
     return out;
 }
 
 } // namespace
+
+std::string format_id_of_file_kind(std::string_view kind)
+{
+    std::string id;
+    for (const char c : kind) id += char(std::tolower(static_cast<unsigned char>(c)));
+    return "file-" + (kind == "?" ? std::string("unknown-bytes") : id);
+}
 
 const std::vector<FormatEntry>& format_catalogue()
 {

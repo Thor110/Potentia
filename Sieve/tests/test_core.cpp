@@ -24,6 +24,7 @@
 #include "sieve/raid_net.hpp"
 #include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
+#include "sieve/format_stats.hpp"
 #include "sieve/save.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/json.hpp"
@@ -7357,6 +7358,63 @@ void test_raid_net()
     fs::remove_all(root, ec);
 }
 
+// Stage 4 of the catalogue (IDEAS 19.165): a measured figure read back as written; anything else
+// refused; records kept per entry, a line that is not one skipped; and added up as said.
+void test_format_stats()
+{
+    namespace fs = std::filesystem;
+    FormatStat s;
+    s.date = "2026-11-12";
+    s.machine = "desk";
+    s.what = "pack";
+    s.result = "lossless";
+    s.figures = {{"bytes", 1000}, {"deflate", 600}, {"install-us", 1000}, {"lzma2", 500}, {"make-us", 20000}, {"sieve", 400}};
+    const std::string line = "sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless bytes=1000 deflate=600 install-us=1000 lzma2=500 make-us=20000 sieve=400";
+    CHECK(s.text() == line && read_format_stat(line).text() == line && read_format_stat(line).get("lzma2") == 500 && read_format_stat(line).get("none") == 0);
+    for (const std::string bad : {std::string("sieve-format-stat-v2 date=2026-11-12 machine=desk what=pack result=lossless"),
+                                  std::string("sieve-format-stat-v1 date=2026-1-12 machine=desk what=pack result=lossless"),
+                                  std::string("sieve-format-stat-v1 date=2026-11-12 machine=Desk what=pack result=lossless"),
+                                  std::string("sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless b=1 a=2"),
+                                  std::string("sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless a=1 a=2"),
+                                  std::string("sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless a=-1"),
+                                  std::string("sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless  a=1"),
+                                  std::string("sieve-format-stat-v1 machine=desk date=2026-11-12 what=pack result=lossless")})
+        CHECK(throws([&] { (void)read_format_stat(bad); }));
+    CHECK(format_stats_machine("My Desk PC!") == "my-desk-pc-" && format_stats_machine("") .size() > 0 && format_stats_today().size() == 10);
+    const fs::path dir = fs::temp_directory_path() / ("sieve-stats-test-" + std::to_string(std::random_device{}()));
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    CHECK(format_stats(dir, "file-png").empty() && measured_entries(dir).empty() && format_stats_summary({}).empty());
+    add_format_stat(dir, "file-png", s);
+    FormatStat t = s;
+    t.machine = "laptop";
+    t.result = "differs";
+    t.figures = {{"bytes", 3000}, {"deflate", 1800}, {"install-us", 9000}, {"lzma2", 1500}, {"make-us", 60000}, {"sieve", 1200}};
+    add_format_stat(dir, "file-png", t);
+    std::ofstream(dir / "file-png.stats", std::ios::binary | std::ios::app) << "not a record\r\n";
+    FormatStat imp;
+    imp.date = "2026-11-12";
+    imp.machine = "desk";
+    imp.what = "import";
+    imp.result = "partial";
+    imp.figures = {{"faces-in", 3552}, {"faces-kept", 9}, {"vertices-in", 1857}, {"vertices-kept", 8}};
+    add_format_stat(dir, "model-obj", imp);
+    CHECK(throws([&] { add_format_stat(dir, "../escape", s); }));
+    size_t skipped = 0;
+    const auto png = format_stats(dir, "file-png", &skipped);
+    CHECK(png.size() == 2 && skipped == 1 && png[1].machine == "laptop");
+    CHECK(measured_entries(dir) == std::vector<std::string>({"file-png", "model-obj"}));
+    const auto sum = format_stats_summary(png);
+    CHECK(sum.size() == 2 && sum[0].find("packed 2 times on 2 machines, 2026-11-12: 4,000 bytes to 1,600 (40.0%); LZMA2 alone 2,000 (50.0%), deflate 2,400 (60.0%)") != std::string::npos);
+    CHECK(sum[1].find("round trips 1 of 2 lossless") != std::string::npos && sum[1].find("made in 20,971 ms a MiB") != std::string::npos);
+    const auto im = format_stats_summary(format_stats(dir, "model-obj"));
+    CHECK(im.size() == 2 && im[0].find("8 of 1,857 vertices kept, 9 of 3,552 faces") != std::string::npos && im[1].find("0 of 1 whole") != std::string::npos);
+    const auto sh = format_stats_short(png);
+    CHECK(sh.size() == 2 && sh[0] == "packed 2x: 40.0% of its bytes (LZMA2 50.0%)" && sh[1] == "1 of 2 lossless; 21.0 s a MiB to make");
+    CHECK(format_id_of_file_kind("PNG") == "file-png" && format_id_of_file_kind("?") == "file-unknown-bytes" && format_by_id(format_id_of_file_kind("JPG")));
+    fs::remove_all(dir, ec);
+}
+
 // A character's save (sieve-save-v1, IDEAS 19.183): the character, its animation and its languages,
 // named together; the languages kept in order, each once; read back the same.
 void test_save()
@@ -7500,6 +7558,7 @@ void run_all(int argc, char** argv)
     RUN(test_character());
     RUN(test_raid());
     RUN(test_raid_net());
+    RUN(test_format_stats());
     RUN(test_catalogue());
     RUN(test_save());
     RUN(test_model());

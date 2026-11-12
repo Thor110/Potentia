@@ -1,40 +1,46 @@
-# The infinite RAID, stage 3: between machines (12 November 2026)
+# The catalogue of formats, stage 4: figures measured as formats are used (12 November 2026)
 
-On top of d72258d ("sieve language setup"). Unzip at the repository root; nothing to delete by hand.
-**Re-run CMake**: there are new source files (core/src/seal.cpp, core/src/raid_net.cpp,
-tools/cli/raid_socket.cpp), and on Windows `sieve` now links ws2_32 and the core links bcrypt.
+On top of f6f56c9 ("sieve raid system"). Unzip at the repository root; nothing to delete by hand.
+**Re-run CMake**: one new source file, core/src/format_stats.cpp.
 
-## What it does (opt in only)
+## What it does
 
-- `sieve raid key --out my.key` makes a key only you hold (never written over an existing file;
-  readable by its owner alone). Lose it and what others keep for you cannot be read by anyone.
-- `sieve raid serve --held D:/kept --listen 0.0.0.0:47100` keeps others' saves on this machine while it
-  runs, with limits: `--space` MiB in all (1024) and `--per-peer` MiB for any one address (64). The
-  address is kept only as a salted hash. It prints a warning box when it starts.
-- `sieve raid share game.sav --drives ... --key my.key --peers a:47100,b:47100` sends a version out
-  sealed (ChaCha20 + HMAC-SHA-256, checked against RFC 8439 and RFC 4231 test vectors), each chunk to
-  two peers (`--peer-copies N`), and prints the save's remote id. A chunk a peer already has is not sent.
-- `sieve raid fetch REMOTE --key my.key --peers ... --out game.sav [--drives ...]` brings it back on any
-  machine, every piece checked.
-
-Measured (4 MiB save, three peers on one machine, two copies): first share 124 pieces, 8,420,593 bytes;
-one byte changed 8 pieces, 95,555 bytes; ten bytes inserted near the start 8 pieces, 92,007 bytes;
-fetched back byte for byte, also with one peer gone; the wrong key gets nothing.
-
-## Decisions taken as defaults, for you to overrule (IDEAS 19.176)
-
-- Others' saves are sealed, so helpers cannot read them.
-- Space given: chosen by whoever serves (1 GiB / 64 MiB an address by default).
-- Finding machines: the addresses you give with --peers. No starting nodes run yet: who runs them is yours.
-- Spam limit: by IP address first, as you chose (19.179), as a salted hash.
-- Not yet: the menu behind the red warning boxes, peers passing on other peers, verified identity.
+- `sieve catalogue --measure FILE|FOLDER [--machine NAME]` packs each file alone as Sieve does, against
+  LZMA2 (7z's method) and deflate, with the time to make and to install, installs it back and checks
+  it, and adds the figures to its kind's entry (file-png, file-txt, ...). Exit 1 if a round trip differs;
+  a withheld or unreadable file is skipped and said so.
+- Every `sieve import` adds what it kept (vertices, faces, joints, animations, things left out) to its
+  importer's entry (model-obj, model-gltf, model-glb). `--no-stats` keeps nothing.
+- `sieve catalogue ID` shows the figures added up beneath the lineage; `--measured` lists every entry
+  measured; the SYSTEMS page shows them in short beneath the entry.
+- Kept in your stats folder, never in the repository: `--stats-folder DIR`, else SIEVE_STATS, else
+  %LOCALAPPDATA%\Sieve\stats (Windows) or ~/.local/share/sieve/stats. Each record is one line of
+  `sieve-format-stat-v1` (SPECIFICATIONS 12.0p) and names no file: only the kind, sizes, times, date
+  and the machine's name (--machine, or SIEVE_MACHINE; "unnamed" otherwise).
 
 ## Files
 
-- New: core/include/sieve/seal.hpp, core/src/seal.cpp, core/include/sieve/raid_net.hpp,
-  core/src/raid_net.cpp, core/src/raid_files.hpp (the RAID's file helpers, one copy),
-  tools/cli/raid_socket.hpp, tools/cli/raid_socket.cpp. Each carries the 7(b) attribution notice.
-- Changed: CMakeLists.txt, core/src/raid.cpp, core/include/sieve/raid.hpp, core/src/catalogue.cpp
-  (4 new entries and 2 general ones: encryption, protocol; 193 in all), tools/sieve_cli.cpp,
-  tools/cli/help.cpp, tests/test_core.cpp (test_raid_net), ci/steps/04-models.sh (two servers on
-  127.0.0.1:47131-47132), docs: SPECIFICATIONS 12.0o, IDEAS 19.176, MANUAL, RAID-NOTICE, ROADMAP.
+- New: core/include/sieve/format_stats.hpp, core/src/format_stats.cpp.
+- Changed: CMakeLists.txt, .gitignore (/sieve-stats/, /measure.txt), core/include/sieve/catalogue.hpp
+  and core/src/catalogue.cpp (format_id_of_file_kind; the record's own entry, 194 in all),
+  tools/sieve_cli.cpp, tools/cli/args.hpp, tools/cli/help.cpp, client/menu.cpp and menu.hpp, client/node_graph.cpp, tools/make_release.py,
+  tests/test_core.cpp (test_format_stats), ci/lib.sh (SIEVE_STATS kept in the step's folder),
+  ci/steps/04-models.sh, ci/steps/10-hallway.sh (document now has 6 doors); docs: SPECIFICATIONS 12.0p, CATALOGUE-ROADMAP, IDEAS 19.165, MANUAL, ROADMAP.
+
+## Also: releases now carry catalogue/ and languages/
+
+tools/make_release.py and the node graph's "This installation" list now include the two folders (a
+release built before this had neither: the LANGUAGE page would be empty), and `sieve` in a release's
+tools/ finds them in the folder above. **In your build folder, delete
+`catalogue/language-english.format`** if it is there: the build copies new data files but never removes
+old ones, and that stale copy makes the catalogue refuse to load (an id twice).
+
+## Ideas noted
+
+IDEAS 19.185: every document and format type built on Sieve's principles, scaling with its state
+space; and .sfilter (and catalogue, map) files kept on disk as .sieve and read on the spot. Planned only.
+
+## Not yet
+
+The hallway's own packing (File Locator) and its imports adding their figures; figures gathered from
+many machines (the RAID could carry them); translations between formats beyond a round trip.

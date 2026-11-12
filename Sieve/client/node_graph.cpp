@@ -61,7 +61,7 @@ fs::path program_dir()
 // list as tools/make_release.py's (FOLDERS, and context and web, which a release has beside them).
 const char* const kInstalled[] = {"hallway",  "hallway.exe", "sieve",   "sieve.exe", "sieve-install",        "sieve-install.exe",
                                   "sieve-view", "sieve-view.exe", "tools",    "dictionaries", "models", "lang",      "prompts",              "fonts",
-                                  "meshes",   "maps",         "vault",  "filters",   "training",             "third_party_licenses",
+                                  "meshes",   "maps",         "vault",  "filters",   "catalogue", "languages", "training",             "third_party_licenses",
                                   "context",  "web",          "potentia-license.txt"};
 
 cli::Map installation_map()

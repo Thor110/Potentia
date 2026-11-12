@@ -119,6 +119,15 @@ $exe catalogue encoding | tr -d '\r' | q "^beneath    2 entries: encoding-base64
 $exe catalogue --search base64 | tr -d '\r' | q "^encoding-base64 "
 $exe catalogue file-flac | tr -d '\r' | q "^lineage    file-flac sound data information$"
 $exe catalogue file-flac | tr -d '\r' | q "^recognised first bytes 66 4C 61 43$"
+# Stage 4 of the catalogue: figures measured as formats are used, kept in SIEVE_STATS (ci/lib.sh). The
+# imports above are on their importers' entries; a file measured (packed alone, installed back and
+# checked) is on its kind's, and nothing but its kind and figures is kept.
+$exe catalogue model-gltf | tr -d '\r' | q "^imported   "
+$exe catalogue --measure cube.obj --machine ci | tr -d '\r' > measure.txt
+q "^1 file measured, 1 round trip lossless$" measure.txt
+q "^file-txt  " measure.txt
+$exe catalogue file-txt | tr -d '\r' | q "^measured   packed "
+if grep -c "cube" "$SIEVE_STATS"/*.stats > /dev/null; then exit 1; fi # (no file's name kept)
 # The catalogue of dimensions: DNA links to research, and research is linked from DNA.
 $exe dimensions | tr -d '\r' | q "^research   planned"
 $exe dimensions research | tr -d '\r' | q "^linked by .*dna"

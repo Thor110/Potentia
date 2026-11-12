@@ -33,6 +33,7 @@
 #include "cli/train.hpp"
 #include "cli/compare.hpp"
 
+#include "sieve/format_stats.hpp"
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
@@ -2251,7 +2252,7 @@ void Menu::cat_init()
     for (const char* name : {"catalogue", "languages"})
     {
         std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
-        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / "data" / name);
+        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / name), where.push_back(exe / ".." / "data" / name); // (a release keeps sieve in tools/, the folders above it)
         for (const auto& w : where)
         {
             std::error_code ec;
@@ -2451,6 +2452,18 @@ void Menu::render_catalogue(float x, float top, float bottom)
                                      at->sieve.empty() ? std::string() : tr("side.cat.sieve") + " " + at->sieve})
     {
         if (line.empty() || y > bottom - 50) continue;
+        text(r_, x + 14, y, fit_cells(line, cols), 1, grey);
+        y += 14;
+    }
+    // What Sieve measured of it on this machine (stage 4), read again only when the entry changes.
+    if (cat_stats_id_ != at->id)
+    {
+        cat_stats_id_ = at->id;
+        cat_stats_ = sieve::format_stats_short(sieve::format_stats(sieve::format_stats_folder(), at->id));
+    }
+    for (const std::string& line : cat_stats_)
+    {
+        if (y > bottom - 50) break;
         text(r_, x + 14, y, fit_cells(line, cols), 1, grey);
         y += 14;
     }

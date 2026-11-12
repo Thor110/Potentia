@@ -89,3 +89,7 @@ data/fonts/unifont.hex
 
 # What tools/make_release.py makes (its default --out).
 /release/
+
+# The catalogue's measured figures when a CI step runs in this folder (ci/lib.sh sets SIEVE_STATS).
+/sieve-stats/
+/measure.txt

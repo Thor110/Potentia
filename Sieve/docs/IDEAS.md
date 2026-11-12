@@ -7067,6 +7067,13 @@ and cataloging all formats across all dimensions of all things".
 - *Stages 1 to 3 built (12 November 2026):* `sieve catalogue` (166 entries from the code, then 170 with
   the first written by hand in data/catalogue), the format written out (SPECIFICATIONS §12.0m), and the
   CATALOGUE page of the setup menu: the catalogue as a ring of doors to walk (docs/CATALOGUE-ROADMAP.md).
+- *Stage 4 built (12 November 2026), as a first form:* figures measured as formats are used, never
+  claimed: `sieve catalogue --measure FILE|FOLDER` packs each file alone, against LZMA2 (7z's method) and
+  deflate, installs it back and checks it; `sieve import` records what each import kept. Each is a line
+  of `sieve-format-stat-v1` (SPECIFICATIONS §12.0p) added to its entry's file in the person's stats
+  folder, outside the repository, naming no file; an entry shows them added up, on the command line and
+  on the SYSTEMS page. Not yet: the hallway's own packing (the File Locator) and its imports adding
+  theirs, figures shared between machines, and translations between formats other than a round trip.
 - *Dynamically, then procedurally:* first by hand and from what Sieve already knows (its packer's
   routes, importers, alphabets and Unicode blocks), then grown by importers of open registries, each
   stating its licence and its roof.
@@ -7556,3 +7563,43 @@ etc", and "that would be a new video editor in the main and pause menu".
 - *A first step that could be built:* recording the hallway's own inputs with their times while
   walking, and playing them back exactly (the hallway is deterministic given its settings and its
   start), as `--record FILE` and `--replay FILE`. Planned only.
+
+**19.185 Every document and format type built on Sieve's own principles, scaling with its state space
+(Edward, 12 November 2026).** His words: "every document type and format type from sfilter to this
+should be based on the sieve principles and be dynamic or scalable through their local and or relevant
+state space".
+- *What it asks:* each of Sieve's own formats, from the filter plugins (`.sfilter`, docs/FILTER-PLUGINS.md)
+  to the newest (`sieve-format-stat-v1`, §12.0p), is not only a record Sieve reads but a state space of
+  its own, held to the same principles as the lines: every possible document of that type has an
+  address, the valid ones are the survivors of that type's filters, they can be counted, ranked and
+  compacted exactly, and each type grows (more fields, longer values, more records) by a setting rather
+  than by a new design.
+- *Already true of many:* they are canonical text, one form for one meaning, read back and refused
+  when not in it (characters, animations, saves, RAID manifests, catalogue entries, measured figures);
+  each is named by its SHA-256, so a change is a new version and the old one stays readable (§19.137);
+  several have a stated roof (§19.159). And the filter plugins already describe a walk through states,
+  one symbol at a time, from which the engine counts, ranks and compacts the survivors.
+- *What would follow:* each format's grammar written once as a filter plugin over its alphabet, so the
+  valid documents of that type are exactly that plugin's survivors on a line: a line of every
+  `sieve-format-stat-v1` record up to a length, every `sieve-save-v1`, every `.sfilter` itself. Then a
+  format's size (how many documents it allows at each length) is counted, not guessed; its documents
+  can be walked, sieved and compacted in the hallway like any other line; and its scale is the line's
+  length and the plugin's parameters ("local": one format's own space; "relevant": the spaces it is
+  part of, through the catalogue's links). The catalogue of formats (§19.165) would then hold, for
+  each of Sieve's own formats, its plugin and its count beside its measured figures.
+- *Planned only:* nothing built yet. A first step: one small format's grammar (the measured-figure
+  record) as a plugin, checked by the oracle to admit exactly the lines `read_format_stat` admits.
+- *Kept on disk as .sieve, read on the spot (Edward, the same day):* "we should also be pulling sfilters
+  and other sieve files like these catalogs or maps from the sieve state space in the beginning during
+  installation, which I think already technically happens naturally through the process of creating a
+  sieve installer anyway", and "I mean specifically as they are stored on disk locally, the .sfilters
+  themselves can be .sieve files decoded on the spot to be read and interpreted, utilised or run as part
+  of the state space generation". Today an installation carries `filters/` (and, from 12 November,
+  `catalogue/` and `languages/`, which the release had left out) as plain files, and the loader
+  (tools/cli/plugins.cpp) reads each `.sfilter` as text, naming it by its SHA-256. The step asked: the
+  same folders may hold `.sieve` files whose members are `.sfilter` (or catalogue entries, or maps);
+  each is opened in memory when the folder is read, every member checked against its SHA-256 as
+  installing checks it, and each member then parsed exactly as a loose file is, its identity still its
+  own text's SHA-256, so a filter is the same filter packed or not. Nothing is unpacked to disk. Planned
+  only; it needs the reader to give a member's bytes without writing them (the installer's decoding,
+  kept in memory), and a limit on what a `.sieve` in those folders may unfold to, as the viewer has.

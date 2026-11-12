@@ -51,6 +51,7 @@ add_library(sieve_core STATIC
     core/src/save.cpp
     core/src/seal.cpp
     core/src/raid_net.cpp
+    core/src/format_stats.cpp
     core/src/json.cpp
     core/src/safetensors.cpp
     core/src/weights.cpp

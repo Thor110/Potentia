@@ -101,7 +101,7 @@ These are Sieve's helper programs. To run Sieve, start hallway{exe} in the folde
 sieve and sieve-install find the installation's data folders (dictionaries, models) in the folder
 above; sieve-view needs none.
 """
-FOLDERS = ["dictionaries", "models", "lang", "prompts", "fonts", "meshes", "vault", "filters", "training", "third_party_licenses"]
+FOLDERS = ["dictionaries", "models", "lang", "prompts", "fonts", "meshes", "vault", "filters", "catalogue", "languages", "training", "third_party_licenses"]
 FILES = ["potentia-license.txt"]
 # From the source folder, beside the programs (24 October 2026): the right-click menu for .sieve
 # files and the web extension with its host's scripts. Their scripts find tools\sieve-install and

@@ -473,6 +473,9 @@ private:
     int cat_door_ = 0;
     std::vector<std::string> cat_back_;
     std::string cat_note_;
+    // Stage 4: what was measured of the entry stood at (sieve/format_stats.hpp), read once per entry.
+    std::string cat_stats_id_;
+    std::vector<std::string> cat_stats_;
     struct CatDoor
     {
         std::string id;
