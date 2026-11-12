@@ -527,7 +527,8 @@ struct Trainer::Net
 // The two loops nearly all the time goes to: a dot product of 32-bit values summed in 64 bits, and
 // a 64-bit row adding a 32-bit row times a number. Plain C++ everywhere; on processors with AVX2
 // (chosen when the program starts, as SHA-256's SHA-NI path is), the same integer sums four and
-// eight at a time. Integer sums: both give the same result, which the tests check.
+// eight at a time, and on those with AVX-512 eight and sixteen (11 November 2026). Integer sums:
+// every path gives the same result, which the tests check.
 namespace {
 
 int64_t dot_plain(const int32_t* a, const int32_t* b, size_t n)
@@ -540,6 +541,25 @@ int64_t dot_plain(const int32_t* a, const int32_t* b, size_t n)
 void axpy_plain(int64_t* acc, const int32_t* x, int32_t d, size_t n)
 {
     for (size_t i = 0; i < n; ++i) acc[i] += int64_t(x[i]) * d;
+}
+
+// The backward pass and the gradient are each one sum of this shape (11 November 2026):
+// C[i][c] += the sum over k < K of A[i ai + k ak] B[k ldb + c], for rows i in [i0, i1) and c < N.
+struct Gemm
+{
+    int64_t* C;
+    size_t ldc;
+    const int32_t* A;
+    size_t ai, ak;
+    const int32_t* B;
+    size_t ldb, K, N;
+};
+
+void gemm_plain(const Gemm& g, size_t i0, size_t i1)
+{
+    for (size_t i = i0; i < i1; ++i)
+        for (size_t k = 0; k < g.K; ++k)
+            if (const int32_t a = g.A[i * g.ai + k * g.ak]; a != 0) axpy_plain(g.C + i * g.ldc, g.B + k * g.ldb, a, g.N);
 }
 
 #if SIEVE_TRAIN_X86
@@ -608,20 +628,178 @@ void axpy_avx2(int64_t* acc, const int32_t* x, int32_t d, size_t n)
     for (; i < n; ++i) acc[i] += int64_t(x[i]) * d;
 }
 
+// Four rows of C by eight columns at a time, their sums held in registers over every k and added
+// into C once (rather than into memory at every k, as a row at a time did); the edges as before.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("avx2")))
+#endif
+void gemm_avx2(const Gemm& g, size_t i0, size_t i1)
+{
+// (macros, not lambdas: a lambda does not take its function's target, so its intrinsics would not build)
+#define SIEVE_X4(p) _mm256_cvtepi32_epi64(_mm_loadu_si128(reinterpret_cast<const __m128i*>(p)))
+#define SIEVE_ADD4(c, v) \
+    _mm256_storeu_si256(reinterpret_cast<__m256i*>(c), _mm256_add_epi64(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(c)), (v)))
+    const size_t N8 = g.N / 8 * 8;
+    size_t i = i0;
+    for (; i + 4 <= i1; i += 4)
+    {
+        const int32_t* A0 = g.A + i * g.ai;
+        for (size_t c = 0; c < N8; c += 8)
+        {
+            __m256i a00 = _mm256_setzero_si256(), a01 = a00, a10 = a00, a11 = a00, a20 = a00, a21 = a00, a30 = a00, a31 = a00;
+            const int32_t* b = g.B + c;
+            const int32_t* a = A0;
+            for (size_t k = 0; k < g.K; ++k, b += g.ldb, a += g.ak)
+            {
+                const __m256i x0 = SIEVE_X4(b), x1 = SIEVE_X4(b + 4);
+                const __m256i v0 = _mm256_set1_epi64x(a[0]), v1 = _mm256_set1_epi64x(a[g.ai]);
+                const __m256i v2 = _mm256_set1_epi64x(a[2 * g.ai]), v3 = _mm256_set1_epi64x(a[3 * g.ai]);
+                a00 = _mm256_add_epi64(a00, _mm256_mul_epi32(x0, v0)), a01 = _mm256_add_epi64(a01, _mm256_mul_epi32(x1, v0));
+                a10 = _mm256_add_epi64(a10, _mm256_mul_epi32(x0, v1)), a11 = _mm256_add_epi64(a11, _mm256_mul_epi32(x1, v1));
+                a20 = _mm256_add_epi64(a20, _mm256_mul_epi32(x0, v2)), a21 = _mm256_add_epi64(a21, _mm256_mul_epi32(x1, v2));
+                a30 = _mm256_add_epi64(a30, _mm256_mul_epi32(x0, v3)), a31 = _mm256_add_epi64(a31, _mm256_mul_epi32(x1, v3));
+            }
+            int64_t* C = g.C + i * g.ldc + c;
+            SIEVE_ADD4(C, a00), SIEVE_ADD4(C + 4, a01);
+            SIEVE_ADD4(C + g.ldc, a10), SIEVE_ADD4(C + g.ldc + 4, a11);
+            SIEVE_ADD4(C + 2 * g.ldc, a20), SIEVE_ADD4(C + 2 * g.ldc + 4, a21);
+            SIEVE_ADD4(C + 3 * g.ldc, a30), SIEVE_ADD4(C + 3 * g.ldc + 4, a31);
+        }
+        if (N8 < g.N)
+            for (size_t r = 0; r < 4; ++r)
+                for (size_t k = 0; k < g.K; ++k)
+                    axpy_plain(g.C + (i + r) * g.ldc + N8, g.B + k * g.ldb + N8, A0[r * g.ai + k * g.ak], g.N - N8);
+    }
+    for (; i < i1; ++i)
+        for (size_t k = 0; k < g.K; ++k)
+            if (const int32_t a = g.A[i * g.ai + k * g.ak]; a != 0) axpy_avx2(g.C + i * g.ldc, g.B + k * g.ldb, a, g.N);
+}
+#undef SIEVE_X4
+#undef SIEVE_ADD4
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("avx512f")))
+#endif
+int64_t dot_avx512(const int32_t* a, const int32_t* b, size_t n)
+{
+    // As dot_avx2, eight lanes of 64 bits: sixteen products a step.
+    __m512i even = _mm512_setzero_si512(), odd = _mm512_setzero_si512();
+    size_t i = 0;
+    for (; i + 16 <= n; i += 16)
+    {
+        const __m512i x = _mm512_loadu_si512(a + i);
+        const __m512i y = _mm512_loadu_si512(b + i);
+        even = _mm512_add_epi64(even, _mm512_mul_epi32(x, y));
+        odd = _mm512_add_epi64(odd, _mm512_mul_epi32(_mm512_srli_epi64(x, 32), _mm512_srli_epi64(y, 32)));
+    }
+    alignas(64) int64_t t[8];
+    _mm512_store_si512(t, _mm512_add_epi64(even, odd));
+    int64_t s = t[0] + t[1] + t[2] + t[3] + t[4] + t[5] + t[6] + t[7];
+    for (; i < n; ++i) s += int64_t(a[i]) * b[i];
+    return s;
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("avx512f")))
+#endif
+void axpy_avx512(int64_t* acc, const int32_t* x, int32_t d, size_t n)
+{
+    const __m512i dv = _mm512_set1_epi64(d);
+    size_t i = 0;
+    for (; i + 8 <= n; i += 8)
+    {
+        const __m512i xv = _mm512_cvtepi32_epi64(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(x + i)));
+        const __m512i av = _mm512_loadu_si512(acc + i);
+        _mm512_storeu_si512(acc + i, _mm512_add_epi64(av, _mm512_mul_epi32(xv, dv)));
+    }
+    for (; i < n; ++i) acc[i] += int64_t(x[i]) * d;
+}
+
+// As gemm_avx2, four rows by sixteen columns at a time.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((target("avx512f")))
+#endif
+void gemm_avx512(const Gemm& g, size_t i0, size_t i1)
+{
+#define SIEVE_X8(p) _mm512_cvtepi32_epi64(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(p)))
+#define SIEVE_ADD8(c, v) _mm512_storeu_si512((c), _mm512_add_epi64(_mm512_loadu_si512(c), (v)))
+    const size_t N16 = g.N / 16 * 16;
+    size_t i = i0;
+    for (; i + 4 <= i1; i += 4)
+    {
+        const int32_t* A0 = g.A + i * g.ai;
+        for (size_t c = 0; c < N16; c += 16)
+        {
+            __m512i a00 = _mm512_setzero_si512(), a01 = a00, a10 = a00, a11 = a00, a20 = a00, a21 = a00, a30 = a00, a31 = a00;
+            const int32_t* b = g.B + c;
+            const int32_t* a = A0;
+            for (size_t k = 0; k < g.K; ++k, b += g.ldb, a += g.ak)
+            {
+                const __m512i x0 = SIEVE_X8(b), x1 = SIEVE_X8(b + 8);
+                const __m512i v0 = _mm512_set1_epi64(a[0]), v1 = _mm512_set1_epi64(a[g.ai]);
+                const __m512i v2 = _mm512_set1_epi64(a[2 * g.ai]), v3 = _mm512_set1_epi64(a[3 * g.ai]);
+                a00 = _mm512_add_epi64(a00, _mm512_mul_epi32(x0, v0)), a01 = _mm512_add_epi64(a01, _mm512_mul_epi32(x1, v0));
+                a10 = _mm512_add_epi64(a10, _mm512_mul_epi32(x0, v1)), a11 = _mm512_add_epi64(a11, _mm512_mul_epi32(x1, v1));
+                a20 = _mm512_add_epi64(a20, _mm512_mul_epi32(x0, v2)), a21 = _mm512_add_epi64(a21, _mm512_mul_epi32(x1, v2));
+                a30 = _mm512_add_epi64(a30, _mm512_mul_epi32(x0, v3)), a31 = _mm512_add_epi64(a31, _mm512_mul_epi32(x1, v3));
+            }
+            int64_t* C = g.C + i * g.ldc + c;
+            SIEVE_ADD8(C, a00), SIEVE_ADD8(C + 8, a01);
+            SIEVE_ADD8(C + g.ldc, a10), SIEVE_ADD8(C + g.ldc + 8, a11);
+            SIEVE_ADD8(C + 2 * g.ldc, a20), SIEVE_ADD8(C + 2 * g.ldc + 8, a21);
+            SIEVE_ADD8(C + 3 * g.ldc, a30), SIEVE_ADD8(C + 3 * g.ldc + 8, a31);
+        }
+        if (N16 < g.N)
+            for (size_t r = 0; r < 4; ++r)
+                for (size_t k = 0; k < g.K; ++k)
+                    axpy_avx2(g.C + (i + r) * g.ldc + N16, g.B + k * g.ldb + N16, A0[r * g.ai + k * g.ak], g.N - N16);
+    }
+    for (; i < i1; ++i)
+        for (size_t k = 0; k < g.K; ++k)
+            if (const int32_t a = g.A[i * g.ai + k * g.ak]; a != 0) axpy_avx512(g.C + i * g.ldc, g.B + k * g.ldb, a, g.N);
+}
+#undef SIEVE_X8
+#undef SIEVE_ADD8
+
+// AVX-512 (its foundation, F): the processor has it and the system saves its registers (the
+// opmask and both halves of the wide ones, XCR0 bits 5 to 7, besides AVX's).
+bool cpu_has_avx512()
+{
+    if (!cpu_has_avx2()) return false;
+#if defined(_MSC_VER)
+    int r[4];
+    __cpuidex(r, 7, 0);
+    if (((r[1] >> 16) & 1) == 0) return false;
+    return (_xgetbv(0) & 0xE6) == 0xE6;
+#else
+    unsigned a = 0, b = 0, c = 0, d = 0;
+    __get_cpuid_count(7, 0, &a, &b, &c, &d);
+    if (((b >> 16) & 1) == 0) return false;
+    unsigned lo = 0, hi = 0;
+    __asm__ volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
+    return (lo & 0xE6) == 0xE6;
+#endif
+}
+
 const bool kHasAvx2 = cpu_has_avx2();
-std::atomic<bool> g_vector{kHasAvx2};
+const bool kHasAvx512 = cpu_has_avx512();
+// 0 plain, 1 AVX2, 2 AVX-512: the widest the processor has, unless the tests choose.
+std::atomic<int> g_kernels{kHasAvx512 ? 2 : kHasAvx2 ? 1 : 0};
 
 #else
 
 const bool kHasAvx2 = false;
-std::atomic<bool> g_vector{false};
+const bool kHasAvx512 = false;
+std::atomic<int> g_kernels{0};
 
 #endif
 
 inline int64_t dot(const int32_t* a, const int32_t* b, size_t n)
 {
 #if SIEVE_TRAIN_X86
-    if (g_vector.load(std::memory_order_relaxed)) return dot_avx2(a, b, n);
+    const int k = g_kernels.load(std::memory_order_relaxed);
+    if (k == 2) return dot_avx512(a, b, n);
+    if (k == 1) return dot_avx2(a, b, n);
 #endif
     return dot_plain(a, b, n);
 }
@@ -629,20 +807,44 @@ inline int64_t dot(const int32_t* a, const int32_t* b, size_t n)
 inline void axpy(int64_t* acc, const int32_t* x, int32_t d, size_t n)
 {
 #if SIEVE_TRAIN_X86
-    if (g_vector.load(std::memory_order_relaxed)) return axpy_avx2(acc, x, d, n);
+    const int k = g_kernels.load(std::memory_order_relaxed);
+    if (k == 2) return axpy_avx512(acc, x, d, n);
+    if (k == 1) return axpy_avx2(acc, x, d, n);
 #endif
     axpy_plain(acc, x, d, n);
+}
+
+inline void gemm(const Gemm& g, size_t i0, size_t i1)
+{
+#if SIEVE_TRAIN_X86
+    const int k = g_kernels.load(std::memory_order_relaxed);
+    if (k == 2) return gemm_avx512(g, i0, i1);
+    if (k == 1) return gemm_avx2(g, i0, i1);
+#endif
+    gemm_plain(g, i0, i1);
 }
 
 } // namespace
 
 bool vector_kernels_available() { return kHasAvx2; }
+bool wide_kernels_available() { return kHasAvx512; }
 bool use_vector_kernels(bool enable)
 {
-    g_vector = enable && kHasAvx2;
-    return g_vector;
+    g_kernels = enable ? (kHasAvx512 ? 2 : kHasAvx2 ? 1 : 0) : 0;
+    return g_kernels != 0;
 }
-bool using_vector_kernels() { return g_vector; }
+bool use_kernels(int level)
+{
+    if (level < 0 || level > 2 || (level == 2 && !kHasAvx512) || (level == 1 && !kHasAvx2)) return false;
+    g_kernels = level;
+    return true;
+}
+bool using_vector_kernels() { return g_kernels != 0; }
+const char* kernels_name()
+{
+    const int k = g_kernels.load();
+    return k == 2 ? "vectorised (AVX-512)" : k == 1 ? "vectorised (AVX2)" : "plain";
+}
 
 // ---------------------------------------------------------------- the work, shared out
 
@@ -811,43 +1013,57 @@ void share(Pool* pool, size_t n, uint64_t work, const std::function<void(size_t,
 
 // Y = X W^T: Y[p][r] = hold((sum over c of W[r][c] X[p][c]) >> 16). Each row of the matrix is
 // read once and taken against every position while it is in the cache; rows are shared out.
-void forward(Pool* pool, const I32* w, const Mat& m, const I32* X, size_t T, I32* Y)
+void forward(Pool* pool, const I32* turned, const Mat& m, const I32* X, size_t T, I32* Y)
 {
-    share(pool, m.rows, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) {
-        for (size_t r = a; r < b; ++r)
-        {
-            const I32* row = w + m.first + r * m.cols;
-            for (size_t p = 0; p < T; ++p) Y[p * m.rows + r] = hold(dot(row, X + p * m.cols, m.cols) >> 16);
-        }
+    // From the matrix turned on its side (turn_all: each of its columns a row), the sums take
+    // gemm's shape: a few positions by a few rows at a time, summed in registers over every column.
+    // The same integers, so the same result as a dot product a row at a time (11 November 2026).
+    std::vector<int64_t> acc(T * m.rows, 0);
+    const Gemm g{acc.data(), m.rows, X, m.cols, 1, turned + m.first, m.rows, m.cols, m.rows};
+    share(pool, T, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) {
+        gemm(g, a, b);
+        for (size_t i = a * m.rows; i < b * m.rows; ++i) Y[i] = hold(acc[i] >> 16);
     });
 }
 
+// Every matrix of the net turned on its side, each at its own place: what forward reads. Made once
+// for a step's windows (the weights change only between steps), its matrices shared out.
+std::vector<I32> turn_all(const Trainer::Net& net, const I32* w, size_t weights, Pool* pool)
+{
+    std::vector<const Mat*> ms{&net.embed};
+    for (const auto& L : net.layers)
+        for (const Mat* m : {&L.q, &L.k, &L.v, &L.o, &L.gate, &L.up, &L.down}) ms.push_back(m);
+    std::vector<I32> t(weights);
+    auto turn = [&](size_t a, size_t b) {
+        for (size_t i = a; i < b; ++i)
+        {
+            const Mat& m = *ms[i];
+            const I32* W = w + m.first;
+            I32* out = t.data() + m.first;
+            for (size_t r = 0; r < m.rows; ++r)
+                for (size_t c = 0; c < m.cols; ++c) out[c * m.rows + r] = W[r * m.cols + c];
+        }
+    };
+    if (pool && pool->size() > 1) pool->each(ms.size(), turn);
+    else turn(0, ms.size());
+    return t;
+}
 // ACC[p][c] += sum over r of W[r][c] dY[p][r], unshifted: the caller shifts once, after every
 // matrix that read the same input has added its part.
 void backward(Pool* pool, const I32* w, const Mat& m, const I32* dY, size_t T, int64_t* ACC)
 {
-    // Positions shared out (each thread adds only to its own); within them, each row is read once
-    // and added into every position it has a part in.
-    share(pool, T, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) {
-        const I32* row = w + m.first;
-        for (uint32_t r = 0; r < m.rows; ++r, row += m.cols)
-            for (size_t p = a; p < b; ++p)
-                if (const I32 d = dY[p * m.rows + r]; d != 0) axpy(ACC + p * m.cols, row, d, m.cols);
-    });
+    // Positions shared out (each thread adds only to its own); within them, a few positions by a
+    // few columns at a time, summed over every row (gemm).
+    const Gemm g{ACC, m.cols, dY, m.rows, 1, w + m.first, m.cols, m.rows, m.cols};
+    share(pool, T, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) { gemm(g, a, b); });
 }
 
 // grad(W)[r][c] += sum over p of dY[p][r] X[p][c], in Q32; rows shared out, so no two threads
 // add to one weight.
 void gradient(Pool* pool, int64_t* g, const Mat& m, const I32* dY, const I32* X, size_t T)
 {
-    share(pool, m.rows, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) {
-        for (size_t r = a; r < b; ++r)
-        {
-            int64_t* row = g + m.first + r * m.cols;
-            for (size_t p = 0; p < T; ++p)
-                if (const I32 d = dY[p * m.rows + r]; d != 0) axpy(row, X + p * m.cols, d, m.cols);
-        }
-    });
+    const Gemm gm{g + m.first, m.cols, dY, 1, m.rows, X, m.cols, T, m.cols};
+    share(pool, m.rows, uint64_t(T) * m.rows * m.cols, [&](size_t a, size_t b) { gemm(gm, a, b); });
 }
 
 // y = x / sqrt(mean(x^2) + eps); r is that factor, Q16.
@@ -941,7 +1157,7 @@ const Rope& rope_for(uint32_t D)
 // matrices' work is shared out among the pool's threads. A window of text is the example whose
 // inputs are its bytes but the last and whose targets are the bytes after them, attending
 // backwards. With `logits`, the head's logits (T x 256, Q16) are written there.
-void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_t* grad, Score& score, Pool* pool,
+void run_window(const Trainer::Net& net, const I32* w, const I32* turned, const Example& ex, int64_t* grad, Score& score, Pool* pool,
                 std::vector<I32>* logits_out = nullptr)
 {
     const uint32_t H = net.H, A = net.A, D = net.D, F = net.F;
@@ -968,9 +1184,9 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         c.x = x;
         c.h1.resize(T * H), c.q.resize(T * H), c.k.resize(T * H), c.v.resize(T * H), c.r1.resize(T);
         for (size_t p = 0; p < T; ++p) c.r1[p] = rmsnorm(&x[p * H], H, &c.h1[p * H]);
-        forward(pool, w, L.q, c.h1.data(), T, c.q.data());
-        forward(pool, w, L.k, c.h1.data(), T, c.k.data());
-        forward(pool, w, L.v, c.h1.data(), T, c.v.data());
+        forward(pool, turned, L.q, c.h1.data(), T, c.q.data());
+        forward(pool, turned, L.k, c.h1.data(), T, c.k.data());
+        forward(pool, turned, L.v, c.h1.data(), T, c.v.data());
         for (size_t p = 0; p < T; ++p)
         {
             rope.turn(&c.q[p * H], A, D, uint32_t(p), 1);
@@ -986,8 +1202,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
                 const size_t n = reach(p);
                 for (size_t u = 0; u < n; ++u)
                 {
-                    int64_t s = 0;
-                    for (uint32_t d = 0; d < D; ++d) s += int64_t(c.q[p * H + a * D + d]) * c.k[u * H + a * D + d];
+                    const int64_t s = dot(&c.q[p * H + a * D], &c.k[u * H + a * D], D);
                     sc[u] = hold((hold(s >> 16) * net.isd) >> 16);
                 }
                 softmax(sc.data(), n, P.data());
@@ -1004,18 +1219,18 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
         c.x1.resize(T * H), c.h2.resize(T * H), c.r2.resize(T);
         c.g.resize(T * F), c.u.resize(T * F), c.sg.resize(T * F), c.sl.resize(T * F), c.a.resize(T * F);
         std::vector<I32> y(std::max<size_t>(T * H, 1));
-        forward(pool, w, L.o, c.o.data(), T, y.data());
+        forward(pool, turned, L.o, c.o.data(), T, y.data());
         for (size_t i = 0; i < T * H; ++i) c.x1[i] = hold(int64_t(x[i]) + y[i]);
         for (size_t p = 0; p < T; ++p) c.r2[p] = rmsnorm(&c.x1[p * H], H, &c.h2[p * H]);
-        forward(pool, w, L.gate, c.h2.data(), T, c.g.data());
-        forward(pool, w, L.up, c.h2.data(), T, c.u.data());
+        forward(pool, turned, L.gate, c.h2.data(), T, c.g.data());
+        forward(pool, turned, L.up, c.h2.data(), T, c.u.data());
         for (size_t at = 0; at < T * F; ++at)
         {
             c.sg[at] = I32(sigmoid_q16(c.g[at]));
             c.sl[at] = hold((int64_t(c.g[at]) * c.sg[at]) >> 16);
             c.a[at] = hold((int64_t(c.sl[at]) * c.u[at]) >> 16);
         }
-        forward(pool, w, L.down, c.a.data(), T, y.data());
+        forward(pool, turned, L.down, c.a.data(), T, y.data());
         for (size_t i = 0; i < T * H; ++i) x[i] = hold(int64_t(c.x1[i]) + y[i]);
     }
 
@@ -1023,7 +1238,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
     std::vector<I32> hf(T * H), logits(T * 256), dlog(grad ? T * 256 : 0);
     std::vector<int64_t> rf(T);
     for (size_t p = 0; p < T; ++p) rf[p] = rmsnorm(&x[p * H], H, &hf[p * H]);
-    forward(pool, w, net.embed, hf.data(), T, logits.data());
+    forward(pool, turned, net.embed, hf.data(), T, logits.data());
     if (logits_out) *logits_out = logits;
     std::vector<int64_t> z(256), probs(256);
     for (size_t p = 0; p < T; ++p)
@@ -1124,8 +1339,7 @@ void run_window(const Trainer::Net& net, const I32* w, const Example& ex, int64_
                 int64_t cp = 0;
                 for (size_t u = 0; u < n; ++u)
                 {
-                    int64_t s = 0;
-                    for (uint32_t d = 0; d < D; ++d) s += int64_t(dO[p * H + a * D + d]) * c.v[u * H + a * D + d];
+                    const int64_t s = dot(&dO[p * H + a * D], &c.v[u * H + a * D], D);
                     dP[u] = hold<true>(s >> 16);
                     cp += P[u] * dP[u];
                 }
@@ -1251,9 +1465,10 @@ Score run_examples(const Trainer::Net& net, const int32_t* w, uint64_t weights, 
 {
     const size_t n = batch.size();
     Score total;
+    const std::vector<I32> turned = turn_all(net, w, weights, &pool);
     if (pool.size() <= 1 || n < pool.size() || weights >= kWindowAtATime)
     {
-        for (const auto& ex : batch) run_window(net, w, ex, grad ? grad->data() : nullptr, total, &pool);
+        for (const auto& ex : batch) run_window(net, w, turned.data(), ex, grad ? grad->data() : nullptr, total, &pool);
         return total;
     }
     std::vector<std::vector<int64_t>> grads(grad ? n : 0);
@@ -1262,7 +1477,7 @@ Score run_examples(const Trainer::Net& net, const int32_t* w, uint64_t weights, 
         for (size_t i = a; i < b; ++i)
         {
             if (grad) grads[i].assign(grad->size(), 0);
-            run_window(net, w, batch[i], grad ? grads[i].data() : nullptr, scores[i], nullptr);
+            run_window(net, w, turned.data(), batch[i], grad ? grads[i].data() : nullptr, scores[i], nullptr);
         }
     });
     for (size_t i = 0; i < n; ++i)
@@ -1319,37 +1534,56 @@ void Trainer::apply(const std::vector<int64_t>& grad)
 {
     const int64_t m = (int64_t(1) << space_.shape().bits) - 1;
     const std::vector<AiSpace::Tensor>& ts = space_.tensors();
-    uint64_t n = 0, zero = 0, gc = 0, vc = 0, mc = 0, ends = 0, low = 0; // (counted only: LimitCounts)
+    // Every weight's update is its own, so the tensors are cut into parts and shared out among the
+    // trainer's threads (11 November 2026: on one thread it held back a step on four); each part
+    // counts for LimitCounts on its own, the counts added after. Each weight's value (what the next
+    // step reads) is made again as its digit is, rather than in a pass of its own.
+    constexpr uint64_t kPart = uint64_t(1) << 16;
+    struct Part
+    {
+        size_t ti;
+        uint64_t from, to;
+        uint64_t n = 0, zero = 0, gc = 0, vc = 0, mc = 0, ends = 0, low = 0; // (counted only: LimitCounts)
+    };
+    std::vector<Part> parts;
     for (size_t ti = 0; ti < ts.size(); ++ti)
     {
-        const int64_t S = scale_[ti];
-        for (uint64_t i = 0; i < uint64_t(ts[ti].rows) * ts[ti].cols; ++i)
+        const uint64_t size = uint64_t(ts[ti].rows) * ts[ti].cols;
+        for (uint64_t f = 0; f < size; f += kPart) parts.push_back({ti, f, std::min(size, f + kPart)});
+    }
+    pool_->each(parts.size(), [&](size_t pa, size_t pb) {
+        for (size_t pi = pa; pi < pb; ++pi)
         {
-            const size_t at = size_t(ts[ti].first + i);
-            // (v1 is v2 with no shift: the limits and the shifts below come to v1's then.)
-            const int64_t gl = kGradLimit << shift_, vl = kVelocityLimit << shift_;
-            const int64_t g = std::clamp(grad[at], -gl, gl);
-            const int64_t v = mul_shift(velocity_[at], momentum_, 16) + g;
-            velocity_[at] = std::clamp(v, -vl, vl);
-            // The rate is held to 16 + k bits and the gradient carries 2^k: both come off here.
-            const int64_t moved = master_[at] - mul_shift(velocity_[at], lr_, 16 + 2 * shift_);
-            master_[at] = std::clamp(moved, -S, S);
-            digits_[at] = uint8_t(std::clamp<int64_t>(fdiv((master_[at] + S) * m + S, 2 * S), 0, m));
-            // (counted only: LimitCounts)
-            zero += grad[at] == 0;
-            gc += g != grad[at];
-            vc += velocity_[at] != v;
-            mc += master_[at] != moved;
-            ends += master_[at] == S || master_[at] == -S;
-            low += master_[at] == -S;
-            ++n;
+            Part& part = parts[pi];
+            const int64_t S = scale_[part.ti];
+            for (uint64_t i = part.from; i < part.to; ++i)
+            {
+                const size_t at = size_t(ts[part.ti].first + i);
+                // (v1 is v2 with no shift: the limits and the shifts below come to v1's then.)
+                const int64_t gl = kGradLimit << shift_, vl = kVelocityLimit << shift_;
+                const int64_t g = std::clamp(grad[at], -gl, gl);
+                const int64_t v = mul_shift(velocity_[at], momentum_, 16) + g;
+                velocity_[at] = std::clamp(v, -vl, vl);
+                // The rate is held to 16 + k bits and the gradient carries 2^k: both come off here.
+                const int64_t moved = master_[at] - mul_shift(velocity_[at], lr_, 16 + 2 * shift_);
+                master_[at] = std::clamp(moved, -S, S);
+                digits_[at] = uint8_t(std::clamp<int64_t>(fdiv((master_[at] + S) * m + S, 2 * S), 0, m));
+                values_[at] = int32_t(fdiv((2 * int64_t(digits_[at]) - m) * S, m << 16));
+                // (counted only: LimitCounts)
+                part.zero += grad[at] == 0;
+                part.gc += g != grad[at];
+                part.vc += velocity_[at] != v;
+                part.mc += master_[at] != moved;
+                part.ends += master_[at] == S || master_[at] == -S;
+                part.low += master_[at] == -S;
+                ++part.n;
+            }
         }
-    }
-    if (!g_counting.load(std::memory_order_relaxed))
-    {
-        refresh_values();
-        return;
-    }
+    });
+    if (!g_counting.load(std::memory_order_relaxed)) return;
+    uint64_t n = 0, zero = 0, gc = 0, vc = 0, mc = 0, ends = 0, low = 0;
+    for (const Part& part : parts)
+        n += part.n, zero += part.zero, gc += part.gc, vc += part.vc, mc += part.mc, ends += part.ends, low += part.low;
     bump(g_updates, n);
     bump(g_grad_zero, zero);
     bump(g_grad_clamped, gc);
@@ -1358,7 +1592,6 @@ void Trainer::apply(const std::vector<int64_t>& grad)
     g_weights.store(n, std::memory_order_relaxed);
     g_master_at_end.store(ends, std::memory_order_relaxed);
     g_master_at_low.store(low, std::memory_order_relaxed);
-    refresh_values();
 }
 
 void Trainer::restore(const std::vector<int64_t>& masters, const std::vector<int64_t>& velocities)
@@ -1435,7 +1668,8 @@ std::vector<int32_t> model_logits(const AiSpace& space, const AiSpace::Digits& d
     Trainer::Net net(space);
     Score score;
     std::vector<int32_t> logits;
-    run_window(net, values.data(), ex, nullptr, score, nullptr, &logits);
+    const std::vector<int32_t> turned = turn_all(net, values.data(), values.size(), nullptr);
+    run_window(net, values.data(), turned.data(), ex, nullptr, score, nullptr, &logits);
     return logits;
 }
 

@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <span>
 #include <string>
 #include <vector>
@@ -39,6 +40,10 @@ std::vector<uint8_t> compress_entries(const std::vector<CompressEntry>& entries,
 // Each stream format's own compressing and undoing, at the settings above.
 std::vector<uint8_t> compress_stream(std::span<const uint8_t> data, const std::string& format);
 std::vector<uint8_t> decompress_stream(std::span<const uint8_t> data, const std::string& format);
+
+// What a tar or zip holds, read back by libarchive: name (folders ending '/') to bytes. Throws
+// where it does not read.
+std::map<std::string, std::vector<uint8_t>> libarchive_read(std::span<const uint8_t> data, bool zip);
 
 // sieve compress PATH... --format F [--out FILE] [--force] [--gather] [--from-menu]
 int cmd_compress(const Args& a);

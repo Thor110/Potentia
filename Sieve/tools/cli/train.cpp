@@ -1,5 +1,6 @@
 // Sieve CLI — training runs and `sieve ai-train` (see train.hpp).
 #include "cli/train.hpp"
+#include "cli/doc_text.hpp"
 
 #include "cli/locate.hpp"
 #include "cli/items.hpp"
@@ -10,6 +11,8 @@
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <iostream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <thread>
@@ -344,10 +347,31 @@ TrainingRun record_training_run(const std::vector<TrainingFile>& sources, const 
     rc.files.clear();
     for (const TrainingFile& f : sources)
     {
-        if (files.count(f.path)) throw std::invalid_argument(f.path + " is in the corpus twice");
-        files[f.path] = read_file_bytes(f.source);
-        sizes.push_back({f.path, files[f.path].size()});
-        rc.files.push_back(f.path);
+        std::vector<uint8_t> bytes = read_file_bytes(f.source);
+        std::string path = f.path;
+        if (o.as_text)
+            if (const std::optional<std::string> kind = document_kind(f.path))
+            {
+                // A document as its text, under its own name with .txt after it; one that does not
+                // read is kept as it is, and said so.
+                try
+                {
+                    const std::string text = document_text(*kind, bytes);
+                    std::cout << "as text: " << f.path.substr(7) << " (" << *kind << ", " << bytes.size() << " bytes) as "
+                              << text.size() << " bytes of text" << std::endl;
+                    bytes.assign(text.begin(), text.end());
+                    path += ".txt";
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout << "as text: " << f.path.substr(7) << " kept as it is (it does not read as " << *kind << ": " << e.what() << ")"
+                              << std::endl;
+                }
+            }
+        if (files.count(path)) throw std::invalid_argument(path + " is in the corpus twice");
+        sizes.push_back({path, bytes.size()});
+        rc.files.push_back(path);
+        files[path] = std::move(bytes);
     }
     const std::vector<training::Window> order = training::make_order(sizes, rc.window, rc.epochs, rc.seed, rc.reading);
     if (order.empty()) throw std::invalid_argument("the corpus has nothing to learn from: no file of two bytes or more");

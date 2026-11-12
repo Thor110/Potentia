@@ -3741,11 +3741,10 @@ void test_training(const std::string& dir)
     std::ifstream cin(dir + "training_corpus.txt", std::ios::binary);
     CHECK(bool(cin));
     const std::string corpus((std::istreambuf_iterator<char>(cin)), std::istreambuf_iterator<char>());
-    // Both inner-loop paths, plain and (where the processor has it) vectorised: the same steps.
-    for (const bool vector : {false, true})
+    // Every inner-loop path, plain and (where the processor has them) AVX2 and AVX-512: the same steps.
+    for (const int level : {0, 1, 2})
     {
-        if (vector && !vector_kernels_available()) continue;
-        use_vector_kernels(vector);
+        if (!use_kernels(level)) continue;
         std::ifstream in(dir + "vectors_training_v1.tsv");
         CHECK(bool(in));
         struct Case
@@ -3829,7 +3828,7 @@ void test_training(const std::string& dir)
         }
         CHECK(steps == 9 && functions == 4);
         std::cout << "training vectors checked: " << steps << " steps, " << functions << " functions, inner loops "
-                  << (using_vector_kernels() ? "vectorised (AVX2)" : "plain") << std::endl;
+                  << kernels_name() << std::endl;
     }
     use_vector_kernels(true);
 

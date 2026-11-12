@@ -1260,7 +1260,10 @@ space made walkable, and a place for priors over weights (§16.8b) to become a g
     and AVX2 integer kernels chosen at start-up: 8 layers of width 1024 went from 42 s a step to
     12 s, width 128 from 4.9 s a pass to 2.2 s; every result bit for bit as before (the tests run
     the plain and the vector paths, and one thread and three). More is possible: blocking several
-    rows at once, AVX-512, and the per-position softmax for small models;
+    rows at once, AVX-512, and the per-position softmax for small models. *(Blocking and AVX-512
+    built 12 November 2026, with the update on every thread: a model of width 64 trains in about
+    half the time on four threads, width 256 in about two thirds, every result bit for bit as before;
+    results/training-kernels-2026-11-11.md.)*;
   - **resuming** *(built)*: `sieve-training-state-v1` beside the run (`RUN.resume`), at every
     checkpoint and when stopped, stamped with the recipe's and order's hashes; carrying on gives
     the very result of a run never stopped (CI stops one twice);
@@ -6480,7 +6483,10 @@ beside the old, so every run recorded so far trains as it did.
   then follows that softmax. *Built 9 November 2026 as `training-v3`* (Edward: "the AI line's min/max
   ... caps, enforced during training"), the default for new runs: on the shipped recipe and a larger
   model, no byte given 0 (from 316 and 1,606 times) and none given all, learning and time the same
-  (results/training-floor-2026-11-09.md). QK-norm is not yet built.
+  (results/training-floor-2026-11-09.md). *QK-norm measured 12 November 2026*
+  (results/qk-norm-2026-11-12.md): on the unscaled run no score was held (from 17.5 million), but
+  the loss scale every new run is given already holds none and learnt more (15.99% of the right
+  byte, against 15.82% with QK-norm too). Not built; to be measured again on a much larger model.
 
 **19.120 After the v33 release: what the pre-release review left (4 November 2026; found and
 measured, nothing built).** Six reviews ran before the release (the changes since the freeze, the

@@ -544,7 +544,7 @@ const std::vector<Page>& pages()
         {"ai-train", "Train a model of the AI line, recording what it learnt from and in what order, so it can be trained again exactly.",
          "sieve ai-train --record FOLDER --out FOLDER [--ai-layers L] [--ai-width H] [--ai-heads A] [--ai-bits B]\n"
          "  [--start ADDR] [--mode MODE] [--learning-rate X] [--momentum X] [--loss-scale-bits K] [--batch N] [--window N] [--epochs N] [--seed S]\n"
-         "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order]\n"
+         "  [--reading MODE] [--file-order FILE] [--checkpoint-every N] [--checkpoint-addresses] [--write-order] [--as-text]\n"
          "  [--sieve FILE.sieve] [--model-out FOLDER] [--address-out FILE] [--threads N] [--quiet]\n"
          "  sieve ai-train RUN [--resume] [--stop-after N] [--threads N] [--model-out FOLDER] [--address-out FILE] [--result-out FILE] [--limits] [--quiet]",
          "A run (training-v1 to -v3, SPECIFICATIONS §12.0e) is a folder, or Sieve instructions (.sieve) made of\n"
@@ -586,6 +586,9 @@ const std::vector<Page>& pages()
           {"--checkpoint-addresses", "List each checkpoint's address as well as its hash (a path to walk on the\n"
                                      "AI line without training again; 4 KB or more a checkpoint)."},
           {"--write-order", "Write the order out in order.txt rather than make it from training.ini."},
+          {"--as-text", "Documents in the corpus put in the run as their text (each as its name with .txt after\n"
+                        "it): HTML, Word (.docx), OpenDocument (.odt), EPUB and RTF; one that does not read is\n"
+                        "kept as it is. The run carries the text, so it trains again the same without them."},
           {"--sieve FILE", "Pack the run folder, result and all, as Sieve instructions."},
           {"--model-out FOLDER", "Write the final model's files (for sieve chat --model FOLDER --raw)."},
           {"--address-out FILE", "Write the final model's address (positional, hex)."},

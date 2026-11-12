@@ -78,6 +78,7 @@ int cmd_ai_train(const Args& a)
         if (a.has("reading")) o.recipe.reading = training::reading_from_string(a.get("reading"));
         o.recipe.checkpoint_addresses = a.has("checkpoint-addresses");
         o.write_order = a.has("write-order");
+        o.as_text = a.has("as-text");
         folder = path_of(a.get("out"));
         state_of = folder;
         std::vector<TrainingFile> files = corpus_files(path_of(a.get("record")));
@@ -111,7 +112,8 @@ int cmd_ai_train(const Args& a)
         const TrainingEstimate est = estimate_training(o.recipe, files, threads);
         std::cout << "estimate: " << est.weights << " weights, " << est.steps << " steps, about " << (est.bytes + (1 << 20) - 1) / (1 << 20)
                   << " MB of memory on " << est.threads << (est.threads == 1 ? " thread" : " threads") << ", a result of about "
-                  << (est.result_bytes + 1023) / 1024 << " KB\n";
+                  << (est.result_bytes + 1023) / 1024 << " KB" << (o.as_text ? " (of the files as they are: documents read as text come to fewer steps)" : "")
+                  << "\n";
         if (est.learning_rate_at_floor)
             std::cout << "note: the learning rate is within a few steps of the smallest the recipe's arithmetic holds; a larger loss scale (--loss-scale-bits, up to 7) holds smaller ones\n";
         run = record_training_run(files, folder, o);

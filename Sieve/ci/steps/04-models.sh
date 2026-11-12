@@ -154,6 +154,27 @@ $exe ai-train run-stop --resume --stop-after 13 --quiet | tr -d '\r' | q "^stopp
 $exe ai-train run-stop --resume --quiet | tr -d '\r' | q "^result written"
 [ ! -f run-stop.resume ]
 python reference/sieve_ref.py train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
+# Documents read as their text (--as-text, 12 November 2026): an HTML page, a Word document and an
+# RTF file each put in the run as its text; a file that is not a document, and a broken one, as
+# they are; the run trains again exactly, and the oracle replays it.
+rm -rf doc-corp doc-run
+mkdir -p doc-corp
+printf '<html><head><title>T</title><script>if (a < b) x();</script></head><body><p>Rooms &amp; books</p><ul><li>one</li><li>caf&#233;</li></ul></body></html>' > doc-corp/page.html
+python -c "import zipfile; z=zipfile.ZipFile('doc-corp/letter.docx','w'); z.writestr('word/document.xml','<w:document><w:body><w:p><w:r><w:t>Dear</w:t><w:tab/><w:t>reader</w:t></w:r><w:r><w:delText>gone</w:delText></w:r></w:p></w:body></w:document>'); z.close()"
+printf '{\\rtf1{\\fonttbl{\\f0 Times;}}Caf\\'"'"'e9 here\\par next}' > doc-corp/memo.rtf
+printf 'not a zip' > doc-corp/broken.docx
+printf 'plain text, kept\n' > doc-corp/plain.txt
+$exe ai-train --record doc-corp --out doc-run --as-text --ai-width 8 --ai-heads 2 --ai-bits 3 --window 9 --epochs 1 --quiet | tr -d '\r' > doc-rec.txt
+q "^as text: page.html (HTML" doc-rec.txt
+q "^as text: broken.docx kept as it is" doc-rec.txt
+printf 'T\n\nRooms & books\n\none\ncaf\303\251\n' | cmp - doc-run/corpus/page.html.txt
+printf 'Dear\treader\n' | cmp - doc-run/corpus/letter.docx.txt
+printf 'Caf\303\251 here\nnext\n' | cmp - doc-run/corpus/memo.rtf.txt
+cmp doc-corp/broken.docx doc-run/corpus/broken.docx
+cmp doc-corp/plain.txt doc-run/corpus/plain.txt
+[ ! -f doc-run/corpus/page.html ]
+$exe ai-train doc-run --quiet | tr -d '\r' | q "^reproduced exactly"
+python reference/sieve_ref.py train-replay --run doc-run | tr -d '\r' | cmp - doc-run/result.txt
 # diffusion-v1 (sieve diffuse): a run whose pictures are drawn from the image line's stack, trained,
 # checked again by the tool, and trained again by the oracle to the same result.txt; then pictures made.
 printf '[image]\nmode = compact\nfilters = figure-v1\n[image.figure-v1]\nconnect = four\nborder = any\n' > figs.ini

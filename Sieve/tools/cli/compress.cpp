@@ -434,8 +434,10 @@ Bytes libarchive_of(const std::vector<CompressEntry>& entries, bool zip)
     return out;
 }
 
+} // namespace
+
 // What a tar or zip holds, read back by libarchive: name (folders ending '/') to bytes.
-std::map<std::string, Bytes> libarchive_read(std::span<const uint8_t> data, bool zip)
+std::map<std::string, std::vector<uint8_t>> libarchive_read(std::span<const uint8_t> data, bool zip)
 {
     struct archive* a = archive_read_new();
     if (!a) throw std::runtime_error("libarchive: cannot start");
@@ -463,6 +465,8 @@ std::map<std::string, Bytes> libarchive_read(std::span<const uint8_t> data, bool
     if (!ok) throw std::runtime_error(std::string(zip ? "zip" : "tar") + ": does not read back");
     return got;
 }
+
+namespace {
 
 // --- 7z: written here (libarchive's 7z writer has no LZMA2 without liblzma inside it) ---
 //

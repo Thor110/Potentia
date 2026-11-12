@@ -62,6 +62,9 @@ struct RecordOptions
 {
     training::Recipe recipe;  // the shape, how it learns, and how it reads (window, epochs, seed, reading)
     bool write_order = false; // write order.txt out, rather than have order-v1 make it from the recipe
+    // Documents (HTML, Word, OpenDocument, EPUB, RTF: doc_text.hpp) put in the run as their text,
+    // each as corpus/<its path>.txt, so the run carries the text and trains again without them.
+    bool as_text = false;
 };
 // A file of a corpus: where it is, its path in the run (corpus/...), and its size.
 struct TrainingFile

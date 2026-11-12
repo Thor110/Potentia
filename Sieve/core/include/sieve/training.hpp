@@ -58,11 +58,14 @@ int64_t scale_q32(uint32_t cols, bool embedding);   // a tensor's scale (aispace
 int64_t mul_shift(int64_t a, int64_t b, unsigned s); // floor(a b / 2^s), the product exact (it may pass 64 bits)
 } // namespace fx
 
-// The inner loops' vector path (AVX2, where the processor has it, chosen at start-up): the same
-// integer sums either way, so the switch is only for the tests, which run both.
-bool vector_kernels_available();
-bool use_vector_kernels(bool enable); // returns whether it is now in use
+// The inner loops' vector paths (AVX2, and AVX-512 where the processor has it; the widest is chosen
+// at start-up): the same integer sums whichever, so the switch is only for the tests, which run each.
+bool vector_kernels_available();      // AVX2
+bool wide_kernels_available();        // AVX-512
+bool use_vector_kernels(bool enable); // the widest there is, or plain; returns whether one is in use
+bool use_kernels(int level);          // 0 plain, 1 AVX2, 2 AVX-512; false (unchanged) where not there
 bool using_vector_kernels();
+const char* kernels_name();           // "plain", "vectorised (AVX2)" or "vectorised (AVX-512)"
 
 // How a run reads its corpus, when its order is made by order-v1 rather than written out.
 enum class Reading { InOrder, ShuffledWithinFiles, Shuffled };
