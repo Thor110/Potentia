@@ -1312,7 +1312,7 @@ struct DeflateSkeleton
         data.insert(data.end(), sub.data.begin(), sub.data.end());
         ++segments;
     }
-    // v34 draft, under "tiff" alone (tiff_codec.hpp): a TIFF's strip made again as libtiff codes it,
+    // v34, under "tiff" alone (tiff_codec.hpp): a TIFF's strip made again as libtiff codes it,
     // from what it holds: kind 6, LZW (the bytes it holds' count); kind 7, PackBits (the count, then
     // the bytes of a row, each row coded alone). False where libtiff's coder does not give back the
     // strip's n bytes exactly.
@@ -1368,7 +1368,7 @@ struct DeflateSkeleton
 };
 
 // A file made again from its skeleton and data (inner: the skeleton's `skeleton` bytes, then the data).
-// `tiff`: the recipe is "tiff" (v34 draft), whose skeleton may hold kinds 6, 7 and 8 too.
+// `tiff`: the recipe is "tiff" (v34), whose skeleton may hold kinds 6, 7 and 8 too.
 std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, size_t skeleton, bool tiff = false)
 {
     if (skeleton > inner.size()) throw std::runtime_error("a deflate skeleton longer than what holds it");
@@ -1417,7 +1417,7 @@ std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, 
             }
             if (tiff && (kind == 6 || kind == 7 || kind == 8))
             {
-                // (v34 draft) a TIFF's strip, by libtiff's coding (tiff_codec.hpp)
+                // (v34) a TIFF's strip, by libtiff's coding (tiff_codec.hpp)
                 auto row_of = [&]() {
                     const uint64_t r = sk_get_varint(sk, at);
                     if (r == 0 || r > (uint64_t(1) << 32)) throw std::runtime_error("a TIFF strip's rows this Sieve does not write");
@@ -1700,7 +1700,7 @@ static bool tar_header_ok(const uint8_t* h)
     return digits && sum == want;
 }
 
-// v34 draft (8 November 2026, Edward: "make a start on listing out and implementing all formats"): a
+// v34 (8 November 2026, Edward: "make a start on listing out and implementing all formats"): a
 // PDF as a skeleton and members, as v31 carries a tar ("skm"; a reader since v31 reads it): its text
 // kept in the skeleton as it is; each stream filtered by /FlateDecode alone (128 bytes of deflate or
 // more) made again by preflate from what it holds, which is a member; each by /DCTDecode alone with a
@@ -1806,7 +1806,7 @@ std::optional<PdfSkeleton> pdf_skeleton(const std::vector<uint8_t>& b)
     return p;
 }
 
-// v34 draft (8 November 2026): a TIFF whose strips or tiles are compressed (deflate, 8 or 32946;
+// v34 (8 November 2026): a TIFF whose strips or tiles are compressed (deflate, 8 or 32946;
 // LZW, 5; PackBits, 32773) carried as what they hold, made again exactly ("tiff <skeleton size>
 // <inner size>": DeflateSkeleton's kinds, and 6, 7 and 8, tiff_codec.hpp): every image of the file
 // (its IFDs, from the first, by each one's next) walked, each strip or tile whose coding gives it back
@@ -2015,7 +2015,7 @@ std::optional<TiffSkeleton> tiff_skeleton(const std::vector<uint8_t>& b)
     return t;
 }
 
-// v34 draft (8 November 2026): the zlib streams inside any file (a git pack's objects, a WOFF font's
+// v34 (8 November 2026): the zlib streams inside any file (a git pack's objects, a WOFF font's
 // tables, an SWF, a game's or a program's data) found and carried as what they hold, the file made
 // again exactly by "sk" (v21, which every reader since reads): each place where a zlib header
 // (deflate, a window of 32 KiB or less, its check right, no preset dictionary) starts a stream that
@@ -2555,7 +2555,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("gif ", 0) == 0)
     {
-        // "gif <sub-block size> <skeleton size> <inner size>" (v34 draft): a GIF made again from its
+        // "gif <sub-block size> <skeleton size> <inner size>" (v34): a GIF made again from its
         // skeleton and its frames' colour indices, each frame's LZW coded as compress codes it (gif_lzw.hpp).
         // (each number as the packer writes one, digits alone and no leading zero, as the oracle reads
         // it: sscanf alone took "+255". Review, 6 November 2026.)
@@ -2569,7 +2569,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("flac ", 0) == 0)
     {
-        // "flac <skeleton size> <inner size>" (v34 draft): a WAV made again from its samples, as FLAC
+        // "flac <skeleton size> <inner size>" (v34): a WAV made again from its samples, as FLAC
         // codes them, and its skeleton (flac_wav.hpp). Each number digits alone, no leading zero.
         const bool plain = plain_words(recipe);
         unsigned long long skeleton = 0, size = 0;
@@ -2615,7 +2615,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("pmp ", 0) == 0)
     {
-        // "pmp <inner size>" (v34 draft): an MP3 made again from packMP3's form of it (mp3_glue.hpp).
+        // "pmp <inner size>" (v34): an MP3 made again from packMP3's form of it (mp3_glue.hpp).
         unsigned long long size = 0;
         char extra = 0;
         if (std::sscanf(recipe.c_str(), "pmp %llu%c", &size, &extra) != 1 || size != inner.size())
@@ -2626,7 +2626,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("pcx ", 0) == 0)
     {
-        // "pcx <skeleton size> <inner size>" (v34 draft): a PCX made again from its pixels, its planes
+        // "pcx <skeleton size> <inner size>" (v34): a PCX made again from its pixels, its planes
         // interleaved, and its header (pcx_rle.hpp).
         unsigned long long skeleton = 0, size = 0;
         char extra = 0;
@@ -2636,7 +2636,7 @@ std::vector<uint8_t> remake_archive(const std::string& recipe, const std::vector
     }
     if (recipe.rfind("tiff ", 0) == 0)
     {
-        // "tiff <skeleton size> <inner size>" (v34 draft): a TIFF made again from its skeleton and what
+        // "tiff <skeleton size> <inner size>" (v34): a TIFF made again from its skeleton and what
         // its strips hold, as "sk" with kinds 6, 7 and 8 (tiff_codec.hpp).
         unsigned long long skeleton = 0, size = 0;
         char extra = 0;
@@ -3018,10 +3018,10 @@ static std::optional<std::pair<uint32_t, uint32_t>> picture_shape(std::span<cons
 // A PNG's pixels' shape, from its recipe: its width and bytes a pixel, where they and the size agree
 // with the bytes carried; else nothing. Pixels as stb makes them again ("stb <level> <filter> <w>
 // <h> <c> <size>"), or a PNG's rows unfiltered ("skr <skeleton> <row bytes> <pixel bytes> <rows>
-// <inner size>", the rows first, then their filter bytes and the skeleton). (v34 draft) A GIF's
+// <inner size>", the rows first, then their filter bytes and the skeleton). (v34) A GIF's
 // indices ("gif <sub-block size> <skeleton size> <inner size>", the indices first), one byte a
 // pixel, where every frame is as wide as the first.
-// v34 draft (8 November 2026): a picture of plain pixels' shape from its own header, for mixing to
+// v34 (8 November 2026): a picture of plain pixels' shape from its own header, for mixing to
 // weigh (mix-v4's I, which every reader since v26 reads; the packer's choice alone): its width and its
 // bytes a pixel, where its rows follow one another with nothing between. A BMP (BI_RGB or bitfields;
 // 8, 24 or 32 bits; rows padded to four bytes, so only where they need none), an uncompressed TGA
@@ -3142,7 +3142,7 @@ static std::optional<std::pair<uint32_t, uint32_t>> recipe_shape(const std::stri
     }
     unsigned long long block = 0;
     if (recipe.rfind("pcx ", 0) == 0 && std::sscanf(recipe.c_str(), "pcx %llu %llu%c", &skeleton, &n, &extra) == 2 && n == size && skeleton <= n)
-        return pcx_shape(bytes, size_t(skeleton)); // (v34 draft: its pixels, planes interleaved)
+        return pcx_shape(bytes, size_t(skeleton)); // (v34: its pixels, planes interleaved)
     if (recipe.rfind("gif ", 0) == 0 && std::sscanf(recipe.c_str(), "gif %llu %llu %llu%c", &block, &skeleton, &n, &extra) == 3 && n == size)
         if (const auto w = gif_width(bytes, size_t(skeleton)); w && *w <= (1u << 24)) return std::pair<uint32_t, uint32_t>{*w, 1};
     return std::nullopt;
@@ -3882,7 +3882,7 @@ std::pair<bool, const char*> optimised_every_way(std::span<const uint8_t> b)
     // (Don Quixote, pi, a 3653 by 5480 picture): Proof/STATISTICS.md.)
     if (prioritise_decoding()) return {false, "decoding speed chosen: Try every way changed nothing measured so"};
     if (b.size() >= 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF) return {true, "a JPEG: mixed whole, 2.7% smaller (median of 153)"};
-    // (v34 draft: a WAV's samples already coded by FLAC, its skeleton after them. WoWRevived's seven
+    // (v34: a WAV's samples already coded by FLAC, its skeleton after them. WoWRevived's seven
     // WAVs at Balanced, 8 November 2026: 192 s searched whole; 52 s with this and the WAV weighed on a
     // sample, the same 223,209,005 bytes.)
     if (b.size() >= 4 && b[0] == 'f' && b[1] == 'L' && b[2] == 'a' && b[3] == 'C') return {false, "a WAV's samples already coded by FLAC"};
@@ -3965,6 +3965,9 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     const timings::Scope t_all("pack.all");
     // The draft switch on (draft.hpp): where the newest is asked for, the draft's is made.
     if (draft_on() && rope_newest == kNewestRope) rope_newest = kDraftRope;
+    // v34 asked for (or newer), before anything below holds rope_newest to the rope's own versions: the
+    // x86 filter restarted at each program goes by it (frozen 12 November 2026; it was the draft switch).
+    const bool v34_asked = rope_newest >= 17;
     // Every file's bytes, checked against the walk: from the contents where a v3 manifest has them,
     // else read from the folder (the current one, for a file named without one).
     std::vector<ManifestEntry*> files;
@@ -4071,14 +4074,14 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     const bool pngr_on = png_on && rope_newest >= 15;
     // v32: a PNG made again exactly with its rows carried unfiltered ("skr").
     const bool skr_on = png_on && rope_newest >= 15;
-    // v34 draft (6 November 2026): a GIF made again from its skeleton and its frames' colour indices,
+    // v34 (6 November 2026): a GIF made again from its skeleton and its frames' colour indices,
     // where compress-style LZW gives it back exactly (gif_lzw.hpp); temporary only, as "sk" is.
     const bool gif_on = rope_newest >= 17 && v21 && newest_made;
-    // v34 draft (8 November 2026): a WAV made again from its samples as FLAC codes them, and the rest of
+    // v34 (8 November 2026): a WAV made again from its samples as FLAC codes them, and the rest of
     // the file as it was (flac_wav.hpp); temporary only, as "gif" is. How hard libFLAC works follows the
     // priority: Size, Balanced, Decoding speed.
     const bool flac_on = gif_on;
-    // v34 draft (7 November 2026): a program mixed with the x86 instruction model (mix-v4's E1).
+    // v34 (7 November 2026): a program mixed with the x86 instruction model (mix-v4's E1).
     const bool instructions_on = rope_newest >= 17 && newest_made;
     // v32: every .sieve in bytes at the newest is v32, for its smaller head (taken here:
     // rope_newest is held to the rope's own versions below).
@@ -4250,7 +4253,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         return x;
     };
     size_t pngs_resaved = 0, gifs_opened = 0, gif_frames = 0, wavs_opened = 0, sounds_to_flac = 0, flacs_recoded = 0, lossless_need_ffmpeg = 0, pdfs_opened = 0, tiffs_opened = 0, zlib_opened = 0, pcxs_opened = 0, mp3s_opened = 0;
-    // (v34 draft: an opened TIFF's shape, its pixels' width and bytes a pixel, for mixing to weigh)
+    // (v34: an opened TIFF's shape, its pixels' width and bytes a pixel, for mixing to weigh)
     std::map<std::string, std::pair<uint32_t, uint32_t>> tiff_shapes;
     uint64_t wav_bytes = 0, sound_flac_was = 0, sound_flac_now = 0;
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
@@ -4475,7 +4478,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             });
             ahead_to = to;
         };
-        // v34 draft: the sound files' FLAC coding, each on its own, on every core, before the loop (a WAV
+        // v34: the sound files' FLAC coding, each on its own, on every core, before the loop (a WAV
         // over 64 MiB is a batch of its own above, so would be coded one at a time): what each will be
         // asked for, kept while their bytes stay under 512 MiB (any past that is coded in the loop).
         struct SoundAhead
@@ -4712,7 +4715,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             // Only where it comes out clearly smaller: the archive as it is (packed, if that is smaller)
             // against what it holds, packed by LZMA2 or pulled tight by the rope (the search is
             // remembered, so packing it later does not search again), its names and recipe counted.
-            // (v34 draft: a WAV FLAC will code is weighed first on a sample, below, and its whole estimate
+            // (v34: a WAV FLAC will code is weighed first on a sample, below, and its whole estimate
             // made only where that is a near thing: 34 of a 55 MB WAV's 38 s went to it, 8 November 2026.)
             const bool wav_first = (sound_exact && is_sound(b)) || (flac_files && is_flac(b));
             std::optional<uint64_t> as_is_kept;
@@ -5410,11 +5413,11 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 const uint64_t as_one = std::min(as_is_of(), shared + unfiltered + sound_as_is);
                 return apart + 64 + as_one / 200 < as_one;
             };
-            // v34 draft: a PDF, with temporary, as its skeleton and members (pdf_skeleton): where its
+            // v34: a PDF, with temporary, as its skeleton and members (pdf_skeleton): where its
             // skeleton, what its deflate streams hold (LZMA2 or mixing), and its JPEGs (each as its
             // brunsli form, where brunsli gives it back, else as it is) come out clearly under the PDF
             // as it is. Checked to give the PDF back before it is kept.
-            // v34 draft: what a picture's pixels come to, `w` wide and `c` bytes a pixel (0 wide: LZMA2's
+            // v34: what a picture's pixels come to, `w` wide and `c` bytes a pixel (0 wide: LZMA2's
             // estimate alone): LZMA2's estimate, or mixing's as a picture of that shape where it is less
             // (on 8 stretches of whole rows, its gain over LZMA2 there applied to the whole, as
             // mixed_estimate), but not under Prioritise Decoding Speed, which mixes nothing.
@@ -5437,7 +5440,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 }
                 return carried;
             };
-            // v34 draft: an MP3, with temporary, as packMP3 codes it (mp3_glue.hpp), where that gives it
+            // v34: an MP3, with temporary, as packMP3 codes it (mp3_glue.hpp), where that gives it
             // back exactly and comes out clearly under the MP3 as it is (64 bytes and 0.5%).
             if (sound_exact && instructions_on && is_mp3(b))
                 if (auto pmp = [&] {
@@ -5455,7 +5458,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         continue;
                     }
                 }
-            // v34 draft: a PCX, with temporary, as its pixels (planes interleaved) and its header
+            // v34: a PCX, with temporary, as its pixels (planes interleaved) and its header
             // (pcx_rle.hpp), where they come out clearly under the PCX as it is.
             if (temporary_ok && instructions_on && is_pcx(b))
                 if (auto o = pcx_open(b))
@@ -5473,7 +5476,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         continue;
                     }
                 }
-            // v34 draft: a TIFF whose strips are compressed (deflate, LZW, PackBits), with temporary, as
+            // v34: a TIFF whose strips are compressed (deflate, LZW, PackBits), with temporary, as
             // its skeleton and what its strips hold (tiff_skeleton): where LZMA2's estimate of that, or
             // mixing's of its pixels as a picture of its width (on 8 stretches of whole rows, as
             // mixed_estimate), comes out clearly under the TIFF as it is. Checked to give it back first.
@@ -5562,7 +5565,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                     std::vector<uint8_t> whole = t->sk.inner(skeleton);
                     if (tar_worth(*t, whole, skeleton) && deflate_skeleton_remake(whole, skeleton) == b && as_members(whole, skeleton, t->members)) continue;
                 }
-            // v34 draft: the zlib streams inside a file of any other kind (zlib_streams), with temporary:
+            // v34: the zlib streams inside a file of any other kind (zlib_streams), with temporary:
             // carried as what they hold ("sk", v21) where that is clearly smaller (worth), checked to
             // give the file back first.
             if (temporary_ok && instructions_on && b.size() >= 1024)
@@ -5612,10 +5615,18 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             if (m.v20) m.more_archives = true; // v20 is v19 and more
             if (m.more_archives) m.remake_gz = true; // v19 is v17 and more
           }
+            // (A sound installed as .flac takes a new name, which may come before its neighbours' (tone.wav
+            // as tone.flac, before tone.mp3): the listing put back in the order of names, as every
+            // listing is, where one was renamed. 12 November 2026, found freezing v34: such a folder was
+            // refused, "entries out of order". No other listing is reordered, so its bytes are as before.)
+            std::vector<size_t> order(entries.size());
+            for (size_t k = 0; k < order.size(); ++k) order[k] = k;
+            if (sounds_to_flac)
+                std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) { return entries[a].path < entries[b].path; });
             m.entries.clear();
             bytes.clear();
             original.clear();
-            for (size_t k = 0; k < entries.size(); ++k)
+            for (const size_t k : order)
             {
                 m.entries.push_back(std::move(entries[k]));
                 if (!m.entries.back().dir)
@@ -5662,7 +5673,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
         for (const ManifestEntry* f : files)
         {
             if (f->remake.rfind("spn ", 0) == 0) texts_with_spans.insert(f->path);
-            // (v34 draft: an archive's or a PDF's members as well, its JPEGs each as its brunsli form)
+            // (v34: an archive's or a PDF's members as well, its JPEGs each as its brunsli form)
             if (instructions_on && f->remake.rfind("skm ", 0) == 0) texts_with_spans.insert(f->path);
         }
         auto in_spans = [&](const ManifestEntry& f) {
@@ -6339,19 +6350,19 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 if (mix2_on && !program && (!picture || pw < 16)) guessed = picture_shape(bytes[i]);
                 uint32_t palette = 0; // (v33 draft: P, its colours where taken)
                 std::optional<std::pair<uint32_t, uint32_t>> known = pixels_shape_on && !program ? recipe_shape(files[i]->remake, bytes[i]) : std::nullopt;
-                // (v34 draft: a picture of plain pixels, its shape from its own header)
+                // (v34: a picture of plain pixels, its shape from its own header)
                 bool from_header = !known && instructions_on && !program && files[i]->remake.empty() && (known = header_shape(bytes[i]));
-                // (v34 draft: an opened TIFF's pixels, their shape from its tags)
+                // (v34: an opened TIFF's pixels, their shape from its tags)
                 if (!known && instructions_on && !program && files[i]->remake.rfind("tiff ", 0) == 0)
                     if (const auto ts = tiff_shapes.find(files[i]->path); ts != tiff_shapes.end()) known = ts->second, from_header = true;
-                bool e1_allowed = true; // (v34 draft: E1 for a program; under Balanced weighed against mixing without it)
+                bool e1_allowed = true; // (v34: E1 for a program; under Balanced weighed against mixing without it)
                 auto code_of = [&](std::span<const uint8_t> f, std::string& way_text, uint32_t w, uint32_t c, const MixDictionary* words = nullptr,
                                    uint32_t primer = 0) {
                     if (mix4_on)
                     {
                         Mix4Params base = mix4_for(f.size(), w, c, words ? word_size : 0, words && by_use_on);
                         base.x86 = program;
-                        base.instructions = program && instructions_on && e1_allowed; // (v34 draft, E1)
+                        base.instructions = program && instructions_on && e1_allowed; // (v34, E1)
                         base.primer = primer; // (v33, weighed below)
                         if (w && c >= 2) base.palette = palette; // (v33 draft, weighed below)
                         std::shared_ptr<const std::vector<uint8_t>> made;
@@ -6418,7 +6429,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                             pc = kc;
                         }
                     }
-                    // (v34 draft: and a header's rows as pictures of one byte a pixel, each channel's
+                    // (v34: and a header's rows as pictures of one byte a pixel, each channel's
                     // neighbour beside it. On 24 pictures, 6 in four formats, the two shapes made them
                     // 0.62% smaller together, photographs 2.3% to 8.2%; a screenshot whose start took the
                     // rows by 1.1% came out 1.26% larger whole, and weighing its middle too lost the
@@ -6528,7 +6539,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                 {
                     std::string mix_way;
                     std::vector<uint8_t> mc = code_of(bytes[i], mix_way, pw, pc, words, primed);
-                    // (Balanced, a program under the v34 draft: E1 decodes about 45% slower than mixing
+                    // (Balanced, a program under the v34: E1 decodes about 45% slower than mixing
                     // without it (results/x86-instructions-2026-11-07.md), so it is asked half as much
                     // again, 6% of the file against mixing's 4%: the program mixed without it too, and the
                     // cheaper of the two, counting each its share, kept. 7 November 2026.)
@@ -7087,14 +7098,14 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
     }
 
     // The streams: the programs; then every file carried as it is, and then the masks, in order.
-    // (v34 draft, 11 November 2026: with two programs or more, the x86 filter restarted at each one,
+    // (v34, 11 November 2026: with two programs or more, the x86 filter restarted at each one,
     // from its own start, so a program and a copy of it changed in a few places stay alike for LZMA2;
     // over the whole stream, each call's address counts from the stream's start, and the copy's all
     // differ. Two 200,000-byte programs, one with 10 bytes changed: 45,348 bytes as one stream,
     // 35,246 restarted at each; two builds of sieve-install three days apart: 4,054,294 and
     // 3,994,999. results/x86-restart-2026-11-11.md.)
     const size_t programs = size_t(std::count_if(files.begin(), files.end(), [](const ManifestEntry* f) { return f->way == "x86"; }));
-    const bool x86_each = draft_on() && binary && programs >= 2;
+    const bool x86_each = v34_asked && binary && programs >= 2;
     std::vector<uint8_t> x86, plain;
     for (size_t i = 0; i < files.size(); ++i)
         if (files[i]->way == "x86")
@@ -7414,7 +7425,7 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
             }
         return false;
     };
-    // v34 (draft): a GIF made again from its indices; a program mixed with the x86 instruction model (E1).
+    // v34: a GIF made again from its indices; a program mixed with the x86 instruction model (E1).
     auto e1_in = [](const std::string& w) { return w.rfind("mix4 ", 0) == 0 && Mix4Params::parse(w.substr(5)).instructions; };
     // (and v34 where a skeleton's member, not a text's spans', is a JPEG as its brunsli form)
     std::unordered_set<std::string> with_skm;

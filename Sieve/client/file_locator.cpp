@@ -1310,7 +1310,7 @@ void FileLocator::event(const SDL_Event& e)
         case SDLK_U: pressed = "permanent"; break; // Archive and compressed formats: permanent, on or off
         case SDLK_E: pressed = sieve::cli::optimise_search() ? "" : "every"; break; // Try every way, on or off (Optimise Search unticked)
         case SDLK_O: pressed = "optimise"; break; // Optimise Search, on or off
-        case SDLK_W: pressed = sieve::cli::draft_on() ? "sound_flac" : ""; break; // Sound as FLAC: Temporary, Permanent, Off (the v34 draft on)
+        case SDLK_W: pressed = "sound_flac"; break; // Sound as FLAC: Temporary, Permanent, Off (v34)
         case SDLK_R: pressed = "defaults"; break; // Reset to defaults
         case SDLK_P: pressed = "priority"; break; // Size, Balanced, Decoding speed, round the three
         case SDLK_C: pressed = kept_compare().on ? "more" : ""; break; // More formats in the comparison, on or off (the comparison on)
@@ -1693,9 +1693,8 @@ void FileLocator::draw(float W, float H)
         }
         else box("temporary", temporary_, tr("loc.temporary"));
         box("permanent", permanent_, tr("loc.permanent"));
-        // (Sound as FLAC: the v34 draft's, shown only while the draft is on; not a box: one button for
-        // the three, the setting in its text, as Priority's)
-        if (sieve::cli::draft_on())
+        // (Sound as FLAC: v34's (frozen 12 November 2026); not a box: one button for the three, the
+        // setting in its text, as Priority's)
         {
             const std::string text = sound_label();
             if (bx > 20 && bx + text_width(text, 2) + 24 > W - 20) bx = 20, box_y += 40;
@@ -1798,7 +1797,6 @@ void FileLocator::draw(float W, float H)
             float x = 20;
             for (const char* id : {"loc.temporary", "loc.permanent", "loc.flac", "loc.optimise", "loc.every", "loc.priority", "loc.log", "loc.compare", "loc.more", "loc.defaults"})
             {
-                if (std::string(id) == "loc.flac" && !sieve::cli::draft_on()) continue;
                 // (Try every way, greyed while Optimise Search chooses it, says so: its width as drawn)
                 const bool chosen = sieve::cli::optimise_search() && (std::string(id) == "loc.every" || std::string(id) == "loc.temporary");
                 const bool button_only = std::string(id) == "loc.priority" || std::string(id) == "loc.flac" || std::string(id) == "loc.defaults";

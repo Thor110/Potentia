@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (8 November 2026, Edward: "work through all of the things on that list next"): a TIFF's
+// v34 (8 November 2026, Edward: "work through all of the things on that list next"): a TIFF's
 // strips made again exactly from their pixels, as libtiff (4.x, the library ImageMagick, GIMP, Pillow
 // and most programs write TIFFs with) codes them. Written here from libtiff's algorithms (its licence:
 // third_party_licenses/libtiff); nothing of libtiff is linked.

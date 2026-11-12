@@ -146,7 +146,7 @@ const char* kUsage =
     "                      way chosen for each file by its kind ([locator] optimise_search)\n"
     "  --search-every-wave the File Locator's Try every way ticked, for this run: the search's\n"
     "                      shortcuts off, up to its time ([locator] search_every_wave)\n"
-    "  --sound-temporary   the File Locator's Sound as FLAC: Temporary, for this run (v34 draft; the default,\n"
+    "  --sound-temporary   the File Locator's Sound as FLAC: Temporary, for this run (v34; the default,\n"
     "                      [locator] sound): only sound Sieve makes again byte for byte (WAV and the like as\n"
     "                      FLAC, MP3 as packMP3 codes it), an archive's too\n"
     "  --sound-permanent   Sound as FLAC: Permanent, for this run: also installed as .flac where smaller (WAV\n"
@@ -160,8 +160,9 @@ const char* kUsage =
     "                      or speed (sieve's command line itself defaults to size)\n"
     "                      ([locator] priority)\n"
     "  --prioritise-decoding  as --priority speed: no file mixed, so its instructions install quickly\n"
-    "  --v34-draft         the next version's draft in the File Locator, for this run (testing only: its\n"
-    "                      name follows the version in the making, docs/NEXT-VERSION.md; [locator] v34_draft)\n"
+    "  --v35-draft         the next version's draft in the File Locator, for this run (testing only: its\n"
+    "                      name follows the version in the making, docs/NEXT-VERSION.md; [locator] v35_draft;\n"
+    "                      --v34-draft, from before v34 was frozen, is still accepted and changes nothing)\n"
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
     "                      writes its reports and times to logs/ beside the settings ([locator] keep_log)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
@@ -879,7 +880,7 @@ int run(const Args& a)
         sieve::priority_from_name(app.locator_priority, p);
         sieve::set_priority(p);
     }
-    // The next version's draft ([locator] v33_draft; --v33-draft for this run: cli/draft.hpp).
+    // The next version's draft ([locator] v35_draft; --v35-draft for this run: cli/draft.hpp; the names follow kDraftVersion).
     if (a.has(sieve::cli::draft_flag())) app.locator_draft = true;
     sieve::cli::set_draft(app.locator_draft);
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
@@ -995,7 +996,7 @@ int run(const Args& a)
         app.save(app_path);
     });
     // Sound as FLAC ([locator] sound; --sound-temporary, --sound-permanent (--sound-to-flac) or
-    // --sound-off for this run): v34 draft's.
+    // --sound-off for this run): v34's.
     {
         sieve::cli::SoundMode mode = sieve::cli::sound_mode_named(app.locator_sound).value_or(sieve::cli::SoundMode::temporary);
         if (a.has("sound-off")) mode = sieve::cli::SoundMode::off;

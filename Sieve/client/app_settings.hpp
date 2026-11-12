@@ -147,7 +147,7 @@ struct AppSettings
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)
     bool locator_more = false;       // More formats: the comparison with gzip, bzip2, zstd, brotli and lz4 too (0.13.78)
-    std::string locator_sound = "temporary"; // Sound as FLAC (v34 draft): "temporary", "permanent" or "off" (pack.hpp's SoundMode)
+    std::string locator_sound = "temporary"; // Sound as FLAC (v34): "temporary", "permanent" or "off" (pack.hpp's SoundMode)
     bool locator_optimise = true;    // Optimise Search: Try every way chosen for each file by its kind (ticked unless unticked)
     bool locator_draft = false;      // the next version's draft (cli/draft.hpp; [locator] v33_draft, its name from the version)
     bool locator_log = false;        // Keep a log: each run's reports and times written to a text file

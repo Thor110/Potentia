@@ -957,7 +957,7 @@ while len(b) < 48000:
 open("x33/prog", "wb").write(bytes(b))
 PY
 $S locate x33 --installer x33-32.sieve --items --v32 2>&1 | tr -d '\r' | grep -q "^manifest  sieve-manifest-v32"
-$S locate x33 --installer x33-33.sieve --items 2>&1 | tr -d '\r' > x33.txt
+$S locate x33 --installer x33-33.sieve --v33 --items 2>&1 | tr -d '\r' > x33.txt
 grep -q "^manifest  sieve-manifest-v33" x33.txt
 [ "$(wc -c < x33-33.sieve)" -lt "$(wc -c < x33-32.sieve)" ]
 rm -rf x33_inst x33_si x33_oracle
@@ -1555,7 +1555,7 @@ $SI g34.sieve --to g34_si --yes > /dev/null
 diff -r g34 g34_si
 python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
 diff -r g34 g34_oracle
-$S locate g34 --installer g34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
+$S locate g34 --installer g34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
 if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi
 # The v34 draft's PDF (8 November 2026, Edward: "make a start on listing out and implementing all
 # formats"): a PDF as a skeleton and members, as v31 carries a tar ("skm"): its deflate streams made
@@ -1605,7 +1605,7 @@ diff -r p34 p34_si
 # (the oracle has no preflate: it reads the listing and every member, and says the PDF is not made
 # again by it, as it says of a zip's deflate)
 python sieve_ref.py unpack p34.sieve --to p34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*pages.pdf"
-$S locate p34 --installer p34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > p34v33.txt
+$S locate p34 --installer p34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > p34v33.txt
 if grep -q "^pdfs " p34v33.txt; then exit 1; fi
 # Compressed TIFFs (v34 draft, 8 November 2026, Edward: "work through all of the things on that
 # list"): written here by Pillow, through the libtiff it carries: LZW with and without the horizontal
@@ -1655,7 +1655,7 @@ diff -r t34 t34_si
 python sieve_ref.py unpack t34.sieve --to t34_oracle 2>&1 | tr -d '\r' > t34_oracle.txt
 grep -q "^not made again by the oracle (preflate.*deflate-pred.tif" t34_oracle.txt
 for f in lzw.tif lzw-pred.tif packbits.tif grey16-lzw-pred.tif pages.tif plain.tif overlap.tif; do cmp t34/$f t34_oracle/$f; done
-SIEVE_ARCHIVES_ALWAYS=1 $S locate t34 --installer t34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > t34v33.txt
+SIEVE_ARCHIVES_ALWAYS=1 $S locate t34 --installer t34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > t34v33.txt
 if grep -q "^tiffs \|	tiff " t34v33.txt; then exit 1; fi
 # zlib streams inside a file of any other kind (v34 draft, 8 November 2026): a file of records, each
 # a little binary head and a zlib stream (levels 1, 6 and 9, as a git pack's objects or a WOFF's
@@ -1686,7 +1686,7 @@ diff -r z34 z34_inst
 $SI z34.sieve --to z34_si --yes > /dev/null
 diff -r z34 z34_si
 python sieve_ref.py unpack z34.sieve --to z34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*records.bin"
-$S locate z34 --installer z34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > z34v33.txt
+$S locate z34 --installer z34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > z34v33.txt
 if grep -q "^zlib " z34v33.txt; then exit 1; fi
 # MP3 (v34 draft, 8 November 2026, Edward: "lets focus on making the decoder safe for MP3"):
 # tests/mp3/tone.mp3 (two sine tones, LAME) carried as packMP3 codes it ("pmp <inner size>") and given
@@ -1705,7 +1705,7 @@ diff -r m34 m34_inst
 $SI m34.sieve --to m34_si --yes > /dev/null
 diff -r m34 m34_si
 python sieve_ref.py unpack m34.sieve --to m34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (.*packMP3): tone.mp3"
-$S locate m34 --installer m34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > m34v33.txt
+$S locate m34 --installer m34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > m34v33.txt
 if grep -q "^mp3 \|	pmp " m34v33.txt; then exit 1; fi
 # (packMP3's decoder given 2,000 damaged forms of the MP3, where the build has the test program)
 if [ -x ../build/sieve_mp3_check ] || [ -x ../build/sieve_mp3_check.exe ]; then
@@ -1750,7 +1750,7 @@ $SI x34.sieve --to x34_si --yes > /dev/null
 diff -r x34 x34_si
 python sieve_ref.py unpack x34.sieve --to x34_oracle > /dev/null
 diff -r x34 x34_oracle
-SIEVE_ARCHIVES_ALWAYS=1 $S locate x34 --installer x34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > x34v33.txt
+SIEVE_ARCHIVES_ALWAYS=1 $S locate x34 --installer x34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > x34v33.txt
 if grep -q "^pcx \|	pcx " x34v33.txt; then exit 1; fi
 # The v34 draft's FLAC way (8 November 2026, Edward: "make a start on that, use the three levels as
 # the size/balanced/speed paths"): a WAV carried as its samples coded by libFLAC and the rest of the
@@ -1868,7 +1868,7 @@ $S locate w34 --installer w34s.sieve --items --compressed-temporary --v34-draft 
 grep -q "^sound     14 file(s) of sound " w34s.txt
 $S install w34s.sieve --to w34s_inst > /dev/null
 diff -r w34 w34s_inst
-$S locate w34 --installer w34v33.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > w34v33.txt
+$S locate w34 --installer w34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > w34v33.txt
 if grep -q "sieve-manifest-v34\|^sound \|	flac " w34v33.txt; then exit 1; fi
 # Sound as FLAC (--sound-to-flac, 8 November 2026): the same folder, each sound file of 1 or 2
 # channels, up to 24 bits, at a rate FLAC's subset holds, installed as name.flac (where no namesake
@@ -2098,6 +2098,20 @@ $S locate sm34z --installer sm34p.sieve --items --v34-draft --compressed-permane
 $S install sm34p.sieve --to sm34p_inst > /dev/null
 test -f sm34p_inst/pack/tune.flac
 cmp sm34/tone.mp3 sm34p_inst/pack/tone.mp3
+# A sound renamed past its neighbour (12 November 2026, found freezing v34): tone.wav installed as
+# tone.flac now comes before tone.mp3, and the listing is put back in the order of names (it was
+# refused, "entries out of order"); installed the same by Sieve and the oracle.
+rm -rf ord34 ord34_inst ord34_oracle
+mkdir ord34
+cp sm34/tune.wav ord34/tone.wav
+cp sm34/tone.mp3 ord34/tone.mp3
+$S locate ord34 --installer ord34.sieve --items --sound-permanent 2>&1 | tr -d '\r' > ord34.txt
+grep -q "	tone.flac$" ord34.txt
+$S install ord34.sieve --to ord34_inst > /dev/null
+test -f ord34_inst/tone.flac
+cmp ord34/tone.mp3 ord34_inst/tone.mp3
+python sieve_ref.py unpack ord34.sieve --to ord34_oracle > /dev/null
+cmp ord34_inst/tone.flac ord34_oracle/tone.flac
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
 # modules (and 7z by 7-Zip where the machine has it); one file alone in a stream format as it is.
@@ -2231,7 +2245,7 @@ grep -q "entries out of order" order12_ref.txt
 mkdir -p x86pair
 head -c 200000 $S > x86pair/a
 python -c "import random; b=bytearray(open('x86pair/a','rb').read()); r=random.Random(7); [b.__setitem__(i, (b[i]+1+r.randrange(255))%256) for i in r.sample(range(len(b)),10)]; open('x86pair/b','wb').write(b)"
-$S locate x86pair --installer x86pair33.sieve > /dev/null
+$S locate x86pair --installer x86pair33.sieve --v33 > /dev/null
 $S locate x86pair --installer x86pair34.sieve --v34-draft | tr -d '\r' > x86pair34.txt
 grep -q "sieve-manifest-v34" x86pair34.txt
 [ "$(stat -c%s x86pair34.sieve 2>/dev/null || wc -c < x86pair34.sieve)" -lt "$(( $(stat -c%s x86pair33.sieve 2>/dev/null || wc -c < x86pair33.sieve) * 9 / 10 ))" ]

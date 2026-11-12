@@ -152,7 +152,7 @@ an installed one is used, otherwise the first configure downloads and builds it.
   addresses.
 - **Versioned rules.** A filter, alphabet or format that changes is a new version beside the old,
   so an address or a `.sieve` written today still reads tomorrow. The `.sieve` format is
-  `sieve-manifest-v33`, and every older version is still read.
+  `sieve-manifest-v34` (frozen 12 November 2026), and every older version is still read.
 
 ## Documentation
 

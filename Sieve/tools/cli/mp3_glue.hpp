@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (8 November 2026, Edward: "lets focus on making the decoder safe for MP3"): an MP3 carried
+// v34 (8 November 2026, Edward: "lets focus on making the decoder safe for MP3"): an MP3 carried
 // as packMP3 codes it (Matthias Stirner's, LGPL v3; third_party/packmp3, its decoder made safe for
 // damaged input by Sieve: results/mp3-pmp-2026-11-08.md), made again byte for byte on installing
 // ("pmp <inner size>").

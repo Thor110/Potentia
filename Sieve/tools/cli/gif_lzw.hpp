@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (6 November 2026, Edward: "build the gif route for gifenc first"): a GIF carried as its
+// v34 (6 November 2026, Edward: "build the gif route for gifenc first"): a GIF carried as its
 // skeleton and each frame's colour indices, its LZW undone, made again exactly on installing.
 //
 // What is carried is each frame's colour indices, one byte each, width times height of them, in the

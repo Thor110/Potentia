@@ -1,8 +1,9 @@
 # The `.sieve` format, on one page
 
-What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v33` (the format rests
-there, frozen 3 November 2026; v32 was frozen 31 October 2026: HANDOFF's standing rules). v33's head
-is v32's, read by its version byte, 33; what v33 adds is in section 4. It is for anyone writing a decoder of their own. The rules in full
+What a `.sieve` file is, layer by layer, as Sieve writes it at `sieve-manifest-v34` (the format rests
+there, frozen 12 November 2026; v33 was frozen 3 November 2026 and v32 31 October 2026: HANDOFF's
+standing rules). v34's head is v32's, read by its version byte, 34 (v33's, 33); what v33 and v34 add
+is in section 4. It is for anyone writing a decoder of their own. The rules in full
 are in [SPECIFICATIONS §12.2](SPECIFICATIONS.md), written as each version's changes to the one
 before; this page puts the newest together in one place and says where each part's rules are.
 
@@ -147,11 +148,14 @@ stream its way names:
 | an archive made again: `xz`, `gz`, `bz2`, `zst`, `lz4`, `br`, `lzma`, `sk`, `stb`, each `<recipe> <inner size> <inner way>` (for `stb`, the inner bytes are the pixels); `skm <members> <skeleton size> <inner way>` | the inner bytes by the inner way (`raw`, `rope`, `pieces`, a mix way, `mixt` or `mixn`: never `x86`, nor another recipe), then the archive made from them by the named compressor and recipe; for `skm`, the inner bytes are its skeleton, and its data the members below | §12.2 v14, v17, v19 to v21, v25, v31 |
 | a text with binary written as text (v33): `spn <members> <skeleton size> <inner way>` | the inner bytes are its skeleton: a varint of its spans; for each, a varint of the text before it, a byte of how it is written (base64, hex, or a list of byte values, and their details), a varint of its width, and for a list its prefix, separator and line break; then the text. Its spans' bytes, decoded, are the next `<members>` files, `<text>/<n>`, each its own way (one recipe allowed among them: `jbr`); each written again and put back | §12.2 v33 (`tools/cli/text_spans.hpp`) |
 | a JPEG or PNG made again (v32): `jbr <form size>`, `pngr <filter> <strategy> <split> <head size> <inner size>`, `skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size>`, each then its inner way | `jbr`: the JPEG's brunsli form, made into the JPEG by brunsli; `pngr`: the PNG without its IDATs, then its rows unfiltered, the PNG re-saved by zlib at level 9 (each row by `filter`, or 5 each its own, at `strategy`), one IDAT put in at `split`; `skr`: the rows unfiltered, their filter bytes, then a v21 skeleton, the rows filtered again by their bytes and the PNG made as `sk` makes it | §12.2 v32 |
+| v34's recipes, each then its inner bytes as any recipe's (§12.2 v34): `gif <sub-block size> <skeleton size> <inner size>`, `flac <skeleton size> <inner size>`, `pmp <inner size>`, `tiff <skeleton size> <inner size>`, `pcx <skeleton size> <inner size>` | `gif`: each frame's colour indices then the GIF without its LZW, which is coded again as compress codes it; `flac`: a FLAC stream then the sound file without its samples (WAV, AIFF, RF64, Wave64, .au, CAF; floats of whole 24-bit steps written back bit for bit); `pmp`: packMP3's form of an MP3, made into it by packMP3's decoder; `tiff`: as `sk`, with strips coded again by libtiff's LZW or PackBits, the predictor undone; `pcx`: the pixels, planes interleaved, then the header, the runs coded again. A `skm` member may also carry `jbr`, `flac` or `pmp` (v34) | §12.2 v34 |
+| mix-v4's `E1` (v34) and a picture's shape from its header | `E1`: a program's mixing given contexts from where each byte falls in its x86 instruction, its mixers' weights chosen by that, and one stage after them; the shape is the packer's choice, read like any `I<w>x<c>` | §12.2 v34 |
 
 A stream left over, or one that runs out, is refused. The x86 and lzma2 streams are raw LZMA2 at the
 dictionary their byte names (the lzma2 stream may instead be carried as it is, byte 255, or mixed,
 byte 254); the items stream is raw LZMA2 or carried as it is; the rope stream is always carried as
-it is, each code in it with its length first.
+it is, each code in it with its length first. From v34, where the x86 stream holds two programs or more, its filter is undone on each program's
+bytes from their own start (position 0, the filter's state fresh), not over the stream as one.
 
 **Archives inside.** A `u` record says an archive in the folder was carried as its contents, in a
 folder of its name. From v31, `skm <members> <skeleton size> <way>` carries a gzip, zip or 7z as its

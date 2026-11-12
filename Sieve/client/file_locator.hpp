@@ -120,7 +120,7 @@ public:
     // Try every way chosen for each file by its kind, from what was measured, in place of its box
     // (sieve::cli::optimise_search). Set once, at start.
     static void remember_optimise(std::function<void(bool)> changed);
-    // "Sound as FLAC" ([locator] sound; Edward, 8 and 9 November 2026; v34 draft): one button that goes
+    // "Sound as FLAC" ([locator] sound; Edward, 8 and 9 November 2026; v34): one button that goes
     // round Temporary (the default: only sound made again byte for byte), Permanent (also installed as
     // .flac where smaller) and Off (sieve::cli::SoundMode, pack.hpp). Set once, at start.
     static void remember_sound_flac(std::function<void(sieve::cli::SoundMode)> changed);

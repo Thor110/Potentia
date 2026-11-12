@@ -413,10 +413,10 @@ struct MatchWays
     bool recover = false;
     int min_match = 6;
     int candidates = 1;
-    bool instructions = false; // v34 draft (E1): the x86 instruction model's contexts in place of the text's three
+    bool instructions = false; // v34 (E1): the x86 instruction model's contexts in place of the text's three
 };
 
-// v34 draft (E1, 7 November 2026): where each byte of a program falls in its x86 instruction, followed
+// v34 (E1, 7 November 2026): where each byte of a program falls in its x86 instruction, followed
 // as the bytes go by, for the model's contexts. A small decoder of x86-64's encodings: legacy prefixes
 // and REX, the one-byte opcodes and those after 0F, 0F 38 and 0F 3A, whether a ModRM byte follows, a
 // SIB byte, a displacement of 1 or 4 bytes, and an immediate of 1, 2, 4 or 8. It only chooses
@@ -631,7 +631,7 @@ public:
         st_[k++] = 256;
         if (words_) st_[k++] = word_list_input();
         const int ml = mlen_ == 0 ? 0 : mlen_ < 16 ? 1 : mlen_ < 32 ? 2 : 3;
-        // (v34 draft, E1: each mixer's weights chosen by the byte's part of its instruction too: the
+        // (v34, E1: each mixer's weights chosen by the byte's part of its instruction too: the
         // second's by the part and which byte of it in place of the byte before's top six bits.)
         if (mw_.instructions) set2_ = size_t((ml * 8 + bitpos_) * 64 + ((x86_.part * 8 + std::min<int>(x86_.index, 7)) & 63));
         else set2_ = size_t((ml * 8 + bitpos_) * 64 + (c1() >> 2));
@@ -642,7 +642,7 @@ public:
         int pr = T.sq((s1_ + s2_) >> 1);
         if (mw_.instructions)
         {
-            // v34 draft (E1): one stage after the mixers, its context the opcode and the byte's part
+            // v34 (E1): one stage after the mixers, its context the opcode and the byte's part
             // of the instruction with the bits so far of the byte, half of what is coded.
             const size_t cx = (hash2(uint32_t(x86_.op) | uint32_t(x86_.what()) << 12, uint32_t(c0_)) >> 16) & 0xFFFF;
             const int q = ea_.p(pr < 1 ? 1 : pr > 4095 ? 4095 : pr, cx);
@@ -847,7 +847,7 @@ private:
             const int above1 = prevline_ + col + 1 < linestart_ ? buf_[prevline_ + col + 1] : 0;
             if (mw_.instructions)
             {
-                // v34 draft (E1): in place of the text's three, the instruction's: what this byte is
+                // v34 (E1): in place of the text's three, the instruction's: what this byte is
                 // in it with its opcode; with its ModRM and SIB, and the byte before; and with the
                 // instruction before's opcode.
                 if (pos_ > 0) x86_.read(buf_[pos_ - 1]);
@@ -865,7 +865,7 @@ private:
             base_[k++] = hash2(0x2001, uint32_t(at(2)) | uint32_t(at(3)) << 8);
             if (mw_.instructions)
             {
-                // v34 draft (E1): in place of two of the sparse three, the last three instructions'
+                // v34 (E1): in place of two of the sparse three, the last three instructions'
                 // opcodes; and, where an immediate is under way, the byte of this place that the same
                 // byte of an absolute address near here would be (a call's target, through the x86
                 // filter, is such an address).
@@ -931,8 +931,8 @@ private:
     Counter mm_[64];
     std::vector<uint32_t, BigTableAllocator<uint32_t>> ht_, ht2_;
     MatchWays mw_;
-    X86Reader x86_; // (v34 draft, E1)
-    Apm ea_{0}; // (v34 draft, E1: its stage, made only where it is used)
+    X86Reader x86_; // (v34, E1)
+    Apm ea_{0}; // (v34, E1: its stage, made only where it is used)
     bool missed_ = false;  // with recover: this byte's bits left the match's, which goes on after it
     uint32_t mlen_ = 0;
     size_t mptr_ = 0;

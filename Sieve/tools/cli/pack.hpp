@@ -86,7 +86,7 @@ struct PackReport
     bool v31 = false;                    // v31: archives made again from their skeleton, their files carried apart
     bool v32 = false;                    // v32: some file carried as its differences from another
     bool v33 = false;                    // v33: as the manifest's (locate.hpp)
-    bool v34 = false;                    // v34 (draft): as the manifest's
+    bool v34 = false;                    // v34: as the manifest's
     // The whole set weighed once more as the plain installer (every file in one LZMA2 stream),
     // after the newest was made (12 November 2026): its bytes and the newest's, and which was kept.
     uint64_t plain_weighed = 0, plain_newest = 0;
@@ -104,16 +104,16 @@ struct PackReport
     uint64_t jpeg_bytes = 0, jpeg_forms = 0;
     size_t jpegs_optimised = 0;          // v32: of those, installed with tables made for their values (permanent), their bytes before and after
     uint64_t jpeg_was = 0, jpeg_now = 0;
-    size_t gifs_opened = 0, gif_frames = 0; // v34 draft: GIFs carried as their indices, and their frames
-    size_t pdfs_opened = 0; // v34 draft: PDFs as skeletons and members
-    size_t tiffs_opened = 0; // v34 draft: TIFFs as skeletons and what their strips hold
-    size_t zlib_opened = 0; // v34 draft: files of other kinds whose zlib streams were opened
-    size_t pcxs_opened = 0; // v34 draft: PCX pictures carried as their pixels
-    size_t mp3s_opened = 0; // v34 draft: MP3s carried as packMP3 codes them
+    size_t gifs_opened = 0, gif_frames = 0; // v34: GIFs carried as their indices, and their frames
+    size_t pdfs_opened = 0; // v34: PDFs as skeletons and members
+    size_t tiffs_opened = 0; // v34: TIFFs as skeletons and what their strips hold
+    size_t zlib_opened = 0; // v34: files of other kinds whose zlib streams were opened
+    size_t pcxs_opened = 0; // v34: PCX pictures carried as their pixels
+    size_t mp3s_opened = 0; // v34: MP3s carried as packMP3 codes them
     size_t sounds_to_flac = 0, flacs_recoded = 0; // Sound as FLAC: files installed as .flac, FLACs re-coded, their bytes before and after
     size_t lossless_need_ffmpeg = 0; // Sound as FLAC: WavPack, Monkey's Audio, TTA or ALAC files left as they are, with no ffmpeg to read them
     uint64_t sound_flac_was = 0, sound_flac_now = 0;
-    size_t wavs_opened = 0; // v34 draft: WAVs carried as their samples coded by FLAC
+    size_t wavs_opened = 0; // v34: WAVs carried as their samples coded by FLAC
     uint64_t wav_bytes = 0;  // (their bytes)
     size_t pngs_resaved = 0;             // v32: PNGs installed re-saved at their smallest (permanent), their bytes before and after
     uint64_t png_bytes = 0, png_resaved_bytes = 0;
@@ -173,10 +173,12 @@ struct SampleAsWhole
 // The newest level of the packer's ways (the rope's waves, mixing, groups, archives' members, files
 // alike, JPEGs and PNGs recoded, mixing's word list counted by use, the smaller head; and v33's:
 // mixing's match ways, programs mixed through the x86 filter, repeating patterns and ramps,
-// copies, binary written as text, a picture's palette): 16, sieve-manifest-v33 (frozen 3 November
-// 2026); 15 is v32's, 14 v31's.
+// copies, binary written as text, a picture's palette; and v34's: GIFs, sound through FLAC and MP3s
+// through packMP3, TIFFs, PCX and PDFs opened, the x86 instruction model in mixing, pictures' shapes
+// from their headers, the x86 filter restarted at each program): 17, sieve-manifest-v34 (frozen 12
+// November 2026); 16 is v33's, 15 v32's, 14 v31's.
 // Everything that makes instructions passes it unless an older version is asked for by name.
-inline constexpr uint32_t kNewestRope = 16;
+inline constexpr uint32_t kNewestRope = 17;
 // The draft's (draft.hpp, kDraftVersion): what an instructions-maker asked for the newest makes
 // while the draft switch is on.
 inline constexpr uint32_t kDraftRope = kNewestRope + 1;
@@ -198,7 +200,7 @@ void set_compressed_modes(bool temporary, bool permanent);
 bool compressed_temporary();
 bool compressed_permanent();
 
-// Sound as FLAC (v34 draft; 8 November 2026, Edward: "repack audio to FLAC"; three ways, 9 November:
+// Sound as FLAC (v34; 8 November 2026, Edward: "repack audio to FLAC"; three ways, 9 November:
 // "temporary wouldn't repack formats we can't reproduce byte for byte ... permanent would repack
 // formats regardless"), which alone decides how sound is taken, an archive's sound included:
 // - temporary (the default): only what Sieve makes again byte for byte on installing. A WAV, AIFF,

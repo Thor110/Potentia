@@ -84,7 +84,7 @@ bool sieve_name(const std::string& name)
 namespace {
 
 // A recipe that says the file is a picture made again: a JPEG from its brunsli form, a PNG by
-// stb_image_write, from its rows unfiltered, or re-saved; (v34 draft) a GIF from its frames' indices.
+// stb_image_write, from its rows unfiltered, or re-saved; (v34) a GIF from its frames' indices.
 bool picture_recipe(const std::string& recipe)
 {
     for (const char* k : {"jbr ", "stb ", "skr ", "pngr ", "gif "})

@@ -11,9 +11,10 @@ namespace sieve::cli {
 // the command line, `[locator] v33_draft = 1` in sieve-hallway.ini; off, every instructions-maker
 // makes the newest frozen version as before. Its names all come from the number here, so the next
 // draft is begun by changing it (and 0 says none is in the making). What it holds: docs/NEXT-VERSION.md.
-// (v33 frozen 3 November 2026; v34 begun empty, and since 6 November 2026 holding the ways
-// docs/NEXT-VERSION.md lists.)
-inline constexpr uint32_t kDraftVersion = 34;
+// (v33 frozen 3 November 2026; v34, begun empty and from 6 November 2026 holding the ways
+// docs/NEXT-VERSION.md lists, frozen 12 November 2026; v35 begun empty, its switch accepted and nothing
+// yet behind it.)
+inline constexpr uint32_t kDraftVersion = 35;
 
 inline std::string draft_name() { return "v" + std::to_string(kDraftVersion); }              // "v33"
 inline std::string draft_flag() { return draft_name() + "-draft"; }                           // "v33-draft" (--v33-draft)

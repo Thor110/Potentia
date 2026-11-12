@@ -169,7 +169,7 @@ struct Mix4Params
     // coded, so the file starts with what the dictionary taught it. 0: none; 1: web-mdn-2026-11-03-64k
     // (MDN's CC0 examples, HTML, CSS and JavaScript; mix_primer). Text only, not a picture or a program.
     uint32_t primer = 0;
-    // v34 draft (7 November 2026): E1, the x86 instruction model: in place of the three contexts
+    // v34 (7 November 2026): E1, the x86 instruction model: in place of the three contexts
     // made for text's lines and fields, three from where each byte falls in its x86 instruction (its
     // part, its opcode, the ModRM and SIB bytes, the instruction before's opcode). A program's bytes.
     bool instructions = false;

@@ -1,7 +1,32 @@
-# The next manifest version: v34 begun, and the plans v32 and v33 were built from
+# The next manifest version: v35 begun, and the plans v32, v33 and v34 were built from
 
-**v34, a draft begun empty (3 November 2026).** Behind `--v34-draft`; with it off, Sieve makes v33
-as before. Candidate still: scattered substitutions (IDEAS §19.114, 3), on real pairs. (The web
+**v35, a draft begun empty (12 November 2026).** Behind `--v35-draft` (`[locator] v35_draft`); with it
+off, Sieve makes v34. Nothing is behind it yet. Candidates: scattered substitutions (IDEAS §19.114, 3),
+on real pairs; headers modelled and BCJ2 (ROADMAP stage 14).
+
+**v34, frozen 12 November 2026** (Edward: "write it into the roadmap then freeze v34").
+- **What changed:** `kNewestRope` is 17 and `kDraftVersion` 35, so every instructions-maker makes v34 at
+  its newest, and a `.sieve` is v34 only where one of its ways is used (else v33, or older, as before).
+  `--v33` makes v33 byte for byte as before the freeze, and `--v34-draft` is still accepted but does
+  nothing. The x86 filter's restart at each program now follows the version asked for (it followed
+  the draft switch), and the whole set weighed as the plain installer stays from v33 on, so `--v33`
+  keeps it. The File Locator's Sound as FLAC button (W) is always there.
+- **Checked:** the docs/ and tests/ folders and a folder of one of each of v34's kinds (a WAV, an MP3,
+  a GIF, two TIFFs, a PCX, a BMP, two programs and a text): the frozen default the same bytes as the
+  draft, `--v33` the same as the old default, and `--v34-draft` the same as the default; again with
+  Compressed formats temporary and Sound as FLAC permanent.
+- **Found and fixed while freezing:** with Sound as FLAC permanent, a sound renamed past its neighbour
+  (`tone.wav` as `tone.flac`, now before `tone.mp3`) left the listing out of order, and the folder was
+  refused ("entries out of order"); the listing is now put back in the order of names where a sound was
+  renamed, and no other listing changes. CI step 11 checks it.
+- **What v34 holds:** the pieces below: GIFs (`gif`), sound through FLAC (`flac`, with floating point
+  and the sound formats beside WAV), MP3s through packMP3 (`pmp`), TIFFs (`tiff`), PCX (`pcx`), PDFs and
+  archives' members as JPEGs' brunsli form and sound, zlib streams inside files, mix-v4's `E1` (the x86
+  instruction model), pictures' shapes from their headers, and the x86 filter restarted at each program.
+
+
+**v34, a draft begun empty (3 November 2026), frozen 12 November 2026 (above).** Behind `--v34-draft`
+while a draft; with it off, Sieve made v33. Candidate still: scattered substitutions (IDEAS §19.114, 3), on real pairs. (The web
 dictionary, IDEAS §19.92, went into v33 as `W1`, below.)
 - **First piece, built 6 November 2026: `gif`** (Edward: "build the gif route for gifenc first"; IDEAS
   §19.123). A GIF carried as its frames' colour indices then its skeleton, each frame's LZW coded

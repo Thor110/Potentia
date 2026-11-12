@@ -246,9 +246,10 @@ void add_packed_items(Manifest& m, const std::filesystem::path& root, const Args
     add_packed(m, root, report, &finder, item_hashes, m.compact ? &coder : nullptr, version >= 8 ? rope_seconds : -1, rope_newest,
                version >= 8 && trim, version >= 8 && trim && pieces, version >= 8 && trim && pieces && optimise_archives,
                version >= 8 && trim && pieces && rope_newest >= 5 && binary, gzip, gzip && v20, gzip && v20 && v21, gzip && v20 && v21 && v22);
-    // The newest asked for (not an older version by name): the whole set weighed as the plain
-    // installer too, the smaller kept.
-    if (version == 8 && rope_newest >= kNewestRope && gzip && v20 && v21 && v22) weigh_plain(m, before, root, report);
+    // v33 or newer asked for (an older version by name is made as it was): the whole set weighed as the
+    // plain installer too, the smaller kept. (Begun 12 November 2026, when v33 was the newest: 16, so
+    // `--v33` makes what v33 made.)
+    if (version == 8 && rope_newest >= 16 && gzip && v20 && v21 && v22) weigh_plain(m, before, root, report);
 }
 
 void weigh_plain(Manifest& m, const Manifest& before, const std::filesystem::path& root, PackReport* report)

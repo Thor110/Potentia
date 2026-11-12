@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (8 November 2026, Edward: "make a start on that, use the three levels as the
+// v34 (8 November 2026, Edward: "make a start on that, use the three levels as the
 // size/balanced/speed paths"): a WAV carried as its samples coded by FLAC (libFLAC 1.4.3) and the
 // rest of the file as it was, made again byte for byte on installing.
 //

@@ -1230,6 +1230,10 @@ const std::vector<Page>& pages()
                                   "(v25): one stb_image_write made (as the hallway's screenshots are) as its\n"
                                   "pixels, made again by it; any other from its skeleton, its deflate by preflate\n"
                                   "and its chunks' CRCs worked out again. Off unless given."},
+          {"--v33", "As sieve-manifest-v33 at newest: none of v34's ways (GIFs, sound through FLAC and MP3s\n"
+                    "through packMP3, TIFFs, PCX and PDFs opened, zlib streams inside files, the x86 instruction\n"
+                    "model in mixing, pictures' shapes from their headers, the x86 filter restarted at each\n"
+                    "program), byte for byte as v33 made it."},
           {"--v32", "As sieve-manifest-v32 at newest: none of v33's ways (mixing's match ways, the x86\n"
                     "filter in mixing, repeating patterns and ramps, copies, binary written as text decoded,\n"
                     "a picture's palette, web text mixed primed on MDN's examples), byte for byte as v32 made it."},
@@ -1254,13 +1258,13 @@ const std::vector<Page>& pages()
                                      "make it again. Only where given by name; packing warns, naming each file installed so.\n"
                                      "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
                                      "smallest, a JPEG with tables made for its values (else made again exactly)."},
-          {"--sound-temporary", "Sound as FLAC, temporary (v34 draft, with --v34-draft; the default): only what Sieve makes\n"
+          {"--sound-temporary", "Sound as FLAC, temporary (v34, with --v34-draft; the default): only what Sieve makes\n"
                                 "again byte for byte on installing. A WAV, AIFF, RF64, Wave64, .au or CAF carried as its\n"
                                 "samples coded by FLAC and the rest of the file; an MP3 (MPEG-1 Layer III) as packMP3 codes\n"
                                 "it. Inside an archive opened too (--compressed-temporary or -permanent). Any other sound\n"
                                 "(FLAC, WavPack, Monkey's Audio, TTA, ALAC, MPEG-2 MP3s) carried as its bytes, the best way\n"
                                 "found for them. This switch alone decides sound, not the archives' boxes."},
-          {"--sound-permanent", "Sound as FLAC, permanent (v34 draft): as temporary, and also installed as the same samples\n"
+          {"--sound-permanent", "Sound as FLAC, permanent (v34): as temporary, and also installed as the same samples\n"
                                 "in other bytes where that is smaller: a WAV, AIFF, RF64, Wave64, .au or CAF of up to 24\n"
                                 "bits (8, 16, 24, or floats of whole 24-bit steps) as name.flac (its LIST INFO or\n"
                                 "NAME/AUTH/ANNO tags kept); a WavPack, Monkey's Audio,\n"
@@ -1268,7 +1272,7 @@ const std::vector<Page>& pages()
                                 "its tags and cover kept; a FLAC re-coded. libFLAC works as hard as --priority says. It\n"
                                 "changes what is installed: only where given by name; packing warns, naming each."},
           {"--sound-to-flac", "The same as --sound-permanent (its name before 9 November 2026)."},
-          {"--sound-off", "Sound as FLAC off (v34 draft): sound left to the ways every file has."},
+          {"--sound-off", "Sound as FLAC off (v34): sound left to the ways every file has."},
           {"--v23", "As sieve-manifest-v23 at newest: no file carried by mixing (mix-v1, v24)."},
           {"--v22", "As sieve-manifest-v22 at newest: the rope's ways at most rope-wave-v5's (no triangle:\n"
                     "v23)."},
@@ -1326,6 +1330,7 @@ const std::vector<Page>& pages()
                                 "--compressed-permanent)."},
           {"--v32-draft", "(v32 was frozen 31 October 2026; kept so older command lines work: it changes nothing.)"},
           {"--v33-draft", "(v33 is the newest now, frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
+          {"--v34-draft", "(v34 is the newest now, frozen 12 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"
                           "not be read by a later Sieve; the File Locator's [locator] " + draft_ini_key() + "): its ways are in docs/NEXT-VERSION.md\n"
                           "(so far: GIFs, x86 instructions in mixing, sound through FLAC and packMP3, compressed TIFFs,\n"

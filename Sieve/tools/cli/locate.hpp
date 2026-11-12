@@ -327,7 +327,7 @@ struct Manifest
     bool v30 = false; // v30: files mixed together in groups (v29 is set too)
     bool v31 = false; // v31: archives made again from their skeleton and their files apart (v30 is set too)
     bool v32 = false; // v32: some file carried as its differences from another, "delta" (v31 is set too)
-    bool v34 = false; // v34 (draft): some GIF made again from its indices (v33 is set too)
+    bool v34 = false; // v34: some file carried by one of v34's ways (a GIF, sound, an MP3, a TIFF, PCX or PDF opened; E1; the x86 restart) (v33 is set too)
     bool v33 = false; // v33: some file a copy, runs, spans, or mixing with the palette, the x86 filter or the match model's ways (v32 is set too)
     bool body_text = false; // v20: its body as text after all (the head's flag 128), where that came out smaller
     // v14: each archive carried as its contents: its format ("7z", "xz"), its size, its path, and the

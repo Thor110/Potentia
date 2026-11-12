@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (8 November 2026, Edward: "work through all of the things on that list next"): a PCX
+// v34 (8 November 2026, Edward: "work through all of the things on that list next"): a PCX
 // picture (ZSoft's) carried as its pixels, made again byte for byte on installing.
 //
 // A PCX of 8 bits a plane (one plane, colour-mapped or grey; three, RGB; four, RGBA), run-length coded

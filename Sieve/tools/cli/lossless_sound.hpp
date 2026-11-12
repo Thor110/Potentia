@@ -1,6 +1,6 @@
 #pragma once
 
-// v34 draft (9 November 2026, Edward: "let's move on to the other formats"): Sound as FLAC for the
+// v34 (9 November 2026, Edward: "let's move on to the other formats"): Sound as FLAC for the
 // other lossless sound formats, WavPack (.wv), Monkey's Audio (.ape), TTA (.tta) and Apple Lossless
 // (ALAC, in an .m4a). Sieve links none of their decoders: each file is decoded by ffmpeg, run as its
 // own process (cli/media_decode.hpp: --ffmpeg, the hallway's [paths] ffmpeg, SIEVE_FFMPEG, beside

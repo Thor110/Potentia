@@ -1,5 +1,40 @@
 # The plan from here
 
+## Next, in order (12 November 2026, evening)
+
+Edward: "lets lay out a roadmap of tasks moving forward, what is next", then "yes, write it into the
+roadmap then freeze v34". Each step finished before the next, unless said.
+
+1. **Freeze v34**, and with it a speed pass on mixing. v34's draft has gathered since 3 November (GIF,
+   the x86 instruction model, FLAC and the sound formats, float sound, TIFFs, MP3 through packMP3, PDFs,
+   zlib streams, PCX, pictures' shapes, the x86 filter restarted per program: docs/NEXT-VERSION.md).
+   Frozen as v32 and v33 were: the draft's ways become what every maker makes, `--v33` makes v33 byte
+   for byte, and the next draft (v35) begins empty. Then mixing's time, measured against
+   results/bench-make-quick-2026-11-12.md (mixing is 13.7 s of program.exe's 21.3 s, 7.8 s of
+   folder.tar's 16.3 s).
+2. **The System Viewer and the right-hand panel, put right** (Edward, the same evening): the System
+   Viewer a viewer of its own, one interface for the trees that fill out and connect the state spaces,
+   not the setup menu's sliding panel; the right-hand panel a direct mirror of the left: it slides in
+   squashing the dimensions as the left one does, without the white line down its side, its scroll bar
+   on its left; and only one of the two panels open at a time.
+3. **This week's loose ends, one session:** the RAID between machines on the menus, behind the red
+   warning boxes, with Ctrl+S sharing your save, and `sieve raid serve` answering more than one
+   connection at once; the File Locator and the hallway's imports adding their figures to the
+   catalogue (stage 4); IDEAS §19.185's first step (the measured-figure record's grammar as a filter
+   plugin, checked by the oracle to admit exactly what its reader admits); glTF translation channels,
+   and held models turning with their spheres.
+4. **Two first steps asked for:** `--record` / `--replay` in the hallway (§19.184), and music
+   visualiser rings for Sieve's own notes.
+5. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
+   tactile Sieve: identity never by colour alone, text size and contrast, the magnifying lens of
+   §19.160), 10 (hallway polish).
+6. **Still open from before:** voices measured by word error rate (stage 3b); the website's power
+   savings page once its figures exist.
+
+**Waiting on Edward:** who runs the RAID's first known nodes, and the step from IP addresses to verified
+identity (§19.178, §19.179); which open registries the catalogue takes in, each licence checked
+(CATALOGUE-ROADMAP stage 5); the Doom reimplementation and its licence.
+
 ## Next: the character system (Edward, 12 November 2026)
 
 "go ahead and start building the character system next" (IDEAS §19.148). In order, each step finished
@@ -60,12 +95,12 @@ and built only where it pays.
 | Stage | Items | Where it stands |
 | --- | --- | --- |
 | 1. Loose ends | entry order, recipe digits, rope tie, CI pins and warnings, the repeat loop, harness sort | **Done** |
-| 2. Finish and freeze v34 | x86 filter per program; BMP RLE, AVI/MOV PCM, WAD/PAK; MPEG-2 MP3s; the freeze | x86 restart **built**; the three formats measured too small; MPEG-2 MP3s open; **the freeze is Edward's call** |
+| 2. Finish and freeze v34 | x86 filter per program; BMP RLE, AVI/MOV PCM, WAD/PAK; MPEG-2 MP3s; the freeze | x86 restart **built**; the three formats measured too small; MPEG-2 MP3s open; **frozen 12 November 2026** |
 | 3. Sieve's voice | read aloud everywhere; words CMUdict lacks; more recordings; prosody; a trained voice | first two **built**; three hours measured (19.8% against 23.3%), not taken; prosody and the trained voice open |
 | 4. The AI line | training speed; QK-norm; corpora; wider arithmetic; a real model | speed **built** (about twice on four threads); QK-norm measured, not built; documents as text **built**; wider arithmetic and a real model left for Edward |
 | 5. The hallway | chat commands, logs, chains; PCM filters; filter ideas; music filter designer; a game dimension | chains steered **built**; sound plugins and `pcm-quiet-ends` **built**; designer plays what it keeps, Media Player's M **built**; game dimension **designed** (GAME.md §11); chain branches open |
 | 6. Compression research | the rope; shortcut seed, cmix ideas; video, game streaming | rope: all measured, ground now mixing's and FLAC's, nothing to build; seed: its winners built in v33; cmix's SSE retired before, x86 model built; streaming measured (no version needed); packets measured, **whole-set plain weighing built**; mixing models for meshes, code points, grammar and MIDI open |
-| 7. Infrastructure and outreach | docs kept up from the code; the website; the rope post | open; the rope post waits for the v34 freeze |
+| 7. Infrastructure and outreach | docs kept up from the code; the website; the rope post | open; the rope post waited for the v34 freeze (frozen 12 November 2026) |
 
 **What is waiting on Edward:** the v34 freeze; wider arithmetic (a training version); the three hours
 of voice recordings; and the designs to decide on (the games line, GAME.md §11; distributed

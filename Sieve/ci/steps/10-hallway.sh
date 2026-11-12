@@ -1179,11 +1179,11 @@ $H --main-menu --read-aloud --press Down --screenshot ra-main.png | tr -d '\r' |
 $H --menu --read-aloud --press "Down,Down,Down" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
 $H --menu --read-aloud --press "F,Down,Down" --screenshot ra-filters.png | tr -d '\r' | q -E "^read aloud: max-run-v1, (On|Off), Filtered: "
 $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --screenshot ra-locator.png | tr -d '\r' | q "^read aloud: Optimise Search, Off$"
-# Sound as FLAC (v34 draft): its button, W, shown and said only while the draft is on; it goes round
-# Temporary (the default), Permanent and Off.
-$H --main-menu --v34-draft --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Permanent$"
-$H --main-menu --v34-draft --read-aloud --locate tests/manifest_fixture/a.txt --press "W,W,W" --screenshot ra-flac3.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
-$H --main-menu --v34-draft --sound-off --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac0.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
+# Sound as FLAC (v34): its button, W, shown and said (once only while the v34 draft was on; v34 frozen
+# 12 November 2026); it goes round Temporary (the default), Permanent and Off.
+$H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Permanent$"
+$H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press "W,W,W" --screenshot ra-flac3.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
+$H --main-menu --sound-off --read-aloud --locate tests/manifest_fixture/a.txt --press W --screenshot ra-flac0.png | tr -d '\r' | q "^read aloud: Sound as FLAC: Temporary$"
 # Reset to defaults (R, 9 November 2026): Priority pressed to Size (Balanced, Decoding speed, Size),
 # reset, then pressed once more: Decoding speed, as from Balanced, its default.
 $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press "P,P,R,P" --screenshot ra-defaults.png | tr -d '\r' | q "^read aloud: Priority: Decoding speed$"

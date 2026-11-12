@@ -1354,11 +1354,11 @@ static const char* const kArchiveFormats[] = {nullptr, "xz", "gz", "bz2", "zst",
                                               "pngr", // (v32: 22, a PNG re-saved at its smallest from its head and rows)
                                               "skr", // (v32: 23, a PNG made again exactly, its rows carried unfiltered)
                                               "spn", // (v33 draft: 24, a text with binary it writes out carried decoded, spans-v1)
-                                              "gif", // (v34 draft: 25, a GIF made again from its skeleton and its frames' colour indices)
-                                              "flac", // (v34 draft: 26, a WAV made again from its samples as FLAC codes them and its skeleton)
-                                              "tiff", // (v34 draft: 27, a TIFF made again from its skeleton and what its strips hold)
-                                              "pcx", // (v34 draft: 28, a PCX made again from its pixels and its header)
-                                              "pmp"}; // (v34 draft: 29, an MP3 made again from packMP3's form of it)
+                                              "gif", // (v34: 25, a GIF made again from its skeleton and its frames' colour indices)
+                                              "flac", // (v34: 26, a WAV made again from its samples as FLAC codes them and its skeleton)
+                                              "tiff", // (v34: 27, a TIFF made again from its skeleton and what its strips hold)
+                                              "pcx", // (v34: 28, a PCX made again from its pixels and its header)
+                                              "pmp"}; // (v34: 29, an MP3 made again from packMP3's form of it)
 
 int archive_format_number(const std::string& name)
 {
@@ -2435,11 +2435,11 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             const bool pngr = m.v32 && e.way.rfind("pngr ", 0) == 0; // v32: "pngr <filter> <strategy> <split> <head size> <inner size> <way>"
             const bool skr = m.v32 && e.way.rfind("skr ", 0) == 0; // v32: "skr <skeleton size> <row bytes> <pixel bytes> <rows> <inner size> <way>"
             const bool spn = m.v33 && e.way.rfind("spn ", 0) == 0; // v33 draft: "spn <members> <skeleton size> <way>"
-            const bool gif = m.v34 && e.way.rfind("gif ", 0) == 0; // v34 draft: "gif <sub-block size> <skeleton size> <inner size> <way>"
-            const bool flac = m.v34 && e.way.rfind("flac ", 0) == 0; // v34 draft: "flac <skeleton size> <inner size> <way>"
-            const bool tiff = m.v34 && e.way.rfind("tiff ", 0) == 0; // v34 draft: "tiff <skeleton size> <inner size> <way>"
-            const bool pcx = m.v34 && e.way.rfind("pcx ", 0) == 0; // v34 draft: "pcx <skeleton size> <inner size> <way>"
-            const bool pmp = m.v34 && e.way.rfind("pmp ", 0) == 0; // v34 draft: "pmp <inner size> <way>"
+            const bool gif = m.v34 && e.way.rfind("gif ", 0) == 0; // v34: "gif <sub-block size> <skeleton size> <inner size> <way>"
+            const bool flac = m.v34 && e.way.rfind("flac ", 0) == 0; // v34: "flac <skeleton size> <inner size> <way>"
+            const bool tiff = m.v34 && e.way.rfind("tiff ", 0) == 0; // v34: "tiff <skeleton size> <inner size> <way>"
+            const bool pcx = m.v34 && e.way.rfind("pcx ", 0) == 0; // v34: "pcx <skeleton size> <inner size> <way>"
+            const bool pmp = m.v34 && e.way.rfind("pmp ", 0) == 0; // v34: "pmp <inner size> <way>"
             if ((m.archives && e.way.rfind("xz ", 0) == 0) || gz || bz2 || zst || lz4 || br || lzma || sk || stb || skm || jbr || pngr || skr || spn || gif || flac || tiff || pcx || pmp)
             {
                 // v14: "xz <preset> <check> <inner size> <way>"; v17: "gz <level> <memory level>
@@ -2451,7 +2451,7 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
                 // <inner size> <way>".
                 // v21: "sk <skeleton size> <inner size> <way>". v25: "stb <level> <filter> <width>
                 // <height> <components> <inner size> <way>". v31: "skm <members> <skeleton size> <way>".
-                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : spn ? 3 : flac ? 3 : tiff ? 3 : pcx ? 3 : pmp ? 2 : 4; // (4: xz's, and v34 draft gif's)
+                const int words = gz ? 5 : bz2 ? 3 : zst ? 6 : lz4 ? 8 : br ? 4 : lzma ? 3 : sk ? 3 : stb ? 7 : skm ? 3 : jbr ? 2 : pngr ? 6 : skr ? 6 : spn ? 3 : flac ? 3 : tiff ? 3 : pcx ? 3 : pmp ? 2 : 4; // (4: xz's, and v34 gif's)
                 size_t at = 0;
                 for (int k = 0; k < words && at != std::string::npos; ++k) at = e.way.find(' ', at + 1);
                 if (at == std::string::npos) throw std::runtime_error("manifest: " + e.path + "'s way has no inner way");
@@ -2579,7 +2579,7 @@ Manifest Manifest::parse(std::string_view whole, std::vector<uint8_t>* release)
             {
                 if (e.path.rfind(under, 0) != 0) continue;
                 // (A member of a text's spans may be a JPEG carried as its brunsli form: the one
-                // recipe a member has. v34 draft: an archive's or a PDF's member too; and an archive's
+                // recipe a member has. v34: an archive's or a PDF's member too; and an archive's
                 // member may be sound by a way that gives it back exactly, "flac" or "pmp", 9 November
                 // 2026: made again first, as every recipe is, before the archive is made from it.)
                 const bool member_recipe = e.remake.rfind("jbr ", 0) == 0 ? (spn || m.v34)
