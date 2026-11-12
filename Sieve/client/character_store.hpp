@@ -9,11 +9,13 @@
 
 #include "app_settings.hpp"
 #include "sieve/character.hpp"
+#include "sieve/animation.hpp"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -23,6 +25,45 @@ namespace hallway {
 inline std::filesystem::path character_store_dir(const std::filesystem::path& app_path)
 {
     return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "characters";
+}
+
+// The animations' store (IDEAS 19.170): `animations` beside the settings file, each animation kept
+// as <SHA-256>.animation, as characters are.
+inline std::filesystem::path animation_store_dir(const std::filesystem::path& app_path)
+{
+    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "animations";
+}
+
+// Keeps an animation in the store (once: the same animation is one file); false if it cannot.
+inline bool store_animation(const std::filesystem::path& dir, const sieve::Animation& a)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path f = dir / (a.id() + ".animation");
+    if (std::filesystem::exists(f, ec)) return true;
+    std::ofstream out(f, std::ios::binary);
+    out << a.text();
+    return bool(out);
+}
+
+// The stored animation of this SHA-256, read and checked against its name; nothing if it is not
+// there, is refused, or is not what its name says.
+inline std::optional<sieve::Animation> stored_animation(const std::filesystem::path& dir, const std::string& id)
+{
+    if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos) return std::nullopt;
+    std::ifstream in(dir / (id + ".animation"), std::ios::binary);
+    if (!in) return std::nullopt;
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    try
+    {
+        sieve::Animation a = sieve::read_animation(text);
+        if (a.id() != id) return std::nullopt;
+        return a;
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
 }
 
 struct PersonalDimension

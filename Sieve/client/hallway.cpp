@@ -2367,7 +2367,22 @@ void Hallway::set_character(std::optional<sieve::Character> c)
 // lines and each sphere as a ring facing you, in the line's edge colour (the head lighter).
 void Hallway::draw_character(SDL_Color edge)
 {
-    if (character_) draw_figure(*character_, edge, 0);
+    if (character_ && animation_)
+    {
+        // In this frame of its animation (IDEAS 19.170): each sphere moved with its parent's turn.
+        animation_shown_ = animation_frame_ >= 0 ? uint32_t(animation_frame_) : uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);
+        animation_shown_ %= std::max<uint32_t>(1, animation_->frames);
+        sieve::Character posed = *character_;
+        const auto at = sieve::pose(*character_, *animation_, animation_shown_);
+        for (size_t i = 0; i < posed.spheres.size(); ++i)
+        {
+            posed.spheres[i].x = int32_t(std::lround(at[i][0]));
+            posed.spheres[i].y = int32_t(std::lround(at[i][1]));
+            posed.spheres[i].z = int32_t(std::lround(at[i][2]));
+        }
+        draw_figure(posed, edge, 0, &*character_);
+    }
+    else if (character_) draw_figure(*character_, edge, 0);
     // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
     // other side, a short line of their own, a little dimmer (at most eight drawn).
     const SDL_Color dim{Uint8(edge.r * 0.7f), Uint8(edge.g * 0.7f), Uint8(edge.b * 0.7f), 255};
@@ -2376,17 +2391,20 @@ void Hallway::draw_character(SDL_Color edge)
 
 // One character standing in the hallway: `place` 0 is yours (ahead and to your right); 1, 2, ... are
 // your personal dimension's, ahead and to your left, one after another along the corridor.
-void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place)
+void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest)
 {
     if (c.spheres.empty()) return;
+    // Where it stands and how far aside: from its rest pose (when it is moving), so its feet and its
+    // place in the corridor hold still while it moves.
+    const sieve::Character& r = rest ? *rest : c;
     int32_t low = 0, high = 0;
-    for (const sieve::Sphere& p : c.spheres)
+    for (const sieve::Sphere& p : r.spheres)
     {
         low = std::min(low, p.y - p.r);
         high = std::max(high, p.y + p.r);
     }
     int32_t ex, ey, ez;
-    c.extent(ex, ey, ez);
+    r.extent(ex, ey, ez);
     // Its own size, in the hallway as you see it (the hallway grown by hall_scale_ is you made smaller).
     const float scale = 1.0f / (float(sieve::kCharacterUnitsPerMetre) * hall_scale_);
     // Along the corridor, whichever way along it you face: 2.2 m ahead of you and 0.9 m to that

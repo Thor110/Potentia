@@ -53,6 +53,7 @@
 
 #include "sieve/audio.hpp"
 #include "sieve/character.hpp"
+#include "sieve/animation.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/booksieve.hpp"
@@ -1086,6 +1087,15 @@ public:
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
     void set_personal(std::vector<sieve::Character> p) { personal_ = std::move(p); }
+    // The animation your character plays as it walks beside you (IDEAS 19.170), by the clock, or held
+    // at `frame` (0 or more: for a picture); none: it stands at rest.
+    void set_animation(std::optional<sieve::Animation> a, int frame = -1)
+    {
+        animation_ = std::move(a);
+        animation_frame_ = frame;
+    }
+    // The frame drawn last (for the readout); -1 with no animation.
+    int animation_frame_drawn() const { return animation_ ? int(animation_shown_) : -1; }
     size_t personal_count() const { return personal_.size(); }
     // How many times larger the hallway is drawn so that your character fits its doors (1: it fits
     // as built; IDEAS 19.153). Seen from your side it is you made smaller: your eye, your stride and
@@ -1797,8 +1807,11 @@ private:
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
     std::optional<sieve::Character> character_;
+    std::optional<sieve::Animation> animation_;
+    int animation_frame_ = -1;
+    uint32_t animation_shown_ = 0;
     std::vector<sieve::Character> personal_; // your personal dimension (the store), drawn beside yours
-    void draw_figure(const sieve::Character& c, SDL_Color edge, int place);
+    void draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest = nullptr);
     float hall_scale_ = 1, max_scale_ = 16;
     bool character_fits_ = true;
     void draw_character(SDL_Color edge);

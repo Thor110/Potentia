@@ -2043,6 +2043,8 @@ void Menu::char_init()
                 // The whole character (its spheres and held models too, on one line with ';').
                 char_ = sieve::read_character(app_->character);
                 char_settings_ = char_.settings;
+                if (!app_->character_animation.empty())
+                    char_anim_ = stored_animation(animation_store_dir(app_path_), app_->character_animation);
                 return;
             }
             catch (const std::exception& e)
@@ -2060,6 +2062,9 @@ void Menu::char_store()
     // whole, on one line with ';' between its lines, so it reads back as it was.
     const std::string t = char_.text();
     app_->character = !char_.given && char_.holds.empty() ? t.substr(0, t.find('\n')) : char_.one_line();
+    // The animation it plays, kept in the store and named by its SHA-256.
+    app_->character_animation.clear();
+    if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
     app_->character_drawing = char_draw_;
     save_app();
 }
@@ -2336,7 +2341,13 @@ void Menu::char_key(SDL_Keycode key, bool shift)
     auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
     switch (key)
     {
-    case SDLK_A: // play or pause the animation (IDEAS 19.170)
+    case SDLK_A: // play or pause the animation (IDEAS 19.170); Shift+A takes it off the character
+        if (char_anim_ && shift)
+        {
+            char_anim_.reset();
+            char_store();
+            return;
+        }
         if (char_anim_)
         {
             if (char_anim_playing_) char_anim_paused_ = uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);

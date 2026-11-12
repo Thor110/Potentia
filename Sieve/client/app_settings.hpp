@@ -134,6 +134,9 @@ struct AppSettings
     // default character), how the CHARACTER page draws it (0 pixels to 3 shaded), and whether it
     // walks beside you in the hallway.
     std::string character;
+    // The animation it plays (IDEAS 19.170): its SHA-256, the file of that name in the animations
+    // folder beside the settings file (the store); empty: none.
+    std::string character_animation;
     int character_drawing = 1;
     bool character_beside = true;
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64

@@ -7165,6 +7165,10 @@ foundations to prepare for moving forward through all formats, scales and visual
   B bones and F frames is one address among 256^(3BF). Played on any character with as many spheres:
   each sphere moves with its parent's turn. Its roof: 64 bones, 300 frames (ten seconds); a joint's
   movement and growth (translation, scale) and cubic splines' tangents are named as left out.
+- *In the hallway (built the same day):* your character plays its animation as it walks beside you,
+  standing where its rest pose stands, so its feet and its place hold still while it moves; the
+  animation is kept in the store (`animations/<SHA-256>.animation`) and named in the settings file,
+  so it plays again after a restart.
 - *Groundwork laid with it:* characters of every version can be kept on one line (the settings file
   had kept only the first line, so a character holding models could not be read back on the next
   start; fixed); seed-made characters can play an animation too, so animations and characters are two
@@ -7240,3 +7244,23 @@ becoms". The speeches on caging information and on tractability are in SPEECHES.
   handles. In the catalogue as `engines`.
 - *What it becomes:* Edward's view that the lattice forms itself, "a state space dimension of
   dimensions"; pseudo-random numbers stay pseudo-random however they are seeded.
+
+**19.174 An interaction dimension: hands and limbs as tools, and the species they reveal (Edward, 12
+November 2026).** His words, on the animation in the hallway: "that will be a state space in and of
+itself breaching the interaction system and the world state spaces", and "an interaction dimension and
+forms of interaction through different modular species systems, designating hands and limbs as
+specific tools or implements would perhaps reveal a natural shape or species perhaps crab like and
+like the caretakes from mass effect, make note of these things as well, an interaction state space
+which links all language and types of interaction from physical to digital through their
+implementations and manifestations for varying species".
+- *Animations as a state space:* every animation is already an address (§19.170); what a character
+  does with its body, between the world and itself, is the next layer: interaction.
+- *Limbs as tools:* a character's limbs (its spheres' branches, §19.148) each given a job (a hand that
+  grips, a claw that cuts, a foot that walks), so a species is described by what its body can do as
+  well as by its shape. Choosing the jobs first and letting the shape follow may reveal natural forms:
+  a crab's, or the Keepers' of Mass Effect (the Citadel's caretakers, Edward's "caretakes"), whose
+  bodies are their tools.
+- *An interaction state space:* every kind of interaction, from physical (gripping, pushing, walking)
+  to digital (pressing a key, a gesture, a command), with the language that names it and the body or
+  device that performs it, for every species. It links the characters, species, languages and
+  animation dimensions. Planned only; in the catalogue as `interaction`.

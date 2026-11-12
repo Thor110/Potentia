@@ -13,6 +13,8 @@ trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' E
 # gets SIGPIPE (the steps run with pipefail).
 q() { grep -c "$@" > /dev/null; }
 H=build/hallway
+exe=build/sieve
+[ -f build/Release/sieve.exe ] && exe=build/Release/sieve.exe
 W="it was the best of times"
 book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
 $H --screenshot hallway.png --size 640x360
@@ -376,6 +378,16 @@ q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
 q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones" arm-menu.txt
 grep -q "^line = sieve-character-v3 spheres=3;s 0 -1 0 0 0 1365 body;" arm.ini
 $H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r' | q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
+# The animation is kept too: in the store beside the settings file, named by its SHA-256 there.
+grep -q "^animation = 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.ini
+test -s animations/2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8.animation
+$H --menu --settings arm.ini --press "\`" --screenshot char-arm3.png | tr -d '\r' | q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones"
+# In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
+$exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
+$H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt
+q "^character beside you: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7" hall-arm.txt
+q "^animation beside you: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" hall-arm.txt
+test -s hall-arm.png
 # The seed walk (IDEAS 19.148 step 7): Shift+G, ten steps from the default character, lands where the
 # unit tests pin it.
 $H --menu --press "\`,Shift+G" --screenshot char-walk.png | tr -d '\r' | q "^character: 775f9b13e7bb87599c40b20aa700f7444da6aca7a09c4ff2a2a2101593c08688"

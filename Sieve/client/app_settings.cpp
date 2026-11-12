@@ -207,6 +207,7 @@ AppSettings AppSettings::load(const fs::path& path)
         else if (section == "character")
         {
             if (key == "line") s.character = value;
+            else if (key == "animation") s.character_animation = value;
             else if (key == "drawing" && value.size() == 1 && value[0] >= '0' && value[0] <= '3') s.character_drawing = value[0] - '0';
             else if (key == "beside_you") s.character_beside = on_off(value, true);
             else if (key == "max_hall_scale")
@@ -351,6 +352,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "priority", locator_priority, "size: the smallest; balanced: mixing only where it saves 4% of what it carries (the default); speed: no file mixed (quickest to install, largest)"},
         {"character", "line", character, "your character (IDEAS 19.148): a seed-made one as the first line of its .character file; one holding models, or of given spheres (an imported skeleton), as its whole text with ';' between lines; empty: the default"},
+        {"character", "animation", character_animation, "the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none"},
         {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
         {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
         {"character", "max_hall_scale", std::to_string(character_max_scale), "how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit)"},

@@ -171,7 +171,9 @@ const char* kUsage =
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
     "  --import-skeleton FILE  with --menu: a glTF's skeleton as your character (sieve-character-v3), its\n"
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
-    "  --animation-frame N with --menu: hold the animation at frame N (for a picture)\n"
+    "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1),\n"
+    "                      for this run: in the hallway as it walks beside you (with --character: only so)\n"
+    "  --animation-frame N hold the animation at frame N (for a picture), on the CHARACTER page and in the hallway\n"
     "  --character-store DIR  your personal dimension from DIR (the store: <SHA-256>.character files) for\n"
     "                      this run, in place of the characters folder beside the settings file\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
@@ -633,6 +635,22 @@ std::optional<sieve::Character> character_of(const AppSettings& app, const Args&
             std::cerr << "the settings file's character was refused (" << e.what() << "): the default instead\n";
         }
     return sieve::unfold_character(sieve::CharacterSettings{});
+}
+
+// The animation your character plays (IDEAS 19.170): from --animation FILE, or the settings file's
+// [character] animation (its SHA-256, read from the store); none with --no-character. A file asked
+// for by name that is refused stops the run; a stored one that is missing or changed is left out.
+std::optional<sieve::Animation> animation_of(const AppSettings& app, const std::filesystem::path& app_path, const Args& a)
+{
+    if (a.has("no-character")) return std::nullopt;
+    if (a.has("animation"))
+    {
+        std::ifstream in(std::filesystem::path(std::u8string(a.get("animation").begin(), a.get("animation").end())), std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return sieve::read_animation(text);
+    }
+    if (a.has("character") || app.character_animation.empty()) return std::nullopt; // (a character by name plays nothing unless asked)
+    return stored_animation(animation_store_dir(app_path), app.character_animation);
 }
 
 // Builds the hallway from options, and applies the start-up and scripting options.
@@ -1350,6 +1368,7 @@ int run(const Args& a)
                 const std::string id = named ? ch->id() : std::string();
                 hall->set_max_scale(float(app.character_max_scale));
                 hall->set_character(std::move(ch));
+                hall->set_animation(animation_of(app, app_path, a), a.has("animation-frame") ? int(a.get_u32("animation-frame", 0)) : -1);
                 // Your personal dimension: the store beside the settings file (or --character-store DIR).
                 if (!a.has("no-character"))
                 {
@@ -1362,6 +1381,7 @@ int run(const Args& a)
                     std::cout << "character beside you: " << id << "\n";
                     std::cout << "hallway scale: " << hallway::hall::fixed(hall->hall_scale(), 2) << (hall->character_fits() ? "" : " (the most it may grow: the character does not fit)") << "\n";
                 }
+                if (a.has("animation")) std::cout << "animation beside you: " << animation_of(app, app_path, a)->id() << "\n";
             }
             if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
@@ -1686,6 +1706,7 @@ int run(const Args& a)
         hall->set_fps_counter(app.fps_counter);
         hall->set_max_scale(float(app.character_max_scale));
         hall->set_character(character_of(app, ha));
+        hall->set_animation(animation_of(app, app_path, ha));
         if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(ha.has("character-store") ? std::filesystem::path(ha.get("character-store")) : character_store_dir(app_path)).characters);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
