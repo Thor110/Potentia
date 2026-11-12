@@ -66,6 +66,9 @@
 #include "sieve/guided.hpp"
 #include "sieve/image.hpp"
 #include "sieve/modelspace.hpp"
+#include "sieve/importers.hpp"
+#include "sieve/dimensions.hpp"
+#include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/aispace.hpp"
 #include "sieve/binaryspace.hpp"
@@ -1083,6 +1086,20 @@ struct ObjMesh
     std::vector<ModelSpace::Face> faces;
 };
 
+// Reads files beside `path` for an importer (a glTF's buffers), never outside its folder.
+sieve::ImportLoader beside(const std::string& path)
+{
+    const std::filesystem::path folder = std::filesystem::path(path).parent_path();
+    return [folder](const std::string& uri) -> std::optional<std::string> {
+        if (!sieve::import_uri_is_local(uri)) return std::nullopt;
+        std::ifstream b(folder / uri, std::ios::binary);
+        if (!b) return std::nullopt;
+        return std::string((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
+    };
+}
+
+// Any model the importers read (.obj, .gltf, .glb; sieve/importers.hpp), as the CHARACTER page's
+// importer reads it.
 ObjMesh read_obj(const std::string& path)
 {
     std::ifstream in(path, std::ios::binary);
@@ -1090,13 +1107,83 @@ ObjMesh read_obj(const std::string& path)
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     try
     {
-        const ModelSpace::AnyMesh any = ModelSpace::read_any_obj(text); // (the core's reader: the CHARACTER page's importer reads the same)
-        return {any.verts, any.faces};
+        const sieve::ImportedModel m = sieve::read_model(text, beside(path));
+        return {m.mesh.verts, m.mesh.faces};
     }
-    catch (const std::invalid_argument&)
+    catch (const std::invalid_argument& e)
     {
-        throw std::invalid_argument(path + " has no vertices");
+        throw std::invalid_argument(path + ": " + e.what());
     }
+}
+
+// sieve dimensions: every dimension, built or planned, with its address, roof and links (IDEAS 19.162).
+int cmd_dimensions(const Args& a)
+{
+    if (!a.positional.empty())
+    {
+        const sieve::Dimension* d = sieve::dimension_by_id(a.positional[0]);
+        if (!d) throw std::invalid_argument("no dimension " + a.positional[0] + " (sieve dimensions lists them)");
+        std::cout << d->name << " (" << d->id << "), " << sieve::dimension_state_name(d->state) << "\n"
+                  << "address   " << d->address << "\n"
+                  << "roof      " << d->roof << "\n"
+                  << "links to  " << d->links << "\n";
+        // And the dimensions that link to it.
+        std::string from;
+        for (const auto& o : sieve::dimensions())
+        {
+            const std::string links = " " + std::string(o.links) + " ";
+            if (links.find(" " + std::string(d->id) + " ") != std::string::npos) from += (from.empty() ? "" : " ") + std::string(o.id);
+        }
+        std::cout << "linked by " << (from.empty() ? "none" : from) << "\n"
+                  << "written   " << d->ideas << "\n";
+        return 0;
+    }
+    for (const auto& d : sieve::dimensions())
+    {
+        std::string id(d.id), state(sieve::dimension_state_name(d.state));
+        id.resize(11, ' ');
+        state.resize(13, ' ');
+        std::cout << id << state << d.address << "\n" << std::string(24, ' ') << "-> " << d.links << "\n";
+    }
+    return 0;
+}
+
+// sieve import FILE: what an existing model carries into Sieve (IDEAS 19.159, 19.162).
+int cmd_import(const Args& a)
+{
+    if (a.has("formats"))
+    {
+        std::cout << "format  name               extensions  carries / leaves out\n";
+        for (const auto& f : sieve::import_formats())
+        {
+            std::string id(f.id), name(f.name), ext(f.extensions);
+            id.resize(7, ' ');
+            name.resize(18, ' ');
+            ext.resize(11, ' ');
+            std::cout << id << " " << name << " " << ext << " carries: " << f.carries << "\n"
+                      << std::string(39, ' ') << "leaves:  " << f.leaves << "\n";
+        }
+        return 0;
+    }
+    if (a.positional.empty()) throw std::invalid_argument("give a model file (or --formats)");
+    const std::string path = a.positional[0];
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::invalid_argument("cannot read " + path);
+    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const sieve::ImportedModel m = sieve::read_model(bytes, beside(path));
+    std::string name = m.format;
+    for (const auto& f : sieve::import_formats())
+        if (f.id == m.format) name = std::string(f.name);
+    std::cout << "format    " << m.format << " (" << name << ")\n";
+    std::cout << "read      " << m.mesh.verts.size() << " vertices, " << m.mesh.faces.size() << " triangles";
+    if (m.format != "obj") std::cout << " (" << m.meshes << " meshes, " << m.primitives << " primitives, " << m.nodes << " nodes)";
+    std::cout << "\n";
+    const sieve::HeldImport h = sieve::import_model_for_hold(bytes, beside(path));
+    std::cout << "held      " << h.hex << "\n"
+              << "kept      " << std::min<size_t>(h.vertices_in, sieve::kHeldVertices) << " of " << h.vertices_in << " vertices, " << h.faces_kept << " of "
+              << h.faces_in << " faces (the held models' roof: " << sieve::kHeldVertices << " and " << sieve::kHeldFaces << ")\n";
+    for (const auto& l : h.left_out) std::cout << "left out  " << l << "\n";
+    return 0;
 }
 
 ModelSpace make_model_space(const Args& a)
@@ -3190,7 +3277,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
@@ -3324,6 +3411,8 @@ int main(int argc, char** argv)
         if (a.command == "dicts") return cmd_dicts(a);
         if (a.command == "alphabets") return cmd_alphabets(a);
         if (a.command == "mesh") return cmd_mesh(a);
+        if (a.command == "import") return cmd_import(a);
+        if (a.command == "dimensions") return cmd_dimensions(a);
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "rope") return cmd_rope(a);

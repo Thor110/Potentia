@@ -18,6 +18,47 @@ printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1
 printf 'f 1 2 3\nf 1 3 4\nf 5 7 6\nf 5 8 7\nf 1 5 6\nf 1 6 2\nf 2 6 7\nf 2 7 3\nf 3 7 8\nf 3 8 4\nf 4 8 5\nf 4 5 1\n' >> cube.obj
 a=$($exe mesh --warp cube.obj 2>/dev/null | tr -d '\r' | awk '$1 == "positional" {print $2}')
 echo "cube: $a"
+# The same cube as glTF (IDEAS 19.162): as .gltf with its buffer beside it, as .gltf with the buffer
+# embedded, and as .glb; each comes in as the same held model as the .obj, and a buffer outside the
+# file's folder is refused.
+python - <<'EOF'
+import base64, json, struct
+v = [(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),(-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
+f = [(1,2,3),(1,3,4),(5,7,6),(5,8,7),(1,5,6),(1,6,2),(2,6,7),(2,7,3),(3,7,8),(3,8,4),(4,8,5),(4,5,1)]
+bin_ = b"".join(struct.pack("<3f", *p) for p in v) + b"".join(struct.pack("<3H", *(i - 1 for i in t)) for t in f)
+def gltf(buffer):
+    return {"asset": {"version": "2.0"}, "buffers": [buffer],
+            "bufferViews": [{"buffer": 0, "byteLength": 96}, {"buffer": 0, "byteOffset": 96, "byteLength": 72}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 8, "type": "VEC3"},
+                          {"bufferView": 1, "componentType": 5123, "count": 36, "type": "SCALAR"}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+            "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}], "skins": [{"joints": [0]}]}
+open("cube.bin", "wb").write(bin_)
+open("cube.gltf", "w").write(json.dumps(gltf({"byteLength": 168, "uri": "cube.bin"})))
+open("cube-embedded.gltf", "w").write(json.dumps(gltf({"byteLength": 168, "uri": "data:application/octet-stream;base64," + base64.b64encode(bin_).decode()})))
+open("cube-outside.gltf", "w").write(json.dumps(gltf({"byteLength": 168, "uri": "../cube.bin"})))
+js = json.dumps(gltf({"byteLength": 168})).encode()
+js += b" " * (-len(js) % 4)
+open("cube.glb", "wb").write(b"glTF" + struct.pack("<II", 2, 12 + 8 + len(js) + 8 + len(bin_)) +
+                             struct.pack("<I", len(js)) + b"JSON" + js + struct.pack("<I", len(bin_)) + b"BIN\0" + bin_)
+EOF
+held=$($exe import cube.obj | tr -d '\r' | awk '$1 == "held" {print $2}')
+echo "cube held: $held"
+for g in cube.gltf cube-embedded.gltf cube.glb; do
+    $exe import "$g" | tr -d '\r' > imp.txt
+    q "^held      $held" imp.txt
+    q "^kept      8 of 8 vertices, 12 of 12 faces" imp.txt
+    q "^left out  1 skin of 1 joint, not carried" imp.txt
+done
+$exe import cube.glb | tr -d '\r' | q "^format    glb"
+test "$($exe mesh --warp cube.gltf | tr -d '\r' | awk '$1 == "positional" {print $2}')" = "$a"
+if $exe import cube-outside.gltf > /dev/null 2>&1; then exit 1; fi
+refused=$($exe import cube-outside.gltf 2>&1 || true)
+q "outside the file's folder" <<< "$refused"
+$exe import --formats | tr -d '\r' | q "^glb "
+# The catalogue of dimensions: DNA links to research, and research is linked from DNA.
+$exe dimensions | tr -d '\r' | q "^research   planned"
+$exe dimensions research | tr -d '\r' | q "^linked by .*dna"
 test "$a" = "000f00ff00f000ff0ffff0ff0504e6b3e128a4dc725baedf8e0"
 $exe mesh --read "$a" --out round.obj 2>/dev/null
 # Symmetric on the grid, and no two spaces in a row anywhere in the canonical form.

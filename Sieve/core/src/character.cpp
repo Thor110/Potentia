@@ -2,6 +2,7 @@
 #include "sieve/character.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/modelspace.hpp"
+#include "sieve/importers.hpp"
 
 #include <algorithm>
 #include <array>
@@ -346,9 +347,29 @@ CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps)
     return s;
 }
 
+namespace {
+HeldImport import_mesh_for_hold(const ModelSpace::AnyMesh& any);
+}
+
 HeldImport import_obj_for_hold(std::string_view obj_text)
 {
-    const ModelSpace::AnyMesh any = ModelSpace::read_any_obj(obj_text);
+    HeldImport out = import_mesh_for_hold(ModelSpace::read_any_obj(obj_text));
+    out.format = "obj";
+    return out;
+}
+
+HeldImport import_model_for_hold(std::string_view bytes, const std::function<std::optional<std::string>(const std::string&)>& load)
+{
+    const ImportedModel m = read_model(bytes, load);
+    HeldImport out = import_mesh_for_hold(m.mesh);
+    out.format = m.format;
+    out.left_out = m.left_out;
+    return out;
+}
+
+namespace {
+HeldImport import_mesh_for_hold(const ModelSpace::AnyMesh& any)
+{
     HeldImport out;
     out.vertices_in = any.verts.size();
     out.faces_in = any.faces.size();
@@ -419,6 +440,7 @@ HeldImport import_obj_for_hold(std::string_view obj_text)
     out.hex = m.hex_of(m.index_of(fit.parts, AddressMode::Positional));
     return out;
 }
+} // namespace
 
 Character read_character(const std::string& text)
 {

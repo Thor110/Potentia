@@ -17,6 +17,8 @@
 #include "sieve/modelsieve.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/character.hpp"
+#include "sieve/importers.hpp"
+#include "sieve/dimensions.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
@@ -489,6 +491,20 @@ void test_canon()
     // Accented letters are dropped and reported in v1.
     r = canonicalise_text("café", a, 4, CanonVersion::V1);
     CHECK(r.units[0] == U"caf " && r.dropped == 1 && r.dropped_examples == U"é");
+
+    // An alphabet with no space (dna4, IDEAS 19.162): capitals fold to the bases, and whatever it cannot
+    // hold is dropped, there being no space to separate with; padding is digit 0 (a). The reference
+    // oracle gives the same units (reference/sieve_ref.py).
+    {
+        const Alphabet& dna = alphabet_by_id("dna4");
+        CHECK(dna.size() == 4 && dna.symbol(0) == U'a' && dna.symbol(3) == U't' && !dna.contains(U' '));
+        const auto d = canonicalise_text("GATTACA, gattaca!", dna, 12);
+        CHECK(d.units.size() == 2 && d.units[0] == U"gattacagatta" && d.units[1] == U"caaaaaaaaaaa");
+        CHECK(d.dropped == 3 && d.separated == 0 && d.padding == 10 && d.case_folded == 7);
+        // A block on its own (no space) can now be read onto, where before it could not.
+        const auto g = canonicalise_text("\u03b1\u03b2 \u03b3", alphabet_of("greek"), 4);
+        CHECK(g.units.size() == 1 && g.units[0].substr(0, 3) == U"\u03b1\u03b2\u03b3");
+    }
 
     // v2: punctuation separates words, apostrophes join, accents fold.
     r = canonicalise_text("A well-known author/editor didn\u2019t stop \u2014 na\u00efve caf\u00e9!", a, 64);
@@ -6875,6 +6891,126 @@ void test_character()
         CHECK(a.hex == b.hex && a.vertices_in == 8 && a.faces_in == 12 && a.faces_kept == 12);
         CHECK(held_model_edges(a.hex).size() >= 12);
         CHECK(throws([] { (void)import_obj_for_hold("o empty\n"); }));
+
+        // The same cube as glTF (IDEAS 19.162's importer layer): its buffer embedded as a data: URI,
+        // then as a .glb, then beside it as a file; each comes in as the .obj did, to the same model.
+        std::string bin;
+        auto put_f = [&](float f) { char b[4]; std::memcpy(b, &f, 4); bin.append(b, 4); };
+        auto put_u16 = [&](uint16_t v) { bin.push_back(char(v & 0xFF)); bin.push_back(char(v >> 8)); };
+        const float P[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}};
+        for (const auto& v : P) put_f(v[0]), put_f(v[1]), put_f(v[2]);
+        const uint16_t quads[6][4] = {{0, 1, 2, 3}, {4, 7, 6, 5}, {0, 4, 5, 1}, {1, 5, 6, 2}, {2, 6, 7, 3}, {4, 0, 3, 7}};
+        for (const auto& q : quads) put_u16(q[0]), put_u16(q[1]), put_u16(q[2]), put_u16(q[0]), put_u16(q[2]), put_u16(q[3]);
+        CHECK(bin.size() == 96 + 72);
+        auto b64 = [](const std::string& in) {
+            static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string o;
+            for (size_t i = 0; i < in.size(); i += 3)
+            {
+                uint32_t n = uint32_t(uint8_t(in[i])) << 16;
+                if (i + 1 < in.size()) n |= uint32_t(uint8_t(in[i + 1])) << 8;
+                if (i + 2 < in.size()) n |= uint32_t(uint8_t(in[i + 2]));
+                o += t[n >> 18 & 63];
+                o += t[n >> 12 & 63];
+                o += i + 1 < in.size() ? t[n >> 6 & 63] : '=';
+                o += i + 2 < in.size() ? t[n & 63] : '=';
+            }
+            return o;
+        };
+        auto gltf = [&](const std::string& buffer, const std::string& extra, const std::string& node) {
+            return "{\"asset\":{\"version\":\"2.0\"}," + extra + "\"buffers\":[" + buffer +
+                   "],\"bufferViews\":[{\"buffer\":0,\"byteLength\":96},{\"buffer\":0,\"byteOffset\":96,\"byteLength\":72}],"
+                   "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":8,\"type\":\"VEC3\"},"
+                   "{\"bufferView\":1,\"componentType\":5123,\"count\":36,\"type\":\"SCALAR\"},"
+                   "{\"componentType\":5126,\"count\":5,\"type\":\"SCALAR\"}],"
+                   "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1}]}],"
+                   "\"nodes\":[" + node + "],\"scenes\":[{\"nodes\":[0]}]}";
+        };
+        const std::string embedded = "{\"byteLength\":168,\"uri\":\"data:application/octet-stream;base64," + b64(bin) + "\"}";
+        const std::string plain = gltf(embedded, "", "{\"mesh\":0}");
+        const HeldImport g = import_model_for_hold(plain);
+        CHECK(g.format == "gltf" && g.hex == a.hex && g.vertices_in == 8 && g.faces_in == 12 && g.faces_kept == 12 && g.left_out.empty());
+        // As a .glb: the JSON chunk (padded with spaces to 4 bytes) and the BIN chunk.
+        std::string js = gltf("{\"byteLength\":168}", "", "{\"mesh\":0}");
+        while (js.size() % 4) js += ' ';
+        auto le = [](uint32_t v) { std::string o(4, '\0'); for (int i = 0; i < 4; ++i) o[size_t(i)] = char(v >> (8 * i) & 0xFF); return o; };
+        const std::string glb = "glTF" + le(2) + le(uint32_t(12 + 8 + js.size() + 8 + bin.size())) + le(uint32_t(js.size())) + "JSON" + js +
+                                le(uint32_t(bin.size())) + std::string("BIN\0", 4) + bin;
+        const HeldImport gb = import_model_for_hold(glb);
+        CHECK(gb.format == "glb" && gb.hex == a.hex);
+        // Beside it as a file, read through the loader; a URI that leaves the folder is refused.
+        const std::string beside = gltf("{\"byteLength\":168,\"uri\":\"cube%20data.bin\"}", "", "{\"mesh\":0}");
+        std::string asked;
+        const HeldImport gf = import_model_for_hold(beside, [&](const std::string& uri) -> std::optional<std::string> { asked = uri; return bin; });
+        CHECK(gf.hex == a.hex && asked == "cube data.bin");
+        CHECK(throws([&] { (void)import_model_for_hold(gltf("{\"byteLength\":168,\"uri\":\"../cube.bin\"}", "", "{\"mesh\":0}"),
+                                                       [&](const std::string&) -> std::optional<std::string> { return bin; }); }));
+        CHECK(throws([&] { (void)import_model_for_hold(beside); })); // no loader: the buffer cannot be reached
+        CHECK(!import_uri_is_local("/etc/x.bin") && !import_uri_is_local("c:x.bin") && !import_uri_is_local("a/../../x") &&
+              !import_uri_is_local("http://x/y.bin") && import_uri_is_local("parts/body.bin"));
+        // Placed by its node: moved 10 along x and turned a quarter about z, (1, -1, -1) lands at (11, 1, -1).
+        const ImportedModel placed = read_model(gltf(embedded, "", "{\"mesh\":0,\"translation\":[10,0,0],\"rotation\":[0,0,0.70710678,0.70710678]}"));
+        CHECK(std::abs(placed.mesh.verts[1].x - 11) < 1e-4 && std::abs(placed.mesh.verts[1].y - 1) < 1e-4 && std::abs(placed.mesh.verts[1].z + 1) < 1e-4);
+        // Skins and animations are counted and named as left out, not dropped silently.
+        const ImportedModel rigged = read_model(gltf(embedded, "\"skins\":[{\"joints\":[0]}],\"animations\":[{\"channels\":[{},{}],\"samplers\":[{\"input\":2}]}],",
+                                                     "{\"mesh\":0}"));
+        CHECK(rigged.skins == 1 && rigged.joints == 1 && rigged.animations == 1 && rigged.channels == 2 && rigged.keyframes == 5 && rigged.left_out.size() == 2);
+        // Refused: Draco compression it cannot undo; an accessor past its buffer; not glTF 2.0.
+        CHECK(throws([&] { (void)read_model(gltf(embedded, "\"extensionsRequired\":[\"KHR_draco_mesh_compression\"],", "{\"mesh\":0}")); }));
+        std::string past = plain;
+        past.replace(past.find("\"count\":36"), 11, "\"count\":37");
+        CHECK(throws([&] { (void)read_model(past); }));
+        std::string v1 = plain;
+        v1.replace(v1.find("\"2.0\""), 5, "\"1.0\"");
+        CHECK(throws([&] { (void)read_model(v1); }));
+        // A strip of 4 vertices is 2 triangles, the second turned to keep the winding.
+        const std::string strip = "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[" + embedded +
+                                  "],\"bufferViews\":[{\"buffer\":0,\"byteLength\":48}],\"accessors\":[{\"bufferView\":0,\"componentType\":5126,"
+                                  "\"count\":4,\"type\":\"VEC3\"}],\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"mode\":5}]}]}";
+        const ImportedModel st = read_model(strip);
+        CHECK(st.mesh.faces.size() == 2 && st.mesh.faces[1].a == 2 && st.mesh.faces[1].b == 1 && st.mesh.faces[1].c == 3);
+    }
+    // The catalogue of dimensions (IDEAS 19.162): ids unique, every link names a dimension that exists.
+    {
+        std::set<std::string> ids;
+        for (const auto& d : dimensions()) CHECK(ids.insert(std::string(d.id)).second);
+        for (const auto& d : dimensions())
+        {
+            std::istringstream links{std::string(d.links)};
+            std::string l;
+            while (links >> l)
+            {
+                if (!dimension_by_id(l)) std::cerr << "dimension " << d.id << " links to " << l << ", which is not there\n";
+                CHECK(dimension_by_id(l) != nullptr);
+            }
+        }
+        CHECK(dimension_by_id("dna") && dimension_by_id("research") && !dimension_by_id("nowhere"));
+        // The wiki principle (IDEAS 19.165), checked: every dimension is linked from another, and
+        // following links from any of them reaches the pages line.
+        std::map<std::string, std::vector<std::string>> out;
+        std::set<std::string> linked;
+        for (const auto& d : dimensions())
+        {
+            std::istringstream links{std::string(d.links)};
+            std::string l;
+            while (links >> l) out[std::string(d.id)].push_back(l), linked.insert(l);
+        }
+        for (const auto& d : dimensions())
+        {
+            if (!linked.count(std::string(d.id))) std::cerr << "dimension " << d.id << " is linked from none\n";
+            CHECK(linked.count(std::string(d.id)) == 1);
+            std::set<std::string> seen{std::string(d.id)};
+            std::vector<std::string> todo{std::string(d.id)};
+            while (!todo.empty())
+            {
+                const std::string x = todo.back();
+                todo.pop_back();
+                for (const auto& y : out[x])
+                    if (seen.insert(y).second) todo.push_back(y);
+            }
+            if (!seen.count("pages")) std::cerr << "dimension " << d.id << " does not reach the pages line\n";
+            CHECK(seen.count("pages") == 1);
+        }
     }
     CharacterSettings p;
     p.seed = 1;

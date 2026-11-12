@@ -294,6 +294,11 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
     const std::u32string input = utf8_decode(utf8);
     r.input_codepoints = input.size();
 
+    // An alphabet with no space (dna4, a block on its own) has nothing to separate words with, so
+    // what it cannot hold is dropped there, as canon-text-v1 drops it. Before this rule such an
+    // alphabet could not be warped into at all (the separating space was not one of its symbols),
+    // so no address that could be reached before means anything different now.
+    const bool has_space = alphabet.contains(U' ');
     std::u32string kept;
     kept.reserve(input.size());
     std::u32string expanded;
@@ -312,6 +317,12 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
             if (original == U'\r' && alphabet.contains(U'\n')) ++r.whitespace_mapped;
             else
             {
+                if (!alphabet.contains(original) && !has_space)
+                {
+                    ++r.dropped;
+                    note_example(r.dropped_examples, original);
+                    continue;
+                }
                 const char32_t as = alphabet.contains(original) ? original : U' ';
                 if (as != original) ++r.whitespace_mapped;
                 expanded.push_back(as);
@@ -346,7 +357,7 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
                 kept.push_back(c);
                 continue;
             }
-            if (version == CanonVersion::V1 || c == U'\'')
+            if (version == CanonVersion::V1 || c == U'\'' || !has_space)
             {
                 ++r.dropped;
                 note_example(r.dropped_examples, original);

@@ -1,8 +1,8 @@
 # Changes since 1eedaf3 "sieve ideas" (12 November 2026)
 
-Thirty-six commits (84d4054 to b97916b). This zip replaces every zip sent today. Code: the hallway's shimmer; the character system's seven steps (pedestal, drawing levels, models in spheres, the seed walk); a store of saves; Personal Dimensions, species and the playground; the first importer (.obj); one comment on the website; the rest is documentation.
+Forty-three commits (84d4054 to e53c546). This zip replaces every zip sent today. Code: the hallway's shimmer; the character system's seven steps (pedestal, drawing levels, models in spheres, the seed walk); a store of saves; Personal Dimensions, species and the playground; the importers (.obj, then glTF and .glb as one layer); the catalogue of dimensions; the DNA alphabet; one comment on the website; the rest is documentation.
 
-**Build:** a new core source, `core/src/character.cpp`, is in CMakeLists.txt, so CMake must run again (a fresh configure, or the build does it itself).
+**Build:** three new core sources, `core/src/character.cpp`, `core/src/importers.cpp` and `core/src/dimensions.cpp`, are in CMakeLists.txt, so CMake must run again (a fresh configure, or the build does it itself).
 
 ## Code
 - **The character system** (IDEAS §19.148 to §19.150; SPECIFICATIONS §12.0j; MANUAL, the setup menu):
@@ -19,6 +19,13 @@ Thirty-six commits (84d4054 to b97916b). This zip replaces every zip sent today.
   - **Tests:** the unit suite passes (177,334 checks); CI step 4 passes (143 s, the moved .obj reader); CI step 10 passed in full on the build with Personal Dimensions and the walk (1,011 s); the checks added since (species and the playground, the .obj import) were run by hand on the latest build and pass.
   - **Scripted keys** (`--press`) now carry their scancode as real keys do (client/app_main.cpp, Menu::press).
   - **CI step 10:** the key opens and closes the panel, and opens it from the key's row; two characters made through the menu are pinned by SHA-256. CI step 10 passed in full on the panel's first build (920 s); the later checks were run by hand on the latest build and pass.
+- **The importers as one layer** (IDEAS §19.159, §19.162; core/include/sieve/importers.hpp, core/src/importers.cpp):
+  - `read_model` tells `.obj`, `.gltf` and `.glb` apart by their content. glTF 2.0 meshes come in as the default scene places them (each node's matrix, or its translation, rotation and scale, down the tree). Buffers may be embedded, beside the file (never from outside its folder) or in the `.glb`'s binary chunk. Strips, fans and sparse accessors are read. Skins, animations, materials, points and lines are counted and named as left out; Draco and meshopt compression are refused with a reason.
+  - Ctrl+I on the CHARACTER page opens all three, and the note says what was left out; `--import-model FILE` (the older `--import-obj` still works).
+  - `sieve import FILE` says what a file carries and what the roof keeps; `sieve import --formats` lists the importers; `sieve mesh --warp` reads glTF too.
+- **The catalogue of dimensions** (IDEAS §19.162; core/include/sieve/dimensions.hpp, core/src/dimensions.cpp, docs/DIMENSIONS.md): 26 dimensions, built or planned, each with what an address is, its roof and its links (DNA to research, formats, simulations, law, ...). `sieve dimensions [ID]`. The unit tests check that every link resolves, every dimension is linked from another, and every one reaches the pages line (the wiki principle).
+- **DNA:** a built-in alphabet, `dna4` (`a c g t`; capitals read as these). `canon-text-v2` on an alphabet with no space now drops what it cannot hold; before, such an alphabet could not be warped into at all, so no reachable address changes. The reference oracle does the same. SPECIFICATIONS §3 and §6 say so. `sieve warp`'s padding line names digit 0 where it is not a space or line feed.
+- **Tests for this part:** the unit suite passes (178,034 checks): the glTF cube as `.gltf`, `.glb` and beside-file gives the `.obj`'s held model; placement by a node, strips, counting, refusals; `dna4` and a lone Greek block read; the dimension links. CI step 2 passes (the DNA lines) and step 4 passes (136 s, the glTF imports and refusals, `sieve dimensions`). CI step 10 passes in full on this build (1,005 s). The hallway's import note can run past the panel's edge when a glTF has things left out; the counts come first, so they show.
 - **Sieve/client/hallway.cpp:** the item under the crosshair shimmers (IDEAS 5.6): its tint breathes over 1.6 s and a leaning band sweeps across its front. Comments on the binary line's doors corrected (the last line before binary is AI now, not models). CI step 10 passes (916 s).
 
 ## The ideas, filtered
@@ -53,6 +60,18 @@ Thirty-six commits (84d4054 to b97916b). This zip replaces every zip sent today.
 - §19.158: every interpretation folded into one web (a way to explain the project).
 - §19.159: importers for models, skeletons and animation, each with its roof; the engine of engines.
 
+## New ideas noted since (IDEAS §19.160 to §19.169)
+- §19.160: a magnifying lens for the whole interface, steered by the arrow keys or a stick.
+- §19.161: every personal dimension as one state space; the world's; games' generators as sub state spaces.
+- §19.162: the DNA dimension, linked to a research dimension that grows until it pops into a hallway of all knowledge.
+- §19.163: Doom as another engine to fold in (which reimplementation, and its licence, are your decision); a line in the sand between AI's work and humanity's.
+- §19.164: a theoretical law dimension.
+- §19.165: every format, file to language to pictograph, as one web; the roadmap is the new **Sieve/docs/CATALOGUE-ROADMAP.md**.
+- §19.166: a catalogue of simulations, in case the ships are not built in time.
+- §19.167: Sieve as a state space visualiser for every state space; Gemini's roadmap mined (the message kept whole, with notes, at the end of ideas/VOICES-STASHED.md).
+- §19.168: every build balanced: now against later, fixes against features, in one catalogue of work.
+- §19.169: speeches spoken at chosen moments; the infinite RAID as deltas across all of a save's possibilities. The new **Sieve/docs/SPEECHES.md** holds longer pieces, your two speeches first.
+
 ## Documents matched to the code (IDEAS §19.134)
 Fifteen places corrected across three files:
 - **MANUAL.md:** the door order with worlds and AI; size limits that follow the machine; ITEM MEMORY; META as the fifth tab; the menu walk to Settings; `compress` and `speak`; the tile size; the 729-unit example.
@@ -62,7 +81,7 @@ Fifteen places corrected across three files:
 ## VOICES
 - 62 technical lines and Gemini's two messages moved to ideas/VOICES-STASHED.md.
 - The note at the top updated.
-- 67 of Edward's lines added to the candidates today.
+- 72 of Edward's lines added to the candidates today.
 
 ## The website
 - **Pages/release.html (Build or Buy):** the comment on two constants no longer points at the Orbital page's script, removed on 6 November.

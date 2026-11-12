@@ -71,6 +71,8 @@ ALPHABETS = {
     "ascii96": "\n" + "".join(chr(c) for c in range(0x20, 0x7F)),
     # SPECIFICATIONS 12.1a: U+0000-U+00FF in code point order, so digit d is byte d.
     "bytes256": "".join(chr(c) for c in range(0x100)),
+    # IDEAS 19.162: the four bases of DNA, in alphabetical order (a, c, g, t); capitals fold to these.
+    "dna4": "acgt",
 }
 
 # A few named Unicode blocks, written out here from the standard rather than read from the C++
@@ -221,12 +223,17 @@ def canonicalise(text, alphabet_id, length, version="v2"):
     """canon-text-v1 or canon-text-v2. Returns the list of units."""
     symbols = alphabet(alphabet_id)
     fold = not any("A" <= c <= "Z" for c in symbols)
+    # An alphabet with no space (dna4) has nothing to separate words with: what it cannot hold is
+    # dropped, as canon-text-v1 drops it.
+    has_space = " " in symbols
     kept = []
     for orig in text:
         if orig in WHITESPACE:
             # Whitespace the alphabet holds itself stays as it is (ascii96's line feed); a
             # carriage return is dropped there, so either line ending canonicalises the same.
             if orig == "\r" and "\n" in symbols:
+                continue
+            if orig not in symbols and not has_space:
                 continue
             expanded = orig if orig in symbols else " "
         elif version == "v2" and orig in TRANSLITERATE:
@@ -240,7 +247,7 @@ def canonicalise(text, alphabet_id, length, version="v2"):
                 c = c.lower()
             if c in symbols:
                 kept.append(c)
-            elif version == "v1" or c == "'":
+            elif version == "v1" or c == "'" or not has_space:
                 pass
             else:
                 kept.append(" ")

@@ -6933,3 +6933,222 @@ database or framework of information, an engine to rule all engines, the informa
   silently; a later version raises the roof without breaking the old (§19.137).
 - *The engine of engines:* a point on a chart is an address; a series is a line; the chart is the
   lattice (§19.145). That is what the hallway draws, and what every importer feeds.
+
+**19.160 A magnifying glass for the whole interface, steered like a third stick (Edward, 12 November
+2026).** His words: "a system with the aim is accessibility, so text doesn't need to be fancy and nor
+does the interface, it needs to be scalable, modular and dynamic, as per the current ethos, we could
+have an on and and off button for a magnifying glass like system that brings text and panels or parts
+of the interface into view, it could be movable through the arrow keys when in the 3D view scape so
+that in theory a third or new analog control style scheme system for a third analog stick could be
+implemented or tied to an existing analog stick in a way that makes it accessible such as the
+magnifying glass moving towards the direction of aim etc".
+- *What it is:* one key turns a lens on and off; the lens enlarges the part of the screen under it
+  (text, a panel, a shelf in the hallway), drawn over the frame at two, three or four times. It
+  sits beside text size (§19.74, *Other settings*, still to build), not instead of it: text size
+  makes everything larger; the lens makes one place larger without moving the rest.
+- *Plain by design:* the interface stays simple bitmap text and flat panels, so the lens only has
+  to scale pixels already drawn; nothing needs redrawing for it, and it works the same on every
+  screen (menus, setup menu, File Locator, hallway).
+- *Steering it:* in the menus it follows the mouse or the chosen row; in the 3D hallway, where the
+  mouse turns the view, the arrow keys move it. That is a third pair of axes beside movement and
+  view, so on a controller it can be its own stick (a third analog control scheme), or ride an
+  existing one: the lens drifting towards where you aim, so looking at a thing brings it into the
+  glass.
+- *Where it stands (12 November 2026):* not built. The client has no controller input yet (keys and
+  mouse only), so the lens comes first on the keyboard; the stick schemes wait for controller support.
+
+**19.161 Every personal dimension as one state space; the world's, and other generators' (Edward, 12
+November 2026).** His words: "also we can log the player dimension as a state space in and of itself,
+like the library of babel folding in on itself to a point through every possible design and or shape
+or form the library itself as a concept could take", then, setting it right: "it is less my personal
+dimension and more so that all personal dimensions become part of their own state space", "the worlds
+state space in reality", and "but there are and will be new and other state spaces to add, such as
+state spaces for games that already use procedural or dynamic systems to create near infinite
+variations or random dungeon generation and the like". Then, in short: "sub state spaces in
+essence".
+- *What it means in Sieve's terms:* not one player's dimension but all of them. A personal dimension
+  (§19.154, §19.157) is today a folder of characters; read as a line of its own, every possible
+  personal dimension (every set of characters, every arrangement of rooms, every way the hallway could
+  be laid out) is one address on it, and each player's is a point. Taken together, everyone's points
+  on that line are the world's state space as it actually is: the part of the possible that people
+  have made.
+- *The library folding in:* the hallway itself is one design of a library; the lines of possible
+  layouts, shelves, doors and lenses are the library's own state space, so the library can walk
+  through every shape it could have taken, down to a point (the address of the one you stand in).
+  Same pattern as §19.158: the lattice holds its own interpretations.
+- *Sub state spaces:* each of these is a state space inside the larger one: the line of personal
+  dimensions, a game's generator, the characters' seed walk. Each is a smaller lattice with its own
+  addresses and roof, folded into the whole as a region of it, so the hallway can walk any one alone
+  or all of them together.
+- *Other state spaces to add:* games that already generate near-endless variety from a seed
+  (procedural worlds, random dungeons, generated levels) each have a state space of their own: the
+  generator's seeds and settings. Each could be a line in Sieve: an address is a seed plus settings,
+  and walking it shows what the generator would make, as `walk_character` does for characters
+  (§19.148). Each such line states its own roof (§19.159): the seed width and settings the
+  generator has.
+- *A first step that could be built:* a `sieve-personal-dimension-v1` text listing the ids of its
+  characters (and later its settings), whose SHA-256 is the dimension's id, so a dimension can be
+  logged, shared and checked as a character is, and a line of them can be listed. Not built.
+
+**19.162 The DNA dimension, linked to a research dimension that grows until it pops (Edward, 12
+November 2026).** His words: "carry on with the glTF importer next and lay the groundwork or
+foundations for moving forward through all formats, dimensions and increasing the accessibility of
+the landscape, implementing new dimensions if and where necessary like the dna dimension which needs
+to link to the research dimension which would be a dimension for active scientific research that
+would grow and in theory eventually pop if and or once all knowledge is catalogued and become more of
+a hallway that links all knowledge".
+- *The DNA dimension:* every sequence of the four bases is a unit of a text line over a four-symbol
+  alphabet (§19.139 c, §19.152). A character's species can link to a sequence there, as a record.
+- *The research dimension:* active scientific research as a line of its own: each finding a unit
+  (a claim, what it rests on, where it was measured), linked to the units it reads from (a sequence
+  on the DNA line, a model, a book). It grows while research is open.
+- *Popping into a hallway:* once everything known is catalogued, the research line stops growing as a
+  frontier and becomes a hallway of links between all knowledge: the same records, read as doors
+  rather than as a list of open questions (§19.144, §19.145, §19.158).
+- *Groundwork, laid the same day:* a catalogue of the dimensions (built and planned), each with its
+  address form, its roof and its links to the others, so a new dimension is added in one place
+  (`sieve dimensions`, docs/DIMENSIONS.md); the importers as one layer that every format plugs into,
+  each stating what it carries and what its roof leaves out (§19.159).
+
+**19.163 Doom as another engine to fold in; a line in the sand between AI's work and humanity's
+(Edward, 12 November 2026).** His words: "doom is also a good candidate for another engine
+reimplementation or adoption of an existing SDL3 and similarly licensed reimplementation to fold into
+the dynamic and scalable worldspace system which scales through games like the plan with altengine to
+sieve its files down to their absolute minimum, this system all also allows room for humanity and AI
+to draw a line in the sand and mark where AI generated works begin and human work ends, no doubt
+99.99% on the AI side and 0.01% inspiration on the human side, all that was needed in fairness, note
+these words and ideas". And, for the voices: "Sieve, sieving information for its complexity one bit at
+a time! Join the Sieve academy!" (in VOICES' candidates; the rest is ideas and thoughts).
+- *Doom beside ALTEngine:* the same plan as ALTEngine (§19.104): an engine that runs the player's own
+  game files (never shipped with Sieve), their unnecessary bytes stripped and their assets streamed
+  from `.sieve`s, folded into the worlds line as one more engine. Doom's engine source is GPL, and
+  there are long-lived reimplementations of it under the GPL; adopting one that builds on SDL rather
+  than writing a new one is the cheaper start. Which one, and whether its licence sits with Sieve's,
+  is a decision for Edward before any code is taken (Sieve's own licence decides what can be linked
+  in; the game data stays the player's, as for every game here).
+- *Doom's maps as a state space:* its levels are already data (WADs: vertices, lines, sectors,
+  things), which fits the sub state spaces of §19.161: a map is an address, and the generators that
+  already exist for it are lines to walk.
+- *A line in the sand:* every unit already says where it came from by its records (§19.144), so a work
+  can carry a plain record of what a person made and what an AI made, as these documents already do
+  (Edward's words quoted as his, VOICES kept apart, commits marked as written with Claude). Edward's
+  estimate of the split, 99.99% to 0.01%, is his, recorded as he said it, not measured.
+
+**19.164 A theoretical law dimension (Edward, 12 November 2026).** His words: "also note that humanity
+racing to put all the money towards making law inevitably meant all the money behind a single
+direction, figuring out the law and all its edge cases, which basically translates to breaking the
+law, theoretical law dimension I suppose as a note for the idea".
+- *His observation:* money poured into one direction, working out the law and every edge case of it,
+  is in effect the search for where the law breaks; mapping a rule fully means finding its edges.
+- *As a dimension:* a law as a line of cases: each address a situation, each filter a rule that
+  says which situations it allows. The edge cases are the boundary between the units a rule keeps
+  and the ones it sets aside, which is what Sieve's filters already count (how many survive, and
+  which are the nearest to the line). A theoretical law dimension would be every rule set and every
+  case, read the same way; it links to the research dimension (§19.162), as findings about rules.
+  Planned only; in the catalogue as `law` (`sieve dimensions law`).
+
+**19.165 Every format, file to language to pictograph, catalogued as one web (Edward, 12 November
+2026; the roadmap is docs/CATALOGUE-ROADMAP.md).** His words: "when done with everything lay out a
+roadmap for tracking and recording all known and recorded formats, from file formats out through to
+language and even pictograph or emoji like language so as to create a new scalable and dynamic roadmap
+or system for unfolding all language and file formats into a web or database of documentation and file
+format documentation, translation metrics and recorded stats, pros, cons, etc for all things as with
+the sieve ethos and general implementation all information links to all other information one way or
+another, like the wiki principle where all pages lead to a certain place or space", and "make note of
+all of what I just said and then lay out that roadmap for dynamically and then procedurally recording
+and cataloging all formats across all dimensions of all things".
+- *What it asks for:* one catalogue of formats in the widest sense: file formats, scripts and writing
+  systems, languages, notations, emoji and pictographs. Each entry carries its documentation, how it is
+  recognised, Sieve's support for it, measured statistics, translation metrics to and from other
+  formats, and pros and cons, each claim with its source or its measurement.
+- *The wiki principle:* every entry links to others, and following links from any entry reaches a
+  common root, as following the first link on Wikipedia pages is said to lead to Philosophy. The
+  catalogue can check this for itself: an entry with no path to the root is an entry not yet linked.
+- *Dynamically, then procedurally:* first by hand and from what Sieve already knows (its packer's
+  routes, importers, alphabets and Unicode blocks), then grown by importers of open registries, each
+  stating its licence and its roof.
+
+**19.166 A catalogue of simulations, in case the ships are not built in time (Edward, 12 November
+2026).** His words: "this hyper dimensional lattice could and should provide humanity a map or near
+endless catalog of vr and hyper realistic simulations to fill time with in-case humanity can not build
+ships fast enough to evacuate humanity as is expected and or predicted by current calculations
+presuming the lack of FTL type engines or dimensional matter transfer or something likely lying in the
+realms of science fiction", and "so that if humanity gets left behind to face the abysmmal approach of
+the sun as it swallows the solar system, they at least have a nice VR lounge for those last dire and
+grueling moments as the species tears itself to shreds".
+- *The idea:* the lattice as a map of worlds to visit, every simulation (the worlds line, the games
+  and their generators, §19.161, §19.163) catalogued and reachable, so that whatever happens to the
+  physical world, there is somewhere to go.
+- *The framing is Edward's:* the sun's growth into a red giant is reckoned by astronomers at around
+  five billion years away; the timescale and the prediction about evacuation are his, recorded as he
+  said them, not measured here. The technical part is the catalogue of worlds, which is the worlds
+  line and the games dimension in `sieve dimensions`.
+
+**19.167 Sieve as a state space visualiser for every state space; Gemini's roadmap mined (Edward, 12
+November 2026).** His words: "also take note of geminis conversation or message regarding the current
+work to mine for ideas and help translate the state space visualiser across all state spaces, also
+make note that this is all also essentially a state space visualiser that folds all state spaces into
+a compression bomb or state space map capable of navigating all information from the waters of the
+known to the abyss of the unknown". Gemini's message is kept whole, with notes on its claims, in
+[ideas/VOICES-STASHED.md](ideas/VOICES-STASHED.md) (its last section).
+- *A state space visualiser for all state spaces:* the hallway already draws eleven lines and the
+  characters as one walkable place; the catalogue of dimensions (`sieve dimensions`) lists every state
+  space built or planned. Translating the visualiser across all of them means each catalogued
+  dimension gets a way to be drawn and walked: its addresses as shelves, its links as doors. The
+  catalogue is where each one's drawing will be recorded, so a new dimension arrives with its view.
+- *Folding into a map, from the known to the unknown:* a map whose near side is what has been made
+  and measured (the units people have saved, the formats Sieve reads, the findings recorded) and whose
+  far side is every address not yet visited. "Compression bomb" is Edward's image: a small address
+  that opens onto a very large space. In Sieve that is literal for the lines (an address of a few
+  hundred bits names a unit among ~10^700) and is why every opening is bounded by a stated roof.
+- *Ideas worth taking from Gemini's message, each checked against what exists:*
+  - *Skeleton and payload apart, for every kind of file:* Sieve already does this for written binary
+    (base64 and hex as skeleton plus members, v33) and for pictures and sound (headers apart from
+    pixels and samples). A catalogue entry can record, per format, whether Sieve separates them and
+    what that measured.
+  - *Similar formats pointing at shared filters:* the packer's route table already sends kinds of
+    data to the same ways; recording that in the catalogue (`sieve` field, `links` of type
+    *handled like*) makes the sharing visible and checkable.
+  - *Old low-resolution assets made into models:* a sprite to voxels or a held model, the reverse of
+    §19.151 (a picture back to a character). Planned with the importers; for *Alien Trilogy* only from
+    the player's own files, never shipped.
+  - *Keyboard-first, high-contrast, modular:* already the house style; the magnifying lens (§19.160)
+    is the next piece.
+  - *Offline-first on small machines:* matches the measured roof work (memory and time per size,
+    results/), and is a reason every dimension states its roof.
+
+**19.168 Every build balanced: now against later, fix against feature (Edward, 12 November 2026).**
+His words: "we should also be looking and aiming to build this system out such that every build
+inherently balances performance and functionality in such a way that we also balance what should be
+worked on now versus what should be worked on later alongside accounting for what needs fixing now
+versus what can be fixed later so that we have a dynamic, modular, scalable and almost procedural
+system for cataloging bugs and implementing new systems, fixes, additions or changes".
+- *What exists:* IDEAS-TRIAGE.md gives every idea a kind, status and verdict; ROADMAP orders the work;
+  WORK-DONE logs it; CI pins what must not break; each build's measured roof (memory, time) is in
+  results/.
+- *What it asks for:* one catalogue of work, bugs and features alike, each entry saying what it costs
+  (time to build, risk), what it is worth (who it helps, what it unblocks), and whether it must be done
+  now (a bug that loses data, a broken build) or can wait. The order of work then follows from the
+  entries rather than from memory, and each build records what it chose and what it left for later.
+- *As a dimension:* the work itself as a line, linked to the formats and dimensions it touches, so
+  the catalogue roadmap's entries (CATALOGUE-ROADMAP.md) and the work on them meet. A first step that
+  could be built: IDEAS-TRIAGE.md's fields extended with *now/later* and *cost*, and bugs entered there
+  beside ideas.
+
+**19.169 Speeches, spoken at chosen moments; the infinite RAID as deltas across all of a save's
+possibilities (Edward, 12 November 2026).** His words: "speech section for voices.md, larger lines,
+paragraphs and the like for recording, maybe have a speech.md document actually to record and catalog
+speeches like the following for models to speak in ways at chosen moments or during chosen paths
+through the state space as per the procedural nature of the rules of the game itself which will
+naturally form from the convergence of all state spaces to rule the topological nature of its
+landscape". The two speeches that followed are the first in [SPEECHES.md](SPEECHES.md).
+- *SPEECHES.md:* longer pieces apart from VOICES' single lines, each with who, when said, and a
+  suggested moment or path (*on saving a character*, *at the far end of a line*), so the game's rules
+  can later choose when each is spoken. Built the same day (the file and its format).
+- *The infinite RAID as deltas (from the second speech):* everyone sharing the storage of everyone's
+  saves (§19.150, §19.154), each save kept as a delta, and the deltas mapping a save from its minimum
+  to its maximum "through all the possibilities in between", so any save can be represented as it was
+  or could be at any moment. In Sieve's terms: a save is an address on its line; a delta between two
+  saves is the step between their addresses (the delta way already does this for files, v32); the
+  store is shared across machines, which waits on sharing between machines. The local store (by
+  SHA-256, §19.154) is the first piece.

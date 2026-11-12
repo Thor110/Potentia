@@ -314,6 +314,7 @@ side.char.unreadable = could not read {0}
 side.char.unwritable = could not write {0}
 side.char.refused = refused: {0}
 side.char.imported = {0}: {1} of {2} vertices, {3} of {4} faces kept (the roof: 8 and 12)
+side.char.left_out = left out: {0}
 side.char.bad_setting = the settings file's character was refused ({0}): the default instead
 side.yes = yes
 side.no = no

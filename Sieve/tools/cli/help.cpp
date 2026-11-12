@@ -288,6 +288,27 @@ const std::vector<Page>& pages()
           {"sieve info --alphabet ascii96 --length 400", "a page that can hold an .obj file"},
           {"sieve browse --alphabet hiragana --length 16 --count 5", "five units of kana"}}},
 
+        {"import", "An existing model (.obj, glTF) brought into Sieve: what it carries, what the roof leaves out.",
+         "sieve import FILE | sieve import --formats",
+         "Reads a model made elsewhere, by its content: Wavefront .obj text, glTF 2.0 as JSON (.gltf,\n"
+         "its buffers embedded or in files beside it) or binary (.glb). A glTF's meshes come in as its\n"
+         "default scene places them. It says what it read, the held model it becomes (the address the\n"
+         "CHARACTER page's Ctrl+I puts into a sphere, under the roof of 8 vertices and 12 faces), and\n"
+         "each thing the file held that is not carried: skins, animations, materials, points and lines.\n"
+         "A glTF's buffers are read only from below its own folder.",
+         {{"FILE", "The model to read."}, {"--formats", "List the formats read, what each carries and what each leaves out."}},
+         {{"sieve import teapot.obj", "8 of 1,857 vertices, 9 of 3,552 faces kept"},
+          {"sieve import --formats", "every importer and its roof"}}},
+
+        {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
+         "sieve dimensions [ID]",
+         "The catalogue of dimensions (IDEAS 19.162): the hallway's lines, the characters and their\n"
+         "species, personal dimensions, the importers, DNA, and the planned ones (research, languages,\n"
+         "emotion, animation, games and their generators). With an ID, one dimension in full, with the\n"
+         "dimensions that link to it. docs/DIMENSIONS.md explains each.",
+         {{"ID", "One dimension, such as dna or research."}},
+         {{"sieve dimensions", "all of them, with their links"}, {"sieve dimensions dna", "the DNA dimension and what links to it"}}},
+
         {"mesh", "The models line: every possible mesh of one shape, and the .obj text of each.",
          "sieve mesh [--vertices V] [--faces F] [--coords C] [--key K] [--warp FILE [--canonical] | --read ADDR | --browse N]",
          "A model of this line is V vertices and F triangles. Each coordinate is one of C steps\n"
@@ -1516,7 +1537,7 @@ void print_usage()
         {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
-        {"Other lines", {"mesh", "world", "ai", "ai-train", "diffuse"}},
+        {"Other lines", {"mesh", "import", "dimensions", "world", "ai", "ai-train", "diffuse"}},
         {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;

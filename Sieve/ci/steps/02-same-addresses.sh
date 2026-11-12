@@ -38,6 +38,11 @@ a=$($exe warp --alphabet ascii96 --length 32 --mode positional --file obj.txt | 
 b=$($exe warp --alphabet ascii96 --length 32 --mode positional --file objcrlf.txt | tr -d '\r' | awk '$1 == "positional" {print $2}')
 test "$a" = "$b"
 $exe read --alphabet ascii96 --length 32 --mode positional "$a" | tr -d '\r' | sed -n 2p | q "^f 1 2 3$"
+# DNA (IDEAS 19.162): the four bases, capitals read as them, anything else dropped (no space to
+# separate with), padded with digit 0 (a); the address reads back as the sequence.
+a=$($exe warp --alphabet dna4 --length 12 --mode positional "GATTACA, gattaca!" | tr -d '\r' | awk '$1 == "positional" {print $2; exit}')
+$exe read --alphabet dna4 --length 12 --mode positional "$a" | tr -d '\r' | q "gattacagatta"
+$exe warp --alphabet dna4 --length 12 --mode positional "GATTACA, gattaca!" | tr -d '\r' | q "copies of digit 0 on the last unit"
 got=$($exe warp --length 32 --mode guided "It was the best of times" | tr -d '\r' | awk '$1 == "guided" {print $2}')
 echo "guided address: $got"
 test "$got" = "90922c700685e28"

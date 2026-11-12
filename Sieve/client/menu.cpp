@@ -46,6 +46,7 @@
 #include "sieve/canon.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/importers.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -1765,7 +1766,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         }
         else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_I && side_page_ == 0)
         {
-            static const SDL_DialogFileFilter kObj[] = {{"Wavefront models", "obj"}};
+            static const SDL_DialogFileFilter kObj[] = {{"Models (OBJ, glTF)", "obj;gltf;glb"}};
             open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
         }
         else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_O)
@@ -2071,9 +2072,10 @@ void Menu::obj_chosen(const std::string& path)
     char_import_from_ = path;
 }
 
-// An existing model into the chosen sphere (IDEAS 19.159): read, brought under the held models' roof,
-// and what was kept said.
-void Menu::import_obj(const std::string& path)
+// An existing model into the chosen sphere (IDEAS 19.159, 19.162): any format the importers read
+// (.obj, .gltf, .glb), brought under the held models' roof, and what was kept and left out said. A
+// glTF's buffers are read beside it, never from outside its folder (sieve::import_uri_is_local).
+void Menu::import_model(const std::string& path)
 {
     char_init();
     std::ifstream in(path_utf8(path), std::ios::binary);
@@ -2085,11 +2087,28 @@ void Menu::import_obj(const std::string& path)
     }
     try
     {
-        const sieve::HeldImport h = sieve::import_obj_for_hold(text);
+        const std::filesystem::path folder = path_utf8(path).parent_path();
+        const sieve::HeldImport h = sieve::import_model_for_hold(text, [&](const std::string& uri) -> std::optional<std::string> {
+            if (!sieve::import_uri_is_local(uri)) return std::nullopt;
+            std::error_code ec;
+            const std::filesystem::path beside = folder / path_utf8(uri);
+            const auto size = std::filesystem::file_size(beside, ec);
+            if (ec || size > (uint64_t(1) << 30)) return std::nullopt; // a gigabyte: more than a held model could use
+            std::ifstream b(beside, std::ios::binary);
+            std::string data((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
+            if (!b && data.empty()) return std::nullopt;
+            return data;
+        });
         char_.hold(char_sphere_, h.hex);
         char_store();
         char_note_ = trf("side.char.imported", {utf8_path(path_utf8(path).filename()), std::to_string(std::min<size_t>(h.vertices_in, sieve::kHeldVertices)),
                                                  std::to_string(h.vertices_in), std::to_string(h.faces_kept), std::to_string(h.faces_in)});
+        if (!h.left_out.empty())
+        {
+            std::string all;
+            for (const auto& l : h.left_out) all += (all.empty() ? "" : "; ") + l;
+            char_note_ += "; " + trf("side.char.left_out", {all});
+        }
     }
     catch (const std::exception& e)
     {
@@ -2816,7 +2835,7 @@ void Menu::render_side(float W, float H)
             load.swap(char_load_from_);
             import.swap(char_import_from_);
         }
-        if (import) import_obj(*import);
+        if (import) import_model(*import);
         if (save)
         {
             std::ofstream out(path_utf8(*save), std::ios::binary);

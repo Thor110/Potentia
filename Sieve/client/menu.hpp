@@ -496,7 +496,7 @@ private:
 public:
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
-    void import_obj(const std::string& path);      // --import-obj FILE, and Ctrl+I: a model into the chosen sphere
+    void import_model(const std::string& path);    // --import-model FILE, and Ctrl+I: a model (.obj, .gltf, .glb) into the chosen sphere
     void obj_chosen(const std::string& path);
     void open_yours();                              // the right-hand panel open on YOURS (Personal Dimensions)
 private:

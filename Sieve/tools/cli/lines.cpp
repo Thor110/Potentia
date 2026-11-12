@@ -282,9 +282,9 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         if (c.padding)
             w.report.push_back(count_line("padding", c.padding,
                                           std::string(bytes ? "NUL bytes"
-                                                      : line.alphabet->contains(U'\n') && line.alphabet->symbol(0) == U'\n'
-                                                          ? "line feeds"
-                                                          : "spaces") +
+                                                      : line.alphabet->symbol(0) == U'\n' ? "line feeds"
+                                                      : line.alphabet->symbol(0) == U' '  ? "spaces"
+                                                                                          : "copies of digit 0") +
                                               " on the last unit"));
         for (const auto& u : c.units) w.units.push_back(line.space.digits_of(u));
         break;

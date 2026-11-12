@@ -83,6 +83,8 @@ std::vector<std::string> block_ids();
 //   ascii96  — line feed + printable ASCII (text that can hold a file, such as an .obj)
 //   bytes256 — U+0000-U+00FF: one symbol per byte value, so a file of N bytes is one unit of
 //              a line of length N, exactly and reversibly, with nothing folded or dropped
+//   dna4     — a, c, g, t: the four bases of DNA (IDEAS 19.162); with no space, text read onto it
+//              keeps only the bases
 std::vector<std::string> alphabet_ids();
 
 // True if an alphabet is exactly the 256 code points U+0000-U+00FF in that order, so that digit

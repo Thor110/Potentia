@@ -106,6 +106,13 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, quote; a point about everything): It all becomes one web of information across every interpretation, and folds in to create the multiverse before time even began.
 - **Edward** (12 November 2026, metaphor): All containment vessels will have a unique roof, throughout this unfolding dimensional landscape.
 - **Edward** (12 November 2026, metaphor): An engine to rule all engines: the information highway engine.
+- **Edward** (12 November 2026, slogan): Sieve, sieving information for its complexity one bit at a time! Join the Sieve academy!
+- **Edward** (12 November 2026, quote; a point about everything): All information links to all other information one way or another, like the wiki principle, where all pages lead to a certain place or space.
+- **Edward** (12 November 2026, quote): If humanity gets left behind to face the approach of the sun as it swallows the solar system, they at least have a nice VR lounge for those last dire moments.
+- **Edward** (12 November 2026, metaphor; a point about everything): There is a point in time, and I can see it, at which all time folds in on itself, and history is preserved or damaged depending on the outcome and actions of all of us who lie around it. That point lies in the Sieve of Potentia, the infinite realm of possibility.
+- **Edward** (12 November 2026, quote; a point about everything): Just discovering the shape of space which already naturally existed is all I am, all we all are, doing naturally: convergent in unison, divergent in discrepancy or during debate.
+
+**Longer pieces.** Whole paragraphs and speeches, for a speaker to give at a chosen moment or on a chosen path, are kept in [SPEECHES.md](SPEECHES.md), not here.
 
 **The format.** One voice a line, so that a program can read them:
 

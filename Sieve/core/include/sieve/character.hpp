@@ -51,7 +51,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sieve {
@@ -149,8 +152,13 @@ struct HeldImport
     std::string hex;                       // the held model's address
     size_t vertices_in = 0, faces_in = 0;  // what the file had
     size_t faces_kept = 0;                 // faces that survived the reduction (at most 12)
+    std::string format;                    // the importer that read it ("obj", "gltf", "glb")
+    std::vector<std::string> left_out;     // what the file held beyond the mesh (importers.hpp)
 };
 HeldImport import_obj_for_hold(std::string_view obj_text);
+// Any format the importers read (sieve/importers.hpp: .obj, .gltf, .glb), told apart by its content;
+// `load` reads a glTF's buffers beside it. The mesh is brought under the roof as above.
+HeldImport import_model_for_hold(std::string_view bytes, const std::function<std::optional<std::string>(const std::string&)>& load = {});
 
 const char* symmetry_name(Symmetry s);
 // "none", "bilateral" or "radial"; throws std::invalid_argument otherwise.

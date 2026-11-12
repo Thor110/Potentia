@@ -83,6 +83,11 @@ const std::vector<Alphabet>& registry()
         // number. Nothing is folded, dropped or collapsed over it (canon-bytes-v1).
         Alphabet("bytes256", "U+0000-U+00FF: one symbol per byte value, so any file is a unit",
                  {{char32_t(0), char32_t(0xFF)}}),
+        // The four bases of DNA (IDEAS 19.162), lower case in alphabetical order, so capitals fold
+        // to them (GATTACA reads as gattaca) and anything else is dropped: with no space it has
+        // nothing to separate with. A unit is a sequence; padding is digit 0, a.
+        Alphabet("dna4", "the four bases of DNA: a, c, g, t (capitals read as these; anything else dropped)",
+                 {one(U'a'), one(U'c'), one(U'g'), one(U't')}),
     };
     return alphabets;
 }

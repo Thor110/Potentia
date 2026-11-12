@@ -166,8 +166,9 @@ const char* kUsage =
     "  --character FILE    your character from a .character file (sieve-character-v1): beside you in the\n"
     "                      hallway, and on the setup menu's CHARACTER page\n"
     "  --no-character      no character beside you in the hallway for this run\n"
-    "  --import-obj FILE   with --menu: a Wavefront .obj into your character's first sphere, as the CHARACTER\n"
-    "                      page's Ctrl+I does (brought under the held models' roof of 8 vertices, 12 faces)\n"
+    "  --import-model FILE with --menu: a model (.obj, .gltf, .glb) into your character's first sphere, as\n"
+    "                      the CHARACTER page's Ctrl+I does (brought under the held models' roof of 8\n"
+    "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
     "  --character-store DIR  your personal dimension from DIR (the store: <SHA-256>.character files) for\n"
     "                      this run, in place of the characters folder beside the settings file\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
@@ -1287,7 +1288,9 @@ int run(const Args& a)
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("character")) menu.load_character(a.get("character"));
-        if (a.has("import-obj")) menu.import_obj(a.get("import-obj")); // into sphere 0, as Ctrl+I does into the chosen one
+        // Into sphere 0, as Ctrl+I does into the chosen one (--import-obj is the older name, kept).
+        if (a.has("import-model")) menu.import_model(a.get("import-model"));
+        else if (a.has("import-obj")) menu.import_model(a.get("import-obj"));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
