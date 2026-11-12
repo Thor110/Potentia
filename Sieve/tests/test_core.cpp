@@ -7440,6 +7440,10 @@ void test_save()
 
 // The catalogue of formats, stage 1 (IDEAS 19.165): gathered from the code; ids unique; every link
 // names an entry; every entry reaches "information" (the wiki principle); one entry pinned.
+// The Sieve folder's data/, found from the tests folder main is given (its sibling), so the tests read
+// it wherever they are run from: ctest runs them in the build folder (step 01), not the Sieve folder.
+std::string g_data = "data/";
+
 void test_catalogue()
 {
     const auto& all = format_catalogue();
@@ -7478,12 +7482,13 @@ void test_catalogue()
     CHECK(throws([] { (void)read_format_entry("sieve-format-v1\nid a\nkind x\nname y"); }));                              // no last line feed
     CHECK(read_format_entry("sieve-format-v1\nid a\nkind x\nname y\nlink part-of data\nsource z\n").links.size() == 1);
     // The hand-written entries (data/catalogue) join the code's, every one reaching information.
-    const auto with = format_catalogue_with("data/catalogue");
+    CHECK(std::filesystem::is_directory(g_data + "catalogue") && std::filesystem::is_directory(g_data + "languages")); // (found, wherever the tests run)
+    const auto with = format_catalogue_with(g_data + "catalogue");
     CHECK(with.size() > all.size() && std::any_of(with.begin(), with.end(), [](const FormatEntry& e) { return e.id == "encoding-utf-8"; }));
     for (const auto& e : with) CHECK(!format_lineage(with, e.id).empty());
     // The language catalogue (data/languages, IDEAS 19.183) joins the same web: every language reaches
     // information through its family and "language", and links to the scripts it is written in.
-    const auto both = format_catalogue_with(std::vector<std::string>{"data/catalogue", "data/languages"});
+    const auto both = format_catalogue_with(std::vector<std::string>{g_data + "catalogue", g_data + "languages"});
     size_t languages = 0;
     for (const auto& e : both)
     {
@@ -7639,6 +7644,7 @@ void run_all(int argc, char** argv)
 int main(int argc, char** argv)
 {
     if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory> [--only NAME[,NAME...]] [--list]\n"; return 1; }
+    g_data = std::string(argv[1]) + "/../data/";
     for (int i = 2; i < argc; ++i)
     {
         const std::string a = argv[i];
