@@ -329,16 +329,29 @@ const std::vector<Page>& pages()
           {"sieve catalogue file-flac", "one entry, its signature and lineage"},
           {"sieve catalogue --path file-png,alphabet-dna4", "how a PNG and DNA meet"}}},
 
-        {"raid", "The infinite RAID, stage 1: saves kept on several folders, verified and repaired.",
-         "sieve raid put FILE|get ID --out FILE|list|verify|repair --drives A,B,... [--copies N] [--name NAME]",
+        {"raid", "The infinite RAID: saves kept on several folders, and on other machines if asked.",
+         "sieve raid put FILE|get ID --out FILE|list|verify|repair --drives A,B,... [--copies N] [--name NAME]\n"
+         "       sieve raid key --out KEY\n"
+         "       sieve raid serve --held DIR --listen HOST:PORT [--space MIB] [--per-peer MIB] [--connections N]\n"
+         "       sieve raid share NAME|ID --drives A,B,... --key KEY --peers HOST:PORT,... [--peer-copies N]\n"
+         "       sieve raid fetch REMOTE --key KEY --peers HOST:PORT,... --out FILE [--drives A,B,...]",
          "Keeps any save (a game's save file, a character, a dimension's file) on several folders the\n"
          "person chooses: a spare drive, a phone's storage, a second disk (IDEAS 19.176). Each save is\n"
-         "cut into chunks of 1 MiB, each named by its SHA-256 and kept on N of the folders (2 unless\n"
-         "--copies says otherwise); a small manifest, kept in every folder, lists a version's chunks,\n"
-         "and its SHA-256 is the version's id. Storing a save again under its name makes a new version\n"
-         "that names the one before, so every save keeps its history. Nothing is trusted: verify checks\n"
-         "every chunk against its name, and repair writes again every copy that is damaged or missing\n"
-         "from a folder that holds a good one. Local only: nothing leaves the machine.\n"
+         "cut into chunks where its content says (16 to 256 KiB, about 80 KiB), each named by its SHA-256\n"
+         "and kept on N of the folders (2 unless --copies says otherwise); a small manifest, kept in every\n"
+         "folder, lists a version's chunks, and its SHA-256 is the version's id. Storing a save again under\n"
+         "its name makes a new version that names the one before and shares every chunk the edit did not\n"
+         "touch. Nothing is trusted: verify checks every chunk against its name, and repair writes again\n"
+         "every copy that is damaged or missing from a folder that holds a good one.\n"
+         "\n"
+         "Between machines (stage 3), opt in only. key makes a key that only you hold. share sends a\n"
+         "version to other machines sealed under it (ChaCha20 and HMAC-SHA-256, docs SPECIFICATIONS\n"
+         "12.0o): they cannot read it, and nothing they send back is taken unless it checks out. Each chunk\n"
+         "goes to N of the peers (2 unless --peer-copies says otherwise), a chunk a peer already has is not\n"
+         "sent again, and share prints the save's remote id: with it and the key, fetch brings the save\n"
+         "back on any machine. serve keeps others' sealed chunks in a folder while it runs, up to the space\n"
+         "you give in all and the most for any one address (kept only as a salted hash). Lose the key and\n"
+         "what others keep for you cannot be read by anyone, you included.\n"
          "\n"
          "The infinite RAID save and data preservation system was designed by Edward James Gordon\n"
          "(Potentia). GNU AGPL v3 with an attribution term (docs/RAID-NOTICE.md).",
@@ -347,13 +360,28 @@ const std::vector<Page>& pages()
           {"list", "Every version kept, by name, oldest first."},
           {"verify", "Check every chunk and manifest; exit 1 if anything is damaged, short or lost."},
           {"repair", "Make it whole again from the good copies, and say what could not be."},
+          {"key", "Make a new key in --out KEY (never written over an existing file)."},
+          {"serve", "Keep others' sealed chunks in --held DIR, answering on --listen HOST:PORT, until stopped."},
+          {"share ID", "Send a version (its id, or a name for its latest) to --peers, sealed; exit 1 if not whole."},
+          {"fetch REMOTE", "Bring a shared save back by its remote id to --out FILE (and into --drives, if given)."},
           {"--drives A,B,...", "The folders (made members the first time)."},
           {"--copies N", "How many folders each chunk goes on (default 2)."},
           {"--name NAME", "The save's name, for put."},
-          {"--out FILE", "Where get writes."}},
+          {"--out FILE", "Where get, fetch and key write."},
+          {"--key KEY", "The key file, for share and fetch."},
+          {"--peers HOST:PORT,...", "The machines to share with or fetch from."},
+          {"--peer-copies N", "How many peers each chunk goes to (default 2)."},
+          {"--held DIR", "Where serve keeps others' chunks."},
+          {"--listen HOST:PORT", "Where serve answers (127.0.0.1 for this machine alone)."},
+          {"--space MIB", "The most serve keeps for everyone, in MiB (default 1024)."},
+          {"--per-peer MIB", "The most serve keeps for any one address, in MiB (default 64)."},
+          {"--connections N", "Stop serving after N connections (default: never)."}},
          {{"sieve raid put game.sav --drives D:/raid,E:/raid", "keep a save on two drives"},
           {"sieve raid verify --drives D:/raid,E:/raid", "check every piece"},
-          {"sieve raid get game.sav --out back.sav --drives D:/raid,E:/raid", "its latest version back"}}},
+          {"sieve raid get game.sav --out back.sav --drives D:/raid,E:/raid", "its latest version back"},
+          {"sieve raid serve --held D:/kept --listen 0.0.0.0:47100", "keep others' saves on this machine"},
+          {"sieve raid share game.sav --drives D:/raid,E:/raid --key my.key --peers friend.example:47100,other.example:47100", "send it out, sealed"},
+          {"sieve raid fetch REMOTE --key my.key --peers friend.example:47100 --out game.sav", "bring it back"}}},
 
         {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
          "sieve dimensions [ID]",

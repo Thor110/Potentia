@@ -21,6 +21,8 @@
 #include "sieve/dimensions.hpp"
 #include "sieve/animation.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/raid_net.hpp"
+#include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/save.hpp"
 #include "sieve/filekind.hpp"
@@ -7203,6 +7205,158 @@ void test_raid()
     fs::remove_all(root, ec);
 }
 
+// Stage 3 of the RAID (IDEAS 19.176): sealing checked against the RFCs' vectors; a held folder's
+// limits; the protocol answered as written; a save shared to peers and fetched back, a changed
+// version sending only what changed, and anything tampered with refused.
+void test_raid_net()
+{
+    namespace fs = std::filesystem;
+    auto hex = [](std::string_view b) {
+        static const char* k = "0123456789abcdef";
+        std::string t;
+        for (const char c : b) t += k[uint8_t(c) >> 4], t += k[uint8_t(c) & 15];
+        return t;
+    };
+    auto view = [](const std::array<uint8_t, 32>& a) { return std::string_view(reinterpret_cast<const char*>(a.data()), a.size()); };
+    // RFC 8439 2.4.2 (ChaCha20, counter 1) and RFC 4231 cases 2 and 6 (HMAC-SHA-256).
+    {
+        std::array<uint8_t, 32> key{};
+        for (int i = 0; i < 32; ++i) key[size_t(i)] = uint8_t(i);
+        const std::array<uint8_t, 12> nonce = {0, 0, 0, 0, 0, 0, 0, 0x4a, 0, 0, 0, 0};
+        const std::string plain = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.";
+        CHECK(hex(chacha20(key, nonce, 1, plain)) ==
+              "6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0bf91b65c5524733ab8f593dabcd62b3571639d624e65152ab8f530c359f0861d807ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab77937365af90bbf74a35be6b40b8eedf2785e42874d");
+        CHECK(chacha20(key, nonce, 1, chacha20(key, nonce, 1, plain)) == plain);
+        CHECK(hex(view(hmac_sha256("Jefe", "what do ya want for nothing?"))) == "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+        CHECK(hex(view(hmac_sha256(std::string(131, '\xaa'), "Test Using Larger Than Block-Size Key - Hash Key First"))) ==
+              "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
+        // sieve-seal-v1, the same as an independent reckoning (Python's cryptography package).
+        SealKey k{};
+        for (int i = 0; i < 32; ++i) k[size_t(i)] = uint8_t(i);
+        const std::string sealed = seal(k, "The infinite RAID");
+        CHECK(hex(sealed) == "4b1885e43f0cd8187f9aa35fdc52a31b529821d45c5ad3a363ea456c2714e2944a632516ef452d97855021c039e97fa322e0792abfd2a6054774afcdcc");
+        CHECK(unseal(k, sealed) == std::optional<std::string>("The infinite RAID"));
+        CHECK(seal(k, "").size() == kSealOverhead && unseal(k, seal(k, "")) == std::optional<std::string>(""));
+        for (size_t i = 0; i < sealed.size(); ++i) // any one bit changed: refused
+        {
+            std::string t = sealed;
+            t[i] = char(t[i] ^ (1 << (i % 8)));
+            CHECK(!unseal(k, t));
+        }
+        CHECK(!unseal(k, sealed.substr(1)) && !unseal(k, "short"));
+        SealKey other = k;
+        other[0] ^= 1;
+        CHECK(!unseal(other, sealed));
+        CHECK(read_seal_key(seal_key_text(k)) == k && new_seal_key() != new_seal_key());
+        CHECK(throws([] { (void)read_seal_key("sieve-raid-key-v1 00"); }) && throws([] { (void)read_seal_key("sieve-raid-key-v1 " + std::string(64, 'G')); }));
+    }
+    const fs::path root = fs::temp_directory_path() / ("sieve-raid-net-test-" + std::to_string(std::random_device{}()));
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    auto sha = [](const std::string& b) { return Sha256::hex(Sha256::hash(b)); };
+    // A held folder: limits per address and in all; the address itself never written down.
+    {
+        HeldLimits lim;
+        lim.space = 3000;
+        lim.per_peer = 2000;
+        RaidHeld held(root / "held", lim);
+        const std::string a(1500, 'a'), b(1000, 'b'), c(900, 'c');
+        CHECK(held.put(sha(a), a, "198.51.100.7").is == RaidHeld::Put::Is::Kept);
+        CHECK(held.put(sha(a), a, "198.51.100.7").is == RaidHeld::Put::Is::Had); // had already: not counted twice
+        CHECK(held.put(sha(b), b, "198.51.100.7").is == RaidHeld::Put::Is::Refused); // over this address's 2000
+        CHECK(held.put(sha(b), b, "203.0.113.9").is == RaidHeld::Put::Is::Kept);
+        CHECK(held.put(sha(c), c, "192.0.2.1").is == RaidHeld::Put::Is::Refused); // over the 3000 in all
+        CHECK(held.put(sha(c), c + "x", "192.0.2.1").is == RaidHeld::Put::Is::Refused); // bytes not their name
+        CHECK(held.used() == 2500 && held.used_by("198.51.100.7") == 1500 && held.get(sha(a)) == a);
+        std::ifstream pf(root / "held" / "peers", std::ios::binary);
+        const std::string peers((std::istreambuf_iterator<char>(pf)), std::istreambuf_iterator<char>());
+        CHECK(peers.find("198.51") == std::string::npos && peers.find(held.peer_key("198.51.100.7")) != std::string::npos);
+        RaidHeld again(root / "held", lim); // opened again: the same salt, the same counts
+        CHECK(again.used_by("198.51.100.7") == 1500 && again.peer_key("x") == held.peer_key("x"));
+    }
+    // The protocol, answered from a script of requests.
+    {
+        struct Script : RaidStream
+        {
+            std::string in, out;
+            size_t at = 0;
+            bool read(char* to, size_t n) override
+            {
+                if (in.size() - at < n) return false;
+                std::memcpy(to, in.data() + at, n);
+                at += n;
+                return true;
+            }
+            bool write(std::string_view b) override
+            {
+                out.append(b);
+                return true;
+            }
+        };
+        RaidHeld held(root / "proto");
+        const std::string blob = "a sealed chunk", name = sha(blob);
+        Script s;
+        s.in = "sieve-raid-net-v1\nhas " + name + "\nput " + name + " " + std::to_string(blob.size()) + "\n" + blob + "has " + name + "\nget " + name + "\nput " + name + " 3\nabcbye\n";
+        CHECK(held.serve(s, "192.0.2.5") == 5);
+        CHECK(s.out == "sieve-raid-net-v1\nno\nkept\nyes\nblob " + std::to_string(blob.size()) + "\n" + blob + "refused its bytes are not its name\n");
+        Script bad;
+        bad.in = "hello\n";
+        CHECK(held.serve(bad, "192.0.2.5") == 0 && bad.out.rfind("refused", 0) == 0);
+        Script odd;
+        odd.in = "sieve-raid-net-v1\nput " + name + " 99999999999\n";
+        CHECK(held.serve(odd, "192.0.2.5") == 0 && odd.out.find("refused too long") != std::string::npos);
+        Script lng;
+        lng.in = "sieve-raid-net-v1\n" + std::string(500, 'x') + "\n";
+        CHECK(held.serve(lng, "192.0.2.5") == 0);
+    }
+    // Shared to three peers and fetched back; a new version sends only its changed chunks.
+    {
+        Raid raid({root / "d1", root / "d2"});
+        std::string bytes;
+        std::mt19937 g(5);
+        for (int i = 0; i < 900000; ++i) bytes.push_back(char(g() & 0xFF));
+        const std::string v1 = raid.put("game.sav", bytes);
+        RaidHeld h1(root / "p1"), h2(root / "p2"), h3(root / "p3");
+        RaidLocalPeer p1(h1, "p1:1"), p2(h2, "p2:1"), p3(h3, "p3:1");
+        const std::vector<RaidPeer*> peers = {&p1, &p2, &p3};
+        SealKey key = new_seal_key();
+        const auto r1 = raid_share(raid, v1, key, peers);
+        const size_t n = raid.list()[0].chunks.size();
+        CHECK(r1.whole() && r1.chunks == n && r1.sent == 2 * n + 3 + 3 && r1.had == 0);
+        CHECK(raid_share(raid, v1, key, peers).sent == 0); // all there already
+        const auto f = raid_fetch(r1.remote, key, peers);
+        CHECK(f.bytes == bytes && f.manifest.id() == v1);
+        // Nothing a peer holds can be read without the key: no chunk of the save appears in it.
+        for (const auto& e : fs::recursive_directory_iterator(root / "p1"))
+            if (e.is_regular_file() && e.path().parent_path().parent_path().filename() == "blobs")
+            {
+                std::ifstream in(e.path(), std::ios::binary);
+                const std::string b((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                CHECK(b.size() < 64 || bytes.find(b.substr(12, 32)) == std::string::npos);
+            }
+        bytes[400000] ^= 1;
+        const std::string v2 = raid.put("game.sav", bytes);
+        const auto r2 = raid_share(raid, v2, key, peers);
+        CHECK(r2.whole() && r2.sent <= 2 + 3 + 3 && raid_fetch(r2.remote, key, peers).bytes == bytes);
+        // One peer gone: still whole from the others. Every copy of a piece changed: refused, not wrong.
+        const std::vector<RaidPeer*> two = {&p1, &p2};
+        CHECK(raid_fetch(r2.remote, key, two).bytes == bytes);
+        for (const fs::path& d : {root / "p1", root / "p2", root / "p3"})
+            for (const auto& e : fs::recursive_directory_iterator(d))
+                if (e.is_regular_file() && e.path().parent_path().parent_path().filename() == "blobs" && e.path().filename() != r2.remote)
+                    std::ofstream(e.path(), std::ios::binary | std::ios::app) << "x";
+        CHECK(throws([&] { (void)raid_fetch(r2.remote, key, peers); }));
+        SealKey wrong = key;
+        wrong[31] ^= 1;
+        CHECK(throws([&] { (void)raid_fetch(r1.remote, wrong, peers); }));
+        CHECK(throws([&] { (void)raid_share(raid, v1, key, {}); }));
+    }
+    CHECK(raid_split_address("127.0.0.1:47100") == std::make_pair(std::string("127.0.0.1"), std::string("47100")));
+    CHECK(raid_split_address("[::1]:9") == std::make_pair(std::string("::1"), std::string("9")));
+    CHECK(throws([] { (void)raid_split_address("::1:9"); }) && throws([] { (void)raid_split_address("host:0"); }) && throws([] { (void)raid_split_address("host"); }));
+    fs::remove_all(root, ec);
+}
+
 // A character's save (sieve-save-v1, IDEAS 19.183): the character, its animation and its languages,
 // named together; the languages kept in order, each once; read back the same.
 void test_save()
@@ -7345,6 +7499,7 @@ void run_all(int argc, char** argv)
     RUN(test_midi_read());
     RUN(test_character());
     RUN(test_raid());
+    RUN(test_raid_net());
     RUN(test_catalogue());
     RUN(test_save());
     RUN(test_model());

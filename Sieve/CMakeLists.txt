@@ -49,6 +49,8 @@ add_library(sieve_core STATIC
     core/src/raid.cpp
     core/src/catalogue.cpp
     core/src/save.cpp
+    core/src/seal.cpp
+    core/src/raid_net.cpp
     core/src/json.cpp
     core/src/safetensors.cpp
     core/src/weights.cpp
@@ -87,6 +89,11 @@ add_library(sieve_core STATIC
     core/src/utf8.cpp)
 target_include_directories(sieve_core PUBLIC core/include)
 target_link_libraries(sieve_core PUBLIC Threads::Threads)
+if(WIN32)
+    # bcrypt: the system's random source for RAID keys (seal.cpp), whatever the compiler's own
+    # std::random_device does (some MinGW builds' gave a fixed sequence).
+    target_link_libraries(sieve_core PUBLIC bcrypt)
+endif()
 
 if(MSVC)
     target_compile_options(sieve_core PUBLIC /W4 /utf-8 /permissive-)
@@ -602,6 +609,7 @@ add_executable(sieve
     tools/cli/train_cmd.cpp
     tools/cli/diffuse.cpp
     tools/cli/cipher_cmd.cpp
+    tools/cli/raid_socket.cpp
     tools/cli/site.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
@@ -610,7 +618,7 @@ if(WIN32)
     # 1903, which ignores it, main reads the command line again in UTF-16: shell32's
     # CommandLineToArgvW).
     target_sources(sieve PRIVATE tools/utf8.manifest)
-    target_link_libraries(sieve PRIVATE shell32)
+    target_link_libraries(sieve PRIVATE shell32 ws2_32) # ws2_32: the RAID between machines (raid_socket.cpp)
 endif()
 target_compile_definitions(sieve PRIVATE SIEVE_VERSION="${PROJECT_VERSION}")
 

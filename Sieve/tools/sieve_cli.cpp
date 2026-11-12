@@ -28,6 +28,7 @@
 #include "cli/compress.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/help.hpp"
+#include "cli/raid_socket.hpp"
 #include "cli/image_io.hpp"
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp"
@@ -69,6 +70,7 @@
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/raid_net.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
@@ -1120,22 +1122,127 @@ ObjMesh read_obj(const std::string& path)
 
 // sieve raid: the infinite RAID, stage 1 (IDEAS 19.176): saves kept on several folders, every piece
 // named by its SHA-256, verified and repaired.
+// Stage 3 (IDEAS 19.176): between machines, opt in only. `serve` keeps others' sealed chunks while it
+// runs; `share` sends a version out sealed under the owner's key; `fetch` brings it back by its remote id.
+namespace {
+
+std::vector<std::string> comma_list(const std::string& d)
+{
+    std::vector<std::string> out;
+    for (size_t i = 0; i <= d.size();)
+    {
+        const size_t c = std::min(d.find(',', i), d.size());
+        if (c > i) out.push_back(d.substr(i, c - i));
+        i = c + 1;
+    }
+    return out;
+}
+
+sieve::SealKey raid_key(const Args& a)
+{
+    if (!a.has("key")) throw std::invalid_argument("give the key file with --key FILE (made by: sieve raid key --out FILE)");
+    std::ifstream in(a.get("key"), std::ios::binary);
+    if (!in) throw std::invalid_argument("cannot read " + a.get("key"));
+    const std::string t((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return sieve::read_seal_key(t);
+}
+
+// Connects to every peer that answers; says which do not.
+std::vector<std::unique_ptr<sieve::RaidPeer>> raid_peers(const Args& a)
+{
+    if (!a.has("peers")) throw std::invalid_argument("give the machines with --peers HOST:PORT,...");
+    std::vector<std::unique_ptr<sieve::RaidPeer>> out;
+    for (const auto& p : comma_list(a.get("peers")))
+        try
+        {
+            out.push_back(std::make_unique<sieve::RaidNetPeer>(sieve_cli::raid_connect(p), p));
+        }
+        catch (const std::exception& e)
+        {
+            std::cout << "no answer from " << p << ": " << e.what() << "\n";
+        }
+    if (out.empty()) throw std::runtime_error("none of the peers answered");
+    return out;
+}
+
+const char* kRaidWarning =
+    "!! Opt in only. This machine now keeps chunks for whoever connects to the address above, up to the\n"
+    "!! limits shown. They are sealed: you cannot read them, and they cannot be changed unseen. The\n"
+    "!! address each comes from is kept only as a salted hash, to count it against its limit.\n";
+
+int raid_between_machines(const Args& a, const std::string& what)
+{
+    if (what == "key")
+    {
+        if (!a.has("out")) throw std::invalid_argument("give where to write the key: --out FILE");
+        if (std::filesystem::exists(a.get("out"))) throw std::invalid_argument(a.get("out") + " is there already; a key is never written over (what it sealed would be lost)");
+        std::ofstream out(a.get("out"), std::ios::binary);
+        out << sieve::seal_key_text(sieve::new_seal_key());
+        out.close();
+        if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+        std::error_code ec; // readable by its owner alone, where the file system says who may read
+        std::filesystem::permissions(a.get("out"), std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, ec);
+        std::cout << "key       " << a.get("out") << "\n"
+                  << "keep it safe and keep a copy: without it, what others keep for you cannot be read by anyone\n";
+        return 0;
+    }
+    if (what == "serve")
+    {
+        if (!a.has("held") || !a.has("listen")) throw std::invalid_argument("give the folder to keep others' chunks in (--held DIR) and the address to listen on (--listen HOST:PORT)");
+        sieve::HeldLimits lim;
+        lim.space = sieve::cli::parse_whole(a.get("space", "1024"), "--space", 1ull << 30) << 20;
+        lim.per_peer = sieve::cli::parse_whole(a.get("per-peer", "64"), "--per-peer", 1ull << 30) << 20;
+        sieve::RaidHeld held(a.get("held"), lim);
+        const size_t connections = a.get_u32("connections", 0);
+        sieve_cli::raid_listen(
+            a.get("listen"), connections, 30,
+            [&] {
+                std::cout << "listening " << a.get("listen") << "\n"
+                          << "held      " << a.get("held") << " (" << held.used() << " bytes kept)\n"
+                          << "limits    " << (lim.space >> 20) << " MiB in all, " << (lim.per_peer >> 20) << " MiB for any one address\n"
+                          << kRaidWarning << std::flush;
+            },
+            [&](sieve::RaidStream& s, const std::string& from) {
+                const size_t n = held.serve(s, from);
+                std::cout << "answered  " << n << (n == 1 ? " request from " : " requests from ") << held.peer_key(from).substr(0, 12) << " (" << held.used_by(from) << " bytes kept for it)\n" << std::flush;
+            });
+        return 0;
+    }
+    if (what == "fetch")
+    {
+        if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give the remote id and --out FILE");
+        const auto key = raid_key(a);
+        auto owned = raid_peers(a);
+        std::vector<sieve::RaidPeer*> peers;
+        for (auto& p : owned) peers.push_back(p.get());
+        const auto f = sieve::raid_fetch(a.positional[1], key, peers);
+        std::ofstream out(a.get("out"), std::ios::binary);
+        out.write(f.bytes.data(), std::streamsize(f.bytes.size()));
+        if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+        std::cout << "wrote     " << a.get("out") << " (" << f.bytes.size() << " bytes: " << f.manifest.name << ", version " << f.manifest.id() << ")\n";
+        if (a.has("drives"))
+        {
+            std::vector<std::filesystem::path> drives;
+            for (const auto& d : comma_list(a.get("drives"))) drives.emplace_back(d);
+            sieve::Raid raid(drives, a.has("copies") ? a.get_u32("copies", 2) : 2);
+            std::cout << "kept      in the RAID as " << raid.put(f.manifest.name, f.bytes) << "\n";
+        }
+        return 0;
+    }
+    return -1;
+}
+
+} // namespace
+
 int cmd_raid(const Args& a)
 {
-    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify or repair");
+    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share or fetch");
+    const std::string what = a.positional[0];
+    if (const int r = raid_between_machines(a, what); r >= 0) return r;
     if (!a.has("drives")) throw std::invalid_argument("give the folders with --drives A,B,...");
     std::vector<std::filesystem::path> drives;
-    {
-        const std::string d = a.get("drives");
-        for (size_t i = 0; i <= d.size();)
-        {
-            const size_t c = std::min(d.find(',', i), d.size());
-            if (c > i) drives.emplace_back(d.substr(i, c - i));
-            i = c + 1;
-        }
-    }
+    for (const auto& d : comma_list(a.get("drives"))) drives.emplace_back(d);
     sieve::Raid raid(drives, a.has("copies") ? a.get_u32("copies", 2) : 2);
-    const std::string what = a.positional[0];
     auto report = [](const sieve::RaidReport& r, const char* found = "") {
         std::cout << "folders   " << r.folders << "\n"
                   << "saves     " << r.manifests << " versions, " << r.chunks << " chunks, " << r.good_copies << " good copies\n"
@@ -1195,7 +1302,30 @@ int cmd_raid(const Args& a)
         std::cout << "after     " << (after.whole() ? "whole" : "still not whole") << "\n";
         return after.whole() ? 0 : 1;
     }
-    throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair)");
+    if (what == "share")
+    {
+        if (a.positional.size() < 2) throw std::invalid_argument("give a version id (or a name, for its latest) to share");
+        std::string v = a.positional[1];
+        if (v.size() != 64)
+        {
+            const auto l = raid.latest(v);
+            if (!l) throw std::invalid_argument("no save named " + v);
+            v = *l;
+        }
+        const auto key = raid_key(a);
+        auto owned = raid_peers(a);
+        std::vector<sieve::RaidPeer*> peers;
+        for (auto& p : owned) peers.push_back(p.get());
+        const auto r = sieve::raid_share(raid, v, key, peers, a.has("peer-copies") ? a.get_u32("peer-copies", 2) : 2);
+        std::cout << "shared    version " << v << " (" << r.chunks << " chunks) with " << peers.size() << " peers\n"
+                  << "sent      " << r.sent << " pieces, " << r.bytes_sent << " bytes; " << r.had << " already there\n";
+        for (const auto& n : r.notes) std::cout << "  " << n << "\n";
+        std::cout << "remote    " << r.remote << "\n"
+                  << (r.whole() ? "whole: every piece on as many peers as asked\n" : "not whole: " + std::to_string(r.short_of) + " pieces on fewer peers than asked\n")
+                  << "keep the remote id and the key: with both, `sieve raid fetch` brings it back on any machine\n";
+        return r.whole() ? 0 : 1;
+    }
+    throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair, key, serve, share, fetch)");
 }
 
 // sieve catalogue: the catalogue of formats, stage 1 (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md).

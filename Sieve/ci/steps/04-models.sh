@@ -81,6 +81,37 @@ tr -d '\r' < raid-verify.txt | q "^damaged   1$"
 $exe raid repair --drives $D | tr -d '\r' | q "^after     whole$"
 $exe raid get save.bin --out save-back.bin --drives $D > /dev/null
 cmp save.bin save-back.bin
+# Stage 3 (IDEAS 19.176): between machines, here two on this one. The save goes out sealed to both,
+# twice (the second time nothing is sent), comes back byte for byte by its remote id, and the wrong
+# key gets nothing; neither held folder holds the save's bytes.
+rm -rf held1 held2 raid.key wrong.key
+$exe raid key --out raid.key | tr -d '\r' | q "^key       raid.key$"
+if $exe raid key --out raid.key > /dev/null 2>&1; then exit 1; fi # never written over
+$exe raid serve --held held1 --listen 127.0.0.1:47131 > serve1.txt 2>&1 &
+serve1=$!
+$exe raid serve --held held2 --listen 127.0.0.1:47132 > serve2.txt 2>&1 &
+serve2=$!
+trap 'kill $serve1 $serve2 2>/dev/null || true' EXIT # (stopped however the step ends)
+python -c "import time
+for _ in range(100):
+    if all('listening' in open(f).read() for f in ('serve1.txt', 'serve2.txt')): break
+    time.sleep(0.1)
+else:
+    raise SystemExit('the RAID servers did not start (ports 47131-47132 taken?)')"
+P=127.0.0.1:47131,127.0.0.1:47132
+$exe raid share save.bin --drives $D --key raid.key --peers $P > share.txt
+tr -d '\r' < share.txt | q "^whole: every piece on as many peers as asked$"
+remote=$(tr -d '\r' < share.txt | awk '$1 == "remote" {print $2}')
+$exe raid share save.bin --drives $D --key raid.key --peers $P | tr -d '\r' | q "^sent      0 pieces, 0 bytes; "
+$exe raid fetch $remote --key raid.key --peers $P --out fetched.bin > /dev/null
+cmp save.bin fetched.bin
+$exe raid key --out wrong.key > /dev/null
+if $exe raid fetch $remote --key wrong.key --peers $P --out wrong.bin > /dev/null 2>&1; then exit 1; fi
+python -c "import glob, os
+save = open('save.bin', 'rb').read()
+blobs = [p for p in glob.glob('held*/blobs/*/*') if os.path.isfile(p)]
+assert blobs and not any(open(p, 'rb').read()[12:44] in save for p in blobs), 'a held chunk shows the save'"
+kill $serve1 $serve2
 # The catalogue of formats (IDEAS 19.165): every entry reaches information, and FLAC's entry is what
 # its signature and lineage say.
 $exe catalogue --check | tr -d '\r' | q " entries read back and reach information$"

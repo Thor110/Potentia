@@ -1,5 +1,5 @@
-// Sieve — the infinite RAID, stage 1: a store for any save, kept on several drives (IDEAS 19.154,
-// 19.176). Local only: no network.
+// Sieve — the infinite RAID, stages 1 and 2: a store for any save, kept on several drives (IDEAS
+// 19.154, 19.176). Local only: between machines is stage 3, sieve/raid_net.hpp.
 //
 // Additional term under section 7(b) of the GNU AGPL v3 (docs/RAID-NOTICE.md): whoever conveys this
 // file, or a work based on it, must keep in it the notice "The infinite RAID save and data

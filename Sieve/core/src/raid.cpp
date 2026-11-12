@@ -9,6 +9,7 @@
 #include "sieve/raid.hpp"
 
 #include "sieve/sha256.hpp"
+#include "raid_files.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -25,38 +26,12 @@ namespace fs = std::filesystem;
 
 namespace {
 
+using raid_files::read_file;
+using raid_files::write_file;
+
 bool is_hex64(const std::string& s)
 {
     return s.size() == 64 && s.find_first_not_of("0123456789abcdef") == std::string::npos;
-}
-
-std::optional<std::string> read_file(const fs::path& p)
-{
-    std::ifstream in(p, std::ios::binary);
-    if (!in) return std::nullopt;
-    std::string s((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (in.bad()) return std::nullopt;
-    return s;
-}
-
-// Written whole or not at all: to a file beside it, then renamed over it.
-bool write_file(const fs::path& p, const std::string& bytes)
-{
-    std::error_code ec;
-    fs::create_directories(p.parent_path(), ec);
-    const fs::path tmp = p.string() + ".part";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        out.write(bytes.data(), std::streamsize(bytes.size()));
-        if (!out) return false;
-    }
-    fs::rename(tmp, p, ec);
-    if (ec)
-    {
-        fs::remove(tmp, ec);
-        return false;
-    }
-    return true;
 }
 
 fs::path chunk_path(const fs::path& folder, const std::string& h) { return folder / "chunks" / h.substr(0, 2) / h; }

@@ -7,6 +7,7 @@
 #include "sieve/filekind.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/raid_net.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -73,6 +74,8 @@ std::vector<FormatEntry> gather()
              general("executable", "Programs", {"data"}),
              general("model-3d", "3D models", {"data"}),
              general("character", "Characters (Sieve's character system)", {"model-3d"}),
+             general("encryption", "Encryption: bytes hidden under a key", {"data"}),
+             general("protocol", "Protocols: how machines speak to one another", {"data"}),
              general("animation", "Animation", {"model-3d"}),
          })
         out.push_back(std::move(g));
@@ -199,6 +202,14 @@ std::vector<FormatEntry> gather()
         "the CHARACTER page and the hallway (SPECIFICATIONS 12.0k)");
     own(kRaidManifestVersion, "A version of a save in the infinite RAID", "container", std::string("first line \"") + kRaidManifestVersion + "\"",
         "sieve raid (SPECIFICATIONS 12.0l)");
+    own(kSealVersion, "Bytes sealed for others to keep (ChaCha20 and HMAC-SHA-256)", "encryption", "12 bytes of nonce, the bytes, 32 bytes of MAC",
+        "sieve raid share and fetch (SPECIFICATIONS 12.0o)");
+    own(kRaidNetVersion, "The infinite RAID between machines", "protocol", std::string("the greeting \"") + kRaidNetVersion + "\"",
+        "sieve raid serve, share and fetch (SPECIFICATIONS 12.0o)");
+    own(kRaidRemoteVersion, "A shared save's index: its sealed manifest and chunks", "container", std::string("first line \"") + kRaidRemoteVersion + "\", sealed",
+        "sieve raid share and fetch (SPECIFICATIONS 12.0o)");
+    own(kRaidHeldVersion, "A folder keeping others' sealed chunks", "container", std::string("a file sieve-raid-held: \"") + kRaidHeldVersion + " salt=...\"",
+        "sieve raid serve (SPECIFICATIONS 12.0o)");
     own(kFormatVersion, "An entry of this catalogue", "document", std::string("first line \"") + kFormatVersion + "\"", "sieve catalogue");
     return out;
 }

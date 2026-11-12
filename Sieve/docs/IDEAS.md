@@ -7307,7 +7307,17 @@ stages, each usable alone:
    added 8,389,648: two pieces new, the first having reached the 256 KiB cap. Characters saved with
    Ctrl+S kept as versions in the RAID where `[raid] drives` is set.)* *Saves as deltas:* each new version of a save kept as its changes from the one before (the delta
    way, v32), so a long history costs little; any version made again from its manifest.
-3. *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
+3. *(Built 12 November 2026, as a first form: `sieve raid key`, `serve`, `share`, `fetch`; SPECIFICATIONS
+   §12.0o. Measured on a 4 MiB save shared to three peers on one machine, two copies of each chunk: the
+   first share sent 124 pieces, 8,420,593 bytes; with one byte changed, 8 pieces, 95,555 bytes (one chunk
+   twice, and the manifest and index to each peer); with ten bytes inserted near the start, 8 pieces,
+   92,007 bytes; fetched back byte for byte, and still with one peer gone. The decisions below were
+   taken as defaults for Edward to overrule: others' saves **sealed** (ChaCha20 and HMAC-SHA-256, a key
+   only the owner holds); space given **chosen by whoever serves** (1 GiB in all and 64 MiB an address by
+   default); machines found by **the addresses the person gives** (`--peers`), no starting nodes run yet;
+   the limit by **IP address first**, as Edward chose (§19.179), kept as a salted hash. Not yet: the
+   menu (behind the red warning boxes), peers passing on other peers, the step to verified identity, and
+   who runs the first known nodes.)* *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
    chunks by name to others and asks for the ones it lacks; a chunk is accepted only if it hashes to
    its name, so nothing can be changed on the way. Before this is built, Edward's decisions: whether
    others' saves are stored encrypted (so a helper cannot read them), how much space each person
