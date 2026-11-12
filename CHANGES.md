@@ -1,6 +1,8 @@
 # Changes since b87b9b4 "sieve state space delta save preservation infinite raid system" (12 November 2026)
 
-Three commits (8a15014 to 9432455): the RAID's authorship secured in its licence; the infinite RAID, stage 2; one idea noted.
+Seven commits (8a15014 to a79769b). This zip replaces the stage 2 zip. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stage 1; four ideas noted.
+
+**Build:** a new core source, `core/src/catalogue.cpp`, is in CMakeLists.txt, so CMake must run again.
 
 ## The RAID's authorship (8a15014)
 - **The licence, as I chose it** (you left the choice to me): the RAID stays under the GNU AGPL v3, as everything else is (you had already published it under that), with the one additional term the AGPL allows and protects, its section 7(b): whoever passes the RAID's files on must keep the notice "The infinite RAID save and data preservation system was designed by Edward James Gordon (Potentia)" in them, and show it with the work's notices. Unlike other added terms, this one cannot be removed.
@@ -16,5 +18,19 @@ Three commits (8a15014 to 9432455): the RAID's authorship secured in its licence
 - **Your character kept as versions:** with `[raid] drives = D:/raid,E:/raid` in the settings file, each character saved with Ctrl+S on the CHARACTER page is also kept in the RAID as a new version of "your character" (its animation as "your character's animation"), each version naming the one before. `--save-character FILE` does it for one run, and the readout gives the page's note.
 - **Tests:** the unit suite passes (178,260 checks; the cuts' bounds, sameness, and an insert costing at most two pieces); CI step 4 passes (122 s) and step 10 passes (954 s), with the RAID filled from the menu and checked whole.
 
+## The catalogue of formats, stage 1 (1e5e585)
+- **`sieve catalogue`** (Sieve/core/include/sieve/catalogue.hpp, Sieve/core/src/catalogue.cpp; MANUAL; docs/CATALOGUE-ROADMAP.md): every format Sieve knows, gathered from its own code so it cannot fall behind it. 166 entries:
+  - 26 file kinds, each with the signature it is told by;
+  - the 3 model importers;
+  - the 6 built-in alphabets and 102 Unicode blocks (emoji and hieroglyph blocks under pictographs, music and maths under notation);
+  - 8 of Sieve's own formats (.sieve, characters v1 to v3, species, animations, RAID manifests, catalogue entries);
+  - all under 21 general entries (text, image, sound, writing, compression...), each leading up to one root, `information`.
+- Each entry as text (`sieve-format-v1`), its SHA-256 the version. `sieve catalogue file-flac` shows one with its lineage (file-flac, sound, data, information); `--kind file` lists one kind; `--path file-png,alphabet-dna4` finds how two meet; `--check` confirms every entry reaches information (the wiki principle: all 166 do).
+- Not yet: the packer's route and the measured figures for each format (stage 4 of the roadmap).
+- **Tests:** `test_catalogue` (ids unique, every link resolves, every entry reaches information, every file kind has an entry, FLAC's entry pinned); the unit suite passes (179,334 checks); CI step 4 passes (143 s).
+
 ## Ideas
 - **Sieve/docs/IDEAS.md §19.178:** the RAID's lockdown against spam before stage 3 shares storage between machines: one character per verified identity, each dimension's own limits, and what is still to decide (how identity is verified while kept private, the quotas, what happens over a limit).
+- **Sieve/docs/IDEAS.md §19.179:** the RAID between machines as peer to peer with a few known nodes to start from; IP addresses as a first limit (weak, and personal data, so kept as salted hashes), then digital ID, then a character's own record, each step added without removing the one before.
+- **Sieve/docs/IDEAS.md §19.178:** your digital ID structure from Pages/order.pdf noted: the anchor, ten at a time, random groups of ten after 1,000, re-verification on doubt; it is the vouching kind of limit, and a project of its own, whose result (verified or not) the RAID would read.
+- **Sieve/docs/IDEAS.md §19.180:** a decentralised place to talk and keep one's own record, built on the RAID: what it needs, and what has to be decided (who reads what, withdrawing a post, moderation).

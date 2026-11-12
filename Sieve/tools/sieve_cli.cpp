@@ -69,6 +69,7 @@
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/catalogue.hpp"
 #include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/aispace.hpp"
@@ -1195,6 +1196,67 @@ int cmd_raid(const Args& a)
         return after.whole() ? 0 : 1;
     }
     throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair)");
+}
+
+// sieve catalogue: the catalogue of formats, stage 1 (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md).
+int cmd_catalogue(const Args& a)
+{
+    const auto& all = sieve::format_catalogue();
+    if (a.has("check"))
+    {
+        // The wiki principle: every entry reaches "information" by its part-of links.
+        size_t ok = 0;
+        for (const auto& e : all)
+        {
+            if (!sieve::format_lineage(e.id).empty()) ++ok;
+            else std::cout << "does not reach information: " << e.id << "\n";
+        }
+        std::cout << ok << " of " << all.size() << " entries reach information\n";
+        return ok == all.size() ? 0 : 1;
+    }
+    if (a.has("path"))
+    {
+        const std::string p = a.get("path");
+        const size_t comma = p.find(',');
+        if (comma == std::string::npos) throw std::invalid_argument("--path A,B: two entries");
+        const auto chain = sieve::format_path(p.substr(0, comma), p.substr(comma + 1));
+        if (chain.empty()) throw std::invalid_argument("no path between " + p.substr(0, comma) + " and " + p.substr(comma + 1) + " (or one is not an entry)");
+        for (size_t i = 0; i < chain.size(); ++i) std::cout << (i ? " - " : "") << chain[i];
+        std::cout << "\n";
+        return 0;
+    }
+    if (!a.positional.empty())
+    {
+        const sieve::FormatEntry* e = sieve::format_by_id(a.positional[0]);
+        if (!e) throw std::invalid_argument("no entry " + a.positional[0] + " (sieve catalogue lists them)");
+        std::cout << e->text();
+        std::cout << "version    " << e->version() << "\n";
+        const auto up = sieve::format_lineage(e->id);
+        std::cout << "lineage   ";
+        for (const auto& x : up) std::cout << " " << x;
+        std::cout << "\n";
+        size_t under = 0;
+        for (const auto& o : all)
+            for (const auto& l : o.links)
+                if (l.to == e->id) ++under;
+        std::cout << "beneath    " << under << " entries\n";
+        return 0;
+    }
+    std::map<std::string, size_t> kinds;
+    for (const auto& e : all) ++kinds[e.kind];
+    std::cout << all.size() << " entries:";
+    for (const auto& [k, n] : kinds) std::cout << " " << n << " " << k;
+    std::cout << "\n";
+    const std::string only = a.get("kind", "");
+    for (const auto& e : all)
+    {
+        if (!only.empty() && e.kind != only) continue;
+        std::string id = e.id, kind = e.kind;
+        id.resize(std::max<size_t>(id.size(), 30), ' ');
+        kind.resize(9, ' ');
+        std::cout << id << " " << kind << " " << e.name << "\n";
+    }
+    return 0;
 }
 
 // sieve dimensions: every dimension, built or planned, with its address, roof and links (IDEAS 19.162).
@@ -3391,7 +3453,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
@@ -3528,6 +3590,7 @@ int main(int argc, char** argv)
         if (a.command == "import") return cmd_import(a);
         if (a.command == "dimensions") return cmd_dimensions(a);
         if (a.command == "raid") return cmd_raid(a);
+        if (a.command == "catalogue") return cmd_catalogue(a);
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);
         if (a.command == "rope") return cmd_rope(a);

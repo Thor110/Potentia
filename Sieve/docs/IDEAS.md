@@ -7064,6 +7064,8 @@ and cataloging all formats across all dimensions of all things".
 - *The wiki principle:* every entry links to others, and following links from any entry reaches a
   common root, as following the first link on Wikipedia pages is said to lead to Philosophy. The
   catalogue can check this for itself: an entry with no path to the root is an entry not yet linked.
+- *Stage 1 built (12 November 2026):* `sieve catalogue`, 166 entries gathered from the code, all reaching
+  `information` (docs/CATALOGUE-ROADMAP.md).
 - *Dynamically, then procedurally:* first by hand and from what Sieve already knows (its packer's
   routes, importers, alphabets and Unicode blocks), then grown by importers of open registries, each
   stating its licence and its roof.
@@ -7373,3 +7375,62 @@ their own limitations respectively".
   (encryption of others' saves, space given, how machines find one another).
 - *Locally, today:* stage 1 and 2 stores are the person's own folders; no limit is needed there, and
   none is imposed.
+- *Edward's structure for digital identity (pointed to the same day: "digital ID has a structure in my
+  order.pdf manifesto amongst the projects github pages site"):* Pages/order.pdf, "Open Source
+  Cryptographically Secure Digital ID System" (Version 1.0). In outline: a single anchor (Edward, live
+  on stream) verifies people ten at a time; once 1,000 are verified, random groups of ten verify each
+  newcomer; anyone verified may register doubt about anyone, which draws ten more at random to
+  re-verify, and flags the group that vouched until it is settled; who verified whom is logged. It is
+  the vouching kind of limit listed under §19.179, with the anchor and the random groups as its start
+  and its check. Building it is a project of its own (identity, privacy, the record of vouches), beyond
+  the RAID; the RAID would read its result: verified or not.
+
+**19.179 The RAID between machines: peer to peer, with a few known nodes to start from; IP addresses
+against spam (Edward, 12 November 2026).** His words: "there would need to be a central node or
+network to help facilitate, or rather a p2p like distribution system that helps to allow for proper
+distribution of the raid nodes in order to ensure data preservation is always safe", "so essentially
+this just becomes p2p raid collapsing into its own state space amongst state spaces and recording plus
+helping track all information through saves", "this might force IPs to become a logging system to
+prevent the creation of multiple characters, which doesn't initially allow for people to have multiple
+at the same household or ip address but could do eventually", and "this would prevent spam creation of
+characters as a tactic to damage the system startup time".
+- *Peer to peer, with a few known nodes to start from:* the usual shape for this is a small number of
+  well-known nodes that a new machine contacts first (to learn of others), and then the machines
+  themselves holding and passing on the chunks, each chunk on several of them chosen by its name, as
+  stage 1 already chooses folders (§12.0l). No single machine holds everything, and none has to be
+  trusted, since every chunk is checked against its name. Losing the known nodes stops newcomers
+  joining, not the data.
+- *IP addresses as a limit (Edward's first answer to spam, §19.178), and what to weigh with it:*
+  - it is a weak limit both ways: many homes, flats, offices, schools and mobile networks share one
+    address, so honest people are refused; and anyone with a VPN or a phone network gets new addresses,
+    so a determined spammer is not. It is useful as one signal (how fast new characters arrive from one
+    address), not as the rule;
+  - an IP address is personal data under UK and EU data protection law, so logging it needs a stated
+    reason, the shortest keeping time, and care: kept as a salted hash rather than the address, only
+    by the starting nodes, deleted after the limit's window passes;
+  - other limits that suit a system with no central owner: a small proof of work to make each new
+    character (cheap once, costly a thousand times), a slow start for new characters (little storage
+    asked of others until they have stored for others in turn), and vouching by existing characters.
+    Each can sit beside the one-character, verified-identity rule (§19.178).
+- *To decide before stage 3:* Edward's choice among these limits, and who runs the first known nodes.
+- *Edward's answer, the same day:* "yes it is a known weak place but it is a starting place never the
+  less, scaling from IP through digital ID and up to the eventual reality or implementation and storage
+  or creation of the data it facilitates access to". So the limit grows in steps: by IP address first
+  (kept as salted hashes, as above), then by verified digital identity, then by the record of what a
+  character has stored and made itself; each step added without removing the one before.
+
+**19.180 A decentralised place to talk and keep one's own record (Edward, 12 November 2026).** His
+words: "this project and program can also become a decentralised distributed discord type system and
+or social media style platform for people to keep their own logs and information present, accurate and
+preserved amongst the information highway".
+- *What it would be:* each person's posts, logs and messages kept as saves of their own in the RAID
+  (§19.176): every message a version named by its SHA-256, every version naming the one before, so a
+  person's record cannot be changed afterwards without it showing, and is kept on many machines rather
+  than one company's.
+- *What it builds on:* the RAID between machines (stage 3, §19.179), the one-character, verified
+  identity (§19.178, Pages/order.pdf), and a way to find and follow others; channels and groups would
+  be the group dimensions of §19.157.
+- *What it adds that has to be decided:* who can read what (most of it private by default, so
+  encrypted, with the keys the person's), how a person withdraws something they no longer want shown
+  (a record can be kept but hidden, which is not the same as deleted, and the law may require
+  deletion), and moderation of what others post. Planned only.

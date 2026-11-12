@@ -81,6 +81,11 @@ tr -d '\r' < raid-verify.txt | q "^damaged   1$"
 $exe raid repair --drives $D | tr -d '\r' | q "^after     whole$"
 $exe raid get save.bin --out save-back.bin --drives $D > /dev/null
 cmp save.bin save-back.bin
+# The catalogue of formats (IDEAS 19.165): every entry reaches information, and FLAC's entry is what
+# its signature and lineage say.
+$exe catalogue --check | tr -d '\r' | q " entries reach information$"
+$exe catalogue file-flac | tr -d '\r' | q "^lineage    file-flac sound data information$"
+$exe catalogue file-flac | tr -d '\r' | q "^recognised first bytes 66 4C 61 43$"
 # The catalogue of dimensions: DNA links to research, and research is linked from DNA.
 $exe dimensions | tr -d '\r' | q "^research   planned"
 $exe dimensions research | tr -d '\r' | q "^linked by .*dna"

@@ -53,10 +53,10 @@ const std::vector<Dimension>& dimensions()
         {"games", "Games and their generators", S::Planned,
          "a game's seed and settings: each generator (procedural worlds, random dungeons) a sub state space",
          "each generator's own seed width and settings", "worlds characters personal simulations boardgames engines", "IDEAS 19.104, 19.161, 19.163"},
-        {"formats", "Formats", S::Planned,
+        {"formats", "Formats", S::Partly,
          "a format in the widest sense: a file format, script, language, notation or emoji set, with its documentation, "
          "how it is recognised, Sieve's support, measured statistics and links",
-         "every format recorded; each entry reaches the root by its links (the wiki principle)", "importers languages binary pages research",
+         "166 entries gathered from the code (stage 1: file kinds, importers, alphabets, Unicode blocks, Sieve's own); each reaches the root by its links (the wiki principle)", "importers languages binary pages research",
          "IDEAS 19.165; docs/CATALOGUE-ROADMAP.md"},
         {"simulations", "Simulations", S::Planned, "a world to visit: a simulation, catalogued and reachable",
          "every world the worlds line and the games' generators hold", "worlds games", "IDEAS 19.166"},

@@ -309,6 +309,22 @@ const std::vector<Page>& pages()
          {{"sieve import teapot.obj", "8 of 1,857 vertices, 9 of 3,552 faces kept"},
           {"sieve import --formats", "every importer and its roof"}}},
 
+        {"catalogue", "The catalogue of formats: every format Sieve knows, as one web leading up to information.",
+         "sieve catalogue [ID] [--kind KIND] [--path A,B] [--check]",
+         "Stage 1 of the catalogue of formats (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md): the file\n"
+         "kinds Sieve recognises, the model importers, the built-in alphabets, the Unicode blocks and\n"
+         "Sieve's own formats, gathered from the code itself, under a first layer of general entries\n"
+         "(text, image, sound, writing, compression...). Every entry leads by its part-of links up to\n"
+         "one root, information; --check says so for each (the wiki principle). With an ID, one entry\n"
+         "as text (sieve-format-v1), its version (the SHA-256 of that text) and its lineage.",
+         {{"ID", "One entry, such as file-png, script-greek or alphabet-dna4."},
+          {"--kind KIND", "List only one kind: general, file, importer, alphabet, script or sieve."},
+          {"--path A,B", "The shortest chain of links between two entries."},
+          {"--check", "Check that every entry reaches information; exit 1 if one does not."}},
+         {{"sieve catalogue --kind file", "the file kinds and what each is part of"},
+          {"sieve catalogue file-flac", "one entry, its signature and lineage"},
+          {"sieve catalogue --path file-png,alphabet-dna4", "how a PNG and DNA meet"}}},
+
         {"raid", "The infinite RAID, stage 1: saves kept on several folders, verified and repaired.",
          "sieve raid put FILE|get ID --out FILE|list|verify|repair --drives A,B,... [--copies N] [--name NAME]",
          "Keeps any save (a game's save file, a character, a dimension's file) on several folders the\n"
@@ -1572,7 +1588,7 @@ void print_usage()
         {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
-        {"Other lines", {"mesh", "import", "dimensions", "raid", "world", "ai", "ai-train", "diffuse"}},
+        {"Other lines", {"mesh", "import", "dimensions", "catalogue", "raid", "world", "ai", "ai-train", "diffuse"}},
         {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;

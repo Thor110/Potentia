@@ -21,6 +21,8 @@
 #include "sieve/dimensions.hpp"
 #include "sieve/animation.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/catalogue.hpp"
+#include "sieve/filekind.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
@@ -7200,6 +7202,41 @@ void test_raid()
     fs::remove_all(root, ec);
 }
 
+// The catalogue of formats, stage 1 (IDEAS 19.165): gathered from the code; ids unique; every link
+// names an entry; every entry reaches "information" (the wiki principle); one entry pinned.
+void test_catalogue()
+{
+    const auto& all = format_catalogue();
+    std::set<std::string> ids;
+    for (const auto& e : all) CHECK(ids.insert(e.id).second);
+    for (const auto& e : all)
+    {
+        for (const auto& l : e.links)
+        {
+            if (!format_by_id(l.to)) std::cerr << "format " << e.id << " links to " << l.to << ", which is not there\n";
+            CHECK(format_by_id(l.to) != nullptr);
+        }
+        if (format_lineage(e.id).empty()) std::cerr << "format " << e.id << " does not reach information\n";
+        CHECK(!format_lineage(e.id).empty());
+    }
+    // Every file kind, importer and built-in alphabet is in it.
+    for (const auto& k : file_kinds())
+    {
+        std::string id = k == "?" ? "unknown-bytes" : k;
+        for (char& c : id) c = char(std::tolower(static_cast<unsigned char>(c)));
+        const FormatEntry* e = format_by_id("file-" + id);
+        if (!e) std::cerr << "file kind " << k << " has no entry\n";
+        CHECK(e && e->kind == "file");
+    }
+    CHECK(format_by_id("file-png") && format_by_id("model-gltf") && format_by_id("alphabet-dna4") && format_by_id("script-greek") && format_by_id(kAnimationVersion));
+    CHECK(format_lineage("file-flac") == (std::vector<std::string>{"file-flac", "sound", "data", "information"}));
+    CHECK(format_by_id("file-flac")->recognised == "first bytes 66 4C 61 43");
+    CHECK(format_by_id("file-flac")->version() == "22b664d61e80e56a39b304716ed25c849dcfb3b783d662b5f3842736f90b4081");
+    const auto path = format_path("file-png", "alphabet-dna4");
+    CHECK(path.size() >= 3 && path.front() == "file-png" && path.back() == "alphabet-dna4");
+    CHECK(format_path("file-png", "nowhere").empty() && !format_by_id("nowhere"));
+}
+
 // `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole
 // suite): only the tests whose call names one of them (as part of it: "mix" runs test_mix to
 // test_mix4); `--list` names them all and runs none.
@@ -7243,6 +7280,7 @@ void run_all(int argc, char** argv)
     RUN(test_midi_read());
     RUN(test_character());
     RUN(test_raid());
+    RUN(test_catalogue());
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());

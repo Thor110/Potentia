@@ -50,8 +50,9 @@ tracks and movies composed of them; models, worlds, AI and binary.
   and once everything known is catalogued it pops into a hallway of links between all knowledge.
 - *Languages* (§19.22, §19.59, §19.152), *emotion* (§19.144), *theoretical law* (§19.164), *board
   games* (§19.171: boards, pieces, rules and artwork across genres and franchises).
-- *Formats* (§19.165): every format in the widest sense, from file formats through scripts and
-  languages to emoji, as one web of entries that all lead to one root; the plan is
+- *Formats* (§19.165, partly built): every format in the widest sense, from file formats through
+  scripts and languages to emoji, as one web of entries that all lead to one root. Stage 1 is
+  `sieve catalogue` (166 entries gathered from the code); the plan is
   [CATALOGUE-ROADMAP.md](CATALOGUE-ROADMAP.md).
 - *Simulations* (§19.166): every world to visit, catalogued and reachable.
 - *Games and their generators* (§19.104, §19.161, §19.163): each generator (procedural worlds,

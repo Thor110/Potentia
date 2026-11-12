@@ -7,7 +7,7 @@ metrics and recorded stats, pros, cons, etc for all things", where "all informat
 other information one way or another, like the wiki principle where all pages lead to a certain place
 or space"; recorded "dynamically and then procedurally ... across all dimensions of all things".
 
-This is the plan. Nothing on it is built yet beyond what *Already here* lists. It is in the catalogue
+This is the plan. Stage 1 is built (below); the rest is not. It is in the catalogue
 of dimensions as `formats` (`sieve dimensions formats`). Every figure the catalogue holds will be
 measured or sourced, as everywhere in Sieve; a pro or con with neither is not recorded.
 
@@ -72,7 +72,12 @@ information, and back down to Welsh).
 
 ## Stages
 
-1. **Gather what Sieve knows (by hand, from its own sources).** Turn the lists above into entries: the
+1. **(Built 12 November 2026: `sieve catalogue`, core/include/sieve/catalogue.hpp. Gathered from the code itself
+   rather than by hand, so it cannot fall behind it: 166 entries, 26 file kinds with their signatures,
+   3 importers, 6 alphabets, 102 Unicode blocks, 8 of Sieve's own formats, under 21 general entries;
+   every one reaches `information`, checked by `sieve catalogue --check` and the unit tests. Not yet:
+   the packer's routes per format and the measured figures in each entry.)** **Gather what Sieve knows
+   (by hand, from its own sources).** Turn the lists above into entries: the
    file kinds, the packer's formats and routes, the importers, the alphabets and blocks, `dna4`. Each
    entry's `sieve` field is filled from the code, and its `stats` from the results files that already
    exist. Add `information` and the first layer of general entries under it: compression, text, image,
