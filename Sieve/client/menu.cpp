@@ -1627,6 +1627,18 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     SDL_Event e = event;
     SDL_ConvertEventToRenderCoordinates(r_, &e);
     if (e.type == SDL_EVENT_QUIT) { done = true; result = Result::Quit; return; }
+    // The System Viewer: the catalogue's keys, the wheel turning its ring; Esc back the way it came.
+    if (viewer_)
+    {
+        if (e.type == SDL_EVENT_MOUSE_WHEEL) cat_key(e.wheel.y > 0 ? SDLK_LEFT : SDLK_RIGHT);
+        else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
+        {
+            done = true;
+            result = Result::Back;
+        }
+        else if (e.type == SDL_EVENT_KEY_DOWN) cat_key(e.key.key);
+        return;
+    }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
     // The character on its pedestal, turned by a drag across it (the right-hand panel's CHARACTER).
     if (side_open_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
@@ -1764,7 +1776,8 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     // While it is in, the right-hand panel takes the keys (its page's settings); Esc closes it.
     if (side_open_)
     {
-        if (e.key.key == SDLK_ESCAPE) side_open_ = false;
+        if (e.key.key == SDLK_ESCAPE) set_side(false);
+        else if (e.key.key == SDLK_TAB) toggle_panel(); // the settings instead (only one panel is in at a time)
         else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_S)
         {
             // Save the character as a .character file (its text: settings, then its spheres).
@@ -2037,12 +2050,37 @@ void Menu::toggle_panel()
 {
     panel_open_ = !panel_open_;
     panel_auto_ = false;
+    // Only one panel is in at a time: the settings coming in send the right-hand panel out, and
+    // its going then brings nothing back (they are in already).
+    if (panel_open_ && side_open_)
+    {
+        side_open_ = false;
+        panel_before_side_ = false;
+    }
 }
 
 void Menu::toggle_side()
 {
-    side_open_ = !side_open_;
+    set_side(!side_open_);
     char_init();
+}
+
+void Menu::set_side(bool open)
+{
+    if (open == side_open_) return;
+    side_open_ = open;
+    if (open)
+    {
+        // The settings go out, remembered as in if they were (or were out only for the calculating).
+        panel_before_side_ = panel_open_ || panel_auto_;
+        panel_open_ = false;
+        panel_auto_ = false;
+    }
+    else if (panel_before_side_)
+    {
+        panel_open_ = true;
+        panel_before_side_ = false;
+    }
 }
 
 void Menu::char_init()
@@ -2267,8 +2305,9 @@ void Menu::cat_init()
 void Menu::open_catalogue(const std::string& id)
 {
     cat_init();
-    side_open_ = true;
+    set_side(true);
     side_ = 1;
+    panel_ = 0; // (in at once, so the settings out at once)
     side_page_ = 2;
     cat_system_ = id == "language" || id.rfind("language-", 0) == 0 || id.rfind("family-", 0) == 0 ? 1 : 0;
     for (const auto& e : cat_)
@@ -2374,7 +2413,7 @@ void Menu::cat_key(SDL_Keycode key)
 
 // The entry you stand at in the middle, its doors round it in a ring (up warm, down grey, across
 // blue), the chosen one ringed; its fields below.
-void Menu::render_catalogue(float x, float top, float bottom)
+void Menu::render_catalogue(float x, float top, float bottom, float width)
 {
     cat_init();
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, warm{230, 200, 120, 255}, blue{140, 180, 240, 255};
@@ -2386,12 +2425,12 @@ void Menu::render_catalogue(float x, float top, float bottom)
     const int n = int(doors.size());
     cat_door_ = n ? std::clamp(cat_door_, 0, n - 1) : 0;
     float y = top + 40;
-    const size_t cols = size_t((kSideW - 28) / 8);
+    const size_t cols = size_t((width - 28) / 8);
     text(r_, x + 14, y, fit_cells(tr(cat_system_ ? "side.cat.system.language" : "side.cat.system.formats") + "  " + trf("side.cat.count", {std::to_string(cat_.size())}), cols), 1, grey);
     y += 18;
     // The ring: as many doors as fit (24), a window round the chosen one when there are more.
     y += 18; // (room for the line saying which doors are shown, when not all of them are)
-    const float cx = x + kSideW / 2, ringh = std::max(80.0f, (bottom - 40) - y - 120);
+    const float cx = x + width / 2, ringh = std::max(80.0f, (bottom - 40) - y - 120);
     const float cy = y + ringh / 2, R = std::max(40.0f, ringh / 2 - 14); // (its height: the room it has)
     const int shown = std::min(n, 24);
     const int first = n > shown ? std::clamp(cat_door_ - shown / 2, 0, n - shown) : 0;
@@ -2405,7 +2444,7 @@ void Menu::render_catalogue(float x, float top, float bottom)
         const float a = k < right ? -sweep + 2 * sweep * t : 3.1415927f + sweep - 2 * sweep * t;
         // An ellipse wider than tall: the labels are wider than they are high, so the doors at the top
         // and the bottom, which stand side by side, get the room.
-        const float rx = kSideW / 2 - 70, dx = cx + rx * std::cos(a), dy = cy + R * std::sin(a);
+        const float rx = width / 2 - 70, dx = cx + rx * std::cos(a), dy = cy + R * std::sin(a);
         const CatDoor& d = doors[size_t(i)];
         const SDL_Color c = d.dir > 0 ? warm : d.dir < 0 ? grey : blue;
         SDL_SetRenderDrawColor(r_, Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255);
@@ -2576,11 +2615,37 @@ void Menu::render_speaks(float x, float top, float bottom)
     side_scrollbar(x, y, room, side_scroll_, side_scroll_max_, content);
 }
 
+void Menu::open_viewer(const std::string& id)
+{
+    open_catalogue(id);
+    viewer_ = true;
+    side_open_ = false; // (not the panel: the viewer has the window)
+    side_ = 0;
+    panel_open_ = false;
+    panel_ = 0;
+    panel_before_side_ = false;
+}
+
+// The System Viewer: its title, the tree as a ring of doors round the entry you stand at across
+// the window's middle, and its keys at the foot. A view of its own, for walking and connecting the
+// systems' trees, not a page of the setup menu.
+void Menu::render_viewer(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
+    text(r_, 20, 16, tr("viewer.title"), 3, white);
+    text(r_, 20, 48, tr("viewer.subtitle"), 1, grey);
+    // As wide as the window allows but no wider than reads well; the ring's middle the window's.
+    const float width = std::min(W - 40, 1100.0f), x = (W - width) / 2, top = 60, bottom = H - 30;
+    render_catalogue(x, top, bottom, width);
+    text(r_, 20, H - 24, tr("viewer.footer"), 1, grey);
+}
+
 void Menu::open_yours()
 {
     char_init();
-    side_open_ = true;
+    set_side(true);
     side_ = 1;
+    panel_ = 0;
     side_page_ = 1;
     yours_read();
 }
@@ -2870,6 +2935,11 @@ void Menu::render()
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderClear(r_);
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
+    if (viewer_)
+    {
+        render_viewer(W, H); // (and nothing of the setup: its lines are not counted for it)
+        return;
+    }
 
     text(r_, 20, 16, tr("setup.title"), 3, white);
     text(r_, 20, 48, tr("setup.subtitle"), 1, grey);
@@ -3318,14 +3388,12 @@ void Menu::render_side(float W, float H)
     }
     if (side_ <= 0) return;
     const float x = W - side_ * kSideW, top = 70, bottom = H - 70;
-    const SDL_FRect box{x, top, kSideW, bottom - top};
+    // A mirror of the settings panel: no frame and no edge line, only black under it so the map
+    // it slides over is not seen through it (the map has given it the room once it is in), and its
+    // scroll bars on its inner, left edge where the settings have theirs on their right.
+    const SDL_FRect box{x, top, kSideW, H - top};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderFillRect(r_, &box);
-    SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
-    SDL_RenderRect(r_, &box);
-    // Its inner edge, the side it slides in from, drawn full height as the settings panel's is.
-    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
-    SDL_RenderLine(r_, x, 0, x, H);
     // The pages' names: one now, more as the systems come.
     static const char* const kPages[] = {"side.page.character", "side.page.yours", "side.page.catalogue", "side.page.speaks"};
     float px = x + 14;
@@ -3348,7 +3416,7 @@ void Menu::render_side(float W, float H)
     }
     if (side_page_ == 2)
     {
-        render_catalogue(x, top, bottom);
+        render_catalogue(x, top, bottom, kSideW);
         text(r_, x + 14, bottom - 22, tr("side.cat.footer"), 1, grey);
         return;
     }

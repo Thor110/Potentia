@@ -7522,7 +7522,7 @@ language language tab for character creation".
   dimensions, characters and species, the RAID's chains) charted by the same viewer as they come.
 - *Built the same day:* **System Viewer** on the main menu and the pause menu, with Formats and
   Language; the setup menu opens with that system in the right-hand panel, and S turns from one to the
-  other. The language catalogue's first entries are in data/languages: thirteen languages (English,
+  other. (*12 November 2026:* a view of its own since, the whole window, not the setup menu's panel.) The language catalogue's first entries are in data/languages: thirteen languages (English,
   Welsh, French, German, Spanish, Greek, Russian, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean) in
   five families, each with its ISO 639 codes and linked to the scripts it is written in; the two
   catalogues are one web of 187 entries.

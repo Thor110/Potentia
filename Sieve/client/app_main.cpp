@@ -176,6 +176,8 @@ const char* kUsage =
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
     "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
     "                      19.165): the catalogue of formats as a ring of doors\n"
+    "  --system-viewer ID  with --menu: the System Viewer instead (the whole window, as the main menu's\n"
+    "                      System Viewer opens it), standing at entry ID\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
     "                      (also into the store, and into the infinite RAID where [raid] drives is set)\n"
     "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1),\n"
@@ -1328,6 +1330,7 @@ int run(const Args& a)
         if (a.has("animation-frame")) menu.set_animation_frame(int(a.get_u32("animation-frame", 0)));
         if (a.has("save-character")) menu.character_chosen(a.get("save-character"), true); // as Ctrl+S does, saved as the menu is drawn
         if (a.has("catalogue-entry")) menu.open_catalogue(a.get("catalogue-entry"));
+        if (a.has("system-viewer")) menu.open_viewer(a.get("system-viewer"));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1340,6 +1343,9 @@ int run(const Args& a)
             menu.render();
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        // Only one of the two panels is in at a time (and neither in the System Viewer).
+        if (menu.viewer()) std::cout << "system viewer: open\ncatalogue: " << menu.catalogue_line() << "\n";
+        else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
             std::string sp;
@@ -1566,7 +1572,7 @@ int run(const Args& a)
     bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
     bool open_yours = false; // Personal Dimensions chosen: the setup menu opens with YOURS on the right
-    std::string open_system; // the System Viewer chosen: the setup menu opens with that system on the right
+    std::string open_system; // the System Viewer chosen: it opens on that system, the whole window (Esc: the main menu)
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
@@ -1634,7 +1640,7 @@ int run(const Args& a)
                 skip_setup = true;
             }
             if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
-            if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the setup menu, its right-hand panel on the system
+            if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
             if (r == MainMenu::Result::ManualNav)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
@@ -1665,7 +1671,7 @@ int run(const Args& a)
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
             if (open_yours) menu.open_yours();
             open_yours = false;
-            if (!open_system.empty()) menu.open_catalogue(open_system);
+            if (!open_system.empty()) menu.open_viewer(open_system); // the System Viewer: the window its own, Esc back here
             open_system.clear();
             const Menu::Result r = menu.run();
             keep_setup(settings, menu.settings());
@@ -1807,7 +1813,7 @@ int run(const Args& a)
                 Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
                 menu.set_in_game(true);
                 if (hall->take_personal_request()) menu.open_yours();
-                if (hall->take_systems_request()) menu.open_catalogue("information");
+                if (hall->take_systems_request()) menu.open_viewer("information"); // the System Viewer; Esc back to the hallway
                 in_game_menu = menu.run();
                 if (in_game_menu == Menu::Result::Back)
                 {

@@ -462,6 +462,9 @@ private:
     // systems to come find their place in it. While it is in, the map gives it the room.
     float side_ = 0;             // as drawn: 0 out of sight, 1 in its place
     bool side_open_ = false;     // where it is sliding to
+    // Only one of the two panels is in at a time (Edward, 12 November 2026): the right-hand one
+    // coming in sends the settings out, and they come back when it goes, if they were in before it.
+    bool panel_before_side_ = false;
     SDL_FRect side_tab_ = {};    // its tab at the right edge, while it is out
     int side_page_ = 0;          // the page shown (0: CHARACTER, 1: YOURS, 2: CATALOGUE)
     // CATALOGUE: every entry (the code's and data/catalogue's), where you stand, the door chosen, and
@@ -484,7 +487,7 @@ private:
     std::vector<CatDoor> cat_doors() const;
     void cat_init();
     void cat_key(SDL_Keycode key);
-    void render_catalogue(float x, float top, float bottom);
+    void render_catalogue(float x, float top, float bottom, float width);
     // LANGUAGE (page 3): the languages your character speaks, ticked from the language catalogue;
     // part of its save (sieve-save-v1, sieve/save.hpp).
     std::vector<std::string> speaks_;
@@ -551,11 +554,19 @@ public:
     const std::string& character_note() const { return char_note_; } // the line under the CHARACTER page's rows
     void obj_chosen(const std::string& path);
     void open_yours();                              // the right-hand panel open on YOURS (Personal Dimensions)
+    // The System Viewer (the main menu's, and the pause menu's): the catalogue's trees on their own,
+    // the whole window, not the setup menu's sliding panel; Esc goes back the way it came (Back).
+    void open_viewer(const std::string& id);
+    bool viewer() const { return viewer_; }
 private:
     void toggle_side();
+    void set_side(bool open);    // in or out; only one panel is in at a time (see panel_before_side_)
+    void render_viewer(float W, float H);
+    bool viewer_ = false;
     void render_side(float W, float H);
 public:
     bool side_open() const { return side_open_; } // (for a picture's report: CI checks the key)
+    bool panel_open() const { return panel_open_ || panel_auto_; } // (the same: the settings panel in, or out only while counting)
     // (for a picture's report) the right-hand panel's page, and how many characters YOURS lists
     int side_page() const { return side_page_; }
     size_t yours_count() const { return yours_.characters.size(); }

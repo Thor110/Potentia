@@ -12,7 +12,7 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    for byte, and the next draft (v35) begins empty. Then mixing's time, measured against
    results/bench-make-quick-2026-11-12.md (mixing is 13.7 s of program.exe's 21.3 s, 7.8 s of
    folder.tar's 16.3 s).
-2. **The System Viewer and the right-hand panel, put right** (Edward, the same evening): the System
+2. **The System Viewer and the right-hand panel, put right** (*done 12 November 2026: the System Viewer the whole window, `--system-viewer ID`; the right-hand panel without its frame and white line, the map squashing beside it; one panel in at a time, CI step 10*) (Edward, the same evening): the System
    Viewer a viewer of its own, one interface for the trees that fill out and connect the state spaces,
    not the setup menu's sliding panel; the right-hand panel a direct mirror of the left: it slides in
    squashing the dimensions as the left one does, without the white line down its side, its scroll bar

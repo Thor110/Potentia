@@ -410,12 +410,27 @@ q "^speaks: language-french,language-korean$" speaks.txt
 save=$(sed -n 's/^save: //p' speaks.txt)
 grep -q "^speaks = language-french,language-korean" speaks.ini
 $H --menu --settings speaks.ini --press "\`" --screenshot speaks2.png | tr -d '\r' | q "^save: $save$"
-# The System Viewer (IDEAS 19.183): on the main menu after Personal Dimensions, its two systems, and S
-# in the panel turning from FORMATS to LANGUAGE (the five families, writing and information round
-# "language"); a language leads to the scripts it is written in.
+# The System Viewer (IDEAS 19.183): on the main menu after Personal Dimensions, its two systems. It is
+# a view of its own, the whole window, not the setup menu's panel (Edward, 12 November 2026): S turns
+# from FORMATS to LANGUAGE (the five families, writing and information round "language"); a language
+# leads to the scripts it is written in.
 $H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Down" --screenshot sys-menu.png | tr -d '\r' | q "^read aloud: Language$"
-$H --menu --catalogue-entry information --press "s" --screenshot sys-language.png | tr -d '\r' | q "^catalogue: language: 7 doors$"
-$H --menu --catalogue-entry language-japanese --press "Right,Return" --screenshot sys-kana.png | tr -d '\r' | q "^catalogue: script-japanese-kana: "
+$H --menu --system-viewer information --screenshot sys-viewer.png | tr -d '\r' > sys-viewer.txt
+q "^system viewer: open$" sys-viewer.txt
+q "^catalogue: information: " sys-viewer.txt
+if grep -q "^settings panel: \|^right-hand panel: " sys-viewer.txt; then exit 1; fi
+$H --menu --system-viewer information --press "s" --screenshot sys-language.png | tr -d '\r' | q "^catalogue: language: 7 doors$"
+$H --menu --system-viewer language-japanese --press "Right,Return" --screenshot sys-kana.png | tr -d '\r' | q "^catalogue: script-japanese-kana: "
+# Only one panel in at a time: the right-hand one sends the settings out, Tab brings them back in
+# and sends it out, and Esc on it brings the settings back as they were.
+$H --menu --catalogue-entry image --screenshot one-side.png | tr -d '\r' | q "^settings panel: out$"
+$H --menu --catalogue-entry image --press "Tab" --screenshot one-tab.png | tr -d '\r' > one-tab.txt
+q "^settings panel: in$" one-tab.txt
+if grep -q "^right-hand panel: " one-tab.txt; then exit 1; fi
+$H --menu --press "\`,Escape" --screenshot one-back.png | tr -d '\r' > one-back.txt
+q "^settings panel: in$" one-back.txt
+if grep -q "^right-hand panel: " one-back.txt; then exit 1; fi
+$H --menu --press "Tab,\`,Escape" --screenshot one-out.png | tr -d '\r' | q "^settings panel: out$"
 # In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt
