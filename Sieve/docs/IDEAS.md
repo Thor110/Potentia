@@ -7032,3 +7032,22 @@ impossible throughout time".
   - *So the map grows from both ends:* the space of every possible history is fixed and exact,
     and the set of points known to be real in it only ever grows, each fixed in place by its
     witnesses, so it cannot later be moved.
+- **Where the known, the unknown and the lost cross (Edward, 12 November 2026).** His words: "at a
+  point in time that is, will eventually be pinpointed where all that could possibly be known or
+  unknown crosses over with what is lost". A third region on the same map:
+  - *Lost records are on the lines too:* a record destroyed still had an address, and still has
+    it; what is gone is any witness to which address it was. So the lost are places once real,
+    now indistinguishable from the unknown, and the map can hold them as regions: "somewhere here
+    stood something real" (a book known to have existed, by title and length; a file known by its
+    name and size; a page known from quotations of it).
+  - *The crossing point:* at any moment, the space divides into what is witnessed (known), what
+    could still be found (unknown, not yet lost), and what can no longer be told from noise
+    (lost). Each record has a moment past which, with no copy and no witness left, it crosses from
+    the second into the third. That moment is what can be pinpointed: by the last witness of it,
+    the last copy, the last reference.
+  - *What the system does about it:* it moves that point. Witnessing a record early (naming it,
+    publishing the name, keeping copies) keeps it out of the lost for good; partial witnesses
+    (a title, a size, a hash, a quotation) shrink the region a lost record must lie in, so it may
+    one day be recognised again if its bytes turn up; and the exact space bounds even the lost
+    exactly: how many places a lost record of a known size could be, and which a filter of what it
+    was like would keep.
