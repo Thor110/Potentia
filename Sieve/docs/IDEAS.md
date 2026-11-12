@@ -2065,6 +2065,10 @@ whether one draws, moves and responds; cabinets in its rooms play them. Nothing 
 *Lenses (Edward, 12 November 2026):* "a mode to toggle from executable through console as well as
 source folder, everything becomes like a lens": one game seen run, as its machine's state, or
 unfolded as a folder of source, each exact both ways (GAME.md §11).
+*A source tree (Edward, 12 November 2026):* "hooked up to git and github like systems and create a
+source tree across the gaming and computing spectrum to light up the information highway": every
+unit's source folder a repository, its variants branches, and the whole a tree of how software
+descends from software (GAME.md §11).
 
 **19.12 A metrics list, made with every release (Edward, 12 October 2026).** Edward wants an
 automated list, made each build and issued as a text file with the installer, of how much each

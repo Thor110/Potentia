@@ -502,6 +502,24 @@ look as a scale, each step a setting rather than a different asset:
 - *Alien Trilogy* is a good first case: its sprites and low-polygon levels are the low end of the
   scale, and ALTEngine is where a higher setting could be tried against the original.
 
+**A source tree across gaming and computing (Edward, 12 November 2026).** His words: "eventually it
+can be hooked up to git and github like systems and create a source tree across the gaming and
+computing spectrum to light up the information highway!"
+- *What it joins up:* the source-folder lens already makes a unit a folder of files that builds
+  back to its exact bytes. A folder like that can be a git repository. Hooked to git and to
+  GitHub-like hosts, every game, engine and program on the map would be a repository: its history
+  as commits, its variants (the original, ALTEngine, a fork) as branches, and the engines that
+  share assets or code as links between repositories.
+- *The tree:* put together, the source tree spans the whole gaming and computing spectrum. A game
+  sits beside the engine that runs it, the engine beside the libraries it uses, and the libraries
+  beside the systems they came from. A walk through it is a walk through how software descends
+  from software, each node at its address and its exact bytes.
+- *What Sieve brings to it:* an address and a hash for every version (the same bytes always have
+  the same place), the sieve's stripping and streaming, so a tree that large stays small to carry,
+  and the lenses for opening any node as it runs, as its machine, or as its source.
+- *Whose code:* as with the games' assets, the tree links to repositories under their owners'
+  licences, which their hosts keep. Sieve holds the map, not the code.
+
 **Questions for Edward:** whether a games line belongs in the hallway at all, or only the cabinets
 of §4; how it is reached (a door of its own, the halfway room of §4, or found through the game
 line); and whether the console's first size (32 × 32, one bit, 256 bytes) is the right one to start
