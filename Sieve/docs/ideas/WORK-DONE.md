@@ -119,3 +119,10 @@ The log begins with the dated write-ups in `results/` (5 October 2026 onwards). 
 - MANUAL, SPECIFICATIONS and FILTER-PLUGINS checked against the code (IDEAS 19.134): 15 places corrected (door order and colours with worlds and AI, size limits from the machine, ITEM MEMORY, the META tab, the menu walk, the Tools commands, retired data filters).
 - VOICES cleaned, first pass: 62 technical lines and Gemini's two messages moved to [VOICES-STASHED.md](VOICES-STASHED.md), each with where its idea went (IDEAS §19.145).
 - IMPLEMENTED checked against the code (IDEAS §19.145): every entry present, none missing; 13 changed since and noted under each. Build or Buy's comment on its constants corrected.
+- The character system, step 1: the right-hand panel in the setup menu, opened by the key left of 1 or its tab (IDEAS §19.148).
+- The character system, step 2: `sieve-character-v1`, a seed and settings unfolding a tree of spheres in integers, with unit tests pinning two characters (SPECIFICATIONS §12.0j).
+- The character system, step 3: the CHARACTER page (seed, limbs, joints, branches, symmetry, head), the character drawn turning as spheres and bones.
+- The character's pedestal: a disc under it, turned by dragging or by [ and ] (IDEAS §19.150).
+- The scalable graphics test: the CHARACTER page draws one character as pixels, wireframe, voxels or shaded (IDEAS §19.147).
+- The character system, step 4: `.character` files saved and opened (Ctrl+S, Ctrl+O, `--character`), kept in the settings file, and the character walking beside you in the hallway (IDEAS §19.148).
+- The character system, step 5: the hallway scaled to fit your character, with a central metric of 4096 units a metre (IDEAS §19.153).

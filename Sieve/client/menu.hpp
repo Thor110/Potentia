@@ -16,6 +16,7 @@
 // count its survivors exactly, the map shows them as a filled bar inside the line's bar.
 #pragma once
 
+#include "sieve/character.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
 #include "display.hpp"
@@ -451,6 +452,46 @@ private:
     Uint64 calc_since_ = 0;      // when the calculating began (ns); 0: not calculating
     bool calc_acted_ = false;    // this calculating has slid it out once already (Tab may bring it back)
     SDL_FRect panel_tab_ = {};   // the SETTINGS tab, while the panel is out
+    // The right-hand panel (IDEAS §19.148): opposite SETTINGS, it slides in from the right edge,
+    // brought by the key left of 1 (read by its place, SDL's GRAVE scancode: ` alone, ¬ with Shift
+    // on a UK keyboard) or by its tab. It is a stack of pages, one a system, CHARACTER first; the
+    // systems to come find their place in it. While it is in, the map gives it the room.
+    float side_ = 0;             // as drawn: 0 out of sight, 1 in its place
+    bool side_open_ = false;     // where it is sliding to
+    SDL_FRect side_tab_ = {};    // its tab at the right edge, while it is out
+    int side_page_ = 0;          // the page shown (0: CHARACTER)
+    // CHARACTER (sieve-character-v1): while the panel is in, it takes the keys: Up/Down choose a
+    // setting, Left/Right change it (Shift x10 on the seed), R a random seed; ` or Esc closes it.
+    sieve::CharacterSettings char_settings_;
+    sieve::Character char_;      // unfolded from char_settings_ when it changes
+    int char_row_ = 0;
+    // How the character is drawn (IDEAS §19.147, the scalable graphics seed): one character, many
+    // levels, from a pixel a sphere to shaded spheres under a light. It changes no character.
+    int char_draw_ = 1;          // 0 pixels, 1 wireframe, 2 voxels, 3 shaded
+    // The pedestal under the character (IDEAS §19.150): a click and drag on the drawing turns it, as
+    // [ and ] do from the keys (15 degrees a press).
+    float char_turn_ = 0.6f;     // radians about the upright
+    bool char_dragging_ = false;
+    float char_drag_x_ = 0;
+    SDL_FRect char_drag_ = {};   // the drawing's box, where a drag turns it
+    void char_key(SDL_Keycode key, bool shift);
+    void char_init();            // from the settings file's [character], once
+    void char_store();           // into it, and saved, after a change
+    bool char_ready_ = false;
+    // A .character file chosen in a dialog (Ctrl+S, Ctrl+O), taken up on the next frame.
+    std::mutex char_mx_;
+    std::optional<std::string> char_save_to_, char_load_from_;
+    std::string char_note_;      // the last save's or open's result, shown under the drawing
+public:
+    void character_chosen(const std::string& path, bool save);
+    void load_character(const std::string& path); // --character FILE, and Ctrl+O
+private:
+    void toggle_side();
+    void render_side(float W, float H);
+public:
+    bool side_open() const { return side_open_; } // (for a picture's report: CI checks the key)
+    std::string character_id() const { return char_.spheres.empty() ? std::string() : char_.id(); }
+private:
     // The settings above the three actions scroll when they are taller than the room for them:
     // the wheel over the panel moves them, and choosing a row (Up, Down) brings it into view.
     float list_scroll_ = 0;      // px of the list above the top of its room

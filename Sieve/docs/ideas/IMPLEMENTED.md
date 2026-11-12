@@ -272,7 +272,7 @@ a feature can be checked on its own while the full run is kept for the end of a 
 *Built (6 November 2026):* `sieve_tests tests --only NAME[,NAME...]` runs only the tests whose name
 holds one of them, and `--list` names the 80; `--only mix4,rope_wave` is 242 checks in about 4 s here.
 
-*Checked against the code, 12 November 2026: present, changed since. `--only mix4,rope_wave` now runs 274 checks (242 when written); `--list` still gives 80 tests.*
+*Checked against the code, 12 November 2026: present, changed since. `--only mix4,rope_wave` now runs 274 checks (242 when written); `--list` gives 81 tests since the character test (12 November 2026); 80 when checked.*
 
 **19.12 A metrics list, made with every release (Edward, 12 October 2026).** Edward wants an
 automated list, made each build and issued as a text file with the installer, of how much each

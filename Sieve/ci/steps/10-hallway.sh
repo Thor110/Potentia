@@ -318,6 +318,31 @@ $H --menu --settings models.ini --training-dir data/training --press "$downs,Rig
 q "^picture_model = .*melodies-2x64" models.ini
 $H --menu --settings models.ini --training-dir data/training --press "$downs,Left" --screenshot menu-models.png | q "saved menu-models.png"
 q "^picture_model = .*figures-2x32" models.ini
+# The right-hand panel (IDEAS 19.148): the key left of 1, read by its place, opens it and closes it,
+# and on the key's row (where letters are typed) it still opens it.
+$H --menu --press "\`" --screenshot side-open.png | tr -d '\r' | q "^right-hand panel: open (CHARACTER)"
+$H --menu --press "\`,\`" --screenshot side-closed.png | tr -d '\r' > side.txt
+if grep -q "right-hand panel" side.txt; then exit 1; fi
+$H --menu --press "Down,Down,\`" --screenshot side-key-row.png | tr -d '\r' | q "^right-hand panel: open (CHARACTER)"
+# Its CHARACTER page (sieve-character-v1): the default character (seed 0, four limbs of three joints,
+# bilateral, a head), and with six limbs of four joints, each named by its SHA-256.
+$H --menu --press "\`" --screenshot char-default.png | tr -d '\r' | q "^character: e5ba98461383a7fae83b0e070885b593653c80e1a5e17d79982abc26a12cfcb7"
+$H --menu --press "\`,Down,Right,Right,Down,Right" --screenshot char-6x4.png | tr -d '\r' | q "^character: 455b1fd6a86a035c41f4ec6f1d4d2ce60869595fc67c30e4a913397d19f38972"
+# A .character file (its settings line alone is enough): opened on the CHARACTER page and beside
+# you in the hallway as the same character; a file missing a setting is refused, and the run stops.
+printf 'sieve-character-v1 seed=99 limbs=5 joints=3 branches=1 symmetry=bilateral head=yes\n' > c99.character
+$H --menu --character c99.character --press "\`" --screenshot char-file.png | tr -d '\r' | q "^character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
+$H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^character beside you: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
+# The hallway fits the character (IDEAS 19.153): this one fits as built; eight radial limbs of twelve
+# joints grow it 1.41 times.
+$H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^hallway scale: 1.00$"
+printf 'sieve-character-v1 seed=5 limbs=8 joints=12 branches=3 symmetry=radial head=yes\n' > big.character
+$H --no-menu --character big.character --screenshot char-big.png | tr -d '\r' | q "^hallway scale: 1.41$"
+printf 'sieve-character-v1 seed=99 limbs=5\n' > bad.character
+if $H --no-menu --character bad.character --screenshot char-bad.png > char-bad.txt 2>&1; then exit 1; fi
+q "missing: joints" char-bad.txt
+# Drawn shaded (the drawing row, the seventh): the same character, since drawing changes none.
+$H --menu --press "\`,Down,Right,Right,Down,Right,Down,Down,Down,Down,Right,Right" --screenshot char-shaded.png | tr -d '\r' | q "^character: 455b1fd6a86a035c41f4ec6f1d4d2ce60869595fc67c30e4a913397d19f38972"
 # Melodies in CHAT: a melody model's (the same addresses as --make), a random melody and picture
 # (/random), and GO TO IT on a melody holds it on AUDIO.
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --talk "/random melody" --training-dir data/training --screenshot chat-mel.png | tr -d '\r' > chatmel.txt

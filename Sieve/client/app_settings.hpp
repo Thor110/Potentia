@@ -129,6 +129,13 @@ struct AppSettings
     // What the packer weighs ways by: size, balanced (the default since 7 November 2026: mixing only
     // where it saves 4% of what it carries) or speed (Prioritise Decoding Speed: no file mixed).
     std::string locator_priority = "balanced";
+    // [character] (IDEAS 19.148): your character as its settings line (sieve-character-v1; empty: the
+    // default character), how the CHARACTER page draws it (0 pixels to 3 shaded), and whether it
+    // walks beside you in the hallway.
+    std::string character;
+    int character_drawing = 1;
+    bool character_beside = true;
+    int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)
     bool locator_more = false;       // More formats: the comparison with gzip, bzip2, zstd, brotli and lz4 too (0.13.78)
     std::string locator_sound = "temporary"; // Sound as FLAC (v34 draft): "temporary", "permanent" or "off" (pack.hpp's SoundMode)

@@ -16,6 +16,7 @@
 #include "sieve/filekind.hpp"
 #include "sieve/modelsieve.hpp"
 #include "sieve/worldspace.hpp"
+#include "sieve/character.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
@@ -6736,6 +6737,94 @@ void test_midi_read()
     std::cout << "MIDI read back: " << n << " melodies\n";
 }
 
+// Characters (sieve-character-v1, IDEAS 19.148): the same seed and settings give the same tree, a
+// different seed another; every parent comes before its child; bilateral characters are their own
+// mirror; radial ones keep to the horizontal ring; the sphere count follows the settings; and the
+// settings out of range are refused. Two characters are pinned by their SHA-256, so any change to
+// the unfolding shows (it would be a new version).
+void test_character()
+{
+    CharacterSettings s;
+    s.seed = 7;
+    const Character a = unfold_character(s), b = unfold_character(s);
+    CHECK(a.text() == b.text());
+    s.seed = 8;
+    CHECK(unfold_character(s).text() != a.text());
+    for (uint64_t seed = 0; seed < 40; ++seed)
+        for (const Symmetry sym : {Symmetry::None, Symmetry::Bilateral, Symmetry::Radial})
+        {
+            CharacterSettings t;
+            t.seed = seed;
+            t.symmetry = sym;
+            t.limbs = uint32_t(seed % 9);
+            t.joints = uint32_t(1 + seed % 6);
+            t.branches = uint32_t(seed % 4);
+            t.head = seed % 3 != 0;
+            const Character c = unfold_character(t);
+            const size_t branch_joints = (t.joints + 1) / 2;
+            CHECK(c.spheres.size() == 1 + (t.head ? 1u : 0u) + t.limbs * (t.joints + t.branches * branch_joints));
+            for (size_t i = 0; i < c.spheres.size(); ++i)
+            {
+                CHECK(c.spheres[i].parent < int32_t(i));
+                CHECK(c.spheres[i].r >= 8);
+                CHECK((i == 0) == (c.spheres[i].parent == -1));
+            }
+            if (sym == Symmetry::Bilateral)
+                for (const Sphere& p : c.spheres)
+                {
+                    bool found = false;
+                    for (const Sphere& q : c.spheres) found = found || (q.x == -p.x && q.y == p.y && q.z == p.z && q.r == p.r);
+                    CHECK(found);
+                }
+            if (sym == Symmetry::Radial && t.limbs > 0)
+                for (size_t i = t.head ? 2 : 1; i < c.spheres.size(); i += t.joints + t.branches * branch_joints)
+                    CHECK(c.spheres[i].y == 0); // each limb's first joint, on the ring
+            int32_t ex, ey, ez;
+            c.extent(ex, ey, ez);
+            CHECK(ex >= c.spheres[0].r && ey >= c.spheres[0].r && ez >= c.spheres[0].r);
+        }
+    CharacterSettings bad;
+    bad.limbs = 17;
+    CHECK(throws([&] { (void)unfold_character(bad); }));
+    bad.limbs = 4;
+    bad.joints = 0;
+    CHECK(throws([&] { (void)unfold_character(bad); }));
+    bad.joints = 3;
+    bad.branches = 4;
+    CHECK(throws([&] { (void)unfold_character(bad); }));
+    CHECK(throws([] { (void)symmetry_from_name("lopsided"); }));
+    CHECK(symmetry_from_name("radial") == Symmetry::Radial);
+    // Read back: the whole text, the settings line alone, and with Windows line endings; a changed
+    // sphere, a missing setting and another version refused.
+    {
+        CharacterSettings t;
+        t.seed = 99;
+        t.limbs = 5;
+        t.branches = 1;
+        const Character c = unfold_character(t);
+        CHECK(read_character(c.text()).id() == c.id());
+        CHECK(read_character(c.text().substr(0, c.text().find('\n') + 1)).id() == c.id());
+        std::string crlf;
+        for (const char ch : c.text()) crlf += ch == '\n' ? std::string("\r\n") : std::string(1, ch);
+        CHECK(read_character(crlf).id() == c.id());
+        std::string changed = c.text();
+        changed[changed.rfind(" joint") - 1] = changed[changed.rfind(" joint") - 1] == '9' ? '8' : '9';
+        CHECK(throws([&] { (void)read_character(changed); }));
+        CHECK(throws([] { (void)read_character("sieve-character-v1 seed=1 limbs=4 joints=3 branches=0 head=yes\n"); }));
+        CHECK(throws([] { (void)read_character("sieve-character-v2 seed=1\n"); }));
+        CHECK(throws([] { (void)read_character("sieve-character-v1 seed=1 limbs=40 joints=3 branches=0 symmetry=none head=yes\n"); }));
+    }
+    CharacterSettings p;
+    p.seed = 1;
+    CHECK(unfold_character(p).id() == "607ec057ef34f8c040ab5f72ae2f0401f05f0675e8d13da656973d0ff4b0f352");
+    p.seed = 2;
+    p.limbs = 6;
+    p.joints = 4;
+    p.branches = 2;
+    p.symmetry = Symmetry::Radial;
+    CHECK(unfold_character(p).id() == "42f354a2d11c87a26cc0c2d877c9ba21efed1ba648abff66e39379334ec48293");
+}
+
 // `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole
 // suite): only the tests whose call names one of them (as part of it: "mix" runs test_mix to
 // test_mix4); `--list` names them all and runs none.
@@ -6777,6 +6866,7 @@ void run_all(int argc, char** argv)
     RUN(test_image());
     RUN(test_audio());
     RUN(test_midi_read());
+    RUN(test_character());
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());

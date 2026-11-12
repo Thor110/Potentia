@@ -6525,6 +6525,11 @@ thing".
   §19.60 b) where the machine cannot draw it live at all. That last step is the barrier Edward
   names: below it the old platform shows pictures made elsewhere, not the scene itself, and what is
   interactive there is only what the pictures allow.
+  *A first test (built 12 November 2026, Edward: "we can also test out the scalable graphics
+  implementation through his interface, from pixels through voxels etc with scalable rendering and
+  shading and lighting"):* the CHARACTER page's **drawing** row shows one character four ways:
+  pixels (a point a sphere), wireframe, voxels and shaded under a light; the character's SHA-256 is
+  the same at each, since the drawing is a view of it, not a part of it.
 - *Near-infinite compute:* the rule of §19.4: every system scales, and says where it stops on this
   machine; on a larger one the same addresses unfold further.
 - *Workable now, in order:* (1) a character record format (`sieve-character-v1`: parts by address,
@@ -6533,3 +6538,257 @@ thing".
   counted by the budget; (3) each one given a small model of the AI line to speak with, and the
   heard-once voices (§19.146); (4) one input layer for keyboard, mouse and controller (SDL already
   reads controllers); (5) impostors for distant characters.
+
+**19.148 The character system: a panel from the right, spheres of influence, a skeleton that unfolds
+(Edward, 12 November 2026; to build next).** His words: "go ahead and start building the character
+system next, have it exist as another pop in panel like the sieve setup settings on the left, but
+with another key like ¬ above tab and it slides in from the right opposite the settings on the left",
+"as this is an important and scalable system it must be modular and dynamic so as to be capable of
+capturing all video games in its shapes, so a head would just really be a sphere which becomes a
+sphere of influence, the model within could be anything, this also means a scalable, dynamic, modular
+and procedural skeleton system that must unfold and unpack from underneath it", "this menu on the
+right side would have access to many more menus, which is why it demands the slide in nature and
+opposite space from the settings menu", "many systems will appear and unfold like this and should be
+allowed to do so, if a setting needs to exist, then it needs to exist somewhere and it will find its
+own space if it waits patiently enough", and "it can be both a character creation system and an AI
+character generation system, one should be able to make a procedural monster essentially and the
+hallway might scale to fit their body so that they can still go through doors, I think that is
+actually necessary to prevent people overbuilding, similar to spore or the sims, for the
+architectural visions and nature of building out a map to capture the infinite through procedural
+nature systems that capture the essence of existence".
+- *The panel:* in the setup menu, a second panel opposite SETTINGS: a tab on the right edge, and
+  the key left of 1 (the one that gives ¬ with Shift on a UK keyboard and \` alone; read by its
+  position, SDL's GRAVE scancode, so it is the same key on every layout) slides it in from the
+  right as Tab slides SETTINGS in from the left. Its first page is CHARACTER; it is a stack of pages
+  ("access to many more menus"), each a system that finds its place there as it comes.
+- *Spheres of influence:* a character is not a fixed body plan. It is a tree of spheres: each sphere
+  has a centre, a radius (its influence: the space it may fill) and a parent, and holds anything (a
+  model from the models line, a primitive, nothing). A head is one sphere; a humanoid, a spider, a
+  serpent or a monster are different trees of the same thing. Every game's character fits, because
+  the spheres say only where and how big, and the model within says what.
+- *The skeleton unfolds from underneath:* the tree is the skeleton, and it is made by rules, not
+  placed bone by bone: a seed and a few settings (how many limbs, how many joints a limb, how it
+  branches, symmetry, how the radii shrink along a limb) unfold the tree. The same seed gives the
+  same skeleton everywhere, so a character is named by its seed and settings (an address), and a
+  hand-made one is a seed plus changes. Creation (the person sets it) and generation (an AI or a
+  random seed sets it) are the same record.
+- *Levels:* each sphere's content has levels from a point to the full model (§19.147), so a
+  character draws as dots, then spheres, then wire meshes, then whatever the machine allows.
+- *The hallway fits the body:* a character's bounding size (the spheres it unfolds to) is
+  measured; the corridor and its doors scale to let it through, so any monster can walk the
+  halls, and how large one may be is bounded by how far the hallway may scale (a setting, so
+  overbuilding is held back by the world, not forbidden by a rule), as in Spore or The Sims.
+- *Settings find their own space:* a rule for every system to come: a setting that needs to
+  exist gets a place, in the panel whose system it belongs to, and the panels make room by sliding
+  and stacking rather than crowding one screen (§19.143's scroll strip, the same idea).
+- *Build order (next):* (1) the right panel, its tab and its key, empty pages stacked, in the setup
+  menu, with a screenshot test (*built 12 November 2026:* `client/menu.cpp`'s `render_side`, opened
+  by the GRAVE scancode or its tab, CHARACTER its first page; scripted keys now carry their
+  scancode; CI step 10 checks it opens, closes, and opens from the key's row); (2) `sieve-character-v1`: a seed and settings unfolding a tree of
+  spheres, deterministic, with unit tests that the same seed gives the same tree (*built 12 November
+  2026:* `core/src/character.cpp`, SPECIFICATIONS §12.0j; `test_character` pins two characters); (3) the
+  CHARACTER page: seed, limbs, joints, symmetry, size, with the character drawn turning in the
+  panel as wire spheres and bones (*built 12 November 2026:* six settings, the keys while the panel
+  is in, the character turning; CI pins two characters' SHA-256 through the menu); (4) the character saved and loaded as a small file, and shown
+  in the hallway beside you (*built 12 November 2026:* `.character` files by Ctrl+S and Ctrl+O, read
+  back and checked by `read_character`; kept in `[character]`; drawn walking beside you; `--character
+  FILE` and `--no-character`; CI checks a file on the page and in the hallway, and a bad one refused); (5) the hallway scaled to the character's size (*built 12 November 2026:* §19.153); (6) a model from the
+  models line inside a sphere; (7) generation by a seed walk or an AI model.
+
+**19.149 A scalable galactic vector information engine (Edward, 12 November 2026).** His words:
+"exactly so everything will be procedural and dynamic, so that this system can scale up to be plugged
+in to any procedural system that exists, from no mans sky to elite dangerous, all the way back to the
+original one on the BBC micro computer with 8 galaxies though really it had more than what was
+marketed so as to make sure people believed it", and "that has to include the skeleton system for
+building out creatures akin to spore up through and to clothing systems like the sims and more all the
+way to combat, armour, health and many more, a true scalable galactic vector information engine. The
+kind of thing turing would be proud of."
+- *What it shares with them:* Elite (1984, the BBC Micro) made its eight galaxies of 256 systems each
+  from a few seed numbers twisted by a fixed rule, so a whole galaxy was a handful of bytes; the
+  generator could have made far more galaxies, and eight was a choice. No Man's Sky and Elite
+  Dangerous do the same at larger scale. Sieve's lines are the same idea made exact and named: every
+  unit is a number, and the rule turns the number into the thing (§0, §19.27). A character from a
+  seed (§19.148) is one more such rule.
+- *Plugged into any procedural system:* a generator is a rule plus a seed; Sieve can name its output
+  by the pair (exactly, where the generator is pinned and deterministic, §19.27 a) and hold the
+  outputs on a line of their own. So a galaxy from Elite's rule, a creature from a Spore-like
+  skeleton or a character from §19.148 are all addresses on lines.
+- *The systems beyond the body:* clothing (parts worn on spheres, §19.147's layers), armour (parts with
+  numbers: coverage, weight), health and combat (numbers attached to spheres: a hit lands on a sphere,
+  and the sphere's numbers say what follows). Each is one more page in the right-hand panel (§19.148)
+  and one more set of fields in the character record, added by version so nothing older breaks
+  (§19.137).
+- *Turing:* a Turing machine is a rule and a tape; every line here is a rule and a number. The engine
+  Edward names is that idea carried through every kind of data, which is what the lines already are.
+
+**19.150 A strong save system on an infinite RAID; games as a geometric graph through time
+(Edward, 12 November 2026).** His words: "with all of this we are going to need a strong save system",
+"I suggest a theoretical implementation of the infinite raid system, where we try to get everyone to
+cooperate on storing everyones characters across an infinite raid system", "gaming this system and
+creating more than one character per entity would be against the laws of time!", "there could perhaps
+be sub characters for sub dimensions or games within games across networks and frames of games across
+genres and more", "in theory that would be an opt-in help preserve all data for all time option where
+people can contribute their own data or just assist with storing save data", "these would need to be
+strongly labelled and opt in only red warning type data checkboxes which inform the user accordingly",
+"all of this would make it easier to record and catalogue information plus verify existence or
+provenance or authorship", "plus maintain accurate save logs, databases and more throughout a delta
+wave transform through the dimensional matrix that stores every save and or combination there of",
+"people could then also add their own data for recording and the infinite raid system could evolve
+into a game engine and operating system instead of require one being made", "focusing onto a single
+point that expands to encompass everything, like pi", "all of this could be used to turn the
+information highway into an engine for transforming all data into the sieve state space for
+cataloging, storing, sorting and processing", "providing all of humanity an infinite raid network for
+processing, storing and preserving cultural identity throughout time", "we can run less tests for a
+little while, as we build out the video game platform which is geometric in nature and should be
+built through a basic shape system", "this is so as to allow it to scale through all games and
+capture their ever evolving nature across time and helping to turn everything into a delta including
+resolution or detail across time and through remakes, demakes or upscales", "all games, modifications
+of games, crossovers of games, everything would become dimensional and recorded as a 3D node or tree
+graph that preserves authorship across time and allows for the building of mod lists and new games as
+well as much more like preserving and recording or helping to present information such that it is
+educational and has the aim of historical preservation", "there are an infinite number of systems like
+this that can link together to form a chain to preserve integrity", "a wiki space almost or engine to
+access all information in the future", "education, dimension, preservation, systematisation,
+implementation", "now that we are implementing game systems we can work on a lot of the game ideas at
+once so as to improve stability and keep things to a minimum for the installation package we should
+aim to include it but not bloat it out with graphics", "such has been the design ethos of the current
+system where it has the low graphics wireframe option which would make it scalable and workable on
+perhaps many older platforms", "the character system needs to be 3D so there should be a circular
+pedestal below the character which can be spun around with a click and drag of the mouse on that
+part of the interface", and "all of this will add up to hooking into the DNA dimension and
+transforming as an interface over time".
+- *A strong save system:* a save is a small record (the character's seed and settings, §19.148; the
+  heard voices, §19.146; where you stand, by address), so it is cheap to keep many and to name each
+  by its hash. Saves as deltas: each save the changes from the last, as `.sieve`'s delta way carries a
+  file as its differences from another (v32), so a history of saves costs little more than the last.
+- *The infinite RAID, opt-in:* the distributed store of §19.139 d holding saves and characters,
+  every piece named by its hash and checked on arrival. Joining it, giving data to it, and storing
+  others' data are separate choices, each a box off by default, in red, saying exactly what it
+  shares and with whom (§19.136's witnesses are the same copies). Nothing leaves a machine without
+  one of them ticked.
+- *One character per person:* a rule the store cannot enforce from bytes alone: it needs an identity
+  (§19.63 b, §19.144's claims). Noted as Edward's rule; sub-characters for sub-dimensions and games
+  within games hang from the one character as children in its tree of records.
+- *Games as a geometric graph through time:* every game, its versions, mods, remakes, demakes and
+  crossovers as nodes of a tree or graph (the node graph, §5.8a; the source tree of §19.11 c), each
+  edge a delta and each node its authors; resolution and detail are one more axis of deltas (the
+  levels of §19.147). A mod list is a path through the graph.
+- *A basic shape system, kept small:* the game platform built from shapes (spheres first, §19.148),
+  drawn as wireframes by default as the hallway is, so the installation stays small and old machines
+  can run it; heavier graphics only where a machine asks for them.
+- *Fewer tests for a while:* agreed: while the game systems are built, the unit tests and the CI
+  step a change touches, not the whole of CI each time.
+- *The pedestal (built the same day):* the CHARACTER page's character stands on a disc seen a little from
+  above, its eight spokes turning with it; a click and drag across the drawing turns it, and [ and ]
+  turn it 15 degrees a press, so the keys can do what the mouse does (§19.140).
+- *Workable now:* a save file for the character
+  (`sieve-character-v1` settings as text, the next step of §19.148); saves as deltas later.
+
+**19.151 Pixels back to a model: matching a character to a picture (Edward, 12 November 2026).** His
+words, on seeing a six-limbed character drawn as voxels and shaded: "that is beautiful work, it looks
+almost like a facehugger from alien trilogy, I wonder if eventually we could match it through its
+pixels backwards and map it out to a 3D model, reverse lithography style".
+- *What it is:* inverse rendering, analysis by synthesis. A character is a seed and a few settings
+  (§19.148), so finding one that looks like a picture is a search: draw candidates at the picture's
+  level (pixels, a silhouette, voxels), score each against the picture, keep the best, and refine.
+  The answer is a character record, so the 3D model comes with it: spheres, bones and all.
+- *What one picture cannot give:* depth. A single view fits many bodies (a limb towards the viewer
+  and one beside it look alike), so a match is one of several; more views narrow it, as
+  photogrammetry does from many photographs; a sprite game's creatures are often drawn from several
+  directions, and each is another view (how many, for a given game, is to be counted from the
+  player's own copy).
+- *The search, in order of cost:* (1) the settings (limbs, joints, symmetry) from the silhouette's
+  shape, then seeds walked and scored; (2) the spheres themselves nudged (a hand-made character is a
+  seed plus changes, §19.148) to close the remaining gap; (3) a learned model proposing settings from
+  pictures, trained on characters drawn at known settings, which Sieve can make without end.
+- *Whose pictures:* the player's own copies of a game (the rule for every game asset, GAME.md §11);
+  nothing from a game is kept in the repository.
+- *Workable now:* a `sieve character --match PICTURE` that walks seeds at fixed settings, scores
+  each by the overlap of its silhouette with the picture's, and reports the best; measured on
+  characters drawn by Sieve itself first (it should find their own seeds), then on a real sprite.
+
+**19.152 Characters to species, languages and DNA; a playground for personal dimensions (Edward,
+12 November 2026).** His words: "characters naturally hook up to species and languages as dimensions
+which also hook to the dna dimension etc which along with everything else hooks into every other
+dimension, it becomes a training platform for learning all things and truly charting all possible
+knowns from any given point in space theoretically", "in order to preserve history this system can
+capture, preserve and scale all systems, from and through operating systems or game engines, all the
+way down to languages and through nature itself", "we will need a temporary testing playground for
+creating personal dimensions which eventually fold back in on themselves alongside everyones personal
+dimensions in order to overlap or link up with and fold alongside the video game dimension and unfold
+out across all dimension along with the other interdimensional lattice linkage primary highways", and
+"all of this becomes a natural unfolding state space of shapes that evolve from language and help it
+create itself as a system or platform, a bunch of stuff to take note of again".
+- *Species and languages as dimensions:* a species is a family of characters: a set of settings held
+  fixed (limbs, joints, symmetry) with the seed free, so every member is a character and the species
+  is a line of them, walkable like any other (§19.148). A language is a line too (the AI line's
+  models, §15; §19.147's speaking characters). Linking a character to its species and its language
+  is the same kind of record as §19.144's links, and the DNA dimension (§19.139 c) sits beside them as
+  one more line.
+- *A training platform:* every link and every line is data a model can learn from (§19.2, the harness),
+  and the characters Sieve can make without end are labelled examples for learning shapes from
+  pictures (§19.151).
+- *A playground for personal dimensions:* a temporary space where a person makes a dimension of
+  their own: a small line from their own settings (a species, a set of characters, a room of doors,
+  §19.144), kept in their save (§19.150), and later linked into the shared lines by records rather than
+  merged into them, so nothing of anyone else's changes. Folding back in is a link, not a rewrite.
+- *Workable now, in order:* (1) a species as fixed settings with the seed free, walked on the
+  CHARACTER page by seed (Left/Right on the seed already does it); (2) a personal dimension as a saved
+  list of characters (a `.characters` file of settings lines), shown in the hallway as a short line of
+  its own; (3) links from a character to a species, a language and a DNA record, as §19.144's records.
+
+**19.153 The hallway scaled to your character; a yardstick between the door and true scale (Edward,
+12 November 2026; the first part built the same day).** His words: "carry on with step 5, scaling the
+hallway to fit the bounds of the player character, that means other player characters would scale to
+fit yours / the doors then eventually a central metric can be defined which allows players to be
+properly scaled, like another lens or spectrum revealer", and "so one end of the yard stick or metric
+would be the door via the players bounding box and the other end of the yard stick would be true scale
+something semi imaginary and semi real reachable through understanding and agreement".
+- *Built:* a central metric, 4096 of a character's units to a metre (`kCharacterUnitsPerMetre`), so
+  every character has a size; the hallway's scale is how many times larger it must be for your
+  character, with a tenth spare, to pass a door (1.2 m wide, 2.2 m high), never less than 1 and at most
+  `[character] max_hall_scale` (16 at first). Seen from your side it is you made smaller: your eye
+  height, your stride and the character drawn beside you all divided by it. The default character
+  (about 0.9 m across) fits as built; eight radial limbs of twelve joints grow the hall 1.41 times.
+  A character past the cap does not fit, and the run says so.
+- *The yardstick's two ends:* one end is the door, met through the player's bounding box (built:
+  the hallway's scale); the other is true scale, "semi imaginary and semi real", reached by
+  understanding and agreement: the metric itself (4096 units a metre) is that agreement's first
+  word, a constant in the format that every machine shares, and a later version can name another.
+- *Other players:* each scaled to fit yours: the same ratio, their size over yours, applied when they
+  are drawn; to build when more than one character is in the hall (§19.150's saves, §19.146).
+- *A lens or spectrum revealer:* the scale is one more readout of a character, like a line's size in
+  bits: shown beside it, it lets characters be compared on one ruler.
+- *Scaling among many, and its dangers (Edward, the same day):* "that means players and characters
+  would scale accordingly, meaning if the hulk entered a universe or dimension full of mice, they would
+  scale down accordingly, this could be deemed troublesome for the player to some extent regarding
+  movement so there has to be some agreed upon metric or system to prevent the inherent dangers of a
+  scaling system such as this", "where galaxy sized characters couldnt make everyone tiny infinitely",
+  and "so there would be a middle cartoon like representation or filter scape which is perception of a
+  character through emotion from a human perspective". In the terms built so far:
+  - *Whose scale rules a shared space:* the space's own, not the largest visitor's. A dimension keeps
+    its scale (a hall of mice is drawn for mice); a visitor is drawn at their size over the space's,
+    and where that ratio passes a cap (the same kind as `max_hall_scale`), the visitor is not made
+    larger but shown through the middle representation below. So no one character can make everyone
+    else tiny, however large it is: the cap bounds what one character does to the others.
+  - *Movement:* stride and reach scale with the ratio too, and are capped the same way, so a giant
+    among mice does not cross the hall in one step, nor a mouse among giants take an hour.
+  - *The middle, cartoon-like representation:* past the caps, a character is shown at a human size and
+    proportion that keeps what it is (its shape, simplified) and carries its size as a readout and a
+    feeling rather than as pixels: a filter over the character, one more drawing level beside
+    pixels, wireframe, voxels and shaded (§19.147). Tied to the emotion line (§19.144): how a character
+    feels to a person (towering, tiny, friendly) drawn in that middle scale.
+  - *The agreed metric:* still the yardstick above: the door at one end, true scale at the other, and
+    between them the caps, set by agreement and named in the format so every machine draws the same.
+- *True scale and perception scale, as a switch (Edward, the same day):* "that would manifest itself
+  as a true scale, perception scale filter system that could be turned on and off by respective worlds
+  or servers and be turned on and off accordingly by the users depending on the situation or
+  circumstance, such as it being locked or server dependant, in which case it would be beyond their
+  control unless they left the server". Two drawings of the same characters: **true scale** (each at its
+  size over the space's, within the caps) and **perception scale** (the middle, cartoon-like drawing).
+  A world or server sets which is used and whether a visitor may change it: *open* (each person
+  chooses for themselves), or *locked* (the world's choice for everyone there; to choose otherwise,
+  leave). Either way it changes only how characters are drawn, never a character, so the same
+  characters are the same addresses on every machine, whichever scale a person sees them at. As a
+  setting: a world's `scale_view = true | perception` with `scale_locked = yes | no`, and a person's own
+  choice used wherever the world leaves it open.

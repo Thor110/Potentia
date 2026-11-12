@@ -52,6 +52,7 @@
 #include "cli/model_folder.hpp"
 
 #include "sieve/audio.hpp"
+#include "sieve/character.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/booksieve.hpp"
@@ -1079,6 +1080,16 @@ public:
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
     void set_fps_counter(bool on) { fps_counter_ = on; }
+    // Your character (IDEAS 19.148), walking beside you: a little ahead and to the right, on the
+    // floor, about 1.4 m tall, facing the way you face; none: not drawn.
+    void set_character(std::optional<sieve::Character> c);
+    // How many times larger the hallway is drawn so that your character fits its doors (1: it fits
+    // as built; IDEAS 19.153). Seen from your side it is you made smaller: your eye, your stride and
+    // the character itself scaled by its inverse. Capped at set_max_scale (16 at first): a character
+    // larger than that does not fit, and the hallway says so.
+    float hall_scale() const { return hall_scale_; }
+    bool character_fits() const { return character_fits_; }
+    void set_max_scale(float m) { max_scale_ = std::max(1.0f, m); if (character_) set_character(character_); }
     void set_angle_decimals(int d)
     {
         angle_decimals_ = std::clamp(d, 0, kMaxAngleDecimals);
@@ -1780,6 +1791,10 @@ private:
     uint32_t portal_frame_ = 0;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
+    std::optional<sieve::Character> character_;
+    float hall_scale_ = 1, max_scale_ = 16;
+    bool character_fits_ = true;
+    void draw_character(SDL_Color edge);
     int angle_decimals_ = 1; // Settings > Graphics: decimal places on the compass's degree readout
     Uint64 fps_since_ = 0, fps_last_ = 0;
     int fps_frames_ = 0;

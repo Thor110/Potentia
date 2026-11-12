@@ -1450,7 +1450,8 @@ void Hallway::update(float dt, const bool* keys)
 {
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
     if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || locator_.is_open()) return;
-    const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f;
+    // Your stride shrinks as the hallway grows to fit your character (hall_scale_).
+    const float speed = ((keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f) / hall_scale_;
     const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
     const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
     Vec3 move{};
@@ -1984,6 +1985,8 @@ std::string Hallway::status()
 // ---- drawing
 void Hallway::render()
 {
+    // Your eye at 1.6 m, made smaller with you as the hallway grows to fit your character.
+    cam_.pos.y = 1.6f / hall_scale_;
     int w = 0, h = 0;
     SDL_GetCurrentRenderOutputSize(r_, &w, &h);
     cam_.update(w, h);
@@ -2118,6 +2121,8 @@ void Hallway::render()
     if (on_binary()) draw_binary_edge(visible, kBack, kAhead, real_hall);
     // The pictures on the items' fronts, on every line that has them (item_faces.cpp).
     draw_item_faces(visible, kBack, kAhead);
+    // Your character, beside you (IDEAS 19.148).
+    if (character_) draw_character(th.edge);
     // The item you are looking at, tinted in the line's edge colour. After the pictures, or a
     // picture covering the whole front hides it (every line but models, whose picture leaves
     // the front uncovered), and over the picture's own rectangle (faces.ini), which is the
@@ -2331,6 +2336,83 @@ void Hallway::draw_start_line(float z0)
             const float za = z0 - sq + row * sq, zb = za + sq;
             fill({{x0, 0.001f, za}, {x1, 0.001f, za}, {x1, 0.001f, zb}, {x0, 0.001f, zb}}, c);
         }
+}
+
+// The hallway's scale from your character's size (IDEAS 19.153): the doors are 1.2 m wide and 2.2 m
+// high; with a tenth spare each way, a character taller or wider than that has the hallway grown to
+// fit it, as many times as it takes, at most max_scale_.
+void Hallway::set_character(std::optional<sieve::Character> c)
+{
+    character_ = std::move(c);
+    hall_scale_ = 1;
+    character_fits_ = true;
+    if (!character_ || character_->spheres.empty()) return;
+    int32_t low = 0, high = 0, ex, ey, ez;
+    for (const sieve::Sphere& p : character_->spheres)
+    {
+        low = std::min(low, p.y - p.r);
+        high = std::max(high, p.y + p.r);
+    }
+    character_->extent(ex, ey, ez);
+    const float metre = float(sieve::kCharacterUnitsPerMetre);
+    const float tall = float(high - low) / metre, wide = 2.0f * float(std::max(ex, ez)) / metre;
+    const float need = std::max({1.0f, tall / (kDoorTop * 0.9f), wide / ((kDoorEnd - kDoorStart) * 0.9f)});
+    hall_scale_ = std::min(need, max_scale_);
+    character_fits_ = need <= max_scale_;
+}
+
+// Your character beside you: a little ahead along the corridor and to the right, its lowest sphere on
+// the floor, at its own size (4096 units a metre) seen through the hallway's scale, facing along the
+// corridor; its bones as
+// lines and each sphere as a ring facing you, in the line's edge colour (the head lighter).
+void Hallway::draw_character(SDL_Color edge)
+{
+    const sieve::Character& c = *character_;
+    if (c.spheres.empty()) return;
+    int32_t low = 0, high = 0;
+    for (const sieve::Sphere& p : c.spheres)
+    {
+        low = std::min(low, p.y - p.r);
+        high = std::max(high, p.y + p.r);
+    }
+    int32_t ex, ey, ez;
+    c.extent(ex, ey, ez);
+    // Its own size, in the hallway as you see it (the hallway grown by hall_scale_ is you made smaller).
+    const float scale = 1.0f / (float(sieve::kCharacterUnitsPerMetre) * hall_scale_);
+    // Along the corridor, whichever way along it you face: 2.2 m ahead of you and 0.9 m to that
+    // way's right, kept off the shelves, so it walks with you down the hall whatever you look at.
+    const float fz = cam_.forward().z >= 0 ? 1.0f : -1.0f;
+    const Vec3 f{0, 0, fz}, right{fz, 0, 0}; // (looking along +z, your right is +x)
+    // Far enough ahead and aside that it never stands where you do: its own half-size plus a margin.
+    const float half = float(std::max(ex, ez)) * scale;
+    const float lo = -kHalfWidth + 0.2f + half, hi = kHalfWidth - 0.2f - half;
+    const float side = lo < hi ? std::clamp(cam_.pos.x + fz * (0.4f + half), lo, hi) : 0.0f; // (wider than the hall: down its middle)
+    const Vec3 base{side, 0, cam_.pos.z + fz * (1.2f + 2.0f * half)};
+    auto world = [&](const sieve::Sphere& p) {
+        return base + right * (float(p.x) * scale) + Vec3{0, float(p.y - low) * scale, 0} + f * (-float(p.z) * scale);
+    };
+    auto line = [&](Vec3 a, Vec3 b) {
+        if (const auto s = cam_.project_segment(a, b)) SDL_RenderLine(r_, s->first.first.x, s->first.first.y, s->first.second.x, s->first.second.y);
+    };
+    SDL_SetRenderDrawColor(r_, Uint8(edge.r * 0.6f), Uint8(edge.g * 0.6f), Uint8(edge.b * 0.6f), 255);
+    for (const sieve::Sphere& p : c.spheres)
+        if (p.parent >= 0) line(world(p), world(c.spheres[size_t(p.parent)]));
+    // Rings facing the camera: in the plane of its right and up.
+    const Vec3 cf = cam_.forward(), cr = normalize(hallway::cross(cf, Vec3{0, 1, 0})), cu = hallway::cross(cr, cf); // (hallway::cross: the vector one, not walking through a door)
+    constexpr int kSegs = 20;
+    for (const sieve::Sphere& p : c.spheres)
+    {
+        const bool head = p.kind == sieve::Sphere::Head;
+        if (head) SDL_SetRenderDrawColor(r_, Uint8(std::min(255, edge.r + 90)), Uint8(std::min(255, edge.g + 90)), Uint8(std::min(255, edge.b + 60)), 255);
+        else SDL_SetRenderDrawColor(r_, edge.r, edge.g, edge.b, 255);
+        const Vec3 o = world(p);
+        const float rad = float(p.r) * scale;
+        for (int k = 0; k < kSegs; ++k)
+        {
+            const float a0 = 6.2831853f * float(k) / kSegs, a1 = 6.2831853f * float(k + 1) / kSegs;
+            line(o + cr * (rad * std::cos(a0)) + cu * (rad * std::sin(a0)), o + cr * (rad * std::cos(a1)) + cu * (rad * std::sin(a1)));
+        }
+    }
 }
 
 void Hallway::fill(const std::vector<Vec3>& quad, SDL_Color c)

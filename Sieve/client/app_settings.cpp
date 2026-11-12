@@ -204,6 +204,21 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "read_aloud") s.read_aloud = on_off(value, false);
             else if (key == "text_to_voice") s.text_to_voice = on_off(value, false);
         }
+        else if (section == "character")
+        {
+            if (key == "line") s.character = value;
+            else if (key == "drawing" && value.size() == 1 && value[0] >= '0' && value[0] <= '3') s.character_drawing = value[0] - '0';
+            else if (key == "beside_you") s.character_beside = on_off(value, true);
+            else if (key == "max_hall_scale")
+                try
+                {
+                    const int v = std::stoi(value);
+                    if (v >= 1 && v <= 64) s.character_max_scale = v;
+                }
+                catch (...)
+                {
+                }
+        }
         else if (section == "models")
         {
             if (key == "text_model") s.text_model = value;
@@ -335,6 +350,10 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"locator", "optimise_search", locator_optimise ? "1" : "0", "1: Optimise Search ticked (the default): Try every way chosen for each file by its kind, from what was measured (off for every file with Priority: Decoding speed; else on for a JPEG, a file over 16 MiB or under 4 KiB, off between), its own box unused; 0: Try every way as its box says"},
         {"locator", "search_every_wave", locator_every_wave ? "1" : "0", "1: Try every way ticked: the search's shortcuts off (the rope through every wave, even on text and on bytes already packed; mixing tried on every file, whole); 0: off"},
         {"locator", "priority", locator_priority, "size: the smallest; balanced: mixing only where it saves 4% of what it carries (the default); speed: no file mixed (quickest to install, largest)"},
+        {"character", "line", character, "your character (sieve-character-v1, IDEAS 19.148): its seed and settings, as the first line of a .character file; empty: the default"},
+        {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
+        {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
+        {"character", "max_hall_scale", std::to_string(character_max_scale), "how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit)"},
         {"locator", "compare", locator_compare ? "1" : "0", "1: Compare with zip and 7z ticked (the default): what zip (deflate 9) and 7z (LZMA2 9e) make of it and of the instructions, beside Sieve's; 0: Sieve's figures alone, quicker on a large folder"},
         {"locator", "more_formats", locator_more ? "1" : "0", "1: More formats ticked: the comparison with gzip, bzip2, zstd, brotli and lz4 too, each the whole as one stream (slower: brotli above all); 0: zip and 7z only"},
         {"locator", sieve::cli::draft_ini_key(), locator_draft ? "1" : "0", "1: " + sieve::cli::draft_manifest() + " in the making, for testing only (docs/NEXT-VERSION.md): what it makes is a draft, not to be published; 0: off, the newest frozen version made"},

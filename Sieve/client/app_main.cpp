@@ -29,6 +29,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include "sieve/character.hpp"
 #include <sstream>
 #include <chrono>
 #include <cstdio>
@@ -161,6 +162,9 @@ const char* kUsage =
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
     "                      writes its reports and times to logs/ beside the settings ([locator] keep_log)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
+    "  --character FILE    your character from a .character file (sieve-character-v1): beside you in the\n"
+    "                      hallway, and on the setup menu's CHARACTER page\n"
+    "  --no-character      no character beside you in the hallway for this run\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --read-aloud        the menus read aloud for this run (not saved); with --screenshot, prints what was said\n"
@@ -539,6 +543,7 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
             SDL_Event e{};
             e.type = SDL_EVENT_KEY_DOWN;
             e.key.key = key;
+            e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
             e.key.mod = mod;
             loc.event(e);
         }
@@ -594,6 +599,31 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
         start = end + 1;
     }
     return out;
+}
+
+// Your character (IDEAS 19.148): from --character FILE, or the settings file's [character] where it
+// walks beside you (the default character when it has none), or none with --no-character or
+// beside_you off. A file or setting that is refused is said on stderr and leaves the default.
+std::optional<sieve::Character> character_of(const AppSettings& app, const Args& a)
+{
+    if (a.has("no-character")) return std::nullopt;
+    if (a.has("character"))
+    {
+        std::ifstream in(std::filesystem::path(std::u8string(a.get("character").begin(), a.get("character").end())), std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        return sieve::read_character(text); // a bad file stops the run: it was asked for by name
+    }
+    if (!app.character_beside) return std::nullopt;
+    if (!app.character.empty())
+        try
+        {
+            return sieve::read_character(app.character);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "the settings file's character was refused (" << e.what() << "): the default instead\n";
+        }
+    return sieve::unfold_character(sieve::CharacterSettings{});
 }
 
 // Builds the hallway from options, and applies the start-up and scripting options.
@@ -717,6 +747,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             SDL_Event e{};
             e.type = SDL_EVENT_KEY_DOWN;
             e.key.key = key;
+            e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
             e.key.mod = mod;
             if (key == kClickPress)
             {
@@ -1250,6 +1281,7 @@ int run(const Args& a)
     {
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
+        if (a.has("character")) menu.load_character(a.get("character"));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1262,6 +1294,7 @@ int run(const Args& a)
             menu.render();
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        if (menu.side_open()) std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         for (const auto& [kind, text] : menu.details_lines()) std::cout << "details: " << text << "\n"; // (I, or the dots: a line's details)
@@ -1291,6 +1324,19 @@ int run(const Args& a)
             hall->set_closeup_px(closeup_setting(a.get("close-up", "screen"), kCloseUpScreen));
             hall->set_graphics_memory(app.graphics_memory_gb);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
+            {
+                auto ch = character_of(app, a);
+                // (said only when asked for by name: other scripts read the readout's last lines)
+                const bool named = ch && a.has("character");
+                const std::string id = named ? ch->id() : std::string();
+                hall->set_max_scale(float(app.character_max_scale));
+                hall->set_character(std::move(ch));
+                if (named)
+                {
+                    std::cout << "character beside you: " << id << "\n";
+                    std::cout << "hallway scale: " << hallway::hall::fixed(hall->hall_scale(), 2) << (hall->character_fits() ? "" : " (the most it may grow: the character does not fit)") << "\n";
+                }
+            }
             if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
             std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
@@ -1355,6 +1401,7 @@ int run(const Args& a)
                 SDL_Event e{};
                 e.type = SDL_EVENT_KEY_DOWN;
                 e.key.key = key;
+                e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
                 e.key.mod = mod;
                 bool quit = false;
                 hall->handle(e, quit);
@@ -1382,6 +1429,7 @@ int run(const Args& a)
                 SDL_Event e{};
                 e.type = SDL_EVENT_KEY_DOWN;
                 e.key.key = key;
+                e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
                 e.key.mod = mod;
                 bool quit = false;
                 hall->handle(e, quit);
@@ -1606,6 +1654,8 @@ int run(const Args& a)
         hall->set_closeup_px(closeup_setting(ha.get("close-up", "screen"), kCloseUpScreen));
         hall->set_graphics_memory(app.graphics_memory_gb);
         hall->set_fps_counter(app.fps_counter);
+        hall->set_max_scale(float(app.character_max_scale));
+        hall->set_character(character_of(app, ha));
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
         if (pending_melody)

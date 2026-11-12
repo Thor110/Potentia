@@ -761,6 +761,17 @@ The Encryption Engine's first stage (IDEAS §19.52): a **recipe** of layers appl
 - **The catalogue** (`--catalogue`) counts recipes with keys of at most K bytes (`--key-bytes`, 16). There are 257 + 3 × (256 + 256² + … + 256^K) layers: reverse, 256 caesar shifts, and xor, vigenère and feistel with each key. There are layers^d recipes of depth d, counted exactly for d = 1 to `--depth` (4). Every recipe is a bijection of the files of each length, so between them they reach every file of that length.
 - **Vectors:** `tests/vectors_cipher_v1.tsv` (`sieve_ref.py cipher-vectors`): 55 encryptions (11 recipes on 5 inputs, among them the empty input), and the top three guesses for 5 ciphers.
 
+### 12.0j Characters (`sieve-character-v1`, as built; IDEAS §19.148)
+
+A character is a tree of spheres unfolded from a seed and a few settings, so the same seed and settings give the same character on every machine (`core/include/sieve/character.hpp`, where every step is written out).
+- **Settings:** the seed (64 bits), limbs (0 to 16), joints a limb (1 to 12), branches at each limb's end (0 to 3), symmetry (none, bilateral or radial) and whether it has a head. Out of range is refused, naming the setting.
+- **Spheres:** each a centre and a radius in integers (1/1024 of a unit) and a parent; the body first, at the origin; then the head, straight up; then each limb with its branches. Every number comes from SHA-256 draws of the seed, so nothing rests on a machine's floating point.
+- **Symmetry:** bilateral characters are their own mirror (limbs in pairs, an odd one kept on the centre plane); radial ones put their limbs round the horizontal ring.
+- **Identity:** the SHA-256 of the character's text (a line of settings, then one line a sphere). Two characters are pinned in the unit tests, so any change to the unfolding shows, and would be a new version.
+- **Files:** a `.character` file is the character's text, or its first line alone; reading one back unfolds the settings and checks every sphere line given against the unfolding (`read_character`), refusing a changed file, a missing or unknown setting, or another version.
+- **Size:** 4096 units are a metre (`kCharacterUnitsPerMetre`). The hallway is drawn hall_scale times larger, where hall_scale = max(1, height / (2.2 m x 0.9), width / (1.2 m x 0.9)), width twice the larger horizontal extent, at most `max_hall_scale` (IDEAS §19.153).
+- **Not yet:** models within spheres (the next step of IDEAS §19.148).
+
 ### 12.1a The bytes256 alphabet
 
 `bytes256` is the 256 code points U+0000-U+00FF in code point order, so **digit d is byte d**. A file of N bytes is exactly one unit of a `bytes256` line of length N.

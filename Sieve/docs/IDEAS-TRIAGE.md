@@ -20,20 +20,20 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 
 | Verdict | Ideas |
 | --- | ---: |
-| done | 185 |
-| workable | 211 |
-| workable, large | 78 |
+| done | 188 |
+| workable | 219 |
+| workable, large | 86 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
 | metaphor only | 16 |
-| **all** | **584** |
+| **all** | **603** |
 
 | Kind | Ideas |
 | --- | ---: |
-| technical | 423 |
-| both | 97 |
-| process | 44 |
+| technical | 432 |
+| both | 106 |
+| process | 45 |
 | metaphorical | 20 |
 
 ## What comes next
@@ -749,4 +749,23 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.147 b | Characters placed by address, fading with distance, spawned by compute | technical | noted only | workable | Placed by seed like everything else; drawing is a level of detail; the budget sets how many. |
 | 19.147 c | Character system from low to high poly | technical | noted only | workable, large | A character record names its parts (body, hat, hair, skins); each part has levels; the machine picks the level. |
 | 19.147 d | One interface to every engine and device | technical | noted only | workable, large | One input layer for every device, one output at any level of detail; the hallway of engines (GAME.md §11). |
-| 19.147 e | Scalable graphics seed and the pre-render barrier | technical | noted only | workable, large | Full geometry, fewer polygons, then impostors where a machine cannot draw live; below that, pictures only. |
+| 19.147 e | Scalable graphics seed and the pre-render barrier | technical | partly built | workable, large | A first test built: the CHARACTER page draws one character as pixels, wireframe, voxels or shaded, the same character at each. Impostors and the barrier still to come. |
+| 19.148 a | Right-hand panel (key left of 1) for the character system and more | technical | built | done | Built 12 November 2026: opened by the GRAVE scancode or its tab, a stack of pages with CHARACTER first; CI checks it. |
+| 19.148 b | Characters as trees of spheres of influence | technical | open | workable, large | Each sphere a centre, radius and parent, holding any model; fits any game's body plan. |
+| 19.148 c | Procedural skeleton unfolding from a seed | technical | open | workable | A seed and a few settings unfold the tree deterministically; creation and generation are one record. |
+| 19.148 d | Hallway scales to fit the character | technical | open | workable | The body's measured size scales corridor and doors, bounded by a setting, so overbuilding is held back by the world. |
+| 19.148 e | Settings find their own space | process | noted only | workable | A rule: every setting gets a place in its system's panel; panels slide and stack rather than crowd. |
+| 19.149 a | Plug into any procedural system (Elite to No Man's Sky) | both | noted only | workable, large | A generator is a rule plus a seed; Sieve names its outputs by the pair and holds them on a line. |
+| 19.149 b | Clothing, armour, health and combat on the character | technical | noted only | workable, large | Parts worn on spheres and numbers attached to spheres, each a page in the right-hand panel, added by version. |
+| 19.150 a | A strong save system, saves as deltas | technical | noted only | workable | A save is a small record named by its hash; a history of saves as deltas costs little more than the last. |
+| 19.150 b | Opt-in infinite RAID for saves and data, red warning boxes | both | noted only | workable, large | The distributed store of 19.139 d; every sharing choice a separate box, off by default, saying what it shares. |
+| 19.150 c | One character per person; sub-characters as children | both | noted only | workable, large | Needs an identity (19.63 b); sub-characters hang from the one character's tree of records. |
+| 19.150 d | Games, mods, remakes as a geometric graph through time | both | noted only | workable, large | Nodes for versions, mods, remakes, demakes, crossovers; edges as deltas; authors on each node; a mod list a path. |
+| 19.150 e | Pedestal under the character, spun by dragging | technical | built | done | Built 12 November 2026: a disc under the character in the CHARACTER page; click and drag on it turns the character. |
+| 19.151 | Pixels back to a model: match a character to a picture | technical | noted only | workable, large | Inverse rendering: search seeds and settings whose drawing matches the picture; one view leaves depth open, more views narrow it. First: match Sieve's own drawings back to their seeds. |
+| 19.152 a | Species and languages as dimensions linked to characters | both | noted only | workable | A species is fixed settings with the seed free, a line of characters; links to languages and DNA are records. |
+| 19.152 b | Playground for personal dimensions | both | noted only | workable, large | A person's own small line kept in their save, linked into shared lines by records rather than merged. |
+| 19.153 a | Hallway scaled to fit your character; a central metric | technical | built | done | Built 12 November 2026: 4096 units a metre; the hall grows to let the character through a door, capped by max_hall_scale; eye, stride and drawing scaled. |
+| 19.153 b | Other players scaled to yours; the yardstick to true scale | both | noted only | workable | Their size over yours when drawn; the metric is the agreed constant a later version may rename. |
+| 19.153 c | Shared spaces keep their own scale; caps; a middle cartoon-like drawing | both | noted only | workable | A visitor drawn at their size over the space's, capped; past the cap a human-sized, simplified drawing that carries size as a readout; stride capped the same. |
+| 19.153 d | True scale and perception scale, switched by world or person | both | noted only | workable | A world sets the view and whether it is locked; open, each person chooses; it changes only the drawing, never a character. |

@@ -77,6 +77,25 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, metaphor): They would unfold alongside everything else, and appear or spawn based on the compute available.
 - **Edward** (12 November 2026, quote): In the long run this could be computed on a much larger, near-infinite system, to calculate all things.
 - **Edward** (12 November 2026, metaphor): Like Minecraft being backported to older consoles: a scalable graphics vector seed.
+- **Edward** (12 November 2026, metaphor): A head would just really be a sphere, which becomes a sphere of influence; the model within could be anything.
+- **Edward** (12 November 2026, quote; a point about everything): If a setting needs to exist, then it needs to exist somewhere, and it will find its own space if it waits patiently enough.
+- **Edward** (12 November 2026, metaphor): Procedural nature systems that capture the essence of existence.
+- **Edward** (12 November 2026, metaphor): A true scalable galactic vector information engine; the kind of thing Turing would be proud of.
+- **Edward** (12 November 2026, quote): The original on the BBC Micro had eight galaxies, though really it had more than was marketed, so as to make sure people believed it.
+- **Edward** (12 November 2026, quote): Creating more than one character per entity would be against the laws of time!
+- **Edward** (12 November 2026, metaphor): Focusing onto a single point that expands to encompass everything, like pi.
+- **Edward** (12 November 2026, quote; a point about everything): An infinite RAID network for all of humanity, for processing, storing and preserving cultural identity throughout time.
+- **Edward** (12 November 2026, quote): There are an infinite number of systems like this that can link together to form a chain to preserve integrity.
+- **Edward** (12 November 2026, rule): Education, dimension, preservation, systematisation, implementation.
+- **Edward** (12 November 2026, metaphor): Match it through its pixels backwards and map it out to a 3D model, reverse lithography style.
+- **Edward** (12 November 2026, quote; a point about everything): There isn't even enough time to compute time itself if everyone is busy trying to scale the multiverse, so just one person has to do it first, that is all.
+- **Edward** (12 November 2026, quote; a point about everything): It becomes a training platform for learning all things, and truly charting all possible knowns from any given point in space.
+- **Edward** (12 November 2026, metaphor): A natural unfolding state space of shapes that evolve from language, and help it create itself.
+- **Edward** (12 November 2026, metaphor): One end of the yardstick is the door, through the player's bounding box; the other end is true scale, something semi-imaginary and semi-real, reachable through understanding and agreement.
+- **Edward** (12 November 2026, quote; a point about everything): Everything is just collateral damage from trying to resolve everything at once; it is why the universe exists too.
+- **Edward** (12 November 2026, quote): If the Hulk entered a universe full of mice, he would scale down accordingly.
+- **Edward** (12 November 2026, metaphor): A middle, cartoon-like representation: the perception of a character through emotion, from a human perspective.
+- **Edward** (12 November 2026, rule): True scale or perception scale: the world may lock it, and then it is beyond your control unless you leave.
 
 **The format.** One voice a line, so that a program can read them:
 

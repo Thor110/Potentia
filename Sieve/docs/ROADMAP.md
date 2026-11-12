@@ -1,5 +1,15 @@
 # The plan from here
 
+## Next: the character system (Edward, 12 November 2026)
+
+"go ahead and start building the character system next" (IDEAS §19.148). In order, each step finished
+before the next: (1) **built 12 November 2026:** a right-hand panel in the setup menu, opposite SETTINGS, slid in by the key
+left of 1 (¬ with Shift on a UK keyboard) or its tab, holding a stack of pages; (2)
+**built 12 November 2026:** `sieve-character-v1`, a seed and settings unfolding a deterministic tree
+of spheres (the skeleton), with unit tests; (3) **built 12 November 2026:** the CHARACTER page, drawing the character as wire spheres and bones; (4) **built 12 November 2026:** saved
+and loaded, and shown in the hallway; (5) **built 12 November 2026:** the hallway scaled to fit it (§19.153); (6) models inside spheres;
+(7) generation by seed walk or AI; then matching a character back from a picture (IDEAS §19.151). Then species, a playground for personal dimensions, and links to languages and DNA (§19.152). After it, the ideas worked through with Edward, a few at a time.
+
 ## The long plan through the ideas (12 November 2026)
 
 Edward: "lay out a long plan moving forward and we will work through all of the ideas accordingly,

@@ -97,6 +97,8 @@ constexpr float kMapX = 620;
 constexpr float kPanelSlideMs = 180;
 constexpr Uint64 kPanelCalcNs = 200'000'000;
 constexpr float kPanelTabW = 20;
+// The right-hand panel's width (Menu::side_), and its tab's.
+constexpr float kSideW = 460;
 // The map's columns are never narrower than this (a line's name and its glass, and its figures).
 constexpr float kMapPitchMin = 80;
 // The panel's list: a row is 16 px (its 8 px of text in the middle of its highlight), a section's
@@ -1588,6 +1590,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     e.type = SDL_EVENT_KEY_DOWN;
     e.key.key = key;
     e.key.mod = mod;
+    e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
     bool done = false;
     Result r = Result::Enter;
     // A scripted Return on ENTER THE HALLWAY waits, as a person would, for the dimensions to be
@@ -1599,6 +1602,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     }
     handle(e, done, r);
     panel_ = panel_open_ ? 1.0f : 0.0f; // a picture after a scripted Tab shows where the panel went
+    side_ = side_open_ ? 1.0f : 0.0f;
     // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
     if (toggling_)
     {
@@ -1607,6 +1611,10 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     }
 }
 
+// The CHARACTER page's dialogs (Ctrl+S, Ctrl+O), defined with the page below.
+static void SDLCALL character_saved(void* self, const char* const* files, int);
+static void SDLCALL character_opened(void* self, const char* const* files, int);
+
 void Menu::handle(const SDL_Event& event, bool& done, Result& result)
 {
     // Mouse positions in the menu's own coordinates (it may be drawn scaled: see render).
@@ -1614,6 +1622,24 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     SDL_ConvertEventToRenderCoordinates(r_, &e);
     if (e.type == SDL_EVENT_QUIT) { done = true; result = Result::Quit; return; }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
+    // The character on its pedestal, turned by a drag across it (the right-hand panel's CHARACTER).
+    if (side_open_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
+    {
+        char_dragging_ = true;
+        char_drag_x_ = e.button.x;
+        return;
+    }
+    if (char_dragging_ && e.type == SDL_EVENT_MOUSE_MOTION)
+    {
+        char_turn_ += (e.motion.x - char_drag_x_) * 0.01f;
+        char_drag_x_ = e.motion.x;
+        return;
+    }
+    if (char_dragging_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+    {
+        char_dragging_ = false;
+        return;
+    }
     if (e.type == SDL_EVENT_MOUSE_WHEEL && alpha_open_)
     {
         const int last = std::max(0, int(alpha_rows().size()) - 1);
@@ -1669,6 +1695,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             toggle_panel();
             return;
         }
+        if (side_ < 1 && inside(side_tab_, mx, my))
+        {
+            toggle_side();
+            return;
+        }
         for (int c = 0; c < kLines + 1; ++c)
         {
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
@@ -1713,6 +1744,32 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         return;
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return;
+    // The key left of 1, by its place on the keyboard (whatever it types): the right-hand panel.
+    if (e.key.scancode == SDL_SCANCODE_GRAVE)
+    {
+        toggle_side();
+        return;
+    }
+    // While it is in, the right-hand panel takes the keys (its page's settings); Esc closes it.
+    if (side_open_)
+    {
+        if (e.key.key == SDLK_ESCAPE) side_open_ = false;
+        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_S)
+        {
+            // Save the character as a .character file (its text: settings, then its spheres).
+            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+            const std::string start = std::string(docs ? docs : "") + char_.id().substr(0, 12) + ".character";
+            static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
+            save_file_dialog(character_saved, this, window_, kChar, 1, start.c_str(), this);
+        }
+        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_O)
+        {
+            static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
+            open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
+        }
+        else char_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        return;
+    }
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0, ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
     const int step = ctrl ? 100 : shift ? 10 : 1;
     // "Enter again to go in anyway" holds only for the Enter straight after it.
@@ -1939,12 +1996,123 @@ void Menu::step_panel()
     const float step = panel_tick_ ? float(double(now - panel_tick_) / 1e6) / kPanelSlideMs : 0.0f;
     panel_tick_ = now;
     panel_ = panel_open_ ? std::min(1.0f, panel_ + step) : std::max(0.0f, panel_ - step);
+    side_ = side_open_ ? std::min(1.0f, side_ + step) : std::max(0.0f, side_ - step);
 }
 
 void Menu::toggle_panel()
 {
     panel_open_ = !panel_open_;
     panel_auto_ = false;
+}
+
+void Menu::toggle_side()
+{
+    side_open_ = !side_open_;
+    char_init();
+}
+
+void Menu::char_init()
+{
+    if (char_ready_) return;
+    char_ready_ = true;
+    if (app_)
+    {
+        char_draw_ = app_->character_drawing;
+        if (!app_->character.empty())
+            try
+            {
+                char_settings_ = sieve::read_character(app_->character).settings;
+            }
+            catch (const std::exception& e)
+            {
+                char_note_ = trf("side.char.bad_setting", {e.what()}); // the default, and why
+            }
+    }
+    char_ = sieve::unfold_character(char_settings_);
+}
+
+void Menu::char_store()
+{
+    if (!app_) return;
+    const std::string t = char_.text();
+    app_->character = t.substr(0, t.find('\n'));
+    app_->character_drawing = char_draw_;
+    save_app();
+}
+
+static void SDLCALL character_saved(void* self, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(self)->character_chosen(files[0], true);
+}
+static void SDLCALL character_opened(void* self, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(self)->character_chosen(files[0], false);
+}
+
+void Menu::character_chosen(const std::string& path, bool save)
+{
+    std::lock_guard<std::mutex> lock(char_mx_);
+    (save ? char_save_to_ : char_load_from_) = path;
+}
+
+void Menu::load_character(const std::string& path)
+{
+    char_init();
+    std::ifstream in(path_utf8(path), std::ios::binary);
+    std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in && text.empty())
+    {
+        char_note_ = trf("side.char.unreadable", {path});
+        return;
+    }
+    try
+    {
+        char_ = sieve::read_character(text);
+        char_settings_ = char_.settings;
+        char_store();
+        char_note_ = trf("side.char.opened", {utf8_path(path_utf8(path).filename())});
+    }
+    catch (const std::exception& e)
+    {
+        char_note_ = trf("side.char.refused", {e.what()});
+    }
+}
+
+// CHARACTER's rows: the seed, limbs, joints, branches, symmetry and head (sieve/character.hpp).
+void Menu::char_key(SDL_Keycode key, bool shift)
+{
+    constexpr int kRows = 7;
+    auto& s = char_settings_;
+    const int dir = key == SDLK_RIGHT ? 1 : key == SDLK_LEFT ? -1 : 0;
+    auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
+    switch (key)
+    {
+    case SDLK_LEFTBRACKET: char_turn_ -= 0.2617994f; return; // 15 degrees
+    case SDLK_RIGHTBRACKET: char_turn_ += 0.2617994f; return;
+    case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
+    case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
+    case SDLK_R: s.seed = (uint64_t(SDL_GetPerformanceCounter()) * 0x9E3779B97F4A7C15ull) >> 16; break; // any seed: the seed is the character's name
+    case SDLK_LEFT:
+    case SDLK_RIGHT:
+        switch (char_row_)
+        {
+        case 0: s.seed += uint64_t(int64_t(dir) * (shift ? 10 : 1)); break;
+        case 1: bump(s.limbs, 0, 16); break;
+        case 2: bump(s.joints, 1, 12); break;
+        case 3: bump(s.branches, 0, 3); break;
+        case 4: s.symmetry = sieve::Symmetry((int(s.symmetry) + 3 + dir) % 3); break;
+        case 5: s.head = !s.head; break;
+        case 6:
+            char_draw_ = (char_draw_ + 4 + dir) % 4; // how it is drawn: no new character
+            char_store();
+            return;
+        }
+        break;
+    default: return;
+    }
+    char_ = sieve::unfold_character(s);
+    char_note_.clear();
+    char_store();
 }
 
 void Menu::render()
@@ -2264,7 +2432,7 @@ void Menu::render()
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
     // Beside the settings panel, or across the room it leaves (past the SETTINGS tab) while it is out.
-    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20) / float(kLines + 1));
+    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_ * kSideW) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 148, bottom = H - 60, span = bottom - top, min_bar = 12;
@@ -2377,6 +2545,7 @@ void Menu::render()
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
     }
+    render_side(W, H);
     if (alpha_open_) render_alphabets(W, H);
     else if (overlay_ >= 0) render_overlay(W, H);
     else if (details_ >= 0) render_details(W, H);
@@ -2392,6 +2561,239 @@ void Menu::render()
     }
 }
 
+
+// ---------------------------------------------------------------- the right-hand panel
+// Opposite SETTINGS (IDEAS §19.148): a tab at the right edge while it is out, and when it is in, its
+// pages' names along the top and the page below. CHARACTER is the first page; the character itself
+// (sieve-character-v1, a seed unfolding a tree of spheres) is the next step, and its page says so.
+void Menu::render_side(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
+    side_tab_ = {};
+    if (side_ < 0.5f)
+    {
+        const std::string word = tr("side.tab");
+        std::vector<std::string> letters;
+        for (size_t i = 0; i < word.size();)
+        {
+            size_t j = i + 1;
+            while (j < word.size() && (uint8_t(word[j]) & 0xC0) == 0x80) ++j; // one UTF-8 character
+            letters.push_back(word.substr(i, j - i));
+            i = j;
+        }
+        side_tab_ = {W - kPanelTabW + 2, 80, kPanelTabW - 4, float(letters.size()) * 12 + 8};
+        SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
+        SDL_RenderFillRect(r_, &side_tab_);
+        SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
+        SDL_RenderRect(r_, &side_tab_);
+        for (size_t k = 0; k < letters.size(); ++k) text(r_, side_tab_.x + (side_tab_.w - 8) / 2, side_tab_.y + 4 + float(k) * 12, letters[k], 1, grey);
+    }
+    if (side_ <= 0) return;
+    const float x = W - side_ * kSideW, top = 70, bottom = H - 70;
+    const SDL_FRect box{x, top, kSideW, bottom - top};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+    SDL_RenderFillRect(r_, &box);
+    SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
+    SDL_RenderRect(r_, &box);
+    // The pages' names: one now, more as the systems come.
+    static const char* const kPages[] = {"side.page.character"};
+    float px = x + 14;
+    for (int i = 0; i < int(std::size(kPages)); ++i)
+    {
+        const std::string name = tr(kPages[i]);
+        text(r_, px, top + 12, name, 1, i == side_page_ ? white : grey);
+        if (i == side_page_)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+            SDL_RenderLine(r_, px, top + 24, px + text_width(name, 1), top + 24);
+        }
+        px += text_width(name, 1) + 16;
+    }
+    // A file chosen in a dialog since the last frame: saved or opened now.
+    {
+        std::optional<std::string> save, load;
+        {
+            std::lock_guard<std::mutex> lock(char_mx_);
+            save.swap(char_save_to_);
+            load.swap(char_load_from_);
+        }
+        if (save)
+        {
+            std::ofstream out(path_utf8(*save), std::ios::binary);
+            out << char_.text();
+            char_note_ = out ? trf("side.char.saved", {utf8_path(path_utf8(*save).filename())}) : trf("side.char.unwritable", {*save});
+        }
+        if (load) load_character(*load);
+    }
+    // The settings, one a row, the chosen one marked; then the character, turning.
+    char_init();
+    const auto& cs = char_settings_;
+    const std::string values[] = {std::to_string(cs.seed), std::to_string(cs.limbs), std::to_string(cs.joints), std::to_string(cs.branches),
+                                  sieve::symmetry_name(cs.symmetry), cs.head ? tr("side.yes") : tr("side.no"),
+                                  tr(std::string("side.char.draw.") + std::to_string(char_draw_))};
+    static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing"};
+    float y = top + 40;
+    for (int i = 0; i < 7; ++i)
+    {
+        const bool on = i == char_row_;
+        if (on)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
+            const SDL_FRect sel{x + 8, y - 3, kSideW - 16, 14};
+            SDL_RenderFillRect(r_, &sel);
+        }
+        text(r_, x + 14, y, (on ? "> " : "  ") + tr(kLabels[i]), 1, on ? white : grey);
+        text(r_, x + 190, y, values[i], 1, on ? white : grey);
+        y += 16;
+    }
+    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16)}), 1, grey);
+    if (!char_note_.empty()) text(r_, x + 14, y + 18, fit_cells(char_note_, size_t((kSideW - 28) / 8)), 1, white);
+    // The drawing: each sphere a circle, each bone a line to its parent, seen from the side, standing
+    // on a pedestal; a drag across it (or [ and ]) turns it about the upright. Scaled to fit the box
+    // below the rows.
+    const float bx = x + 14, by = y + 24, bw = kSideW - 28, bh = (bottom - 34) - by;
+    char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
+    if (bh > 40)
+    {
+        int32_t ex, ey, ez;
+        char_.extent(ex, ey, ez);
+        const float reach = float(std::max({ex, ez, 1})), tall = float(std::max(ey, 1));
+        const float scale = std::min(bw / (2.4f * reach), bh / (2.6f * tall));
+        const float cx = bx + bw / 2, cy = by + bh / 2 - bh * 0.04f;
+        const float turn = char_turn_, ca = std::cos(turn), sa = std::sin(turn);
+        // The pedestal: a disc under the lowest sphere, seen a little from above (its depth a
+        // quarter of its width), with eight spokes that turn with the character.
+        int32_t low = 0;
+        for (const sieve::Sphere& p : char_.spheres) low = std::min(low, p.y - p.r);
+        const float py = cy - float(low) * scale + 6, prx = reach * 1.15f * scale, pry = prx * 0.25f;
+        SDL_SetRenderDrawColor(r_, 110, 110, 110, 255);
+        constexpr int kRim = 48;
+        for (int k = 0; k < kRim; ++k)
+        {
+            const float a0 = 6.2831853f * float(k) / kRim, a1 = 6.2831853f * float(k + 1) / kRim;
+            SDL_RenderLine(r_, cx + prx * std::cos(a0), py + pry * std::sin(a0), cx + prx * std::cos(a1), py + pry * std::sin(a1));
+            SDL_RenderLine(r_, cx + prx * std::cos(a0), py + 8 + pry * std::sin(a0), cx + prx * std::cos(a1), py + 8 + pry * std::sin(a1));
+        }
+        SDL_RenderLine(r_, cx - prx, py, cx - prx, py + 8);
+        SDL_RenderLine(r_, cx + prx, py, cx + prx, py + 8);
+        SDL_SetRenderDrawColor(r_, 70, 70, 70, 255);
+        for (int k = 0; k < 8; ++k)
+        {
+            const float a = turn + 0.7853982f * float(k);
+            SDL_RenderLine(r_, cx, py, cx + prx * std::cos(a), py + pry * std::sin(a));
+        }
+        auto at = [&](const sieve::Sphere& p, float& sx, float& sy, float& depth) {
+            const float px = float(p.x), pz = float(p.z);
+            sx = cx + (px * ca - pz * sa) * scale;
+            sy = cy - float(p.y) * scale;
+            depth = px * sa + pz * ca;
+        };
+        // Spheres drawn far to near, so the nearer cover the farther.
+        std::vector<std::pair<float, size_t>> order;
+        for (size_t i = 0; i < char_.spheres.size(); ++i)
+        {
+            float sx, sy, d;
+            at(char_.spheres[i], sx, sy, d);
+            order.push_back({d, i});
+        }
+        std::sort(order.begin(), order.end());
+        // A sphere's colour: nearer brighter (the depth, from -reach to reach, as 90 to 255), the
+        // head warmer, scaled by `light` (1 unlit).
+        auto colour = [&](const sieve::Sphere& p, float d, float light) {
+            const float v = std::clamp(172.0f + 83.0f * d / reach, 90.0f, 255.0f) * light;
+            const bool head = p.kind == sieve::Sphere::Head;
+            return SDL_FColor{v / 255.0f, (head ? v : v * 0.85f) / 255.0f, (head ? v * 0.7f : v) / 255.0f, 1.0f};
+        };
+        if (char_draw_ <= 1)
+        {
+            // The bones, under everything.
+            SDL_SetRenderDrawColor(r_, 120, 120, 120, 255);
+            for (const sieve::Sphere& p : char_.spheres)
+                if (p.parent >= 0)
+                {
+                    float x1, y1, d1, x2, y2, d2;
+                    at(p, x1, y1, d1);
+                    at(char_.spheres[size_t(p.parent)], x2, y2, d2);
+                    SDL_RenderLine(r_, x1, y1, x2, y2);
+                }
+        }
+        // Voxels: one cell size for the whole character, an eighth of the body's radius on screen.
+        const float cell = std::max(2.0f, float(char_.spheres[0].r) * scale / 4.0f);
+        for (const auto& [d, i] : order)
+        {
+            const sieve::Sphere& p = char_.spheres[i];
+            float sx, sy, dd;
+            at(p, sx, sy, dd);
+            const float rad = std::max(1.5f, float(p.r) * scale);
+            const SDL_FColor c = colour(p, d, 1.0f);
+            SDL_SetRenderDrawColorFloat(r_, c.r, c.g, c.b, 1.0f);
+            if (char_draw_ == 0)
+            {
+                // Pixels: the sphere as one point, its size what a pixel is.
+                const SDL_FRect px{std::floor(sx) - 1, std::floor(sy) - 1, 3, 3};
+                SDL_RenderFillRect(r_, &px);
+            }
+            else if (char_draw_ == 1)
+            {
+                constexpr int kSegs = 24;
+                for (int k = 0; k < kSegs; ++k)
+                {
+                    const float a0 = 6.2831853f * float(k) / kSegs, a1 = 6.2831853f * float(k + 1) / kSegs;
+                    SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
+                }
+            }
+            else if (char_draw_ == 2)
+            {
+                // Voxels: the cells of a grid fixed to the screen whose centres fall in the sphere's
+                // disc, each a filled square with a darker edge.
+                const int x0 = int(std::floor((sx - rad - cx) / cell)), x1 = int(std::ceil((sx + rad - cx) / cell));
+                const int y0 = int(std::floor((sy - rad - cy) / cell)), y1 = int(std::ceil((sy + rad - cy) / cell));
+                for (int gy = y0; gy <= y1; ++gy)
+                    for (int gx = x0; gx <= x1; ++gx)
+                    {
+                        const float qx = cx + (float(gx) + 0.5f) * cell, qy = cy + (float(gy) + 0.5f) * cell;
+                        if ((qx - sx) * (qx - sx) + (qy - sy) * (qy - sy) > rad * rad) continue;
+                        const SDL_FRect q{cx + float(gx) * cell, cy + float(gy) * cell, cell, cell};
+                        SDL_SetRenderDrawColorFloat(r_, c.r, c.g, c.b, 1.0f);
+                        SDL_RenderFillRect(r_, &q);
+                        SDL_SetRenderDrawColorFloat(r_, c.r * 0.55f, c.g * 0.55f, c.b * 0.55f, 1.0f);
+                        SDL_RenderRect(r_, &q);
+                    }
+            }
+            else
+            {
+                // Shaded: a disc lit from the upper left (Lambert's cosine on the sphere's surface,
+                // over a little ambient light), as a fan of triangles whose rim and centre carry
+                // the light where they face.
+                constexpr int kSegs = 32;
+                std::vector<SDL_Vertex> v;
+                std::vector<int> idx;
+                const float lx = -0.45f, ly = -0.55f, lz = 0.70f; // towards the light, of length about 1
+                auto lit = [&](float nx, float ny, float nz) {
+                    const float lambert = std::max(0.0f, nx * lx + ny * ly + nz * lz);
+                    const SDL_FColor k = colour(p, d, 0.25f + 0.75f * lambert);
+                    return k;
+                };
+                // The centre, facing the viewer, and rings at 0.5 and 1 of the radius.
+                v.push_back({{sx, sy}, lit(0, 0, 1), {0, 0}});
+                for (const float ring : {0.5f, 0.97f})
+                    for (int k = 0; k < kSegs; ++k)
+                    {
+                        const float a = 6.2831853f * float(k) / kSegs, ux = std::cos(a), uy = std::sin(a);
+                        const float nz = std::sqrt(std::max(0.0f, 1.0f - ring * ring));
+                        v.push_back({{sx + rad * ring * ux, sy + rad * ring * uy}, lit(ring * ux, ring * uy, nz), {0, 0}});
+                    }
+                for (int k = 0; k < kSegs; ++k)
+                {
+                    const int a = 1 + k, b = 1 + (k + 1) % kSegs, a2 = 1 + kSegs + k, b2 = 1 + kSegs + (k + 1) % kSegs;
+                    idx.insert(idx.end(), {0, a, b, a, a2, b2, a, b2, b});
+                }
+                SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), idx.data(), int(idx.size()));
+            }
+        }
+    }
+    text(r_, x + 14, bottom - 22, tr("side.footer"), 1, grey);
+}
 
 // ---------------------------------------------------------------- filters overlay
 
