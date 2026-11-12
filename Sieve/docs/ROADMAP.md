@@ -16,11 +16,11 @@ stage, the first items are the cheapest with the widest reach.
 
 | Stage | What it is | First items | Large ones |
 | --- | --- | --- | --- |
-| 8. The record | docs that match the code; the work-done log; loose notes reconciled | `ideas/WORK-DONE.md`; docs checked from the code (19.134); the loose notes (§10); chat logs (19.9) | none |
-| 9. The tactile Sieve | accessibility, every sense | colour-blindness pass (2.4); text size and contrast (19.74 d); read-aloud for panels; "describe this unit"; key remapping (§10) | braille and haptics (19.140 b); wider scripts and fonts (2.5, §11) |
+| 8. The record | docs that match the code; the work-done log; loose notes reconciled | [ideas/WORK-DONE.md](ideas/WORK-DONE.md) **begun** (from `results/`); docs checked from the code (19.134); the loose notes (§10); chat logs (19.9) | none |
+| 9. The tactile Sieve | accessibility, every sense | identity never by colour alone (19.143; the colour pass was done, 2.4); text size and contrast (19.74 d); read-aloud for panels; "describe this unit"; key remapping (§10) | braille and haptics (19.140 b); wider scripts and fonts (2.5, §11) |
 | 10. Hallway polish | small things that make it feel finished | shimmer (5.6); warp animation (5.4); held item's links (5.7); see-through panel and the render glitch (§10); presets above START; tabs on every line (19.80 b); completion estimate's place (19.130 a); metrics wall (19.50 b) | none |
-| 11. Hallway shape | how the lines are laid out and seen | one wall of shelves (5.1, §11); junction as a ring and the wheel through forks (5.12); telescope (5.9); sphere and cube views (19.117 d) | rings (5.2); toroidal map (5.8); end-caps (7.13); scene description (5.10) |
-| 12. Filters and lines | what can be set aside and counted | titled lines bottom-up (5.13); `.obj` filter and alphabet (7.3, 7.4); pages on babel29 (§11); lines filtering each other (§12); Optimise all in COST and clash sets (§12); geometry (19.1, 19.7); join filters (§13); Life lens and `life-causal-v1` (19.141); glider guns (19.112 g); a generated line (19.27 a) | predefined stacks (§12); rules between voices and nine tones (§12) |
+| 11. Hallway shape | how the lines are laid out and seen | the setup menu as a scroll strip when lines outgrow the screen, and views of the spaces from other angles (19.143); one wall of shelves (5.1, §11); junction as a ring and the wheel through forks (5.12); telescope (5.9); sphere and cube views (19.117 d) | rings (5.2); toroidal map (5.8); end-caps (7.13); scene description (5.10) |
+| 12. Filters and lines | what can be set aside and counted | an emotion line as a ring of doors, with links as records (19.144); titled lines bottom-up (5.13); `.obj` filter and alphabet (7.3, 7.4); pages on babel29 (§11); lines filtering each other (§12); Optimise all in COST and clash sets (§12); geometry (19.1, 19.7); join filters (§13); Life lens and `life-causal-v1` (19.141); glider guns (19.112 g); a generated line (19.27 a) | predefined stacks (§12); rules between voices and nine tones (§12) |
 | 13. Sound and voice | music, PCM, voices | designer inside the Media Player (19.19); loudness and note sets (§12); PCM filters (19.133 g); film sound apart (19.132 e); voices of the halls (19.55, 19.70 b) | PCM against note sets (§12); track model (19.31 b); trained voice (19.135 c); articulatory voice (19.33) |
 | 14. Compression, the next version | gathered into v35, measured first | BCJ2 (Hdr); headers modelled (Hdr, 19.88 g); rope probe at a second place (19.118); cards as a transform (19.112 e); scattered substitutions (19.114 c); start-test cache (19.120 b); route table per priority (19.130 b); RAPL figures (19.111 i); maps as v5 (16.3); threads (19.99 d, 19.120 c); duplicated code (19.120 g) | JPEGs smaller (19.88 a); mixing as a piece (19.103 b); real-rope rules (19.110 b); mesh, code point, grammar, melody models (19.114 d); coded video (19.116 d) |
 | 15. The AI line | models that replay bit for bit | keep only the hash (§15); shelf budget (§15); byte model on pictures (18.5); deterministic sampling (19.121 e); QK-norm again at size (19.119 a); training interface and readers (19.133 c, e); chain branches (19.46 b); small baked models (19.72) | aispace-v2 (§15, 19.86 e); plug in any model (18.3); diffusion (19.2, 19.17); wider arithmetic (19.133 d); a real model (19.122, 19.133 f); ComfyUI (19.26 a) |
@@ -33,7 +33,7 @@ line, the rankable canonical form, wider arithmetic, Optimise Search's other kin
 icon, and the others listed there. They join a stage when he decides.
 
 **Where to start:** Stage 8 (it makes every later stage cheaper to check), with Stage 9's
-colour-blindness pass and Stage 10's small items beside it, since each is a day or less and touches
+first items and Stage 10's small items beside it, since each is a day or less and touches
 what everyone sees; then Stage 12 and 14 in turn, measured; the large ones one at a time.
 
 ## The long plan (11 November 2026), and where it stands (12 November 2026)
@@ -91,13 +91,13 @@ voices etc accordingly as well as the rest of the documentation". In order:
   [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md), pointers left in IDEAS.md. Next: §17 and the
   unworkable ones to `ideas/DEPRECATED.md`, then the dated `ideas/WORK-DONE.md`.
 - **Step 2 carried on (12 November 2026):** 19 set-aside entries, all of §17 among them, moved whole
-  to [ideas/DEPRECATED.md](ideas/DEPRECATED.md); the colour-blindness pass kept in IDEAS.
+  to [ideas/DEPRECATED.md](ideas/DEPRECATED.md); the colour-blindness pass kept in IDEAS (it was done on 6 November; §19.143).
 - **Step 3 done (12 November 2026):** the long plan through the ideas, at the top of this file.
 - **A rule over all of it, the tactile Sieve (IDEAS §19.140):** Sieve is meant to be felt as well as
   seen: colours and notes carried by braille, touch and sensation screens, for the disabled
   throughout time; that is why the interface is kept simple. Every new screen keeps few elements,
   each with a name, a value and a place, and no meaning held by colour or position alone. First
-  steps: the colour-blindness pass (2.4), read-aloud for the hallway's panels, and a "describe this
+  steps (the colour pass was done, 2.4; colour cannot carry identity as lines grow, §19.143): read-aloud for the hallway's panels, and a "describe this
   unit" key that speaks or brailles the unit in hand exactly.
 
 ---

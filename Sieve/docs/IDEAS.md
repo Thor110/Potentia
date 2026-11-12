@@ -6,7 +6,7 @@ is a defect, a feature, an open question, or framing.
 
 Nothing here is a commitment. Within each section the order is roughly by how much it is worth.
 
-**First, when work turns to the game (GAME.md; Edward, 6 October 2026): the colour-blindness pass (2.4).**
+**First, when work turns to the game (GAME.md; Edward, 6 October 2026): the colour-blindness pass (2.4).** *Done 6 November 2026; see §19.143.*
 
 **How to read it (28 October 2026).** The file grew in the order things were said, so an item's
 first paragraph may be an idea that later paragraphs, or a later section, built, changed or set
@@ -139,7 +139,7 @@ where the Python oracle earns its keep a second time.
 
 **2.3 The cased dictionary lets short gibberish through.** *Done; moved whole to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md) (12 November 2026).*
 
-**2.4 No colour-blindness pass.** Nine lines, filter verdicts and the map all encode meaning in
+**2.4 No colour-blindness pass.** *Done 6 November 2026; colours kept by Edward; why colour cannot carry a line's identity as lines grow: §19.143.* Nine lines, filter verdicts and the map all encode meaning in
 hue, with no non-colour fallback and no simulation check. First when work turns to the game (above). The pair most
 at risk: audio's dark green and video's dark red (and so tracks and movies, which share them),
 which differ mostly in hue, the difference red–green colour blindness loses.
@@ -295,6 +295,7 @@ It also hides the moment the shelf changes side.
 **5.5 Accelerating scroll.** *Done; moved whole to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md) (12 November 2026).*
 
 **5.6 Shimmer on the item under the crosshair.** Small, and it makes the interactable thing obvious.
+*Built 12 November 2026 (`client/hallway.cpp`): the item under the crosshair, already tinted in its line's edge colour, now breathes (its tint between 85 and 135 of 255 over 1.6 s) and a leaning band sweeps across its front every 1.6 s. Shimmer on walking past stays undecided (§10).*
 
 **5.7 Metadata and links on an item in hand.** When a unit has been catalogued, show what is known
 about it and let its links be followed — a warp at the touch of a hyperlink. This is the feature
@@ -796,7 +797,7 @@ is a setting, as a book holds pages of any length.
 
 - **The colours:** tracks audio's green, movies video's red, each with black edges, as books
   (grey) has. Black edges then mean a composition, whose background says what of. The
-  colour-blindness pass (2.4) is still to do: audio's and video's dark green and dark red differ
+  colour-blindness pass (2.4) was done on 6 November 2026 (§19.143): audio's and video's dark green and dark red differ
   mostly in hue, which red–green colour blindness loses.
 - **Their models:** their own (`book-tracks.obj`, `book-movies.obj`), begun as copies of audio's and
   video's, to be modelled from there.
@@ -6284,7 +6285,7 @@ throughout time", and "that is a major part of why I have left the interface loo
   - *Notes by touch:* a melody's pitches and lengths as vibration patterns, beside its sound.
   - *Settings:* text size, contrast, colour-blind palettes, holding a key instead of repeating it
     (§19.74's list), as each sense is added.
-- *Workable now, in order:* the colour-blindness pass (2.4, still open); read-aloud for the hallway's
+- *Workable now, in order:* (the colour-blindness pass is done, 2.4, and colour cannot carry identity as lines grow, §19.143) read-aloud for the hallway's
   panels (the part §19.74 left); a "describe this unit" key that speaks or brailles the unit in hand
   exactly (its letters, its notes, its rows of colours); braille output through the system's screen
   reader. *Later:* haptic and sensation screens as the hardware comes.
@@ -6344,3 +6345,109 @@ constrained, fraud made impossible) and §19.137 (compatible forever) into one a
   theory say what can be named and how briefly (the counting argument is the floor under all of
   it); chaos theory and generators (§19.111, §19.141) give the short routes through it; hashing
   and exact arithmetic give the lock. Sieve's rule stays: each is used where it is measured to work.
+
+**19.143 Colour at infinite dimensions; the span as a scroll wheel; views of the spaces from other
+angles (Edward, 12 November 2026).** His words: "I thought we did the colour blindness pass and found
+two dimensions colours slightly clashed on the sieve setup menu, I didn't know what colour to change
+them to while similarly preserving its identity, we also have new dimensions, theoretically infinite
+to add in to the mix so everything will inevitably become a shade or something like that, which
+means there is nothing we can do about colour blindness to begin with, this also means the dimension
+span from binary to binary eventually becomes so big that it becomes a left to right scroll wheel
+interface", and "it could also interface with a series of visualisations the view the spaces from
+different angles such as the toroidal nature implied by the circles of the minimap as well as
+through its cross dimensional filtering etc".
+- *The pass was done* (2.4, 6 November 2026, `tools/colour_check.py`): tracks and movies, 58.9
+  apart normally and 2.4 with deuteranopia; every other pair 14.2 or more. Edward kept the colours,
+  not knowing what to change them to without losing each line's identity. The triage's "not
+  wanted" for 2.4 means that; the plans that called it still to do were wrong and are corrected.
+- *Why colour cannot carry it:* with lines added without end, every colour becomes a shade of
+  another, for everyone, colour-blind or not: any palette runs out. So a line's identity must never
+  rest on colour alone. It already does not: every line is named wherever it is shown (the HUD, the
+  setup menu's columns, the door signs). Colour stays as a help, chosen by `colour_check.py` as far
+  as it can go; the name, the place in the order, and later a pattern, a sound (each line's music
+  mode) and a touch (§19.140) carry the rest.
+- *The span becomes a scroll wheel:* the setup menu draws binary, every line, and binary again as
+  columns across the screen (pitch = the width over the lines plus one, with a minimum). With 11
+  lines it fits; as lines grow it will not, and the menu becomes a strip scrolled left and right by
+  the wheel or the arrows, with the focused line centred and its name and figures always shown. The
+  corridor already works this way (left and right through the doors, binary wrapping round). To
+  build when the lines outgrow the screen; the minimum pitch is where it starts.
+- *Views of the spaces from other angles:* the same strip as one of a series of views. The minimap's
+  circles already imply a torus (every line loops, §5.2, §5.8); a toroidal view would draw each line
+  as a ring and the doors as the links between rings. A cross-dimensional view would draw how the
+  lines filter each other (§12's lines as filters against others, `not-a-file-v1`), and the node
+  graph is a third. Each is a lens on the same addresses, chosen like a camera, and each keeps the
+  tactile rule: a name, a value and a place for everything shown.
+
+**19.144 An emotion dimension, shortcut dimensions as highways, and doors through doors (Edward,
+12 November 2026).** His words: "I suppose there would also be an emotion dimension, that might be a
+really simple dimension to help map everything from, as it would only contain X number of doors or
+objects or words which are emotions, note that down as an idea to help mapping the state spaces,
+tying everything to emotion and thus a simple shortwave route interface provides a link between
+everything via the emotion dimension and other such highway dimension interfaces." "These shortcut
+dimensions would be capable of being linked upstream to things like hashtags and words and more in
+order to help make everything preserved, an immutable chain through history between ai and human
+work, thus preserving what was truly ai made over what was truly human made forever." "I don't know
+what an emotion dimension would look like, in theory that is small enough to just become doors and in
+theory all dimensions could be represented by doors as doors through doors and across the
+dimensions etc".
+- *What an emotion dimension could be:* a small, closed line: a fixed, versioned list of emotion
+  words, each one unit. Published lists exist to start from (Ekman's six, Plutchik's eight with
+  their intensities, or the 27 of Google's GoEmotions), so the line would be `emotions-v1` naming
+  its list, and a later list a later version. Small enough that it needs no shelves: every unit is a
+  door, as Edward says, standing round one room (a junction as a ring, §5.12).
+- *How it maps everything:* an item is not *in* the emotion line; it is *linked* to it. A link is a
+  record (this item's hash, this emotion, who said so, when), an edge in the node graph (§5.8a), so
+  the emotion's door leads to every item linked to it, and an item's page lists its emotions. That
+  is the shortwave route: two hops between any two items that share an emotion, whatever their
+  lines. The same works for any small set of labels (a hashtag, a word, a place, a year): each is a
+  highway dimension, a hub of doors, and they can be linked upstream to the tags people already use.
+- *The honest limit:* an emotion is a judgement, not a property of the bytes, so links are claims,
+  and different people link differently. Sieve keeps every claim apart, named by who made it, rather
+  than one verdict; a model can make claims too, marked as a model's. Counting links is cheap; agreeing
+  on them is not Sieve's to decide.
+- *AI and human work, preserved:* Sieve cannot tell from content whether a person or a model made
+  something, and no filter will (§19.66, §19.136). What it can lock in time is the *claim*, made when
+  the work was made: the work's hash, its maker's statement (person, model, or both, and which
+  model), and witnesses holding that record from that day (§19.136, §19.142). A record made early
+  cannot be quietly changed later; a claim made late carries its own date. So the chain preserves
+  what was said to be human-made and AI-made, and when, forever, which is as much as can be known.
+- *Doors through doors:* any line small enough can be drawn as doors alone, and a door can open on
+  another room of doors, so lines nest: a tree or graph of rooms (the branching end-caps, §7.13; the
+  junction as a ring, §5.12), with the big lines (pages, images, binary) as the corridors at its
+  leaves. It is the same space drawn another way, a view chosen like a camera (§19.143).
+- *Workable now, in order:* (1) `emotions-v1` as a line of one list, drawn as a ring of doors;
+  (2) emotion links as records in the node graph, by whom and when, with a door listing the items
+  linked to it; (3) the same for hashtags and words; (4) maker claims (human, model, both) recorded
+  with the hash when a `.sieve` or an item is made, and witnessed as §19.136's records are.
+- *As a circle of doors (Edward, the same day):* "the emotion dimension might actually be one of those
+  dimensions I envisioned as a circle with X number of doors leading to something but for now this
+  is just an idea, I don't know how it would actually build, but to some extent all of these things
+  unpack or unfold naturally and mathematically from its very structure or nature", and "there are
+  infinite ways to navigate it all also". Kept as an idea, not a design. In Sieve's terms: a line of
+  X units is already a circle (every line loops), so a small one drawn as X doors round a room is
+  the line itself, not a picture of it; what each door leads to follows from the links (above), and
+  the ways through are as many as the orderings, filters and links that can be laid over the same
+  addresses.
+
+**19.145 A cross-dimensional lattice of highways; ideas checked against what was built (Edward, 12
+November 2026).** His words: "while it goes can you look through the existing voices document and
+remove anything technical, stashing it away and going through it if it seems relevant, that way
+eventually we can cross reference and compare all ideas against all implementations and make sure we
+got everything done", and "the idea is that sieve becomes a cross dimensional lattice of cross
+dimensional highways through information across space and time preserving history as accurately as
+possible within the given time constraints".
+- *The lattice:* what §19.143 and §19.144 describe, taken together. The lines are the corridors; the
+  doors between them, the small highway dimensions (emotions, tags, words; §19.144) and the links
+  between items are the highways across them; every item sits where all of them cross, at its exact
+  address. Time is one more axis: each record carries when it was made, and the hashes and witnesses
+  of §19.136 and §19.142 keep it from being changed afterwards. "As accurately as possible within the
+  given time constraints" is Sieve's own rule already: exact where it can count, and every limit
+  (memory, time, the budget) measured on the machine and said out loud (§19.4, §19.143).
+- *Ideas against what was built:* done in a first pass the same day. VOICES' technical lines were
+  stashed in [ideas/VOICES-STASHED.md](ideas/VOICES-STASHED.md), each with where its idea went (the
+  IDEAS entry and its triage verdict, or what was built); [IDEAS-TRIAGE.md](IDEAS-TRIAGE.md) gives
+  every idea's verdict; done ideas move to [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md), set-aside
+  ones to [ideas/DEPRECATED.md](ideas/DEPRECATED.md), and [ideas/WORK-DONE.md](ideas/WORK-DONE.md)
+  dates the work. The next pass: each IMPLEMENTED entry checked against the code it names, so the
+  record says not only that something was built but that it is still there.

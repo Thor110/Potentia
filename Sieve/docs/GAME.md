@@ -36,7 +36,9 @@ That means content first (which exists), then rules as units (a Life-like line),
 exact physics, then representation from voxels to triangles, then an optional learned upscaler.
 
 **First, when work turns to the game** (Edward, 6 October 2026): the colour-blindness pass (IDEAS
-2.4). Nine lines, filter verdicts and the map all mean things by hue alone.
+2.4). *Done 6 November 2026: one pair (tracks and movies) close with deuteranopia, the colours kept,
+and every line named wherever it is shown; as lines grow without end colour cannot carry a line's
+identity, so names, places, sounds and touch do (IDEAS §19.143).*
 
 ---
 

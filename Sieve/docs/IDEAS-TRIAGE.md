@@ -20,19 +20,19 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 
 | Verdict | Ideas |
 | --- | ---: |
-| done | 183 |
-| workable | 207 |
-| workable, large | 72 |
+| done | 185 |
+| workable | 209 |
+| workable, large | 74 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
 | metaphor only | 16 |
-| **all** | **572** |
+| **all** | **578** |
 
 | Kind | Ideas |
 | --- | ---: |
 | technical | 419 |
-| both | 89 |
+| both | 95 |
 | process | 44 |
 | metaphorical | 20 |
 
@@ -177,7 +177,7 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 5.3 | Signs above the portals | technical | built | done | §10: a sign over every doorway in its line's colours. |
 | 5.4 | Warp animation | technical | noted only | workable | Turn the world, not the camera; "costs nothing" and hides the shelf changing side. |
 | 5.5 | Accelerating scroll | technical | built | done | Built 6 November 2026; doubles every two notches, up to 1,024 tiles. |
-| 5.6 | Shimmer on crosshair item | technical | noted only | workable | Small, and it makes the interactable thing obvious. |
+| 5.6 | Shimmer on crosshair item | technical | built | done | Built 12 November 2026: the tint breathes and a band sweeps across the item's front. |
 | 5.7 | Metadata and links on held item | technical | noted only | workable | Turns the hallway from a viewer into an archive; needs §4.1, which is built. |
 | 5.8a | Node graph, first version | technical | built | done | Built 27 September 2026; next steps (maps shipped, more relations) open; a whole-space graph left out as a tangle of noise. |
 | 5.8 | Toroidal map overlay | both | noted only | workable, large | Needs 5.2 first and anchors to plot. |
@@ -701,7 +701,7 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.127b | Order-1 rope coding by previous byte | technical | measured, set aside | not wanted | Measured "2.2 to 2.7%", but the packer now handles those files by mixing and WAVs go to FLAC, so it "would change what Sieve writes almost nowhere: not built." |
 | 19.128 | Seeded noise matches clipped from file | both | measured, set aside | unworkable | Noise matches one byte in 256 on any file, so recording where it matched costs as much as it saves. It lost bits at every seed count up to 2^28. |
 | 19.129 | Rope wave search across all threads | technical | open | workable | Since the memory pass, a wave's estimate holds only counts. It would shorten a large file's search (MAPS.WoW's "about 1,020 s") with the same result. Not built. |
-| 19.130a | Move completion estimate off main menu | technical | noted only | workable | Looks out of place between the title and the items. Might go beside or under them, or on its own page. §19.133 later moves the menu's readouts to Start Sieve's map. |
+| 19.130a | Move completion estimate off main menu | technical | built | done | Done 9 November 2026 (§19.133): the readouts left the main menu; each line's walk time is under its column in Start Sieve's map. |
 | 19.130b | Optimise Search route table per priority | technical | open | workable | Three paths per data kind (Size, Balanced, Speed), each measured. Today the table was measured for size only and the other two reuse it. Not built. |
 | 19.131a | Trim values the wave predicts exactly | technical | measured, set aside | not wanted | One trim saves "0.31 to 0.69%" on WAVs and "4.36% on `mr`". It was tied to the order-1 rope, which §19.127 later dropped. Not built. |
 | 19.131b | Second wave or noise trim pass | technical | measured, set aside | unworkable | A second wave loses "5 to 7%" because the kept values sit apart. A noise pass loses "27 to 116%". |
@@ -738,3 +738,9 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.141 | Game of Life over noise, through time | both | noted only | workable | A view and a countable filter, not a way to shorten files: each frame follows the last, so the first frame names the film (`life-causal-v1` on the movies line). |
 | 19.141 (all to say) | Infinite short routes into a state space across time | both | noted only | workable | Generators reach families of units, each an axis to walk; they cannot name an arbitrary file more briefly than the file (§0), so they pair with exact addresses. |
 | 19.142 | Sieve as a lock in time | both | noted only | workable | Gathers §19.136 and §19.137: hashes, exact rebuilds and forever-readable versions are the lock; released games are shared witnesses; each theory used where measured. |
+| 19.143 | Colour at infinite lines; scroll strip; other views | both | noted only | workable | Colour runs out as lines grow, so identity rests on names (already shown everywhere); the setup menu becomes a scroll strip; toroidal and cross-dimensional views as lenses. |
+| 19.144 a | Emotion dimension as a ring of doors | both | noted only | workable | A small versioned line of emotion words (a published list), drawn as doors; items linked to it as records, not placed in it. |
+| 19.144 b | Highway dimensions linked to tags and words | both | noted only | workable | Labels as hubs in the node graph: two hops between any items sharing one; links are claims, kept apart by who made them. |
+| 19.144 c | Immutable chain of AI and human work | both | noted only | workable, large | Content cannot show its maker; what can be locked is the maker's claim, hashed and witnessed when made (§19.136). |
+| 19.144 d | Doors through doors across dimensions | both | noted only | workable, large | Small lines drawn as rooms of doors, nesting into a graph of rooms (§5.12, §7.13); a view of the same space. |
+| 19.145 | Cross-dimensional lattice of highways; ideas against implementations | both | partly built | workable | The lines, doors, highway dimensions and links make the lattice, with time as an axis kept by hashes; VOICES' technical lines stashed with where each went; next, IMPLEMENTED checked against the code. |

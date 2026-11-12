@@ -10,6 +10,7 @@
 #include "cli/timings.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <future>
@@ -1502,10 +1503,10 @@ void Hallway::jump_tiles(int64_t n)
 // line, right wall to the previous one. You come in through the opposite wall's door.
 //
 // The binary line is the exception. It has one wall, the left, and one door in it, and that door
-// leads back to the line you came from. From pages you walk out of pages' right wall and into
-// binary's left, as between any two lines. From models you walk out of models' left wall, and the
+// leads back to the line you came from. From image you walk out of image's right wall and into
+// binary's left, as between any two lines. From AI, the last, you walk out of its left wall, and the
 // only door in binary is also in its left wall: so you are turned round, and come out of that
-// door facing into the room, with the line running the other way from you. Going back to models
+// door facing into the room, with the line running the other way from you. Going back to AI
 // turns you round again. The room itself never turns: it is one line, met from either end.
 void Hallway::cross(Side side)
 {
@@ -1514,12 +1515,12 @@ void Hallway::cross(Side side)
     if (on_binary())
     {
         to = binary_from_;
-        turn = to != (li_ + 1) % kLines; // back to models, through its left wall
+        turn = to != (li_ + 1) % kLines; // back to the last line (AI), through its left wall
     }
     else if (to == kBinaryLine)
     {
         binary_from_ = li_;
-        turn = side == Side::Left; // from models' left wall into binary's left wall
+        turn = side == Side::Left; // from the last line's left wall into binary's left wall
     }
     const float out = (kHalfWidth - 0.1f) * (side == Side::Left ? 1.0f : -1.0f);
     cam_.pos.x = turn ? -out : out;
@@ -2131,8 +2132,18 @@ void Hallway::render()
         // cover: there the tint is white.
         SDL_Color c = th.edge;
         if (int(c.r) * 3 + int(c.g) * 6 + int(c.b) < 600) c = SDL_Color{255, 255, 255, 255};
-        c.a = 110;
+        // The shimmer (IDEAS 5.6): the tint breathes between 85 and 135 over 1.6 s, and a brighter
+        // band, leaning like light on glass, sweeps across the front from left to right every
+        // 1.6 s, so the item you can take is plain at a glance.
+        const float t = float(SDL_GetTicks() % 1600) / 1600.0f;
+        c.a = Uint8(110.0f + 25.0f * std::sin(t * 6.2831853f));
         fill({f[0], f[1], f[2], f[3]}, c);
+        const auto along = [](Vec3 a, Vec3 b, float u) { return a + (b - a) * std::clamp(u, 0.0f, 1.0f); };
+        const float u = t * 1.5f - 0.3f, band = 0.16f, lean = 0.12f; // from just before the left edge to past the right
+        SDL_Color s = c;
+        s.a = 70;
+        if (u + lean + band > 0 && u < 1)
+            fill({along(f[0], f[1], u + lean), along(f[0], f[1], u + lean + band), along(f[3], f[2], u + band), along(f[3], f[2], u)}, s);
     }
     if (edge_glow_ && !md) draw_glow(buckets);
     for (int i = 0; i < kBuckets; ++i)

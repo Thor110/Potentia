@@ -248,9 +248,11 @@ The hallway is a wireframe. Each line has exactly two colours, a solid backgroun
 | Video | red | yellow |
 | Movies | red | black |
 | Models | clay | green |
+| Worlds | clay | black |
+| AI | deep violet | lilac |
 | Binary | black | green |
 
-Black edges mark a line composed of another's units: books of pages, tracks of audio, movies of video. Each line's colours, names and place in the door order are defined once, in `client/dimensions.hpp`.
+Black edges mark a line composed of another's units: books of pages, tracks of audio, movies of video, and worlds of models. Each line's colours, names and place in the door order are defined once, in `client/dimensions.hpp`.
 
 The text line's units are pages, so the hallway and the setup menu call it PAGES; `--line pages` is accepted as another name for `--line text`.
 
@@ -302,7 +304,7 @@ Input longer than one unit becomes a **sequence of addresses**. The warp lands o
 
 ## 7. Doors
 
-Doors connect the lines in order, and the binary line (§12.1) is the end of the run at both sides: **binary → Text → Image → Audio → Video → Books → Models → binary**. Left goes to the next line and right to the previous one; binary has one wall, so it has one door, and it leads back to the line you came from.
+Doors connect the lines in order, and the binary line (§12.1) is the end of the run at both sides: **binary → Image → Pages → Books → Audio → Tracks → Video → Movies → Models → Worlds → AI → binary**. Left goes to the next line and right to the previous one; binary has one wall, so it has one door, and it leads back to the line you came from.
 
 ### 7.1 Mapping
 
@@ -394,9 +396,9 @@ The structure tests of §8.1 are built as **filters**: small, self-contained mod
 | `clean-v2`, `words-v2`, `window-v2` | text (`lower27`) | as v1, but a unit may end in two or more SPACEs of padding, in which case the part before them is judged by v1. This admits the last unit of warped text. `window-v2` implies `clean-v2`; `words-v2` implies `clean-v2` and `window-v2`. `window-v2` is the filter for pages cut from real books: the words cut by the page edges are allowed. | yes |
 | `title-v1` (retired for `title-data-v1`, the same rule in the token form) | text (`lower27`) | a title page: within the first `N = min(max_length, L)` characters, the unit passes `words-v2` at length `N`, and every character after them is SPACE (default `max_length` 64). Implies `clean-v2`, `window-v2`, `words-v2`. | yes |
 | `max-run-v1` | text | no symbol other than SPACE repeated more than `max_run` times in a row (default 3) | yes: an automaton (its state is the last symbol and its run), so it also merges with the custom filters and `not-written-v1`; it judges only when that table would pass 16 million entries |
-| `symbol-entropy-v1` | every line | `min · L · 2^16 ≤ 1000 · HL ≤ max · L · 2^16`, where `HL = max(0, L·lg(L) − Σ c·lg(c))` (millibits per symbol; defaults 0 and 4400) | two-symbol lines (black-and-white images and video), up to the length whose rank fits the time budget (about 1,000 at 50 ms; measured on the machine) |
+| `symbol-entropy-v1` | every line but binary, models and AI | `min · L · 2^16 ≤ 1000 · HL ≤ max · L · 2^16`, where `HL = max(0, L·lg(L) − Σ c·lg(c))` (millibits per symbol; defaults 0 and 4400) | two-symbol lines (black-and-white images and video), up to the length whose rank fits the time budget (about 1,000 at 50 ms; measured on the machine) |
 | `model-information-v1` | text, with a model | `1000 · Σ (16·2^16 − lg(f)) ≤ max · L · 2^16`, each symbol's `f` taken in its context as in §4.2 (default max 5000 millibits per symbol) | no |
-| `symbol-entropy-v2` (24 October 2026; IDEAS §2.1, §2.2) | every line | as v1 on the unit's first `n` symbols, `min · n · lg(min(B, n)) ≤ 1000 · HL ≤ max · n · lg(min(B, n))`, where `B` is the line's number of symbols: thousandths of the most a unit can have (`min_permille`, `max_permille`; defaults 0 and 925). `n = L`, but on a line with a SPACE a unit that ends in two or more SPACEs has `n` the length before them (as `words-v2`), and a unit of SPACEs alone fails | two-symbol lines with no SPACE, as v1 |
+| `symbol-entropy-v2` (24 October 2026; IDEAS §2.1, §2.2) | every line but binary, models and AI | as v1 on the unit's first `n` symbols, `min · n · lg(min(B, n)) ≤ 1000 · HL ≤ max · n · lg(min(B, n))`, where `B` is the line's number of symbols: thousandths of the most a unit can have (`min_permille`, `max_permille`; defaults 0 and 925). `n = L`, but on a line with a SPACE a unit that ends in two or more SPACEs has `n` the length before them (as `words-v2`), and a unit of SPACEs alone fails | two-symbol lines with no SPACE, as v1 |
 | `model-information-v2` (24 October 2026; IDEAS §2.2) | text, with a model | as v1 on the unit's first `n` symbols, `n` as in `symbol-entropy-v2`: trailing padding is not counted, and a unit of SPACEs alone fails | no |
 | `neighbour-agreement-v1` | image, video | among all horizontally, vertically and (video) frame-to-frame adjacent pixel pairs, at least `min` per thousand share a colour (default 600) | while the table fits (below) |
 | `key-v1` | audio | every note's pitch class is in the scale on the tonic (parameters `tonic` C…B and `scale`: major, minor, harmonic-minor, major-pentatonic, minor-pentatonic, blues); rests always pass | yes |
@@ -773,13 +775,13 @@ It is the only alphabet that packs exactly: 256 symbols is 8 bits each, so a uni
 
 The last line, and the one the others are bounded by:
 
-    binary | image  pages  books  audio  tracks  video  movies  models | binary
+    binary | image  pages  books  audio  tracks  video  movies  models  worlds  ai | binary
 
-It is listed twice because it is met from either end, but it is **one line**, not two. It wraps around the outside of the others — a single closed loop, in binary, around everything they address. Its room is always the same way round, shelves on the line's left and the edge on its right; met from the models end, you are turned round to face the other way along it, so the two ends run in opposite directions, as the two ends of one line do.
+It is listed twice because it is met from either end, but it is **one line**, not two. It wraps around the outside of the others — a single closed loop, in binary, around everything they address. Its room is always the same way round, shelves on the line's left and the edge on its right; met from the AI end, you are turned round to face the other way along it, so the two ends run in opposite directions, as the two ends of one line do.
 
 **Shape.** It is the **same space** as any other tile of corridor — the same width, the same height, the same bookcase — and an ordinary line in every respect the engine cares about: its own two colours (black, with green edges and green text), its own place in the door order, its own column on the map. The one difference is that it has **one side**. One wall carries the bookcases; in place of the other the floor ends, at a short wall no higher than your waist, and past that there is nothing. Green rain falls off that edge for ever, filling the opening from the ceiling down and passing behind the wall — characters from every Unicode block, and now and then a code point written out as the surrogate pair it is stored as.
 
-**Doors.** Its one wall carries its one door, so the other lines **no longer loop into one another**: they start and finish at binary. Walking left out of `image` runs `pages`, `books`, `audio`, `tracks`, `video`, `movies`, `models`, and then binary. Walking right out of `image` reaches binary directly, from the other end. Either way the door you came in by is the door you leave by, because there is only one wall to put a door in: it leads back to the line you came from, and its sign names that line (image, the first, when you start on binary).
+**Doors.** Its one wall carries its one door, so the other lines **no longer loop into one another**: they start and finish at binary. Walking left out of `image` runs `pages`, `books`, `audio`, `tracks`, `video`, `movies`, `models`, `worlds`, `ai`, and then binary. Walking right out of `image` reaches binary directly, from the other end. Either way the door you came in by is the door you leave by, because there is only one wall to put a door in: it leads back to the line you came from, and its sign names that line (image, the first, when you start on binary).
 
 **Units (`binary-v1`).** The line holds **every file of 0 to N bytes**, the empty file included, where N is the line's length setting. There are
 

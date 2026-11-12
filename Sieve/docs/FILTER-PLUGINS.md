@@ -262,7 +262,7 @@ every length checked, and the same verdict on every unit.
 | `key-data-v2` | `key-v1`, every scale | table, v2 (a choice parameter) |
 | `melody-leap-v1`, `melody-lengths-v1`, `melody-rests-v1`, `melody-ending-v1`, `melody-range-v1` | (new: melody shape) | table, v2 |
 | `melody-metre-v1`, `melody-ambitus-v1`, `melody-gapfill-v1` | (new: bars, span, leaps filled; §19) | table, v2 |
-| `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1` and `-v2`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens) |
+| `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1` and `-v2`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens, v1; babel-punctuation: table, v1) |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
 a conformance check, not a replacement.
@@ -325,13 +325,14 @@ a conformance check, not a replacement.
   states that differ only in a missing transition, so the oracle completes the automaton with a
   sink before refining.) The unit tests check the ports against the built-ins: `clean-data-v1`'s
   counts are `clean-v1`'s at lengths 1 to 200 and it judges the same; `max-run-data-v1` judges as
-  `max-run-v1` at `max` 1 to 4, exhaustively at length 3 and on run-heavy units at 24, and counts
-  where the built-in cannot; `key-data-v1` counts as `key-v1` in the major key on all twelve
+  `max-run-v1` at `max` 1 to 4, exhaustively at length 3 and on run-heavy units at 24 (the built-in
+  has since become the same rule as an automaton, and counts too); `key-data-v1` counts as `key-v1` in the major key on all twelve
   tonics; a stack of two plugins ranks exactly; renumbered states compile to the same automaton;
   and ten kinds of mistake are refused with their line.
 - **Reference plugins** (`data/filters/`): `clean-data-v1` (table), `max-run-data-v1` (parameter
-  `max`, loops; unlike `max-run-v1` it counts, so compact mode works with it), `key-data-v1`
-  (parameter `tonic`, symbols by digit on the notes line), `tidy-data-v1` (`requires`),
+  `max`, loops; since retired for the built-in `max-run-v1`, now the same rule as an automaton,
+  which counts), `key-data-v1`
+  (parameter `tonic`, symbols by digit on the notes line), `tidy-data-v1` (`requires`; since retired for `tidy-data-v2`),
   `words-data-v1` and `window-data-v1` (the token form, with a `dict` parameter).
 - **The token form.** The engine builds the automaton directly: words from every set in one trie
   (each node knowing which sets it ends a word of); between tokens the state is the set of

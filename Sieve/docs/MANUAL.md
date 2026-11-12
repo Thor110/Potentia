@@ -185,7 +185,7 @@ hallway [options]          (hallway --help for the full list)
 
 Every line shares **one endless corridor** lined with bookcases. **Every book is one unit**, and the address increases as you walk forward:
 - Each tile of corridor holds **128 book slots** unless set otherwise (4 shelves of 16 on each wall): the left wall first, then the right wall. The setup menu's items per wall, or `--items-per-wall N`, sets it: a power of two from 2 to 4096, changing no address, only the tile and slot that name a place.
-- It must be a power of two, and the code refuses to build if it isn't (`sieve/corridor.hpp`).
+- It must be a power of two from 2 to 4096; any other value is refused when it is set (`core/src/corridor.cpp`).
 - On each wall the books run shelf by shelf from the top, and along each shelf in the direction you are walking.
 - One tile of geometry is built once and repeated forever.
 
@@ -226,7 +226,7 @@ hallway --line books --length 400 --book-pages 3 --warp tests/example_book_v1.bo
 
 ![A random book from the scrambled books line](images/hallway-book-random.png)
 
-The lines are astronomically long, so to see a whole loop, try a 2-character text line: `hallway --length 2` gives 729 units, which is 6 tiles with 39 empty slots.
+The lines are astronomically long, so to see a whole loop, try a 2-character text line: `hallway --length 2 --title-length 0` gives 729 units, which is 6 tiles with 39 empty slots (with a title, the default, each unit is a cover, a title and its text, and there are far more).
 
 ![The double start line at corridor tile 0](images/hallway-start-line.png)
 
@@ -261,15 +261,15 @@ In the hallway the models line is green wireframe on clay. **Pre-rendered displa
 
 **The binary line.** The last line, and the one the others are bounded by:
 
-    binary | image  pages  books  audio  tracks  video  movies  models | binary
+    binary | image  pages  books  audio  tracks  video  movies  models  worlds  ai | binary
 
 Each line stands before what is made of it, and image, a part of nearly all of them (covers, frames), first. It is listed at both ends because it is met from either end, but it is one line, not two. It wraps around the outside of the others — a single closed loop, in binary, around everything they address — so which end of the corridor you walk out of decides which side of it you see the edge on.
 
 It is the **same space** as any other tile of corridor — the same width, the same height, the same bookcase — and an ordinary line in every respect the engine cares about: its own two colours (black, with green edges), its own place in the door order, its own column on the map. The one difference is that it has **one side**. One wall carries the shelves, which stand empty; in place of the other the floor simply ends, at a short wall no higher than your waist, and past that there is nothing. Green rain falls off that edge for ever, filling the opening from the ceiling down and disappearing behind the wall — characters drawn from every Unicode block Sieve knows, with a bright head and a fading tail, and now and then a column that writes a code point out as the **surrogate pair** it is stored as: the code point, then its high half, then its low half, which is the forward pass down the column and the backward one read up it.
 
-Its one wall carries its one door, so the other lines no longer loop into one another — they **start and finish** at binary. Walking left out of IMAGE runs PAGES, BOOKS, AUDIO, TRACKS, VIDEO, MOVIES, MODELS and then binary, where the corridor ends; walking right out of IMAGE reaches binary directly, from the other side.
+Its one wall carries its one door, so the other lines no longer loop into one another — they **start and finish** at binary. Walking left out of IMAGE runs PAGES, BOOKS, AUDIO, TRACKS, VIDEO, MOVIES, MODELS, WORLDS, AI and then binary, where the corridor ends; walking right out of IMAGE reaches binary directly, from the other side.
 
-Its shelves hold **every file up to N bytes long**, the empty file first (BINARY in the setup menu, `--binary-length`, default 32). Files are numbered shortest first and then by their bytes, so a file's address is its own hex dump plus `0101...01`, one `01` per byte. Each file has a title, and on its front, drawn large, what kind of file it is, read from its own first bytes (ZIP, PNG, EXE, PDF, TXT, EMPTY, or ? when unknown); in hand it is a hex dump. **T** takes a path and warps to that file, with the file's name as its title (or, if it names no file, to the bytes of what you typed); the File Locator's "Go to it" does the same. Its files stand on the one wall. The room is always the same way round: coming in from models you are turned to face the other way along it, and its door leads back to where you came from.
+Its shelves hold **every file up to N bytes long**, the empty file first (BINARY in the setup menu, `--binary-length`, default 32). Files are numbered shortest first and then by their bytes, so a file's address is its own hex dump plus `0101...01`, one `01` per byte. Each file has a title, and on its front, drawn large, what kind of file it is, read from its own first bytes (ZIP, PNG, EXE, PDF, TXT, EMPTY, or ? when unknown); in hand it is a hex dump. **T** takes a path and warps to that file, with the file's name as its title (or, if it names no file, to the bytes of what you typed); the File Locator's "Go to it" does the same. Its files stand on the one wall. The room is always the same way round: coming in from AI you are turned to face the other way along it, and its door leads back to where you came from.
 
 **FIND MY LIMITS focus** (GLOBAL): FIND MY LIMITS grows every line, or only the one chosen here, leaving the others as they are.
 
@@ -281,7 +281,7 @@ The rain only ever falls as characters the font can actually draw, so it never b
 
 **SORT, and maps.** A map (`sieve map FOLDER`, or the node graph's "Make a map from a folder...") links real files and folders, each file named by its SHA-256. Made from a folder it holds none of their bytes, so it is small and can be handed round or bundled with a release (an anchor added with V, below, is held). On the SORT tab, a file on the binary line whose bytes a node of the chosen map names is that node, a verified anchor, drawn in its place among the rest; anything else is a lone point. Mouse or A/D turns the graph; [ and ] choose another map (on any tab).
 
-**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (one of its files: a map is Sieve instructions with a graph part, as `sieve-manifest-v18` added), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fourth tab, **META**. Sealed maps and "This installation" (the map chosen at the start, made fresh each time) cannot be changed.
+**Verified anchors: V.** Make a map with the node graph's **New map...** (O). Then, holding a file (an item on the binary line), press **V** on any tab to add it to the chosen map as a verified anchor, and V again to take it out; the item page shows which map is chosen and what V will do, and [ and ] change the map. Its bytes are kept inside the map (one of its files: a map is Sieve instructions with a graph part, as `sieve-manifest-v18` added), so the map can always walk back to it, and can be sent as one file. The node graph's **Remove from map** (or Delete) takes an anchor out too. When an anchor has metadata in the map, its item page has a fifth tab, **META**, between SORT and HELP. Sealed maps and "This installation" (the map chosen at the start, made fresh each time) cannot be changed.
 
 **The vault.** Sieve refuses to show, save or pass on files, pictures, melodies and models whose hash is in its vault (`docs/VAULT.md`), in any form it recognises, including written out as text (as it is, or in hex, base64 and other well-known encodings, decoded); text is never judged by what it says. Pictures are matched by PDQ, Meta's open perceptual hash, so resized, recompressed, recoloured, rotated or flipped copies are caught too, whether drawn in the hallway or found in a file. Files can also be listed by their content-defined chunks (`cdc-v1`), so a piece of one of a couple of kilobytes, cut out anywhere and put anywhere, is caught too. A withheld item keeps its address and place, so every count stays exact, but it is drawn blank, cannot be taken or saved, and never appears in the excluded view; files matching it are not located, installed or mapped. It cannot make an address secret (that is arithmetic); it makes sure Sieve is not what hands it over. It is not a filter and has no setting. `sieve vault` says what it holds (`--pdq` prints a picture's PDQ hash). The built-in entries are harmless tests: the 16 bytes "sieve vault test", a test picture of grey noise (`sieve vault --test-picture`), and a test file listed by its chunks (`sieve vault --test-file`).
 
@@ -341,11 +341,11 @@ What stands in a slot is **scaled to the slot, uniformly**. Scaling only along t
 
 **Filter memory.** The FILTER MEMORY row (GLOBAL) sets how much memory one count of the filters' survivors may take for its tables (512 MB at first; Left/Right in steps of 256 MB, PgUp/PgDn double or halve; saved with the application's settings, and `--filter-memory MB` for the `sieve` tool and the hallway). Every filter that counts by a table keeps within it: the plugins' combined automaton, not-written with them, utf8-valid on the binary line, and the built-in word filters. Past it a stack still judges every unit, but cannot count or compact, and the filter list says how much it would need ("the plugins' combined table needs 1.4 GB of memory at this length, over the filter memory (512 MB)"). At the top right, the budget's **filter memory** bar shows the most any line's ticked filters need for a full count against the setting, red when it is over. Changing the setting counts nothing by itself, so it can be stepped freely: a red line under the bars says *Memory Limit Change Detected : Press X to re-optimise all dimensions*, and **X** (on the setup screen or in a filters window) then counts every line again with it and re-ticks them, the clashes weighed anew. While any line is still being counted, *Calculating Dimensions...* is said in red at the top middle of the menu, the line under the bars says which lines, and ENTER THE HALLWAY is greyed until the counting is done. Going into the hallway uses the setting as it stands. Raise it as far as the machine allows: X counts several filters at once, so leave room for more than one.
 
-**Counting memory and merge cache.** The last two GLOBAL rows share out memory among the counts.
+**Counting memory and merge cache.** Two GLOBAL rows share out memory among the counts.
 - **COUNTING MEMORY** is the share of installed memory the setup menu's counts may take at once (50% at first; 5 to 100, Left/Right in steps of 5, PgUp/PgDn 25). Counts wait in a queue and run on one thread per core but the one that draws, and no more of them at once than this share holds, at the whole filter memory each. The row says how many that is on this machine ("50% of 15.7 GB (3 at once)").
 - **MERGE CACHE** is the share of the filter memory that keeps the plugins' merged automata, and their counting tables when they fit, between counts (50% at first; 0 to 100). With it, the pages line and the books' title merge the same plugins only once, and a line counted again doesn't merge them again. 0 keeps none. Whatever this is set to, a table two counts need at the same time is built once and used by both.
 
-Both change no count, only how fast the counts arrive, so they take effect at once without pressing X. **TIME BUDGET**, the last GLOBAL row, is the longest one unit may take to open (50 ms at first; 5 ms a step, PgUp/PgDn double or halve). The budget's time bar and FIND MY LIMITS hold every line to it at once, with how the time grows measured on this machine at start-up. A ranker whose time grows faster than its table's memory follows it too: symbol-entropy on black-and-white pictures ranks units up to about 1,000 symbols at 50 ms. Since that changes what can be counted, the budget is applied like the filter memory: a red line says *Time Budget Change Detected : Press X to re-optimise all dimensions*, and X (or going into the hallway) applies it. `--unit-time MS` sets it for the hallway and the `sieve` tool. Both are saved with the application's settings. `--counting-memory PCT` and `--merge-cache PCT` set them for the hallway, and `--merge-cache` for the `sieve` tool.
+Both change no count, only how fast the counts arrive, so they take effect at once without pressing X. **TIME BUDGET**, the row after them, is the longest one unit may take to open (50 ms at first; 5 ms a step, PgUp/PgDn double or halve). The budget's time bar and FIND MY LIMITS hold every line to it at once, with how the time grows measured on this machine at start-up. A ranker whose time grows faster than its table's memory follows it too: symbol-entropy on black-and-white pictures ranks units up to about 1,000 symbols at 50 ms. Since that changes what can be counted, the budget is applied like the filter memory: a red line says *Time Budget Change Detected : Press X to re-optimise all dimensions*, and X (or going into the hallway) applies it. `--unit-time MS` sets it for the hallway and the `sieve` tool. The last GLOBAL row, **ITEM MEMORY**, is the share of installed memory the items around you may take (25% at first; 5 to 90, 5 a step, PgUp/PgDn 25). Both are saved with the application's settings. `--counting-memory PCT` and `--merge-cache PCT` set them for the hallway, and `--merge-cache` for the `sieve` tool.
 
 Beside the settings, a **map** draws the lines side by side, one copy each, with the binary line at each end because that is where it runs:
 - Each bar's length is the line's size in bits (log2 of its number of units). The real sizes differ by factors far too large to draw literally.
@@ -355,7 +355,7 @@ Beside the settings, a **map** draws the lines side by side, one copy each, with
 
 **No limits.** The state spaces are meant to scale without end. Each setting goes up to the largest value it can store (over 4 billion). Left/Right change a setting (Shift ×10, Ctrl ×100), and PgUp/PgDn double or halve it, which is quick for reaching powers of two.
 
-What limits a line in practice is the machine. An address is one number held in memory, and the arithmetic on it grows with the square of its length. The menu marks a line "large: slow to open" beyond 4 million bits per address (about 840,000 lower27 characters). It refuses to open one beyond 8 billion bits, where a single address would need a gigabyte. Both thresholds are single constants in `client/menu.cpp`, there to be raised as machines grow. `--no-menu` skips the menu.
+What limits a line in practice is the machine. An address is one number held in memory, and the arithmetic on it grows with the square of its length. The menu marks a line "large: slow to open" where opening one of its units would take more than a quarter of the time budget on this machine, and refuses to open one whose address would need more than a third of ITEM MEMORY's share of installed memory. Both follow from this machine's own measurements, so they grow with the machine. `--no-menu` skips the menu.
 
 ![The setup menu](images/hallway-menu.png)
 
@@ -451,7 +451,7 @@ A changed filter never replaces the old one. It is registered as the next versio
 
 The hallway and the setup menu call the text line **PAGES**, since each of its units is a page; `--line pages` works as another name for `--line text`.
 
-**Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line (text → image → audio → video → text). A door in the **right** wall leads to the **previous** line. You come in through the opposite door, in the new line's colours.
+**Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line, in the order image, pages, books, audio, tracks, video, movies, models, worlds, AI, with binary at both ends. A door in the **right** wall leads to the **previous** line. You come in through the opposite door, in the new line's colours.
 
 A door **keeps your corridor position** and only changes which line reads it:
 - Every door lines up with a door in every other line.
@@ -461,7 +461,7 @@ A door **keeps your corridor position** and only changes which line reads it:
 
 ![A door in the video line](images/hallway-door.png)
 
-**Books.** Look at a book and a panel shows its position on the shelf, its address, how far along the line it is, and a preview. Press **E** or click to take it off the shelf:
+**Books.** The item you are looking at shimmers in its line's edge colour (a light that breathes, and a band sweeping across its front), so the one you can take is plain at a glance. Look at a book and a panel shows its position on the shelf, its address, how far along the line it is, and a preview. Press **E** or click to take it off the shelf:
 - **Text:** the full text.
 - **Image:** the picture, in its palette colours.
 - **Video:** the frames, animated.
@@ -536,7 +536,7 @@ hallway --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png   # through
 hallway --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --screenshot loop.png   # through, one tile along, back
 hallway --length 2 --goto @0 --pose 0,5,180,-14 --screenshot start.png   # the double start line
 hallway --menu --screenshot menu.png                                      # the setup menu (--press keys go to the menu)
-hallway --main-menu --press "Down,Return,Return" --screenshot gfx.png     # the main menu (here: Settings > Graphics)
+hallway --main-menu --press "Down,Down,Down,Down,Down,Return,Return" --screenshot gfx.png     # the main menu (here: Settings > Graphics)
 hallway --warp "it was the best of times" --press "M,M,-,-" --screenshot g.png   # keys, as if typed
 ```
 
@@ -634,7 +634,7 @@ unit 1/1  "it was the best of times        "
 | Files | `locate` (a file's place, a folder's manifest, installers), `install`, `map` (node graphs of verified anchors), `vault`, `site` (a website of `.sieve` files), `web-host` (the browser extension's host: [web/README.md](../web/README.md)) |
 | Books | `bind`, `unbind` |
 | Other lines | `mesh`, `world`, `ai`, `ai-train`, `diffuse` |
-| Tools | `rope` (the tightened rope), `alike`, `mix`, `tensors`, `chat`, `cipher`, `version` |
+| Tools | `rope` (the tightened rope), `alike`, `mix`, `tensors`, `chat`, `cipher`, `compress` (zip, 7z, xz and the rest, each read back before it is kept), `speak` (a text in Sieve's own voice, as a WAV file), `version` |
 
 `sieve-install`, the small installer, is described in
 [docs/SIEVE-INSTALL-USAGE.md](SIEVE-INSTALL-USAGE.md), with how a release is made

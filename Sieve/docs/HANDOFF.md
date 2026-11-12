@@ -491,7 +491,8 @@ did. `draw_face_image` is shared by the binary edge and the crate faces and stay
 2. ~~The node graph, as a SORT tab~~ — built: SORT beside ITEM and COST on the item page, and the
    node graph as its own screen, with maps of verified anchors (`sieve map`; MANUAL.md, "SORT, and
    maps").
-3. The colour-blindness pass over the line palettes.
+3. ~~The colour-blindness pass over the line palettes~~ — done 6 November 2026 (IDEAS 2.4,
+   `tools/colour_check.py`); colours kept, and why: IDEAS §19.143.
 4. ~~Portal signage~~ — built: every doorway has a sign over it naming the line it leads to,
    in that line's colours (`draw_door_sign`, `client/door_portal.cpp`).
 5. The manifest and directory walker (§4 of `docs/IDEAS.md`).
