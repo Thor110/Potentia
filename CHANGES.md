@@ -7,6 +7,7 @@ Your notes, in GAME.md section 11 and IDEAS:
 - ALTEngine as the first to be sieved and streamed;
 - graphics that scale from pixels to NURBS;
 - a source tree across gaming and computing;
-- a core aim: history constrained and fraud made impossible throughout time (IDEAS 19.136).
+- a core aim: history constrained and fraud made impossible throughout time, and all of history,
+  known and unknown, mapped (IDEAS 19.136).
 
-Four commits (local only). Extract from the repository root. This replaces the earlier notes zips.
+Five commits (local only). Extract from the repository root. This replaces the earlier notes zips.

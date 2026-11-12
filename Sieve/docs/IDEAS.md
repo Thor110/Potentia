@@ -7017,3 +7017,18 @@ impossible throughout time".
   - *published name lists:* the names of everything a release, a run or a map holds, each list
     itself named and published, so a later list can show what was there before it. A chain of
     those is history fixed in place, a little at a time.
+- **All of history, mapped (Edward, 12 November 2026).** His words: "eventually all of the possible
+  known and unknown human history will in a sense be mapped". In Sieve's terms it already is, in
+  one sense, and becomes so in another:
+  - *Every possible record is already on the lines:* every page that could be written, every
+    picture of its size and every file has its address, so every account of the past that could
+    exist, true or false, known or not yet found, has a place. That is the Library of Babel's
+    sense, and it is complete from the start.
+  - *What mapping adds is knowing which places are real:* the known part of history is the
+    records that have been witnessed (named, published and held, above), marked on the lines as
+    anchors; the unknown part is everything between them, already addressed and waiting. Each
+    record found, named and witnessed lights one more point, and the filters and the anchors'
+    neighbourhoods narrow where the next real ones are likely to lie.
+  - *So the map grows from both ends:* the space of every possible history is fixed and exact,
+    and the set of points known to be real in it only ever grows, each fixed in place by its
+    witnesses, so it cannot later be moved.
