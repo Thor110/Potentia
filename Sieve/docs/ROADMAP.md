@@ -26,6 +26,38 @@ of voice recordings; and the designs to decide on (the games line, GAME.md §11;
 computing, IDEAS §19.139). **What can go on without him:** Stage 7's documentation pass, chain
 branches, prosody in the voice, and the open mixing models, each measured first.
 
+### Next: the ideas filtered (Edward, 12 November 2026)
+
+"continue to evaluate ideas as you go forward and give me updates as you go, sort workable and
+unworkable ideas, as well as technical notes and metaphorical jargon between notes and ideas and
+voices etc accordingly as well as the rest of the documentation". In order:
+1. **Every idea triaged** (docs/IDEAS-TRIAGE.md): each entry of IDEAS.md given its kind (technical,
+   metaphorical, both, a way of working), its status, and a verdict (done, workable, workable but
+   large, waiting on Edward, unworkable, not wanted, metaphor only) with the reason from its own text.
+2. **Sorted by kind:** technical ideas stay in IDEAS with their notes; Edward's metaphorical lines go
+   to VOICES.md's candidates (the file is cleaned only when he asks); notes about how to work go to
+   HANDOFF.
+3. **The workable ones planned:** the open, workable ideas ranked by reach and cost into the stages
+   above; the unworkable ones marked so, with why, so they are not measured again.
+4. **The rest of the documentation:** MANUAL, SPECIFICATIONS, FILTER-PLUGINS and the others checked
+   against the code (Stage 7's pass, IDEAS §19.134).
+- **Step 1 done (12 November 2026):** [IDEAS-TRIAGE.md](IDEAS-TRIAGE.md), 569 ideas: 183 done, 204
+  workable, 72 workable but large, 14 waiting on Edward, 49 unworkable, 31 not wanted, 16 metaphor
+  only. Twenty-three of Edward's lines added to VOICES' candidates.
+- **Where ideas go from here (Edward, 12 November 2026):** "the ideas will slowly get filtered onto
+  the task list … and get deprecated accordingly or utilised … keeping record of the old ideas
+  somewhere". Workable ideas move onto this file a few at a time. Worked-through ones move whole to
+  `docs/ideas/`: `IMPLEMENTED.md` (done, each checked against the code), `DEPRECATED.md`
+  (unworkable and not wanted, with the reason) and `WORK-DONE.md` (a dated log, a chart across
+  time). IDEAS.md keeps a one-line pointer at each old number, so no link breaks, and holds only
+  what is open.
+- **A rule over all of it, the tactile Sieve (IDEAS §19.140):** Sieve is meant to be felt as well as
+  seen: colours and notes carried by braille, touch and sensation screens, for the disabled
+  throughout time; that is why the interface is kept simple. Every new screen keeps few elements,
+  each with a name, a value and a place, and no meaning held by colour or position alone. First
+  steps: the colour-blindness pass (2.4), read-aloud for the hallway's panels, and a "describe this
+  unit" key that speaks or brailles the unit in hand exactly.
+
 ---
 
 

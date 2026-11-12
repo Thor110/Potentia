@@ -3648,6 +3648,8 @@ already shows each voice as text while it speaks, so it has subtitles.
     language files, so a new language translates the world as well as the menus.
   - **Other settings:** text size, contrast and colour-blind palettes (the lines' colours are
     settings already), and holding a key in place of pressing it again and again.
+- *The tactile Sieve (12 November 2026):* the aim goes further than reading aloud: braille, and
+  colour, touch and sensation as screens come to carry them (§19.140).
 - *Quick-time events, noted and not wanted:* Edward's old idea, recorded so it is not lost. A
   prompt could repeat across the screen in a grid, many at once, with how many on screen as a
   setting, so no player could miss it. There are no quick-time events in this game or its story,
@@ -7164,3 +7166,32 @@ say. Some notes are both, and are kept in both.
 america big = universe = boom"; "cant we all just ration and starve to release the valve and
 exchange interface with the universe"; "humans had to grow clothes lol"; "infinite debt from the
 wars = humanity still at war" (with §19.138).
+
+**19.140 The tactile Sieve: every colour and note felt, for the disabled throughout time (Edward, 12
+November 2026; an aim, and why the interface is simple).** His words: "sieve should be the ultimate
+tactile experience to interact with in a way, with all the colours and notes eventually being
+transmitted through braille and colour / touch / sensation type screens to help uplift the disabled
+throughout time", and "that is a major part of why I have left the interface looking simple so far".
+- *What it means for the design now:* the interface stays simple on purpose. Every screen should be
+  something that can be carried by other senses without losing what it says: few elements, each
+  with a name, a value and a place, and no meaning held by colour or position alone. That is the
+  same rule as the colour-blindness pass (2.4) and §19.74's read-aloud, taken to every sense.
+- *What Sieve already has towards it:*
+  - every string in the language files, so anything shown can be spoken or brailled;
+  - menus read aloud, in Sieve's own voice where it is installed (§19.74, §19.135);
+  - every unit an exact sequence of symbols (letters, notes, pixels as colour numbers), so any unit
+    can be rendered to any sense exactly, not described: a melody as notes, a picture as rows of
+    colour values, a page as text.
+- *Towards braille and touch:*
+  - *Text to braille:* the pages line's text and every menu string through a braille translation
+    (the open-source liblouis tables are the usual way) to a refreshable braille display, which
+    screen readers already drive. The read-aloud hook is where it would attach.
+  - *Colour and pictures by touch:* a picture's rows read as a grid of values, a cell at a time, as
+    tone or as braille cells; on haptic screens, colour mapped to texture or vibration.
+  - *Notes by touch:* a melody's pitches and lengths as vibration patterns, beside its sound.
+  - *Settings:* text size, contrast, colour-blind palettes, holding a key instead of repeating it
+    (§19.74's list), as each sense is added.
+- *Workable now, in order:* the colour-blindness pass (2.4, still open); read-aloud for the hallway's
+  panels (the part §19.74 left); a "describe this unit" key that speaks or brailles the unit in hand
+  exactly (its letters, its notes, its rows of colours); braille output through the system's screen
+  reader. *Later:* haptic and sensation screens as the hardware comes.

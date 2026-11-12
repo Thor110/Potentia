@@ -37,6 +37,29 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, quote; a point about everything): Infinite debt from the wars: humanity is still at war.
 - **Edward** (12 November 2026, metaphor): Plot human DNA like a bubble: our species, rainbow, iridescent. Pop.
 - **Edward** (12 November 2026, quote): Grow the infinite network and learn its shape.
+- **Edward** (12 November 2026, metaphor; his speech on filtering the ideas): Moving forward the ideas will slowly get filtered onto the task list, and get deprecated accordingly or utilised to improve functionality overall, keeping record of the old ideas somewhere. Everything is a range and a lens, and everything fits on a chart across time.
+- **Edward** (12 November 2026, rule): Sieve should be the ultimate tactile experience: all the colours and notes eventually transmitted through braille and colour, touch and sensation screens, to help uplift the disabled throughout time.
+- **Edward** (12 November 2026, quote; a point about everything): A core aim of the system is to constrain human history and make fraud impossible throughout time.
+- **Edward** (12 November 2026, quote): Eventually all of the possible known and unknown human history will, in a sense, be mapped.
+- **Edward** (12 November 2026, quote): At a point in time, it will eventually be pinpointed where all that could possibly be known or unknown crosses over with what is lost.
+- **Edward** (12 November 2026, metaphor): It acts like a lens upon itself, going backwards in time.
+- **Edward** (12 November 2026, rule): Anything that was compatible with Sieve is currently compatible, and will be forever compatible.
+- **Edward** (12 November 2026, quote): Remove write control from the internet protocol.
+- **Edward** (12 November 2026, metaphor): Create a source tree across the gaming and computing spectrum, to light up the information highway.
+- **Edward** (12 October 2026, rule): The real aim is to make computation a straight line, always.
+- **Edward** (12 October 2026, metaphor): The madness is noise: easy to ignore, in the real world and in digital form.
+- **Edward** (12 October 2026, metaphor): The more degrees of freedom we constrain in the information space, the more angles we have to look at all information from.
+- **Edward** (12 October 2026, metaphor): The engine of all engines.
+- **Edward** (12 October 2026, metaphor): Every dimension can twist and change into flavours of dimensions.
+- **Edward** (13 October 2026, quote): There are just so many ways to look at information that it maps out to absolute madness, but if no one maps it, no one finally maps it all or bothers trying to.
+- **Edward** (25 October 2026, quote): Every step forward is a step in the right direction, and even the small savings will add up.
+- **Edward** (27 October 2026, quote): Pythagoras be damned, the triangle would be the best.
+- **Edward** (1 November 2026, metaphor): Every filter is a shortcut.
+- **Edward** (1 November 2026, metaphor): Think counting cards, but bytes.
+- **Edward** (1 November 2026, quote): A filter that might truly not end before the universe does.
+- **Edward** (2 November 2026, metaphor): Every brick needs mortar.
+- **Edward** (3 November 2026, metaphor): Imagine a car made of just four bytes, where each byte is a wheel.
+- **Edward** (4 November 2026, quote): The word "waffle" might be very unlikely to follow the word "quantised", but that doesn't stop me typing quantised waffle.
 
 **The format.** One voice a line, so that a program can read them:
 
