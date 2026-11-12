@@ -43,3 +43,46 @@ A program can then read them as it reads VOICES.
 > that map saves from what their minimum is to what their maximum is, through all the possibilities
 > in between that exist across all time, to represent any one save ever as it could be in that or any
 > moment of time.
+
+### The cross lattice, and its shortcuts
+
+`who` Edward · `date` 12 November 2026 · `kind` speech · `when` on finding a door between two dimensions, or at the catalogue of dimensions
+
+> It should be good fun to see this system evolve and scale to capture itself and everything else in
+> a cross lattice of dimensional frameworks that link all things from all angles.
+>
+> There would be infinite ways to shortcut between dimensions, through hyper-dimensional links between
+> categories, frameworks, languages, or anything else for that matter.
+
+### Making problems tractable
+
+`who` Edward · `date` 12 November 2026 · `kind` speech · `when` at a filter's count, or on finding one's limits in the setup menu
+
+> It should add up to making all or most problems tractable to some extent: at least the base
+> coordinate space for each possible state space, or element of things that need to be represented
+> or made tractable, by condensing each problem down to a tractability map or grid of the state space
+> in question, to be probed under relevant or given conditions to seek an answer; to reduce complexity,
+> to save processing time and or storage space in the long run.
+
+### Why information cannot be caged
+
+`who` Edward · `date` 12 November 2026 · `kind` speech · `when` at the binary line, or on refusing a hidden filter
+
+> Consider it all the ultimate cage on information. If a square or a circle or a line happens to fall
+> on a flat value, then so be it: a shorter address, solved from a seed, known on demand. As such,
+> simple algorithms for noise and maze generation, and filtering, and model states across item types,
+> just become known. Thus all information becomes communicable amongst the noise. People should not
+> cage information, as time simply prohibits it from being possible, within reason and for any given
+> amount or period of time.
+
+(Edward asked for "a separate speech idea, specifically on the potential to cage information and why
+people should not cage information as time simply prohibits it from being possible within reason and
+for a given amount or period of time"; the last sentence is his reason, from that request.)
+
+### A guiding force, like time
+
+`who` Edward · `date` 12 November 2026 · `kind` speech · `when` at the far end of a line, or after a long walk
+
+> In theory, doesn't it make all problems tractable through a state space map? Well, given you limit
+> how many problems you wish to solve, it at least becomes a guiding force of nature, like time itself.
+> This landscape carves its own canyons and grooves in its digital realm.

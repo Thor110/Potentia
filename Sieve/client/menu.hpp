@@ -17,6 +17,7 @@
 #pragma once
 
 #include "sieve/character.hpp"
+#include "sieve/animation.hpp"
 #include "character_store.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
@@ -491,12 +492,20 @@ private:
     bool char_ready_ = false;
     // A .character file chosen in a dialog (Ctrl+S, Ctrl+O), taken up on the next frame.
     std::mutex char_mx_;
-    std::optional<std::string> char_save_to_, char_load_from_, char_import_from_;
+    std::optional<std::string> char_save_to_, char_load_from_, char_import_from_, char_skeleton_from_;
+    std::optional<sieve::Animation> char_anim_; // the animation playing on the character (IDEAS 19.170)
+    bool char_anim_playing_ = true;
+    int char_anim_fixed_ = -1;                  // a frame to hold at, or -1 to play by the clock
+    uint32_t char_anim_paused_ = 0;             // the frame it stopped at
     std::string char_note_;      // the last save's or open's result, shown under the drawing
 public:
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
     void import_model(const std::string& path);    // --import-model FILE, and Ctrl+I: a model (.obj, .gltf, .glb) into the chosen sphere
+    void import_skeleton(const std::string& path); // --import-skeleton FILE, and Ctrl+K: a glTF's skeleton as your character, its first animation playing
+    void skeleton_chosen(const std::string& path);
+    void set_animation_frame(int frame) { char_anim_fixed_ = frame; } // --animation-frame N: hold the animation at frame N (for pictures)
+    std::string animation_line() const;           // "ID FRAMES BONES" of the animation playing, or empty
     void obj_chosen(const std::string& path);
     void open_yours();                              // the right-hand panel open on YOURS (Personal Dimensions)
 private:

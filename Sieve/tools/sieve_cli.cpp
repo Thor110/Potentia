@@ -1178,11 +1178,44 @@ int cmd_import(const Args& a)
     std::cout << "read      " << m.mesh.verts.size() << " vertices, " << m.mesh.faces.size() << " triangles";
     if (m.format != "obj") std::cout << " (" << m.meshes << " meshes, " << m.primitives << " primitives, " << m.nodes << " nodes)";
     std::cout << "\n";
-    const sieve::HeldImport h = sieve::import_model_for_hold(bytes, beside(path));
-    std::cout << "held      " << h.hex << "\n"
-              << "kept      " << std::min<size_t>(h.vertices_in, sieve::kHeldVertices) << " of " << h.vertices_in << " vertices, " << h.faces_kept << " of "
-              << h.faces_in << " faces (the held models' roof: " << sieve::kHeldVertices << " and " << sieve::kHeldFaces << ")\n";
-    for (const auto& l : h.left_out) std::cout << "left out  " << l << "\n";
+    if (!m.mesh.verts.empty())
+    {
+        const sieve::HeldImport h = sieve::import_model_for_hold(bytes, beside(path));
+        std::cout << "held      " << h.hex << "\n"
+                  << "kept      " << std::min<size_t>(h.vertices_in, sieve::kHeldVertices) << " of " << h.vertices_in << " vertices, " << h.faces_kept << " of "
+                  << h.faces_in << " faces (the held models' roof: " << sieve::kHeldVertices << " and " << sieve::kHeldFaces << ")\n";
+    }
+    if (!m.skeleton.empty())
+    {
+        const sieve::Character c = sieve::skeleton_character(m);
+        int32_t ex, ey, ez;
+        c.extent(ex, ey, ez);
+        std::cout << "skeleton  " << m.skeleton.size() << (m.skeleton.size() == 1 ? " joint" : " joints") << ", as " << sieve::kCharacterVersion3 << " " << c.id() << "\n";
+        if (a.has("character-out"))
+        {
+            std::ofstream out(a.get("character-out"), std::ios::binary);
+            out << c.text();
+            if (!out) throw std::invalid_argument("cannot write " + a.get("character-out"));
+            std::cout << "wrote     " << a.get("character-out") << "\n";
+        }
+    }
+    for (size_t i = 0; i < m.sampled.size(); ++i)
+    {
+        const sieve::Animation an = sieve::imported_animation(m, i);
+        std::printf("animation %zu \"%s\": %u frames (%.2f s), %u bones, %s %s\n", i, m.sampled[i].name.c_str(), an.frames, double(an.frames) / sieve::kAnimationRate,
+                    an.bones, sieve::kAnimationVersion, an.id().c_str());
+    }
+    if (a.has("animation-out"))
+    {
+        const sieve::Animation an = sieve::imported_animation(m, a.get_u32("which", 0));
+        std::ofstream out(a.get("animation-out"), std::ios::binary);
+        out << an.text();
+        if (!out) throw std::invalid_argument("cannot write " + a.get("animation-out"));
+        std::cout << "wrote     " << a.get("animation-out") << "\n";
+    }
+    else if (a.has("character-out") && m.skeleton.empty())
+        throw std::invalid_argument("no skeleton in it to write (a glTF's first skin is read as one)");
+    for (const auto& l : m.left_out) std::cout << "left out  " << l << "\n";
     return 0;
 }
 

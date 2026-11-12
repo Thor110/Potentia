@@ -163,12 +163,15 @@ const char* kUsage =
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
     "                      writes its reports and times to logs/ beside the settings ([locator] keep_log)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
-    "  --character FILE    your character from a .character file (sieve-character-v1): beside you in the\n"
+    "  --character FILE    your character from a .character file (any version): beside you in the\n"
     "                      hallway, and on the setup menu's CHARACTER page\n"
     "  --no-character      no character beside you in the hallway for this run\n"
     "  --import-model FILE with --menu: a model (.obj, .gltf, .glb) into your character's first sphere, as\n"
     "                      the CHARACTER page's Ctrl+I does (brought under the held models' roof of 8\n"
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
+    "  --import-skeleton FILE  with --menu: a glTF's skeleton as your character (sieve-character-v3), its\n"
+    "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
+    "  --animation-frame N with --menu: hold the animation at frame N (for a picture)\n"
     "  --character-store DIR  your personal dimension from DIR (the store: <SHA-256>.character files) for\n"
     "                      this run, in place of the characters folder beside the settings file\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
@@ -1291,6 +1294,8 @@ int run(const Args& a)
         // Into sphere 0, as Ctrl+I does into the chosen one (--import-obj is the older name, kept).
         if (a.has("import-model")) menu.import_model(a.get("import-model"));
         else if (a.has("import-obj")) menu.import_model(a.get("import-obj"));
+        if (a.has("import-skeleton")) menu.import_skeleton(a.get("import-skeleton"));
+        if (a.has("animation-frame")) menu.set_animation_frame(int(a.get_u32("animation-frame", 0)));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1304,7 +1309,11 @@ int run(const Args& a)
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         if (menu.side_open() && menu.side_page() == 1) std::cout << "right-hand panel: open (YOURS, " << menu.yours_count() << " characters)\n";
-        else if (menu.side_open()) std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
+        else if (menu.side_open())
+        {
+            std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
+            if (!menu.animation_line().empty()) std::cout << "animation: " << menu.animation_line() << "\n";
+        }
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         for (const auto& [kind, text] : menu.details_lines()) std::cout << "details: " << text << "\n"; // (I, or the dots: a line's details)

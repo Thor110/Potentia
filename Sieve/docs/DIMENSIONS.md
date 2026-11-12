@@ -34,8 +34,11 @@ tracks and movies composed of them; models, worlds, AI and binary.
   (§19.154, §19.157). Next: a dimension as a list of its characters' ids, with an id of its own, so
   that all personal dimensions form one state space (§19.161).
 - *Importers* (partly built): existing files brought onto a line. `.obj`, `.gltf` and `.glb` come in
-  as held models (`sieve import`, and Ctrl+I on the CHARACTER page); skins and animations are counted
-  and named, not yet carried.
+  as held models (`sieve import`, and Ctrl+I on the CHARACTER page); a glTF's first skin comes in as a
+  skeleton (`sieve-character-v3`, Ctrl+K) and its animations onto the animation line.
+- *Animation* (built, §19.170): `sieve-animation-v1`, each bone's turn from rest per frame at 30 a
+  second, 256 steps a number, so every animation is an address; played on any character. The roof:
+  64 bones, 300 frames, turns only.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try
   `sieve warp --alphabet dna4 --length 12 GATTACA`. A reader of FASTA files, which would skip the
@@ -45,8 +48,8 @@ tracks and movies composed of them; models, worlds, AI and binary.
 
 - *Research* (§19.162): findings, each linked to what it rests on; it grows while research is open,
   and once everything known is catalogued it pops into a hallway of links between all knowledge.
-- *Languages* (§19.22, §19.59, §19.152), *emotion* (§19.144), *animation* (§19.159), *theoretical
-  law* (§19.164).
+- *Languages* (§19.22, §19.59, §19.152), *emotion* (§19.144), *theoretical law* (§19.164), *board
+  games* (§19.171: boards, pieces, rules and artwork across genres and franchises).
 - *Formats* (§19.165): every format in the widest sense, from file formats through scripts and
   languages to emoji, as one web of entries that all lead to one root; the plan is
   [CATALOGUE-ROADMAP.md](CATALOGUE-ROADMAP.md).

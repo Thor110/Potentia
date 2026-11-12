@@ -19,6 +19,7 @@
 #include "sieve/character.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
+#include "sieve/animation.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
 #include "sieve/weights.hpp"
@@ -6951,10 +6952,13 @@ void test_character()
         // Placed by its node: moved 10 along x and turned a quarter about z, (1, -1, -1) lands at (11, 1, -1).
         const ImportedModel placed = read_model(gltf(embedded, "", "{\"mesh\":0,\"translation\":[10,0,0],\"rotation\":[0,0,0.70710678,0.70710678]}"));
         CHECK(std::abs(placed.mesh.verts[1].x - 11) < 1e-4 && std::abs(placed.mesh.verts[1].y - 1) < 1e-4 && std::abs(placed.mesh.verts[1].z + 1) < 1e-4);
-        // Skins and animations are counted and named as left out, not dropped silently.
+        // Skins and animations are counted.
         const ImportedModel rigged = read_model(gltf(embedded, "\"skins\":[{\"joints\":[0]}],\"animations\":[{\"channels\":[{},{}],\"samplers\":[{\"input\":2}]}],",
                                                      "{\"mesh\":0}"));
-        CHECK(rigged.skins == 1 && rigged.joints == 1 && rigged.animations == 1 && rigged.channels == 2 && rigged.keyframes == 5 && rigged.left_out.size() == 2);
+        // (Since IDEAS 19.170 the skin comes in as a skeleton of its one joint, and the animation, whose
+        // channels name no target, is sampled as one frame of no turn.)
+        CHECK(rigged.skins == 1 && rigged.joints == 1 && rigged.animations == 1 && rigged.channels == 2 && rigged.keyframes == 5 && rigged.left_out.empty());
+        CHECK(rigged.skeleton.size() == 1 && rigged.sampled.size() == 1 && rigged.sampled[0].frames == 1);
         // Refused: Draco compression it cannot undo; an accessor past its buffer; not glTF 2.0.
         CHECK(throws([&] { (void)read_model(gltf(embedded, "\"extensionsRequired\":[\"KHR_draco_mesh_compression\"],", "{\"mesh\":0}")); }));
         std::string past = plain;
@@ -6970,6 +6974,94 @@ void test_character()
         const ImportedModel st = read_model(strip);
         CHECK(st.mesh.faces.size() == 2 && st.mesh.faces[1].a == 2 && st.mesh.faces[1].b == 1 && st.mesh.faces[1].c == 3);
     }
+    // Characters of given spheres (sieve-character-v3) and the animation line (IDEAS 19.170).
+    {
+        // The arm: a body, an elbow 1 m up, a hand 1 m above it.
+        std::vector<Sphere> sp(3);
+        sp[0] = {-1, 0, 0, 0, 1365, Sphere::Body};
+        sp[1] = {0, 0, 4096, 0, 1024, Sphere::Joint};
+        sp[2] = {1, 0, 8192, 0, 1024, Sphere::Joint};
+        const Character arm = given_character(sp);
+        CHECK(arm.given && arm.text() == "sieve-character-v3 spheres=3\ns 0 -1 0 0 0 1365 body\ns 1 0 0 4096 0 1024 joint\ns 2 1 0 8192 0 1024 joint\n");
+        CHECK(read_character(arm.text()).id() == arm.id() && read_character(arm.one_line()).id() == arm.id());
+        // Every version reads back from its one-line form, the same character.
+        Character v2 = unfold_character(CharacterSettings{});
+        v2.hold(1, held_model_from(7));
+        CHECK(read_character(v2.one_line()).id() == v2.id() && read_character(unfold_character(CharacterSettings{}).one_line()).id() == unfold_character(CharacterSettings{}).id());
+        // Refused: a parent after its child, a second body, a radius of 0, text not canonical.
+        auto bad = sp;
+        bad[1].parent = 2;
+        CHECK(throws([&] { (void)given_character(bad); }));
+        bad = sp;
+        bad[2].parent = -1;
+        CHECK(throws([&] { (void)given_character(bad); }));
+        bad = sp;
+        bad[2].r = 0;
+        CHECK(throws([&] { (void)given_character(bad); }));
+        CHECK(throws([] { (void)read_character("sieve-character-v3 spheres=1\ns 0 -1 00 0 0 5 body\n"); }));
+        CHECK(throws([] { (void)read_character("sieve-character-v3 spheres=2\ns 0 -1 0 0 0 5 body\n"); }));
+
+        // An animation of the arm: the elbow turns a quarter about z over 30 frames.
+        Animation an;
+        an.bones = 3;
+        an.frames = 31;
+        for (uint32_t f = 0; f <= 30; ++f)
+        {
+            const double h = 3.14159265358979323846 / 4 * f / 30; // half the angle
+            an.turns.push_back({});
+            an.turns.push_back(turn_of_quaternion(0, 0, std::sin(h), std::cos(h)));
+            an.turns.push_back(turn_of_quaternion(0, 0, std::sin(h), std::cos(h)));
+        }
+        CHECK(an.at(30, 1) == (BoneTurn{128, 128, 192}) && an.at(0, 1) == BoneTurn{});
+        CHECK(read_animation(an.text()).text() == an.text() && an.address().size() == size_t(31) * 3 * 6);
+        CHECK(an.address().substr(0, 18) == "808080808080808080");
+        // At frame 30 the hand is a metre to the left of the elbow; at frame 0 it is at rest.
+        const auto p30 = pose(arm, an, 30), p0 = pose(arm, an, 0);
+        CHECK(std::abs(p30[2][0] + 4096) < 1 && std::abs(p30[2][1] - 4096) < 1 && std::abs(p30[1][1] - 4096) < 1e-6);
+        CHECK(std::abs(p0[2][1] - 8192) < 1e-6 && std::abs(p0[2][0]) < 1e-6);
+        // A character with more spheres than bones plays it too (the extra turn as their parent).
+        CHECK(pose(unfold_character(CharacterSettings{}), an, 30).size() == unfold_character(CharacterSettings{}).spheres.size());
+        CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=1 rate=25\nf 0 808080\n"); }));
+        CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=2 rate=30\nf 0 808080\n"); }));
+        CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=1 rate=30\nf 0 80808G\n"); }));
+
+        // The same arm from a glTF: its skin's joints as the skeleton, its animation sampled.
+        std::string bin;
+        auto putf = [&](float f) { char b[4]; std::memcpy(b, &f, 4); bin.append(b, 4); };
+        for (float f : {0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.70710678f, 0.70710678f}) putf(f);
+        auto b64 = [](const std::string& in) {
+            static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string o;
+            for (size_t i = 0; i < in.size(); i += 3)
+            {
+                uint32_t n = uint32_t(uint8_t(in[i])) << 16;
+                if (i + 1 < in.size()) n |= uint32_t(uint8_t(in[i + 1])) << 8;
+                if (i + 2 < in.size()) n |= uint32_t(uint8_t(in[i + 2]));
+                o += t[n >> 18 & 63];
+                o += t[n >> 12 & 63];
+                o += i + 1 < in.size() ? t[n >> 6 & 63] : '=';
+                o += i + 2 < in.size() ? t[n & 63] : '=';
+            }
+            return o;
+        };
+        const std::string doc = "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"byteLength\":40,\"uri\":\"data:application/octet-stream;base64," + b64(bin) +
+                                "\"}],\"bufferViews\":[{\"buffer\":0,\"byteLength\":8},{\"buffer\":0,\"byteOffset\":8,\"byteLength\":32}],"
+                                "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":2,\"type\":\"SCALAR\"},"
+                                "{\"bufferView\":1,\"componentType\":5126,\"count\":2,\"type\":\"VEC4\"}],"
+                                "\"nodes\":[{\"name\":\"root\",\"children\":[1]},{\"name\":\"elbow\",\"translation\":[0,1,0],\"children\":[2]},"
+                                "{\"name\":\"hand\",\"translation\":[0,1,0]}],\"skins\":[{\"joints\":[0,1,2]}],"
+                                "\"animations\":[{\"name\":\"wave\",\"samplers\":[{\"input\":0,\"output\":1}],"
+                                "\"channels\":[{\"sampler\":0,\"target\":{\"node\":1,\"path\":\"rotation\"}}]}],\"scenes\":[{\"nodes\":[0]}]}";
+        const ImportedModel m = read_model(doc);
+        CHECK(m.skeleton.size() == 3 && m.mesh.verts.empty() && m.sampled.size() == 1 && m.sampled[0].frames == 31);
+        CHECK(skeleton_character(m).text() == arm.text());
+        const Animation ia = imported_animation(m, 0);
+        CHECK(ia.at(30, 1) == (BoneTurn{128, 128, 192}) && ia.at(30, 2) == (BoneTurn{128, 128, 192}) && ia.at(0, 1) == BoneTurn{});
+        CHECK(ia.at(15, 1) == an.at(15, 1)); // halfway, slerped as made by hand
+        CHECK(throws([&] { (void)imported_animation(m, 1); }));
+        CHECK(throws([&] { (void)import_model_for_hold(doc); })); // no mesh to hold
+    }
+
     // The catalogue of dimensions (IDEAS 19.162): ids unique, every link names a dimension that exists.
     {
         std::set<std::string> ids;

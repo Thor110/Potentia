@@ -9,7 +9,10 @@
 #include <cstdlib>
 #include <span>
 #include <stdexcept>
+#include <sstream>
 #include <string>
+#include <cstdint>
+#include <climits>
 
 namespace sieve {
 
@@ -370,6 +373,7 @@ HeldImport import_model_for_hold(std::string_view bytes, const std::function<std
 namespace {
 HeldImport import_mesh_for_hold(const ModelSpace::AnyMesh& any)
 {
+    if (any.verts.empty()) throw std::invalid_argument("no mesh in it to hold (a skeleton alone: Ctrl+K takes that)");
     HeldImport out;
     out.vertices_in = any.verts.size();
     out.faces_in = any.faces.size();
@@ -442,8 +446,112 @@ HeldImport import_mesh_for_hold(const ModelSpace::AnyMesh& any)
 }
 } // namespace
 
-Character read_character(const std::string& text)
+namespace {
+
+// The given spheres of a v3 character, checked.
+void check_given(const std::vector<Sphere>& sp)
 {
+    if (sp.empty()) throw std::invalid_argument("a character has at least one sphere");
+    if (sp.size() > 4096) throw std::invalid_argument("more than 4,096 spheres");
+    constexpr int32_t kFar = int32_t(1) << 28;
+    for (size_t i = 0; i < sp.size(); ++i)
+    {
+        const Sphere& p = sp[i];
+        const std::string n = "sphere " + std::to_string(i);
+        if (i == 0 && p.parent != -1) throw std::invalid_argument("sphere 0 is the body: its parent is -1");
+        if (i > 0 && (p.parent < 0 || size_t(p.parent) >= i)) throw std::invalid_argument(n + "'s parent must come before it");
+        if (p.r < 1 || p.r > kFar) throw std::invalid_argument(n + "'s radius is out of range");
+        if (std::abs(int64_t(p.x)) > kFar || std::abs(int64_t(p.y)) > kFar || std::abs(int64_t(p.z)) > kFar) throw std::invalid_argument(n + " is too far out");
+        if (p.kind > Sphere::Joint) throw std::invalid_argument(n + "'s kind is not body, head or joint");
+    }
+}
+
+Character read_given(const std::vector<std::string>& lines)
+{
+    // lines[0]: "sieve-character-v3 spheres=N"
+    const std::string head = std::string(kCharacterVersion3) + " spheres=";
+    if (lines[0].rfind(head, 0) != 0) throw std::invalid_argument("a sieve-character-v3's first line is \"sieve-character-v3 spheres=N\"");
+    const std::string n = lines[0].substr(head.size());
+    if (n.empty() || n.size() > 5 || n.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("spheres: not a number: " + n);
+    const size_t count = std::stoul(n);
+    if (lines.size() < count + 1) throw std::invalid_argument("it names " + n + " spheres but has fewer lines");
+    std::vector<Sphere> sp;
+    for (size_t i = 0; i < count; ++i)
+    {
+        std::istringstream in(lines[i + 1]);
+        std::string tag, kind;
+        long long idx, parent, x, y, z, r;
+        if (!(in >> tag >> idx >> parent >> x >> y >> z >> r >> kind) || tag != "s" || idx != (long long)i)
+            throw std::invalid_argument("sphere " + std::to_string(i) + "'s line is not \"s INDEX PARENT X Y Z R KIND\"");
+        std::string extra;
+        if (in >> extra) throw std::invalid_argument("sphere " + std::to_string(i) + "'s line has more after its kind");
+        auto fits = [](long long v) { return v >= INT32_MIN && v <= INT32_MAX; };
+        if (!fits(parent) || !fits(x) || !fits(y) || !fits(z) || !fits(r)) throw std::invalid_argument("sphere " + std::to_string(i) + " is out of range");
+        Sphere s;
+        s.parent = int32_t(parent), s.x = int32_t(x), s.y = int32_t(y), s.z = int32_t(z), s.r = int32_t(r);
+        if (kind == "body") s.kind = Sphere::Body;
+        else if (kind == "head") s.kind = Sphere::Head;
+        else if (kind == "joint") s.kind = Sphere::Joint;
+        else throw std::invalid_argument("sphere " + std::to_string(i) + "'s kind is not body, head or joint");
+        sp.push_back(s);
+    }
+    Character c = given_character(std::move(sp));
+    for (size_t i = count + 1; i < lines.size(); ++i)
+    {
+        const std::string& h = lines[i];
+        const size_t sp2 = h.find(' ', 2);
+        if (h.rfind("h ", 0) != 0 || sp2 == std::string::npos) throw std::invalid_argument("not a held model's line: " + h);
+        const std::string idx = h.substr(2, sp2 - 2);
+        if (idx.empty() || idx.size() > 6 || idx.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a sphere's number: " + h);
+        if (c.held(uint32_t(std::stoul(idx)))) throw std::invalid_argument("two models in one sphere: " + h);
+        c.hold(uint32_t(std::stoul(idx)), h.substr(sp2 + 1));
+    }
+    if (c.text() != [&] { std::string t; for (const auto& l : lines) t += l + "\n"; return t; }())
+        throw std::invalid_argument("not in its canonical form (spheres or held models out of order, or numbers written otherwise)");
+    return c;
+}
+
+} // namespace
+
+Character given_character(std::vector<Sphere> spheres)
+{
+    check_given(spheres);
+    Character c;
+    c.given = true;
+    c.spheres = std::move(spheres);
+    return c;
+}
+
+std::string Character::one_line() const
+{
+    std::string t = text();
+    while (!t.empty() && t.back() == '\n') t.pop_back();
+    for (char& ch : t)
+        if (ch == '\n') ch = ';';
+    return t;
+}
+
+Character read_character(const std::string& text_in)
+{
+    // One line with ';' between its lines (as the settings file keeps it) reads as the text.
+    std::string text = text_in;
+    if (text.find('\n') == std::string::npos && text.find(';') != std::string::npos)
+        for (char& ch : text)
+            if (ch == ';') ch = '\n';
+    if (text.rfind(std::string(kCharacterVersion3) + " ", 0) == 0)
+    {
+        std::vector<std::string> lines;
+        for (size_t i = 0; i < text.size();)
+        {
+            size_t e = text.find('\n', i);
+            if (e == std::string::npos) e = text.size();
+            std::string l = text.substr(i, e - i);
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            if (!l.empty()) lines.push_back(l);
+            i = e + 1;
+        }
+        return read_given(lines);
+    }
     const size_t nl = text.find('\n');
     std::string first = text.substr(0, nl);
     if (!first.empty() && first.back() == '\r') first.pop_back();
@@ -455,7 +563,7 @@ Character read_character(const std::string& text)
         i = sp + 1;
     }
     if (words.empty() || (words[0] != kCharacterVersion && words[0] != kCharacterVersion2))
-        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + " or " + kCharacterVersion2);
+        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + ", " + kCharacterVersion2 + " or " + kCharacterVersion3);
     const bool v2 = words[0] == kCharacterVersion2;
     CharacterSettings s;
     bool seen[6] = {};
@@ -532,9 +640,10 @@ Character read_character(const std::string& text)
 
 std::string Character::text() const
 {
-    std::string t = std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + " limbs=" + std::to_string(settings.limbs) +
-                    " joints=" + std::to_string(settings.joints) + " branches=" + std::to_string(settings.branches) +
-                    " symmetry=" + symmetry_name(settings.symmetry) + " head=" + (settings.head ? "yes" : "no") + "\n";
+    std::string t = given ? std::string(kCharacterVersion3) + " spheres=" + std::to_string(spheres.size()) + "\n"
+                          : std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + " limbs=" + std::to_string(settings.limbs) +
+                                " joints=" + std::to_string(settings.joints) + " branches=" + std::to_string(settings.branches) +
+                                " symmetry=" + symmetry_name(settings.symmetry) + " head=" + (settings.head ? "yes" : "no") + "\n";
     static const char* const kKinds[] = {"body", "head", "joint"};
     for (size_t i = 0; i < spheres.size(); ++i)
     {

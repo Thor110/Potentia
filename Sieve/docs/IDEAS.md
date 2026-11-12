@@ -7152,3 +7152,91 @@ landscape". The two speeches that followed are the first in [SPEECHES.md](SPEECH
   saves is the step between their addresses (the delta way already does this for files, v32); the
   store is shared across machines, which waits on sharing between machines. The local store (by
   SHA-256, §19.154) is the first piece.
+
+**19.170 Skeletons and animations from glTF; the animation line (built 12 November 2026).** Edward:
+"carry on with glTF skeletons and animations next while continuuing to lay the groundwork and
+foundations to prepare for moving forward through all formats, scales and visualisations".
+- *Skeletons:* a glTF's first skin comes in as a character whose spheres are given rather than grown
+  from a seed (`sieve-character-v3`): each joint a sphere at its rest position, the nearest joint above
+  it its parent, 4096 units a metre (the central metric, §19.153), so an imported character stands at
+  its true size and the hallway fits it as it fits any other.
+- *The animation line* (`sieve-animation-v1`, sieve/animation.hpp): each bone's turn from rest in each
+  frame, at 30 frames a second, each of a turn's three numbers one of 256 steps, so every animation of
+  B bones and F frames is one address among 256^(3BF). Played on any character with as many spheres:
+  each sphere moves with its parent's turn. Its roof: 64 bones, 300 frames (ten seconds); a joint's
+  movement and growth (translation, scale) and cubic splines' tangents are named as left out.
+- *Groundwork laid with it:* characters of every version can be kept on one line (the settings file
+  had kept only the first line, so a character holding models could not be read back on the next
+  start; fixed); seed-made characters can play an animation too, so animations and characters are two
+  lines that meet.
+
+**19.171 A board games dimension (Edward, 12 November 2026).** His words: "board games dimension idea
+to help catalog artwork and information throughout genres and franchises, note that down".
+- *What it would hold:* board games as a dimension of their own: each game's boards, pieces, cards
+  and rules, and their artwork, catalogued across genres and franchises, linked to the games dimension
+  (§19.161), the formats catalogue (§19.165; a game's rules are a notation) and the worlds line.
+- *A natural fit for Sieve's lines:* a board's positions are already a state space (chess positions,
+  Go boards), and many games' rules can be written as filters on them, as the law dimension's rules
+  are (§19.164). Artwork is the publishers' own; the catalogue would describe and link, and hold
+  pictures only where their licences allow. Planned only; in the catalogue as `boardgames`.
+- *Edward, the same day, on board games and dying:* "starting with a character sheet and scaling
+  through all systems, genres, franchises etc on an infinite landscape of games where you die if you
+  die and your character too, note on the board games dimensions and potential for games to implement
+  a die across all games and die system that has a divide down the middle between hardcore for dying
+  saves and creative for non dying saves through a scale of difficulties across games".
+  - *A character sheet first:* a tabletop character sheet is the smallest whole character (its
+    numbers, its gear, its story), and the character system already makes characters any game could
+    read (§19.148); a sheet is a record laid over one, carried from game to game.
+  - *Dying across all games:* one rule every game can take part in: a save is either *hardcore* (when
+    the character dies, it stays dead, in every game it plays in) or *creative* (it never dies), with
+    a scale of difficulties between them. Recorded in the save itself (§19.150), so any game reading
+    the character knows which it is, and the strong save system keeps a dead character's record
+    rather than erasing it.
+  - *A play on words:* a die across all games: dice as a dimension too, every roll an address.
+
+**19.172 One character through every game of a franchise, held back only by temporal directives
+(Edward, 12 November 2026).** His words: "your character in a star wars game could step straight
+through into any other star wars game only perhaps being locked out by temporal directives", and
+"that would be where your character can not exist yet due to temporal decisions that are in place for
+the server".
+- *What it means:* one character (the character system's, §19.148; one per person, §19.150) carried
+  from game to game within a franchise, as a door from one world into the next, the games dimension's
+  links made walkable (§19.161).
+- *Temporal directives:* a world (a server) may set rules about when in its own timeline a character
+  can exist, and refuse one that would arrive before it could have, as the scale switch lets a world
+  lock true or perception scale (§19.153). The character is kept, not changed: it simply waits at the
+  door until the world's timeline allows it.
+- *Licences are the game makers':* a franchise's games are their makers' works; Sieve can carry the
+  player's own character and the links, and each game would have to take part. Recorded as Edward's
+  idea, not a plan to touch anyone's games.
+
+**19.173 Every filter on every state space at once; the cage on information; the Game Engine
+dimension (Edward, 12 November 2026).** His words: "that means that all cross dimensional filtering
+systems can be engaged to help map and probe all state spaces for information at once, especially if
+through a distributed computing model which is something I have been considering for a while alongside
+the infinite raid system"; "consider it all the ultimate cage on information, if a square or a circle
+or a line happens to fall on a flat value then so be it, shorter address, solved from seed known on
+demand"; "as such simple algorithms for noise and maze generation and filtering and model states across
+item types just become known"; "thus all information becomes communicable amongst the noise"; "not to
+mention the UV unwrap automation and delta transform shorcut pass engine for UVs and thd Game Engine
+Dimension..."; and "I really do not know yet, I suppose it all just becomes an infinite token dimension
+or state space dimension of dimensions that become whatever it becomes naturally because it is forming
+really, I mean math is math and data is data and computers are computers and prng is prng and any
+attempt to use sensor data to offset prng is just that also, so as such it will just become what it
+becoms". The speeches on caging information and on tractability are in SPEECHES.md.
+- *All filters on all spaces at once:* every filter Sieve has counts and ranks on its own line; run
+  across every catalogued dimension (`sieve dimensions`) together, and shared out across machines
+  (the distributed model beside the infinite RAID, §19.139 d, §19.154), the whole lattice is probed at
+  once rather than one line at a time.
+- *Shapes that fall on a flat value:* a square, a circle or a line that a generator makes from a short
+  seed has a shorter address than its pixels: the shortcut seed's geometric filters already find these
+  (orders, shapes subtracted; results of 19.111). Generators for noise, mazes and model states become
+  known routes into the space, each a short address.
+- *UVs:* automatic UV unwrapping, and a shortcut pass that stores UVs as deltas from an unwrap the
+  program can make again, so only the difference is kept (the delta way, v32, applied to texture
+  coordinates). For the importers once they carry surfaces (§19.159).
+- *The Game Engine dimension:* engines themselves as a dimension (ALTEngine, the engines of `engine/`,
+  Doom's, §19.104, §19.163): what each reads, what it can run, linked to the games and formats it
+  handles. In the catalogue as `engines`.
+- *What it becomes:* Edward's view that the lattice forms itself, "a state space dimension of
+  dimensions"; pseudo-random numbers stay pseudo-random however they are seeded.

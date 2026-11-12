@@ -48,7 +48,7 @@ for g in cube.gltf cube-embedded.gltf cube.glb; do
     $exe import "$g" | tr -d '\r' > imp.txt
     q "^held      $held" imp.txt
     q "^kept      8 of 8 vertices, 12 of 12 faces" imp.txt
-    q "^left out  1 skin of 1 joint, not carried" imp.txt
+    q "^skeleton  1 joint, as sieve-character-v3 " imp.txt
 done
 $exe import cube.glb | tr -d '\r' | q "^format    glb"
 test "$($exe mesh --warp cube.gltf | tr -d '\r' | awk '$1 == "positional" {print $2}')" = "$a"
@@ -56,6 +56,15 @@ if $exe import cube-outside.gltf > /dev/null 2>&1; then exit 1; fi
 refused=$($exe import cube-outside.gltf 2>&1 || true)
 q "outside the file's folder" <<< "$refused"
 $exe import --formats | tr -d '\r' | q "^glb "
+# A skeleton and its animation (IDEAS 19.170): tests/arm.gltf is a three-joint arm (a body, an elbow
+# 1 m up, a hand 1 m above it) whose elbow turns a quarter about z over one second. Its skin comes in
+# as a sieve-character-v3 and its animation as 31 frames of sieve-animation-v1, the last frame's
+# elbow turn exactly 8080c0 (a quarter turn about z).
+$exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation | tr -d '\r' > arm.txt
+q "^skeleton  3 joints, as sieve-character-v3 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7" arm.txt
+q "^animation 0 \"wave\": 31 frames (1.03 s), 3 bones, sieve-animation-v1 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.txt
+tr -d '\r' < arm.character | q "^s 2 1 0 8192 0 1024 joint$"
+tr -d '\r' < arm.animation | q "^f 30 808080 8080c0 8080c0$"
 # The catalogue of dimensions: DNA links to research, and research is linked from DNA.
 $exe dimensions | tr -d '\r' | q "^research   planned"
 $exe dimensions research | tr -d '\r' | q "^linked by .*dna"

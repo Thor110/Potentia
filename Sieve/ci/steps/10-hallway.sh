@@ -368,6 +368,14 @@ test -f play/characters/768169973d3190fd9cfa2c16eab7161e944d50ec85ba469411fc306e
 # Importing a model (IDEAS 19.159, .obj first): a cube into the first sphere, the same character each run.
 printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\nf 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 2 6 7 3\nf 3 7 8 4\nf 5 1 4 8\n' > cube.obj
 $H --menu --import-obj cube.obj --press "\`" --screenshot char-cube.png | tr -d '\r' | q "^character: c202ce801122dd88e98ed455be1cc39dd81b7df7720ccddd6b48b4dea78ef196"
+# A glTF's skeleton as your character (IDEAS 19.170), its animation held at its last frame; the
+# settings file keeps the whole character on one line, so the next start reads the same one back.
+rm -f arm.ini
+$H --menu --settings arm.ini --import-skeleton tests/arm.gltf --animation-frame 30 --press "\`" --screenshot char-arm.png | tr -d '\r' > arm-menu.txt
+q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7" arm-menu.txt
+q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones" arm-menu.txt
+grep -q "^line = sieve-character-v3 spheres=3;s 0 -1 0 0 0 1365 body;" arm.ini
+$H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r' | q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
 # The seed walk (IDEAS 19.148 step 7): Shift+G, ten steps from the default character, lands where the
 # unit tests pin it.
 $H --menu --press "\`,Shift+G" --screenshot char-walk.png | tr -d '\r' | q "^character: 775f9b13e7bb87599c40b20aa700f7444da6aca7a09c4ff2a2a2101593c08688"

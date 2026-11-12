@@ -48,6 +48,16 @@
 //                        by its positional address in hex, 51 digits; at most one a sphere, in order)
 // The model's coordinates, in (-1, 1), are its sphere's radius. A character that holds nothing is
 // written as v1, so every v1 character keeps its text and its identity; v1 files read as before.
+//
+// "sieve-character-v3" (IDEAS 19.170): a character whose spheres are given rather than unfolded from
+// a seed: an imported skeleton (a glTF skin's joints, sieve/importers.hpp), or any tree made by hand.
+// Its first line is "sieve-character-v3 spheres=N"; then its N sphere lines as above, each one's
+// parent before it (the body, sphere 0, has parent -1 and no other sphere has), every radius at
+// least 1 and every coordinate within 2^28; then its held models' lines, if it holds any, as in v2.
+// It has no seed and no settings; its identity is the SHA-256 of its text, as for every version.
+//
+// Any version may also be written on one line with ';' between its lines (the settings file keeps a
+// character so); it reads the same and has the same identity.
 #pragma once
 
 #include <cstdint>
@@ -61,6 +71,7 @@ namespace sieve {
 
 inline constexpr const char* kCharacterVersion = "sieve-character-v1";
 inline constexpr const char* kCharacterVersion2 = "sieve-character-v2";
+inline constexpr const char* kCharacterVersion3 = "sieve-character-v3";
 // The models a sphere may hold: the models line at its default shape (eight vertices, twelve faces,
 // sixteen coordinates), positional.
 inline constexpr uint32_t kHeldVertices = 8, kHeldFaces = 12, kHeldCoords = 16;
@@ -97,7 +108,10 @@ struct Character
     std::vector<Sphere> spheres;
     // Models held (v2): sphere index -> the model's positional address on the models line, in hex.
     std::vector<std::pair<uint32_t, std::string>> holds;
-    std::string text() const;     // the canonical text (above): v1, or v2 where it holds models
+    // v3: the spheres are given, not unfolded from the settings (which are then unused).
+    bool given = false;
+    std::string text() const;     // the canonical text (above): v1, v2 where it holds models, v3 where given
+    std::string one_line() const; // the text with ';' between its lines (for the settings file)
     // Puts a model in a sphere (an empty address takes it out), checked: the sphere must exist and
     // the address be a model of the held models' line. Throws std::invalid_argument otherwise.
     void hold(uint32_t sphere, const std::string& hex);
@@ -123,6 +137,10 @@ std::string species_id(const CharacterSettings& s);
 // head = d[12] % 4 != 0. So a walk is a line of characters, the same from the same start on every
 // machine, and any step can be retraced from the one before.
 CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps = 1);
+
+// A character of given spheres (v3), checked as read_character checks one. Throws
+// std::invalid_argument saying what is wrong.
+Character given_character(std::vector<Sphere> spheres);
 
 // A character read back from its text (a .character file): the first line's settings unfolded,
 // and, where sphere lines follow, every one checked against the unfolding. Throws

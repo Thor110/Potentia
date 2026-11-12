@@ -289,14 +289,23 @@ const std::vector<Page>& pages()
           {"sieve browse --alphabet hiragana --length 16 --count 5", "five units of kana"}}},
 
         {"import", "An existing model (.obj, glTF) brought into Sieve: what it carries, what the roof leaves out.",
-         "sieve import FILE | sieve import --formats",
+         "sieve import FILE [--character-out FILE] [--animation-out FILE [--which N]] | sieve import --formats",
          "Reads a model made elsewhere, by its content: Wavefront .obj text, glTF 2.0 as JSON (.gltf,\n"
          "its buffers embedded or in files beside it) or binary (.glb). A glTF's meshes come in as its\n"
          "default scene places them. It says what it read, the held model it becomes (the address the\n"
          "CHARACTER page's Ctrl+I puts into a sphere, under the roof of 8 vertices and 12 faces), and\n"
          "each thing the file held that is not carried: skins, animations, materials, points and lines.\n"
-         "A glTF's buffers are read only from below its own folder.",
-         {{"FILE", "The model to read."}, {"--formats", "List the formats read, what each carries and what each leaves out."}},
+         "A glTF's buffers are read only from below its own folder.\n"
+         "\n"
+         "A glTF's first skin is read as a skeleton: a character of given spheres\n"
+         "(sieve-character-v3), each joint a sphere at its rest position, 4096 units a metre. Each\n"
+         "animation is sampled at 30 frames a second into each joint's turn from rest\n"
+         "(sieve-animation-v1): every animation is an address on that line. Turns only: a joint's\n"
+         "movement and growth are named as left out. The roof: 64 joints, 300 frames.",
+         {{"FILE", "The model to read."}, {"--formats", "List the formats read, what each carries and what each leaves out."},
+          {"--character-out FILE", "Write the skeleton as a .character file (sieve-character-v3)."},
+          {"--animation-out FILE", "Write an animation as a .animation file (sieve-animation-v1)."},
+          {"--which N", "Which animation --animation-out writes, from 0 (default 0)."}},
          {{"sieve import teapot.obj", "8 of 1,857 vertices, 9 of 3,552 faces kept"},
           {"sieve import --formats", "every importer and its roof"}}},
 

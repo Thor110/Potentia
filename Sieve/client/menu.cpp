@@ -1616,6 +1616,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
 static void SDLCALL character_saved(void* self, const char* const* files, int);
 static void SDLCALL character_opened(void* self, const char* const* files, int);
 static void SDLCALL obj_opened(void* self, const char* const* files, int);
+static void SDLCALL skeleton_opened(void* self, const char* const* files, int);
 
 void Menu::handle(const SDL_Event& event, bool& done, Result& result)
 {
@@ -1768,6 +1769,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         {
             static const SDL_DialogFileFilter kObj[] = {{"Models (OBJ, glTF)", "obj;gltf;glb"}};
             open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
+        }
+        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_K && side_page_ == 0)
+        {
+            static const SDL_DialogFileFilter kGltf[] = {{"glTF models with a skeleton", "gltf;glb"}};
+            open_file_dialog(skeleton_opened, this, window_, kGltf, 1, nullptr, false, false, this);
         }
         else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_O)
         {
@@ -2034,7 +2040,10 @@ void Menu::char_init()
         if (!app_->character.empty())
             try
             {
-                char_settings_ = sieve::read_character(app_->character).settings;
+                // The whole character (its spheres and held models too, on one line with ';').
+                char_ = sieve::read_character(app_->character);
+                char_settings_ = char_.settings;
+                return;
             }
             catch (const std::exception& e)
             {
@@ -2047,8 +2056,10 @@ void Menu::char_init()
 void Menu::char_store()
 {
     if (!app_) return;
+    // A v1 character is its first line; one holding models (v2) or of given spheres (v3) is kept
+    // whole, on one line with ';' between its lines, so it reads back as it was.
     const std::string t = char_.text();
-    app_->character = t.substr(0, t.find('\n'));
+    app_->character = !char_.given && char_.holds.empty() ? t.substr(0, t.find('\n')) : char_.one_line();
     app_->character_drawing = char_draw_;
     save_app();
 }
@@ -2070,6 +2081,66 @@ void Menu::obj_chosen(const std::string& path)
 {
     std::lock_guard<std::mutex> lock(char_mx_);
     char_import_from_ = path;
+}
+static void SDLCALL skeleton_opened(void* self, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(self)->skeleton_chosen(files[0]);
+}
+void Menu::skeleton_chosen(const std::string& path)
+{
+    std::lock_guard<std::mutex> lock(char_mx_);
+    char_skeleton_from_ = path;
+}
+
+// A glTF's skeleton as your character (IDEAS 19.170): its first skin's joints as given spheres
+// (sieve-character-v3), at their true size, and its first animation, if it has one, playing on it.
+void Menu::import_skeleton(const std::string& path)
+{
+    char_init();
+    std::ifstream in(path_utf8(path), std::ios::binary);
+    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in && bytes.empty())
+    {
+        char_note_ = trf("side.char.unreadable", {path});
+        return;
+    }
+    try
+    {
+        const std::filesystem::path folder = path_utf8(path).parent_path();
+        const sieve::ImportedModel m = sieve::read_model(bytes, [&](const std::string& uri) -> std::optional<std::string> {
+            if (!sieve::import_uri_is_local(uri)) return std::nullopt;
+            std::error_code ec;
+            const std::filesystem::path beside = folder / path_utf8(uri);
+            const auto size = std::filesystem::file_size(beside, ec);
+            if (ec || size > (uint64_t(1) << 30)) return std::nullopt;
+            std::ifstream b(beside, std::ios::binary);
+            return std::string((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
+        });
+        char_ = sieve::skeleton_character(m);
+        char_sphere_ = 0;
+        char_anim_.reset();
+        if (!m.sampled.empty()) char_anim_ = sieve::imported_animation(m, 0);
+        char_anim_playing_ = true;
+        char_store();
+        char_note_ = trf("side.char.skeleton", {utf8_path(path_utf8(path).filename()), std::to_string(m.skeleton.size()),
+                                                 char_anim_ ? trf("side.char.anim", {std::to_string(char_anim_->frames)}) : tr("side.char.no_anim")});
+        if (!m.left_out.empty())
+        {
+            std::string all;
+            for (const auto& l : m.left_out) all += (all.empty() ? "" : "; ") + l;
+            char_note_ += "; " + trf("side.char.left_out", {all});
+        }
+    }
+    catch (const std::exception& e)
+    {
+        char_note_ = trf("side.char.refused", {e.what()});
+    }
+}
+
+std::string Menu::animation_line() const
+{
+    if (!char_anim_) return {};
+    return char_anim_->id() + " " + std::to_string(char_anim_->frames) + " frames, " + std::to_string(char_anim_->bones) + " bones";
 }
 
 // An existing model into the chosen sphere (IDEAS 19.159, 19.162): any format the importers read
@@ -2265,6 +2336,13 @@ void Menu::char_key(SDL_Keycode key, bool shift)
     auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
     switch (key)
     {
+    case SDLK_A: // play or pause the animation (IDEAS 19.170)
+        if (char_anim_)
+        {
+            if (char_anim_playing_) char_anim_paused_ = uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);
+            char_anim_playing_ = !char_anim_playing_;
+        }
+        return;
     case SDLK_LEFTBRACKET: char_turn_ -= 0.2617994f; return; // 15 degrees
     case SDLK_RIGHTBRACKET: char_turn_ += 0.2617994f; return;
     case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
@@ -2828,14 +2906,16 @@ void Menu::render_side(float W, float H)
     }
     // A file chosen in a dialog since the last frame: saved or opened now.
     {
-        std::optional<std::string> save, load, import;
+        std::optional<std::string> save, load, import, skeleton;
         {
             std::lock_guard<std::mutex> lock(char_mx_);
             save.swap(char_save_to_);
             load.swap(char_load_from_);
             import.swap(char_import_from_);
+            skeleton.swap(char_skeleton_from_);
         }
         if (import) import_model(*import);
+        if (skeleton) import_skeleton(*skeleton);
         if (save)
         {
             std::ofstream out(path_utf8(*save), std::ios::binary);
@@ -2863,8 +2943,10 @@ void Menu::render_side(float W, float H)
     // The settings, one a row, the chosen one marked; then the character, turning.
     char_init();
     const auto& cs = char_settings_;
-    const std::string values[] = {std::to_string(cs.seed), std::to_string(cs.limbs), std::to_string(cs.joints), std::to_string(cs.branches),
-                                  sieve::symmetry_name(cs.symmetry), cs.head ? tr("side.yes") : tr("side.no"),
+    const std::string given = tr("side.char.given"); // a character of given spheres has no settings
+    const std::string values[] = {char_.given ? tr("side.char.from_skeleton") : std::to_string(cs.seed), char_.given ? given : std::to_string(cs.limbs), char_.given ? given : std::to_string(cs.joints),
+                                  char_.given ? given : std::to_string(cs.branches), char_.given ? given : std::string(sieve::symmetry_name(cs.symmetry)),
+                                  char_.given ? given : cs.head ? tr("side.yes") : tr("side.no"),
                                   tr(std::string("side.char.draw.") + std::to_string(char_draw_)),
                                   trf("side.char.sphere_of", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())}),
                                   char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : tr("side.char.none")};
@@ -2883,8 +2965,12 @@ void Menu::render_side(float W, float H)
         text(r_, x + 190, y, values[i], 1, on ? white : grey);
         y += 16;
     }
-    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16), char_.holds.empty() ? sieve::kCharacterVersion : sieve::kCharacterVersion2}), 1, grey);
-    text(r_, x + 14, y + 18, trf("side.char.species", {sieve::species_id(char_.settings).substr(0, 12)}), 1, grey);
+    const std::string ctext = char_.text();
+    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16), ctext.substr(0, ctext.find(' '))}), 1, grey);
+    if (char_anim_)
+        text(r_, x + 14, y + 18, fit_cells(trf("side.char.playing", {char_anim_->id().substr(0, 12), std::to_string(char_anim_->frames), char_anim_playing_ ? tr("side.char.anim_on") : tr("side.char.anim_off")}), size_t((kSideW - 28) / 8)), 1, grey);
+    else if (char_.given) text(r_, x + 14, y + 18, tr("side.char.no_species"), 1, grey);
+    else text(r_, x + 14, y + 18, trf("side.char.species", {sieve::species_id(char_.settings).substr(0, 12)}), 1, grey);
     if (!char_note_.empty()) text(r_, x + 14, y + 32, fit_cells(char_note_, size_t((kSideW - 28) / 8)), 1, white);
     // The drawing: each sphere a circle, each bone a line to its parent, seen from the side, standing
     // on a pedestal; a drag across it (or [ and ]) turns it about the upright. Scaled to fit the box
@@ -2893,8 +2979,23 @@ void Menu::render_side(float W, float H)
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
     {
+        // The character as drawn: at rest, or in this frame of its animation (IDEAS 19.170).
+        sieve::Character shown = char_;
+        if (char_anim_)
+        {
+            const uint32_t frame = char_anim_fixed_ >= 0 ? uint32_t(char_anim_fixed_)
+                                   : char_anim_playing_ ? uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000)
+                                                        : char_anim_paused_;
+            const auto at = sieve::pose(char_, *char_anim_, frame);
+            for (size_t i = 0; i < shown.spheres.size(); ++i)
+            {
+                shown.spheres[i].x = int32_t(std::lround(at[i][0]));
+                shown.spheres[i].y = int32_t(std::lround(at[i][1]));
+                shown.spheres[i].z = int32_t(std::lround(at[i][2]));
+            }
+        }
         int32_t ex, ey, ez;
-        char_.extent(ex, ey, ez);
+        char_.extent(ex, ey, ez); // (at rest, so the scale holds still while it moves)
         const float reach = float(std::max({ex, ez, 1})), tall = float(std::max(ey, 1));
         const float scale = std::min(bw / (2.4f * reach), bh / (2.6f * tall));
         const float cx = bx + bw / 2, cy = by + bh / 2 - bh * 0.04f;
@@ -2928,10 +3029,10 @@ void Menu::render_side(float W, float H)
         };
         // Spheres drawn far to near, so the nearer cover the farther.
         std::vector<std::pair<float, size_t>> order;
-        for (size_t i = 0; i < char_.spheres.size(); ++i)
+        for (size_t i = 0; i < shown.spheres.size(); ++i)
         {
             float sx, sy, d;
-            at(char_.spheres[i], sx, sy, d);
+            at(shown.spheres[i], sx, sy, d);
             order.push_back({d, i});
         }
         std::sort(order.begin(), order.end());
@@ -2946,20 +3047,20 @@ void Menu::render_side(float W, float H)
         {
             // The bones, under everything.
             SDL_SetRenderDrawColor(r_, 120, 120, 120, 255);
-            for (const sieve::Sphere& p : char_.spheres)
+            for (const sieve::Sphere& p : shown.spheres)
                 if (p.parent >= 0)
                 {
                     float x1, y1, d1, x2, y2, d2;
                     at(p, x1, y1, d1);
-                    at(char_.spheres[size_t(p.parent)], x2, y2, d2);
+                    at(shown.spheres[size_t(p.parent)], x2, y2, d2);
                     SDL_RenderLine(r_, x1, y1, x2, y2);
                 }
         }
         // Voxels: one cell size for the whole character, an eighth of the body's radius on screen.
-        const float cell = std::max(2.0f, float(char_.spheres[0].r) * scale / 4.0f);
+        const float cell = std::max(2.0f, float(shown.spheres[0].r) * scale / 4.0f);
         for (const auto& [d, i] : order)
         {
-            const sieve::Sphere& p = char_.spheres[i];
+            const sieve::Sphere& p = shown.spheres[i];
             float sx, sy, dd;
             at(p, sx, sy, dd);
             const float rad = std::max(1.5f, float(p.r) * scale);
@@ -3036,9 +3137,9 @@ void Menu::render_side(float W, float H)
             sy = cy - py * scale;
         };
         SDL_SetRenderDrawColor(r_, 120, 255, 160, 255);
-        for (const auto& [i, hex] : char_.holds)
+        for (const auto& [i, hex] : shown.holds)
         {
-            const sieve::Sphere& p = char_.spheres[i];
+            const sieve::Sphere& p = shown.spheres[i];
             for (const sieve::HeldEdge& e : sieve::held_model_edges(hex))
             {
                 float x1, y1, x2, y2;
@@ -3047,11 +3148,11 @@ void Menu::render_side(float W, float H)
                 SDL_RenderLine(r_, x1, y1, x2, y2);
             }
         }
-        if ((char_row_ == 7 || char_row_ == 8) && char_sphere_ < char_.spheres.size())
+        if ((char_row_ == 7 || char_row_ == 8) && char_sphere_ < shown.spheres.size())
         {
             float sx, sy, d;
-            at(char_.spheres[char_sphere_], sx, sy, d);
-            const float rad = std::max(4.0f, float(char_.spheres[char_sphere_].r) * scale) + 4;
+            at(shown.spheres[char_sphere_], sx, sy, d);
+            const float rad = std::max(4.0f, float(shown.spheres[char_sphere_].r) * scale) + 4;
             SDL_SetRenderDrawColor(r_, 255, 220, 80, 255);
             for (int k = 0; k < 32; ++k)
             {

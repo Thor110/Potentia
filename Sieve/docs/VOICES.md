@@ -111,6 +111,10 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, quote): If humanity gets left behind to face the approach of the sun as it swallows the solar system, they at least have a nice VR lounge for those last dire moments.
 - **Edward** (12 November 2026, metaphor; a point about everything): There is a point in time, and I can see it, at which all time folds in on itself, and history is preserved or damaged depending on the outcome and actions of all of us who lie around it. That point lies in the Sieve of Potentia, the infinite realm of possibility.
 - **Edward** (12 November 2026, quote; a point about everything): Just discovering the shape of space which already naturally existed is all I am, all we all are, doing naturally: convergent in unison, divergent in discrepancy or during debate.
+- **Edward** (12 November 2026, metaphor; a point about everything): It truly becomes its own geometric shape: the shape of all possible state spaces.
+- **Edward** (12 November 2026, metaphor): This landscape carves its own canyons and grooves in its digital realm.
+- **Edward** (12 November 2026, quote): All information becomes communicable amongst the noise.
+- **Edward** (12 November 2026, quote): The Sieve of Potentia, for sieving information to its Kolmogorov complexity limit, if possible and where applicable.
 
 **Longer pieces.** Whole paragraphs and speeches, for a speaker to give at a chosen moment or on a chosen path, are kept in [SPEECHES.md](SPEECHES.md), not here.
 

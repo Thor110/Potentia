@@ -129,7 +129,8 @@ struct AppSettings
     // What the packer weighs ways by: size, balanced (the default since 7 November 2026: mixing only
     // where it saves 4% of what it carries) or speed (Prioritise Decoding Speed: no file mixed).
     std::string locator_priority = "balanced";
-    // [character] (IDEAS 19.148): your character as its settings line (sieve-character-v1; empty: the
+    // [character] (IDEAS 19.148): your character as its settings line (v1), or its whole text on one
+    // line with ';' between its lines (v2, v3: sieve/character.hpp); empty: the
     // default character), how the CHARACTER page draws it (0 pixels to 3 shaded), and whether it
     // walks beside you in the hallway.
     std::string character;

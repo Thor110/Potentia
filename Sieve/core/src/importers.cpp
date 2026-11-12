@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cctype>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -22,8 +23,9 @@ const std::vector<ImportFormat>& import_formats()
         {"obj", "Wavefront OBJ", "obj", "every v and f line: vertices and faces (polygons as fans)",
          "texture coordinates, normals, materials, groups"},
         {"gltf", "glTF 2.0 (JSON)", "gltf",
-         "every triangle mesh of the default scene, placed as its nodes place it; buffers embedded or beside it",
-         "skins (bones), animations, materials, textures; points and lines; Draco and meshopt compression"},
+         "every triangle mesh of the default scene, placed as its nodes place it; buffers embedded or beside it; "
+         "the first skin's joints as a skeleton (sieve-character-v3); animations sampled as turns (sieve-animation-v1)",
+         "skins after the first; joints' movement and growth in animations; materials, textures; points and lines; Draco and meshopt compression"},
         {"glb", "glTF 2.0 (binary)", "glb", "as glTF: the JSON and its buffer in one file",
          "as glTF"},
     };
@@ -165,12 +167,14 @@ std::vector<double> numbers(const json::Value& v, size_t n, const char* what)
     return out;
 }
 
+Mat trs_matrix(const double t[3], const double q[4], const double s[3]);
+
 Mat local_matrix(const json::Value& node)
 {
     if (const json::Value* m = node.find("matrix"))
     {
         const auto v = numbers(*m, 16, "a node's matrix");
-        Mat r;
+        Mat r{};
         std::copy(v.begin(), v.end(), r.begin());
         return r;
     }
@@ -190,8 +194,16 @@ Mat local_matrix(const json::Value& node)
         const auto n = numbers(*v, 3, "a node's scale");
         std::copy(n.begin(), n.end(), s);
     }
+    return trs_matrix(t, q, s);
+}
+
+// T * R * S, column-major; the quaternion (x, y, z, w) normalised first.
+Mat trs_matrix(const double t[3], const double qin[4], const double s[3])
+{
+    double n = std::sqrt(qin[0] * qin[0] + qin[1] * qin[1] + qin[2] * qin[2] + qin[3] * qin[3]);
+    if (n == 0) n = 1;
+    const double q[4] = {qin[0] / n, qin[1] / n, qin[2] / n, (qin[0] == 0 && qin[1] == 0 && qin[2] == 0 && qin[3] == 0) ? 1 : qin[3] / n};
     const double x = q[0], y = q[1], z = q[2], w = q[3];
-    // T * R * S, column-major.
     Mat r{};
     r[0] = (1 - 2 * (y * y + z * z)) * s[0];
     r[1] = (2 * (x * y + z * w)) * s[0];
@@ -470,6 +482,305 @@ private:
     std::vector<bool> seen_;
 };
 
+// A node's rest: its matrix as given, or its translation, rotation and scale (which animations
+// replace one at a time).
+struct Rest
+{
+    bool has_matrix = false;
+    Mat m{};
+    double t[3] = {0, 0, 0}, r[4] = {0, 0, 0, 1}, s[3] = {1, 1, 1};
+};
+
+Rest rest_of(const json::Value& node)
+{
+    Rest k;
+    if (node.find("matrix"))
+    {
+        k.has_matrix = true;
+        k.m = local_matrix(node);
+        return k;
+    }
+    if (const json::Value* v = node.find("translation"))
+    {
+        const auto n = numbers(*v, 3, "a node's translation");
+        std::copy(n.begin(), n.end(), k.t);
+    }
+    if (const json::Value* v = node.find("rotation"))
+    {
+        const auto n = numbers(*v, 4, "a node's rotation");
+        std::copy(n.begin(), n.end(), k.r);
+    }
+    if (const json::Value* v = node.find("scale"))
+    {
+        const auto n = numbers(*v, 3, "a node's scale");
+        std::copy(n.begin(), n.end(), k.s);
+    }
+    return k;
+}
+
+// Every node's matrix in the world, from each node's local one and its parent (-1: none).
+std::vector<Mat> world_matrices(const std::vector<Mat>& local, const std::vector<int64_t>& parent)
+{
+    std::vector<Mat> w(local.size());
+    std::vector<uint8_t> done(local.size(), 0);
+    for (size_t i = 0; i < local.size(); ++i)
+    {
+        // The chain up to a node already done (or a root), then down it.
+        std::vector<size_t> chain;
+        size_t at = i;
+        while (!done[at])
+        {
+            chain.push_back(at);
+            if (parent[at] < 0) break;
+            at = size_t(parent[at]);
+            if (chain.size() > local.size()) refuse("its nodes form a loop");
+        }
+        for (size_t k = chain.size(); k-- > 0;)
+        {
+            const size_t n = chain[k];
+            w[n] = parent[n] < 0 ? local[n] : mul(w[size_t(parent[n])], local[n]);
+            done[n] = 1;
+        }
+    }
+    return w;
+}
+
+// A world matrix's turn (its scale taken off each column), row-major 3x3.
+std::array<double, 9> turn_of(const Mat& m)
+{
+    std::array<double, 9> r{};
+    for (int c = 0; c < 3; ++c)
+    {
+        double n = std::sqrt(m[size_t(c * 4)] * m[size_t(c * 4)] + m[size_t(c * 4 + 1)] * m[size_t(c * 4 + 1)] + m[size_t(c * 4 + 2)] * m[size_t(c * 4 + 2)]);
+        if (n == 0) n = 1;
+        for (int row = 0; row < 3; ++row) r[size_t(row * 3 + c)] = m[size_t(c * 4 + row)] / n;
+    }
+    return r;
+}
+
+std::array<double, 4> quaternion_of(const std::array<double, 9>& m)
+{
+    // Shepperd's method: the largest of the four first, for accuracy.
+    const double tr = m[0] + m[4] + m[8];
+    double x, y, z, w;
+    if (tr > 0)
+    {
+        const double s = std::sqrt(tr + 1.0) * 2;
+        w = 0.25 * s, x = (m[7] - m[5]) / s, y = (m[2] - m[6]) / s, z = (m[3] - m[1]) / s;
+    }
+    else if (m[0] > m[4] && m[0] > m[8])
+    {
+        const double s = std::sqrt(1.0 + m[0] - m[4] - m[8]) * 2;
+        w = (m[7] - m[5]) / s, x = 0.25 * s, y = (m[1] + m[3]) / s, z = (m[2] + m[6]) / s;
+    }
+    else if (m[4] > m[8])
+    {
+        const double s = std::sqrt(1.0 + m[4] - m[0] - m[8]) * 2;
+        w = (m[2] - m[6]) / s, x = (m[1] + m[3]) / s, y = 0.25 * s, z = (m[5] + m[7]) / s;
+    }
+    else
+    {
+        const double s = std::sqrt(1.0 + m[8] - m[0] - m[4]) * 2;
+        w = (m[3] - m[1]) / s, x = (m[2] + m[6]) / s, y = (m[5] + m[7]) / s, z = 0.25 * s;
+    }
+    return {x, y, z, w};
+}
+
+// The first skin's joints as a skeleton (parents first, at most kAnimationMaxBones), and every
+// animation sampled into their turns from rest.
+void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
+{
+    const auto& nodes = array_of(root, "nodes");
+    std::vector<int64_t> parent(nodes.size(), -1);
+    for (size_t i = 0; i < nodes.size(); ++i)
+        for (const auto& c : array_of(nodes[i], "children"))
+        {
+            if (!c.is_number() || c.u64() >= nodes.size()) refuse("a node's child is not there");
+            if (parent[c.u64()] >= 0) refuse("node " + std::to_string(c.u64()) + " has two parents");
+            parent[c.u64()] = int64_t(i);
+        }
+    std::vector<Rest> rest;
+    std::vector<Mat> local;
+    for (const auto& n : nodes)
+    {
+        rest.push_back(rest_of(n));
+        local.push_back(rest.back().has_matrix ? rest.back().m : trs_matrix(rest.back().t, rest.back().r, rest.back().s));
+    }
+    const std::vector<Mat> world0 = world_matrices(local, parent);
+
+    const auto& skin = array_of(root, "skins")[0];
+    std::vector<uint64_t> joints;
+    std::vector<int64_t> joint_index(nodes.size(), -1);
+    for (const auto& j : array_of(skin, "joints"))
+    {
+        if (!j.is_number() || j.u64() >= nodes.size()) refuse("a skin names a joint that is not there");
+        if (joint_index[j.u64()] >= 0) continue;
+        joint_index[j.u64()] = int64_t(joints.size());
+        joints.push_back(j.u64());
+    }
+    if (joints.empty()) return;
+    // Each joint's parent: the nearest joint above it.
+    std::vector<int64_t> jparent(joints.size(), -1);
+    for (size_t k = 0; k < joints.size(); ++k)
+    {
+        int64_t at = parent[joints[k]];
+        size_t steps = 0;
+        while (at >= 0 && joint_index[size_t(at)] < 0 && ++steps <= nodes.size()) at = parent[size_t(at)];
+        jparent[k] = at >= 0 ? joint_index[size_t(at)] : -1;
+    }
+    // Parents first: from the roots down, in the skin's order; every root after the first hangs
+    // from the first.
+    std::vector<size_t> order;
+    std::vector<std::vector<size_t>> kids(joints.size());
+    std::vector<size_t> roots;
+    for (size_t k = 0; k < joints.size(); ++k)
+        (jparent[k] < 0 ? roots : kids[size_t(jparent[k])]).push_back(k);
+    for (size_t r : roots) order.push_back(r);
+    for (size_t at = 0; at < order.size(); ++at)
+        for (size_t c : kids[order[at]]) order.push_back(c);
+    const size_t kept = std::min<size_t>(order.size(), kAnimationMaxBones);
+    std::vector<int64_t> sphere_of(joints.size(), -1);
+    for (size_t i = 0; i < kept; ++i) sphere_of[order[i]] = int64_t(i);
+    for (size_t i = 0; i < kept; ++i)
+    {
+        const size_t k = order[i];
+        const Mat& w = world0[joints[k]];
+        ImportedModel::Joint j;
+        if (const json::Value* nm = nodes[joints[k]].find("name"); nm && nm->is_string()) j.name = nm->string();
+        j.parent = i == 0 ? -1 : jparent[k] >= 0 ? int32_t(sphere_of[size_t(jparent[k])]) : 0;
+        j.x = w[12], j.y = w[13], j.z = w[14];
+        out.skeleton.push_back(std::move(j));
+    }
+    auto plural = [](size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); };
+    if (kept < order.size())
+        out.left_out.push_back(plural(order.size() - kept, "joint", "joints") + " past the roof of " + std::to_string(kAnimationMaxBones) + ", not carried");
+
+    // The animations, each sampled at kAnimationRate a second.
+    std::vector<std::array<double, 9>> rest_turn(kept);
+    for (size_t i = 0; i < kept; ++i) rest_turn[i] = turn_of(world0[joints[order[i]]]);
+    size_t translations = 0, scales = 0, weights = 0, cubic = 0, frames_cut = 0;
+    for (const auto& a : array_of(root, "animations"))
+    {
+        struct Channel
+        {
+            size_t node;
+            int path; // 0 translation, 1 rotation, 2 scale
+            std::vector<float> times, values;
+            int interp; // 0 linear, 1 step, 2 cubic spline
+        };
+        std::vector<Channel> chans;
+        const auto& samplers = array_of(a, "samplers");
+        double end = 0;
+        for (const auto& c : array_of(a, "channels"))
+        {
+            const json::Value* target = c.find("target");
+            if (!target || !target->find("node") || !target->find("path")) continue;
+            const std::string path = target->at("path").is_string() ? target->at("path").string() : "";
+            const uint64_t node = uint_of(*target, "node", 0), si = uint_of(c, "sampler", UINT64_MAX);
+            if (node >= nodes.size() || si >= samplers.size()) refuse("an animation's channel names what is not there");
+            if (path == "weights")
+            {
+                ++weights;
+                continue;
+            }
+            const int pi = path == "translation" ? 0 : path == "rotation" ? 1 : path == "scale" ? 2 : -1;
+            if (pi < 0) continue;
+            if (pi == 0) ++translations;
+            if (pi == 2) ++scales;
+            if (rest[node].has_matrix) refuse("an animation moves node " + std::to_string(node) + ", which has a matrix (glTF forbids it)");
+            const json::Value& smp = samplers[si];
+            Channel ch;
+            ch.node = size_t(node);
+            ch.path = pi;
+            const std::string interp = smp.find("interpolation") && smp.at("interpolation").is_string() ? smp.at("interpolation").string() : "LINEAR";
+            ch.interp = interp == "STEP" ? 1 : interp == "CUBICSPLINE" ? 2 : 0;
+            if (ch.interp == 2) ++cubic;
+            ch.times = g.floats(uint_of(smp, "input", UINT64_MAX), 1);
+            const size_t comps = pi == 1 ? 4 : 3;
+            ch.values = g.floats(uint_of(smp, "output", UINT64_MAX), comps);
+            const size_t per = comps * (ch.interp == 2 ? 3 : 1);
+            if (ch.times.empty() || ch.values.size() != ch.times.size() * per) refuse("an animation sampler's keys and values do not match");
+            end = std::max(end, double(ch.times.back()));
+            chans.push_back(std::move(ch));
+        }
+        ImportedModel::Sampled sm;
+        if (const json::Value* nm = a.find("name"); nm && nm->is_string()) sm.name = nm->string();
+        sm.seconds = end;
+        double want = std::floor(end * kAnimationRate + 1e-9) + 1;
+        if (want > kAnimationMaxFrames) ++frames_cut;
+        sm.frames = uint32_t(std::min<double>(want, kAnimationMaxFrames));
+        for (uint32_t f = 0; f < sm.frames; ++f)
+        {
+            const double t = double(f) / kAnimationRate;
+            std::vector<Rest> now = rest;
+            for (const Channel& ch : chans)
+            {
+                const size_t comps = ch.path == 1 ? 4 : 3, stride = comps * (ch.interp == 2 ? 3 : 1), off = ch.interp == 2 ? comps : 0;
+                size_t k = size_t(std::upper_bound(ch.times.begin(), ch.times.end(), float(t)) - ch.times.begin());
+                double v[4];
+                auto value = [&](size_t key, size_t c) { return double(ch.values[key * stride + off + c]); };
+                if (k == 0 || k >= ch.times.size() || ch.interp == 1)
+                {
+                    const size_t key = k == 0 ? 0 : k - 1;
+                    for (size_t c = 0; c < comps; ++c) v[c] = value(std::min(key, ch.times.size() - 1), c);
+                }
+                else
+                {
+                    const double t0 = ch.times[k - 1], t1 = ch.times[k], u = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+                    if (ch.path == 1)
+                    {
+                        // Slerp, the shorter way round.
+                        double a0[4], a1[4], dot = 0;
+                        for (size_t c = 0; c < 4; ++c) a0[c] = value(k - 1, c), a1[c] = value(k, c), dot += a0[c] * a1[c];
+                        if (dot < 0)
+                        {
+                            for (double& x : a1) x = -x;
+                            dot = -dot;
+                        }
+                        double wa = 1 - u, wb = u;
+                        if (dot < 0.9995)
+                        {
+                            const double th = std::acos(std::min(1.0, dot)), st = std::sin(th);
+                            wa = std::sin((1 - u) * th) / st, wb = std::sin(u * th) / st;
+                        }
+                        for (size_t c = 0; c < 4; ++c) v[c] = wa * a0[c] + wb * a1[c];
+                    }
+                    else
+                        for (size_t c = 0; c < comps; ++c) v[c] = (1 - u) * value(k - 1, c) + u * value(k, c);
+                }
+                Rest& r = now[ch.node];
+                if (ch.path == 0) std::copy(v, v + 3, r.t);
+                else if (ch.path == 1) std::copy(v, v + 4, r.r);
+                else std::copy(v, v + 3, r.s);
+            }
+            std::vector<Mat> loc(nodes.size());
+            for (size_t i = 0; i < nodes.size(); ++i) loc[i] = now[i].has_matrix ? now[i].m : trs_matrix(now[i].t, now[i].r, now[i].s);
+            const std::vector<Mat> w = world_matrices(loc, parent);
+            for (size_t i = 0; i < kept; ++i)
+            {
+                // The turn from rest: now times rest's inverse (its transpose).
+                const auto r1 = turn_of(w[joints[order[i]]]);
+                const auto& r0 = rest_turn[i];
+                std::array<double, 9> d{};
+                for (int row = 0; row < 3; ++row)
+                    for (int col = 0; col < 3; ++col)
+                    {
+                        double sum = 0;
+                        for (int k2 = 0; k2 < 3; ++k2) sum += r1[size_t(row * 3 + k2)] * r0[size_t(col * 3 + k2)];
+                        d[size_t(row * 3 + col)] = sum;
+                    }
+                sm.turns.push_back(quaternion_of(d));
+            }
+        }
+        out.sampled.push_back(std::move(sm));
+    }
+    if (translations) out.left_out.push_back(plural(translations, "translation channel", "translation channels") + ", not carried: the animation line holds turns");
+    if (scales) out.left_out.push_back(plural(scales, "scale channel", "scale channels") + ", not carried: the animation line holds turns");
+    if (weights) out.left_out.push_back(plural(weights, "morph-weight channel", "morph-weight channels") + ", not carried");
+    if (cubic) out.left_out.push_back(plural(cubic, "cubic-spline channel", "cubic-spline channels") + " played as straight lines between their keys");
+    if (frames_cut) out.left_out.push_back(plural(frames_cut, "animation", "animations") + " cut at the roof of " + std::to_string(kAnimationMaxFrames) + " frames");
+}
+
 ImportedModel read_gltf_json(std::string_view json_text, std::optional<std::string> bin, const ImportLoader& load, const char* format)
 {
     json::Value root;
@@ -525,17 +836,16 @@ ImportedModel read_gltf_json(std::string_view json_text, std::optional<std::stri
             if (s.find("input")) out.keyframes = std::max<size_t>(out.keyframes, size_t(g.count_of(uint_of(s, "input", 0))));
     }
     auto plural = [](size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); };
-    if (out.skins)
-        out.left_out.push_back(plural(out.skins, "skin", "skins") + " of " + plural(out.joints, "joint", "joints") + ", not carried: a held model has no bones yet");
-    if (out.animations)
-        out.left_out.push_back(plural(out.animations, "animation", "animations") + " (" + plural(out.channels, "channel", "channels") + ", up to " +
-                               plural(out.keyframes, "keyframe", "keyframes") + "), not carried: there is no animation line yet");
+    if (!skins.empty()) read_skeleton(root, g, out);
+    if (out.skins > 1) out.left_out.push_back(plural(out.skins - 1, "skin", "skins") + " after the first, not carried: a character has one skeleton");
+    if (!anims.empty() && out.skeleton.empty())
+        out.left_out.push_back(plural(out.animations, "animation", "animations") + ", not carried: they move a skeleton, and there is none");
     if (g.skipped_points_lines_) out.left_out.push_back(plural(g.skipped_points_lines_, "primitive", "primitives") + " of points or lines, not carried: a held model is triangles");
     if (g.skipped_no_position_) out.left_out.push_back(plural(g.skipped_no_position_, "primitive", "primitives") + " with no positions, skipped");
     const size_t materials = array_of(root, "materials").size(), textures = array_of(root, "textures").size();
     if (materials || textures)
         out.left_out.push_back(plural(materials, "material", "materials") + " and " + plural(textures, "texture", "textures") + ", not carried: a held model has no surface yet");
-    if (out.mesh.verts.empty()) refuse("no triangles in its default scene");
+    if (out.mesh.verts.empty() && out.skeleton.empty()) refuse("no triangles in its default scene, and no skeleton");
     return out;
 }
 
@@ -565,6 +875,57 @@ ImportedModel read_gltf(std::string_view bytes, const ImportLoader& load)
         return read_gltf_json(json_chunk, std::move(bin), load, "glb");
     }
     return read_gltf_json(bytes, std::nullopt, load, "gltf");
+}
+
+Character skeleton_character(const ImportedModel& m)
+{
+    if (m.skeleton.empty()) throw std::invalid_argument("no skeleton in it (a glTF's first skin is read as one)");
+    const auto& j = m.skeleton;
+    const double metre = kCharacterUnitsPerMetre;
+    auto dist = [&](size_t a, size_t b) {
+        const double dx = j[a].x - j[b].x, dy = j[a].y - j[b].y, dz = j[a].z - j[b].z;
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    };
+    std::vector<double> nearest(j.size(), 0), farthest(j.size(), 0);
+    for (size_t i = 1; i < j.size(); ++i)
+    {
+        const size_t p = size_t(j[i].parent);
+        const double d = dist(i, p);
+        if (d <= 0) continue;
+        for (const size_t k : {i, p})
+        {
+            nearest[k] = nearest[k] == 0 ? d : std::min(nearest[k], d);
+            farthest[k] = std::max(farthest[k], d);
+        }
+    }
+    std::vector<Sphere> sp;
+    for (size_t i = 0; i < j.size(); ++i)
+    {
+        Sphere s;
+        s.parent = j[i].parent;
+        s.x = int32_t(std::lround((j[i].x - j[0].x) * metre));
+        s.y = int32_t(std::lround((j[i].y - j[0].y) * metre));
+        s.z = int32_t(std::lround((j[i].z - j[0].z) * metre));
+        const double r = i == 0 ? farthest[0] / 3 : nearest[i] / 4;
+        s.r = std::max<int32_t>(1, int32_t(std::lround(r * metre)));
+        if (s.r == 1 && i == 0) s.r = std::max<int32_t>(1, int32_t(0.05 * metre));
+        std::string lower = j[i].name;
+        for (char& c : lower) c = char(std::tolower(static_cast<unsigned char>(c)));
+        s.kind = i == 0 ? Sphere::Body : lower.find("head") != std::string::npos ? Sphere::Head : Sphere::Joint;
+        sp.push_back(s);
+    }
+    return given_character(std::move(sp));
+}
+
+Animation imported_animation(const ImportedModel& m, size_t which)
+{
+    if (which >= m.sampled.size()) throw std::invalid_argument("no animation " + std::to_string(which) + " in it (it has " + std::to_string(m.sampled.size()) + ")");
+    const ImportedModel::Sampled& s = m.sampled[which];
+    Animation a;
+    a.bones = uint32_t(m.skeleton.size());
+    a.frames = s.frames;
+    for (const auto& q : s.turns) a.turns.push_back(turn_of_quaternion(q[0], q[1], q[2], q[3]));
+    return a;
 }
 
 ImportedModel read_model(std::string_view bytes, const ImportLoader& load)
