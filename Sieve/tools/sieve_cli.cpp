@@ -1085,40 +1085,18 @@ struct ObjMesh
 
 ObjMesh read_obj(const std::string& path)
 {
-    std::ifstream in(path);
+    std::ifstream in(path, std::ios::binary);
     if (!in) throw std::invalid_argument("cannot read " + path);
-    ObjMesh m;
-    std::string line;
-    while (std::getline(in, line))
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    try
     {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        std::istringstream ls(line);
-        std::string tag;
-        if (!(ls >> tag)) continue;
-        if (tag == "v")
-        {
-            ModelSpace::Vertex v;
-            if (ls >> v.x >> v.y >> v.z) m.verts.push_back(v);
-        }
-        else if (tag == "f")
-        {
-            std::vector<uint32_t> idx;
-            std::string tok;
-            while (ls >> tok)
-            {
-                const std::string first = tok.substr(0, tok.find('/'));
-                if (first.empty()) continue;
-                long n = 0;
-                try { n = std::stol(first); } catch (...) { continue; }
-                if (n < 0) n = long(m.verts.size()) + n; // -1 is the newest vertex
-                else --n;                                 // .obj counts from 1
-                if (n >= 0) idx.push_back(uint32_t(n));
-            }
-            for (size_t i = 2; i < idx.size(); ++i) m.faces.push_back({idx[0], idx[i - 1], idx[i]});
-        }
+        const ModelSpace::AnyMesh any = ModelSpace::read_any_obj(text); // (the core's reader: the CHARACTER page's importer reads the same)
+        return {any.verts, any.faces};
     }
-    if (m.verts.empty()) throw std::invalid_argument(path + " has no vertices");
-    return m;
+    catch (const std::invalid_argument&)
+    {
+        throw std::invalid_argument(path + " has no vertices");
+    }
 }
 
 ModelSpace make_model_space(const Args& a)

@@ -1,4 +1,6 @@
 #include "sieve/modelspace.hpp"
+#include <locale>
+#include <sstream>
 
 #include <algorithm>
 #include <cmath>
@@ -308,6 +310,52 @@ ModelSpace::Fitted ModelSpace::fit(const std::vector<Vertex>& verts, const std::
     r.faces_dropped = uint32_t(faces.size()) > f_ ? uint32_t(faces.size()) - f_ : 0;
     r.faces_added = f_ - take_f;
     return r;
+}
+
+ModelSpace::AnyMesh ModelSpace::read_any_obj(std::string_view text)
+{
+    AnyMesh m;
+    std::istringstream in{std::string(text)};
+    in.imbue(std::locale::classic());
+    std::string line;
+    while (std::getline(in, line))
+    {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::istringstream ls(line);
+        ls.imbue(std::locale::classic());
+        std::string tag;
+        if (!(ls >> tag)) continue;
+        if (tag == "v")
+        {
+            Vertex v;
+            if (ls >> v.x >> v.y >> v.z) m.verts.push_back(v);
+        }
+        else if (tag == "f")
+        {
+            std::vector<uint32_t> idx;
+            std::string tok;
+            while (ls >> tok)
+            {
+                const std::string first = tok.substr(0, tok.find('/'));
+                if (first.empty()) continue;
+                long n = 0;
+                try
+                {
+                    n = std::stol(first);
+                }
+                catch (...)
+                {
+                    continue;
+                }
+                if (n < 0) n = long(m.verts.size()) + n; // -1 is the newest vertex
+                else --n;                                 // .obj counts from 1
+                if (n >= 0) idx.push_back(uint32_t(n));
+            }
+            for (size_t i = 2; i < idx.size(); ++i) m.faces.push_back({idx[0], idx[i - 1], idx[i]});
+        }
+    }
+    if (m.verts.empty()) throw std::invalid_argument("no vertices in it (not a Wavefront .obj?)");
+    return m;
 }
 
 } // namespace sieve

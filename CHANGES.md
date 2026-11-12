@@ -1,6 +1,6 @@
 # Changes since 1eedaf3 "sieve ideas" (12 November 2026)
 
-Thirty commits (84d4054 to 48d8d99). This zip replaces every zip sent today. Code: the hallway's shimmer, and the character system's first five steps (with its pedestal and four drawing levels); one comment on the website; the rest is documentation.
+Thirty-six commits (84d4054 to b97916b). This zip replaces every zip sent today. Code: the hallway's shimmer; the character system's seven steps (pedestal, drawing levels, models in spheres, the seed walk); a store of saves; Personal Dimensions, species and the playground; the first importer (.obj); one comment on the website; the rest is documentation.
 
 **Build:** a new core source, `core/src/character.cpp`, is in CMakeLists.txt, so CMake must run again (a fresh configure, or the build does it itself).
 
@@ -12,13 +12,17 @@ Thirty commits (84d4054 to 48d8d99). This zip replaces every zip sent today. Cod
   - **Drawing levels:** the CHARACTER page's seventh row draws one character as pixels, wireframe, voxels or shaded; its SHA-256 is the same at each (IDEAS §19.147).
   - **Step 4, saving and the hallway:** `read_character` reads a `.character` file back and checks every sphere against its settings; Ctrl+S and Ctrl+O on the page; the character kept in `sieve-hallway.ini`'s `[character]` (`line`, `drawing`, `beside_you`, `max_hall_scale`); and it walks beside you in the hallway. `--character FILE` and `--no-character` for one run.
   - **Step 5, the hallway scaled to fit it:** a central metric, 4096 units a metre; the hallway grows (as you made smaller: eye, stride, the character) until your character passes a door, at most `max_hall_scale` times (IDEAS §19.153).
-  - **Tests:** the unit suite passes (177,200 checks); CI step 10 passed in full (919 s) with step 4; step 5's two scale checks (1.00 and 1.41) were run by hand on the latest build and pass.
+  - **Step 6, models in spheres (`sieve-character-v2`):** a sphere holds a model of the models line (51-digit address); a character holding none is still v1, identity unchanged. The page's sphere and model rows; drawn on the page and in the hallway. Every save also kept as `characters/<SHA-256>.character` beside the settings file (the store).
+  - **Step 7, the seed walk (`sieve-character-walk-v1`):** G and Shift+G make the next character from this one, the same on every machine.
+  - **Personal Dimensions:** on the main and pause menus (before Exit), a screen of three; Personal Dimension opens YOURS, the right-hand panel's second page (PgUp/PgDn): your store grouped by **species** (`sieve-species-v1`), with a **playground** (P fills it along the walk, K keeps one). Your store's characters stand in the hallway on your left; `--character-store DIR`. Other people's and group dimensions are listed and say they wait on sharing.
+  - **The first importer:** Ctrl+I (and `--import-obj`) brings any `.obj` into a sphere under the held roof of 8 vertices and 12 faces, saying what it kept. The reader moved into the core (`ModelSpace::read_any_obj`), shared with `sieve mesh --warp`.
+  - **Tests:** the unit suite passes (177,334 checks); CI step 4 passes (143 s, the moved .obj reader); CI step 10 passed in full on the build with Personal Dimensions and the walk (1,011 s); the checks added since (species and the playground, the .obj import) were run by hand on the latest build and pass.
   - **Scripted keys** (`--press`) now carry their scancode as real keys do (client/app_main.cpp, Menu::press).
   - **CI step 10:** the key opens and closes the panel, and opens it from the key's row; two characters made through the menu are pinned by SHA-256. CI step 10 passed in full on the panel's first build (920 s); the later checks were run by hand on the latest build and pass.
 - **Sieve/client/hallway.cpp:** the item under the crosshair shimmers (IDEAS 5.6): its tint breathes over 1.6 s and a leaning band sweeps across its front. Comments on the binary line's doors corrected (the last line before binary is AI now, not models). CI step 10 passes (916 s).
 
 ## The ideas, filtered
-- **Sieve/docs/IDEAS-TRIAGE.md (new):** every idea (603) given a kind, a status and a verdict, with its reason.
+- **Sieve/docs/IDEAS-TRIAGE.md (new):** every idea (613) given a kind, a status and a verdict, with its reason.
 - **Sieve/docs/ideas/ (new folder):**
   - IMPLEMENTED.md: 40 done entries, moved whole (5.6, the shimmer, among them), and every one checked against the code: all present, none missing; 13 have moved on since and carry a dated note of how.
   - DEPRECATED.md: 19 set-aside entries, all of §17 among them, with their reasons.
@@ -27,7 +31,7 @@ Thirty commits (84d4054 to 48d8d99). This zip replaces every zip sent today. Cod
   IDEAS.md keeps a one-line pointer at every moved number.
 - **Sieve/docs/ROADMAP.md:** the long plan through the ideas, stages 8 to 18, at the top. Stage 8 (the record) and Stage 10 (hallway polish) are begun.
 
-## New ideas noted (IDEAS §19.140 to §19.153)
+## New ideas noted (IDEAS §19.140 to §19.159)
 - §19.140: the tactile Sieve.
 - §19.141: the Game of Life over noise through time, and infinite short routes into the space.
 - §19.142: Sieve as a lock in time.
@@ -42,6 +46,12 @@ Thirty commits (84d4054 to 48d8d99). This zip replaces every zip sent today. Cod
 - §19.151: pixels back to a model (matching a character to a picture).
 - §19.152: species, languages and DNA; a playground for personal dimensions.
 - §19.153: the hallway scaled to your character; the yardstick between the door and true scale; caps so no character makes everyone tiny; a middle cartoon-like drawing; true and perception scale, switched by world or person.
+- §19.154: a rudimentary infinite RAID (the store, built); a personal dimension to build your own world.
+- §19.155: a setting to turn the AI off (to build with the first spawned characters); a human-written Sieve beside this one.
+- §19.156: the perfect educational system, at every range.
+- §19.157: Personal Dimensions from the menus; others' ranked, group dimensions; everyone's interpretation as one rigid structure.
+- §19.158: every interpretation folded into one web (a way to explain the project).
+- §19.159: importers for models, skeletons and animation, each with its roof; the engine of engines.
 
 ## Documents matched to the code (IDEAS §19.134)
 Fifteen places corrected across three files:
@@ -52,7 +62,7 @@ Fifteen places corrected across three files:
 ## VOICES
 - 62 technical lines and Gemini's two messages moved to ideas/VOICES-STASHED.md.
 - The note at the top updated.
-- 57 of Edward's lines added to the candidates today.
+- 67 of Edward's lines added to the candidates today.
 
 ## The website
 - **Pages/release.html (Build or Buy):** the comment on two constants no longer points at the Orbital page's script, removed on 6 November.

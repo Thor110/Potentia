@@ -6814,6 +6814,68 @@ void test_character()
         CHECK(throws([] { (void)read_character("sieve-character-v2 seed=1\n"); }));
         CHECK(throws([] { (void)read_character("sieve-character-v1 seed=1 limbs=40 joints=3 branches=0 symmetry=none head=yes\n"); }));
     }
+    // v2: models held in spheres. A character holding none is v1 still (its identity unchanged);
+    // one holding models reads back as v2 with them; a model on a missing sphere, a bad address,
+    // two models in one sphere, and a v2 holding nothing are refused. The held models' address width
+    // is reported, for the specification.
+    {
+        CharacterSettings t;
+        t.seed = 3;
+        Character c = unfold_character(t);
+        const std::string v1 = c.text(), id1 = c.id();
+        const ModelSpace m(kHeldVertices, kHeldFaces, kHeldCoords);
+        const std::string a = m.hex_of(BigUint(12345)), b = m.hex_of(BigUint(678));
+        c.hold(0, a);
+        c.hold(1, b);
+        CHECK(c.text().rfind("sieve-character-v2 ", 0) == 0);
+        CHECK(c.id() != id1);
+        const Character back = read_character(c.text());
+        CHECK(back.id() == c.id() && back.holds.size() == 2 && *back.held(0) == a);
+        CHECK(read_character(c.text().substr(0, c.text().find('\n') + 1) + "h 0 " + a + "\nh 1 " + b + "\n").id() == c.id());
+        c.hold(0, "");
+        c.hold(1, "");
+        CHECK(c.text() == v1 && c.id() == id1);
+        CHECK(throws([&] { c.hold(9999, a); }));
+        CHECK(throws([&] { c.hold(0, "xyz"); }));
+        const std::string head2 = "sieve-character-v2" + v1.substr(v1.find(' '), v1.find('\n') - v1.find(' ')) + "\n";
+        CHECK(throws([&] { (void)read_character(head2); }));
+        CHECK(throws([&] { (void)read_character(head2 + "h 0 " + a + "\nh 0 " + b + "\n"); }));
+    }
+    // The seed walk: the same start walks the same way; two steps are one step twice; each step a
+    // valid character; pinned at ten steps from the default.
+    {
+        const CharacterSettings start;
+        CHECK(unfold_character(walk_character(start, 2)).id() == unfold_character(walk_character(walk_character(start, 1), 1)).id());
+        CharacterSettings w = start;
+        for (int k = 0; k < 50; ++k)
+        {
+            w = walk_character(w);
+            CHECK(unfold_character(w).spheres.size() >= 1);
+        }
+        CHECK(unfold_character(walk_character(start, 10)).id() == "775f9b13e7bb87599c40b20aa700f7444da6aca7a09c4ff2a2a2101593c08688");
+    }
+    // Species: the seed free, the rest fixed; two seeds of one species share it, another limb count
+    // does not.
+    {
+        CharacterSettings a1, a2, b;
+        a1.seed = 5;
+        a2.seed = 6;
+        b.seed = 5;
+        b.limbs = 5;
+        CHECK(species_id(a1) == species_id(a2));
+        CHECK(species_id(a1) != species_id(b));
+        CHECK(species_text(a1) == "sieve-species-v1 limbs=4 joints=3 branches=0 symmetry=bilateral head=yes");
+    }
+    // Importing an .obj into a sphere: a cube of 8 vertices and 12 triangles comes in whole (8 of 8,
+    // 12 of 12); the same file gives the same model; a file with no vertices is refused.
+    {
+        const std::string cube = "v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\n"
+                                 "f 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 2 6 7 3\nf 3 7 8 4\nf 5 1 4 8\n";
+        const HeldImport a = import_obj_for_hold(cube), b = import_obj_for_hold(cube);
+        CHECK(a.hex == b.hex && a.vertices_in == 8 && a.faces_in == 12 && a.faces_kept == 12);
+        CHECK(held_model_edges(a.hex).size() >= 12);
+        CHECK(throws([] { (void)import_obj_for_hold("o empty\n"); }));
+    }
     CharacterSettings p;
     p.seed = 1;
     CHECK(unfold_character(p).id() == "607ec057ef34f8c040ab5f72ae2f0401f05f0675e8d13da656973d0ff4b0f352");

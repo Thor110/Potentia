@@ -2122,7 +2122,7 @@ void Hallway::render()
     // The pictures on the items' fronts, on every line that has them (item_faces.cpp).
     draw_item_faces(visible, kBack, kAhead);
     // Your character, beside you (IDEAS 19.148).
-    if (character_) draw_character(th.edge);
+    if (character_ || !personal_.empty()) draw_character(th.edge);
     // The item you are looking at, tinted in the line's edge colour. After the pictures, or a
     // picture covering the whole front hides it (every line but models, whose picture leaves
     // the front uncovered), and over the picture's own rectangle (faces.ini), which is the
@@ -2367,7 +2367,17 @@ void Hallway::set_character(std::optional<sieve::Character> c)
 // lines and each sphere as a ring facing you, in the line's edge colour (the head lighter).
 void Hallway::draw_character(SDL_Color edge)
 {
-    const sieve::Character& c = *character_;
+    if (character_) draw_figure(*character_, edge, 0);
+    // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
+    // other side, a short line of their own, a little dimmer (at most eight drawn).
+    const SDL_Color dim{Uint8(edge.r * 0.7f), Uint8(edge.g * 0.7f), Uint8(edge.b * 0.7f), 255};
+    for (size_t i = 0; i < personal_.size() && i < 8; ++i) draw_figure(personal_[i], dim, int(i) + 1);
+}
+
+// One character standing in the hallway: `place` 0 is yours (ahead and to your right); 1, 2, ... are
+// your personal dimension's, ahead and to your left, one after another along the corridor.
+void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place)
+{
     if (c.spheres.empty()) return;
     int32_t low = 0, high = 0;
     for (const sieve::Sphere& p : c.spheres)
@@ -2386,8 +2396,10 @@ void Hallway::draw_character(SDL_Color edge)
     // Far enough ahead and aside that it never stands where you do: its own half-size plus a margin.
     const float half = float(std::max(ex, ez)) * scale;
     const float lo = -kHalfWidth + 0.2f + half, hi = kHalfWidth - 0.2f - half;
-    const float side = lo < hi ? std::clamp(cam_.pos.x + fz * (0.4f + half), lo, hi) : 0.0f; // (wider than the hall: down its middle)
-    const Vec3 base{side, 0, cam_.pos.z + fz * (1.2f + 2.0f * half)};
+    const float aside = place == 0 ? fz * (0.4f + half) : -fz * (0.6f + half);
+    const float side = lo < hi ? std::clamp(cam_.pos.x + aside, lo, hi) : 0.0f; // (wider than the hall: down its middle)
+    const float ahead = place == 0 ? 1.2f + 2.0f * half : 2.0f + 1.6f * float(place) + 2.0f * half;
+    const Vec3 base{side, 0, cam_.pos.z + fz * ahead};
     auto world = [&](const sieve::Sphere& p) {
         return base + right * (float(p.x) * scale) + Vec3{0, float(p.y - low) * scale, 0} + f * (-float(p.z) * scale);
     };
@@ -2397,6 +2409,17 @@ void Hallway::draw_character(SDL_Color edge)
     SDL_SetRenderDrawColor(r_, Uint8(edge.r * 0.6f), Uint8(edge.g * 0.6f), Uint8(edge.b * 0.6f), 255);
     for (const sieve::Sphere& p : c.spheres)
         if (p.parent >= 0) line(world(p), world(c.spheres[size_t(p.parent)]));
+    // The models held in spheres (sieve-character-v2), each a wireframe filling its sphere.
+    SDL_SetRenderDrawColor(r_, Uint8(std::min(255, edge.r / 2 + 120)), Uint8(std::min(255, edge.g / 2 + 128)), Uint8(std::min(255, edge.b / 2 + 80)), 255);
+    for (const auto& [i, hex] : c.holds)
+    {
+        const sieve::Sphere& p = c.spheres[i];
+        const Vec3 o = world(p);
+        const float rad = float(p.r) * scale;
+        for (const sieve::HeldEdge& e : sieve::held_model_edges(hex))
+            line(o + right * (e.a[0] * rad) + Vec3{0, e.a[1] * rad, 0} + f * (-e.a[2] * rad),
+                 o + right * (e.b[0] * rad) + Vec3{0, e.b[1] * rad, 0} + f * (-e.b[2] * rad));
+    }
     // Rings facing the camera: in the plane of its right and up.
     const Vec3 cf = cam_.forward(), cr = normalize(hallway::cross(cf, Vec3{0, 1, 0})), cu = hallway::cross(cr, cf); // (hallway::cross: the vector one, not walking through a door)
     constexpr int kSegs = 20;

@@ -20,21 +20,21 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 
 | Verdict | Ideas |
 | --- | ---: |
-| done | 188 |
-| workable | 219 |
-| workable, large | 86 |
+| done | 189 |
+| workable | 220 |
+| workable, large | 93 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
-| metaphor only | 16 |
-| **all** | **603** |
+| metaphor only | 17 |
+| **all** | **613** |
 
 | Kind | Ideas |
 | --- | ---: |
-| technical | 432 |
-| both | 106 |
+| technical | 435 |
+| both | 112 |
 | process | 45 |
-| metaphorical | 20 |
+| metaphorical | 21 |
 
 ## What comes next
 
@@ -763,9 +763,19 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.150 d | Games, mods, remakes as a geometric graph through time | both | noted only | workable, large | Nodes for versions, mods, remakes, demakes, crossovers; edges as deltas; authors on each node; a mod list a path. |
 | 19.150 e | Pedestal under the character, spun by dragging | technical | built | done | Built 12 November 2026: a disc under the character in the CHARACTER page; click and drag on it turns the character. |
 | 19.151 | Pixels back to a model: match a character to a picture | technical | noted only | workable, large | Inverse rendering: search seeds and settings whose drawing matches the picture; one view leaves depth open, more views narrow it. First: match Sieve's own drawings back to their seeds. |
-| 19.152 a | Species and languages as dimensions linked to characters | both | noted only | workable | A species is fixed settings with the seed free, a line of characters; links to languages and DNA are records. |
-| 19.152 b | Playground for personal dimensions | both | noted only | workable, large | A person's own small line kept in their save, linked into shared lines by records rather than merged. |
+| 19.152 a | Species and languages as dimensions linked to characters | both | partly built | workable | Species built (sieve-species-v1; YOURS grouped by them); links to languages and DNA to come. |
+| 19.152 b | Playground for personal dimensions | both | partly built | workable, large | A first playground built: P fills it along the seed walk, K keeps one in the store. Folding into shared lines waits on sharing. |
 | 19.153 a | Hallway scaled to fit your character; a central metric | technical | built | done | Built 12 November 2026: 4096 units a metre; the hall grows to let the character through a door, capped by max_hall_scale; eye, stride and drawing scaled. |
 | 19.153 b | Other players scaled to yours; the yardstick to true scale | both | noted only | workable | Their size over yours when drawn; the metric is the agreed constant a later version may rename. |
 | 19.153 c | Shared spaces keep their own scale; caps; a middle cartoon-like drawing | both | noted only | workable | A visitor drawn at their size over the space's, capped; past the cap a human-sized, simplified drawing that carries size as a readout; stride capped the same. |
 | 19.153 d | True scale and perception scale, switched by world or person | both | noted only | workable | A world sets the view and whether it is locked; open, each person chooses; it changes only the drawing, never a character. |
+| 19.154 | Rudimentary infinite RAID store; personal dimension | both | partly built | workable, large | The store built: saves kept by SHA-256 beside the settings file. Sharing, deltas and the personal dimension's line to come. |
+| 19.155 a | Game settings: AI in the hallway on/off, AI-made content shown/marked/hidden | technical | noted only | workable | To build with the first spawned characters, so it never does nothing; one switch with ALTEngine's "disable AI spawn". |
+| 19.155 b | A human-written Sieve beside the AI-written one | both | noted only | workable, large | Its own line in the source tree, compared by the same files in, same bytes out; the separate spec and oracle make it checkable. |
+| 19.156 | The perfect educational system, at every range | both | noted only | workable, large | Lines to walk, filters as lessons, characters made to learn bodies and scale; age and profession scaled as machines are, by level of detail. |
+| 19.157 a | Personal Dimensions on the main and pause menus; YOURS | technical | built | done | Built 12 November 2026: the menus' entry and screen, YOURS in the right-hand panel, and your store's characters in the hallway. |
+| 19.157 b | Other people's dimensions, ranked so everyone can be first in something | both | noted only | workable, large | Listings as orderings of the same addresses; wait on sharing between machines. |
+| 19.157 c | Group dimensions, games in the long run | both | noted only | workable, large | Made together; wait on sharing; the graph of games of 19.150. |
+| 19.157 d | Everyone's interpretation as one rigid structure | both | noted only | workable, large | Personal dimensions are many views of one lattice; agreement between them, counted as records, marks its load-bearing paths. |
+| 19.158 | Every interpretation folded into one web | metaphorical | noted only | metaphor only | An explanation of Sieve: agreements kept as records, side by side; with the caution that guiding choice can narrow it, met by choosing filters, naming rankings, and the whole line always walkable. |
+| 19.159 | Importers for models, skeletons and animation, each with its roof | technical | partly built | workable, large | .obj built: into a sphere under the held roof (8 vertices, 12 faces), kept counts said. glTF, skeletons and animation to come. |

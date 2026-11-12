@@ -126,3 +126,8 @@ The log begins with the dated write-ups in `results/` (5 October 2026 onwards). 
 - The scalable graphics test: the CHARACTER page draws one character as pixels, wireframe, voxels or shaded (IDEAS §19.147).
 - The character system, step 4: `.character` files saved and opened (Ctrl+S, Ctrl+O, `--character`), kept in the settings file, and the character walking beside you in the hallway (IDEAS §19.148).
 - The character system, step 5: the hallway scaled to fit your character, with a central metric of 4096 units a metre (IDEAS §19.153).
+- The character system, step 6: models held in spheres (`sieve-character-v2`, every v1 character unchanged), drawn on the page and in the hallway; saves kept in a store named by their SHA-256 (IDEAS §19.148, §19.154).
+- Personal Dimensions: on the main and pause menus, YOURS in the right-hand panel, and your store's characters standing in the hallway (IDEAS §19.157).
+- The character system, step 7: the seed walk (`sieve-character-walk-v1`), G and Shift+G on the CHARACTER page; IDEAS §19.158 noted.
+- Species (`sieve-species-v1`) and the playground on YOURS (P fills it along the seed walk, K keeps one); IDEAS §19.159 noted.
+- The first importer: any `.obj` into a character's sphere (Ctrl+I, `--import-obj`), under the held models' roof, with what was kept said (IDEAS §19.159).

@@ -64,7 +64,9 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Main:
         // (Manual Navigation after the rest, before Exit: the CI's walks through this menu count rows.)
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "exit"}};
+                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "exit"}};
+    // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
+    case Screen::Personal: return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
                 {Kind::Action, "back"}};
@@ -215,6 +217,13 @@ void MainMenu::back()
     case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
     case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
+    case Screen::Personal:
+        screen_ = Screen::Main;
+        row_ = 0;
+        for (const Item& it : items())
+            if (it.id == "personal") break;
+            else ++row_;
+        return;
     }
 }
 
@@ -234,6 +243,9 @@ void MainMenu::change(int dir)
         else if (it.id == "media") { result_ = Result::Media; done_ = true; }
         else if (it.id == "cipher") { result_ = Result::Cipher; done_ = true; }
         else if (it.id == "manual_nav") { result_ = Result::ManualNav; done_ = true; }
+        else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
+        else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
+        else if (it.id == "personal_others" || it.id == "personal_groups") {} // (not built yet: its help line says so)
         else if (it.id == "exit") { result_ = Result::Quit; done_ = true; }
         else if (it.id == "settings") { screen_ = Screen::Settings; row_ = 0; }
         else if (it.id == "graphics") { screen_ = Screen::Graphics; row_ = 0; }
@@ -483,6 +495,7 @@ void MainMenu::render()
                           : screen_ == Screen::Graphics ? "screen.graphics"
                           : screen_ == Screen::Controls ? "screen.controls"
                           : screen_ == Screen::Language ? "screen.language"
+                          : screen_ == Screen::Personal ? "screen.personal"
                           : screen_ == Screen::Programs ? "screen.programs"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in

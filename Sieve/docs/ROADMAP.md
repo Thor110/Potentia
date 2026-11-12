@@ -7,8 +7,8 @@ before the next: (1) **built 12 November 2026:** a right-hand panel in the setup
 left of 1 (¬ with Shift on a UK keyboard) or its tab, holding a stack of pages; (2)
 **built 12 November 2026:** `sieve-character-v1`, a seed and settings unfolding a deterministic tree
 of spheres (the skeleton), with unit tests; (3) **built 12 November 2026:** the CHARACTER page, drawing the character as wire spheres and bones; (4) **built 12 November 2026:** saved
-and loaded, and shown in the hallway; (5) **built 12 November 2026:** the hallway scaled to fit it (§19.153); (6) models inside spheres;
-(7) generation by seed walk or AI; then matching a character back from a picture (IDEAS §19.151). Then species, a playground for personal dimensions, and links to languages and DNA (§19.152). After it, the ideas worked through with Edward, a few at a time.
+and loaded, and shown in the hallway; (5) **built 12 November 2026:** the hallway scaled to fit it (§19.153); (6) **built 12 November 2026:** models inside spheres (`sieve-character-v2`), and a store of saves named by their SHA-256 (§19.154);
+(7) **built 12 November 2026:** generation by seed walk (by AI to come); then matching a character back from a picture (IDEAS §19.151). Then species, a playground for personal dimensions, and links to languages and DNA (§19.152). *Built 12 November 2026:* Personal Dimensions on the menus, YOURS, and your store's characters in the hallway (§19.157); species and the playground (§19.152). Next: importers for models, skeletons and animation (§19.159), and the links to languages and DNA. After it, the ideas worked through with Edward, a few at a time.
 
 ## The long plan through the ideas (12 November 2026)
 

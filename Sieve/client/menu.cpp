@@ -1614,6 +1614,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
 // The CHARACTER page's dialogs (Ctrl+S, Ctrl+O), defined with the page below.
 static void SDLCALL character_saved(void* self, const char* const* files, int);
 static void SDLCALL character_opened(void* self, const char* const* files, int);
+static void SDLCALL obj_opened(void* self, const char* const* files, int);
 
 void Menu::handle(const SDL_Event& event, bool& done, Result& result)
 {
@@ -1762,11 +1763,22 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
             save_file_dialog(character_saved, this, window_, kChar, 1, start.c_str(), this);
         }
+        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_I && side_page_ == 0)
+        {
+            static const SDL_DialogFileFilter kObj[] = {{"Wavefront models", "obj"}};
+            open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
+        }
         else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_O)
         {
             static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
             open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
         }
+        else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN)
+        {
+            side_page_ = (side_page_ + 1) % 2; // CHARACTER, YOURS
+            if (side_page_ == 1) yours_read();
+        }
+        else if (side_page_ == 1) yours_key(e.key.key);
         else char_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
         return;
     }
@@ -2048,6 +2060,153 @@ static void SDLCALL character_opened(void* self, const char* const* files, int)
 {
     if (files && files[0]) static_cast<Menu*>(self)->character_chosen(files[0], false);
 }
+static void SDLCALL obj_opened(void* self, const char* const* files, int)
+{
+    if (files && files[0]) static_cast<Menu*>(self)->obj_chosen(files[0]);
+}
+
+void Menu::obj_chosen(const std::string& path)
+{
+    std::lock_guard<std::mutex> lock(char_mx_);
+    char_import_from_ = path;
+}
+
+// An existing model into the chosen sphere (IDEAS 19.159): read, brought under the held models' roof,
+// and what was kept said.
+void Menu::import_obj(const std::string& path)
+{
+    char_init();
+    std::ifstream in(path_utf8(path), std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in && text.empty())
+    {
+        char_note_ = trf("side.char.unreadable", {path});
+        return;
+    }
+    try
+    {
+        const sieve::HeldImport h = sieve::import_obj_for_hold(text);
+        char_.hold(char_sphere_, h.hex);
+        char_store();
+        char_note_ = trf("side.char.imported", {utf8_path(path_utf8(path).filename()), std::to_string(std::min<size_t>(h.vertices_in, sieve::kHeldVertices)),
+                                                 std::to_string(h.vertices_in), std::to_string(h.faces_kept), std::to_string(h.faces_in)});
+    }
+    catch (const std::exception& e)
+    {
+        char_note_ = trf("side.char.refused", {e.what()});
+    }
+}
+
+void Menu::open_yours()
+{
+    char_init();
+    side_open_ = true;
+    side_ = 1;
+    side_page_ = 1;
+    yours_read();
+}
+
+void Menu::yours_read()
+{
+    yours_ = read_personal_dimension(character_store_dir(app_path_));
+    // Grouped by species (the same settings, any seed), in the order of their names within each.
+    std::stable_sort(yours_.characters.begin(), yours_.characters.end(),
+                     [](const sieve::Character& a, const sieve::Character& b) { return sieve::species_id(a.settings) < sieve::species_id(b.settings); });
+    yours_row_ = std::clamp(yours_row_, 0, std::max(0, int(playground_.size() + yours_.characters.size()) - 1));
+}
+
+// YOURS: Up/Down choose one of your characters, Enter makes it the one you are (and goes to CHARACTER).
+void Menu::yours_key(SDL_Keycode key)
+{
+    if (key == SDLK_P)
+    {
+        // The playground: the next eight along the seed walk from the character you are.
+        char_init();
+        playground_.clear();
+        sieve::CharacterSettings s = char_settings_;
+        for (int i = 0; i < 8; ++i)
+        {
+            s = sieve::walk_character(s);
+            playground_.push_back(sieve::unfold_character(s));
+        }
+        yours_row_ = 0;
+        return;
+    }
+    const int np = int(playground_.size()), n = np + int(yours_.characters.size());
+    if (n == 0) return;
+    const sieve::Character& chosen = yours_row_ < np ? playground_[size_t(yours_row_)] : yours_.characters[size_t(yours_row_ - np)];
+    if (key == SDLK_UP) yours_row_ = (yours_row_ + n - 1) % n;
+    else if (key == SDLK_DOWN) yours_row_ = (yours_row_ + 1) % n;
+    else if (key == SDLK_K && yours_row_ < np)
+    {
+        // Kept: written to the store by its SHA-256, and the store read again.
+        std::error_code ec;
+        const std::filesystem::path dir = character_store_dir(app_path_);
+        std::filesystem::create_directories(dir, ec);
+        std::ofstream k(dir / (chosen.id() + ".character"), std::ios::binary);
+        k << chosen.text();
+        k.close();
+        playground_.erase(playground_.begin() + yours_row_);
+        yours_read();
+    }
+    else if (key == SDLK_RETURN || key == SDLK_KP_ENTER)
+    {
+        char_init();
+        char_ = chosen;
+        char_settings_ = char_.settings;
+        char_sphere_ = 0;
+        char_store();
+        char_note_ = trf("side.yours.chosen", {char_.id().substr(0, 12)});
+        side_page_ = 0;
+    }
+}
+
+void Menu::render_yours(float x, float top, float bottom)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
+    float y = top + 40;
+    text(r_, x + 14, y, trf("side.yours.count", {std::to_string(yours_.characters.size()), utf8_path(character_store_dir(app_path_))}), 1, grey);
+    y += 14;
+    if (yours_.left_out) text(r_, x + 14, y, trf("side.yours.left_out", {std::to_string(yours_.left_out)}), 1, grey);
+    y += 22;
+    auto line_of = [&](const sieve::Character& c, bool on) {
+        const auto& s = c.settings;
+        return (on ? "> " : "  ") + c.id().substr(0, 12) + "  " + std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " " + sieve::symmetry_name(s.symmetry) +
+               (c.holds.empty() ? "" : "  " + std::to_string(c.holds.size()) + " held");
+    };
+    const int np = int(playground_.size());
+    if (np)
+    {
+        text(r_, x + 14, y, fit_cells(trf("side.yours.playground", {std::to_string(np)}), size_t((kSideW - 28) / 8)), 1, white);
+        y += 16;
+        for (int i = 0; i < np && y < bottom - 40; ++i, y += 14) text(r_, x + 14, y, line_of(playground_[size_t(i)], i == yours_row_), 1, i == yours_row_ ? white : grey);
+        y += 10;
+    }
+    if (yours_.characters.empty())
+    {
+        text(r_, x + 14, y, tr("side.yours.empty"), 1, grey);
+        return;
+    }
+    std::string last_species;
+    for (size_t i = 0; i < yours_.characters.size() && y < bottom - 40; ++i)
+    {
+        const sieve::Character& c = yours_.characters[i];
+        const std::string sp = sieve::species_id(c.settings);
+        if (sp != last_species)
+        {
+            // A heading for each species: its name, and the settings its members share.
+            const auto& s = c.settings;
+            const std::string shape = std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " b" + std::to_string(s.branches) + " " +
+                                      sieve::symmetry_name(s.symmetry) + (s.head ? " head" : " no head");
+            text(r_, x + 14, y, fit_cells(trf("side.yours.species", {sp.substr(0, 12), shape}), size_t((kSideW - 28) / 8)), 1, SDL_Color{180, 180, 120, 255});
+            y += 14;
+            last_species = sp;
+        }
+        const bool on = np + int(i) == yours_row_;
+        text(r_, x + 14, y, line_of(c, on), 1, on ? white : grey);
+        y += 14;
+    }
+}
 
 void Menu::character_chosen(const std::string& path, bool save)
 {
@@ -2081,7 +2240,7 @@ void Menu::load_character(const std::string& path)
 // CHARACTER's rows: the seed, limbs, joints, branches, symmetry and head (sieve/character.hpp).
 void Menu::char_key(SDL_Keycode key, bool shift)
 {
-    constexpr int kRows = 7;
+    constexpr int kRows = 9;
     auto& s = char_settings_;
     const int dir = key == SDLK_RIGHT ? 1 : key == SDLK_LEFT ? -1 : 0;
     auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
@@ -2091,7 +2250,24 @@ void Menu::char_key(SDL_Keycode key, bool shift)
     case SDLK_RIGHTBRACKET: char_turn_ += 0.2617994f; return;
     case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
     case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
-    case SDLK_R: s.seed = (uint64_t(SDL_GetPerformanceCounter()) * 0x9E3779B97F4A7C15ull) >> 16; break; // any seed: the seed is the character's name
+    case SDLK_R:
+        if (char_row_ == 8)
+        {
+            // A model at random in the chosen sphere (any model of the held models' line).
+            char_.hold(char_sphere_, sieve::held_model_from(uint64_t(SDL_GetPerformanceCounter()) * 0x9E3779B97F4A7C15ull));
+            char_note_.clear();
+            char_store();
+            return;
+        }
+        s.seed = (uint64_t(SDL_GetPerformanceCounter()) * 0x9E3779B97F4A7C15ull) >> 16; // any seed: the seed is the character's name
+        break;
+    case SDLK_G: s = sieve::walk_character(s, shift ? 10 : 1); break; // the seed walk: the next character (Shift: ten on)
+    case SDLK_DELETE:
+    case SDLK_BACKSPACE:
+        if (char_row_ != 8) return;
+        char_.hold(char_sphere_, ""); // the sphere empty again
+        char_store();
+        return;
     case SDLK_LEFT:
     case SDLK_RIGHT:
         switch (char_row_)
@@ -2106,11 +2282,27 @@ void Menu::char_key(SDL_Keycode key, bool shift)
             char_draw_ = (char_draw_ + 4 + dir) % 4; // how it is drawn: no new character
             char_store();
             return;
+        case 7: // which sphere the model row works on
+            char_sphere_ = uint32_t((int64_t(char_sphere_) + dir + int64_t(char_.spheres.size())) % int64_t(char_.spheres.size()));
+            return;
+        case 8: // its model: the next or the one before on the held models' line (Shift: a thousand)
+        {
+            const std::string* h = char_.held(char_sphere_);
+            char_.hold(char_sphere_, sieve::held_model_step(h ? *h : std::string(), h ? int64_t(dir) * (shift ? 1000 : 1) : 0));
+            char_note_.clear();
+            char_store();
+            return;
+        }
         }
         break;
     default: return;
     }
+    // A new character from the settings, keeping the models held in spheres it still has.
+    const auto holds = char_.holds;
     char_ = sieve::unfold_character(s);
+    for (const auto& [i, hex] : holds)
+        if (i < char_.spheres.size()) char_.hold(i, hex);
+    char_sphere_ = std::min<uint32_t>(char_sphere_, uint32_t(char_.spheres.size() - 1));
     char_note_.clear();
     char_store();
 }
@@ -2596,7 +2788,7 @@ void Menu::render_side(float W, float H)
     SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
     SDL_RenderRect(r_, &box);
     // The pages' names: one now, more as the systems come.
-    static const char* const kPages[] = {"side.page.character"};
+    static const char* const kPages[] = {"side.page.character", "side.page.yours"};
     float px = x + 14;
     for (int i = 0; i < int(std::size(kPages)); ++i)
     {
@@ -2609,19 +2801,43 @@ void Menu::render_side(float W, float H)
         }
         px += text_width(name, 1) + 16;
     }
+    if (side_page_ == 1)
+    {
+        render_yours(x, top, bottom);
+        text(r_, x + 14, bottom - 22, tr("side.yours.footer"), 1, grey);
+        return;
+    }
     // A file chosen in a dialog since the last frame: saved or opened now.
     {
-        std::optional<std::string> save, load;
+        std::optional<std::string> save, load, import;
         {
             std::lock_guard<std::mutex> lock(char_mx_);
             save.swap(char_save_to_);
             load.swap(char_load_from_);
+            import.swap(char_import_from_);
         }
+        if (import) import_obj(*import);
         if (save)
         {
             std::ofstream out(path_utf8(*save), std::ios::binary);
             out << char_.text();
             char_note_ = out ? trf("side.char.saved", {utf8_path(path_utf8(*save).filename())}) : trf("side.char.unwritable", {*save});
+            // The store (IDEAS 19.154, the infinite RAID in miniature): a copy named by its SHA-256 in
+            // the characters folder beside the settings file, so the same character saved twice is
+            // one file and any copy can be checked against its name.
+            if (out)
+            {
+                std::error_code ec;
+                const std::filesystem::path dir = character_store_dir(app_path_);
+                std::filesystem::create_directories(dir, ec);
+                const std::filesystem::path kept = dir / (char_.id() + ".character");
+                if (!std::filesystem::exists(kept, ec))
+                {
+                    std::ofstream k(kept, std::ios::binary);
+                    k << char_.text();
+                }
+                char_note_ += "; " + trf("side.char.stored", {char_.id().substr(0, 12)});
+            }
         }
         if (load) load_character(*load);
     }
@@ -2630,10 +2846,12 @@ void Menu::render_side(float W, float H)
     const auto& cs = char_settings_;
     const std::string values[] = {std::to_string(cs.seed), std::to_string(cs.limbs), std::to_string(cs.joints), std::to_string(cs.branches),
                                   sieve::symmetry_name(cs.symmetry), cs.head ? tr("side.yes") : tr("side.no"),
-                                  tr(std::string("side.char.draw.") + std::to_string(char_draw_))};
-    static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing"};
+                                  tr(std::string("side.char.draw.") + std::to_string(char_draw_)),
+                                  trf("side.char.sphere_of", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())}),
+                                  char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : tr("side.char.none")};
+    static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing", "side.char.sphere", "side.char.model"};
     float y = top + 40;
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 9; ++i)
     {
         const bool on = i == char_row_;
         if (on)
@@ -2646,12 +2864,13 @@ void Menu::render_side(float W, float H)
         text(r_, x + 190, y, values[i], 1, on ? white : grey);
         y += 16;
     }
-    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16)}), 1, grey);
-    if (!char_note_.empty()) text(r_, x + 14, y + 18, fit_cells(char_note_, size_t((kSideW - 28) / 8)), 1, white);
+    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16), char_.holds.empty() ? sieve::kCharacterVersion : sieve::kCharacterVersion2}), 1, grey);
+    text(r_, x + 14, y + 18, trf("side.char.species", {sieve::species_id(char_.settings).substr(0, 12)}), 1, grey);
+    if (!char_note_.empty()) text(r_, x + 14, y + 32, fit_cells(char_note_, size_t((kSideW - 28) / 8)), 1, white);
     // The drawing: each sphere a circle, each bone a line to its parent, seen from the side, standing
     // on a pedestal; a drag across it (or [ and ]) turns it about the upright. Scaled to fit the box
     // below the rows.
-    const float bx = x + 14, by = y + 24, bw = kSideW - 28, bh = (bottom - 34) - by;
+    const float bx = x + 14, by = y + 48, bw = kSideW - 28, bh = (bottom - 34) - by;
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
     {
@@ -2789,6 +3008,36 @@ void Menu::render_side(float W, float H)
                     idx.insert(idx.end(), {0, a, b, a, a2, b2, a, b2, b});
                 }
                 SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), idx.data(), int(idx.size()));
+            }
+        }
+        // The models held in spheres (sieve-character-v2): each a wireframe filling its sphere, its
+        // coordinates times the radius, turned with the character; the chosen sphere ringed.
+        auto at3 = [&](float px, float py, float pz, float& sx, float& sy) {
+            sx = cx + (px * ca - pz * sa) * scale;
+            sy = cy - py * scale;
+        };
+        SDL_SetRenderDrawColor(r_, 120, 255, 160, 255);
+        for (const auto& [i, hex] : char_.holds)
+        {
+            const sieve::Sphere& p = char_.spheres[i];
+            for (const sieve::HeldEdge& e : sieve::held_model_edges(hex))
+            {
+                float x1, y1, x2, y2;
+                at3(float(p.x) + e.a[0] * float(p.r), float(p.y) + e.a[1] * float(p.r), float(p.z) + e.a[2] * float(p.r), x1, y1);
+                at3(float(p.x) + e.b[0] * float(p.r), float(p.y) + e.b[1] * float(p.r), float(p.z) + e.b[2] * float(p.r), x2, y2);
+                SDL_RenderLine(r_, x1, y1, x2, y2);
+            }
+        }
+        if ((char_row_ == 7 || char_row_ == 8) && char_sphere_ < char_.spheres.size())
+        {
+            float sx, sy, d;
+            at(char_.spheres[char_sphere_], sx, sy, d);
+            const float rad = std::max(4.0f, float(char_.spheres[char_sphere_].r) * scale) + 4;
+            SDL_SetRenderDrawColor(r_, 255, 220, 80, 255);
+            for (int k = 0; k < 32; ++k)
+            {
+                const float a0 = 6.2831853f * float(k) / 32, a1 = 6.2831853f * float(k + 1) / 32;
+                SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
             }
         }
     }

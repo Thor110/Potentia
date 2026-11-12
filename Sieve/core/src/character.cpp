@@ -1,6 +1,7 @@
 // Sieve — characters: a seed unfolding a tree of spheres (sieve/character.hpp; IDEAS §19.148).
 #include "sieve/character.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/modelspace.hpp"
 
 #include <algorithm>
 #include <array>
@@ -229,6 +230,196 @@ Character unfold_character(const CharacterSettings& st)
     return c;
 }
 
+namespace {
+const ModelSpace& held_models()
+{
+    static const ModelSpace m(kHeldVertices, kHeldFaces, kHeldCoords);
+    return m;
+}
+} // namespace
+
+void Character::hold(uint32_t sphere, const std::string& hex)
+{
+    if (sphere >= spheres.size()) throw std::invalid_argument("hold: no sphere " + std::to_string(sphere));
+    auto it = std::find_if(holds.begin(), holds.end(), [&](const auto& h) { return h.first == sphere; });
+    if (hex.empty())
+    {
+        if (it != holds.end()) holds.erase(it);
+        return;
+    }
+    const ModelSpace& m = held_models();
+    if (hex.size() != m.hex_width() || hex.find_first_not_of("0123456789abcdef") != std::string::npos)
+        throw std::invalid_argument("hold: not a model's address (" + std::to_string(m.hex_width()) + " hex digits): " + hex);
+    (void)m.parse(hex); // range-checked
+    if (it != holds.end()) it->second = hex;
+    else
+    {
+        holds.push_back({sphere, hex});
+        std::sort(holds.begin(), holds.end());
+    }
+}
+
+const std::string* Character::held(uint32_t sphere) const
+{
+    for (const auto& h : holds)
+        if (h.first == sphere) return &h.second;
+    return nullptr;
+}
+
+std::vector<HeldEdge> held_model_edges(const std::string& hex)
+{
+    const ModelSpace& m = held_models();
+    const ModelSpace::Parts parts = m.parts_at(m.parse(hex), AddressMode::Positional);
+    const auto v = m.mesh_of(parts);
+    std::vector<std::pair<uint32_t, uint32_t>> seen;
+    std::vector<HeldEdge> out;
+    for (const auto& f : m.faces_of(parts))
+        for (auto [a, b] : {std::pair{f.a, f.b}, std::pair{f.b, f.c}, std::pair{f.c, f.a}})
+        {
+            if (a == b || a >= v.size() || b >= v.size()) continue;
+            const auto key = std::minmax(a, b);
+            if (std::find(seen.begin(), seen.end(), std::pair{key.first, key.second}) != seen.end()) continue;
+            seen.push_back({key.first, key.second});
+            out.push_back({{v[a].x, v[a].y, v[a].z}, {v[b].x, v[b].y, v[b].z}});
+        }
+    return out;
+}
+
+std::string held_model_step(const std::string& hex, int64_t n)
+{
+    const ModelSpace& m = held_models();
+    if (hex.empty()) return m.hex_of(BigUint(0));
+    BigUint i = m.parse(hex);
+    const BigUint& size = m.size();
+    const BigUint s = BigUint::mod(BigUint(uint64_t(n < 0 ? -n : n)), size);
+    if (n >= 0)
+    {
+        i += s;
+        i = BigUint::mod(i, size);
+    }
+    else if (i >= s) i -= s;
+    else
+    {
+        BigUint w = size;
+        w -= s;
+        w += i;
+        i = w;
+    }
+    return m.hex_of(i);
+}
+
+std::string held_model_from(uint64_t r)
+{
+    const ModelSpace& m = held_models();
+    // The number's 64 bits spread over the whole line: shifted up to the line's own width, then
+    // reduced, so any number lands somewhere along all of it.
+    BigUint i(r);
+    const size_t bits = m.size().bit_length();
+    if (bits > 64) i <<= (bits - 64);
+    return m.hex_of(BigUint::mod(i, m.size()));
+}
+
+std::string species_text(const CharacterSettings& s)
+{
+    return "sieve-species-v1 limbs=" + std::to_string(s.limbs) + " joints=" + std::to_string(s.joints) + " branches=" + std::to_string(s.branches) +
+           " symmetry=" + symmetry_name(s.symmetry) + " head=" + (s.head ? "yes" : "no");
+}
+
+std::string species_id(const CharacterSettings& s) { return Sha256::hex(Sha256::hash(species_text(s))); }
+
+CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps)
+{
+    CharacterSettings s = from;
+    for (uint32_t k = 0; k < steps; ++k)
+    {
+        const std::string t = unfold_character(s).text();
+        const auto d = Sha256::hash("sieve-character-walk-v1" + t.substr(0, t.find('\n')));
+        uint64_t seed = 0;
+        for (int i = 7; i >= 0; --i) seed = seed << 8 | d[size_t(i)];
+        s.seed = seed;
+        s.limbs = d[8] % 9;
+        s.joints = 1 + d[9] % 6;
+        s.branches = d[10] % 3;
+        s.symmetry = Symmetry(d[11] % 3);
+        s.head = d[12] % 4 != 0;
+    }
+    return s;
+}
+
+HeldImport import_obj_for_hold(std::string_view obj_text)
+{
+    const ModelSpace::AnyMesh any = ModelSpace::read_any_obj(obj_text);
+    HeldImport out;
+    out.vertices_in = any.verts.size();
+    out.faces_in = any.faces.size();
+    const auto& v = any.verts;
+    auto d2 = [&](const ModelSpace::Vertex& a, float x, float y, float z) {
+        return (a.x - x) * (a.x - x) + (a.y - y) * (a.y - y) + (a.z - z) * (a.z - z);
+    };
+    float lo[3] = {v[0].x, v[0].y, v[0].z}, hi[3] = {v[0].x, v[0].y, v[0].z};
+    for (const auto& p : v)
+    {
+        lo[0] = std::min(lo[0], p.x), lo[1] = std::min(lo[1], p.y), lo[2] = std::min(lo[2], p.z);
+        hi[0] = std::max(hi[0], p.x), hi[1] = std::max(hi[1], p.y), hi[2] = std::max(hi[2], p.z);
+    }
+    const float cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2, cz = (lo[2] + hi[2]) / 2;
+    // Farthest-point sampling: the first the farthest from the centre, each next the farthest from
+    // those kept (the first such in file order on a tie).
+    std::vector<uint32_t> kept;
+    std::vector<float> nearest(v.size(), 0);
+    {
+        uint32_t best = 0;
+        for (uint32_t i = 0; i < v.size(); ++i)
+            if (d2(v[i], cx, cy, cz) > d2(v[best], cx, cy, cz)) best = i;
+        kept.push_back(best);
+        for (uint32_t i = 0; i < v.size(); ++i) nearest[i] = d2(v[i], v[best].x, v[best].y, v[best].z);
+    }
+    while (kept.size() < kHeldVertices && kept.size() < v.size())
+    {
+        uint32_t best = 0;
+        for (uint32_t i = 0; i < v.size(); ++i)
+            if (nearest[i] > nearest[best]) best = i;
+        if (nearest[best] <= 0) break; // every vertex sits on one kept already
+        kept.push_back(best);
+        for (uint32_t i = 0; i < v.size(); ++i) nearest[i] = std::min(nearest[i], d2(v[i], v[best].x, v[best].y, v[best].z));
+    }
+    auto snap = [&](uint32_t i) {
+        uint32_t best = 0;
+        for (uint32_t k = 1; k < kept.size(); ++k)
+            if (d2(v[i], v[kept[k]].x, v[kept[k]].y, v[kept[k]].z) < d2(v[i], v[kept[best]].x, v[kept[best]].y, v[kept[best]].z)) best = k;
+        return best;
+    };
+    // The largest faces first (by twice their area), each moved onto the kept vertices.
+    std::vector<std::pair<float, size_t>> by_area;
+    for (size_t f = 0; f < any.faces.size(); ++f)
+    {
+        const auto& F = any.faces[f];
+        if (F.a >= v.size() || F.b >= v.size() || F.c >= v.size()) continue;
+        const float ux = v[F.b].x - v[F.a].x, uy = v[F.b].y - v[F.a].y, uz = v[F.b].z - v[F.a].z;
+        const float wx = v[F.c].x - v[F.a].x, wy = v[F.c].y - v[F.a].y, wz = v[F.c].z - v[F.a].z;
+        const float nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+        by_area.push_back({-(nx * nx + ny * ny + nz * nz), f});
+    }
+    std::stable_sort(by_area.begin(), by_area.end());
+    std::vector<ModelSpace::Face> faces;
+    for (const auto& [area, f] : by_area)
+    {
+        if (faces.size() >= kHeldFaces) break;
+        const auto& F = any.faces[f];
+        const ModelSpace::Face g{snap(F.a), snap(F.b), snap(F.c)};
+        if (g.a == g.b || g.b == g.c || g.a == g.c) continue; // closed up
+        if (std::find_if(faces.begin(), faces.end(), [&](const ModelSpace::Face& h) { return h.a == g.a && h.b == g.b && h.c == g.c; }) != faces.end()) continue;
+        faces.push_back(g);
+    }
+    out.faces_kept = faces.size();
+    std::vector<ModelSpace::Vertex> verts;
+    for (const uint32_t i : kept) verts.push_back(v[i]);
+    const ModelSpace& m = held_models();
+    const ModelSpace::Fitted fit = m.fit(verts, faces);
+    out.hex = m.hex_of(m.index_of(fit.parts, AddressMode::Positional));
+    return out;
+}
+
 Character read_character(const std::string& text)
 {
     const size_t nl = text.find('\n');
@@ -241,8 +432,9 @@ Character read_character(const std::string& text)
         if (sp > i) words.push_back(first.substr(i, sp - i));
         i = sp + 1;
     }
-    if (words.empty() || words[0] != kCharacterVersion)
-        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion);
+    if (words.empty() || (words[0] != kCharacterVersion && words[0] != kCharacterVersion2))
+        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + " or " + kCharacterVersion2);
+    const bool v2 = words[0] == kCharacterVersion2;
     CharacterSettings s;
     bool seen[6] = {};
     for (size_t i = 1; i < words.size(); ++i)
@@ -267,7 +459,7 @@ Character read_character(const std::string& text)
             s.head = v == "yes";
             seen[5] = true;
         }
-        else throw std::invalid_argument("not a setting of " + std::string(kCharacterVersion) + ": " + k);
+        else throw std::invalid_argument("not a setting of " + words[0] + ": " + k);
     }
     static const char* const kNames[] = {"seed", "limbs", "joints", "branches", "symmetry", "head"};
     for (int i = 0; i < 6; ++i)
@@ -279,9 +471,37 @@ Character read_character(const std::string& text)
     for (const char ch : rest)
         if (ch != '\r') clean += ch;
     while (!clean.empty() && clean.back() == '\n') clean.pop_back();
+    // v2: the held models' lines, after the spheres, taken off before the spheres are checked.
+    if (v2)
+    {
+        std::vector<std::string> lines;
+        for (size_t i = 0; i <= clean.size();)
+        {
+            const size_t e = std::min(clean.find('\n', i), clean.size());
+            lines.push_back(clean.substr(i, e - i));
+            i = e + 1;
+        }
+        while (!lines.empty() && lines.back().rfind("h ", 0) == 0)
+        {
+            const std::string& h = lines.back();
+            const size_t sp = h.find(' ', 2);
+            if (sp == std::string::npos) throw std::invalid_argument("not a held model's line: " + h);
+            const std::string idx = h.substr(2, sp - 2);
+            if (idx.empty() || idx.size() > 6 || idx.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a sphere's number: " + h);
+            if (c.held(uint32_t(std::stoul(idx)))) throw std::invalid_argument("two models in one sphere: " + h);
+            c.hold(uint32_t(std::stoul(idx)), h.substr(sp + 1));
+            lines.pop_back();
+        }
+        if (c.holds.empty()) throw std::invalid_argument("a sieve-character-v2 holds at least one model (one that holds none is v1)");
+        clean.clear();
+        for (size_t i = 0; i < lines.size(); ++i) clean += (i ? "\n" : "") + lines[i];
+        while (!clean.empty() && clean.back() == '\n') clean.pop_back();
+    }
     if (!clean.empty())
     {
-        std::string want = c.text().substr(c.text().find('\n') + 1);
+        Character bare = c;
+        bare.holds.clear();
+        std::string want = bare.text().substr(bare.text().find('\n') + 1);
         while (!want.empty() && want.back() == '\n') want.pop_back();
         if (clean != want) throw std::invalid_argument("the spheres do not match their settings (a changed file, or another version)");
     }
@@ -290,7 +510,7 @@ Character read_character(const std::string& text)
 
 std::string Character::text() const
 {
-    std::string t = std::string(kCharacterVersion) + " seed=" + std::to_string(settings.seed) + " limbs=" + std::to_string(settings.limbs) +
+    std::string t = std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + " limbs=" + std::to_string(settings.limbs) +
                     " joints=" + std::to_string(settings.joints) + " branches=" + std::to_string(settings.branches) +
                     " symmetry=" + symmetry_name(settings.symmetry) + " head=" + (settings.head ? "yes" : "no") + "\n";
     static const char* const kKinds[] = {"body", "head", "joint"};
@@ -300,6 +520,7 @@ std::string Character::text() const
         t += "s " + std::to_string(i) + " " + std::to_string(p.parent) + " " + std::to_string(p.x) + " " + std::to_string(p.y) + " " +
              std::to_string(p.z) + " " + std::to_string(p.r) + " " + kKinds[p.kind] + "\n";
     }
+    for (const auto& [i, hex] : holds) t += "h " + std::to_string(i) + " " + hex + "\n";
     return t;
 }
 

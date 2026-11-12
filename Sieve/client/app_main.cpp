@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <fstream>
 #include "sieve/character.hpp"
+#include "character_store.hpp"
 #include <sstream>
 #include <chrono>
 #include <cstdio>
@@ -165,6 +166,10 @@ const char* kUsage =
     "  --character FILE    your character from a .character file (sieve-character-v1): beside you in the\n"
     "                      hallway, and on the setup menu's CHARACTER page\n"
     "  --no-character      no character beside you in the hallway for this run\n"
+    "  --import-obj FILE   with --menu: a Wavefront .obj into your character's first sphere, as the CHARACTER\n"
+    "                      page's Ctrl+I does (brought under the held models' roof of 8 vertices, 12 faces)\n"
+    "  --character-store DIR  your personal dimension from DIR (the store: <SHA-256>.character files) for\n"
+    "                      this run, in place of the characters folder beside the settings file\n"
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --read-aloud        the menus read aloud for this run (not saved); with --screenshot, prints what was said\n"
@@ -1282,6 +1287,7 @@ int run(const Args& a)
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("character")) menu.load_character(a.get("character"));
+        if (a.has("import-obj")) menu.import_obj(a.get("import-obj")); // into sphere 0, as Ctrl+I does into the chosen one
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1294,7 +1300,8 @@ int run(const Args& a)
             menu.render();
         }
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
-        if (menu.side_open()) std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
+        if (menu.side_open() && menu.side_page() == 1) std::cout << "right-hand panel: open (YOURS, " << menu.yours_count() << " characters)\n";
+        else if (menu.side_open()) std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         for (const auto& [kind, text] : menu.details_lines()) std::cout << "details: " << text << "\n"; // (I, or the dots: a line's details)
@@ -1331,6 +1338,13 @@ int run(const Args& a)
                 const std::string id = named ? ch->id() : std::string();
                 hall->set_max_scale(float(app.character_max_scale));
                 hall->set_character(std::move(ch));
+                // Your personal dimension: the store beside the settings file (or --character-store DIR).
+                if (!a.has("no-character"))
+                {
+                    const auto pd = read_personal_dimension(a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path));
+                    hall->set_personal(pd.characters);
+                    if (a.has("character-store")) std::cout << "personal dimension: " << pd.characters.size() << " characters, " << pd.left_out << " left out\n";
+                }
                 if (named)
                 {
                     std::cout << "character beside you: " << id << "\n";
@@ -1494,6 +1508,7 @@ int run(const Args& a)
     bool settings_chosen = false; // settings came from a setup menu (F1 in game), even with --no-menu
     bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
+    bool open_yours = false; // Personal Dimensions chosen: the setup menu opens with YOURS on the right
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
@@ -1560,6 +1575,7 @@ int run(const Args& a)
                 settings_chosen = true;
                 skip_setup = true;
             }
+            if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
             if (r == MainMenu::Result::ManualNav)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
@@ -1588,6 +1604,8 @@ int run(const Args& a)
         if (show_menu && !skip_setup)
         {
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
+            if (open_yours) menu.open_yours();
+            open_yours = false;
             const Menu::Result r = menu.run();
             keep_setup(settings, menu.settings());
             if (r == Menu::Result::Quit) break;
@@ -1656,6 +1674,7 @@ int run(const Args& a)
         hall->set_fps_counter(app.fps_counter);
         hall->set_max_scale(float(app.character_max_scale));
         hall->set_character(character_of(app, ha));
+        if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(ha.has("character-store") ? std::filesystem::path(ha.get("character-store")) : character_store_dir(app_path)).characters);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
         if (pending_melody)
@@ -1725,6 +1744,7 @@ int run(const Args& a)
             {
                 Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
                 menu.set_in_game(true);
+                if (hall->take_personal_request()) menu.open_yours();
                 in_game_menu = menu.run();
                 if (in_game_menu == Menu::Result::Back)
                 {

@@ -95,6 +95,15 @@ public:
     };
     Fitted fit(const std::vector<Vertex>& verts, const std::vector<Face>& faces) const;
 
+    // Any Wavefront .obj's geometry: its v lines and its f lines (any polygon, split into a fan;
+    // indices from 1 or negative from the newest; /vt/vn ignored). Throws if it has no vertices.
+    struct AnyMesh
+    {
+        std::vector<Vertex> verts;
+        std::vector<Face> faces;
+    };
+    static AnyMesh read_any_obj(std::string_view text);
+
 private:
     uint32_t v_, f_, c_, decimals_;
     std::string key_;

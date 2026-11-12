@@ -96,6 +96,16 @@ placed in the sections below when the file is cleaned:
 - **Edward** (12 November 2026, quote): If the Hulk entered a universe full of mice, he would scale down accordingly.
 - **Edward** (12 November 2026, metaphor): A middle, cartoon-like representation: the perception of a character through emotion, from a human perspective.
 - **Edward** (12 November 2026, rule): True scale or perception scale: the world may lock it, and then it is beyond your control unless you leave.
+- **Edward** (12 November 2026, quote): It could bloat to begin with, and eventually settle into a workable system where everyone has a spare drive dedicated to the infinite RAID universal storage platform.
+- **Edward** (12 November 2026, quote): I suppose humanity did challenge AI to that one at some point; no hard feelings, eh.
+- **Edward** (12 November 2026, quote; a point about everything): All of this would unpack to the perfect educational system, to scale across all ranges, ages, industries, professions or hobbies.
+- **Edward** (12 November 2026, quote): Ranks, listings and categories across all dimensions and genres, leaving room for everyone to get first place in something.
+- **Edward** (12 November 2026, metaphor): Creating their own unique universe: a spectrum across the multiverse.
+- **Edward** (12 November 2026, metaphor): Everyone's interpretation of the state space helps build a more stable, solid foundation: a rigid structure to bound all information across time.
+- **Edward** (12 November 2026, metaphor): Infinite interpretations of the Library of Babel, folded across dimensions to reveal all information of whatever nature is searched for, from noise to agreed meaning.
+- **Edward** (12 November 2026, quote; a point about everything): It all becomes one web of information across every interpretation, and folds in to create the multiverse before time even began.
+- **Edward** (12 November 2026, metaphor): All containment vessels will have a unique roof, throughout this unfolding dimensional landscape.
+- **Edward** (12 November 2026, metaphor): An engine to rule all engines: the information highway engine.
 
 **The format.** One voice a line, so that a program can read them:
 

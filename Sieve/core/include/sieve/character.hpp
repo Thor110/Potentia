@@ -41,6 +41,13 @@
 // The text: the first line names the version and the settings; then one line a sphere, in order:
 //     s INDEX PARENT X Y Z R KIND    (KIND: body, head, joint; PARENT -1 for the body)
 // The character's identity is the SHA-256 of that text.
+//
+// "sieve-character-v2" (IDEAS 19.148, step 6): a v1 character whose spheres hold models. Its text is
+// v1's with the version on the first line read v2, and after the spheres one line a held model:
+//     h SPHERE MODEL    (MODEL: a model of the models line "models/V8/F12/C16/key=sieve/modelspace-v1",
+//                        by its positional address in hex, 51 digits; at most one a sphere, in order)
+// The model's coordinates, in (-1, 1), are its sphere's radius. A character that holds nothing is
+// written as v1, so every v1 character keeps its text and its identity; v1 files read as before.
 #pragma once
 
 #include <cstdint>
@@ -50,6 +57,10 @@
 namespace sieve {
 
 inline constexpr const char* kCharacterVersion = "sieve-character-v1";
+inline constexpr const char* kCharacterVersion2 = "sieve-character-v2";
+// The models a sphere may hold: the models line at its default shape (eight vertices, twelve faces,
+// sixteen coordinates), positional.
+inline constexpr uint32_t kHeldVertices = 8, kHeldFaces = 12, kHeldCoords = 16;
 // The central metric (IDEAS 19.153): 4096 of a character's units are a metre, so every character has
 // a size in the world and the hallway can be scaled to it; the default character, about 0.9 m
 // across, fits the doors as built.
@@ -81,7 +92,13 @@ struct Character
 {
     CharacterSettings settings;
     std::vector<Sphere> spheres;
-    std::string text() const;     // the canonical text (above)
+    // Models held (v2): sphere index -> the model's positional address on the models line, in hex.
+    std::vector<std::pair<uint32_t, std::string>> holds;
+    std::string text() const;     // the canonical text (above): v1, or v2 where it holds models
+    // Puts a model in a sphere (an empty address takes it out), checked: the sphere must exist and
+    // the address be a model of the held models' line. Throws std::invalid_argument otherwise.
+    void hold(uint32_t sphere, const std::string& hex);
+    const std::string* held(uint32_t sphere) const;
     std::string id() const;       // SHA-256 of the text, in hex
     // The half-widths of the box holding every sphere, centred on the body (for the hallway to fit it).
     void extent(int32_t& x, int32_t& y, int32_t& z) const;
@@ -90,11 +107,50 @@ struct Character
 // Unfolds the character of these settings (checked first).
 Character unfold_character(const CharacterSettings& s);
 
+// A species ("sieve-species-v1", IDEAS 19.152): the settings with the seed left free, named by the
+// SHA-256 of "sieve-species-v1 limbs=L joints=J branches=B symmetry=S head=H" in hex. Every seed of a
+// species is one of its members, so a species is a line of characters walked by seed.
+std::string species_text(const CharacterSettings& s);
+std::string species_id(const CharacterSettings& s);
+
+// The seed walk ("sieve-character-walk-v1", IDEAS 19.148 step 7): from one character's settings, the
+// next: d = SHA-256("sieve-character-walk-v1" | the settings' line as text); its first 8 bytes,
+// little-endian, are the next seed, and its next bytes draw the next settings: limbs = d[8] % 9,
+// joints = 1 + d[9] % 6, branches = d[10] % 3, symmetry = d[11] % 3 (none, bilateral, radial),
+// head = d[12] % 4 != 0. So a walk is a line of characters, the same from the same start on every
+// machine, and any step can be retraced from the one before.
+CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps = 1);
+
 // A character read back from its text (a .character file): the first line's settings unfolded,
 // and, where sphere lines follow, every one checked against the unfolding. Throws
 // std::invalid_argument saying what is wrong (not this version, a setting missing or out of range,
 // or spheres that do not match their settings). A file of the first line alone is a character too.
 Character read_character(const std::string& text);
+
+// A held model's edges, each a pair of points in (-1, 1) (times its sphere's radius to draw it).
+struct HeldEdge
+{
+    float a[3], b[3];
+};
+std::vector<HeldEdge> held_model_edges(const std::string& hex);
+// The model n steps along the held models' line from `hex` (wrapping round), or the first model
+// when `hex` is empty; and a model chosen by a 64-bit number (any model as likely as any other,
+// up to the number's reach).
+std::string held_model_step(const std::string& hex, int64_t n);
+std::string held_model_from(uint64_t r);
+
+// Importing an existing model into a sphere (IDEAS 19.159, ".obj" first): any Wavefront .obj, brought
+// under the held models' roof (8 vertices, 12 faces). 8 vertices are kept spread across the whole shape
+// (the first the farthest from the centre of its bounds, each next the farthest from those kept), the
+// 12 largest faces kept with each corner moved to its nearest kept vertex (faces that close up are left
+// out), and the result fitted to the line's grid. Deterministic: the same file, the same model.
+struct HeldImport
+{
+    std::string hex;                       // the held model's address
+    size_t vertices_in = 0, faces_in = 0;  // what the file had
+    size_t faces_kept = 0;                 // faces that survived the reduction (at most 12)
+};
+HeldImport import_obj_for_hold(std::string_view obj_text);
 
 const char* symmetry_name(Symmetry s);
 // "none", "bilateral" or "radial"; throws std::invalid_argument otherwise.

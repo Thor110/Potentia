@@ -341,6 +341,36 @@ $H --no-menu --character big.character --screenshot char-big.png | tr -d '\r' | 
 printf 'sieve-character-v1 seed=99 limbs=5\n' > bad.character
 if $H --no-menu --character bad.character --screenshot char-bad.png > char-bad.txt 2>&1; then exit 1; fi
 q "missing: joints" char-bad.txt
+# A character holding models (sieve-character-v2): read from its file, the same on the page and
+# beside you, and its models drawn in their spheres.
+printf 'sieve-character-v2 seed=0 limbs=6 joints=4 branches=0 symmetry=bilateral head=yes\nh 0 230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b\nh 1 9f2e6d33a3717ee826353a404ba4618d1aeeb6879ad7936bce8\n' > held.character
+$H --menu --character held.character --press "\`" --screenshot char-held.png | tr -d '\r' | q "^character: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
+$H --no-menu --character held.character --screenshot char-held-hall.png | tr -d '\r' | q "^character beside you: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
+# Personal Dimensions (IDEAS 19.157): the main menu's screen; YOURS listing a store of three characters
+# (beside the settings file); and the same store standing in the hallway.
+$H --main-menu --press "Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot main-personal.png | q "saved main-personal.png"
+mkdir -p pdim/characters
+for spec in "seed=1 limbs=4 joints=3 branches=0 symmetry=bilateral head=yes" "seed=2 limbs=6 joints=2 branches=1 symmetry=radial head=no"; do
+  printf 'sieve-character-v1 %s\n' "$spec" > pdim/one.character
+  id=$($H --menu --character pdim/one.character --press "\`" --screenshot pdim-one.png | tr -d '\r' | sed -n 's/^character: //p')
+  test -n "$id"
+  mv pdim/one.character "pdim/characters/$id.character"
+done
+printf 'not a character\n' > pdim/characters/bad.character
+touch pdim/s.ini
+$H --menu --settings pdim/s.ini --press "\`,PageDown" --screenshot pdim-yours.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 2 characters)"
+$H --no-menu --character-store pdim/characters --screenshot pdim-hall.png | tr -d '\r' | q "^personal dimension: 2 characters, 1 left out"
+# The playground (IDEAS 19.152): P fills it along the seed walk from the default character; K keeps the
+# second in a fresh store, by its SHA-256.
+mkdir -p play && touch play/s.ini
+$H --menu --settings play/s.ini --press "\`,PageDown,P,Down,K" --screenshot play.png | tr -d '\r' | q "^right-hand panel: open (YOURS, 1 characters)"
+test -f play/characters/768169973d3190fd9cfa2c16eab7161e944d50ec85ba469411fc306ee0fc4d5d.character
+# Importing a model (IDEAS 19.159, .obj first): a cube into the first sphere, the same character each run.
+printf 'v -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nv -1 -1 1\nv 1 -1 1\nv 1 1 1\nv -1 1 1\nf 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 2 6 7 3\nf 3 7 8 4\nf 5 1 4 8\n' > cube.obj
+$H --menu --import-obj cube.obj --press "\`" --screenshot char-cube.png | tr -d '\r' | q "^character: c202ce801122dd88e98ed455be1cc39dd81b7df7720ccddd6b48b4dea78ef196"
+# The seed walk (IDEAS 19.148 step 7): Shift+G, ten steps from the default character, lands where the
+# unit tests pin it.
+$H --menu --press "\`,Shift+G" --screenshot char-walk.png | tr -d '\r' | q "^character: 775f9b13e7bb87599c40b20aa700f7444da6aca7a09c4ff2a2a2101593c08688"
 # Drawn shaded (the drawing row, the seventh): the same character, since drawing changes none.
 $H --menu --press "\`,Down,Right,Right,Down,Right,Down,Down,Down,Down,Right,Right" --screenshot char-shaded.png | tr -d '\r' | q "^character: 455b1fd6a86a035c41f4ec6f1d4d2ce60869595fc67c30e4a913397d19f38972"
 # Melodies in CHAT: a melody model's (the same addresses as --make), a random melody and picture

@@ -6593,7 +6593,9 @@ nature systems that capture the essence of existence".
   in the hallway beside you (*built 12 November 2026:* `.character` files by Ctrl+S and Ctrl+O, read
   back and checked by `read_character`; kept in `[character]`; drawn walking beside you; `--character
   FILE` and `--no-character`; CI checks a file on the page and in the hallway, and a bad one refused); (5) the hallway scaled to the character's size (*built 12 November 2026:* §19.153); (6) a model from the
-  models line inside a sphere; (7) generation by a seed walk or an AI model.
+  models line inside a sphere (*built 12 November 2026:* `sieve-character-v2`; the page's sphere and
+  model rows; drawn on the page and in the hallway; a v1 character's identity unchanged); (7) generation by a seed walk or an AI model (*built 12 November 2026:* the seed walk,
+  `sieve-character-walk-v1`, G and Shift+G on the page; generation by an AI model to come).
 
 **19.149 A scalable galactic vector information engine (Edward, 12 November 2026).** His words:
 "exactly so everything will be procedural and dynamic, so that this system can scale up to be plugged
@@ -6732,6 +6734,8 @@ create itself as a system or platform, a bunch of stuff to take note of again".
   their own: a small line from their own settings (a species, a set of characters, a room of doors,
   §19.144), kept in their save (§19.150), and later linked into the shared lines by records rather than
   merged into them, so nothing of anyone else's changes. Folding back in is a link, not a rewrite.
+- *Built (12 November 2026):* species (`sieve-species-v1`, named on the CHARACTER page, YOURS grouped by
+  them) and the playground (P fills it along the seed walk, K keeps one in your store).
 - *Workable now, in order:* (1) a species as fixed settings with the seed free, walked on the
   CHARACTER page by seed (Left/Right on the seed already does it); (2) a personal dimension as a saved
   list of characters (a `.characters` file of settings lines), shown in the hallway as a short line of
@@ -6792,3 +6796,140 @@ something semi imaginary and semi real reachable through understanding and agree
   characters are the same addresses on every machine, whichever scale a person sees them at. As a
   setting: a world's `scale_view = true | perception` with `scale_locked = yes | no`, and a person's own
   choice used wherever the world leaves it open.
+
+**19.154 A rudimentary infinite RAID for character saves; a personal dimension to build your own
+world (Edward, 12 November 2026).** His words: "carry on with step 6, models inside spheres, we will
+also need to make a rudimentary version of the infinite raid for character saves system as well as
+this new personal dimension system which would be like a build your own world with access to all
+other worlds and dimensions of data", and "an infinite raid system like that could or should bloat to
+begin with and eventually settle into a workable system where everyone could have a spare drive or
+storage space on their phone and or computer dedicated to the infinite raid universal storage
+platform".
+- *A rudimentary version, local first (the store built the same day: every save also kept as
+  `characters/<SHA-256>.character` beside the settings file):* a store folder of character saves, each file named by its
+  SHA-256, so the same character saved twice is one file and any copy can be checked against its
+  name; a store is then a set of names, and two stores join by copying the names one lacks (the
+  "infinite RAID" in miniature: no server, every piece verifiable). Sharing beyond the machine stays
+  opt-in behind red boxes (§19.150), and is not built.
+- *Bloat first, then settle:* a store that keeps every version first (cheap: a character is a line of
+  text) and later keeps deltas and drops copies others hold, as §19.150's saves as deltas.
+- *A spare drive for it:* a store's size limit as a setting, and the folder anywhere (a spare drive,
+  a phone's storage), the same files on every device.
+- *A personal dimension, build your own world:* a list of characters (and later worlds, §16.7, and
+  links to any line) kept in its own file, walked as a short line of its own, with doors to every
+  other line, as §19.152's playground.
+
+**19.155 A setting to turn the AI off, and a human-written Sieve beside an AI-written one (Edward, 12
+November 2026).** His words: "we also need a global setting and new settings option for game systems,
+such as turning AI on or off as well as other systems where access to AI generated content could be
+restricted, forking Sieve itself into its own AI generated category and spawning a space for a manual
+Sieve to be implemented in raw human written assembly such that it could be compared against an AI
+generated implementation of Sieve as an OS / scalable system across all systems, I suppose humanity
+did challenge AI to that one at some point, no hard feelings eh lol but this setting would primarily be
+about turning on and off the AI in the hallway so that people can navigate without seeing them
+everywhere, it would also link to the disable AI spawn modern testing option built into the alien
+trilogy engine reimplementation of mine altengine previously discussed".
+- *The setting:* a Game settings screen (beside Graphics and Controls) with **AI in the hallway**
+  (on/off: the speaking characters of §19.147 spawned or not, so the halls can be walked empty) and
+  **AI-made content** (shown, marked, or hidden: anything whose maker's claim says a model made it,
+  §19.144, kept off the shelves and out of chat where hidden). Saved under `[game]`, and a world may
+  lock either (as the scale switch, §19.153). It belongs with ALTEngine's "disable AI spawn" testing
+  option: the same switch, named the same, so a test in one is a test in the other.
+- *Built so far:* nothing spawns yet (the character beside you is yours, not an AI), so the switch
+  waits for the first spawned characters; it is to be built with them, not before, so it is never a
+  setting that does nothing.
+- *A human-written Sieve beside an AI-written one:* Sieve as it stands is AI-assisted throughout
+  (the README says so, §9.7, §19.66). A second Sieve written by hand (in assembly, or any language a
+  person chooses) would be its own line in the source tree (§19.11 c), named as human-made by its
+  author's claim (§19.144), and the two compared by what they do: the same `.sieve` files in, the same
+  bytes out, and their size and speed side by side. The format being specified and tested apart from
+  the code (SPECIFICATIONS, the Python oracle, the CI's vectors) is what makes a second implementation
+  checkable at all.
+
+**19.156 The perfect educational system, at every range (Edward, 12 November 2026).** His words: "note
+that all of this would also unpack to the perfect educational system to scale across all ranges, ages,
+industries, professions or hobbies". In the terms built so far: every line is something to walk and
+look at, from a page of letters to a model's weights; every filter is a lesson in what makes a thing
+what it is (a word, a melody, a shape); the character system teaches bodies, symmetry and scale by
+making them; and the highways (§19.144) and stories (§19.146) are the paths a learner follows. Scaling
+by age or profession is the same as scaling by machine: the same addresses at every level of detail
+(§19.147), a child's view and an expert's of one thing. Read aloud and the tactile rule (§19.74,
+§19.140) carry it past sight.
+
+**19.157 Personal Dimensions, from the menus (Edward, 12 November 2026; the first part built the same
+day).** His words: "it should be accessible from personal dimension a new option on the menu and pause
+menu, it can be at the bottom as per the need to maintain CI controls and testing harnesses, a space
+where a user can craft their own dimension, load in 3D models from modelling programs and much more,
+creating their own unique universe, a spectrum across the multiverse", and "that would need a sub
+menu or series of menus: Personal Dimensions; Personal Dimension; Other Users Personal Dimensions ->
+Ranks/Listings/Categories across all dimensions and genres, theoretically leaving room for everyone to
+get first place in something; Group Dimensions = this almost equals games in the long run; things to
+note down and keep in mind during development".
+- *Built:* **Personal Dimensions** on the main menu and the pause menu, before Exit (so no row CI walks
+  to moves), opening a screen of its own: **Personal Dimension** (the setup menu with the right-hand
+  panel open on **YOURS**: the characters in your store, Up/Down to choose, Enter to be that one),
+  **Other People's Personal Dimensions** and **Group Dimensions** (listed, each saying it is not built
+  yet: they wait on sharing between machines). In the hallway, your store's characters stand ahead on
+  your left, a short line of their own (`--character-store DIR` for one run).
+- *Other people's, ranked:* listings by category, genre and dimension, so many that everyone can be
+  first in something: a ranking is one more ordering of the same addresses (§5.13's orderings, the
+  emotion and tag highways of §19.144), and there are as many as there are ways to sort.
+- *Group dimensions:* made together, they are games in the long run (§19.150's graph of games).
+- *Loading 3D models from modelling programs:* the models line already fits any mesh to its grid
+  (`ModelSpace::fit`); an `.obj` from a modelling program, fitted, is a model a sphere can hold
+  (§19.148 step 6), so a person's own models enter their dimension the same way.
+- *Everyone's interpretation, one rigid structure (Edward, the same day):* "the personal dimensions
+  system would create a unique structure and shape or platform that allows everyone to make their
+  interpretation of the state space and dimensional lattice helping to assist with the creation of a
+  more stable and solid foundation or rigid structure to bound all information across time". In
+  Sieve's terms: each personal dimension is one person's ordering and choice of the same addresses,
+  so many of them are many views of one shared lattice, not many lattices. Where interpretations
+  agree (the same characters kept, the same links made by many people independently), that agreement
+  is itself a record (§19.144's links, counted), and the most agreed paths become the lattice's
+  load-bearing beams: stable because many hold them, and checkable because every piece is named by
+  its hash.
+
+**19.158 Every interpretation folded into one web (Edward, 12 November 2026; a way to explain the
+project).** His words: "exactly, like infinite interpretations of the library of babel eventually being
+cross dimensionally folded to reveal all information of whatever chosen nature is searched for from
+noise to theoretical or agreed upon meaning, whether that be agreed upon by humans, or ai, or both, or
+a chosen group or mix as per a ranking and node based scaling system to help preserve choice, identity
+and the unique and personal nature of the evolving category of the loss of personal freedoms or
+potential loss there of through systems such as this that help to guide choice based on past
+principles, it all becomes one web of information across every interpretation and folds in to create
+the multiverse before time even began", and "make note of that random speech and series of ideas and
+ways to convey or explain the nature of the project from a conceptual, metaphysical or metaphorical
+angle".
+- *As an explanation of Sieve:* the library holds everything; meaning is what someone agrees to find in
+  it; Sieve keeps every such agreement as a record (who: a person, a model, a group; what: a filter, a
+  link, a ranking) rather than one verdict for all, so many interpretations stand side by side and
+  fold into one web where they meet.
+- *The caution inside it:* a system that guides choice by past principles can narrow choice. Sieve's
+  answer so far: nothing is hidden by default (filters are chosen, not imposed; §9.1, §9.2), every
+  ranking says whose it is, and a person can always walk the whole line unfiltered.
+- *For the metaphorical side:* the conceptual and metaphysical framing belongs with §9 (framing worth
+  writing down) and VOICES; the technical side is what is built.
+
+**19.159 Importers for every existing model, animation and skeleton; the engine of engines (Edward,
+12 November 2026).** His words: "make note of the fact we need a series of loadable and scalable systems
+for importing existing data such as models and their animations or skeletons which must scale across
+all game engines across time to capture the true nature and or essence of everything", "so the initial
+and dynamic modular scalable system for this has to be able to meet or match with that as an upper end,
+all containment vessels will have a unique roof such as this throughout this unfolding dimensional
+landscape", and "like a chart or a point on a chart or a series of points or data for a chart or
+database or framework of information, an engine to rule all engines, the information highway engine".
+- *Importers, one format at a time:* each importer reads one existing format (a mesh: `.obj` first, then
+  glTF, FBX and the old game formats of `engine/`; a skeleton and its animation: glTF's skins and
+  BVH) into what Sieve already has: meshes fitted to the models line (`ModelSpace::fit`), skeletons
+  as trees of spheres (a bone is a sphere's link to its parent, §19.148), and animation as a list of
+  turns per bone per frame (a new line, to come). Each kept with what it lost on the way in (what
+  `fit` reports), so the import is honest about its roof.
+- *Built (12 November 2026), `.obj` first:* Ctrl+I on the CHARACTER page (and `--import-obj`) brings
+  any `.obj` into a sphere: farthest-point sampling to 8 vertices, the 12 largest faces on them, fitted,
+  and the kept counts said (the Utah teapot: 8 of 1,857 vertices, 9 of 3,552 faces). The reader moved
+  into the core (`ModelSpace::read_any_obj`), shared with `sieve mesh --warp`.
+- *Every vessel has a roof:* each line and format states its own upper end (vertices, faces, bones,
+  frames), and a richer original is carried at the most it can hold, with the rest named, not dropped
+  silently; a later version raises the roof without breaking the old (§19.137).
+- *The engine of engines:* a point on a chart is an address; a series is a line; the chart is the
+  lattice (§19.145). That is what the hallway draws, and what every importer feeds.

@@ -17,6 +17,7 @@
 #pragma once
 
 #include "sieve/character.hpp"
+#include "character_store.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
 #include "display.hpp"
@@ -468,6 +469,16 @@ private:
     // How the character is drawn (IDEAS §19.147, the scalable graphics seed): one character, many
     // levels, from a pixel a sphere to shaded spheres under a light. It changes no character.
     int char_draw_ = 1;          // 0 pixels, 1 wireframe, 2 voxels, 3 shaded
+    uint32_t char_sphere_ = 0;   // the sphere the model row works on (sieve-character-v2's holds)
+    // YOURS (the panel's second page): your personal dimension, the store read back (IDEAS 19.152).
+    PersonalDimension yours_;
+    // The playground (IDEAS 19.152): characters made for trying, kept nowhere until K keeps one in
+    // the store. P fills it with the next eight along the seed walk from the character you are.
+    std::vector<sieve::Character> playground_;
+    int yours_row_ = 0;          // over the playground first, then the store
+    void yours_read();
+    void yours_key(SDL_Keycode key);
+    void render_yours(float x, float top, float bottom);
     // The pedestal under the character (IDEAS §19.150): a click and drag on the drawing turns it, as
     // [ and ] do from the keys (15 degrees a press).
     float char_turn_ = 0.6f;     // radians about the upright
@@ -480,16 +491,22 @@ private:
     bool char_ready_ = false;
     // A .character file chosen in a dialog (Ctrl+S, Ctrl+O), taken up on the next frame.
     std::mutex char_mx_;
-    std::optional<std::string> char_save_to_, char_load_from_;
+    std::optional<std::string> char_save_to_, char_load_from_, char_import_from_;
     std::string char_note_;      // the last save's or open's result, shown under the drawing
 public:
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
+    void import_obj(const std::string& path);      // --import-obj FILE, and Ctrl+I: a model into the chosen sphere
+    void obj_chosen(const std::string& path);
+    void open_yours();                              // the right-hand panel open on YOURS (Personal Dimensions)
 private:
     void toggle_side();
     void render_side(float W, float H);
 public:
     bool side_open() const { return side_open_; } // (for a picture's report: CI checks the key)
+    // (for a picture's report) the right-hand panel's page, and how many characters YOURS lists
+    int side_page() const { return side_page_; }
+    size_t yours_count() const { return yours_.characters.size(); }
     std::string character_id() const { return char_.spheres.empty() ? std::string() : char_.id(); }
 private:
     // The settings above the three actions scroll when they are taller than the room for them:

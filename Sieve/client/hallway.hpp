@@ -1065,6 +1065,8 @@ public:
     float draw_book(const BookSpace::Parts& p, float x, float cy, float pw, float bottom);
 
     bool menu_requested() const { return menu_requested_; }
+    // The setup menu was asked for by Personal Dimensions: open it on YOURS (taken once).
+    bool take_personal_request() { const bool r = personal_requested_; personal_requested_ = false; return r; }
     void clear_menu_request() { menu_requested_ = false; } // back from the setup menu without a new hallway
     // Back from the setup menu to this hallway: to the pause menu if Restart Sieve opened it
     // (true: the pointer is then free), else to walking.
@@ -1083,6 +1085,8 @@ public:
     // Your character (IDEAS 19.148), walking beside you: a little ahead and to the right, on the
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
+    void set_personal(std::vector<sieve::Character> p) { personal_ = std::move(p); }
+    size_t personal_count() const { return personal_.size(); }
     // How many times larger the hallway is drawn so that your character fits its doors (1: it fits
     // as built; IDEAS 19.153). Seen from your side it is you made smaller: your eye, your stride and
     // the character itself scaled by its inverse. Capped at set_max_scale (16 at first): a character
@@ -1719,6 +1723,7 @@ private:
     Uint64 message_until_ = 0;
     bool message_warns_ = false; // drawn in red (warn)
     bool menu_requested_ = false;
+    bool personal_requested_ = false;
     bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
     float wheel_ = 0;      // mouse wheel movement not yet turned into whole tiles
@@ -1792,6 +1797,8 @@ private:
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
     std::optional<sieve::Character> character_;
+    std::vector<sieve::Character> personal_; // your personal dimension (the store), drawn beside yours
+    void draw_figure(const sieve::Character& c, SDL_Color edge, int place);
     float hall_scale_ = 1, max_scale_ = 16;
     bool character_fits_ = true;
     void draw_character(SDL_Color edge);
