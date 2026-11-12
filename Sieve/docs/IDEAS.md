@@ -6649,3 +6649,31 @@ the counting argument, since it names nothing.
   each generation shown as the picture-line unit it is (so every frame has its address); (2) the
   same as a film on the movies line, with the rule gradient as a setting; (3) `life-causal-v1` on
   the movies line, counted as above. Nothing here is measured yet.
+- *What it was all to say (Edward, the same day):* "that was all to say that there are infinite
+  shorter ways to create strange variants and noise patterns or seeds to turn everything into a
+  dimensional state space across time that represents all information across all games or forms of
+  media and representations of space such as simulations in all manner of ways, forms, styles,
+  rendering engines or otherwise". In Sieve's terms: every generator (Life, a seed, a noise map, a
+  rule gradient, a rendering engine) is a short way to *reach* a family of units, and each family is
+  another axis of the state space, so the ways to walk it have no end. What a short seed cannot do is
+  name an arbitrary file more briefly than the file (§0, §19.27): it reaches what it generates. The
+  two sit together: generators give infinite short routes *into* the space and through time; exact
+  addresses and hashes pin down where the real things are in it (§19.142).
+
+**19.142 Sieve as a lock in time (Edward, 12 November 2026).** His words: "the idea is that the sieve
+acts like a lock in time in order to preserve and anchor history to something permanent and
+immutable such as video games coupled with compression and data or information theory, chaos theory
+and infinitely more theories, yet in reality all of them (theories)". This gathers §19.136 (history
+constrained, fraud made impossible) and §19.137 (compatible forever) into one aim.
+- *The lock:* what is already permanent in Sieve. A file named by its SHA-256 cannot be changed
+  without its name changing; a `.sieve` rebuilds its files byte for byte and checks them; every
+  format version stays readable (§19.137). A record locked this way can be lost, but not quietly
+  altered.
+- *Anchored to something permanent, such as video games:* released games are fixed artefacts with
+  many independent copies (discs, archives, players' installs), so their hashes are witnesses that
+  no one holds alone (§19.136); the games line and the hallway of engines (GAME.md §11) are where
+  history meets them.
+- *The theories, all of them:* each is a lens on the same addresses. Compression and information
+  theory say what can be named and how briefly (the counting argument is the floor under all of
+  it); chaos theory and generators (§19.111, §19.141) give the short routes through it; hashing
+  and exact arithmetic give the lock. Sieve's rule stays: each is used where it is measured to work.

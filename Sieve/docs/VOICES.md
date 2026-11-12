@@ -60,6 +60,9 @@ placed in the sections below when the file is cleaned:
 - **Edward** (2 November 2026, metaphor): Every brick needs mortar.
 - **Edward** (3 November 2026, metaphor): Imagine a car made of just four bytes, where each byte is a wheel.
 - **Edward** (4 November 2026, quote): The word "waffle" might be very unlikely to follow the word "quantised", but that doesn't stop me typing quantised waffle.
+- **Edward** (12 November 2026, metaphor): There are infinite shorter ways to create strange variants and noise patterns or seeds, to turn everything into a dimensional state space across time that represents all information across all games and forms of media.
+- **Edward** (12 November 2026, quote; a point about everything): The Sieve acts like a lock in time, to preserve and anchor history to something permanent and immutable.
+- **Edward** (12 November 2026, metaphor): Compression, information theory, chaos theory and infinitely more theories; yet in reality, all of them.
 
 **The format.** One voice a line, so that a program can read them:
 

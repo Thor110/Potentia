@@ -21,18 +21,18 @@ Where an entry holds several ideas they are split (19.11 a, b, c). The ids follo
 | Verdict | Ideas |
 | --- | ---: |
 | done | 183 |
-| workable | 205 |
+| workable | 207 |
 | workable, large | 72 |
 | waiting on Edward | 14 |
 | unworkable | 49 |
 | not wanted | 31 |
 | metaphor only | 16 |
-| **all** | **570** |
+| **all** | **572** |
 
 | Kind | Ideas |
 | --- | ---: |
 | technical | 419 |
-| both | 87 |
+| both | 89 |
 | process | 44 |
 | metaphorical | 20 |
 
@@ -736,3 +736,5 @@ Kept so they are not measured again. Several were Edward's best questions; the a
 | 19.140a | Interface kept simple for other senses | both | built | done | Deliberate: few elements, each with a name, value and place, and nothing shown by colour or position alone. Strings are in language files and menus are read aloud. |
 | 19.140b | Braille, haptic and touch rendering | technical | open | workable, large | Workable now: colour-blindness pass (2.4), hallway panel read-aloud, a "describe this unit" key, braille through screen readers (liblouis). Haptic screens later, as hardware comes. |
 | 19.141 | Game of Life over noise, through time | both | noted only | workable | A view and a countable filter, not a way to shorten files: each frame follows the last, so the first frame names the film (`life-causal-v1` on the movies line). |
+| 19.141 (all to say) | Infinite short routes into a state space across time | both | noted only | workable | Generators reach families of units, each an axis to walk; they cannot name an arbitrary file more briefly than the file (§0), so they pair with exact addresses. |
+| 19.142 | Sieve as a lock in time | both | noted only | workable | Gathers §19.136 and §19.137: hashes, exact rebuilds and forever-readable versions are the lock; released games are shared witnesses; each theory used where measured. |
