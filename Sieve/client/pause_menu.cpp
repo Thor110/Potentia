@@ -33,7 +33,7 @@ constexpr PauseItem kPauseItems[] = {
     // The main menu's systems in the same order (IDEAS §19.18), with what only a walked hallway has
     // (the node graph, the navigator) after Restart.
     {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true},
-    {"designer", true}, {"harness", true}, {"settings", true}, {"cipher", true}, {"personal", true}, {"exit", true},
+    {"designer", true}, {"harness", true}, {"settings", true}, {"cipher", true}, {"personal", true}, {"systems", true}, {"exit", true},
 };
 constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
 
@@ -83,6 +83,16 @@ void Hallway::pause_choose(int row, bool& quit)
         menu_requested_ = true;
         restart_from_pause_ = true;
         personal_requested_ = true;
+        quit = true;
+    }
+    else if (id == "systems")
+    {
+        // The System Viewer (IDEAS 19.183): the setup menu, as Restart opens it, with the right-hand
+        // panel open on the systems (FORMATS first; S changes system).
+        close_pause();
+        menu_requested_ = true;
+        restart_from_pause_ = true;
+        systems_requested_ = true;
         quit = true;
     }
     else if (id == "graph") open_graph(); // over the pause menu, which is there again after it

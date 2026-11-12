@@ -1,0 +1,9 @@
+sieve-format-v1
+id language-hebrew
+kind language
+name Hebrew
+link part-of family-afroasiatic
+link written-in script-hebrew
+recognised ISO 639-1 he; ISO 639-3 heb
+sieve its script can be taken onto the pages line (L at the script's door)
+source written by hand (data/languages), 12 November 2026

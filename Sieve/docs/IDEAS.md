@@ -7503,3 +7503,40 @@ language language tab for character creation".
   system is chosen; FORMATS (the catalogue of formats, as built) and LANGUAGE (the spoken-language
   catalogue, above) the first two, each its own web of nodes and links, and more systems (the
   dimensions, characters and species, the RAID's chains) charted by the same viewer as they come.
+- *Built the same day:* **System Viewer** on the main menu and the pause menu, with Formats and
+  Language; the setup menu opens with that system in the right-hand panel, and S turns from one to the
+  other. The language catalogue's first entries are in data/languages: thirteen languages (English,
+  Welsh, French, German, Spanish, Greek, Russian, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean) in
+  five families, each with its ISO 639 codes and linked to the scripts it is written in; the two
+  catalogues are one web of 187 entries. Not yet: the LANGUAGE page on the CHARACTER side, where a
+  character chooses what it speaks.
+
+**19.184 A recorder and replay for every game, and a film studio built in (Edward, 12 November
+2026).** His words: "note down a save recorder and playback system like that used in MGO2PC and other
+games for replaying matches and games across dimensions or games, like replaying it from all of its
+recorded positions and parameters as well as execution over time, similar to how replays in GTA4 film
+studio and rocket league work, this would work for hallway and be scalable through all games systems
+in the long run", "essentially a film studio built in that allows for making movies and replaying
+scenes throughout all games", "this would require input recording across servers throughout the course
+of matches in order to ensure playthroughs are properly catalogued and can be used to adjust or make
+movies out of the gameplay such as machinima, with built in video editing and colour grading tools
+etc", and "that would be a new video editor in the main and pause menu".
+- *Recording as inputs over time:* a replay kept as the starting state and every input in order (with
+  its time), played back by running the same steps again, so a whole match costs a few bytes a second
+  and every camera angle can be chosen afterwards. This only replays exactly where the game is
+  deterministic (the same inputs give the same result on every machine), which Sieve's own systems are
+  built to be (addresses, characters, the seed walk, animations). Where it is not, positions are
+  recorded as well as inputs.
+- *In Sieve already:* the hallway's scripted keys (`--press`, carrying their scancodes), Manual
+  Navigation's log of every step (Keep a log, Load Log), the chat logs, and animations as turns per
+  bone per frame (§19.170): each is a recording of one kind. A hallway replay would join them into one
+  record (the start: line, address, pose; then each key and mouse movement with its time).
+- *Across servers and games:* a match's inputs recorded by its server and kept in the RAID (§19.176)
+  as a save of its own, named by its SHA-256, so a playthrough is catalogued and can be checked; each
+  game that takes part records its own the same way.
+- *A film studio (a video editor on the main and pause menus):* replays as clips on a timeline, free
+  cameras placed along them, cuts, titles, colour grading, and the result written out as video (the
+  hallway's exports already write video with ffmpeg), for machinima.
+- *A first step that could be built:* recording the hallway's own inputs with their times while
+  walking, and playing them back exactly (the hallway is deterministic given its settings and its
+  start), as `--record FILE` and `--replay FILE`. Planned only.

@@ -70,6 +70,9 @@ std::vector<FormatEntry> read_format_folder(const std::string& dir);
 // The code's entries and a folder's, together (the folder's after), checked as one: ids unique, every
 // link naming an entry. Throws std::invalid_argument.
 std::vector<FormatEntry> format_catalogue_with(const std::string& dir);
+// The same with several folders (data/catalogue and data/languages: one web, IDEAS 19.183), read in
+// the order given.
+std::vector<FormatEntry> format_catalogue_with(const std::vector<std::string>& dirs);
 
 // The chain of "part-of" links from an entry up to "information" (the entry first, the root last);
 // empty if it does not reach the root. Over the code's entries, or over a given set.

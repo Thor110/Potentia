@@ -373,14 +373,17 @@ std::vector<FormatEntry> read_format_folder(const std::string& dir)
     return out;
 }
 
-std::vector<FormatEntry> format_catalogue_with(const std::string& dir)
+std::vector<FormatEntry> format_catalogue_with(const std::string& dir) { return format_catalogue_with(std::vector<std::string>{dir}); }
+
+std::vector<FormatEntry> format_catalogue_with(const std::vector<std::string>& dirs)
 {
     std::vector<FormatEntry> all = format_catalogue();
-    for (auto& f : read_format_folder(dir))
-    {
-        if (find_in(all, f.id)) throw std::invalid_argument(f.id + ".format: the id " + f.id + " is already in the catalogue");
-        all.push_back(std::move(f));
-    }
+    for (const std::string& dir : dirs)
+        for (auto& f : read_format_folder(dir))
+        {
+            if (find_in(all, f.id)) throw std::invalid_argument(f.id + ".format: the id " + f.id + " is already in the catalogue");
+            all.push_back(std::move(f));
+        }
     for (const auto& e : all)
         for (const auto& l : e.links)
             if (!find_in(all, l.to)) throw std::invalid_argument(e.id + " links to " + l.to + ", which is not in the catalogue");

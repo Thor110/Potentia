@@ -2206,22 +2206,26 @@ void Menu::cat_init()
 {
     if (cat_ready_) return;
     cat_ready_ = true;
-    // The code's entries and the hand-written ones: data/catalogue here, else beside the program.
-    std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "catalogue"};
-    if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / "catalogue"), where.push_back(exe / ".." / "data" / "catalogue");
-    std::string folder;
-    for (const auto& w : where)
+    // The code's entries and the hand-written ones (data/catalogue, data/languages: one web), here,
+    // else beside the program.
+    std::vector<std::string> folders;
+    for (const char* name : {"catalogue", "languages"})
     {
-        std::error_code ec;
-        if (std::filesystem::is_directory(w, ec))
+        std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
+        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / "data" / name);
+        for (const auto& w : where)
         {
-            folder = w.string();
-            break;
+            std::error_code ec;
+            if (std::filesystem::is_directory(w, ec))
+            {
+                folders.push_back(w.string());
+                break;
+            }
         }
     }
     try
     {
-        cat_ = folder.empty() ? sieve::format_catalogue() : sieve::format_catalogue_with(folder);
+        cat_ = sieve::format_catalogue_with(folders);
     }
     catch (const std::exception& e)
     {
@@ -2236,6 +2240,7 @@ void Menu::open_catalogue(const std::string& id)
     side_open_ = true;
     side_ = 1;
     side_page_ = 2;
+    cat_system_ = id == "language" || id.rfind("language-", 0) == 0 || id.rfind("family-", 0) == 0 ? 1 : 0;
     for (const auto& e : cat_)
         if (e.id == id)
         {
@@ -2302,9 +2307,19 @@ void Menu::cat_key(SDL_Keycode key)
             cat_note_.clear();
         }
         return;
-    case SDLK_HOME: // to the root
-        if (cat_at_ != "information") cat_back_.push_back(cat_at_);
-        cat_at_ = "information";
+    case SDLK_HOME: // to the system's root
+    {
+        const std::string root = cat_system_ ? "language" : "information";
+        if (cat_at_ != root) cat_back_.push_back(cat_at_);
+        cat_at_ = root;
+        cat_door_ = 0;
+        cat_note_.clear();
+        return;
+    }
+    case SDLK_S: // the other system, from its root (IDEAS 19.183)
+        cat_system_ = 1 - cat_system_;
+        cat_back_.push_back(cat_at_);
+        cat_at_ = cat_system_ ? "language" : "information";
         cat_door_ = 0;
         cat_note_.clear();
         return;
@@ -2365,7 +2380,7 @@ void Menu::render_catalogue(float x, float top, float bottom)
         const SDL_Color c = d.dir > 0 ? warm : d.dir < 0 ? grey : blue;
         SDL_SetRenderDrawColor(r_, Uint8(c.r / 3), Uint8(c.g / 3), Uint8(c.b / 3), 255);
         SDL_RenderLine(r_, cx, cy, dx, dy);
-        const std::string label = fit_cells(d.id, 14);
+        const std::string label = fit_cells(d.id, 16);
         const float w = text_width(label, 1) + 8;
         const SDL_FRect door{dx - w / 2, dy - 7, w, 14};
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
@@ -3159,7 +3174,7 @@ void Menu::render_side(float W, float H)
     float px = x + 14;
     for (int i = 0; i < int(std::size(kPages)); ++i)
     {
-        const std::string name = tr(kPages[i]);
+        const std::string name = tr(i == 2 && cat_system_ == 1 ? "side.page.language" : kPages[i]);
         text(r_, px, top + 12, name, 1, i == side_page_ ? white : grey);
         if (i == side_page_)
         {

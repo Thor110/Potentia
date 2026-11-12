@@ -1549,6 +1549,7 @@ int run(const Args& a)
     bool went_in_thin = false;    // the setup menu was told to go in past the budget
     bool show_main = show_menu;
     bool open_yours = false; // Personal Dimensions chosen: the setup menu opens with YOURS on the right
+    std::string open_system; // the System Viewer chosen: the setup menu opens with that system on the right
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
@@ -1616,6 +1617,7 @@ int run(const Args& a)
                 skip_setup = true;
             }
             if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
+            if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the setup menu, its right-hand panel on the system
             if (r == MainMenu::Result::ManualNav)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
@@ -1646,6 +1648,8 @@ int run(const Args& a)
             Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
             if (open_yours) menu.open_yours();
             open_yours = false;
+            if (!open_system.empty()) menu.open_catalogue(open_system);
+            open_system.clear();
             const Menu::Result r = menu.run();
             keep_setup(settings, menu.settings());
             if (r == Menu::Result::Quit) break;
@@ -1786,6 +1790,7 @@ int run(const Args& a)
                 Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
                 menu.set_in_game(true);
                 if (hall->take_personal_request()) menu.open_yours();
+                if (hall->take_systems_request()) menu.open_catalogue("information");
                 in_game_menu = menu.run();
                 if (in_game_menu == Menu::Result::Back)
                 {

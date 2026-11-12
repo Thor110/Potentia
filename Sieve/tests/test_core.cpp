@@ -7245,6 +7245,19 @@ void test_catalogue()
     const auto with = format_catalogue_with("data/catalogue");
     CHECK(with.size() > all.size() && std::any_of(with.begin(), with.end(), [](const FormatEntry& e) { return e.id == "encoding-utf-8"; }));
     for (const auto& e : with) CHECK(!format_lineage(with, e.id).empty());
+    // The language catalogue (data/languages, IDEAS 19.183) joins the same web: every language reaches
+    // information through its family and "language", and links to the scripts it is written in.
+    const auto both = format_catalogue_with(std::vector<std::string>{"data/catalogue", "data/languages"});
+    size_t languages = 0;
+    for (const auto& e : both)
+    {
+        CHECK(!format_lineage(both, e.id).empty());
+        if (e.kind != "language") continue;
+        ++languages;
+        CHECK(std::any_of(e.links.begin(), e.links.end(), [](const FormatLink& l) { return l.type == "written-in" && l.to.rfind("script-", 0) == 0; }));
+    }
+    CHECK(languages >= 13);
+    CHECK(format_lineage(both, "language-welsh") == (std::vector<std::string>{"language-welsh", "family-indo-european", "language", "information"}));
     // Refused: an id already in the catalogue, a link to nothing, a file named otherwise.
     namespace fs = std::filesystem;
     const fs::path dir = fs::temp_directory_path() / ("sieve-catalogue-test-" + std::to_string(std::random_device{}()));

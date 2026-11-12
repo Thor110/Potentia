@@ -1,0 +1,9 @@
+sieve-format-v1
+id language-korean
+kind language
+name Korean
+link part-of family-koreanic
+link written-in script-hangul-syllables
+recognised ISO 639-1 ko; ISO 639-3 kor
+sieve its script can be taken onto the pages line (L at the script's door)
+source written by hand (data/languages), 12 November 2026

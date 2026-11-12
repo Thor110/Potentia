@@ -468,6 +468,7 @@ private:
     std::vector<sieve::FormatEntry> cat_;
     bool cat_ready_ = false;
     std::string cat_at_ = "information";
+    int cat_system_ = 0; // the system shown (IDEAS 19.183): 0 FORMATS (from information), 1 LANGUAGE (from language)
     int cat_door_ = 0;
     std::vector<std::string> cat_back_;
     std::string cat_note_;

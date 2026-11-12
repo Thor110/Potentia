@@ -28,8 +28,11 @@ class MainMenu
 public:
     MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path, DisplayInfo display);
 
-    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Quit };
+    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Systems, Quit };
     Result run();
+    // The system chosen in the System Viewer (Result::Systems): the entry it stands at to begin with
+    // ("information" for FORMATS, "language" for LANGUAGE).
+    const std::string& system_root() const { return system_root_; }
     // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
     // screen, and backing out of it ends the menu instead of going to the main screen.
     Result run_settings()
@@ -45,7 +48,7 @@ public:
     // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
-    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal };
+    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems };
     // A Program row names another program Sieve runs (ffmpeg): Enter chooses it with the system's
     // file window, Left goes back to looking for one by itself.
     enum class Kind { Action, Toggle, Choice, Number, Program };
@@ -78,6 +81,7 @@ private:
     std::filesystem::path path_;
     DisplayInfo display_;
     Screen screen_ = Screen::Main;
+    std::string system_root_ = "information";
     bool settings_only_ = false;
     int row_ = 0;
     int spoken_screen_ = -1; // the screen last read aloud on (speech.hpp): a new one is read from its first item

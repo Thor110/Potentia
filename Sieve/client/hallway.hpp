@@ -1068,6 +1068,7 @@ public:
     bool menu_requested() const { return menu_requested_; }
     // The setup menu was asked for by Personal Dimensions: open it on YOURS (taken once).
     bool take_personal_request() { const bool r = personal_requested_; personal_requested_ = false; return r; }
+    bool take_systems_request() { const bool r = systems_requested_; systems_requested_ = false; return r; }
     void clear_menu_request() { menu_requested_ = false; } // back from the setup menu without a new hallway
     // Back from the setup menu to this hallway: to the pause menu if Restart Sieve opened it
     // (true: the pointer is then free), else to walking.
@@ -1734,6 +1735,7 @@ private:
     bool message_warns_ = false; // drawn in red (warn)
     bool menu_requested_ = false;
     bool personal_requested_ = false;
+    bool systems_requested_ = false;
     bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
     float wheel_ = 0;      // mouse wheel movement not yet turned into whole tiles

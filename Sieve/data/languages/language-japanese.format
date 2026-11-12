@@ -1,0 +1,10 @@
+sieve-format-v1
+id language-japanese
+kind language
+name Japanese
+link part-of family-japonic
+link written-in script-japanese-kana
+link written-in script-chinese
+recognised ISO 639-1 ja; ISO 639-3 jpn
+sieve its script can be taken onto the pages line (L at the script's door)
+source written by hand (data/languages), 12 November 2026

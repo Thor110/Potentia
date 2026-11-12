@@ -1202,24 +1202,26 @@ int cmd_raid(const Args& a)
 int cmd_catalogue(const Args& a)
 {
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
-    // data/catalogue in the Sieve folder, else beside the program (where the build copies it).
-    std::string folder = a.get("folder", "");
-    if (folder.empty())
-    {
-        std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "catalogue"};
-        if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / "catalogue"), where.push_back(exe / ".." / "data" / "catalogue");
-        folder = where[0].string();
-        for (const auto& w : where)
+    // data/catalogue and data/languages in the Sieve folder, else beside the program (where the build
+    // copies them): one web (IDEAS 19.183). --folder DIR reads that one folder instead.
+    std::vector<std::string> folders;
+    if (a.has("folder")) folders.push_back(a.get("folder"));
+    else
+        for (const char* name : {"catalogue", "languages"})
         {
-            std::error_code ec;
-            if (std::filesystem::is_directory(w, ec))
+            std::vector<std::filesystem::path> where = {std::filesystem::path("data") / name};
+            if (const auto exe = sieve::cli::executable_dir(); !exe.empty()) where.push_back(exe / name), where.push_back(exe / ".." / "data" / name);
+            for (const auto& w : where)
             {
-                folder = w.string();
-                break;
+                std::error_code ec;
+                if (std::filesystem::is_directory(w, ec))
+                {
+                    folders.push_back(w.string());
+                    break;
+                }
             }
         }
-    }
-    const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folder);
+    const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folders);
     auto find = [&](const std::string& id) -> const sieve::FormatEntry* {
         for (const auto& e : all)
             if (e.id == id) return &e;

@@ -1,0 +1,7 @@
+sieve-format-v1
+id family-sino-tibetan
+kind family
+name Sino-Tibetan languages
+link part-of language
+sieve a family of the language catalogue (IDEAS 19.183)
+source written by hand (data/languages), 12 November 2026

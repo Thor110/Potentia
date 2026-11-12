@@ -1,0 +1,10 @@
+sieve-format-v1
+id language-german
+kind language
+name German
+link part-of family-indo-european
+link written-in script-ascii
+link written-in script-latin-supplement
+recognised ISO 639-1 de; ISO 639-3 deu
+sieve its script can be taken onto the pages line (L at the script's door)
+source written by hand (data/languages), 12 November 2026

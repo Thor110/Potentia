@@ -1,6 +1,8 @@
 # Changes since b87b9b4 "sieve state space delta save preservation infinite raid system" (12 November 2026)
 
-Eleven commits (8a15014 to ce94ca3). This zip replaces the earlier zips since your last push. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stages 1 to 3; seven ideas noted.
+Thirteen commits (8a15014 to 3a3e858). This zip replaces the earlier zips since your last push. The RAID's authorship secured in its licence; the infinite RAID, stage 2; the catalogue of formats, stages 1 to 3; the System Viewer with Formats and Language; eight ideas noted.
+
+**One file to delete, if an earlier zip of today put it there:** `Sieve/data/catalogue/language-english.format`. English now lives in `Sieve/data/languages/`; with both, the same id twice, the hand-written entries are refused.
 
 **Build:** a new core source, `core/src/catalogue.cpp`, is in CMakeLists.txt, so CMake must run again.
 
@@ -41,6 +43,13 @@ Eleven commits (8a15014 to ce94ca3). This zip replaces the earlier zips since yo
 - **The hand-written entries** are copied beside the programs when they are built, and both programs look for them there (CMakeLists.txt).
 - **Tests:** CI step 10 walks it (the ring at image, eight doors; through to document; Home; L at Greek) and passes (975 s).
 
+## The System Viewer (3f0fd1b)
+- **System Viewer** on the main menu (after Personal Dimensions) and on the pause menu: **Formats** or **Language**, opening the setup menu with that system in the right-hand panel. **S** there turns from one to the other, and the tab names the one shown (FORMATS or LANGUAGE).
+- **The language catalogue** (**Sieve/data/languages/**, new): thirteen languages (English, Welsh, French, German, Spanish, Greek, Russian, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean) in five families, each with its ISO 639 codes and linked to the scripts it is written in. Only English says Sieve does more than show its script (its dictionaries and voice). A README there says how to add one.
+- **One web:** the two catalogues load together, 187 entries, every one reaching information; a language's door leads to its script and on to everything else (`sieve catalogue --path language-welsh,file-png`: Welsh, Indo-European, language, information, data, image, PNG). `sieve catalogue` reads both folders.
+- **Tests:** every language reaches information and links to a script; CI step 10 walks the System Viewer screen, S to LANGUAGE, and Japanese through to its kana. The unit suite passes (180,426 checks); CI steps 4 (132 s) and 10 (971 s) pass.
+- Not yet: the LANGUAGE page on the CHARACTER side, where a character chooses what it speaks.
+
 ## Ideas
 - **Sieve/docs/IDEAS.md §19.178:** the RAID's lockdown against spam before stage 3 shares storage between machines: one character per verified identity, each dimension's own limits, and what is still to decide (how identity is verified while kept private, the quotas, what happens over a limit).
 - **Sieve/docs/IDEAS.md §19.179:** the RAID between machines as peer to peer with a few known nodes to start from; IP addresses as a first limit (weak, and personal data, so kept as salted hashes), then digital ID, then a character's own record, each step added without removing the one before.
@@ -49,3 +58,4 @@ Eleven commits (8a15014 to ce94ca3). This zip replaces the earlier zips since yo
 - **Sieve/docs/IDEAS.md §19.181:** implementations side by side (your mesh scaler and your friend's), measured on the same inputs and steered towards their shortest form, with a program's packed size as the measurable bound on its Kolmogorov complexity; applications as entries of the catalogue.
 - **Sieve/docs/IDEAS.md §19.182:** the catalogue as another node viewer, like the node graph for items and maps: one viewer for every web.
 - **Sieve/docs/IDEAS.md §19.183:** a catalogue of spoken languages as a LANGUAGE page for characters, made the same way as FORMATS; and a System Viewer on the main and pause menus, opening FORMATS and LANGUAGE as the first two systems to chart. Spelling kept British: "catalogue" is the noun and the verb.
+- **Sieve/docs/IDEAS.md §19.184:** a recorder and replay for every game (inputs over time, replayed exactly where a game is deterministic, as Sieve's systems are), and a film studio with a video editor on the main and pause menus; a first step would be `--record` and `--replay` for the hallway.

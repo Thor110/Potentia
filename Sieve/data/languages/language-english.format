@@ -1,0 +1,9 @@
+sieve-format-v1
+id language-english
+kind language
+name English
+link part-of family-indo-european
+link written-in script-ascii
+recognised ISO 639-1 en; ISO 639-3 eng
+sieve the pages line's alphabets lower27, babel29 and ascii95; the guided model's dictionaries (SCOWL, data/dictionaries); Sieve's voice (CMUdict, data/voice)
+source written by hand (data/languages), 12 November 2026

@@ -1,0 +1,9 @@
+sieve-format-v1
+id language-hindi
+kind language
+name Hindi
+link part-of family-indo-european
+link written-in script-devanagari
+recognised ISO 639-1 hi; ISO 639-3 hin
+sieve its script can be taken onto the pages line (L at the script's door)
+source written by hand (data/languages), 12 November 2026

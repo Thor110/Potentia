@@ -399,6 +399,12 @@ $H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
+# The System Viewer (IDEAS 19.183): on the main menu after Personal Dimensions, its two systems, and S
+# in the panel turning from FORMATS to LANGUAGE (the five families, writing and information round
+# "language"); a language leads to the scripts it is written in.
+$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Down" --screenshot sys-menu.png | tr -d '\r' | q "^read aloud: Language$"
+$H --menu --catalogue-entry information --press "s" --screenshot sys-language.png | tr -d '\r' | q "^catalogue: language: 7 doors$"
+$H --menu --catalogue-entry language-japanese --press "Right,Return" --screenshot sys-kana.png | tr -d '\r' | q "^catalogue: script-japanese-kana: "
 # In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt
