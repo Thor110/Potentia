@@ -349,6 +349,7 @@ side.char.bad_setting = the settings file's character was refused ({0}): the def
 side.yes = yes
 side.no = no
 side.footer = G walk  R seed  [ ] turn  A play  Ctrl+S/O/I/K files
+side.tabs.keys = PgUp/PgDn: tabs
 side.char.from_skeleton = none: spheres given (a skeleton)
 side.char.given = -
 side.char.skeleton = {0}: a skeleton of {1} joints is your character now; {2}

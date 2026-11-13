@@ -466,6 +466,8 @@ private:
     // coming in sends the settings out, and they come back when it goes, if they were in before it.
     bool panel_before_side_ = false;
     SDL_FRect side_tab_ = {};    // its tab at the right edge, while it is out
+    SDL_FRect side_tabs_[4] = {}; // its pages' tabs along its top, by page, to be clicked
+    void side_page_to(int page); // to that page (PgUp/PgDn, Ctrl+Left/Right, or its tab clicked)
     int side_page_ = 0;          // the page shown (0: CHARACTER, 1: YOURS, 2: CATALOGUE)
     // CATALOGUE: every entry (the code's and data/catalogue's), where you stand, the door chosen, and
     // the way back.

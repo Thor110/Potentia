@@ -1718,6 +1718,14 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             toggle_side();
             return;
         }
+        // The right-hand panel's tabs, clicked: that page.
+        if (side_open_)
+            for (int i = 0; i < 4; ++i)
+                if (inside(side_tabs_[i], mx, my))
+                {
+                    side_page_to(i);
+                    return;
+                }
         for (int c = 0; c < kLines + 1; ++c)
         {
             if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
@@ -1801,15 +1809,15 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
             static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
             open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
         }
-        else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN)
+        else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN ||
+                 ((e.key.mod & SDL_KMOD_CTRL) && (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)))
         {
-            // In the order the tabs stand: CHARACTER, LANGUAGE, YOURS, SYSTEMS (pages 0, 3, 1, 2).
+            // The next tab or the one before, in the order they stand: CHARACTER, LANGUAGE, YOURS,
+            // SYSTEMS (pages 0, 3, 1, 2). Ctrl+Left/Right too, for keyboards with no Page keys.
             static const int kOrder[] = {0, 3, 1, 2};
             int at = 0;
             while (at < 4 && kOrder[at] != side_page_) ++at;
-            side_page_ = kOrder[(at + (e.key.key == SDLK_PAGEUP ? 3 : 1)) % 4];
-            if (side_page_ == 1) yours_read();
-            if (side_page_ == 2 || side_page_ == 3) cat_init();
+            side_page_to(kOrder[(at + (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_LEFT ? 3 : 1)) % 4]);
         }
         else if (side_page_ == 1) yours_key(e.key.key);
         else if (side_page_ == 2) cat_key(e.key.key);
@@ -2057,6 +2065,13 @@ void Menu::toggle_panel()
         side_open_ = false;
         panel_before_side_ = false;
     }
+}
+
+void Menu::side_page_to(int page)
+{
+    side_page_ = page;
+    if (page == 1) yours_read();
+    if (page == 2 || page == 3) cat_init();
 }
 
 void Menu::toggle_side()
@@ -3400,6 +3415,7 @@ void Menu::render_side(float W, float H)
     for (const int i : {0, 3, 1, 2}) // (the order the tabs stand in)
     {
         const std::string name = tr(kPages[i]);
+        side_tabs_[i] = {px - 4, top + 6, text_width(name, 1) + 8, 22}; // (clicked: that page)
         text(r_, px, top + 12, name, 1, i == side_page_ ? white : grey);
         if (i == side_page_)
         {
@@ -3407,6 +3423,12 @@ void Menu::render_side(float W, float H)
             SDL_RenderLine(r_, px, top + 24, px + text_width(name, 1), top + 24);
         }
         px += text_width(name, 1) + 16;
+    }
+    // How to move between them, at the tabs' right end (where it fits), so it is seen on every page.
+    {
+        const std::string keys = tr("side.tabs.keys");
+        const float kw = text_width(keys, 1);
+        if (px + kw <= x + kSideW - 14) text(r_, x + kSideW - 14 - kw, top + 12, keys, 1, grey);
     }
     if (side_page_ == 1)
     {

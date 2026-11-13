@@ -431,6 +431,10 @@ $H --menu --press "\`,Escape" --screenshot one-back.png | tr -d '\r' > one-back.
 q "^settings panel: in$" one-back.txt
 if grep -q "^right-hand panel: " one-back.txt; then exit 1; fi
 $H --menu --press "Tab,\`,Escape" --screenshot one-out.png | tr -d '\r' | q "^settings panel: out$"
+# The right-hand panel's tabs: PgUp/PgDn, or Ctrl+Left/Right for keyboards with no Page keys (or
+# a tab clicked), in the order they stand: CHARACTER, LANGUAGE, YOURS, SYSTEMS, and round again.
+$H --menu --press "\`,Ctrl+Right" --screenshot tabs-right.png | tr -d '\r' | q "^right-hand panel: open (LANGUAGE)$"
+$H --menu --press "\`,Ctrl+Left" --screenshot tabs-left.png | tr -d '\r' | q "^right-hand panel: open (CATALOGUE)$"
 # In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt
