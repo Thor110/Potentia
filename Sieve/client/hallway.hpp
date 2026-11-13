@@ -1457,6 +1457,7 @@ public:
     const std::optional<Space::Digits>& tailored_unit() const { return tailored_unit_; }
     // The line you are on, by its --line name (dimensions.hpp): where a new hallway should start.
     const char* line_name() const { return kDimensions[li_].line; }
+    std::string tile_decimal() const { return tile_.to_decimal(); } // (a recording's start: sieve-replay-v1)
     // The item at `unit` of this line in hand, on its COST tab (after Request::Tailored).
     void hold_on_cost(const Space::Digits& unit);
     // For screenshots and tests: K on the item in hand, waited for; with a path, what Return would

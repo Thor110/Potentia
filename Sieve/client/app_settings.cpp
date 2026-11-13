@@ -222,6 +222,19 @@ AppSettings AppSettings::load(const fs::path& path)
                 {
                 }
         }
+        else if (section == "replays")
+        {
+            if (key == "cached") s.replays_cached = value;
+            else if (key == "max_minutes" || key == "min_free_mb")
+                try
+                {
+                    const int n = std::clamp(std::stoi(value), 1, 1 << 20);
+                    (key == "max_minutes" ? s.replays_max_minutes : s.replays_min_free_mb) = n;
+                }
+                catch (...)
+                {
+                }
+        }
         else if (section == "raid")
         {
             if (key == "drives") s.raid_drives = value;
@@ -387,6 +400,9 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
         {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
         {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
+        {"replays", "max_minutes", std::to_string(replays_max_minutes), "the longest a recording runs (F12 in the hallway starts and stops one), in minutes; at it, the recording stops and is kept (30 by default)"},
+        {"replays", "min_free_mb", std::to_string(replays_min_free_mb), "the least free space, in MB, kept where recordings are written: checked every few seconds while one runs, and below it (or below twice the recording's size, if more) the recording stops and is kept (256 by default)"},
+        {"replays", "cached", replays_cached, "recordings kept as .sieve that are decoded once into the cache (beside the filters') rather than each time they are played, useful for long ones: their files' SHA-256s, separated by commas (the replay viewer's checkbox, one a recording); empty: none"},
         {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
         {"raid", "copies", std::to_string(raid_copies), "with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer"},
         {"raid", "peers", raid_peers, "the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none"},

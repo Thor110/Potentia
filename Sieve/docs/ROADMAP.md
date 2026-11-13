@@ -29,8 +29,11 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    in the save; a character creator of its own on the main menu, the setup menu's CHARACTER page linking
    to it. (*The infinite RAID's placement, settled with Edward and built 13 November 2026: 3 copies by
    default, mirrored, kept whole by its owner's checks, Settings > Infinite RAID; docs/INFINITE-RAID.md.*)
-5. **Two first steps asked for:** `--record` / `--replay` in the hallway (§19.184), and music
+5. **Two first steps asked for:** (*recording and replay built 13 November 2026: `sieve-replay-v1`, F12, the Replays viewer with its cache boxes*) `--record` / `--replay` in the hallway (§19.184), and music
    visualiser rings for Sieve's own notes.
+5b. **Personal Dimensions into a world of its own** (Edward, 13 November 2026; IDEAS §19.187): an empty 3D
+   world, by default a grassy hill under a blue sky with clouds, drawn from a seed, in place of the
+   setup menu's YOURS.
 6. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
    tactile Sieve: identity never by colour alone, text size and contrast, the magnifying lens of
    §19.160), 10 (hallway polish).

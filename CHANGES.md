@@ -1,46 +1,49 @@
-# Actions to animations, and the Character Creator (IDEAS 19.186)
+# Recording and replay (IDEAS 19.184), and the Replays viewer
 
-## The action map: `sieve-actions-v1`
+## The recording format: `sieve-replay-v1` (SPECIFICATIONS §12.0q)
 
-- Covers seven actions: idle, walk, run, jump, take, read and wave.
-- Each action names the animation that plays it, by SHA-256, or `none`.
-- An animation **fits** a character when it has no more bones than the character has spheres.
-- Maps are stored as `actions/<SHA-256>.actions` beside the settings file, and `[character] actions` names the one in use.
-- With `[raid] drives` set, Ctrl+S also keeps the map in the RAID.
-
-## The save: `sieve-save-v2`
-
-- Adds an `actions SHA-256` line, so a custom character brings its actions with it.
-- A save without a map is still written as v1, so every existing save keeps its id.
-
-## The Character Creator
-
-- Opens from the main menu (after the System Viewer) or with **C** on the CHARACTER page. It uses the whole window.
-- The character's settings are on the left and the character is drawn large on the right; drag, the wheel, or [ and ] turn it.
-- The seven actions are listed below the settings, each with its animation:
-  - **Tab** switches between the settings and the actions.
-  - **Left/Right** go through `none` and every animation in your store that fits. One that doesn't fit, or isn't in the store, is shown in red.
-  - **Enter** plays the chosen action's animation, or says there is none.
-- Ctrl+S/O/I/K work as on the CHARACTER page. **Esc** goes back to where you opened it.
+- It keeps where you began: the line, the tile, and the camera exactly.
+- Then, for every frame, it keeps the frame's time, the keys held, and that frame's input events.
+- Playback runs the same steps again, so a recording plays back exactly. Each frame's time is rounded to the microsecond as it's recorded so the steps match.
 
 ## In the hallway
 
-- With a map, your character plays idle when you stand, walk when you move, run with Shift, and read while you hold an item.
-- An action with no animation plays nothing, and the hallway says so once for each action.
-- Without a map, its one animation plays whatever it does, as before.
-- For pictures: `--action NAME` holds one action, and `--creator` (with `--menu`) opens the creator.
+- **F12** starts and stops a recording.
+- Recordings go into `replays/` beside the settings file, packed as `.sieve` (as you asked), and are named by the date and time they began.
+- A recording stops by itself and keeps what it has:
+  - at **30 minutes** (`[replays] max_minutes`), or
+  - when the free space where it's kept, checked every five seconds, falls below **256 MB** (`[replays] min_free_mb`) or twice the recording's size, whichever is more.
 
-## Still to come
+## Replays (main menu, after Character Creator)
 
-- Jump, take and wave are in the map but not yet triggered in the hallway.
-- Characters having their own extra actions (emotes) would be a later version.
+- Lists every recording in `replays/`.
+- **Enter** plays one in the hallway, then hands the hallway back to you.
+- **Space** ticks its **cache** box: a packed recording is then decoded once into the cache (beside the filters' cache) instead of every time it's played. The box is kept by the file's SHA-256 in `[replays] cached`.
+
+## From the command line
+
+- `--record FILE`: a `.replay` file is plain text, `.sieve` is packed.
+- `--replay FILE`
+- `--replay-cache`
+- With `--screenshot`, a recording is played through and the picture is taken where it ends.
+
+## Limits
+
+- A recording only plays where the hallway starts the same way it did when recorded (the same settings). Otherwise it's refused, saying where it began.
+- Moving the hallway to any recording's start, free cameras and the film studio come next.
+
+## Noted
+
+- IDEAS §19.187 and ROADMAP step 5b: Personal Dimensions opening onto a world of its own, by default a grassy hill under a blue sky with clouds, drawn from a seed rather than copying the XP photograph.
 
 ## Checked
 
-- Unit tests for the format and save v2.
-- CI 01, 04 and 10 passed, with new checks for the main menu row, C on the CHARACTER page, setting idle and walk in the creator, the map kept, and the hallway playing walk and saying jump has none.
+- CI 10 passed. A 132-frame walk (1,612 bytes as text, 256 packed) ends in the same place whether played as text, packed or cached.
+- Played back while recording, it is written again byte for byte.
+- A recording begun elsewhere is refused.
+- The viewer's cache box is kept.
 
 ## Files
 
-- New: `core/include/sieve/actions.hpp` and `core/src/actions.cpp`. Re-run CMake.
+- New: `client/replay.cpp` and `client/replay.hpp`. Re-run CMake.
 - No files to delete.

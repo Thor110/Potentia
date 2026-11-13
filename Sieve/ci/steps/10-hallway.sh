@@ -397,6 +397,31 @@ test -n "$amap"
 head -1 "crt/actions/$amap.actions" | tr -d '\r' | q "^sieve-actions-v1$"
 $H --settings crt/c.ini --no-menu --action walk --animation-frame 15 --screenshot crt-walk.png | tr -d '\r' | q "^action: walk: 45adcf033beb3fc647acd80ff8053472d5f3bef3561cf2510e6208ae6894acb1$"
 $H --settings crt/c.ini --no-menu --action jump --screenshot crt-jump.png | tr -d '\r' | q "^action: jump: none$"
+# Recording and replay (IDEAS 19.184, sieve-replay-v1): a recording's start written where the
+# hallway begins; frames added (W held for 1.5 s, the mouse turned, S held, Q pressed); played through,
+# it ends where it ends every time, as plain text, packed as .sieve, and packed and cached; played while
+# recording, it is written again the same, byte for byte. One begun elsewhere is refused, saying where.
+rm -rf rpl
+mkdir -p rpl/replays
+$H --no-menu --record rpl/start.replay --screenshot rpl-start.png > /dev/null
+head -1 rpl/start.replay | tr -d '\r' | q "^sieve-replay-v1$"
+python -c "
+t = open('rpl/start.replay').read()
+fr = ['f 16667 26'] * 90 + ['f 16667 - mm:600:350:120:0'] + ['f 16667 7'] * 40 + ['f 16667 - kd:20:113:0:0 ku:20:113:0:0']
+open('rpl/walk.replay', 'w', newline='\n').write(t + '\n'.join(fr) + '\n')"
+$H --no-menu --replay rpl/walk.replay --record rpl/again.replay --screenshot rpl-walk.png | tr -d '\r' > rpl-walk.txt
+q "^replay: 132 frames, 2.200 s$" rpl-walk.txt
+cmp rpl/walk.replay rpl/again.replay
+where=$(grep -A1 "^replay: " rpl-walk.txt | tail -1)
+$H --no-menu --replay rpl/walk.replay --record rpl/replays/walk.sieve --screenshot rpl-pack.png > /dev/null
+$H --no-menu --replay rpl/replays/walk.sieve --screenshot rpl-packed.png | tr -d '\r' | grep -A1 "^replay: " | tail -1 | cmp - <(printf '%s\n' "$where")
+$H --no-menu --replay rpl/replays/walk.sieve --replay-cache --screenshot rpl-cached.png | tr -d '\r' | grep -A1 "^replay: " | tail -1 | cmp - <(printf '%s\n' "$where")
+if $H --no-menu --line image --replay rpl/walk.replay --screenshot rpl-elsewhere.png > rpl-elsewhere.txt 2>&1; then exit 1; fi
+q "the recording began on the text line" rpl-elsewhere.txt
+# The replay viewer (the main menu's Replays): each recording a row, a packed one with its box to be
+# decoded once into the cache, ticked with Space and kept by its SHA-256 in [replays] cached.
+$H --main-menu --settings rpl/v.ini --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Space" --screenshot rpl-viewer.png | tr -d '\r' | q "^read aloud: walk.sieve, [0-9]* bytes  \[x\] cache$"
+grep -q "^cached = $(sha256sum rpl/replays/walk.sieve | cut -c1-64)" rpl/v.ini
 # Stage 4 of the catalogue: Ctrl+K's import is added to its importer's entry, as `sieve import` adds it.
 grep -c " what=import result=whole animations=1 .* joints=3 " "$SIEVE_STATS/model-gltf.stats" > /dev/null
 # The animation is kept too: in the store beside the settings file, named by its SHA-256 there.

@@ -2,6 +2,8 @@
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
 #include "raid_service.hpp"
+#include "replay.hpp"
+#include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
@@ -37,6 +39,7 @@
 #include <sstream>
 #include <chrono>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <functional>
 #include <iterator>
@@ -177,6 +180,11 @@ const char* kUsage =
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
     "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
     "                      19.165): the catalogue of formats as a ring of doors\n"
+    "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
+    "                      input with its time), written each time you leave it; FILE.sieve: packed\n"
+    "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
+    "                      back to you; with --screenshot, played through and pictured where it ends\n"
+    "  --replay-cache      decode a packed recording once into the cache, not each time ([replays] cached)\n"
     "  --action NAME       hold your character at one action for a picture (idle, walk, run, jump, take,\n"
     "                      read, wave): it plays that action's animation from its map, or none\n"
     "  --creator           with --menu: the Character Creator instead (the whole window, as the main menu's\n"
@@ -665,6 +673,131 @@ std::optional<sieve::Animation> animation_of(const AppSettings& app, const std::
     }
     if (a.has("character") || app.character_animation.empty()) return std::nullopt; // (a character by name plays nothing unless asked)
     return stored_animation(animation_store_dir(app_path), app.character_animation);
+}
+
+// Recordings (IDEAS 19.184, sieve-replay-v1, client/replay.hpp): kept as text, or, named .sieve, packed
+// as Sieve packs its own files (Edward, 13 November 2026: "those text files should also get sieved just
+// like sfilter files"), the recording one member of it, read back and checked on the spot.
+constexpr uint64_t kReplaySieveRoof = uint64_t(256) << 20;
+
+// A packed recording is decoded in memory each time it is played, or, where it is marked cached
+// ([replays] cached, by the .sieve's SHA-256; --replay-cache for one run), decoded once into the cache
+// (kind "replays", beside the filters') and read from there, every member checked against the index
+// at each later start as the filters' are (Edward: "a checkbox for caching them so that they don't
+// always have to be decoded, this would be useful for large replays").
+Replay load_replay_file(const std::string& path, bool cached = false)
+{
+    const std::filesystem::path p = sieve::from_u8(path);
+    std::string text;
+    if (p.extension() == ".sieve" && cached)
+    {
+        const std::filesystem::path dir = sieve::cli::decoded_sieve(p, "replays", kReplaySieveRoof);
+        std::error_code ec;
+        for (const auto& e : std::filesystem::recursive_directory_iterator(dir, ec))
+            if (e.is_regular_file() && e.path().extension() == ".replay")
+            {
+                std::ifstream in(e.path(), std::ios::binary);
+                text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                break;
+            }
+        if (text.empty()) throw std::invalid_argument(path + " holds no .replay");
+    }
+    else if (p.extension() == ".sieve")
+    {
+        for (auto& [name, bytes] : sieve::cli::files_in_sieve(p, kReplaySieveRoof))
+            if (name.size() > 7 && name.substr(name.size() - 7) == ".replay")
+            {
+                text.assign(bytes.begin(), bytes.end());
+                break;
+            }
+        if (text.empty()) throw std::invalid_argument(path + " holds no .replay");
+    }
+    else
+    {
+        std::ifstream in(p, std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + path);
+        text.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+    try
+    {
+        return read_replay(text);
+    }
+    catch (const std::invalid_argument& e)
+    {
+        throw std::invalid_argument(path + ": " + e.what());
+    }
+}
+
+void save_replay_file(const std::string& path, const Replay& r)
+{
+    const std::filesystem::path p = sieve::from_u8(path);
+    if (p.extension() != ".sieve")
+    {
+        std::ofstream out(p, std::ios::binary);
+        out << r.text();
+        if (!out) throw std::runtime_error("cannot write " + path);
+        return;
+    }
+    // Packed: the recording as one member of a folder of its own, packed and read back, then removed.
+    std::error_code ec;
+    const std::filesystem::path dir = std::filesystem::temp_directory_path(ec) / ("sieve-replay-" + std::to_string(SDL_GetTicksNS()));
+    std::filesystem::create_directories(dir, ec);
+    {
+        std::ofstream out(dir / (p.stem().string() + ".replay"), std::ios::binary);
+        out << r.text();
+    }
+    try
+    {
+        sieve::cli::pack_folder_sieve(dir, p, kReplaySieveRoof);
+    }
+    catch (...)
+    {
+        std::filesystem::remove_all(dir, ec);
+        throw;
+    }
+    std::filesystem::remove_all(dir, ec);
+}
+
+// Whether a recording is marked to be decoded once into the cache: --replay-cache, or its file's
+// SHA-256 in [replays] cached.
+bool replay_cached(const AppSettings& app, const Args& a, const std::string& path)
+{
+    if (a.has("replay-cache")) return true;
+    if (app.replays_cached.empty() || sieve::from_u8(path).extension() != ".sieve") return false;
+    const std::string sha = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(sieve::from_u8(path)));
+    return app.replays_cached.find(sha) != std::string::npos;
+}
+
+// A recording's start: where the hallway stands now (its line, its tile, the camera exactly).
+Replay replay_start_of(Hallway& hall)
+{
+    Replay r;
+    r.line = hall.line_name();
+    r.tile = hall.tile_decimal();
+    const Camera& c = hall.camera();
+    r.x = c.pos.x, r.y = c.pos.y, r.z = c.pos.z, r.yaw = c.yaw, r.pitch = c.pitch;
+    return r;
+}
+
+// Put the hallway where a recording began; it must be the same line and tile (the same settings and
+// options), else the replay is refused, saying where each is.
+void replay_begin(Hallway& hall, const Replay& r)
+{
+    if (r.line != hall.line_name() || r.tile != hall.tile_decimal())
+        throw std::invalid_argument("the recording began on the " + r.line + " line, tile " + r.tile + ", and this hallway starts on the " +
+                                    hall.line_name() + " line, tile " + hall.tile_decimal() + ": start it as the recording was started");
+    Camera& c = hall.camera();
+    c.pos = {r.x, r.y, r.z};
+    c.yaw = r.yaw;
+    c.pitch = r.pitch;
+}
+
+// One frame of a recording played: its events, then its step with its keys held.
+void replay_frame(Hallway& hall, const ReplayFrame& f, bool& quit)
+{
+    for (const SDL_Event& e : f.events) hall.handle(e, quit);
+    const auto keys = keyboard_of(f.held);
+    hall.update(float(f.dt_us) / 1e6f, keys.data());
 }
 
 // Your character's actions (IDEAS 19.186): the settings file's [character] actions (its map's SHA-256,
@@ -1555,6 +1688,23 @@ int run(const Args& a)
         if (a.has("save-view")) hall->save_view_to(a.get("save-view"));   // F in the viewer, without the dialog
         if (a.has("sample-degrees"))
             std::cout << hall->sample_degrees(a.get("sample-degrees"), a.get("sample-out", a.get("sample-degrees") + ".sieve"));
+        // A recording played through (IDEAS 19.184), every frame as it was, then the picture of where it
+        // ends; --record FILE with it writes what was played (the same, frame for frame).
+        if (a.has("replay"))
+        {
+            const Replay r = load_replay_file(a.get("replay"), replay_cached(app, a, a.get("replay")));
+            replay_begin(*hall, r);
+            Replay again = replay_start_of(*hall);
+            bool q = false;
+            for (const auto& f : r.frames)
+            {
+                replay_frame(*hall, f, q);
+                again.frames.push_back(f);
+            }
+            std::cout << "replay: " << r.frames.size() << " frames, " << hallway::hall::fixed(r.seconds(), 3) << " s\n" << hall->status() << "\n";
+            if (a.has("record")) save_replay_file(a.get("record"), again);
+        }
+        else if (a.has("record")) save_replay_file(a.get("record"), replay_start_of(*hall)); // (where it begins, no frames: a start to build on)
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
@@ -1609,6 +1759,8 @@ int run(const Args& a)
     std::string open_system; // the System Viewer chosen: it opens on that system, the whole window (Esc: the main menu)
     bool open_creator = false; // the Character Creator chosen: the whole window, Esc back to the main menu
     bool first = true;
+    bool first_hallway_of_run = true; // (--record and --replay: the run's first hallway)
+    std::string pending_replay;       // a recording chosen in the replay viewer, played in the next hallway
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
@@ -1677,6 +1829,14 @@ int run(const Args& a)
             if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
             if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
             if (r == MainMenu::Result::Creator) open_creator = true;
+            if (r == MainMenu::Result::Replay)
+            {
+                // A recording chosen in the replay viewer: into the hallway as the settings stand, then
+                // played from where it began.
+                pending_replay = sieve::u8(mm.replay_chosen());
+                settings_chosen = true;
+                skip_setup = true;
+            }
             if (r == MainMenu::Result::ManualNav)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
@@ -1819,6 +1979,80 @@ int run(const Args& a)
         }
         skip_setup = false;
         SDL_SetWindowRelativeMouseMode(window, true);
+        // Recording (--record FILE) and replay (--replay FILE), the first hallway of the run only
+        // (IDEAS 19.184): a replay plays its frames in place of your inputs (closing the window still
+        // closes it) and then hands the hallway back to you; a recording keeps every frame from here,
+        // written each time the hallway is left.
+        std::optional<Replay> playing, recording;
+        size_t played = 0;
+        std::string record_path;           // where the recording goes
+        uint64_t record_bytes = 0;         // its text's length so far
+        double record_seconds = 0;
+        Uint64 record_checked = 0;         // when the free space was last looked at
+        if (first_hallway_of_run && a.has("replay"))
+        {
+            playing = load_replay_file(a.get("replay"), replay_cached(app, a, a.get("replay")));
+            replay_begin(*hall, *playing);
+        }
+        if (!pending_replay.empty())
+        {
+            try
+            {
+                playing = load_replay_file(pending_replay, replay_cached(app, a, pending_replay));
+                replay_begin(*hall, *playing);
+            }
+            catch (const std::exception& ex)
+            {
+                playing.reset();
+                hall->warn(trf("msg.replay_refused", {ex.what()}));
+            }
+            pending_replay.clear();
+        }
+        if (first_hallway_of_run && a.has("record"))
+        {
+            recording = replay_start_of(*hall);
+            record_path = a.get("record");
+        }
+        first_hallway_of_run = false;
+        // Recording stopped (F12, its limit, or too little space): written, and said.
+        auto stop_recording = [&](const std::string& why_key, const std::string& why_arg) {
+            if (!recording) return;
+            try
+            {
+                save_replay_file(record_path, *recording);
+                if (why_key.empty()) hall->message(trf("msg.record_off", {std::to_string(recording->frames.size()), hallway::hall::fixed(record_seconds, 1), record_path}));
+                else hall->warn(trf(why_key.c_str(), {why_arg, record_path}));
+                std::cout << "recorded  " << recording->frames.size() << " frames, " << hallway::hall::fixed(record_seconds, 1) << " s, to " << record_path << "\n";
+            }
+            catch (const std::exception& ex)
+            {
+                hall->warn(trf("msg.record_failed", {ex.what()}));
+            }
+            recording.reset();
+            record_bytes = 0;
+            record_seconds = 0;
+        };
+        // F12: a recording started, into `replays` beside the settings, named by when it began, packed.
+        auto start_recording = [&] {
+            std::error_code ec;
+            const std::filesystem::path dir = app_path.parent_path() / "replays";
+            std::filesystem::create_directories(dir, ec);
+            const std::time_t t = std::time(nullptr);
+            std::tm u{};
+#ifdef _WIN32
+            localtime_s(&u, &t);
+#else
+            localtime_r(&t, &u);
+#endif
+            char name[64];
+            std::snprintf(name, sizeof name, "%04d-%02d-%02d-%02d%02d%02d.sieve", u.tm_year + 1900, u.tm_mon + 1, u.tm_mday, u.tm_hour, u.tm_min, u.tm_sec);
+            record_path = sieve::u8(dir / name);
+            recording = replay_start_of(*hall);
+            record_bytes = recording->text().size();
+            record_seconds = 0;
+            record_checked = 0;
+            hall->message(trf("msg.record_on", {std::to_string(app.replays_max_minutes), record_path}));
+        };
         Menu::Result in_game_menu = Menu::Result::Back;
         bool harness_went = false; // the pause menu's harness went to its model: a hallway on the AI line
         for (;;)
@@ -1829,14 +2063,76 @@ int run(const Args& a)
             while (!quit)
             {
                 SDL_Event e;
-                while (SDL_PollEvent(&e)) hall->handle(e, quit);
+                ReplayFrame frame;
+                while (SDL_PollEvent(&e))
+                {
+                    if (e.type == SDL_EVENT_KEY_DOWN && e.key.scancode == SDL_SCANCODE_F12 && !e.key.repeat && !playing)
+                    {
+                        // F12 starts and stops a recording (itself never recorded).
+                        if (recording) stop_recording("", "");
+                        else start_recording();
+                        continue;
+                    }
+                    if (playing)
+                    {
+                        if (e.type == SDL_EVENT_QUIT) hall->handle(e, quit); // (while a replay plays, only closing is yours)
+                        continue;
+                    }
+                    hall->handle(e, quit);
+                    if (recording && !replay_token(e).empty()) frame.events.push_back(e);
+                }
                 pump_speech(); // (a reply Sieve's voice has made, played)
                 const Uint64 now = SDL_GetTicksNS();
-                const float dt = std::min(0.1f, float(now - last) / 1e9f);
+                float dt = std::min(0.1f, float(now - last) / 1e9f);
                 last = now;
+                if (playing && played < playing->frames.size())
                 {
+                    // The recording's frame in place of yours, kept to its own time.
+                    const ReplayFrame& f = playing->frames[played++];
+                    sieve::cli::timings::Scope timed("hallway.frame.update");
+                    replay_frame(*hall, f, quit);
+                    if (recording)
+                    {
+                        recording->frames.push_back(f);
+                        record_bytes += replay_frame_line(f).size();
+                        record_seconds += double(f.dt_us) / 1e6;
+                    }
+                    if (played == playing->frames.size())
+                    {
+                        hall->message(trf("msg.replay_done", {std::to_string(played)}));
+                        playing.reset();
+                    }
+                }
+                else
+                {
+                    if (recording)
+                    {
+                        // Rounded to the microsecond, so the replay takes the same steps.
+                        frame.dt_us = std::clamp<uint32_t>(uint32_t(std::lround(double(dt) * 1e6)), 1, kReplayMaxDtUs);
+                        dt = float(frame.dt_us) / 1e6f;
+                        frame.held = held_keys(SDL_GetKeyboardState(nullptr));
+                        record_bytes += replay_frame_line(frame).size();
+                        record_seconds += double(frame.dt_us) / 1e6;
+                        recording->frames.push_back(std::move(frame));
+                    }
                     sieve::cli::timings::Scope timed("hallway.frame.update");
                     hall->update(dt, SDL_GetKeyboardState(nullptr));
+                }
+                // A recording's safety valves: its longest time, and the free space where it is kept,
+                // looked at every five seconds (it needs at least [replays] min_free_mb, and twice
+                // its own size to be written and packed). Either stops it, keeping what it has.
+                if (recording)
+                {
+                    if (record_seconds >= double(app.replays_max_minutes) * 60) stop_recording("msg.record_limit", std::to_string(app.replays_max_minutes));
+                    else if (now - record_checked >= 5000000000ull)
+                    {
+                        record_checked = now;
+                        std::error_code ec;
+                        const std::filesystem::path where = sieve::from_u8(record_path).parent_path();
+                        const auto sp = std::filesystem::space(where.empty() ? std::filesystem::path(".") : where, ec);
+                        const uint64_t need = std::max<uint64_t>(uint64_t(app.replays_min_free_mb) << 20, 2 * record_bytes);
+                        if (!ec && sp.available < need) stop_recording("msg.record_disk", std::to_string(sp.available >> 20));
+                    }
                 }
                 {
                     sieve::cli::timings::Scope timed("hallway.frame.render");
@@ -1848,6 +2144,18 @@ int run(const Args& a)
                     present(renderer);
                 }
             }
+            // The recording so far, written each time the hallway is left (a menu, or closing); it
+            // carries on if the same hallway is come back to.
+            if (recording)
+                try
+                {
+                    save_replay_file(record_path, *recording);
+                    std::cout << "recorded  " << recording->frames.size() << " frames, " << hallway::hall::fixed(record_seconds, 1) << " s, to " << record_path << "\n";
+                }
+                catch (const std::exception& ex)
+                {
+                    std::cerr << "warning: the recording was not written: " << ex.what() << "\n";
+                }
             // F1: the setup menu over the hallway, which is kept. Esc there comes back to it just
             // as it was; ENTER THE HALLWAY builds a new one from the new settings.
             if (hall->menu_requested())

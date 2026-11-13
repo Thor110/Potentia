@@ -7586,7 +7586,17 @@ etc", and "that would be a new video editor in the main and pause menu".
   hallway's exports already write video with ffmpeg), for machinima.
 - *A first step that could be built:* recording the hallway's own inputs with their times while
   walking, and playing them back exactly (the hallway is deterministic given its settings and its
-  start), as `--record FILE` and `--replay FILE`. Planned only.
+  start), as `--record FILE` and `--replay FILE`. Planned only. (*Built 13 November 2026:* `sieve-replay-v1`
+  (SPECIFICATIONS §12.0q), `--record`, `--replay`, F12 in the hallway, recordings packed as `.sieve`
+  (Edward: "those text files should also get sieved just like sfilter files"), the main menu's Replays
+  with a cache box for each (Edward: "a checkbox for caching them so that they don't always have to be
+  decoded, this would be useful for large replays, ie an individual checkbox for replay in the list"),
+  and F12's limits (Edward: "F12 should be the default stop/start recording key, we should have a
+  default max time limit for recordings as well as persistent checks to ensure that there is enough
+  disk space for the current recording": 30 minutes, and the space looked at every five seconds). A
+  walk of 132 frames, 1,612 bytes as text and 256 packed, ends in the same place played from either,
+  and is written again byte for byte while it plays. Next: playing from anywhere (moving the hallway
+  to a recording's start), free cameras, and the film studio.)
 
 **19.185 Every document and format type built on Sieve's own principles, scaling with its state space
 (Edward, 12 November 2026).** His words: "every document type and format type from sfilter to this
@@ -7685,4 +7695,21 @@ the setup one just stays simple but can link through to it".
   do, an action with none said once. Decided as proposed: a fixed list first, a choice edits the map.
   Still to come: jump, take and wave played when the hallway has those moments; a character's own
   actions (emotes) as a later version.
+
+**19.187 Personal Dimensions open onto a world of their own: a grassy hill under a blue sky (Edward, 13
+November 2026).** His words: "currently personal dimension just goes through to the setup page, it
+should go through to an empty 3D world, the default starting world should be a grassy hill with blue
+sky and clouds, something akin to the windows xp background".
+- *Today:* the main menu's Personal Dimensions opens the setup menu with YOURS in its right-hand panel
+  (§19.152, §19.157); your stored characters stand in the hallway's corridor.
+- *Asked:* Personal Dimensions goes into a 3D world of its own, empty but for you (and your
+  characters), its default a rolling grassy hill, a blue sky and white clouds: the feeling of that
+  famous desktop, made from Sieve's own shapes, not a copy of the photograph (which is someone
+  else's), so drawn from a seed like everything else: the hill a smooth height field, the grass a
+  colour gradient (and later blades), the sky a gradient from deep blue overhead to pale at the
+  horizon, the clouds soft shapes drifting.
+- *How it fits:* a world is already a line (WORLDS, §19.85 onwards), so the default world is one
+  address on it, and a person's own world is theirs to change from there and keep (the store, the
+  RAID); the character, its actions (§19.186) and later others' characters walk in it.
+- *Planned only;* after the music visualiser rings (ROADMAP "Next, in order").
 

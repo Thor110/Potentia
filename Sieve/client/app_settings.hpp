@@ -154,6 +154,12 @@ struct AppSettings
     bool raid_share = false, raid_serve = false;
     std::string raid_peers, raid_key, raid_listen = "0.0.0.0:47100", raid_held;
     int raid_space_mb = 1024, raid_per_peer_mb = 64;
+    // Recordings kept packed (.sieve) that are decoded once into the cache rather than each time they
+    // are played (IDEAS 19.184; the replay viewer's checkbox, one a recording): their SHA-256s, by commas.
+    std::string replays_cached;
+    // A recording's longest (F12 in the hallway), and the least free space kept where recordings are
+    // written: below it, a recording stops and keeps what it has (Edward, 13 November 2026).
+    int replays_max_minutes = 30, replays_min_free_mb = 256;
     // How many machines keep each piece of a shared save (Edward, 13 November 2026: 3 by default).
     int raid_copies = 3;
     int character_drawing = 1;

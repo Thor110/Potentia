@@ -28,11 +28,13 @@ class MainMenu
 public:
     MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path, DisplayInfo display);
 
-    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Systems, Creator, Quit };
+    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Systems, Creator, Replay, Quit };
     Result run();
     // The system chosen in the System Viewer (Result::Systems): the entry it stands at to begin with
     // ("information" for FORMATS, "language" for LANGUAGE).
     const std::string& system_root() const { return system_root_; }
+    // The recording chosen in the replay viewer (Result::Replay), to play in the hallway.
+    const std::filesystem::path& replay_chosen() const { return replay_chosen_; }
     // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
     // screen, and backing out of it ends the menu instead of going to the main screen.
     Result run_settings()
@@ -48,17 +50,20 @@ public:
     // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
-    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid };
+    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays };
     // A Program row names another program Sieve runs (ffmpeg): Enter chooses it with the system's
     // file window, Left goes back to looking for one by itself.
     // An Info row only shows a value (one set in the settings file: the RAID's machines).
-    enum class Kind { Action, Toggle, Choice, Number, Program, Info };
+    // A Replay row is one recording in the replay viewer: Enter plays it, Space (or Left/Right) ticks
+    // its box, decoding it once into the cache rather than each time (a .sieve recording).
+    enum class Kind { Action, Toggle, Choice, Number, Program, Info, Replay };
     struct Item
     {
         Kind kind;
         std::string id; // also the language key: "item.<id>", and "help.<id>"
     };
     std::vector<Item> items() const;
+    static std::string help_key(const Item& it);
     std::string value_of(const Item& it) const;
     void change(int dir);        // the selected item: act, toggle, step, or open its list
     void back();
@@ -81,6 +86,13 @@ private:
     AppSettings& s_;
     std::filesystem::path path_;
     std::string raid_note_; // Settings > RAID: the key made, or why not
+    // The replay viewer (IDEAS 19.184): the recordings in `replays` beside the settings, read as the
+    // screen opens; the one chosen to play; whether each is ticked to be cached.
+    std::vector<std::filesystem::path> replays_;
+    std::filesystem::path replay_chosen_;
+    void read_replays();
+    bool replay_cached(size_t i) const;
+    void toggle_replay_cache(size_t i);
     DisplayInfo display_;
     Screen screen_ = Screen::Main;
     std::string system_root_ = "information";

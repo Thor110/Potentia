@@ -748,6 +748,7 @@ if(SIEVE_BUILD_CLIENT)
         client/navigator.cpp
         client/pause_menu.cpp
         client/raid_service.cpp
+        client/replay.cpp
         client/speech.cpp
         client/font.cpp
         client/gpu_memory.cpp

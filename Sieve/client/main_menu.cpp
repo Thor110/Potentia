@@ -9,6 +9,7 @@
 #include "main_menu.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/timings.hpp"
+#include "cli/locate.hpp" // read_file_bytes, sha256_hex (the replay viewer's cache boxes)
 #include "dialogs.hpp"
 #include "speech.hpp"
 
@@ -73,7 +74,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Main:
         // (Manual Navigation after the rest, before Exit: the CI's walks through this menu count rows.)
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "exit"}};
+                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "replays"}, {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
     case Screen::Personal: return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
@@ -88,6 +89,14 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
+    // The replay viewer (IDEAS 19.184): one row a recording, its box for caching it; then Back.
+    case Screen::Replays:
+    {
+        std::vector<Item> out;
+        for (size_t i = 0; i < replays_.size(); ++i) out.push_back({Kind::Replay, "replay:" + std::to_string(i)});
+        out.push_back({Kind::Action, "back"});
+        return out;
+    }
     // The infinite RAID between machines (IDEAS 19.176, 19.150): both halves opt in only, each its own
     // red box; the machines and the address are set in the settings file and shown here.
     case Screen::Raid:
@@ -114,6 +123,16 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "read_aloud") return speech_available() ? onoff(s_.read_aloud) : tr("value.read_aloud.none");
     if (it.id == "text_to_voice") return speech_available() || sieve_voice_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
+    if (it.kind == Kind::Replay)
+    {
+        // Its size, and its box: ticked, decoded once into the cache (a packed recording alone).
+        const size_t i = size_t(std::stoul(it.id.substr(7)));
+        std::error_code ec;
+        const uint64_t bytes = std::filesystem::file_size(replays_[i], ec);
+        const std::string size = bytes >= 10240 ? std::to_string(bytes / 1024) + " KiB" : std::to_string(bytes) + " bytes";
+        if (replays_[i].extension() != ".sieve") return size + "  " + tr("value.replay.plain");
+        return size + "  [" + (replay_cached(i) ? "x" : " ") + "] " + tr("value.replay.cache");
+    }
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
     if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
@@ -127,6 +146,48 @@ std::string MainMenu::value_of(const Item& it) const
         return language_code();
     }
     return "";
+}
+
+// The line of help under an item: "help.<id>", one for every recording's row.
+std::string MainMenu::help_key(const Item& it) { return it.kind == Kind::Replay ? "help.replay_row" : "help." + it.id; }
+
+// The recordings in `replays` beside the settings file, plain (.replay) or packed (.sieve), by name.
+void MainMenu::read_replays()
+{
+    replays_.clear();
+    std::error_code ec;
+    for (const auto& e : std::filesystem::directory_iterator(path_.parent_path() / "replays", ec))
+        if (e.is_regular_file() && (e.path().extension() == ".replay" || e.path().extension() == ".sieve")) replays_.push_back(e.path());
+    std::sort(replays_.begin(), replays_.end());
+    if (replays_.size() > 200) replays_.resize(200);
+}
+
+bool MainMenu::replay_cached(size_t i) const
+{
+    if (i >= replays_.size() || replays_[i].extension() != ".sieve" || s_.replays_cached.empty()) return false;
+    const std::string sha = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(replays_[i]));
+    return s_.replays_cached.find(sha) != std::string::npos;
+}
+
+// Its box ticked or not: its SHA-256 put in [replays] cached, or taken out, and saved.
+void MainMenu::toggle_replay_cache(size_t i)
+{
+    if (i >= replays_.size() || replays_[i].extension() != ".sieve") return;
+    const std::string sha = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(replays_[i]));
+    std::vector<std::string> list;
+    for (size_t at = 0; at <= s_.replays_cached.size();)
+    {
+        const size_t c = std::min(s_.replays_cached.find(',', at), s_.replays_cached.size());
+        if (c > at) list.push_back(s_.replays_cached.substr(at, c - at));
+        at = c + 1;
+    }
+    const auto f = std::find(list.begin(), list.end(), sha);
+    if (f == list.end()) list.push_back(sha);
+    else list.erase(f);
+    std::string v;
+    for (const auto& x : list) v += (v.empty() ? "" : ",") + x;
+    s_.replays_cached = v;
+    save();
 }
 
 void MainMenu::save()
@@ -239,6 +300,13 @@ void MainMenu::back()
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
     case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
     case Screen::Raid: screen_ = Screen::Settings; row_ = 4; return;
+    case Screen::Replays:
+        screen_ = Screen::Main;
+        row_ = 0;
+        for (const Item& it : items())
+            if (it.id == "replays") break;
+            else ++row_;
+        return;
     case Screen::Personal:
         screen_ = Screen::Main;
         row_ = 0;
@@ -276,6 +344,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
         else if (it.id == "creator") { result_ = Result::Creator; done_ = true; } // the character creator (IDEAS 19.186)
+        else if (it.id == "replays") { read_replays(); screen_ = Screen::Replays; row_ = 0; }
         else if (it.id == "systems_formats") { system_root_ = "information"; result_ = Result::Systems; done_ = true; }
         else if (it.id == "systems_language") { system_root_ = "language"; result_ = Result::Systems; done_ = true; }
         else if (it.id == "personal_others" || it.id == "personal_groups") {} // (not built yet: its help line says so)
@@ -361,6 +430,7 @@ void MainMenu::change(int dir)
         return;
     case Kind::Choice: open_list(it); return;
     case Kind::Info: return;
+    case Kind::Replay: toggle_replay_cache(size_t(std::stoul(it.id.substr(7)))); return;
     case Kind::Program:
         if (dir > 0)
         {
@@ -460,6 +530,15 @@ void MainMenu::handle(const SDL_Event& event)
         return;
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return;
+    // A recording's row: Enter plays it; Space, Left and Right tick its box (below).
+    const auto its = items();
+    if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) && row_ >= 0 && row_ < n && its[size_t(row_)].kind == Kind::Replay)
+    {
+        replay_chosen_ = replays_[size_t(std::stoul(its[size_t(row_)].id.substr(7)))];
+        result_ = Result::Replay;
+        done_ = true;
+        return;
+    }
     switch (e.key.key)
     {
     case SDLK_UP: row_ = (row_ + n - 1) % n; break;
@@ -565,19 +644,21 @@ void MainMenu::render()
                           : screen_ == Screen::Systems ? "screen.systems"
                           : screen_ == Screen::Programs ? "screen.programs"
                           : screen_ == Screen::Raid ? "screen.raid"
+                          : screen_ == Screen::Replays ? "screen.replays"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
-    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid;
+    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
+                       screen_ == Screen::Replays;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
-    if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr("help." + its[size_t(row_)].id)).size();
+    if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();
     if (screen_ == Screen::Controls) key_lines = split_lines(tr("controls.keys")).size();
     bool has_back = false;
     for (const auto& it : its) has_back = has_back || it.id == "back";
     // The help block is sized for the tallest item's help, so the block does not jump as you move.
-    for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr("help." + it.id)).size());
+    for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr(help_key(it))).size());
     const float block = (heading ? 40.0f : 0.0f) + float(its.size()) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
     float top = 50 + 8 * ts + 60;
@@ -623,7 +704,7 @@ void MainMenu::render()
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 160);
             SDL_RenderRect(r_, &r);
         }
-        const std::string label = tr("item." + it.id);
+        const std::string label = it.kind == Kind::Replay ? sieve::u8(replays_[size_t(std::stoul(it.id.substr(7)))].filename()) : tr("item." + it.id);
         const float scale = screen_ == Screen::Main ? 3.0f : 2.0f;
         if (!pairs || it.kind == Kind::Action) draw_centred(r_, cx, yy + (screen_ == Screen::Main ? -2 : 2), label, scale, sel ? kWhite : kGrey);
         else
@@ -645,7 +726,7 @@ void MainMenu::render()
     // What the selected item does.
     if (row_ >= 0 && row_ < int(its.size()))
     {
-        const std::string help = tr("help." + its[size_t(row_)].id);
+        const std::string help = tr(help_key(its[size_t(row_)]));
         float hy = item_y + 16;
         // (the RAID's opt-ins' help in red: what ticking them does, before it is done)
         const bool red_help = its[size_t(row_)].id == "raid_share" || its[size_t(row_)].id == "raid_serve";
