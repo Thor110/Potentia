@@ -6,7 +6,8 @@ The infinite RAID (IDEAS §19.150, §19.154, §19.176) is Sieve's system for kee
 across many drives, and in later stages across many machines, every piece checked by its SHA-256.
 Its code is `core/include/sieve/raid.hpp`, `core/src/raid.cpp` and `core/src/raid_files.hpp`, with stage 3's
 `core/include/sieve/seal.hpp`, `core/src/seal.cpp`, `core/include/sieve/raid_net.hpp`, `core/src/raid_net.cpp`
-and `tools/cli/raid_socket.hpp`/`.cpp`, and the `sieve raid` command.
+and `tools/cli/raid_socket.hpp`/`.cpp`, the menus' `client/raid_service.hpp`/`.cpp`, and the `sieve raid`
+command. What it is for, how it works and what comes next: [INFINITE-RAID.md](INFINITE-RAID.md).
 
 ## The licence: GNU AGPL v3, with one additional term
 

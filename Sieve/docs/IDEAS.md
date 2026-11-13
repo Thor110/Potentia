@@ -7326,7 +7326,19 @@ stages, each usable alone:
    the limit by **IP address first**, as Edward chose (§19.179), kept as a salted hash. Not yet: the
    menu (behind the red warning boxes), peers passing on other peers, the step to verified identity, and
    who runs the first known nodes.)* *(13 November 2026: the menu built, Settings > RAID, its two halves each behind a red box, off until
-   ticked; Ctrl+S shares, and the hallway serves while it runs, up to 32 connections at once.)* *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
+   ticked; Ctrl+S shares, and the hallway serves while it runs, up to 32 connections at once.)* *(13 November 2026, placement decided with Edward: "agreed, 3 copies
+   default, write it into IDEAS then build", and "these can also become a new settings option under
+   Settings -> Infinite RAID". (a) **Copies:** each piece shared goes to 3 machines by default (2 before),
+   `[raid] copies` and `--peer-copies` setting another number; with fewer machines, each of them. Your
+   own drives keep 2. (b) **Mirroring for now:** whole copies, chosen piece by piece by the ranking
+   above, so a save spreads across many machines and a machine joining or leaving moves only the pieces
+   that ranked it highest; erasure coding (any k of n pieces rebuild a chunk, more machines lost for
+   less space) a later stage, as a new version, once there are machines enough. (c) **Kept whole by its
+   owner:** `sieve raid check` and Settings > Infinite RAID's Check my shares ask every machine which
+   pieces it still keeps and put any on too few back on the next machines from one that holds it; a
+   piece no machine keeps is lost, and said. (d) **The index and manifest** go to as many machines as
+   the chunks, not to every one. (e) **Homes on different networks** (two copies in one house are not
+   two), a later stage. Built the same day; docs/INFINITE-RAID.md gathers the whole.)* *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
    chunks by name to others and asks for the ones it lacks; a chunk is accepted only if it hashes to
    its name, so nothing can be changed on the way. Before this is built, Edward's decisions: whether
    others' saves are stored encrypted (so a helper cannot read them), how much space each person
@@ -7438,6 +7450,16 @@ characters as a tactic to damage the system startup time".
   or creation of the data it facilitates access to". So the limit grows in steps: by IP address first
   (kept as salted hashes, as above), then by verified digital identity, then by the record of what a
   character has stored and made itself; each step added without removing the one before.
+- *Safety valves and checks, every one dynamic (Edward, 13 November 2026):* "there are going to need
+  to be lots of safety valves and checks, for now I think we were just using IP, but alongside that
+  many more details can be tagged in the long run, so as per anything in the system it should all be
+  dynamic and scalable so as to support the nature of the state space mechanics that demand its
+  existence". So the limits are not one rule about addresses but an open, versioned list of **tags**
+  (the address first, as built; then a verified identity, a character, a household, what a machine
+  has kept for others, how long it has stayed), each check a rule over the tags with its own settings,
+  written as data the way measured figures are (`KEY=N`, §12.0p) and filters are (`.sfilter`), so a new
+  tag or check is a new version, not a new design, and every one can be counted and tested.
+  docs/INFINITE-RAID.md, "Safety valves and checks", lists those built and the principle.
 
 **19.180 A decentralised place to talk and keep one's own record (Edward, 12 November 2026).** His
 words: "this project and program can also become a decentralised distributed discord type system and

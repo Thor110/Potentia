@@ -37,6 +37,13 @@ std::string serving_status(); // for Settings > RAID: "on 0.0.0.0:47100, 1,234 b
 // [raid] peers, sealed, on a thread of its own; what came of it is taken once by take_share_note().
 void share(const AppSettings& s, const std::filesystem::path& settings_path, std::vector<std::filesystem::path> drives, std::vector<std::string> versions);
 std::optional<std::string> take_share_note();
+
+// Check my shares: every save shared from here (raid-shared.txt beside the key) asked of the peers, and
+// each piece kept on fewer than [raid] copies put back on the next machines, on a thread of its own;
+// what came of it taken once by take_check_note().
+void check(const AppSettings& s, const std::filesystem::path& settings_path);
+std::optional<std::string> take_check_note();
+bool checking();
 bool sharing(); // a share still under way
 
 } // namespace raid_service

@@ -27,8 +27,8 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    the next idea to work on"; IDEAS §19.186): `sieve-actions-v1`, each in-game action mapped to the
    animation that plays it; a missing one said, or chosen from the animations that fit; the map kept
    in the save; a character creator of its own on the main menu, the setup menu's CHARACTER page linking
-   to it. And with it, the infinite RAID's placement settled with Edward (how many machines keep each
-   piece, mirrored or coded; §19.176).
+   to it. (*The infinite RAID's placement, settled with Edward and built 13 November 2026: 3 copies by
+   default, mirrored, kept whole by its owner's checks, Settings > Infinite RAID; docs/INFINITE-RAID.md.*)
 5. **Two first steps asked for:** `--record` / `--replay` in the hallway (§19.184), and music
    visualiser rings for Sieve's own notes.
 6. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the

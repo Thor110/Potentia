@@ -1212,6 +1212,25 @@ int raid_between_machines(const Args& a, const std::string& what)
             });
         return 0;
     }
+    if (what == "check")
+    {
+        // Kept whole by its owner (IDEAS 19.176, 13 November 2026): every peer asked which pieces it
+        // holds; a piece on too few put back on the next of its homes, unless --no-repair.
+        if (a.positional.size() < 2) throw std::invalid_argument("give the remote id to check");
+        const auto key = raid_key(a);
+        auto owned = raid_peers(a);
+        std::vector<sieve::RaidPeer*> peers;
+        for (auto& p : owned) peers.push_back(p.get());
+        const uint32_t copies = a.has("peer-copies") ? a.get_u32("peer-copies", sieve::kRaidPeerCopies) : sieve::kRaidPeerCopies;
+        const auto c = sieve::raid_check(a.positional[1], key, peers, copies, !a.has("no-repair"));
+        std::cout << "checked   " << c.pieces << " pieces on " << peers.size() << " peers, asking for " << std::min<size_t>(copies, peers.size()) << " copies each\n"
+                  << "whole     " << c.whole << "\n"
+                  << "short     " << c.short_of << (a.has("no-repair") ? "" : ", put back " + std::to_string(c.repaired) + " (" + std::to_string(c.bytes_sent) + " bytes sent)") << "\n"
+                  << "lost      " << c.lost << "\n";
+        for (const auto& n : c.notes) std::cout << "  " << n << "\n";
+        std::cout << (c.whole_now() ? "whole now: every piece on as many peers as asked\n" : "not whole\n");
+        return c.whole_now() ? 0 : 1;
+    }
     if (what == "fetch")
     {
         if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give the remote id and --out FILE");
@@ -1320,7 +1339,7 @@ int cmd_raid(const Args& a)
         auto owned = raid_peers(a);
         std::vector<sieve::RaidPeer*> peers;
         for (auto& p : owned) peers.push_back(p.get());
-        const auto r = sieve::raid_share(raid, v, key, peers, a.has("peer-copies") ? a.get_u32("peer-copies", 2) : 2);
+        const auto r = sieve::raid_share(raid, v, key, peers, a.has("peer-copies") ? a.get_u32("peer-copies", sieve::kRaidPeerCopies) : sieve::kRaidPeerCopies);
         std::cout << "shared    version " << v << " (" << r.chunks << " chunks) with " << peers.size() << " peers\n"
                   << "sent      " << r.sent << " pieces, " << r.bytes_sent << " bytes; " << r.had << " already there\n";
         for (const auto& n : r.notes) std::cout << "  " << n << "\n";
@@ -1329,7 +1348,7 @@ int cmd_raid(const Args& a)
                   << "keep the remote id and the key: with both, `sieve raid fetch` brings it back on any machine\n";
         return r.whole() ? 0 : 1;
     }
-    throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair, key, serve, share, fetch)");
+    throw std::invalid_argument("not something raid does: " + what + " (put, get, list, verify, repair, key, serve, share, fetch, check)");
 }
 
 // sieve catalogue: the catalogue of formats, stage 1 (IDEAS 19.165; docs/CATALOGUE-ROADMAP.md).

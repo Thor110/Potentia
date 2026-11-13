@@ -7402,7 +7402,8 @@ void test_raid_net()
         SealKey key = new_seal_key();
         const auto r1 = raid_share(raid, v1, key, peers);
         const size_t n = raid.list()[0].chunks.size();
-        CHECK(r1.whole() && r1.chunks == n && r1.sent == 2 * n + 3 + 3 && r1.had == 0);
+        // (each chunk on 3 of the 3, the default since 13 November 2026; the manifest and the index too)
+        CHECK(r1.whole() && r1.chunks == n && r1.sent == 3 * n + 3 + 3 && r1.had == 0);
         CHECK(raid_share(raid, v1, key, peers).sent == 0); // all there already
         const auto f = raid_fetch(r1.remote, key, peers);
         CHECK(f.bytes == bytes && f.manifest.id() == v1);
@@ -7417,7 +7418,23 @@ void test_raid_net()
         bytes[400000] ^= 1;
         const std::string v2 = raid.put("game.sav", bytes);
         const auto r2 = raid_share(raid, v2, key, peers);
-        CHECK(r2.whole() && r2.sent <= 2 + 3 + 3 && raid_fetch(r2.remote, key, peers).bytes == bytes);
+        CHECK(r2.whole() && r2.sent <= 3 + 3 + 3 && raid_fetch(r2.remote, key, peers).bytes == bytes);
+        // Kept whole by its owner: one peer loses everything it kept; check finds every piece short,
+        // puts each back from the others, and then finds it whole, sending nothing more.
+        {
+            const auto before = raid_check(r2.remote, key, peers, 3, false);
+            CHECK(before.whole_now() && before.short_of == 0 && before.pieces == n + 2);
+            std::error_code e2;
+            fs::remove_all(root / "p3" / "blobs", e2);
+            const auto seen = raid_check(r2.remote, key, peers, 3, false);
+            CHECK(!seen.whole_now() && seen.short_of == n + 2 && seen.repaired == 0 && seen.lost == 0);
+            const auto mended = raid_check(r2.remote, key, peers, 3, true);
+            CHECK(mended.whole_now() && mended.repaired == n + 2 && mended.bytes_sent > 0);
+            const auto after = raid_check(r2.remote, key, peers);
+            CHECK(after.whole_now() && after.short_of == 0 && after.bytes_sent == 0);
+            // Asked for 2: each piece on 3 is more than enough.
+            CHECK(raid_check(r2.remote, key, peers, 2).whole == n + 2);
+        }
         // One peer gone: still whole from the others. Every copy of a piece changed: refused, not wrong.
         const std::vector<RaidPeer*> two = {&p1, &p2};
         CHECK(raid_fetch(r2.remote, key, two).bytes == bytes);

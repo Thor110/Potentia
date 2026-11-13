@@ -355,7 +355,8 @@ const std::vector<Page>& pages()
          "       sieve raid key --out KEY\n"
          "       sieve raid serve --held DIR --listen HOST:PORT [--space MIB] [--per-peer MIB] [--connections N]\n"
          "       sieve raid share NAME|ID --drives A,B,... --key KEY --peers HOST:PORT,... [--peer-copies N]\n"
-         "       sieve raid fetch REMOTE --key KEY --peers HOST:PORT,... --out FILE [--drives A,B,...]",
+         "       sieve raid fetch REMOTE --key KEY --peers HOST:PORT,... --out FILE [--drives A,B,...]\n"
+         "       sieve raid check REMOTE --key KEY --peers HOST:PORT,... [--peer-copies N] [--no-repair]",
          "Keeps any save (a game's save file, a character, a dimension's file) on several folders the\n"
          "person chooses: a spare drive, a phone's storage, a second disk (IDEAS 19.176). Each save is\n"
          "cut into chunks where its content says (16 to 256 KiB, about 80 KiB), each named by its SHA-256\n"
@@ -368,9 +369,11 @@ const std::vector<Page>& pages()
          "Between machines (stage 3), opt in only. key makes a key that only you hold. share sends a\n"
          "version to other machines sealed under it (ChaCha20 and HMAC-SHA-256, docs SPECIFICATIONS\n"
          "12.0o): they cannot read it, and nothing they send back is taken unless it checks out. Each chunk\n"
-         "goes to N of the peers (2 unless --peer-copies says otherwise), a chunk a peer already has is not\n"
+         "goes to N of the peers (3 unless --peer-copies says otherwise), a chunk a peer already has is not\n"
          "sent again, and share prints the save's remote id: with it and the key, fetch brings the save\n"
-         "back on any machine. serve keeps others' sealed chunks in a folder while it runs, up to the space\n"
+         "back on any machine. Machines come and go: check asks every peer which of a shared save's pieces\n"
+         "it holds, and puts each one held by fewer than N back on the next machines, from one that holds\n"
+         "it. serve keeps others' sealed chunks in a folder while it runs, up to the space\n"
          "you give in all and the most for any one address (kept only as a salted hash). Lose the key and\n"
          "what others keep for you cannot be read by anyone, you included.\n"
          "\n"
@@ -385,13 +388,15 @@ const std::vector<Page>& pages()
           {"serve", "Keep others' sealed chunks in --held DIR, answering on --listen HOST:PORT, until stopped."},
           {"share ID", "Send a version (its id, or a name for its latest) to --peers, sealed; exit 1 if not whole."},
           {"fetch REMOTE", "Bring a shared save back by its remote id to --out FILE (and into --drives, if given)."},
+          {"check REMOTE", "Ask --peers which pieces of a shared save each holds, and put back any held by too few; exit 1 if not whole."},
+          {"--no-repair", "check only says what is short, putting nothing back."},
           {"--drives A,B,...", "The folders (made members the first time)."},
           {"--copies N", "How many folders each chunk goes on (default 2)."},
           {"--name NAME", "The save's name, for put."},
           {"--out FILE", "Where get, fetch and key write."},
           {"--key KEY", "The key file, for share and fetch."},
           {"--peers HOST:PORT,...", "The machines to share with or fetch from."},
-          {"--peer-copies N", "How many peers each chunk goes to (default 2)."},
+          {"--peer-copies N", "How many peers each piece goes to, and check keeps it on (default 3)."},
           {"--held DIR", "Where serve keeps others' chunks."},
           {"--listen HOST:PORT", "Where serve answers (127.0.0.1 for this machine alone)."},
           {"--space MIB", "The most serve keeps for everyone, in MiB (default 1024)."},

@@ -418,7 +418,7 @@ cmp raidn/me.character raidn/back.character
 kill $raidn_serve
 # Keeping others' saves, from the menu: ticked, this machine answers at once on [raid] listen.
 printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
-$H --main-menu --settings raidn/serve.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Return,Down" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
+$H --main-menu --settings raidn/serve.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
 test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,

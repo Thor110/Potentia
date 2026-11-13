@@ -173,4 +173,4 @@ an installed one is used, otherwise the first configure downloads and builds it.
 
 ## Licence
 
-GNU AGPL v3.0, as Potentia. Third-party licences are in [third_party_licenses/](third_party_licenses/). The infinite RAID (`sieve raid`) carries one additional term under the AGPL's section 7(b), that its author's attribution be kept: see [docs/RAID-NOTICE.md](docs/RAID-NOTICE.md).
+GNU AGPL v3.0, as Potentia. Third-party licences are in [third_party_licenses/](third_party_licenses/). The infinite RAID (`sieve raid`) carries one additional term under the AGPL's section 7(b), that its author's attribution be kept: see [docs/RAID-NOTICE.md](docs/RAID-NOTICE.md). What the RAID is for (helping keep all data of all types, in time), how it works and what comes next: [docs/INFINITE-RAID.md](docs/INFINITE-RAID.md).

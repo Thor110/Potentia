@@ -37,6 +37,9 @@ std::string g_status = "off";
 std::thread g_sharer;
 std::atomic<bool> g_sharing{false};
 std::optional<std::string> g_share_note;
+std::thread g_checker;
+std::atomic<bool> g_checking{false};
+std::optional<std::string> g_check_note;
 
 std::vector<std::string> comma_list(const std::string& s)
 {
@@ -147,6 +150,7 @@ void stop()
 {
     stop_server();
     if (g_sharer.joinable()) g_sharer.join();
+    if (g_checker.joinable()) g_checker.join();
 }
 
 std::string serving_status()
@@ -190,7 +194,8 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     // Each version's remote id, kept beside the key: with the key, all that is needed to fetch it
     // back on any machine (sieve raid fetch ID --key FILE --peers ...), and it cannot be worked out again.
     const fs::path log = key_path(s, settings_path).parent_path() / "raid-shared.txt";
-    g_sharer = std::thread([peers, key, drives = std::move(drives), versions = std::move(versions), note, log] {
+    const uint32_t copies = uint32_t(std::max(1, s.raid_copies));
+    g_sharer = std::thread([peers, key, drives = std::move(drives), versions = std::move(versions), note, log, copies] {
         try
         {
             std::vector<std::unique_ptr<sieve::RaidPeer>> owned;
@@ -212,7 +217,7 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
             std::string remote;
             for (const auto& v : versions)
             {
-                const sieve::RaidShareReport r = sieve::raid_share(raid, v, key, ptrs, uint32_t(std::min<size_t>(2, ptrs.size())));
+                const sieve::RaidShareReport r = sieve::raid_share(raid, v, key, ptrs, copies);
                 bytes += r.bytes_sent;
                 short_of += r.short_of;
                 remote = r.remote; // (the last: your save, which names the rest)
@@ -239,6 +244,105 @@ std::optional<std::string> take_share_note()
 }
 
 bool sharing() { return g_sharing; }
+
+void check(const AppSettings& s, const fs::path& settings_path)
+{
+    auto note = [](std::string n) {
+        std::lock_guard<std::mutex> lock(g_mx);
+        g_check_note = std::move(n);
+    };
+    if (g_checking) return;
+    if (g_checker.joinable()) g_checker.join();
+    const std::vector<std::string> peers = comma_list(s.raid_peers);
+    if (peers.empty())
+    {
+        note("nothing checked: no machines named ([raid] peers)");
+        return;
+    }
+    // Each save shared from here: the remote ids beside the key, each once.
+    std::vector<std::string> remotes;
+    {
+        std::ifstream in(key_path(s, settings_path).parent_path() / "raid-shared.txt", std::ios::binary);
+        std::string l;
+        while (std::getline(in, l))
+        {
+            const size_t sp = l.find(' ');
+            if (sp == std::string::npos) continue;
+            std::string r = l.substr(sp + 1);
+            while (!r.empty() && (r.back() == '\r' || r.back() == ' ')) r.pop_back();
+            if (r.size() == 64 && std::find(remotes.begin(), remotes.end(), r) == remotes.end()) remotes.push_back(r);
+        }
+    }
+    if (remotes.empty())
+    {
+        note("nothing checked: nothing shared from here yet");
+        return;
+    }
+    sieve::SealKey key;
+    try
+    {
+        std::ifstream in(key_path(s, settings_path), std::ios::binary);
+        if (!in) throw std::runtime_error("no key at " + sieve::u8(key_path(s, settings_path)));
+        key = sieve::read_seal_key(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+    }
+    catch (const std::exception& e)
+    {
+        note(std::string("nothing checked: ") + e.what());
+        return;
+    }
+    g_checking = true;
+    note("checking " + std::to_string(remotes.size()) + " shared versions...");
+    const uint32_t copies = uint32_t(std::max(1, s.raid_copies));
+    g_checker = std::thread([peers, key, remotes, copies, note] {
+        try
+        {
+            std::vector<std::unique_ptr<sieve::RaidPeer>> owned;
+            for (const auto& p : peers)
+                try
+                {
+                    owned.push_back(std::make_unique<sieve::RaidNetPeer>(sieve_cli::raid_connect(p, 10), p));
+                }
+                catch (const std::exception&)
+                {
+                }
+            if (owned.empty()) throw std::runtime_error("none of the " + std::to_string(peers.size()) + " machines answered");
+            std::vector<sieve::RaidPeer*> ptrs;
+            for (auto& p : owned) ptrs.push_back(p.get());
+            size_t pieces = 0, short_of = 0, repaired = 0, lost = 0, unreadable = 0;
+            for (const auto& r : remotes)
+                try
+                {
+                    const sieve::RaidCheckReport c = sieve::raid_check(r, key, ptrs, copies, true);
+                    pieces += c.pieces;
+                    short_of += c.short_of;
+                    repaired += c.repaired;
+                    lost += c.lost;
+                }
+                catch (const std::exception&)
+                {
+                    ++unreadable; // (its index had by none of them)
+                }
+            note("checked " + std::to_string(remotes.size()) + " versions, " + std::to_string(pieces) + " pieces on " + std::to_string(owned.size()) + " of " +
+                 std::to_string(peers.size()) + " machines: " + std::to_string(short_of) + " short, " + std::to_string(repaired) + " put back, " +
+                 std::to_string(lost) + " lost" + (unreadable ? ", " + std::to_string(unreadable) + " versions not found" : ""));
+        }
+        catch (const std::exception& e)
+        {
+            note(std::string("not checked: ") + e.what());
+        }
+        g_checking = false;
+    });
+}
+
+std::optional<std::string> take_check_note()
+{
+    std::lock_guard<std::mutex> lock(g_mx);
+    std::optional<std::string> n;
+    n.swap(g_check_note);
+    return n;
+}
+
+bool checking() { return g_checking; }
 
 } // namespace raid_service
 } // namespace hallway

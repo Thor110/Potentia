@@ -338,11 +338,12 @@ RaidShareReport raid_share(const Raid& raid, const std::string& version, const S
         index += "blob " + name + "\n";
         if (place(name, sealed, peers, want, r) < want) ++r.short_of;
     }
-    // The manifest and the index on every peer: small, and without them nothing else can be read.
+    // The manifest and the index as every chunk is: on `copies` of its homes (13 November 2026; on
+    // every peer before, which does not grow with the network).
     const std::string sealed_index = seal(key, index);
     r.remote = sha_hex(sealed_index);
-    if (place(manifest_name, sealed_manifest, peers, peers.size(), r) < want) ++r.short_of;
-    if (place(r.remote, sealed_index, peers, peers.size(), r) < want) ++r.short_of;
+    if (place(manifest_name, sealed_manifest, peers, want, r) < want) ++r.short_of;
+    if (place(r.remote, sealed_index, peers, want, r) < want) ++r.short_of;
     return r;
 }
 
@@ -409,6 +410,77 @@ RaidFetched raid_fetch(const std::string& remote, const SealKey& key, const std:
     }
     if (f.bytes.size() != f.manifest.size) throw std::runtime_error("the chunks do not add up to the save's size");
     return f;
+}
+
+RaidCheckReport raid_check(const std::string& remote, const SealKey& key, const std::vector<RaidPeer*>& peers, uint32_t copies, bool repair)
+{
+    if (!is_hex64(remote)) throw std::runtime_error("not a remote id (64 hex digits): " + remote);
+    if (peers.empty()) throw std::runtime_error("no peers to check");
+    const size_t want = std::min<size_t>(std::max<uint32_t>(copies, 1), peers.size());
+    std::vector<std::string> tried;
+    const std::string index = fetch_piece(remote, key, peers, tried); // (opened with the key: it is the owner's)
+    std::vector<std::string> names{remote};
+    for (size_t i = 0; i < index.size();)
+    {
+        const size_t e = index.find('\n', i);
+        if (e == std::string::npos) break;
+        const std::string l = index.substr(i, e - i);
+        i = e + 1;
+        if (l.rfind("manifest ", 0) == 0 && is_hex64(l.substr(9))) names.push_back(l.substr(9));
+        else if (l.rfind("blob ", 0) == 0 && is_hex64(l.substr(5))) names.push_back(l.substr(5));
+    }
+    RaidCheckReport c;
+    for (const std::string& name : names)
+    {
+        ++c.pieces;
+        size_t holding = 0;
+        for (RaidPeer* p : peers)
+            try
+            {
+                holding += p->has(name) ? 1 : 0;
+            }
+            catch (const std::exception& e)
+            {
+                c.notes.push_back(p->address() + ": " + e.what());
+            }
+        if (holding >= want)
+        {
+            ++c.whole;
+            continue;
+        }
+        if (holding == 0)
+        {
+            ++c.lost;
+            c.notes.push_back(name.substr(0, 12) + " is held by none of the peers given");
+            continue;
+        }
+        ++c.short_of;
+        if (!repair) continue;
+        // Its sealed bytes from one that holds it, checked against its name, then on its next homes.
+        std::optional<std::string> sealed;
+        for (const size_t i : raid_peer_homes(name, peers))
+            try
+            {
+                if (auto b = peers[i]->get(name); b && sha_hex(*b) == name)
+                {
+                    sealed = std::move(b);
+                    break;
+                }
+            }
+            catch (const std::exception&)
+            {
+            }
+        if (!sealed)
+        {
+            c.notes.push_back(name.substr(0, 12) + " could not be had whole from those that said they hold it");
+            continue;
+        }
+        RaidShareReport r;
+        if (place(name, *sealed, peers, want, r) >= want) ++c.repaired;
+        c.bytes_sent += r.bytes_sent;
+        for (auto& n : r.notes) c.notes.push_back(std::move(n));
+    }
+    return c;
 }
 
 std::pair<std::string, std::string> raid_split_address(const std::string& a)

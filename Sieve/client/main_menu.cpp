@@ -91,7 +91,8 @@ std::vector<MainMenu::Item> MainMenu::items() const
     // The infinite RAID between machines (IDEAS 19.176, 19.150): both halves opt in only, each its own
     // red box; the machines and the address are set in the settings file and shown here.
     case Screen::Raid:
-        return {{Kind::Toggle, "raid_share"}, {Kind::Info, "raid_peers"}, {Kind::Toggle, "raid_serve"}, {Kind::Info, "raid_listen"}, {Kind::Action, "back"}};
+        return {{Kind::Toggle, "raid_share"}, {Kind::Info, "raid_peers"},  {Kind::Number, "raid_copies"}, {Kind::Action, "raid_check"},
+                {Kind::Toggle, "raid_serve"}, {Kind::Info, "raid_listen"}, {Kind::Action, "back"}};
     }
     return {};
 }
@@ -115,6 +116,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "text_to_voice") return speech_available() || sieve_voice_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
+    if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
     if (it.id == "raid_peers") return s_.raid_peers.empty() ? tr("value.raid_peers.none") : s_.raid_peers;
     if (it.id == "raid_listen") return s_.raid_serve ? hallway::raid_service::serving_status() : s_.raid_listen;
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
@@ -282,6 +284,12 @@ void MainMenu::change(int dir)
         else if (it.id == "controls") { screen_ = Screen::Controls; row_ = 0; }
         else if (it.id == "language") { screen_ = Screen::Language; row_ = 0; }
         else if (it.id == "raid") { screen_ = Screen::Raid; row_ = 0; }
+        else if (it.id == "raid_check")
+        {
+            // Check my shares (IDEAS 19.176): on a thread; what came of it said below the rows.
+            hallway::raid_service::check(s_, path_);
+            if (auto n = hallway::raid_service::take_check_note()) raid_note_ = *n;
+        }
         else if (it.id == "programs")
         {
             screen_ = Screen::Programs;
@@ -346,6 +354,7 @@ void MainMenu::change(int dir)
         if (it.id == "graphics_memory") s_.graphics_memory_gb = std::clamp(s_.graphics_memory_gb + dir, 1, 128);
         else if (it.id == "view_rooms") s_.view_rooms = std::clamp(s_.view_rooms + dir, 2, 64);
         else if (it.id == "picture_rooms") s_.picture_rooms = std::clamp(s_.picture_rooms + dir, 0, 8);
+        else if (it.id == "raid_copies") s_.raid_copies = std::clamp(s_.raid_copies + dir, 1, 16);
         else s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
         save();
         return;
@@ -640,6 +649,8 @@ void MainMenu::render()
         // (the RAID's opt-ins' help in red: what ticking them does, before it is done)
         const bool red_help = its[size_t(row_)].id == "raid_share" || its[size_t(row_)].id == "raid_serve";
         for (const auto& line : split_lines(help)) { draw_centred(r_, cx, hy, line, 1, red_help ? kRed : kGrey); hy += 14; }
+        if (screen_ == Screen::Raid)
+            if (auto n = hallway::raid_service::take_check_note()) raid_note_ = *n; // (a check finishing)
         if (screen_ == Screen::Raid && !raid_note_.empty())
         {
             hy += 6;

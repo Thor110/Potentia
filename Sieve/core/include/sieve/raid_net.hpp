@@ -14,9 +14,12 @@
 // What leaves the owner's machine is sealed (sieve/seal.hpp) under a key only the owner holds, so
 // those who keep it cannot read it, and every piece is named by the SHA-256 of its sealed bytes, so
 // nothing can be changed on the way or in keeping without being refused. A save goes out as:
-//   - each chunk of the version, sealed, to `copies` of the peers (2 unless asked): the peers ranked by
-//     SHA-256(sealed chunk's name | the peer's address), highest first, as stage 1 ranks folders;
-//   - its manifest, sealed, and an index, sealed, to every peer. The index's text:
+//   - each chunk of the version, sealed, to `copies` of the peers (3 unless asked, Edward's choice of
+//     13 November 2026; 2 before): the peers ranked by SHA-256(sealed chunk's name | the peer's
+//     address), highest first, as stage 1 ranks folders;
+//   - its manifest, sealed, and an index, sealed, to `copies` of the peers by the same ranking (every
+//     peer before 13 November 2026; a fetch asks every peer it is given, so either is found). The
+//     index's text:
 //         sieve-raid-remote-v1
 //         manifest SHA-256       (the sealed manifest's name)
 //         blob SHA-256           (each sealed chunk's name, in the manifest's order)
@@ -24,6 +27,13 @@
 //     back from any of the peers, on any machine.
 // A chunk a peer already has is not sent again; since sealing gives the same bytes for the same
 // chunk, versions that share chunks share what is sent.
+//
+// Kept whole by its owner (raid_check, `sieve raid check`): machines come and go, so the owner asks
+// every peer it is given which of a save's pieces it holds, and a piece held by fewer than `copies`
+// is fetched from one that holds it (checked against its name) and put on the next of its homes; a
+// piece no peer holds is lost, and said. Placement is mirroring for now: whole copies, chosen piece
+// by piece. Erasure coding (any k of n pieces rebuild a chunk) and homes on different networks are
+// later stages (IDEAS 19.176).
 //
 // "sieve-raid-held-v1": a folder keeping others' sealed chunks. Its file `sieve-raid-held` reads
 // "sieve-raid-held-v1 salt=HEX" (32 random hex digits, made once); the chunks are blobs/AB/<SHA-256>;
@@ -180,7 +190,25 @@ struct RaidShareReport
 };
 // Sends a version of a save from a RAID to the peers, sealed under the key. Throws
 // std::invalid_argument if there are no peers or the version is not in the RAID.
-RaidShareReport raid_share(const Raid& raid, const std::string& version, const SealKey& key, const std::vector<RaidPeer*>& peers, uint32_t copies = 2);
+inline constexpr uint32_t kRaidPeerCopies = 3; // whole copies of each piece between machines, unless asked
+RaidShareReport raid_share(const Raid& raid, const std::string& version, const SealKey& key, const std::vector<RaidPeer*>& peers, uint32_t copies = kRaidPeerCopies);
+
+// A shared save checked on the peers, and, with `repair`, each piece held by fewer than `copies` of
+// them (or as many as there are) put back on the next of its homes from one that holds it. Throws
+// std::runtime_error if the index itself cannot be had.
+struct RaidCheckReport
+{
+    size_t pieces = 0;       // the index, the manifest and every chunk
+    size_t whole = 0;        // held by as many as asked
+    size_t short_of = 0;     // held by fewer, but by one at least
+    size_t repaired = 0;     // of those, put back on as many as asked
+    size_t lost = 0;         // held by none of the peers given
+    uint64_t bytes_sent = 0;
+    std::vector<std::string> notes;
+    bool whole_now() const { return lost == 0 && short_of == repaired; }
+};
+RaidCheckReport raid_check(const std::string& remote, const SealKey& key, const std::vector<RaidPeer*>& peers, uint32_t copies = kRaidPeerCopies,
+                           bool repair = true);
 
 // A save fetched back by its remote id: every piece asked of its homes first, then of any peer, and
 // each one checked (its name, its seal, and the manifest's SHA-256 of each chunk). Throws

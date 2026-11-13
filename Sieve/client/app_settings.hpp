@@ -151,6 +151,8 @@ struct AppSettings
     bool raid_share = false, raid_serve = false;
     std::string raid_peers, raid_key, raid_listen = "0.0.0.0:47100", raid_held;
     int raid_space_mb = 1024, raid_per_peer_mb = 64;
+    // How many machines keep each piece of a shared save (Edward, 13 November 2026: 3 by default).
+    int raid_copies = 3;
     int character_drawing = 1;
     bool character_beside = true;
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64

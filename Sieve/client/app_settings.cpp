@@ -230,6 +230,14 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "key") s.raid_key = value;
             else if (key == "listen" && !value.empty()) s.raid_listen = value;
             else if (key == "held") s.raid_held = value;
+            else if (key == "copies")
+                try
+                {
+                    s.raid_copies = std::clamp(std::stoi(value), 1, 16);
+                }
+                catch (...)
+                {
+                }
             else if (key == "space_mb" || key == "per_peer_mb")
                 try
                 {
@@ -378,6 +386,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
         {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
         {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
+        {"raid", "copies", std::to_string(raid_copies), "with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer"},
         {"raid", "peers", raid_peers, "the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none"},
         {"raid", "key", raid_key, "your key's file (sieve-raid-key-v1); keep it safe and keep a copy, as without it what others keep for you cannot be read by anyone; empty: raid.key beside these settings, made when share is first turned on"},
         {"raid", "serve", on_off(raid_serve), "OPT IN ONLY (Settings > RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none"},
