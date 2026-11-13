@@ -78,7 +78,16 @@ std::vector<MainMenu::Item> MainMenu::items() const
                 {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "replays"}, {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
     case Screen::Personal:
-        return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_features"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
+        return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_features"}, {Kind::Action, "personal_favourites"}, {Kind::Action, "personal_others"},
+                {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
+    // Every favourite kept anywhere (IDEAS 19.190): one row each, then Back.
+    case Screen::Favourites:
+    {
+        std::vector<Item> out;
+        for (size_t i = 0; i < favourite_rows_.size(); ++i) out.push_back({Kind::Info, "favrow:" + std::to_string(i)});
+        out.push_back({Kind::Action, "back"});
+        return out;
+    }
     // A dimension's features (IDEAS 19.197): each to be turned on or off by whoever walks it.
     case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
@@ -146,6 +155,11 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
     if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
+    if (it.id.rfind("favrow:", 0) == 0)
+    {
+        const auto& f = favourite_rows_[size_t(std::stoul(it.id.substr(7)))];
+        return trf(f.where == "media" ? "value.fav_media" : "value.fav_in", {f.line, f.where});
+    }
     if (it.id == "raid_peers") return s_.raid_peers.empty() ? tr("value.raid_peers.none") : s_.raid_peers;
     if (it.id == "raid_listen") return s_.raid_serve && s_.online ? hallway::raid_service::serving_status() : s_.raid_listen;
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
@@ -159,7 +173,12 @@ std::string MainMenu::value_of(const Item& it) const
 }
 
 // The line of help under an item: "help.<id>", one for every recording's row.
-std::string MainMenu::help_key(const Item& it) { return it.kind == Kind::Replay ? "help.replay_row" : "help." + it.id; }
+std::string MainMenu::help_key(const Item& it)
+{
+    if (it.kind == Kind::Replay) return "help.replay_row";
+    if (it.id.rfind("favrow:", 0) == 0) return "help.fav_row";
+    return "help." + it.id;
+}
 
 // The recordings in `replays` beside the settings file, plain (.replay) or packed (.sieve), by name.
 void MainMenu::read_replays()
@@ -321,6 +340,7 @@ void MainMenu::back()
     case Screen::Raid: screen_ = Screen::Settings; select("raid"); return;
     case Screen::Game: screen_ = Screen::Settings; select("game_systems"); return;
     case Screen::Features: screen_ = Screen::Personal; select("personal_features"); return;
+    case Screen::Favourites: screen_ = Screen::Personal; select("personal_favourites"); return;
     case Screen::Replays: screen_ = Screen::Main; select("replays"); return;
     case Screen::Personal: screen_ = Screen::Main; select("personal"); return;
     case Screen::Systems: screen_ = Screen::Main; select("systems"); return;
@@ -346,6 +366,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "personal_features") { screen_ = Screen::Features; row_ = 0; }
+        else if (it.id == "personal_favourites") { favourite_rows_ = hallway::all_favourites(path_.parent_path()); screen_ = Screen::Favourites; row_ = 0; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
         else if (it.id == "creator") { result_ = Result::Creator; done_ = true; } // the character creator (IDEAS 19.186)
         else if (it.id == "replays") { read_replays(); screen_ = Screen::Replays; row_ = 0; }
@@ -669,12 +690,13 @@ void MainMenu::render()
                           : screen_ == Screen::Replays ? "screen.replays"
                           : screen_ == Screen::Game ? "screen.game"
                           : screen_ == Screen::Features ? "screen.features"
+                          : screen_ == Screen::Favourites ? "screen.favourites"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
-                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features;
+                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features || screen_ == Screen::Favourites;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();
@@ -728,7 +750,9 @@ void MainMenu::render()
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 160);
             SDL_RenderRect(r_, &r);
         }
-        const std::string label = it.kind == Kind::Replay ? sieve::u8(replays_[size_t(std::stoul(it.id.substr(7)))].filename()) : tr("item." + it.id);
+        const std::string label = it.kind == Kind::Replay ? sieve::u8(replays_[size_t(std::stoul(it.id.substr(7)))].filename())
+                                  : it.id.rfind("favrow:", 0) == 0 ? favourite_rows_[size_t(std::stoul(it.id.substr(7)))].title.substr(0, 40)
+                                                                    : tr("item." + it.id);
         const float scale = screen_ == Screen::Main ? 3.0f : 2.0f;
         if (!pairs || it.kind == Kind::Action) draw_centred(r_, cx, yy + (screen_ == Screen::Main ? -2 : 2), label, scale, sel ? kWhite : kGrey);
         else

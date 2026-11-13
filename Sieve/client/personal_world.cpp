@@ -52,6 +52,14 @@ const SDL_FColor kSkyTop{0.13f, 0.36f, 0.86f, 1}, kSkyLow{0.72f, 0.85f, 0.98f, 1
 PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, std::filesystem::path world_file, uint64_t seed)
     : window_(window), r_(renderer), characters_(std::move(characters)), file_(std::move(world_file)), seed_(seed)
 {
+    rows_ = catalogue();
+    if (!file_.empty())
+        for (const std::string& sha : dimension_favourites(favourites_list_of(file_)))
+            if (auto f = read_favourite(file_.parent_path().parent_path(), sha))
+            {
+                favourites_.push_back(*f);
+                rows_.push_back("fav:" + sha);
+            }
     load(); // (what was placed before, and the world's seed)
     // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed (the
     // world file's, where it has one).
@@ -431,21 +439,21 @@ void PersonalWorld::render()
     SDL_SetRenderDrawColor(r_, 255, 255, 255, 200);
     SDL_RenderLine(r_, W_ / 2 - 6, H_ / 2, W_ / 2 + 6, H_ / 2);
     SDL_RenderLine(r_, W_ / 2, H_ / 2 - 6, W_ / 2, H_ / 2 + 6);
-    if (held_ >= 0) draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf("pworld.holding", {tr("pworld.object." + placed_[size_t(held_)].kind)}), 1, white);
+    if (held_ >= 0) draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf("pworld.holding", {label_of(placed_[size_t(held_)].kind)}), 1, white);
     else if (const int a = aimed(); a >= 0)
-        draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf(author_ ? "pworld.aim" : "pworld.aim.visitor", {tr("pworld.object." + placed_[size_t(a)].kind)}), 1, white);
+        draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf(author_ ? "pworld.aim" : "pworld.aim.visitor", {label_of(placed_[size_t(a)].kind)}), 1, white);
     draw_text(r_, 20, 16, tr("pworld.title"), 2, white);
     if (cat_panel_.shown > 0)
     {
         // The catalogue: a list on a dark plate sliding in at the left, the one chosen marked.
-        const auto& cat = catalogue();
+        const auto& cat = rows_;
         const float x = cat_panel_.left(300);
         const SDL_FRect plate{x, 48, 290, 34 + float(cat.size()) * 18};
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
         SDL_RenderFillRect(r_, &plate);
         draw_text(r_, x + 22, 56, tr("pworld.catalogue"), 1, white);
         for (size_t i = 0; i < cat.size(); ++i)
-            draw_text(r_, x + 22, 76 + float(i) * 18, (int(i) == catalogue_row_ ? "> " : "  ") + tr("pworld.object." + cat[i]), 1, int(i) == catalogue_row_ ? white : grey);
+            draw_text(r_, x + 22, 76 + float(i) * 18, (int(i) == catalogue_row_ ? "> " : "  ") + label_of(cat[i]), 1, int(i) == catalogue_row_ ? white : grey);
     }
     if (place_panel_.shown > 0 && held_ >= 0)
     {
@@ -455,7 +463,7 @@ void PersonalWorld::render()
         const SDL_FRect plate{x, 48, 290, 34 + 8 * 18};
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
         SDL_RenderFillRect(r_, &plate);
-        draw_text(r_, x + 22, 56, trf("pworld.place.title", {tr("pworld.object." + p.kind)}), 1, white);
+        draw_text(r_, x + 22, 56, trf("pworld.place.title", {label_of(p.kind)}), 1, white);
         const float deg = 180.0f / kPi;
         const double values[6] = {p.x, p.y, p.z, p.yaw * deg, p.pitch * deg, p.roll * deg};
         static const char* const kRows[7] = {"pworld.place.x", "pworld.place.y", "pworld.place.z", "pworld.place.yaw", "pworld.place.pitch", "pworld.place.roll", "pworld.place.go"};
@@ -687,6 +695,28 @@ const ShelfItems& shelf_items()
 
 std::string PersonalWorld::catalogue_note() { return shelf_items().note; }
 
+const Favourite* PersonalWorld::favourite(const std::string& sha) const
+{
+    for (const Favourite& f : favourites_)
+        if (f.sha == sha) return &f;
+    return nullptr;
+}
+
+std::string PersonalWorld::mesh_kind(const std::string& kind) const
+{
+    if (kind.rfind("fav:", 0) != 0) return kind;
+    const Favourite* f = favourite(kind.substr(4));
+    return f ? f->line : "pages"; // (one no longer kept: drawn as a page until it is taken away)
+}
+
+std::string PersonalWorld::label_of(const std::string& kind) const
+{
+    if (kind.rfind("fav:", 0) != 0) return tr("pworld.object." + kind);
+    const Favourite* f = favourite(kind.substr(4));
+    if (!f) return trf("pworld.fav.gone", {kind.substr(4, 12)});
+    return trf("pworld.fav", {f->title.empty() ? f->sha.substr(0, 12) : f->title.substr(0, 40), f->line});
+}
+
 // An object's model point turned by its yaw, pitch and roll and moved to its place. The model's front
 // faces +X, its up +Y, its side +Z: roll turns about the front, pitch about the side, then yaw about
 // the vertical, so +X ends along the yaw's forward ((sin, cos) in x and z) tipped by the pitch.
@@ -701,10 +731,10 @@ static std::array<float, 3> turned(const float m[3], float yaw, float pitch, flo
     return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
 }
 
-void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across)
+void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across) const
 {
     low = 0, high = 0.4f, across = 0.2f;
-    const auto it = shelf_items().mesh.find(p.kind);
+    const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
     if (it == shelf_items().mesh.end()) return;
     const Mesh& m = *it->second;
     low = 1e9f, high = -1e9f, across = 0;
@@ -718,9 +748,9 @@ void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& a
 }
 
 // An object's faces in the world: its shelf item's triangles, turned and placed.
-void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out)
+void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out) const
 {
-    const auto it = shelf_items().mesh.find(p.kind);
+    const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
     if (it == shelf_items().mesh.end()) return;
     for (const MeshTri& t : it->second->tris)
     {
@@ -896,7 +926,7 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         return;
     }
 
-    const int n = int(catalogue().size());
+    const int n = int(rows_.size());
     if (held_ >= 0)
     {
         // In your hand: turned 15 degrees a press (Shift: the other way), then placed where it is or
@@ -909,14 +939,14 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
         {
             p.physics = false, p.resting = true;
-            note_ = trf("pworld.placed_here", {tr("pworld.object." + p.kind)});
+            note_ = trf("pworld.placed_here", {label_of(p.kind)});
             held_ = -1;
             save();
         }
         else if (k == SDLK_Q)
         {
             p.physics = true, p.resting = false, p.vx = p.vy = p.vz = 0;
-            note_ = trf("pworld.dropped", {tr("pworld.object." + p.kind)});
+            note_ = trf("pworld.dropped", {label_of(p.kind)});
             held_ = -1;
             save();
         }
@@ -938,7 +968,9 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
             held_from_ = placed_[size_t(a)];
             note_.clear();
         }
-        else note_ = trf("pworld.open", {tr("pworld.object." + placed_[size_t(a)].kind)}); // (a visitor's E too)
+        else if (placed_[size_t(a)].kind.rfind("fav:", 0) == 0 && favourite(placed_[size_t(a)].kind.substr(4)))
+            opened_ = placed_[size_t(a)].kind.substr(4); // (read on its own line: run() goes there)
+        else note_ = trf("pworld.open", {label_of(placed_[size_t(a)].kind)}); // (a visitor's E too)
         return;
     }
     if (cat_panel_.open && k == SDLK_UP) catalogue_row_ = (catalogue_row_ + n - 1) % n;
@@ -947,11 +979,11 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
     {
         // Four metres before you, on the ground, turned to face you.
         Placed p;
-        p.kind = catalogue()[size_t(catalogue_row_)];
+        p.kind = rows_[size_t(catalogue_row_)];
         p.x = px_ + kPlaceAhead * std::sin(yaw_), p.z = pz_ + kPlaceAhead * std::cos(yaw_), p.yaw = yaw_ + kPi;
         p.y = ground(p.x, p.z);
         placed_.push_back(p);
-        note_ = trf("pworld.placed", {tr("pworld.object." + p.kind), std::to_string(placed_.size())});
+        note_ = trf("pworld.placed", {label_of(p.kind), std::to_string(placed_.size())});
         save();
     }
     else if (k == SDLK_BACKSPACE)
@@ -967,7 +999,7 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         if (best == placed_.size()) note_ = tr("pworld.none_near");
         else
         {
-            note_ = trf("pworld.removed", {tr("pworld.object." + placed_[best].kind)});
+            note_ = trf("pworld.removed", {label_of(placed_[best].kind)});
             placed_.erase(placed_.begin() + long(best));
             if (held_ > int(best)) --held_;
             save();
@@ -991,7 +1023,7 @@ void PersonalWorld::save()
     // 3D place, three turns, placed or dropped) as soon as anything is more, or the file held lines
     // this build keeps without reading.
     bool v2 = !kept_lines_.empty();
-    for (const Placed& p : placed_) v2 = v2 || p.physics || p.pitch != 0 || p.roll != 0 || std::fabs(p.y - ground(p.x, p.z)) > 1e-4f;
+    for (const Placed& p : placed_) v2 = v2 || p.kind.rfind("fav:", 0) == 0 || p.physics || p.pitch != 0 || p.roll != 0 || std::fabs(p.y - ground(p.x, p.z)) > 1e-4f;
     std::error_code ec;
     std::filesystem::create_directories(file_.parent_path(), ec);
     std::ofstream out(file_, std::ios::binary);
@@ -1053,7 +1085,7 @@ void PersonalWorld::load()
             p.physics = how == "physics";
             p.resting = !p.physics; // (a dropped one settles from where it was written)
         }
-        if (ok && std::find(cat.begin(), cat.end(), p.kind) != cat.end()) placed_.push_back(p);
+        if (ok && (std::find(cat.begin(), cat.end(), p.kind) != cat.end() || (version == 2 && p.kind.rfind("fav:", 0) == 0 && p.kind.size() == 68))) placed_.push_back(p);
         else ++skipped;
     }
     if (skipped) note_ = trf("pworld.skipped", {std::to_string(skipped)});
@@ -1110,6 +1142,12 @@ PersonalWorld::Result PersonalWorld::run()
                 return Result::Back;
             }
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) key(e.key.key, e.key.mod);
+            if (!opened_.empty())
+            {
+                save();
+                SDL_SetWindowRelativeMouseMode(window_, false);
+                return Result::Open;
+            }
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) key(held_ >= 0 ? SDLK_RETURN : SDLK_E); // (click: pick up, or place)
             if (e.type == SDL_EVENT_MOUSE_MOTION)
             {

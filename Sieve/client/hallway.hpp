@@ -39,6 +39,7 @@
 #include "dimensions.hpp"
 #include "theme.hpp"
 #include "world.hpp"
+#include "favourites.hpp"
 
 #include "cli/args.hpp"
 #include "cli/book.hpp"
@@ -1093,6 +1094,15 @@ public:
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
     void set_personal(std::vector<sieve::Character> p) { personal_ = std::move(p); }
+    // Where favourites are kept (IDEAS 19.190): the folder the settings are in (favourites/ and
+    // worlds/personal.favourites there); empty: H says favourites are not kept in this run.
+    void set_favourites_base(std::filesystem::path base) { favourites_base_ = std::move(base); }
+    // H with an item in hand: kept as a favourite of your personal dimension (H again: no longer).
+    void keep_favourite();
+    // A favourite opened from a dimension (O on it there): gone to on this line and taken into your
+    // hand, or said why not (made under other settings of the line, its shape then otherwise).
+    void open_favourite(const Favourite& f);
+    bool holding() const { return in_hand_.has_value(); } // (an item in hand)
     // The animation your character plays as it walks beside you (IDEAS 19.170), by the clock, or held
     // at `frame` (0 or more: for a picture); none: it stands at rest.
     void set_animation(std::optional<sieve::Animation> a, int frame = -1)
@@ -1859,7 +1869,8 @@ private:
     const sieve::Animation* action_animation(); // the animation of what it is doing now, or none (told once)
     int animation_frame_ = -1;
     uint32_t animation_shown_ = 0;
-    std::vector<sieve::Character> personal_; // your personal dimension (the store), drawn beside yours
+    std::vector<sieve::Character> personal_;
+    std::filesystem::path favourites_base_; // your personal dimension (the store), drawn beside yours
     void draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest = nullptr,
                      const std::vector<std::array<double, 9>>* turns = nullptr); // (each sphere's turn: its held model turns with it)
     float hall_scale_ = 1, max_scale_ = 16;

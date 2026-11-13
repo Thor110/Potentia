@@ -474,10 +474,11 @@ test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
-# pages line as its alphabet. (document's 7: text and image above it; the manifest, PDF, the
-# catalogue's two record formats and the hallway's recordings, sieve-replay-v1, beneath.)
+# pages line as its alphabet. (document's 9: text and image above it; the manifest, PDF, the
+# catalogue's two record formats, the hallway's recordings (sieve-replay-v1) and favourites, as one
+# and as a dimension's list, beneath.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 7 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 9 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
@@ -1491,6 +1492,19 @@ $H --personal-world --world-file pw/p.world --screenshot pworld-features.png | t
 $H --main-menu --settings pw/f.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_map,Return" --screenshot features-menu.png > /dev/null
 grep -c "^map = off" pw/f.ini | q "^1$"
 $H --personal-world --settings pw/f.ini --world-file pw/p.world --screenshot pworld-nomap.png | tr -d '\r' | q "^features: map off, compass on$"
+# Favourites (IDEAS 19.190): H keeps the item in hand as a favourite of your dimension (beside the
+# settings: favourites/SHA.item and worlds/personal.favourites); your dimension's catalogue lists it
+# after the shelf items, placed it stands as its line's item, O on it opens it, and the hallway takes
+# it into your hand on its line; the main menu's Favourites lists every one.
+rm -rf fv && mkdir fv
+$H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-keep.png | tr -d '\r' | q "Kept as a favourite of your personal dimension: it was the best of times"
+SHA=$(sed -n 2p fv/worlds/personal.favourites | tr -d '\r')
+grep -c "^title it was the best of times$" "fv/favourites/$SHA.item" | q "^1$"
+$H --personal-world --settings fv/s.ini --pworld-look -45 --press "Tab,Up,Return,Tab,o" --screenshot fav-open.png | tr -d '\r' | q "^opened: pages $SHA$"
+grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
+$H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"
+$H --no-menu --settings fv/s.ini --line text --open-favourite "$SHA" --screenshot fav-hand.png | tr -d '\r' | q "^favourite: in hand$"
+$H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-off.png | tr -d '\r' | q "No longer a favourite"
 # Holding (IDEAS 19.192): E picks up what the crosshair is on, R and T turn it, Return places it where
 # it is held (here a little above the grass, tipped), and the world is written as v2 for it; Q drops one,
 # which falls and comes to rest on the grass; both read back. A v2 line this build does not know is

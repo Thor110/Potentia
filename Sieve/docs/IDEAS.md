@@ -7790,7 +7790,15 @@ list for example".
   (`favourites/`), rebuilt from each dimension's list and the Media Player's, never a second copy of
   either, so the lists cannot drift apart. Large items (a file on the binary line) are kept packed as
   `.sieve`, as recordings are.
-- *Planned;* next after the world's first catalogue (Edward, the same day).
+- *Planned;* next after the world's first catalogue (Edward, the same day). (*Built 13 November 2026:* H with
+  an item in hand in the hallway keeps it (H again lets it go); `favourites/SHA.item` and
+  `worlds/personal.favourites` as above, but the dimension's list is a file of its own beside the world
+  rather than lines in it, so keeping a favourite never rewrites the world; your dimension's catalogue
+  lists them after the shelf items; placed (`fav:SHA`, a v2 world) each stands as its line's shelf item,
+  and O on it opens the hallway on its line with the item in your hand, when the line is shaped as it
+  was; Main menu > Personal Dimensions > Favourites lists every one, the Media Player's melodies among
+  them. *Left:* each favourite's own cover on its shelf item, files and models' weights as favourites,
+  and favourites of other dimensions as they come.)
 
 **19.192 Holding, placing, rotating and dropping things in a dimension; authors and visitors (Edward, 13
 November 2026).** His words: "users need a way to place and rotate items in the dimensions as well",

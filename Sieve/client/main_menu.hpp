@@ -8,6 +8,8 @@
 // string comes from the language files (strings.hpp).
 #pragma once
 
+#include "favourites.hpp"
+
 #include "app_settings.hpp"
 #include "strings.hpp"
 #include "dialogs.hpp" // DialogOwner
@@ -50,7 +52,7 @@ public:
     // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
-    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays, Game, Features };
+    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays, Game, Features, Favourites };
     // A Program row names another program Sieve runs (ffmpeg): Enter chooses it with the system's
     // file window, Left goes back to looking for one by itself.
     // An Info row only shows a value (one set in the settings file: the RAID's machines).
@@ -90,6 +92,9 @@ private:
     // The replay viewer (IDEAS 19.184): the recordings in `replays` beside the settings, read as the
     // screen opens; the one chosen to play; whether each is ticked to be cached.
     std::vector<std::filesystem::path> replays_;
+    // Every favourite, every dimension's and the Media Player's (IDEAS 19.190; favourites.hpp), read as the
+    // Favourites screen opens.
+    std::vector<hallway::FavouriteRow> favourite_rows_;
     std::filesystem::path replay_chosen_;
     void read_replays();
     bool replay_cached(size_t i) const;

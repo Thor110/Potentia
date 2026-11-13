@@ -34,6 +34,7 @@
 
 #include "sieve/character.hpp"
 #include "slide_panel.hpp"
+#include "favourites.hpp"
 
 #include <array>
 #include <cstdint>
@@ -51,7 +52,8 @@ public:
     static const std::vector<std::string>& catalogue();
     // Empty when every shelf item was read from shelf-items.sieve; else what could not be.
     static std::string catalogue_note();
-    enum class Result { Back, Quit };
+    enum class Result { Back, Quit, Open }; // Open: a favourite opened (O), to be read on its own line (opened())
+    const Favourite* opened() const { return opened_.empty() ? nullptr : favourite(opened_); }
     Result run();
     // For pictures and tests: a key as if pressed and held for `seconds`, the frame drawn, and where
     // you stand.
@@ -100,7 +102,7 @@ private:
     void physics_step(float dt, float move_x, float move_z);
     // An object's shape as its turns make it: the drop from its origin to its lowest point, and how
     // far it reaches across (for knocks and aiming).
-    static void extent_of(const Placed& p, float& low, float& high, float& across);
+    void extent_of(const Placed& p, float& low, float& high, float& across) const;
     std::filesystem::path file_;
     // The panels slide in from the left as the setup menu's do (slide_panel.hpp), one at a time: the
     // catalogue, and while something is in your hand, Place (its exact place and turns).
@@ -114,7 +116,15 @@ private:
     void save();
     void key(SDL_Keycode k, SDL_Keymod mod = SDL_KMOD_NONE);
     // An object's faces, in the world: triangles (three points each) and their colour.
-    static void faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out);
+    void faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out) const;
+    // Favourites (IDEAS 19.190): this dimension's, read beside its world file, in the catalogue after
+    // Sieve's shelf items as "fav:SHA" and drawn as their line's shelf item.
+    std::vector<Favourite> favourites_;
+    std::vector<std::string> rows_;  // the catalogue as shown: the shelf items' ids, then "fav:SHA" each
+    std::string opened_;             // the favourite O opened, by its SHA
+    const Favourite* favourite(const std::string& sha) const;
+    std::string mesh_kind(const std::string& kind) const; // the shelf item a kind is drawn as
+    std::string label_of(const std::string& kind) const;  // what it is called on the screen
     bool project(float x, float y, float z, float& sx, float& sy, float& depth) const;
     SDL_Window* window_;
     SDL_Renderer* r_;

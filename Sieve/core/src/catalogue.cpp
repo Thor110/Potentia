@@ -223,6 +223,11 @@ std::vector<FormatEntry> gather()
         "first line \"sieve-replay-v1\", then \"start line=...\"; often packed as a .sieve", "F12 in the hallway, --record and --replay, the Replays viewer (SPECIFICATIONS 12.0q; IDEAS 19.184)");
     own("sieve-personal-world-v1", "A personal dimension's world: its seed and what is placed in it", "model-3d",
         "first line \"sieve-personal-world-v1\", then \"seed N\" and \"place KIND X Z YAW\" lines", "your personal dimension (SPECIFICATIONS 12.0r; IDEAS 19.187)");
+    own("sieve-favourite-v1", "A favourite: an item kept by its line, its line's shape and its digits", "document",
+        "first line \"sieve-favourite-v1\", then \"line\", \"space\", \"title\" and \"digits\"; named by SHA-256",
+        "H on an item in the hallway; your dimension's catalogue and the Favourites list (SPECIFICATIONS 12.0r; IDEAS 19.190)");
+    own("sieve-favourites-v1", "A dimension's favourites: the SHA-256 of each, in the order kept", "document", "first line \"sieve-favourites-v1\", then one SHA-256 a line",
+        "worlds/NAME.favourites beside a dimension's world (SPECIFICATIONS 12.0r; IDEAS 19.190)");
     own("sieve-personal-world-v2", "A personal dimension's world in three dimensions: places, turns, placed or dropped", "model-3d",
         "first line \"sieve-personal-world-v2\", then \"seed N\" and \"place KIND X Y Z YAW PITCH ROLL fixed|physics\" lines",
         "your personal dimension: holding, placing and dropping (SPECIFICATIONS 12.0r; IDEAS 19.192)");

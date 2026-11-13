@@ -751,6 +751,7 @@ if(SIEVE_BUILD_CLIENT)
         client/replay.cpp
         client/rings.cpp
         client/personal_world.cpp
+        client/favourites.cpp
         client/speech.cpp
         client/font.cpp
         client/gpu_memory.cpp

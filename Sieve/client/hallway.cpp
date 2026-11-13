@@ -3,6 +3,7 @@
 // drawn over it live in files of their own (hallway.hpp says which).
 
 #include "hallway.hpp"
+#include "favourites.hpp"
 #include "gpu_memory.hpp"
 
 #include "cli/vault.hpp"
@@ -1868,6 +1869,9 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the CHAT tab (chat.cpp)
         else if (in_hand_) apply_tailored(quit);
         break;
+    case SDLK_H:
+        if (in_hand_) keep_favourite(); // (your personal dimension's favourites: IDEAS 19.190)
+        break;
     case SDLK_Z:
         if (in_hand_) open_viewer();
         break;
@@ -1902,6 +1906,55 @@ void Hallway::take_or_return()
 {
     if (in_hand_) { drop_in_hand(); return; }
     take_hovered();
+}
+
+void Hallway::keep_favourite()
+{
+    if (!in_hand_) return;
+    if (favourites_base_.empty())
+    {
+        message(tr("fav.not_kept"));
+        return;
+    }
+    if (in_hand_->unit.empty() || on_binary() || on_ai())
+    {
+        message(tr("fav.not_yet")); // (a file, or a model's weights: to come)
+        return;
+    }
+    Favourite f;
+    f.line = kDimensions[li_].id;
+    f.space = space_id();
+    f.digits = in_hand_->unit;
+    f.title = title_text(*in_hand_);
+    // (a line with no titles: a page is named by its own text, as the status line quotes it)
+    if (f.title.find_first_not_of(' ') == std::string::npos && line().kind == LineKind::Text) f.title = utf8_encode(line().space.text_of(in_hand_->unit));
+    while (!f.title.empty() && f.title.back() == ' ') f.title.pop_back();
+    f.sha = favourite_sha(f.space, f.digits);
+    const auto list = favourites_list_of(favourites_base_ / "worlds" / "personal.world");
+    std::string why;
+    if (!save_favourite(favourites_base_, f, why))
+    {
+        warn(trf("fav.unwritable", {why}));
+        return;
+    }
+    if (add_to_dimension(list, f.sha, why)) message(trf("fav.kept", {f.title.empty() ? f.sha.substr(0, 12) : f.title}));
+    else if (!why.empty()) warn(trf("fav.unwritable", {why}));
+    else
+    {
+        remove_from_dimension(list, f.sha);
+        message(trf("fav.removed", {f.title.empty() ? f.sha.substr(0, 12) : f.title}));
+    }
+}
+
+void Hallway::open_favourite(const Favourite& f)
+{
+    if (f.space != space_id())
+    {
+        message(trf("fav.other_shape", {f.line, f.space}));
+        return;
+    }
+    go_to_unit(f.digits, true);
+    if (in_hand_) hand_tab_ = 0;
 }
 
 void Hallway::take_hovered()

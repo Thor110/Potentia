@@ -191,6 +191,8 @@ const char* kUsage =
     "                      down first, --pworld-wait S lets what was dropped fall, --no-map and --no-compass\n"
     "                      leave those out (as Personal Dimensions > Features can), --pworld-back S walked\n"
     "                      back after; --world-file FILE what is placed\n"
+    "  --open-favourite SHA  a favourite (kept beside --settings) opened as your dimension's O opens it: gone\n"
+    "                      to on its line and taken into your hand (give --line its line)\n"
     "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
     "                      input with its time), written each time you leave it; FILE.sieve: packed\n"
     "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
@@ -951,6 +953,17 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             start = end + 1;
         }
     }
+    // (favourites kept by H in --press go beside a --settings file only, never beside the program: IDEAS 19.190)
+    if (a.has("settings")) hall->set_favourites_base(std::filesystem::path(sieve::from_u8(a.get("settings"))).parent_path());
+    if (a.has("open-favourite"))
+    {
+        // A favourite opened as your dimension's O opens it (IDEAS 19.190): read from beside --settings.
+        const auto base = std::filesystem::path(sieve::from_u8(a.get("settings", "."))).parent_path();
+        const auto f = hallway::read_favourite(base, a.get("open-favourite"));
+        if (!f) throw std::invalid_argument("--open-favourite: no favourite " + a.get("open-favourite") + " beside --settings");
+        hall->open_favourite(*f);
+        std::cout << "favourite: " << (hall->holding() ? "in hand" : "not opened") << "\n";
+    }
     if (a.has("press"))
         for (const auto& [key, mod] : parse_presses(a.get("press")))
         {
@@ -1533,6 +1546,7 @@ int run(const Args& a)
         world.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "personal world: " << world.report() << "\n";
+        if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
         std::cout << "features: map " << (app.personal_map && !a.has("no-map") ? "on" : "off") << ", compass " << (app.personal_compass && !a.has("no-compass") ? "on" : "off") << "\n";
         if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
@@ -1841,6 +1855,7 @@ int run(const Args& a)
     std::string pending_replay;       // a recording chosen in the replay viewer, played in the next hallway
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
+    std::optional<hallway::Favourite> pending_favourite; // a favourite opened in your dimension, to hold there
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
     std::optional<LocatedGo> pending_file;            // a file to walk to there (the File Locator's Go to it)
     std::optional<std::vector<uint32_t>> pending_picture; // a picture to go to there (the chat window's Go to it)
@@ -1914,8 +1929,16 @@ int run(const Args& a)
                 hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
                 world.set_wireframe(!app.real_graphics);
                 world.set_features(app.personal_map, app.personal_compass);
-                if (world.run() == hallway::PersonalWorld::Result::Quit) break;
-                continue;
+                const auto res = world.run();
+                if (res == hallway::PersonalWorld::Result::Quit) break;
+                if (res != hallway::PersonalWorld::Result::Open || !world.opened()) continue;
+                // A favourite opened there (O): into the hallway on its line, as the settings stand, and
+                // into your hand (IDEAS 19.190).
+                pending_favourite = *world.opened();
+                for (const auto& d : hallway::kDimensions)
+                    if (pending_favourite->line == d.id) settings.start_line = d.line;
+                settings_chosen = true;
+                skip_setup = true;
             }
             if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
             if (r == MainMenu::Result::Creator) open_creator = true;
@@ -2035,6 +2058,7 @@ int run(const Args& a)
             hall->set_actions(std::move(map), std::move(anims));
         }
         if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(ha.has("character-store") ? std::filesystem::path(ha.get("character-store")) : character_store_dir(app_path)).characters);
+        hall->set_favourites_base(app_path.parent_path()); // (favourites/ and worlds/ beside the settings: IDEAS 19.190)
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;
         if (pending_melody)
@@ -2046,6 +2070,11 @@ int run(const Args& a)
         {
             hall->hold_on_cost(*pending_unit);
             pending_unit.reset();
+        }
+        if (pending_favourite)
+        {
+            hall->open_favourite(*pending_favourite);
+            pending_favourite.reset();
         }
         if (pending_ai)
         {
