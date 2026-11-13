@@ -35,10 +35,9 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::map<std::string, SDL_FColor> load_mtl(const fs::path& path)
+std::map<std::string, SDL_FColor> read_mtl(std::istream& in)
 {
     std::map<std::string, SDL_FColor> out;
-    std::ifstream in(path);
     std::string line, current;
     while (std::getline(in, line))
     {
@@ -65,8 +64,18 @@ std::shared_ptr<const Mesh> load_obj(const fs::path& path)
 {
     std::ifstream in(path);
     if (!in) return nullptr;
+    return read_obj(in, path.string(), [&](const std::string& name) {
+        std::ifstream m(path.parent_path() / fs::path(name));
+        std::stringstream t;
+        t << m.rdbuf();
+        return t.str();
+    });
+}
+
+std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text)
+{
     auto mesh = std::make_shared<Mesh>();
-    mesh->source = path.string();
+    mesh->source = source;
     std::vector<Vec3> v, vn;
     std::map<std::string, SDL_FColor> materials;
     SDL_FColor kd{0.6f, 0.6f, 0.6f, 1.0f};
@@ -93,7 +102,8 @@ std::shared_ptr<const Mesh> load_obj(const fs::path& path)
             std::string name;
             std::getline(ss >> std::ws, name);
             while (!name.empty() && (name.back() == '\r' || name.back() == ' ')) name.pop_back();
-            for (auto& [k, c] : load_mtl(path.parent_path() / name)) materials[k] = c;
+            std::istringstream mtl(mtl_text(name));
+            for (auto& [k, c] : read_mtl(mtl)) materials[k] = c;
         }
         else if (key == "usemtl")
         {

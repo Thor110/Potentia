@@ -81,7 +81,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Systems: return {{Kind::Action, "systems_formats"}, {Kind::Action, "systems_language"}, {Kind::Action, "back"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
-                {Kind::Action, "raid"}, {Kind::Action, "back"}};
+                {Kind::Action, "raid"}, {Kind::Action, "game_systems"}, {Kind::Toggle, "online"}, {Kind::Action, "back"}};
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
@@ -89,6 +89,8 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
+    // Game systems: AI Explorers (IDEAS 19.189), off until switched on.
+    case Screen::Game: return {{Kind::Toggle, "ai_explorers"}, {Kind::Action, "back"}};
     // The replay viewer (IDEAS 19.184): one row a recording, its box for caching it; then Back.
     case Screen::Replays:
     {
@@ -133,11 +135,13 @@ std::string MainMenu::value_of(const Item& it) const
         if (replays_[i].extension() != ".sieve") return size + "  " + tr("value.replay.plain");
         return size + "  [" + (replay_cached(i) ? "x" : " ") + "] " + tr("value.replay.cache");
     }
+    if (it.id == "online") return onoff(s_.online);
+    if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
     if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
     if (it.id == "raid_peers") return s_.raid_peers.empty() ? tr("value.raid_peers.none") : s_.raid_peers;
-    if (it.id == "raid_listen") return s_.raid_serve ? hallway::raid_service::serving_status() : s_.raid_listen;
+    if (it.id == "raid_listen") return s_.raid_serve && s_.online ? hallway::raid_service::serving_status() : s_.raid_listen;
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {
@@ -300,6 +304,7 @@ void MainMenu::back()
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
     case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
     case Screen::Raid: screen_ = Screen::Settings; row_ = 4; return;
+    case Screen::Game: screen_ = Screen::Settings; row_ = 5; return;
     case Screen::Replays:
         screen_ = Screen::Main;
         row_ = 0;
@@ -354,6 +359,7 @@ void MainMenu::change(int dir)
         else if (it.id == "controls") { screen_ = Screen::Controls; row_ = 0; }
         else if (it.id == "language") { screen_ = Screen::Language; row_ = 0; }
         else if (it.id == "raid") { screen_ = Screen::Raid; row_ = 0; }
+        else if (it.id == "game_systems") { screen_ = Screen::Game; row_ = 0; }
         else if (it.id == "raid_check")
         {
             // Check my shares (IDEAS 19.176): on a thread; what came of it said below the rows.
@@ -394,6 +400,14 @@ void MainMenu::change(int dir)
             s_.text_to_voice = !s_.text_to_voice;
             set_text_to_voice(s_.text_to_voice);
         }
+        else if (it.id == "online")
+        {
+            // Online on or off: the RAID's serving starts or stops with it (sharing asks it each time).
+            s_.online = !s_.online;
+            save();
+            hallway::raid_service::apply(s_, path_);
+        }
+        else if (it.id == "ai_explorers") s_.ai_explorers = !s_.ai_explorers;
         else if (it.id == "raid_share")
         {
             // Opt in: turned on, your key is made if there is none (said, with where), so what is sent
@@ -645,12 +659,13 @@ void MainMenu::render()
                           : screen_ == Screen::Programs ? "screen.programs"
                           : screen_ == Screen::Raid ? "screen.raid"
                           : screen_ == Screen::Replays ? "screen.replays"
+                          : screen_ == Screen::Game ? "screen.game"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
-                       screen_ == Screen::Replays;
+                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();

@@ -61,6 +61,10 @@ Three things hold for everything it keeps, at every stage:
   pieces it cannot read, up to the space you give in all (1 GiB by default) and the most for any one
   address (64 MiB), counted by address kept only as a salted hash (IDEAS §19.179). Nothing kept is
   deleted to make room; a piece over either limit is refused. Up to 32 connections are answered at once.
+- **Online, off by default** (Settings > Online, `[online] enabled`; IDEAS §19.189). Edward: "We
+  should make sure online isn't a requirement and that it is off by default". Sharing, keeping others'
+  saves and checking shares all need it on as well as their own box; while it is off each says so and
+  nothing is sent or answered. The RAID on your own drives needs no network and is never gated.
 - **The protocol** (`sieve-raid-net-v1`): four requests (`has`, `get`, `put`, `bye`) over TCP, every
   piece checked against its name on arrival.
 
@@ -107,8 +111,8 @@ machines may keep what, for whom, and how much, each answer checkable.
 | | |
 | :--- | :--- |
 | Commands | `sieve help raid`: put, get, list, verify, repair, key, serve, share, fetch, check |
-| The menus | Settings > Infinite RAID (share, copies, check, serve); the CHARACTER page's Ctrl+S |
-| Settings file | `[raid]`: drives, share, peers, copies, key, serve, listen, held, space_mb, per_peer_mb |
+| The menus | Settings > Online (needed for everything between machines); Settings > Infinite RAID (share, copies, check, serve); the CHARACTER page's Ctrl+S |
+| Settings file | `[online]`: enabled; `[raid]`: drives, share, peers, copies, key, serve, listen, held, space_mb, per_peer_mb |
 | Specifications | SPECIFICATIONS §12.0l (stages 1 and 2), §12.0o (stage 3) |
 | The plan | IDEAS §19.150 (why), §19.154 (the store), §19.176 (the stages), §19.177 (the licence), §19.178 and §19.179 (identity and limits) |
 | Code | `core/include/sieve/raid.hpp`, `raid_net.hpp`, `seal.hpp`; `tools/cli/raid_socket.hpp`; `client/raid_service.hpp` |

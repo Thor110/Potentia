@@ -112,7 +112,7 @@ std::string ensure_key(const AppSettings& s, const fs::path& settings_path, bool
 
 void apply(const AppSettings& s, const fs::path& settings_path)
 {
-    const std::string config = s.raid_serve ? s.raid_listen + "|" + sieve::u8(held_path(s, settings_path)) + "|" + std::to_string(s.raid_space_mb) + "|" +
+    const std::string config = s.online && s.raid_serve ? s.raid_listen + "|" + sieve::u8(held_path(s, settings_path)) + "|" + std::to_string(s.raid_space_mb) + "|" +
                                                   std::to_string(s.raid_per_peer_mb)
                                             : std::string();
     if (config == g_config && (config.empty() || g_server.joinable())) return;
@@ -166,6 +166,11 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
         g_share_note = std::move(n);
     };
     if (!s.raid_share) return;
+    if (!s.online)
+    {
+        note("not shared: Online is off (Settings > Online)");
+        return;
+    }
     const std::vector<std::string> peers = comma_list(s.raid_peers);
     if (peers.empty())
     {
@@ -253,6 +258,11 @@ void check(const AppSettings& s, const fs::path& settings_path)
     };
     if (g_checking) return;
     if (g_checker.joinable()) g_checker.join();
+    if (!s.online)
+    {
+        note("nothing checked: Online is off (Settings > Online)");
+        return;
+    }
     const std::vector<std::string> peers = comma_list(s.raid_peers);
     if (peers.empty())
     {

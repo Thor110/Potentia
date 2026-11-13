@@ -152,6 +152,14 @@ struct AppSettings
     // the settings), up to raid_space_mb in all and raid_per_peer_mb for any one address. raid_key:
     // your key's file (empty: "raid.key" beside the settings; made when sharing is first ticked).
     bool raid_share = false, raid_serve = false;
+    // Online (Edward, 13 November 2026: "online isn't a requirement and ... it is off by default"):
+    // every system that reaches another machine (the infinite RAID's sharing and serving, and any to
+    // come) runs only while this is on, whatever its own setting says; off by default, so Sieve needs
+    // no network at all.
+    bool online = false;
+    // Game systems (Settings > Game Systems): AI Explorers, AI-driven explorers walking the state
+    // space (IDEAS 19.189), off by default; the switch they will answer to, ready before they come.
+    bool ai_explorers = false;
     std::string raid_peers, raid_key, raid_listen = "0.0.0.0:47100", raid_held;
     int raid_space_mb = 1024, raid_per_peer_mb = 64;
     // Recordings kept packed (.sieve) that are decoded once into the cache rather than each time they

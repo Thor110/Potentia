@@ -19,6 +19,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
+#include <istream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -41,6 +43,9 @@ struct Mesh
 
 // Loads an .obj (and the .mtl it names). Returns null if the file cannot be read or has no faces.
 std::shared_ptr<const Mesh> load_obj(const std::filesystem::path& path);
+// The same from text already in memory (a member of a .sieve, say): `mtl_text` gives the text of a
+// material library it names, empty if there is none. `source` is what the mesh says it came from.
+std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text);
 
 // The model for a line: <model>-<medium>.obj, else the template, else null (stays wireframe).
 std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium);

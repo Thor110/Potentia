@@ -50,7 +50,7 @@ public:
     // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
-    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays };
+    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays, Game };
     // A Program row names another program Sieve runs (ffmpeg): Enter chooses it with the system's
     // file window, Left goes back to looking for one by itself.
     // An Info row only shows a value (one set in the settings file: the RAID's machines).

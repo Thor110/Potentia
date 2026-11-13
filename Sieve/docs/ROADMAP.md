@@ -33,7 +33,9 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    visualiser rings for Sieve's own notes.
 5b. **Personal Dimensions into a world of its own** (Edward, 13 November 2026; IDEAS §19.187): an empty 3D
    world, by default a grassy hill under a blue sky with clouds, drawn from a seed, in place of the
-   setup menu's YOURS.
+   setup menu's YOURS. (*Built 13 November 2026, with a catalogue of Sieve's shelf items to place, kept in
+   `data/objects/shelf-items.sieve`, and placements kept as `sieve-personal-world-v1`; also Online, off
+   by default, and Game Systems with AI Explorers, IDEAS §19.189.*)
 6. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
    tactile Sieve: identity never by colour alone, text size and contrast, the magnifying lens of
    §19.160), 10 (hallway polish).

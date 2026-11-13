@@ -445,7 +445,7 @@ mkdir -p raidn
 $H --main-menu --settings raidn/raidn.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Return" --screenshot raid-menu.png | tr -d '\r' | q "^read aloud: Share my saves, On$"
 test -s raidn/raid.key
 grep -q "^share = on" raidn/raidn.ini
-printf '[raid]\ndrives = raidn/d1,raidn/d2\npeers = 127.0.0.1:47133\n' >> raidn/raidn.ini
+printf '[raid]\ndrives = raidn/d1,raidn/d2\npeers = 127.0.0.1:47133\n[online]\nenabled = on\n' >> raidn/raidn.ini
 $exe raid serve --held raidn-held --listen 127.0.0.1:47133 > raidn-serve.txt 2>&1 &
 raidn_serve=$!
 trap 'kill $raidn_serve 2>/dev/null || true' EXIT
@@ -461,7 +461,11 @@ $exe raid fetch "$(sed -n 1p raidn/raid-shared.txt | cut -d' ' -f2)" --key raidn
 cmp raidn/me.character raidn/back.character
 kill $raidn_serve
 # Keeping others' saves, from the menu: ticked, this machine answers at once on [raid] listen.
-printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
+# Online off (the default) keeps it from answering, however it is set; on, it answers.
+printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\nserve = on\n' > raidn/offline.ini
+$H --main-menu --settings raidn/offline.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Down,Down,Down" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134$"
+test ! -e raidn-held2
+printf '[online]\nenabled = on\n[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
 $H --main-menu --settings raidn/serve.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
 test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
@@ -1460,6 +1464,23 @@ $H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,
 $H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return,r" --screenshot rings-open.png | tr -d '\r' | q "^rings: zoom 0;"
 $H --no-menu --rings 48,60,64,67,72 --screenshot rings.png | tr -d '\r' | q "^rings: zoom 0; C3 1.00 C4 1.00 E4 1.00 G4 1.00 C5 1.00$"
 $H --no-menu --rings 48,60,64,67,72 --rings-zoom 2 --screenshot rings-waves.png | tr -d '\r' | q "^rings: zoom 2; "
+# Your personal dimension's world (IDEAS 19.187): a grassy hill with your character on it. Its
+# catalogue is Sieve's shelf items, read from data/objects/shelf-items.sieve (checked, in memory),
+# apart from the meshes folder anyone may change; Tab, Return places the first (a page), Down twice
+# and Return the third (a record sleeve), and both are kept in the world file (sieve-personal-world-v1)
+# and read back when it opens again. Backspace takes the nearest away; a line not as written is said.
+rm -rf pw && mkdir -p pw
+$H --personal-world --world-file pw/p.world --press "Tab,Return,Down,Down,Return" --pworld-back 2 --screenshot pworld.png | tr -d '\r' > pw/out.txt
+q "^personal world: seed 0; .*; 2 objects placed$" pw/out.txt
+if grep -q "^catalogue: not read" pw/out.txt; then exit 1; fi
+head -2 pw/p.world | tr -d '\r' | tr '\n' '|' | q "^sieve-personal-world-v1|seed 0|$"
+grep -c "^place pages " pw/p.world | q "^1$"
+grep -c "^place audio " pw/p.world | q "^1$"
+$H --personal-world --world-file pw/p.world --screenshot pworld2.png | tr -d '\r' | q "; 2 objects placed$"
+$H --personal-world --world-file pw/p.world --press "Backspace" --screenshot pworld3.png | tr -d '\r' | q "; 1 objects placed$"
+grep -c "^place " pw/p.world | q "^1$"
+printf 'sieve-personal-world-v1\nseed 0\nplace nothing-such 0 0 0\nplace pages 1 2 3\n' > pw/bad.world
+$H --personal-world --world-file pw/bad.world --screenshot pworld4.png | tr -d '\r' | q "; 1 objects placed$"
 out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
 echo "$out" | tail -2 | sed -n 1p | q "went to 1"
 if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi

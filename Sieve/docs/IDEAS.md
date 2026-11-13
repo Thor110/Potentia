@@ -7723,7 +7723,136 @@ sky and clouds, something akin to the windows xp background".
 - *How it fits:* a world is already a line (WORLDS, §19.85 onwards), so the default world is one
   address on it, and a person's own world is theirs to change from there and keep (the store, the
   RAID); the character, its actions (§19.186) and later others' characters walk in it.
-- *Planned only;* after the music visualiser rings (ROADMAP "Next, in order").
+- *Planned only;* after the music visualiser rings (ROADMAP "Next, in order"). (*Built 13 November
+  2026* (client/personal_world.hpp): the main menu's Personal Dimensions opens a world of its own, a
+  hill of a few broad swells from the world's seed (0 by default), shaded by the sun and hazed into the
+  sky with distance, clouds of soft discs drifting, your character before you and the store's round the
+  top; WASD and the mouse to walk, Esc back to the main menu. The setup menu's YOURS page is still there
+  from the setup menu.)
+- *Objects placed from a catalogue (Edward, the same day):* "that should be a 3D space of course, the
+  personal dimension should have the ability to place objects from a catalog in the world space", and
+  "the default placeable objects can just be the sieve books for shelves, that makes sense, however that
+  means they also need sieving and preserving somewhere aside from the overridable ones". *Built:* Tab
+  opens the catalogue, one item a line (a sheet of paper for pages, a canvas, a record sleeve, a tape
+  case, a book, crates and a box), at their size on the shelves; Enter places one on the ground 1.5 m
+  before you, turned to face you, Backspace takes away the nearest within 8 m. They are read from
+  `data/objects/shelf-items.sieve` (the eleven items' .obj and .mtl, 22 files of 21,060 bytes, packed as 2,014),
+  read in memory with every member checked against its SHA-256, so Real Graphics' meshes folder, which
+  anyone may change, does not change them. What is placed is kept as `sieve-personal-world-v1`
+  (SPECIFICATIONS §12.0r) in `worlds/personal.world` beside the settings and read back when the world
+  opens. *Next:* a bookcase to place, items placed on shelves, items of your own beside Sieve's, and the
+  world itself as an address on the WORLDS line.
+- *What it is for (Edward, the same day):* "the main goal of the personal dimensions is to provide a
+  lens for users in which they could create their own interpretation of the sieve space, they could
+  also be used to make games and or just fun spaces to hang out in". So each step here is weighed by
+  that: placing Sieve's own items is a first way to arrange the space as you see it; a world of your
+  own making can become a game (with Game Systems, §19.189) or simply somewhere to be.
+
+**19.189 AI Explorers in the state space, under Game Systems (Edward, 13 November 2026).** His words: "We
+should make sure online isn't a requirement and that it is off by default as a setting", "As well as
+infinite raid which I believe we already have off by default", "That way all the online systems aren't a
+requirement", and "We also need another toggle for AI Explorers in the state space, which would be under
+a sub toggle for the game systems".
+- *Built:* Settings > Online (`[online] enabled`, off by default). While it is off nothing goes out or
+  is answered over the network: Infinite RAID's sharing, keeping others' saves and checking shares each
+  say that Online is off, even where they are ticked; the RAID on your own drives is not online and is
+  unaffected. Settings > Game Systems, a screen of its own, holds AI Explorers (`[game] ai_explorers`,
+  off by default), shown as "(to come)".
+- *What the toggle is for:* AI explorers walking the state space as characters (the harness's models,
+  §19.186's actions), seen in the hallway and in personal dimensions. Nothing reads the toggle yet.
+- *Planned only* beyond the toggle.
+
+**19.190 Favourites in every personal dimension, and one catalogue of them all (Edward, 13 November
+2026).** His words: "users should also be able to add favourites into their personal dimensions, which
+could be real items picked from the shelf, this means each dimension needs a favourites system and
+overall a combined favourites system to catalog them all, the media player already has a favourites
+list for example".
+- *Today:* the Media Player keeps favourite melodies (`sieve-favourites.sieve`: each a MIDI file, with
+  an index of their notes); a personal dimension holds only the shelf items' kinds (§19.187), not real
+  items.
+- *Asked:* a real item, picked from a shelf in the hallway (a page, a picture, a melody, a model, a
+  file), kept as a favourite of a dimension and placed in its world as the thing itself (its cover on
+  its shelf item); every dimension its own list; and one combined catalogue listing every favourite
+  everywhere (the Media Player's included), saying which dimension holds each.
+- *The design proposed:* a favourite is a reference, not a copy: its line, its address (kept as the
+  line's own unit, so it is the item exactly) and its title, named by the SHA-256 of the line and
+  address, so the same item kept twice is one favourite. Each dimension keeps its own list in its world
+  file; a world that holds a favourite is written as `sieve-personal-world-v2` (v1 stays readable, and
+  a world with none is still written as v1). The combined catalogue is an index beside the settings
+  (`favourites/`), rebuilt from each dimension's list and the Media Player's, never a second copy of
+  either, so the lists cannot drift apart. Large items (a file on the binary line) are kept packed as
+  `.sieve`, as recordings are.
+- *Planned;* next after the world's first catalogue (Edward, the same day).
+
+**19.192 Holding, placing, rotating and dropping things in a dimension; authors and visitors (Edward, 13
+November 2026).** His words: "users need a way to place and rotate items in the dimensions as well",
+"they would pick it up and then be presented with the option to either read it, other players would go
+straight to reading the item in its associated viewer, IE the dimension it is from and the viewer
+associated with it, but authors of the dimension would be allowed to pick it up or open it with two
+different key presses", and "picking it up would pick it up to the cursor, users could then drop or
+place it, placed items would stay at their coordinates, even floating where as dropping it would drop it
+and leave its physics flag on so that it can be kicked or bounce / interact with other objects".
+- *Today:* an item is placed on the ground before you, facing you (§19.187), and can only be taken away.
+- *Asked:* in a dimension, looking at an item gives two keys to its author: **open** it (read it in its
+  own viewer, the one of the line it comes from) or **pick it up** to the cursor. A visitor (anyone not
+  an author of the dimension) has only open. What is held can be turned (yaw, pitch and roll), then
+  **placed**, staying exactly where it is held, floating if it is in the air, or **dropped**, falling
+  with its physics on, so it can be kicked, bounce and knock into other things.
+- *What it needs:* each object's place in three dimensions (x, y, z) and its turn in all three axes, a
+  physics flag, and for a favourite (§19.190) the item it is; the world's authors, by the identity the
+  RAID uses (§19.178), a single author (you) until that exists; and a small physics step (gravity,
+  ground and box contacts, rest) run the same on every machine, so a dropped thing comes to rest in the
+  same place everywhere (fixed time step, as replay's, §19.184).
+- *Order:* with favourites, in one new world version: `sieve-personal-world-v2` carries the 3D place,
+  the three turns, the physics flag, favourites and authors together, so the file is not bumped again for
+  each (v1 stays readable; a world using none of them is still written as v1).
+
+**19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
+make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
+users to lay out the line of each dimension according to their own rules, hexagons, septagons, non
+euclidean space, all these sorts of things, which would further access a fractal dimension that would
+contain the rules for fractals", and "those fractals can then be used to generate images, worlds and just
+about anything else using an object and a ruleset or a ruleset and a ruleset".
+- *Today:* every line is laid out one way, a corridor: units in address order along shelves, tile after
+  tile (SPECIFICATIONS §9). A personal dimension (§19.187) is a hill with things placed by hand.
+- *Asked, first part: layouts.* A ruleset says where each unit of a line stands in a space, so a person
+  can walk a line laid out their own way: on square or hexagonal cells in a plane, on heptagons
+  (seven-sided cells meet three at a corner only on a hyperbolic plane, the {7,3} tiling: non-Euclidean,
+  room growing exponentially with distance, so every step out reaches far more units than the corridor
+  does), on a sphere, along a spiral or a space-filling curve, or by a rule of the person's own.
+- *What a layout must keep:* every unit in exactly one place and every place one unit, so the place is
+  still the address, as on the corridor (§6). A layout is therefore a numbering of its cells: from a
+  starting cell, ring by ring outwards, each ring in a fixed order, the n-th cell holding unit n. Any
+  tiling that can be walked that way gives a layout; a rule that leaves a cell out or reaches one twice
+  is refused, as filter plugins are checked (docs/FILTER-PLUGINS.md).
+- *Second part: the fractal dimension.* The rulesets are themselves units: texts in one small grammar
+  (tilings, L-systems, iterated function systems, substitution rules), so the dimension of rulesets is a
+  line like any other, every ruleset of the grammar up to its length at its address, walked, filtered
+  (does it terminate, does it tile) and favourited (§19.190).
+- *Third part: making things.* A ruleset applied to an object (a shelf item, a picture, a model, a
+  world) makes another: an iterated function system drawn from a picture's pieces, an L-system grown from
+  a model, a world's ground laid out by a tiling. A ruleset applied to a ruleset makes a ruleset: one
+  substituted into the other, or one's output the other's seed. What is made is an item of its own line
+  at its own address; the ruleset and the object are a short description of it, and the two together
+  can be kept, shared and checked by their hashes as any item can.
+- *Why (Edward, the same day):* "the reasoning for that is so that people can use these rules to help
+  with the creation of their own universes/dimensions/interpretations of the sieve state spaces": the
+  rulesets are tools for the lens of §19.187, each person's own reading of the same space.
+- *Data and rulesets (Edward):* "rulesets / objects might really be data / rulesets, as an object is a
+  piece of data and we already have data viewers that intrinsically link and span the state spaces". So
+  the two forms are one: data and a ruleset, or a ruleset and a ruleset. Any item of any line is data
+  (a page, a picture, a melody, a model, a file), already shown by its own viewer, so a ruleset needs no
+  new kind of object to act on: it takes an item from any line and makes an item of any line, and the
+  viewers show both. A ruleset is data too (a unit of the fractal dimension), which is why a ruleset
+  applied to a ruleset is the same operation, not a second one.
+- *Honest limits:* most units of any line are noise, and a short ruleset can describe only things with
+  structure: rules name some items briefly, they do not shorten every item (the pigeonhole of §6). A
+  hyperbolic layout cannot be drawn in flat space without distortion (the Poincaré disc shrinks the far
+  cells towards its rim).
+- *First step proposed:* `sieve-layout-v1`, a hexagonal layout of one line in a personal dimension
+  (rings of hexagons round the item you stand at), with its numbering checked against the corridor's
+  order; then {7,3} in the Poincaré disc; then the grammar of the fractal dimension. *Planned only;*
+  after favourites (§19.190).
 
 **19.188 The main menu reordered, from Start Sieve to Exit Sieve; Settings as Potentia Settings
 (Edward, 13 November 2026). One of the final tasks.** His words: "At some point we need to move the main

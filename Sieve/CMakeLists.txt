@@ -750,6 +750,7 @@ if(SIEVE_BUILD_CLIENT)
         client/raid_service.cpp
         client/replay.cpp
         client/rings.cpp
+        client/personal_world.cpp
         client/speech.cpp
         client/font.cpp
         client/gpu_memory.cpp
@@ -788,6 +789,9 @@ if(SIEVE_BUILD_CLIENT)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/models
                 $<TARGET_FILE_DIR:hallway>/models
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/objects
+                $<TARGET_FILE_DIR:hallway>/objects
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/lang
                 $<TARGET_FILE_DIR:hallway>/lang

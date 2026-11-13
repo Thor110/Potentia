@@ -2,6 +2,7 @@
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
 #include "raid_service.hpp"
+#include "personal_world.hpp"
 #include "replay.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
@@ -182,6 +183,9 @@ const char* kUsage =
     "                      19.165): the catalogue of formats as a ring of doors\n"
     "  --rings NOTES       with --screenshot: the Media Player's rings (R there), those MIDI notes (by\n"
     "                      commas, 60 the middle C) held sounding; --rings-zoom N steps in (0 to 2)\n"
+    "  --personal-world    with --screenshot: your personal dimension's world (a grassy hill, your characters),\n"
+    "                      --pworld-walk S walked first, --press to its catalogue (Tab, Up, Down, Return,\n"
+    "                      Backspace), --pworld-back S walked back after; --world-file FILE what is placed\n"
     "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
     "                      input with its time), written each time you leave it; FILE.sieve: packed\n"
     "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
@@ -639,6 +643,9 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 // Your character (IDEAS 19.148): from --character FILE, or the settings file's [character] where it
 // walks beside you (the default character when it has none), or none with --no-character or
 // beside_you off. A file or setting that is refused is said on stderr and leaves the default.
+// Your personal dimension's world (sieve-personal-world-v1): worlds/personal.world beside the settings.
+std::filesystem::path personal_world_file(const std::filesystem::path& app_path) { return app_path.parent_path() / "worlds" / "personal.world"; }
+
 std::optional<sieve::Character> character_of(const AppSettings& app, const Args& a)
 {
     if (a.has("no-character")) return std::nullopt;
@@ -1477,6 +1484,31 @@ int run(const Args& a)
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         return finish();
     }
+    if (shot && a.has("personal-world"))
+    {
+        // A picture of your personal dimension's world (IDEAS 19.187): your character and the store's
+        // on the hill, --pworld-walk SECONDS walked forward first, --press keys to the catalogue
+        // (Tab, Up, Down, Return, Backspace), --pworld-back SECONDS walked back after them, --world-file FILE the placements read and kept (else
+        // beside --settings, else none).
+        std::vector<sieve::Character> chars;
+        if (auto ch = character_of(app, a)) chars.push_back(*ch);
+        if (!a.has("no-character"))
+            for (auto& c : read_personal_dimension(a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path)).characters) chars.push_back(std::move(c));
+        const std::filesystem::path wf = a.has("world-file") ? sieve::from_u8(a.get("world-file"))
+                                         : a.has("settings")  ? personal_world_file(app_path)
+                                                              : std::filesystem::path();
+        hallway::PersonalWorld world(window, renderer, std::move(chars), wf);
+        if (a.has("pworld-walk")) world.hold(SDL_SCANCODE_W, std::stof(a.get("pworld-walk")));
+        if (a.has("press"))
+            for (const auto& [key, mod] : parse_presses(a.get("press"))) world.press(key);
+        if (a.has("pworld-back")) world.hold(SDL_SCANCODE_S, std::stof(a.get("pworld-back"))); // (to see what was placed)
+        world.render();
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        std::cout << "personal world: " << world.report() << "\n";
+        if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        return finish();
+    }
     if (shot && a.has("menu"))
     {
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
@@ -1842,7 +1874,17 @@ int run(const Args& a)
                 settings_chosen = true;
                 skip_setup = true;
             }
-            if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
+            if (r == MainMenu::Result::Personal)
+            {
+                // Your personal dimension: its own world (IDEAS 19.187), your character and the store's
+                // on the hill, what you place there kept beside the settings; Esc back to the main menu.
+                std::vector<sieve::Character> chars;
+                if (auto ch = character_of(app, a)) chars.push_back(*ch);
+                for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
+                hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
+                if (world.run() == hallway::PersonalWorld::Result::Quit) break;
+                continue;
+            }
             if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
             if (r == MainMenu::Result::Creator) open_creator = true;
             if (r == MainMenu::Result::Replay)
