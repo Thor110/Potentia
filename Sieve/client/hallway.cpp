@@ -1916,20 +1916,32 @@ void Hallway::keep_favourite()
         message(tr("fav.not_kept"));
         return;
     }
-    if (in_hand_->unit.empty() || on_binary() || on_ai())
-    {
-        message(tr("fav.not_yet")); // (a file, or a model's weights: to come)
-        return;
-    }
     Favourite f;
     f.line = kDimensions[li_].id;
     f.space = space_id();
-    f.digits = in_hand_->unit;
+    // Kept by its digits where it is a unit of one line, else by its place (a model, a world, a book);
+    // a file and a model's weights are to come.
+    // (on a titled line, a model's place is its titled item's: its title and the model together, as
+    // positional addresses are, whatever ordering or filters stand now)
+    if (in_hand_->model)
+    {
+        const BigUint content = model_space_->index_of(*in_hand_->model, AddressMode::Positional);
+        f.index = (titled_here() ? titled_here()->index_of({{}, in_hand_->title, content}, AddressMode::Positional) : content).to_hex();
+    }
+    else if (in_hand_->world) f.index = world_space_->index_of(*in_hand_->world, AddressMode::Positional).to_hex();
+    else if (in_hand_->parts && books_) f.index = books_->index_of(*in_hand_->parts, AddressMode::Positional).to_hex();
+    else if (!in_hand_->unit.empty() && !on_binary() && !on_ai()) f.digits = in_hand_->unit;
+    else
+    {
+        message(tr("fav.not_yet"));
+        return;
+    }
     f.title = title_text(*in_hand_);
-    // (a line with no titles: a page is named by its own text, as the status line quotes it)
-    if (f.title.find_first_not_of(' ') == std::string::npos && line().kind == LineKind::Text) f.title = utf8_encode(line().space.text_of(in_hand_->unit));
+    // (a page on a line with no titles is named by its own text, as the status line quotes it; an item of
+    // parts, such as a model with a blank title, keeps no page text to quote)
+    if (f.title.find_first_not_of(' ') == std::string::npos && f.index.empty() && line().kind == LineKind::Text) f.title = utf8_encode(line().space.text_of(in_hand_->unit));
     while (!f.title.empty() && f.title.back() == ' ') f.title.pop_back();
-    f.sha = favourite_sha(f.space, f.digits);
+    f.sha = favourite_sha(f.space, f.digits, f.index);
     const auto list = favourites_list_of(favourites_base_ / "worlds" / "personal.world");
     std::string why;
     if (!save_favourite(favourites_base_, f, why))
@@ -1953,8 +1965,28 @@ void Hallway::open_favourite(const Favourite& f)
         message(trf("fav.other_shape", {f.line, f.space}));
         return;
     }
-    go_to_unit(f.digits, true);
-    if (in_hand_) hand_tab_ = 0;
+    if (f.index.empty()) go_to_unit(f.digits, true);
+    else
+    {
+        // An item of parts: found by its place, then shown in this line's ordering.
+        const BigUint at = BigUint::from_hex(f.index);
+        if (effective_mode() == FilterMode::Compact)
+        {
+            message(tr("fav.compact")); // (its place among the survivors is another matter: to come)
+            return;
+        }
+        if (on_models())
+            place(titled_here() ? titled_here()->index_of(titled_here()->parts_at(at, AddressMode::Positional), mode_)
+                                : model_space_->index_of(model_space_->parts_at(at, AddressMode::Positional), mode_),
+                  true);
+        else if (on_worlds()) place(world_space_->index_of(world_space_->parts_at(at, AddressMode::Positional), mode_), true);
+        else if (books_ && on_books()) go_to_book(books_->parts_at(at, AddressMode::Positional), true);
+    }
+    if (in_hand_)
+    {
+        hand_tab_ = 0;
+        open_viewer(); // (read in its own viewer at once, as a visitor does: IDEAS 19.192)
+    }
 }
 
 void Hallway::take_hovered()

@@ -8,6 +8,7 @@
 // makes the window unusable can be undone by changing it back rather than by editing a file.
 #include "main_menu.hpp"
 #include "press_names.hpp"
+#include "keys.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/timings.hpp"
 #include "cli/locate.hpp" // read_file_bytes, sha256_hex (the replay viewer's cache boxes)
@@ -99,7 +100,17 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
                 {Kind::Action, "back"}};
-    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "back"}};
+    case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "keys"}, {Kind::Action, "back"}};
+    // Every key of every system that has moved onto the registry (keys.hpp), by section: Enter, then the
+    // key wanted; Backspace puts back the default.
+    case Screen::Keys:
+    {
+        std::vector<Item> out;
+        const auto rows = hallway::Keys::get().listing();
+        for (size_t i = 0; i < rows.size(); ++i) out.push_back({Kind::Info, "keyrow:" + std::to_string(i)});
+        out.push_back({Kind::Action, "back"});
+        return out;
+    }
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
     // Game systems: AI Explorers (IDEAS 19.189), off until switched on.
@@ -155,6 +166,13 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
     if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
+    if (it.id.rfind("keyrow:", 0) == 0)
+    {
+        const size_t i = size_t(std::stoul(it.id.substr(7)));
+        if (int(i) == key_capture_ && screen_ == Screen::Keys) return tr("value.key_press");
+        const auto rows = hallway::Keys::get().listing();
+        return i < rows.size() ? rows[i].keys + (rows[i].changed ? "  *" : "") : std::string();
+    }
     if (it.id.rfind("favrow:", 0) == 0)
     {
         const auto& f = favourite_rows_[size_t(std::stoul(it.id.substr(7)))];
@@ -177,6 +195,7 @@ std::string MainMenu::help_key(const Item& it)
 {
     if (it.kind == Kind::Replay) return "help.replay_row";
     if (it.id.rfind("favrow:", 0) == 0) return "help.fav_row";
+    if (it.id.rfind("keyrow:", 0) == 0) return "help.key_row";
     return "help." + it.id;
 }
 
@@ -309,6 +328,13 @@ void MainMenu::choose_from_list(int index)
     save();
 }
 
+std::string MainMenu::key_row_label(size_t i) const
+{
+    const auto rows = hallway::Keys::get().listing();
+    if (i >= rows.size()) return std::string();
+    return tr("keys.section." + rows[i].section) + ": " + tr(rows[i].name_key);
+}
+
 bool MainMenu::select(const std::string& id)
 {
     const auto its = items();
@@ -341,6 +367,7 @@ void MainMenu::back()
     case Screen::Game: screen_ = Screen::Settings; select("game_systems"); return;
     case Screen::Features: screen_ = Screen::Personal; select("personal_features"); return;
     case Screen::Favourites: screen_ = Screen::Personal; select("personal_favourites"); return;
+    case Screen::Keys: key_capture_ = -1; screen_ = Screen::Controls; select("keys"); return;
     case Screen::Replays: screen_ = Screen::Main; select("replays"); return;
     case Screen::Personal: screen_ = Screen::Main; select("personal"); return;
     case Screen::Systems: screen_ = Screen::Main; select("systems"); return;
@@ -366,6 +393,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "personal_features") { screen_ = Screen::Features; row_ = 0; }
+        else if (it.id == "keys") { screen_ = Screen::Keys; row_ = 0; key_capture_ = -1; }
         else if (it.id == "personal_favourites") { favourite_rows_ = hallway::all_favourites(path_.parent_path()); screen_ = Screen::Favourites; row_ = 0; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
         else if (it.id == "creator") { result_ = Result::Creator; done_ = true; } // the character creator (IDEAS 19.186)
@@ -506,6 +534,39 @@ void MainMenu::press(SDL_Keycode key, SDL_Keymod mod)
 void MainMenu::handle(const SDL_Event& event)
 {
     if (event.type == SDL_EVENT_QUIT) { result_ = Result::Quit; done_ = true; return; }
+    if (screen_ == Screen::Keys && event.type == SDL_EVENT_KEY_DOWN)
+    {
+        const auto its = items();
+        const bool on_row = row_ >= 0 && size_t(row_) < its.size() && its[size_t(row_)].id.rfind("keyrow:", 0) == 0;
+        const auto rows = hallway::Keys::get().listing();
+        if (key_capture_ >= 0)
+        {
+            // The key pressed becomes this action's key (Esc: leave it as it was).
+            const SDL_Keycode k = event.key.key;
+            if (k != SDLK_ESCAPE && size_t(key_capture_) < rows.size() && k != SDLK_LSHIFT && k != SDLK_RSHIFT && k != SDLK_LCTRL && k != SDLK_RCTRL && k != SDLK_LALT && k != SDLK_RALT)
+            {
+                const hallway::KeyChord c{k, SDL_Keymod(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT))}; // (written as Shift+, Ctrl+, Alt+)
+                hallway::Keys::get().set(rows[size_t(key_capture_)].full_id, hallway::chord_name(c));
+                s_.keys = hallway::Keys::get().overrides();
+                save();
+            }
+            if (k == SDLK_LSHIFT || k == SDLK_RSHIFT || k == SDLK_LCTRL || k == SDLK_RCTRL || k == SDLK_LALT || k == SDLK_RALT) return; // (waiting for the key itself)
+            key_capture_ = -1;
+            return;
+        }
+        if (on_row && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER))
+        {
+            key_capture_ = int(std::stoul(its[size_t(row_)].id.substr(7)));
+            return;
+        }
+        if (on_row && event.key.key == SDLK_BACKSPACE)
+        {
+            hallway::Keys::get().set(rows[std::stoul(its[size_t(row_)].id.substr(7))].full_id, "");
+            s_.keys = hallway::Keys::get().overrides();
+            save();
+            return;
+        }
+    }
     SDL_Event e = event;
     SDL_ConvertEventToRenderCoordinates(r_, &e); // the menu may be drawn scaled (see render)
     const int n = int(items().size());
@@ -691,13 +752,18 @@ void MainMenu::render()
                           : screen_ == Screen::Game ? "screen.game"
                           : screen_ == Screen::Features ? "screen.features"
                           : screen_ == Screen::Favourites ? "screen.favourites"
+                          : screen_ == Screen::Keys ? "screen.keys"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
-                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features || screen_ == Screen::Favourites;
-    const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
+                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features || screen_ == Screen::Favourites || screen_ == Screen::Keys;
+    // (Keys: many rows, so smaller, and a window of them about the one chosen that scrolls with it)
+    const bool compact = screen_ == Screen::Keys;
+    const float rowh = screen_ == Screen::Main ? 44.0f : compact ? 22.0f : 36.0f, boxw = std::min(W - 60, compact ? 900.0f : 760.0f);
+    const int shown = compact ? std::max(4, int((H - 50 - (50 + 8 * ts + 60) - 40 - 140) / rowh)) : int(its.size());
+    const int first = compact ? std::clamp(row_ - shown / 2, 0, std::max(0, int(its.size()) - shown)) : 0;
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();
     if (screen_ == Screen::Controls) key_lines = split_lines(tr("controls.keys")).size();
@@ -705,7 +771,7 @@ void MainMenu::render()
     for (const auto& it : its) has_back = has_back || it.id == "back";
     // The help block is sized for the tallest item's help, so the block does not jump as you move.
     for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr(help_key(it))).size());
-    const float block = (heading ? 40.0f : 0.0f) + float(its.size()) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
+    const float block = (heading ? 40.0f : 0.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
     float top = 50 + 8 * ts + 60;
     const float bottom = H - 50;
@@ -723,11 +789,11 @@ void MainMenu::render()
     item_rects_.clear();
     float item_y = y;
     SDL_FRect list_anchor{};
-    for (int i = 0; i < int(its.size()); ++i)
+    for (int i = first; i < int(its.size()) && i < first + shown; ++i)
     {
         const Item& it = its[size_t(i)];
         const bool sel = i == row_;
-        const float yy = y + float(i) * rowh + (it.id == "back" ? 12 : 0);
+        const float yy = y + float(i - first) * rowh + (it.id == "back" ? 12 : 0);
         const SDL_FRect r{cx - boxw / 2, yy - 8, boxw, rowh - 6};
         item_rects_.emplace_back(r, i);
         // The RAID's two opt-ins: a red box always (IDEAS 19.150: "strongly labelled and opt in only
@@ -752,9 +818,16 @@ void MainMenu::render()
         }
         const std::string label = it.kind == Kind::Replay ? sieve::u8(replays_[size_t(std::stoul(it.id.substr(7)))].filename())
                                   : it.id.rfind("favrow:", 0) == 0 ? favourite_rows_[size_t(std::stoul(it.id.substr(7)))].title.substr(0, 40)
+                                  : it.id.rfind("keyrow:", 0) == 0 ? key_row_label(size_t(std::stoul(it.id.substr(7))))
                                                                     : tr("item." + it.id);
-        const float scale = screen_ == Screen::Main ? 3.0f : 2.0f;
+        const float scale = screen_ == Screen::Main ? 3.0f : compact ? 1.0f : 2.0f;
         if (!pairs || it.kind == Kind::Action) draw_centred(r_, cx, yy + (screen_ == Screen::Main ? -2 : 2), label, scale, sel ? kWhite : kGrey);
+        else if (compact)
+        {
+            draw_text(r_, r.x + 12, yy + 1, label, 1, sel ? kWhite : kGrey);
+            const std::string v = value_of(it);
+            draw_text(r_, r.x + r.w - 12 - text_width(v, 1), yy + 1, v, 1, sel ? kAccent : kGrey);
+        }
         else
         {
             draw_text(r_, r.x + 20, yy + 2, label, 2, sel ? kWhite : kGrey);

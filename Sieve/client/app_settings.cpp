@@ -239,6 +239,10 @@ AppSettings AppSettings::load(const fs::path& path)
         {
             if (key == "enabled") s.online = on_off(value, false);
         }
+        else if (section == "keys")
+        {
+            if (!key.empty()) s.keys[key] = value; // (a key changed on Settings > Controls > Keys)
+        }
         else if (section == "personal")
         {
             if (key == "map") s.personal_map = on_off(value, true);
@@ -444,6 +448,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
     r.push_back({"language", "language", language, "the language file's name in data/lang (en: English)"});
+    // Only the keys changed from their defaults, so none are written until one is (Settings > Controls > Keys).
+    for (const auto& [id, k] : keys) r.push_back({"keys", id, k, "changed from its default on Settings > Controls > Keys"});
     return r;
 }
 

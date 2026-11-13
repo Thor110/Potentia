@@ -52,7 +52,7 @@ public:
     // until 9 November 2026; it is now the Start Sieve map's, client/menu.cpp.)
 
 private:
-    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays, Game, Features, Favourites };
+    enum class Screen { Main, Settings, Graphics, Controls, Language, Programs, Personal, Systems, Raid, Replays, Game, Features, Favourites, Keys };
     // A Program row names another program Sieve runs (ffmpeg): Enter chooses it with the system's
     // file window, Left goes back to looking for one by itself.
     // An Info row only shows a value (one set in the settings file: the RAID's machines).
@@ -70,6 +70,7 @@ private:
     void change(int dir);        // the selected item: act, toggle, step, or open its list
     void back();
     bool select(const std::string& id); // the row of that name on this screen chosen; false if none
+    std::string key_row_label(size_t i) const; // Settings > Controls > Keys: "section: what it does"
     void open_list(const Item& it);
     void choose_from_list(int index);
     std::vector<std::string> list_labels() const;
@@ -95,6 +96,8 @@ private:
     // Every favourite, every dimension's and the Media Player's (IDEAS 19.190; favourites.hpp), read as the
     // Favourites screen opens.
     std::vector<hallway::FavouriteRow> favourite_rows_;
+    // Settings > Controls > Keys (IDEAS 19.199): the row whose next key press becomes its key, or -1.
+    int key_capture_ = -1;
     std::filesystem::path replay_chosen_;
     void read_replays();
     bool replay_cached(size_t i) const;

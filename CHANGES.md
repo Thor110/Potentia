@@ -1,35 +1,29 @@
-# Changes: a bookcase in your dimension, things resting on things, better drawing
+# Keys registry, map zoom, viewer-first opening
 
-## The bookcase
-- The catalogue's last object is **a bookcase**: the corridor's own case, 6 m long with four shelves.
-- It's kept in `data/objects/shelf-items.sieve` with the shelf items, apart from the meshes folder that can be overridden. The pack now holds 24 files (28,370 bytes), packed as 2,885 bytes.
+## Every key in one registry (IDEAS 19.199, first step)
+- New `client/keys.hpp` / `client/keys.cpp`: each system declares its actions (section, id, name, default keys) and asks the registry, rather than testing key codes itself.
+- The personal dimension's 28 actions are on it, in four sections: moving, the catalogue, holding, the map.
+- **Settings > Controls > Keys** lists every action by section. Enter, then a key, changes one (Shift/Ctrl/Alt kept); Backspace restores its default; Esc cancels.
+- Changes are kept in the settings file under `[keys]` (`personal.holding/pick_up = F`). Footers and the aiming hint show the keys as set.
 
-## Things rest on things
-- Held or dropped things rest on the highest upward-facing surface beneath them: the grass, a shelf board, the case's top, or another object's lid.
-- While you hold something, the crosshair rests it on the first such surface it meets within 3 m, so you can stand items on the shelves.
-- A board thinner than one physics step's fall still stops what falls.
+## Map zoom
+- `+` and `-` zoom the personal dimension's map (five steps, each halving what it shows, centred on you). The width shown is written under the map.
 
-| Measured here | Came to rest |
-| :--- | :--- |
-| A page dropped from 17 m over the case | on the case's top |
-| A record sleeve dropped onto a shelf | on that shelf's board |
+## Items open in the viewer made for them (IDEAS 19.200)
+- New **3D** view: models and worlds open on it (arrows or WASD turn it); the .obj text and the picture are tabs.
+- O on a favourite in your dimension opens it in hand **and** in its viewer.
+- Models, worlds and books can now be favourites, kept by their place on the line (`index` in the `.item` file). One kept from a compacted line opens with the filters off.
+- A file has no viewer of its own yet: it is shown as hex, the viewer says a viewer for its kind needs making, and the kind is noted once in `viewers-needed.txt` beside the settings file.
+- Fixed: keeping a model from a compacted line failed with "digit vector has the wrong length" (a blank-titled model was being named by page text).
 
-- Only dropped things knock each other along. A placed thing is a surface to land on, not something to push.
+## Ideas recorded
+- IDEAS 19.200: the viewer rule.
+- IDEAS 19.201: a documentation viewer on the main menu, laid out as a categorised help library (idea only).
+- IDEAS 19.202: screenshots of every screen and feature made by a tool, version-tagged, remade only where their inputs changed; changes sorted by the testing they need (unit, CI, user, ...) (idea only).
 
-## Better aiming and drawing
-- **Aiming:** E and O pick the face the crosshair actually hits, so the 6 m case no longer hides a small item in front of it.
-- **Faces turned away are left out**, and the rest are drawn far first, so items on a shelf show in front of the case's back panel.
-- **Characters:** a character standing behind something placed is hidden, sphere by sphere and bone by bone.
-
-## Keys
-- **PgUp/PgDn** look up and down by 5°, as the mouse does. This helps keyboard-only use.
-
-## IDEAS
-- §19.187: the bookcase and shelves, marked built.
-- §19.199 (new): one registry for every key.
-  - Each system declares its actions under a section path, with default keys.
-  - They appear on the controls listing by section, and any of them can be changed there.
-  - The minimap zoom (+ and -) comes first. I'm building this next.
+## CI (step 10)
+- Map zoom; the Keys screen's read-aloud row; rebinding pick up to F and using it.
+- A model favourite kept from the compacted line, then opened on its 3D view; a file's missing viewer flagged and noted.
 
 ## Files to delete by hand
 - None.

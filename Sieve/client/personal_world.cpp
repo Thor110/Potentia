@@ -2,6 +2,7 @@
 #include "personal_world.hpp"
 
 #include "font.hpp"
+#include "keys.hpp"
 #include "mesh.hpp"
 #include "music.hpp"
 #include "strings.hpp"
@@ -29,6 +30,47 @@ namespace {
 constexpr float kPi = 3.14159265358979f;
 constexpr float kPlaceAhead = 1.5f; // (metres before you an object is placed: a shelf item is 0.4 m tall)
 constexpr float kEye = 1.7f, kFov = 70.0f * kPi / 180.0f, kHalf = 320.0f, kCell = 10.0f, kNear = 0.1f;
+
+} // namespace
+
+// The keys of your personal dimension (IDEAS 19.199): each named by what it does, under its section, so it
+// is listed on Settings > Controls > Keys and can be changed there.
+namespace pk {
+const std::string& declare(const char* section, const char* id, const char* defaults)
+{
+    return Keys::get().declare({section, id, std::string("keys.") + section + "." + id, defaults});
+}
+const std::string& kForward = declare("personal.moving", "forward", "W,Up");
+const std::string& kBack = declare("personal.moving", "back", "S,Down");
+const std::string& kLeft = declare("personal.moving", "left", "A");
+const std::string& kRight = declare("personal.moving", "right", "D");
+const std::string& kTurnLeft = declare("personal.moving", "turn_left", "Left");
+const std::string& kTurnRight = declare("personal.moving", "turn_right", "Right");
+const std::string& kRun = declare("personal.moving", "run", "Left Shift,Right Shift");
+const std::string& kLookUp = declare("personal.moving", "look_up", "PageUp");
+const std::string& kLookDown = declare("personal.moving", "look_down", "PageDown");
+const std::string& kCatalogue = declare("personal.catalogue", "open", "Tab");
+const std::string& kChooseUp = declare("personal.catalogue", "up", "Up");
+const std::string& kChooseDown = declare("personal.catalogue", "down", "Down");
+const std::string& kPlace = declare("personal.catalogue", "place", "Return,Keypad Enter");
+const std::string& kTakeAway = declare("personal.catalogue", "take_away", "Backspace");
+const std::string& kPickUp = declare("personal.holding", "pick_up", "E");
+const std::string& kOpen = declare("personal.holding", "open", "O");
+const std::string& kTurn = declare("personal.holding", "turn", "R");
+const std::string& kTurnBack = declare("personal.holding", "turn_back", "Shift+R");
+const std::string& kTip = declare("personal.holding", "tip", "T");
+const std::string& kTipBack = declare("personal.holding", "tip_back", "Shift+T");
+const std::string& kRoll = declare("personal.holding", "roll", "G");
+const std::string& kRollBack = declare("personal.holding", "roll_back", "Shift+G");
+const std::string& kPlaceHere = declare("personal.holding", "place_here", "Return,Keypad Enter");
+const std::string& kDrop = declare("personal.holding", "drop", "Q");
+const std::string& kPutBack = declare("personal.holding", "put_back", "Escape");
+const std::string& kExact = declare("personal.holding", "exact", "Tab");
+const std::string& kZoomIn = declare("personal.minimap", "zoom_in", "=,Shift+=,Plus,Keypad +");
+const std::string& kZoomOut = declare("personal.minimap", "zoom_out", "-,Keypad -");
+} // namespace pk
+
+namespace {
 
 uint64_t splitmix(uint64_t& s)
 {
@@ -119,14 +161,19 @@ bool PersonalWorld::project(float x, float y, float z, float& sx, float& sy, flo
 
 void PersonalWorld::step(float dt, const bool* keys)
 {
-    const float speed = (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 12.0f : 4.0f;
+    const Keys& K = Keys::get();
+    const bool menu = cat_panel_.open || (place_panel_.open && held_ >= 0); // (a panel's own keys are not walked with)
+    const float speed = K.held(pk::kRun, keys) ? 12.0f : 4.0f;
     float fx = 0, fz = 0;
-    if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]) fz += 1;
-    if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) fz -= 1;
-    if (keys[SDL_SCANCODE_D]) fx += 1;
-    if (keys[SDL_SCANCODE_A]) fx -= 1;
-    if (keys[SDL_SCANCODE_LEFT]) yaw_ -= 1.6f * dt;
-    if (keys[SDL_SCANCODE_RIGHT]) yaw_ += 1.6f * dt;
+    if (!menu)
+    {
+        if (K.held(pk::kForward, keys)) fz += 1;
+        if (K.held(pk::kBack, keys)) fz -= 1;
+        if (K.held(pk::kRight, keys)) fx += 1;
+        if (K.held(pk::kLeft, keys)) fx -= 1;
+        if (K.held(pk::kTurnLeft, keys)) yaw_ -= 1.6f * dt;
+        if (K.held(pk::kTurnRight, keys)) yaw_ += 1.6f * dt;
+    }
     float mx = 0, mz = 0; // (how you move, metres a second, for knocks)
     if (fx != 0 || fz != 0)
     {
@@ -473,7 +520,10 @@ void PersonalWorld::render()
     SDL_RenderLine(r_, W_ / 2, H_ / 2 - 6, W_ / 2, H_ / 2 + 6);
     if (held_ >= 0) draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf("pworld.holding", {label_of(placed_[size_t(held_)].kind)}), 1, white);
     else if (const int a = aimed(); a >= 0)
-        draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf(author_ ? "pworld.aim" : "pworld.aim.visitor", {label_of(placed_[size_t(a)].kind)}), 1, white);
+        draw_text(r_, W_ / 2 + 14, H_ / 2 + 10,
+                  author_ ? trf("pworld.aim", {label_of(placed_[size_t(a)].kind), Keys::get().first(pk::kPickUp), Keys::get().first(pk::kOpen)})
+                          : trf("pworld.aim.visitor", {label_of(placed_[size_t(a)].kind), Keys::get().first(pk::kOpen)}),
+                  1, white);
     draw_text(r_, 20, 16, tr("pworld.title"), 2, white);
     if (cat_panel_.shown > 0)
     {
@@ -520,7 +570,20 @@ void PersonalWorld::render()
     if (held_ >= 0) place_panel_.draw_tab(r_, 80, tr("pworld.place.tab"));
     else cat_panel_.draw_tab(r_, 80, tr("pworld.catalogue.tab"));
     if (!note_.empty()) draw_text(r_, 20, H_ - 42, note_, 1, white);
-    draw_text(r_, 20, H_ - 24, tr(cat_panel_.open ? "pworld.footer.catalogue" : place_panel_.open ? "pworld.footer.place" : held_ >= 0 ? "pworld.footer.holding" : "pworld.footer"), 1, white);
+    {
+        // The footer: the keys as they are set (Settings > Controls > Keys), each by what it does.
+        const Keys& K = Keys::get();
+        auto f = [&](const std::string& id) { return K.first(id); };
+        std::string foot;
+        if (cat_panel_.open) foot = trf("pworld.footer.catalogue", {f(pk::kChooseUp), f(pk::kChooseDown), f(pk::kPlace), f(pk::kCatalogue)});
+        else if (place_panel_.open && held_ >= 0) foot = trf("pworld.footer.place", {f(pk::kDrop), f(pk::kExact)});
+        else if (held_ >= 0)
+            foot = trf("pworld.footer.holding", {f(pk::kTurn), f(pk::kTip), f(pk::kRoll), f(pk::kTurnBack), f(pk::kTipBack), f(pk::kRollBack), f(pk::kExact), f(pk::kPlaceHere), f(pk::kDrop), f(pk::kPutBack)});
+        else
+            foot = trf("pworld.footer", {f(pk::kForward) + " " + f(pk::kLeft) + " " + f(pk::kBack) + " " + f(pk::kRight), f(pk::kLookUp) + "/" + f(pk::kLookDown), f(pk::kRun),
+                                         f(pk::kCatalogue), f(pk::kPickUp), f(pk::kOpen), f(pk::kTakeAway), f(pk::kZoomIn) + "/" + f(pk::kZoomOut)});
+        draw_text(r_, 20, H_ - 24, foot, 1, white);
+    }
 }
 
 // ---- the map and the compass (IDEAS 19.197)
@@ -569,12 +632,16 @@ void PersonalWorld::draw_map()
     const SDL_FRect frame{x0, y0, size, size};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, wireframe_ ? 255 : 150);
     SDL_RenderFillRect(r_, &frame);
-    auto at = [&](float wx, float wz) { return SDL_FPoint{x0 + (wx + kHalf) / (2 * kHalf) * size, y0 + (kHalf - wz) / (2 * kHalf) * size}; };
+    // What it shows: the whole world at zoom 0; each step in, half as far each way, centred on you.
+    const float half = kHalf / float(1 << map_zoom_);
+    const float cxw = map_zoom_ ? px_ : 0.0f, czw = map_zoom_ ? pz_ : 0.0f;
+    auto at = [&](float wx, float wz) { return SDL_FPoint{x0 + (wx - cxw + half) / (2 * half) * size, y0 + (half - (wz - czw)) / (2 * half) * size}; };
+    auto inside = [&](SDL_FPoint q) { return q.x >= x0 && q.x <= x0 + size && q.y >= y0 && q.y <= y0 + size; };
     float lo = 1e9f, hi = -1e9f, hs[kCells][kCells];
     for (int i = 0; i < kCells; ++i)
         for (int j = 0; j < kCells; ++j)
         {
-            hs[i][j] = height(-kHalf + (float(i) + 0.5f) * 2 * kHalf / kCells, kHalf - (float(j) + 0.5f) * 2 * kHalf / kCells);
+            hs[i][j] = height(cxw - half + (float(i) + 0.5f) * 2 * half / kCells, czw + half - (float(j) + 0.5f) * 2 * half / kCells);
             lo = std::min(lo, hs[i][j]), hi = std::max(hi, hs[i][j]);
         }
     const float band = std::max(1.0f, (hi - lo) / 8); // (eight bands of height)
@@ -605,6 +672,7 @@ void PersonalWorld::draw_map()
     for (const Placed& p : placed_)
     {
         const SDL_FPoint q = at(p.x, p.z);
+        if (!inside(q)) continue;
         SDL_SetRenderDrawColor(r_, 255, p.physics && !p.resting ? 220 : 255, p.physics && !p.resting ? 60 : 255, 255);
         const SDL_FRect d{q.x - 1.5f, q.y - 1.5f, 3, 3};
         SDL_RenderFillRect(r_, &d);
@@ -620,6 +688,7 @@ void PersonalWorld::draw_map()
             bx = swells_.empty() ? 0 : swells_[0].x + 14 * std::cos(a), bz = swells_.empty() ? 0 : swells_[0].z + 14 * std::sin(a);
         }
         const SDL_FPoint q = at(bx, bz);
+        if (!inside(q)) continue;
         for (int k = 0; k < 8; ++k)
         {
             const float a0 = 2 * kPi * float(k) / 8, a1 = 2 * kPi * float(k + 1) / 8;
@@ -642,7 +711,11 @@ void PersonalWorld::draw_map()
         const SDL_Vertex v[3] = {{tip, gold, {}}, {l, gold, {}}, {r, gold, {}}};
         SDL_RenderGeometry(r_, nullptr, v, 3, nullptr, 0);
     }
-    draw_text(r_, x0 + 4, y0 + size + 4, "N ^", 1, SDL_Color{200, 200, 210, 255});
+    {
+        char b[48];
+        std::snprintf(b, sizeof b, "N ^   %.0f m across", double(2 * half));
+        draw_text(r_, x0 + 4, y0 + size + 4, b, 1, SDL_Color{200, 200, 210, 255});
+    }
 }
 
 // ---- the catalogue of objects, and what is placed
@@ -1042,27 +1115,57 @@ void PersonalWorld::place_key(SDL_Keycode k, SDL_Keymod mod)
             place_edit_.clear();
             return;
         }
-        place_panel_.open = false;
-        key(SDLK_RETURN); // (placed where its numbers put it)
+        place_held(); // (where its numbers put it)
     }
-    else if (k == SDLK_Q)
-    {
-        place_panel_.open = false;
-        key(SDLK_Q);
-    }
+    else if (Keys::get().is(pk::kDrop, k, mod)) drop_held();
 }
 
 void PersonalWorld::press(SDL_Keycode k, SDL_Keymod mod) { key(k, mod); }
 
+void PersonalWorld::place_held()
+{
+    Placed& p = placed_[size_t(held_)];
+    p.physics = false, p.resting = true;
+    note_ = trf("pworld.placed_here", {label_of(p.kind)});
+    held_ = -1;
+    place_panel_.open = false;
+    save();
+}
+
+void PersonalWorld::drop_held()
+{
+    Placed& p = placed_[size_t(held_)];
+    p.physics = true, p.resting = false, p.vx = p.vy = p.vz = 0;
+    note_ = trf("pworld.dropped", {label_of(p.kind)});
+    held_ = -1;
+    place_panel_.open = false;
+    save();
+}
+
+void PersonalWorld::put_back_held()
+{
+    placed_[size_t(held_)] = held_from_;
+    held_ = -1;
+    place_panel_.open = false;
+    note_.clear();
+}
+
+// Every key here is asked of the registry (keys.hpp) by what it does, never by its key code, so each
+// can be changed on Settings > Controls > Keys and is listed there under its section.
 void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
 {
-    // Looking up and down from the keyboard as well as the mouse, five degrees a press.
-    if (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN)
+    const Keys& K = Keys::get();
+    if (K.is(pk::kLookUp, k, mod) || K.is(pk::kLookDown, k, mod))
     {
-        pitch_ = std::clamp(pitch_ + (k == SDLK_PAGEUP ? 1.0f : -1.0f) * 5.0f * kPi / 180.0f, -1.3f, 1.3f);
+        pitch_ = std::clamp(pitch_ + (K.is(pk::kLookUp, k, mod) ? 1.0f : -1.0f) * 5.0f * kPi / 180.0f, -1.3f, 1.3f);
         return;
     }
-    if (k == SDLK_TAB)
+    if (show_map_ && (K.is(pk::kZoomIn, k, mod) || K.is(pk::kZoomOut, k, mod)) && !(place_panel_.open && held_ >= 0))
+    {
+        map_zoom_ = std::clamp(map_zoom_ + (K.is(pk::kZoomIn, k, mod) ? 1 : -1), 0, kMapZooms - 1);
+        return;
+    }
+    if (K.is(held_ >= 0 ? pk::kExact : pk::kCatalogue, k, mod))
     {
         // One panel at a time: Place while something is in your hand, else the catalogue.
         if (held_ >= 0) place_panel_.toggle(), cat_panel_.open = false, place_edit_.clear();
@@ -1078,40 +1181,25 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
     const int n = int(rows_.size());
     if (held_ >= 0)
     {
-        // In your hand: turned 15 degrees a press (Shift: the other way), then placed where it is or
-        // dropped; Esc puts it back where it was.
+        // In your hand: turned 15 degrees a press, then placed where it is or dropped; put back.
         Placed& p = placed_[size_t(held_)];
-        const float step = (mod & SDL_KMOD_SHIFT) ? -kPi / 12 : kPi / 12;
-        if (k == SDLK_R) p.yaw += step;
-        else if (k == SDLK_T) p.pitch += step;
-        else if (k == SDLK_G) p.roll += step;
-        else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
-        {
-            p.physics = false, p.resting = true;
-            note_ = trf("pworld.placed_here", {label_of(p.kind)});
-            held_ = -1;
-            save();
-        }
-        else if (k == SDLK_Q)
-        {
-            p.physics = true, p.resting = false, p.vx = p.vy = p.vz = 0;
-            note_ = trf("pworld.dropped", {label_of(p.kind)});
-            held_ = -1;
-            save();
-        }
-        else if (k == SDLK_ESCAPE)
-        {
-            p = held_from_;
-            held_ = -1;
-            note_.clear();
-        }
+        const float step = kPi / 12;
+        if (K.is(pk::kTurn, k, mod)) p.yaw += step;
+        else if (K.is(pk::kTurnBack, k, mod)) p.yaw -= step;
+        else if (K.is(pk::kTip, k, mod)) p.pitch += step;
+        else if (K.is(pk::kTipBack, k, mod)) p.pitch -= step;
+        else if (K.is(pk::kRoll, k, mod)) p.roll += step;
+        else if (K.is(pk::kRollBack, k, mod)) p.roll -= step;
+        else if (K.is(pk::kPlaceHere, k, mod)) place_held();
+        else if (K.is(pk::kDrop, k, mod)) drop_held();
+        else if (K.is(pk::kPutBack, k, mod)) put_back_held();
         return;
     }
-    if (!cat_panel_.open && (k == SDLK_E || k == SDLK_O))
+    if (!cat_panel_.open && (K.is(pk::kPickUp, k, mod) || K.is(pk::kOpen, k, mod)))
     {
         const int a = aimed();
         if (a < 0) return;
-        if (k == SDLK_E && author_)
+        if (K.is(pk::kPickUp, k, mod) && author_)
         {
             held_ = a;
             held_from_ = placed_[size_t(a)];
@@ -1122,11 +1210,11 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         else note_ = trf("pworld.open", {label_of(placed_[size_t(a)].kind)}); // (a visitor's E too)
         return;
     }
-    if (cat_panel_.open && k == SDLK_UP) catalogue_row_ = (catalogue_row_ + n - 1) % n;
-    else if (cat_panel_.open && k == SDLK_DOWN) catalogue_row_ = (catalogue_row_ + 1) % n;
-    else if (cat_panel_.open && (k == SDLK_RETURN || k == SDLK_KP_ENTER))
+    if (cat_panel_.open && K.is(pk::kChooseUp, k, mod)) catalogue_row_ = (catalogue_row_ + n - 1) % n;
+    else if (cat_panel_.open && K.is(pk::kChooseDown, k, mod)) catalogue_row_ = (catalogue_row_ + 1) % n;
+    else if (cat_panel_.open && K.is(pk::kPlace, k, mod))
     {
-        // Four metres before you, on the ground, turned to face you.
+        // Before you, on the ground, turned to face you.
         Placed p;
         p.kind = rows_[size_t(catalogue_row_)];
         p.x = px_ + kPlaceAhead * std::sin(yaw_), p.z = pz_ + kPlaceAhead * std::cos(yaw_), p.yaw = yaw_ + kPi;
@@ -1135,7 +1223,7 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         note_ = trf("pworld.placed", {label_of(p.kind), std::to_string(placed_.size())});
         save();
     }
-    else if (k == SDLK_BACKSPACE)
+    else if (K.is(pk::kTakeAway, k, mod))
     {
         // The one nearest you, within eight metres, taken away.
         size_t best = placed_.size();
@@ -1283,7 +1371,7 @@ PersonalWorld::Result PersonalWorld::run()
                 }
                 if (held_ >= 0)
                 {
-                    key(SDLK_ESCAPE); // (put back where it was)
+                    put_back_held(); // (put back where it was)
                     continue;
                 }
                 save();
@@ -1297,7 +1385,12 @@ PersonalWorld::Result PersonalWorld::run()
                 SDL_SetWindowRelativeMouseMode(window_, false);
                 return Result::Open;
             }
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) key(held_ >= 0 ? SDLK_RETURN : SDLK_E); // (click: pick up, or place)
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT)
+            {
+                // (a click: pick up what the crosshair is on, or place what you hold)
+                if (held_ >= 0) place_held();
+                else if (const int a = aimed(); a >= 0 && author_) held_ = a, held_from_ = placed_[size_t(a)], note_.clear();
+            }
             if (e.type == SDL_EVENT_MOUSE_MOTION)
             {
                 yaw_ += e.motion.xrel * 0.0025f;

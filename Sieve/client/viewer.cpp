@@ -27,6 +27,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fstream>
+#include <string>
 
 namespace hallway::hall {
 
@@ -195,6 +197,7 @@ std::string Hallway::view_label(ViewKind k) const
     switch (k)
     {
     case ViewKind::Picture: return tr("view.tab.picture");
+    case ViewKind::Shape: return tr("view.tab.shape");
     case ViewKind::Cover: return tr("view.tab.cover");
     case ViewKind::Title: return tr("view.tab.title");
     case ViewKind::Raw: break;
@@ -386,6 +389,24 @@ void Hallway::view_show(size_t at)
         view_.heading = trf("view.title", {std::to_string(written_length(t))});
         break;
     }
+    case ViewKind::Shape:
+    {
+        // The model (or the world, every model placed) drawn in three dimensions, large and square,
+        // turned as model_spin_ and model_tilt_ say (the item page's turn, so it opens as it was left).
+        const int n = view_picture_px(1.0);
+        view_.picture = true;
+        view_.pw = uint32_t(n);
+        view_.ph = uint32_t(n);
+        const SDL_Color edge = theme().edge;
+        if (bk.model) render_model_face(*model_space_, *bk.model, n, model_spin_, model_tilt_, edge, view_.px);
+        else
+        {
+            const WorldSpace::Mesh m = world_mesh(*world_space_, *bk.world);
+            render_mesh_face(m.vertices, m.faces, n, model_spin_, model_tilt_, edge, view_.px);
+        }
+        view_.heading = named + tr("view.shape");
+        break;
+    }
     case ViewKind::Picture:
     {
         // The picture on the item, drawn again by the same painter as the shelf's, larger, on a
@@ -431,6 +452,8 @@ void Hallway::open_viewer()
     }
     // The views it has: itself, and what was made of it for the shelf.
     view_kinds_ = {ViewKind::Raw};
+    // A model or a world opens on itself in three dimensions, turned as on its page; its .obj text next.
+    if (bk.model || bk.world) view_kinds_.insert(view_kinds_.begin(), ViewKind::Shape);
     if (face_painter(bk)) view_kinds_.push_back(ViewKind::Picture);
     if (bk.parts || !bk.cover.empty()) view_kinds_.push_back(ViewKind::Cover);
     if (bk.parts || !title_text(bk).empty()) view_kinds_.push_back(ViewKind::Title);
@@ -438,6 +461,40 @@ void Hallway::open_viewer()
     view_had_mouse_ = SDL_GetWindowRelativeMouseMode(window_);
     SDL_SetWindowRelativeMouseMode(window_, false);
     view_show(0);
+    // A file opens in the viewer made for its kind. Where none is made yet, it is shown as its bytes
+    // and the kind is flagged, so the viewers still to be made are known (Edward, 13 November 2026: "if
+    // one doesnt exist it should flag it to us and tell us a new viewer needs to be created").
+    if (bk.is_file && !view_.bytes.empty()) flag_missing_viewer(file_type(view_.bytes, view_.bytes.size()));
+}
+
+// The kinds of file with a viewer of their own here; every other kind is shown as its bytes. (None yet:
+// pictures, sound and the rest open in their own viewers on their own lines, not as files.)
+namespace {
+bool has_file_viewer(const std::string& /*kind*/) { return false; }
+} // namespace
+
+void Hallway::flag_missing_viewer(const std::string& kind)
+{
+    if (has_file_viewer(kind)) return;
+    std::fprintf(stderr, "viewer: none for %s files yet\n", kind.c_str());
+    // Noted once a kind, beside your settings: the list of viewers to make.
+    bool noted = false;
+    if (!favourites_base_.empty())
+    {
+        const auto list = favourites_base_ / "viewers-needed.txt";
+        std::ifstream in(list);
+        std::string l;
+        bool listed = false;
+        while (std::getline(in, l)) listed = listed || l == kind;
+        in.close();
+        if (!listed)
+        {
+            std::ofstream out(list, std::ios::app);
+            out << kind << "\n"; // (one kind a line)
+        }
+        noted = true;
+    }
+    message(trf(noted ? "view.no_viewer.noted" : "view.no_viewer", {kind == "?" ? tr("view.kind_unknown") : kind}));
 }
 
 void Hallway::close_viewer()
@@ -532,6 +589,23 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
     {
         const float across = a.w / view_zoom_, down = a.h / view_zoom_;
         const float big = (mod & SDL_KMOD_SHIFT) ? 2.0f : 1.25f;
+        if (view_kinds_[view_at_] == ViewKind::Shape)
+        {
+            // In three dimensions, the arrows and WASD turn it (15 degrees about the vertical, 10 up and
+            // down) rather than move across it.
+            const SDL_Keycode k = e.key.key;
+            const bool turn = k == SDLK_LEFT || k == SDLK_A || k == SDLK_RIGHT || k == SDLK_D, tip = k == SDLK_UP || k == SDLK_W || k == SDLK_DOWN || k == SDLK_S;
+            if (turn || tip)
+            {
+                if (turn) model_spin_ += (k == SDLK_RIGHT || k == SDLK_D ? 1.0f : -1.0f) * 0.2618f;
+                else model_tilt_ = std::clamp(model_tilt_ + (k == SDLK_UP || k == SDLK_W ? 1.0f : -1.0f) * 0.1745f, -1.5f, 1.5f);
+                const float z = view_zoom_;
+                view_show(view_at_);
+                view_set_zoom(z);
+                view_clamp();
+                return;
+            }
+        }
         switch (e.key.key)
         {
         case SDLK_ESCAPE:

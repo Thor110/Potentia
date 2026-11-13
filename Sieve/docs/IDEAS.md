@@ -8012,6 +8012,73 @@ modular, as per everything".
 - *First:* the registry, the minimap's zoom (+ and -) as its first entries, and the personal dimension's
   keys moved onto it; then each other system in turn (the hallway, the setup menu, the Media Player,
   ...), each one its own commit so nothing is changed at once that cannot be checked.
+- *Built, its first step (13 November 2026):* `client/keys.hpp` (the registry: actions declared by
+  section, asked by what they do, their keys kept as `[keys]` overrides); the personal dimension's 28
+  actions on it in four sections (moving, the catalogue, holding, the map), the map's zoom among them
+  (+ and -, five steps, the whole world to 40 m across); its footers and aiming hint built from the
+  keys as set; Settings > Controls > Keys listing every action by section, Enter then a key to change
+  it, Backspace for the default. *Next:* the hallway's keys, then the setup menu's, the Media Player's
+  and each other system's, one at a time.
+
+**19.200 Every item opens in a viewer that already exists; where none does, it is flagged (Edward, 13
+November 2026).** His words: "all items should always default to using a viewer that already exists, if
+one doesnt exist it should flag it to us and tell us a new viewer needs to be created if that data type
+doesnt already have one", "so O on a model in personal dimensions would open it in the 3D model viewer
+for the most part, sometimes like with books, you might need to pick a viewer or sub item to determine
+its viewer". And: "overall this system will help us map out more datatypes, discover new dimensions to
+be charted and fold the system in on itself to link everything from every conceivable angle".
+- *The rule:* opening anything (O in a dimension, Z or a click in the hallway) goes to the viewer made
+  for its data type, on the view that suits it first; an item with several (a book: its pages, cover,
+  title) opens on one and offers the rest as tabs. Where its type has no viewer, it is shown in the
+  plainest form (its bytes), the viewer says that a viewer for this type needs making, and the type is
+  noted, so the list of viewers to make writes itself as people meet them.
+- *Built, its first step (13 November 2026):* a **3D** view (models and worlds open on it, turned with
+  the arrows or WASD; the .obj text and the picture as tabs); O on a favourite opens it in hand and in
+  its viewer; models, worlds and books can be favourites, kept by their place on the line (so one kept
+  from a compacted line opens with the filters off); a file, which has no viewer of its own yet, is
+  shown as hex and its kind (file-kinds-v1) noted once in `viewers-needed.txt` beside the settings.
+  *Next:* files opened by their kind in the viewers that exist (a PNG as a picture, a WAV as sound), so
+  only kinds with none are flagged; and choosing a viewer or a part where an item has several.
+
+**19.201 A documentation viewer on the main menu, laid out as a help library (Edward, 13 November 2026).
+An idea for now.** His words: "we should also add a documentation viewer to the main menu", "which would
+provide access to the docs folder and documentation within them", "this documentation would likely have
+to be rewritten for the end user and laid out somewhat like the old help libraries for windows programs
+in that everything is categorised".
+- *What it would be:* a main-menu item opening the documents in a viewer of their own: a tree of
+  categories on the left (getting started, the hallway, each system, the formats, the command line),
+  the page on the right, with contents, an index and search, and links between pages followed in place.
+- *What it needs:* the documents rewritten for the person using Sieve, not its makers (the present ones
+  are written for development, and many are long notes and measurements), and split into short pages,
+  each under its category. The developers' documents stay as they are, beside it.
+- *Fits with:* §19.196 (menus as data: the categories and pages a data file the viewer reads), §19.200
+  (a document is a data type; this is its viewer), and the existing /docs line and GO TO IT (task 98).
+
+**19.202 Every screen and feature's screenshot made and kept up to date by itself, and each change
+tested only as far as it needs (Edward, 13 November 2026). An idea for now.** His words: "automating the
+creation and updates for each and every screenshot the website might contain which would showcase every
+feature the project has", "each screen gets a screenshot as does each feature and those screenshots get
+tagged with a version number", "when something is changed, altered or updated, we can automate the
+creation of all the new screenshots based only on which ones need updating", and "organise tasks into
+categories to reduce the amount of testing time required ... CI/unit/user and perhaps more where CI is
+a change that requires testing the full or partial CI, unit is a change that requires the unit tests
+and user is something that requires a user to test it such as myself".
+- *Screenshots as data:* a list (a data file) of every shot: its name, the screen or feature it shows,
+  the command that makes it (the hallway's `--screenshot` with its presses, as the CI steps already
+  take them), the source files and data it depends on, and the version it was last made at. A tool
+  makes each one, tags it with the version (in its name and in a listing beside it), and the website
+  reads the listing.
+- *Only what changed:* each shot remembers the SHA-256 of what it depends on (its files, the language
+  strings it shows, the settings it starts from). After a change only the shots whose inputs differ are
+  made again; a shot whose picture comes out byte-identical keeps its old version tag.
+- *Tests by category:* each change says what it needs. **unit** (the unit tests alone: a function's
+  behaviour), **CI** (the CI steps that reach the files changed, found from the same file-to-step map;
+  or all of them for a format or a shared core), **user** (only a person can judge it: a look, a feel,
+  a sound; listed for Edward with how to see it), and perhaps **docs** (nothing to run but the help and
+  settings checks) and **screenshots** (the shots above). The CI runner would take a change's files and
+  run only the steps that depend on them.
+- *Fits with:* the CI's `Item:ID` presses (rows chosen by name, so a shot survives a menu's reordering),
+  §19.196 (screens as data: the list of screens is the list of shots), and task 32 (the website).
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

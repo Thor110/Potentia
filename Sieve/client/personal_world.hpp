@@ -120,6 +120,15 @@ private:
     void load();
     void save();
     void key(SDL_Keycode k, SDL_Keymod mod = SDL_KMOD_NONE);
+    void place_held();
+    void drop_held();
+    void put_back_held();
+    // The map's zoom (IDEAS 19.199's first keys): 0 the whole world, each step in halves what it shows.
+    static constexpr int kMapZooms = 5;
+    int map_zoom_ = 0;
+public:
+    float map_across() const { return 2 * 320.0f / float(1 << map_zoom_); } // (metres the map shows across)
+private:
     // An object's faces, in the world: triangles (three points each) and their colour.
     void faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out) const;
     // Favourites (IDEAS 19.190): this dimension's, read beside its world file, in the catalogue after

@@ -9,7 +9,9 @@
 // named by the SHA-256 of the space's id, a line feed and the digits written as decimal numbers
 // apart by commas, so the same item kept twice is one favourite. Kept beside the settings:
 //   favourites/SHA.item     "sieve-favourite-v1", then "line ID", "space ID", "title TEXT" (the
-//                           title percent-encoded: %25 for %, %0A for a line feed) and "digits D,D,..."
+//                           title percent-encoded: %25 for %, %0A for a line feed) and "digits D,D,...";
+//                           or, for an item made of parts (a model, a world, a book), "digits" empty
+//                           and "index HEX", its positional address on its line
 //   worlds/NAME.favourites  "sieve-favourites-v1", then one SHA a line: that dimension's favourites,
 //                           in the order kept
 // The combined catalogue is worked out from these and the Media Player's own favourites
@@ -31,9 +33,12 @@ struct Favourite
     std::string space;  // the line's shape (Hallway::space_id)
     std::string title;  // as the shelf shows it
     std::vector<uint32_t> digits;
+    // An item kept by its place rather than its digits (a model, a world, a book: items made of parts):
+    // its positional address on its line, in hex; empty for one kept by its digits.
+    std::string index;
 };
 
-std::string favourite_sha(const std::string& space, const std::vector<uint32_t>& digits);
+std::string favourite_sha(const std::string& space, const std::vector<uint32_t>& digits, const std::string& index = {});
 // favourites/ beside the settings file (`base` is the folder the settings are in).
 std::filesystem::path favourites_dir(const std::filesystem::path& base);
 // Writes favourites/SHA.item; false and `why` if it cannot.

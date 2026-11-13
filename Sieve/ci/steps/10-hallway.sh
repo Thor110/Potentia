@@ -1505,12 +1505,33 @@ grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
 $H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"
 $H --no-menu --settings fv/s.ini --line text --open-favourite "$SHA" --screenshot fav-hand.png | tr -d '\r' | q "^favourite: in hand$"
 $H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-off.png | tr -d '\r' | q "No longer a favourite"
+# Every item opens in the viewer made for it (IDEAS 19.200): a model kept from the compacted line
+# (filters mr.ini) is kept by its place, and opens with the filters off on its 3D view. A file has no
+# viewer of its own yet, so it is shown as its bytes and its kind is flagged in viewers-needed.txt.
+rm -rf fm && mkdir fm
+printf "[models]\nmode = compact\nfilters = distinct-vertices-v1, distinct-indices-v1, every-vertex-used-v1\n" > fm/mr.ini
+$H --no-menu --settings fm/s.ini --line models --filters fm/mr.ini --walk "0,0" --press "e,h" --screenshot fav-model.png | tr -d '\r' | q "Kept as a favourite of your personal dimension: "
+MSHA=$(sed -n 2p fm/worlds/personal.favourites | tr -d '\r')
+grep -c "^index [0-9a-f]*$" "fm/favourites/$MSHA.item" | q "^1$"
+$H --no-menu --settings fm/s.ini --line models --open-favourite "$MSHA" --screenshot fav-model-open.png | tr -d '\r' | sed -n 1,2p | tr '\n' ' ' | q "^favourite: in hand viewer: 3D $"
+$H --no-menu --settings fm/s.ini --line binary --press "e,z" --screenshot noviewer.png 2>&1 | tr -d '\r' | q "^viewer: none for .* files yet$"
+grep -c . fm/viewers-needed.txt | q "^1$"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Up,Return" --screenshot pworld-case.png > /dev/null
 grep -c "^place bookcase " pw/bc.world | q "^1$"
 printf 'sieve-personal-world-v2\nseed 0\nplace bookcase 0 22.9 -57 3.14159274 0 0 fixed\nplace pages -0.1 40 -56.82 0 0 0 physics\nplace audio 1.5 25.0 -56.9 3.14159274 0 0 physics\n' > pw/on.world
 $H --personal-world --world-file pw/on.world --pworld-wait 6 --screenshot pworld-shelf.png | tr -d '\r' | q "pages dropped at -0.10, 2\.[78][0-9], .*audio dropped at 1.50, 1\.9[0-9], "
+# Every key on one registry (IDEAS 19.199): the map's zoom (+ and -), each step in halving what it
+# shows; Settings > Controls > Keys lists every key by section, and one changed there (pick up, to F)
+# is kept in the settings file under [keys] and used: F then picks up what E did.
+$H --personal-world --world-file pw/p.world --press "=,=" --screenshot pworld-zoom.png | tr -d '\r' | q "^map: 160 m across$"
+$H --personal-world --world-file pw/p.world --press "=,=,-" --screenshot pworld-zoom2.png | tr -d '\r' | q "^map: 320 m across$"
+rm -rf kb && mkdir kb
+$H --main-menu --settings kb/s.ini --read-aloud --press "Item:settings,Return,Item:controls,Return,Item:keys,Return" --screenshot keys.png | tr -d '\r' | q "^read aloud: Your personal dimension: moving: walk forward, W / Up$"
+$H --main-menu --settings kb/s.ini --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,F" --screenshot keys2.png > /dev/null
+grep -c "^personal.holding/pick_up = F " kb/s.ini | q "^1$"
+$H --personal-world --settings kb/s.ini --pworld-look -45 --press "Tab,Return,Tab,f" --screenshot pworld-f.png | tr -d '\r' | q "pages held at "
 # Holding (IDEAS 19.192): E picks up what the crosshair is on, R and T turn it, Return places it where
 # it is held (here a little above the grass, tipped), and the world is written as v2 for it; Q drops one,
 # which falls and comes to rest on the grass; both read back. A v2 line this build does not know is

@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -163,6 +164,9 @@ struct AppSettings
     // Your personal dimension's features (IDEAS 19.197): the map and the compass, each on by default and
     // each to be turned off (Personal Dimensions > Features).
     bool personal_map = true, personal_compass = true;
+    // Keys changed from their defaults (IDEAS 19.199; keys.hpp): "SECTION/ID" to its keys, as [keys] keeps
+    // them. Only what differs is kept, so a new default reaches everyone who has not changed it.
+    std::map<std::string, std::string> keys;
     std::string raid_peers, raid_key, raid_listen = "0.0.0.0:47100", raid_held;
     int raid_space_mb = 1024, raid_per_peer_mb = 64;
     // Recordings kept packed (.sieve) that are decoded once into the cache rather than each time they

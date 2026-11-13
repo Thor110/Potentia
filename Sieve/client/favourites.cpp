@@ -62,9 +62,10 @@ std::vector<std::string> lines_of(const fs::path& p)
 
 } // namespace
 
-std::string favourite_sha(const std::string& space, const std::vector<uint32_t>& digits)
+std::string favourite_sha(const std::string& space, const std::vector<uint32_t>& digits, const std::string& index)
 {
-    return sieve::Sha256::hex(sieve::Sha256::hash(space + "\n" + digits_text(digits)));
+    // (one kept by its place: the space, a line feed, nothing, a line feed and its address)
+    return sieve::Sha256::hex(sieve::Sha256::hash(space + "\n" + digits_text(digits) + (index.empty() ? std::string() : "\n" + index)));
 }
 
 fs::path favourites_dir(const fs::path& base) { return base / "favourites"; }
@@ -75,6 +76,7 @@ bool save_favourite(const fs::path& base, const Favourite& f, std::string& why)
     fs::create_directories(favourites_dir(base), ec);
     std::ofstream out(favourites_dir(base) / (f.sha + ".item"), std::ios::binary);
     out << "sieve-favourite-v1\nline " << f.line << "\nspace " << f.space << "\ntitle " << encode(f.title) << "\ndigits " << digits_text(f.digits) << "\n";
+    if (!f.index.empty()) out << "index " << f.index << "\n";
     if (!out)
     {
         why = sieve::u8(favourites_dir(base));
@@ -97,6 +99,7 @@ std::optional<Favourite> read_favourite(const fs::path& base, const std::string&
         if (k == "line") f.line = v;
         else if (k == "space") f.space = v;
         else if (k == "title") f.title = decode(v);
+        else if (k == "index") f.index = v;
         else if (k == "digits")
         {
             digits = true;
@@ -113,7 +116,7 @@ std::optional<Favourite> read_favourite(const fs::path& base, const std::string&
         }
     }
     // (checked against its own name, so a file changed by hand is not taken for the favourite it was)
-    if (!digits || f.line.empty() || favourite_sha(f.space, f.digits) != sha) return std::nullopt;
+    if (!digits || f.line.empty() || favourite_sha(f.space, f.digits, f.index) != sha) return std::nullopt;
     return f;
 }
 

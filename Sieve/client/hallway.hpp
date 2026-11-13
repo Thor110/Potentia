@@ -1103,6 +1103,8 @@ public:
     // hand, or said why not (made under other settings of the line, its shape then otherwise).
     void open_favourite(const Favourite& f);
     bool holding() const { return in_hand_.has_value(); } // (an item in hand)
+    // The viewer's open tab ("3D", "TEXT" ...), or "" with the viewer closed.
+    std::string viewer_tab() const { return view_open_ && view_at_ < view_kinds_.size() ? view_label(view_kinds_[view_at_]) : std::string(); }
     // The animation your character plays as it walks beside you (IDEAS 19.170), by the clock, or held
     // at `frame` (0 or more: for a picture); none: it stands at rest.
     void set_animation(std::optional<sieve::Animation> a, int frame = -1)
@@ -1526,7 +1528,7 @@ private:
     // whole window, scrolled both ways and zoomed
     // What the thing can be seen as, the buttons along the top: what it is (its text, pixels, notes,
     // .obj or bytes), the picture on the item, its cover, and its title.
-    enum class ViewKind { Raw, Picture, Cover, Title };
+    enum class ViewKind { Raw, Picture, Cover, Title, Shape }; // Shape: a model or a world in 3D, turned with the keys
     struct ViewDoc
     {
         std::string heading;               // what is open, above it
@@ -1541,6 +1543,7 @@ private:
         Uint64 next_frame = 0;
     };
     void open_viewer();
+    void flag_missing_viewer(const std::string& kind);
     void view_show(size_t at);
     void view_raw();
     std::string view_label(ViewKind k) const;

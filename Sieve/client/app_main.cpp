@@ -3,6 +3,7 @@
 
 #include "raid_service.hpp"
 #include "personal_world.hpp"
+#include "keys.hpp"
 #include "press_names.hpp"
 #include "replay.hpp"
 #include "sieve/paths.hpp"
@@ -963,6 +964,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
         if (!f) throw std::invalid_argument("--open-favourite: no favourite " + a.get("open-favourite") + " beside --settings");
         hall->open_favourite(*f);
         std::cout << "favourite: " << (hall->holding() ? "in hand" : "not opened") << "\n";
+        if (!hall->viewer_tab().empty()) std::cout << "viewer: " << hall->viewer_tab() << "\n";
     }
     if (a.has("press"))
         for (const auto& [key, mod] : parse_presses(a.get("press")))
@@ -1049,6 +1051,7 @@ int run(const Args& a)
     sieve::cli::prefetch_maps(sieve::cli::executable_dir() / "maps");
     AppSettings app = shot ? AppSettings{} : AppSettings::load(app_path);
     if (shot && a.has("settings")) app = AppSettings::load(app_path);
+    for (const auto& [id, k] : app.keys) hallway::Keys::get().set(id, k); // (keys changed on Settings > Controls > Keys)
     const AppSettings loaded = app; // (as the file has them: what the options below are for this run only)
     // The filter memory (the setup menu's FILTER MEMORY): what one count's tables may take.
     if (a.has("filter-memory")) app.filter_memory_mb = std::clamp(int(a.get_positive("filter-memory", 512)), 64, 1048576);
@@ -1548,6 +1551,7 @@ int run(const Args& a)
         std::cout << "personal world: " << world.report() << "\n";
         if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
         std::cout << "features: map " << (app.personal_map && !a.has("no-map") ? "on" : "off") << ", compass " << (app.personal_compass && !a.has("no-compass") ? "on" : "off") << "\n";
+        std::cout << "map: " << world.map_across() << " m across\n";
         if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
