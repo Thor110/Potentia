@@ -57,6 +57,8 @@ public:
     void hold(SDL_Scancode key, float seconds);
     void press(SDL_Keycode key); // the catalogue's keys (Tab, Up, Down, Enter, Backspace), as if typed
     void render();
+    // Real Graphics off: the characters drawn as the wireframe (rings and bones), as everywhere else.
+    void set_wireframe(bool on) { wireframe_ = on; }
     std::string report() const;
     float height(float x, float z) const; // the ground's height there, in metres
     float ground(float x, float z) const; // the same as drawn (the cells' flat triangles)
@@ -95,6 +97,7 @@ private:
     std::vector<Swell> swells_;
     std::vector<Cloud> clouds_;
     float px_ = 0, pz_ = -60, yaw_ = 0, pitch_ = -0.05f; // where you stand, and which way you look
+    bool wireframe_ = false;
     float wind_ = 0;                                     // how far the clouds have drifted
     float W_ = 1280, H_ = 720;
 };

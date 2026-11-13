@@ -170,7 +170,7 @@ struct AppSettings
     int replays_max_minutes = 30, replays_min_free_mb = 256;
     // How many machines keep each piece of a shared save (Edward, 13 November 2026: 3 by default).
     int raid_copies = 3;
-    int character_drawing = 1;
+    int character_drawing = 3; // shaded (Edward, 13 November 2026); the wireframe while Real Graphics is off
     bool character_beside = true;
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)

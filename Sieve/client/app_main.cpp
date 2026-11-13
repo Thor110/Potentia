@@ -1498,6 +1498,7 @@ int run(const Args& a)
                                          : a.has("settings")  ? personal_world_file(app_path)
                                                               : std::filesystem::path();
         hallway::PersonalWorld world(window, renderer, std::move(chars), wf);
+        world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
         if (a.has("pworld-walk")) world.hold(SDL_SCANCODE_W, std::stof(a.get("pworld-walk")));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) world.press(key);
@@ -1512,6 +1513,7 @@ int run(const Args& a)
     if (shot && a.has("menu"))
     {
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
+        if (a.has("real-graphics")) app.real_graphics = true; // (characters drawn as the drawing row says)
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("character")) menu.load_character(a.get("character"));
         // Into sphere 0, as Ctrl+I does into the chosen one (--import-obj is the older name, kept).
@@ -1882,6 +1884,7 @@ int run(const Args& a)
                 if (auto ch = character_of(app, a)) chars.push_back(*ch);
                 for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
                 hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
+                world.set_wireframe(!app.real_graphics);
                 if (world.run() == hallway::PersonalWorld::Result::Quit) break;
                 continue;
             }

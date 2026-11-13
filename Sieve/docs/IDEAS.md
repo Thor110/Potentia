@@ -7807,6 +7807,50 @@ and leave its physics flag on so that it can be kicked or bounce / interact with
   the three turns, the physics flag, favourites and authors together, so the file is not bumped again for
   each (v1 stays readable; a world using none of them is still written as v1).
 
+**19.193 A face finder: faces no one can see taken away from placed objects, the original kept by link
+(Edward, 13 November 2026).** His words: "a useful tool for the dimensions could be a face finder, take
+our book for example, I deleted some faces from them which wouldn't be visible due to the shelf getting
+in the way", "if an object is permanently placed, its origin point the original model can be catalogued
+and then its current position can be raytraced to test if any of its faces can be deleted in order to
+reduce complexity of the personal dimension", "the link through to the original object can start with
+its hash, but needs to still directly link through to the original model", and "this might bloat sieve
+personal dimensions, but it could or should also just result in another localised file that stores all
+the bloat".
+- *What it does:* for an object placed for good (placed, not dropped: §19.192), rays are cast at each of
+  its faces from everywhere a viewer can stand (the walkable ground and the air above it, sampled
+  densely, plus every direction from outside the world's bounds), against everything else placed. A face
+  no ray reaches is never seen and can be left out; one reached by any ray is kept. Edward's books on
+  their shelves are the case done by hand: the faces against the shelf and its neighbours are gone.
+- *The original stays the original:* the object's entry names its original model by SHA-256, and that
+  link must lead straight to the model itself (in the store, the catalogue, or the line it is an item of),
+  never only to the cut copy. The cut copy is the original minus a list of face numbers, so it is checked
+  against its original and can always be made again from it.
+- *Where the cut copies go:* not into the world file, which stays small (places, turns, links). A
+  separate file beside it, local to the machine (e.g. `worlds/personal.faces`, a cache), holds each
+  placed object's face list; deleted, it is worked out again, so it is never part of a save or shared as
+  the world. Anything moved, added or taken away near an object marks that object's list stale.
+- *Honest limits:* sampled rays can miss a face visible only through a narrow gap, so the sampling is
+  conservative (a face is kept when in doubt) and a gap smaller than the sample spacing is said; physics
+  objects (dropped) are never cut, since they move and turn.
+- *Order:* after holding, placing and physics (§19.192), since only placed objects are cut; it uses the
+  same 3D places in `sieve-personal-world-v2`.
+
+**19.194 Modelling tools inside the dimensions (Edward, 13 November 2026). An idea for now.** His words:
+"eventually we should also build all types of modelling tools into this system or dimension, like
+raising ground, subdividing, extruding, boolean cutting etc but this is just an idea for now".
+- *What it would be:* the tools of a modelling program, used in place, in a dimension: the ground raised
+  and lowered (the height field's swells, then a painted offset of its own), faces subdivided and
+  extruded, objects cut and joined by booleans (union, difference, intersection), each change one step
+  of an editable history.
+- *How it fits:* a model made or changed so is an item of the models line like any other, and each step
+  is data + ruleset (§19.191): the original model's hash and the operation, so the result can always be
+  made again from its original, as the face finder's cut copies are (§19.193). The world's ground,
+  changed, is kept as the seed plus the strokes on it, not as a new mesh.
+- *Honest limits:* booleans on triangle meshes need watertight inputs and careful arithmetic to come out
+  the same on every machine (fixed-point or exact predicates), and the models line's roof (8 vertices,
+  12 faces today) holds only small results: larger ones are imported models (§19.159) kept in the store.
+- *Idea only;* after holding and placing (§19.192) and the face finder (§19.193).
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non

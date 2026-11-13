@@ -545,6 +545,8 @@ private:
     // the rows and the lines under them (from y, returning where they end), and the drawing.
     float render_char_rows(float x, float top, float width);
     void render_char_drawing(float bx, float by, float bw, float bh);
+    // Real Graphics off: every character drawn as the wireframe, whatever the drawing row says.
+    bool char_draw_forced() const { return app_ && !app_->real_graphics; }
     // The character creator (IDEAS 19.186): the CHARACTER page and the actions, the whole window.
     bool creator_ = false;
     bool creator_from_main_ = false; // opened from the main menu (Esc: back there), not the setup menu

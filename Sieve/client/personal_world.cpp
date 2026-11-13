@@ -142,6 +142,14 @@ void PersonalWorld::render()
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
     // The sky: deep blue overhead to pale at the horizon (where a level line meets the screen).
     const float f = (H_ / 2) / std::tan(kFov / 2), horizon = H_ / 2 + std::tan(pitch_) * f;
+    if (wireframe_)
+    {
+        // Real Graphics off: everything as the wireframe on black (Edward, 13 November 2026: "everything
+        // should be wireframe when real graphics are off").
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+        SDL_RenderClear(r_);
+    }
+    else
     {
         const float hy = std::clamp(horizon, 0.0f, H_);
         const SDL_FColor top = mix(kSkyLow, kSkyTop, std::clamp((horizon - 0) / (H_ * 0.6f), 0.0f, 1.0f));
@@ -165,6 +173,16 @@ void PersonalWorld::render()
         for (const auto& [d, c] : discs)
         {
             constexpr int kSides = 28;
+            if (wireframe_)
+            {
+                SDL_SetRenderDrawColorFloat(r_, 0.55f * c[3], 0.55f * c[3], 0.60f * c[3], 1);
+                for (int k = 0; k < kSides; ++k)
+                {
+                    const float a0 = 2 * kPi * float(k) / kSides, a1 = 2 * kPi * float(k + 1) / kSides;
+                    SDL_RenderLine(r_, c[0] + c[2] * std::cos(a0), c[1] + c[2] * 0.6f * std::sin(a0), c[0] + c[2] * std::cos(a1), c[1] + c[2] * 0.6f * std::sin(a1));
+                }
+                continue;
+            }
             std::vector<SDL_Vertex> v;
             const SDL_FColor in{c[3], c[3], c[3], 0.9f}, out{c[3], c[3], c[3], 0.0f};
             for (int k = 0; k < kSides; ++k)
@@ -186,7 +204,8 @@ void PersonalWorld::render()
         {
             std::array<Pt, 3> t;
             SDL_FColor base;
-            float lift; // (the grass's lighter crests: its height adds this much light a metre)
+            float lift;          // (the grass's lighter crests: its height adds this much light a metre)
+            unsigned edges = 7; // the wireframe's: bit k, the edge from point k to the next, is drawn
         };
         std::vector<World> world;
         const int n = int(2 * kHalf / kCell);
@@ -200,8 +219,8 @@ void PersonalWorld::render()
                 uint64_t s = seed_ ^ (uint64_t(uint32_t(i)) << 32 | uint32_t(j));
                 const float vary = 1.0f + (unit(s) - 0.5f) * 0.10f;
                 const SDL_FColor g{kGrass.r * vary, kGrass.g * vary, kGrass.b * vary, 1};
-                world.push_back({{Pt{x0, h00, z0}, Pt{x1, h10, z0}, Pt{x1, h11, z1}}, g, 0.10f / 30.0f});
-                world.push_back({{Pt{x0, h00, z0}, Pt{x1, h11, z1}, Pt{x0, h01, z1}}, g, 0.10f / 30.0f});
+                world.push_back({{Pt{x0, h00, z0}, Pt{x1, h10, z0}, Pt{x1, h11, z1}}, g, 0.10f / 30.0f, 3}); // (not the diagonal)
+                world.push_back({{Pt{x0, h00, z0}, Pt{x1, h11, z1}, Pt{x0, h01, z1}}, g, 0.10f / 30.0f, 6});
             }
         // The objects after the ground, all of them: a small thing near a large cell of grass would
         // otherwise be painted over by it (the cell's middle can be nearer than the thing). One
@@ -219,7 +238,7 @@ void PersonalWorld::render()
                     seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g + 0.5f - eye_y) * u;
                 if (seen) faces_of(p, g, faces);
             }
-            for (const auto& [t, c] : faces) world.push_back({t, c, 0});
+            for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7});
         }
         struct Tri
         {
@@ -227,6 +246,8 @@ void PersonalWorld::render()
             std::array<SDL_FPoint, 6> p;
             int count;
             SDL_FColor c;
+            std::array<bool, 6> edge{}; // the wireframe's: the edge from point k to the next drawn
+            bool object = false;
         };
         std::vector<Tri> tris;
         tris.reserve(world.size());
@@ -250,10 +271,12 @@ void PersonalWorld::render()
             const float shade = 0.55f + 0.45f * lit + w.lift * cyw;
             const float dist = std::sqrt((cxw - px_) * (cxw - px_) + (czw - pz_) * (czw - pz_));
             SDL_FColor c{std::clamp(w.base.r * shade, 0.0f, 1.0f), std::clamp(w.base.g * shade, 0.0f, 1.0f), std::clamp(w.base.b * shade, 0.0f, 1.0f), 1};
-            c = mix(c, kSkyLow, std::pow(std::clamp(dist / 700.0f, 0.0f, 1.0f), 1.5f));
+            if (wireframe_) c = mix(w.base, SDL_FColor{0, 0, 0, 1}, std::pow(std::clamp(dist / 700.0f, 0.0f, 1.0f), 1.5f));
+            else c = mix(c, kSkyLow, std::pow(std::clamp(dist / 700.0f, 0.0f, 1.0f), 1.5f));
             // Cut against the near plane (Sutherland-Hodgman), then onto the screen.
             std::array<Pt, 3> in{};
             std::array<Pt, 6> outp{};
+            std::array<bool, 6> oute{};
             int no = 0;
             for (int k = 0; k < 3; ++k) in[size_t(k)] = cam(t[size_t(k)]);
             for (int k = 0; k < 3; ++k)
@@ -261,10 +284,14 @@ void PersonalWorld::render()
                 const Pt& a = in[size_t(k)];
                 const Pt& b = in[size_t((k + 1) % 3)];
                 const bool ain = a[2] >= kNear, bin = b[2] >= kNear;
-                if (ain) outp[size_t(no++)] = a;
+                const bool e = (w.edges >> k) & 1u;
+                if (ain) oute[size_t(no)] = e, outp[size_t(no++)] = a;
                 if (ain != bin)
                 {
+                    // (leaving: the next edge runs along the near plane, never drawn; entering: it is
+                    // the rest of this one)
                     const float u = (kNear - a[2]) / (b[2] - a[2]);
+                    oute[size_t(no)] = !ain && e;
                     outp[size_t(no++)] = {a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, kNear};
                 }
             }
@@ -272,6 +299,7 @@ void PersonalWorld::render()
             Tri tr{};
             tr.count = no;
             tr.c = c;
+            tr.edge = oute;
             float sum = 0;
             for (int k = 0; k < no; ++k)
             {
@@ -279,16 +307,45 @@ void PersonalWorld::render()
                 tr.p[size_t(k)] = {W_ / 2 + q[0] / q[2] * f, H_ / 2 - q[1] / q[2] * f};
                 sum += q[2];
             }
-            tr.depth = sum / float(no) - (size_t(&w - world.data()) >= ground_tris ? 1e6f : 0.0f); // (objects after the ground)
+            tr.object = size_t(&w - world.data()) >= ground_tris;
+            tr.depth = sum / float(no) - (tr.object ? 1e6f : 0.0f); // (objects after the ground)
             tris.push_back(tr);
         }
         std::sort(tris.begin(), tris.end(), [](const Tri& a, const Tri& b) { return a.depth > b.depth; });
+        if (wireframe_)
+        {
+            // Far first, the ground as its open grid (the cells' sides), then each object's faces
+            // filled black and their edges drawn, so an object hides what is behind it. (The ground
+            // is not filled: on a slope seen at a low angle its long thin cells cannot be put in
+            // order by their middles, and a cell drawn out of order would hide lines that show.
+            // Objects behind a hill are already left out, by their line of sight.)
+            const SDL_FColor black{0, 0, 0, 1};
+            for (const Tri& t : tris)
+            {
+                SDL_Vertex fill[12];
+                int nf = 0;
+                for (int k = 1; k + 1 < t.count; ++k)
+                    for (const int q : {0, k, k + 1}) fill[nf++] = {t.p[size_t(q)], black, {}};
+                if (t.object) SDL_RenderGeometry(r_, nullptr, fill, nf, nullptr, 0);
+                SDL_SetRenderDrawColorFloat(r_, t.c.r, t.c.g, t.c.b, 1);
+                for (int k = 0; k < t.count; ++k)
+                    if (t.edge[size_t(k)])
+                    {
+                        const SDL_FPoint& a = t.p[size_t(k)];
+                        const SDL_FPoint& b = t.p[size_t((k + 1) % t.count)];
+                        SDL_RenderLine(r_, a.x, a.y, b.x, b.y);
+                    }
+            }
+        }
+        else
+        {
         std::vector<SDL_Vertex> v;
         v.reserve(tris.size() * 12);
         for (const Tri& t : tris)
             for (int k = 1; k + 1 < t.count; ++k)
                 for (const int q : {0, k, k + 1}) v.push_back({t.p[size_t(q)], t.c, {}});
         SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), nullptr, 0);
+        }
     }
     // Your characters on the hill: yours a few steps ahead of where you began, those in your store in
     // a ring round the top; each sphere a disc, each bone a line, at its own size (4096 units a metre).
@@ -323,6 +380,17 @@ void PersonalWorld::render()
                 if (!at(s, sx, sy, d)) continue;
                 const float rad = std::max(1.5f, float(s.r) * unitm * f / d);
                 const SDL_FColor col = ci == 0 ? SDL_FColor{0.95f, 0.92f, 0.85f, 1} : SDL_FColor{0.80f, 0.82f, 0.90f, 1};
+                if (wireframe_)
+                {
+                    SDL_SetRenderDrawColorFloat(r_, col.r, col.g, col.b, 1);
+                    constexpr int kRing = 20;
+                    for (int k = 0; k < kRing; ++k)
+                    {
+                        const float a0 = 2 * kPi * float(k) / kRing, a1 = 2 * kPi * float(k + 1) / kRing;
+                        SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
+                    }
+                    continue;
+                }
                 std::vector<SDL_Vertex> v;
                 constexpr int kSides = 20;
                 for (int k = 0; k < kSides; ++k)

@@ -369,6 +369,7 @@ side.char.draw.0 = pixels (a point a sphere)
 side.char.draw.1 = wireframe
 side.char.draw.2 = voxels
 side.char.draw.3 = shaded, lit from the upper left
+side.char.draw.forced = wireframe (Real Graphics is off)
 side.char.count = {0} spheres, {2} {1}...
 side.char.saved = saved as {0}
 side.char.stored = in the store as {0}...

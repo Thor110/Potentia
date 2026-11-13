@@ -3729,7 +3729,7 @@ float Menu::render_char_rows(float x, float top, float width)
     const std::string values[] = {char_.given ? tr("side.char.from_skeleton") : std::to_string(cs.seed), char_.given ? given : std::to_string(cs.limbs), char_.given ? given : std::to_string(cs.joints),
                                   char_.given ? given : std::to_string(cs.branches), char_.given ? given : std::string(sieve::symmetry_name(cs.symmetry)),
                                   char_.given ? given : cs.head ? tr("side.yes") : tr("side.no"),
-                                  tr(std::string("side.char.draw.") + std::to_string(char_draw_)),
+                                  char_draw_forced() ? tr("side.char.draw.forced") : tr(std::string("side.char.draw.") + std::to_string(char_draw_)),
                                   trf("side.char.sphere_of", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())}),
                                   char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : tr("side.char.none")};
     static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing", "side.char.sphere", "side.char.model"};
@@ -3762,6 +3762,9 @@ float Menu::render_char_rows(float x, float top, float width)
     // below the rows.
 void Menu::render_char_drawing(float bx, float by, float bw, float bh)
 {
+    // How it is drawn: as the drawing row says (shaded unless changed), but always the wireframe while
+    // Real Graphics is off, as everything else then is (Edward, 13 November 2026).
+    const int draw = char_draw_forced() ? 1 : char_draw_;
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
     {
@@ -3831,7 +3834,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             const bool head = p.kind == sieve::Sphere::Head;
             return SDL_FColor{v / 255.0f, (head ? v : v * 0.85f) / 255.0f, (head ? v * 0.7f : v) / 255.0f, 1.0f};
         };
-        if (char_draw_ <= 1)
+        if (draw <= 1)
         {
             // The bones, under everything.
             SDL_SetRenderDrawColor(r_, 120, 120, 120, 255);
@@ -3854,13 +3857,13 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             const float rad = std::max(1.5f, float(p.r) * scale);
             const SDL_FColor c = colour(p, d, 1.0f);
             SDL_SetRenderDrawColorFloat(r_, c.r, c.g, c.b, 1.0f);
-            if (char_draw_ == 0)
+            if (draw == 0)
             {
                 // Pixels: the sphere as one point, its size what a pixel is.
                 const SDL_FRect px{std::floor(sx) - 1, std::floor(sy) - 1, 3, 3};
                 SDL_RenderFillRect(r_, &px);
             }
-            else if (char_draw_ == 1)
+            else if (draw == 1)
             {
                 constexpr int kSegs = 24;
                 for (int k = 0; k < kSegs; ++k)
@@ -3869,7 +3872,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
                     SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
                 }
             }
-            else if (char_draw_ == 2)
+            else if (draw == 2)
             {
                 // Voxels: the cells of a grid fixed to the screen whose centres fall in the sphere's
                 // disc, each a filled square with a darker edge.
