@@ -7744,12 +7744,20 @@ sky and clouds, something akin to the windows xp background".
   opens the catalogue, one item a line (a sheet of paper for pages, a canvas, a record sleeve, a tape
   case, a book, crates and a box), at their size on the shelves; Enter places one on the ground 1.5 m
   before you, turned to face you, Backspace takes away the nearest within 8 m. They are read from
-  `data/objects/shelf-items.sieve` (the eleven items' .obj and .mtl, 22 files of 21,060 bytes, packed as 2,014),
+  `data/objects/shelf-items.sieve` (the eleven items' .obj and .mtl, 22 files of 21,060 bytes, packed as 2,014; with the bookcase, 24 files of 28,370 bytes packed as 2,885),
   read in memory with every member checked against its SHA-256, so Real Graphics' meshes folder, which
   anyone may change, does not change them. What is placed is kept as `sieve-personal-world-v1`
   (SPECIFICATIONS §12.0r) in `worlds/personal.world` beside the settings and read back when the world
   opens. *Next:* a bookcase to place, items placed on shelves, items of your own beside Sieve's, and the
-  world itself as an address on the WORLDS line.
+  world itself as an address on the WORLDS line. (*The bookcase and shelves built 13 November 2026:* the
+  corridor's left-wall case (templates/bookshelf.obj, packed in shelf-items.sieve with the items) is the
+  catalogue's last object, stood as every object is; things rest on the highest surface beneath them
+  that faces up (the grass, a shelf board, the case's top), held or dropped, and the crosshair rests
+  what you hold on the first such surface it meets within 3 m. Measured here: pages dropped from 17 m over the
+  case come to rest on its top (2.85 m above its foot), a record sleeve dropped onto a shelf rests on
+  its board; a board thinner than one step's fall still stops what falls (each step looks for surfaces
+  from where it began). Drawing: objects' faces turned away are left out and the rest sorted far first, and
+  a character behind something placed is hidden, sphere by sphere.)
 - *What it is for (Edward, the same day):* "the main goal of the personal dimensions is to provide a
   lens for users in which they could create their own interpretation of the sieve space, they could
   also be used to make games and or just fun spaces to hang out in". So each step here is weighed by
@@ -7981,6 +7989,29 @@ naturally".
   line of its own rulesets, each able to hold dimensions of its own; the door names the ruleset it
   uses by its address, so a new maze generator found there is one a door can use at once.
 - *Idea only;* after favourites (§19.190) and the layouts of §19.191, whose cells it uses.
+
+**19.199 Every key in one controls registry: each system names its keys, they gather under its section,
+and every one can be changed (Edward, 13 November 2026).** His words: "we could and should also add a zoom
+system to the minimap +/- keys by default", "as with any and every key throughout the entire project and
+its many systems, they should get mapped back to a section so these keys would be listed under minimap
+controls a sub section of the controls listing", "this should be dynamically in such a way that when we
+add new key press handlers to new systems, the system itself has a primary tag and it can funnel/filter
+itself upstream to the controls listings", "so that we have a single system in place which can extend
+through all current systems and future systems", and "this would mean we could add new keys to something
+and they would naturally just appear on the controls list under "movement/vehicles/sieve setup
+menu/media player menu" etc so that all keys are adjustable through and through, dynamic, procedural,
+modular, as per everything".
+- *The registry:* one table of actions, each with a section path (its system's tag, e.g. "personal
+  dimension/minimap"), a name ("zoom in"), its default keys and its description. A system declares its
+  actions where it is written and asks the registry "was zoom-in pressed?" rather than testing a key
+  code, so a new system's keys appear in the controls listing under its section by themselves.
+- *Changing keys:* Settings > Controls lists every section and its actions; a key changed there is kept
+  in the settings file (`[keys] section/action = KEY,...`, only what differs from the default), and a
+  key used twice in one section is said. The footers and help lines read their key names from the same
+  registry, so they always show the keys as they are set.
+- *First:* the registry, the minimap's zoom (+ and -) as its first entries, and the personal dimension's
+  keys moved onto it; then each other system in turn (the hallway, the setup menu, the Media Player,
+  ...), each one its own commit so nothing is changed at once that cannot be checked.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

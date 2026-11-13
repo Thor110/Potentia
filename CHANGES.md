@@ -1,46 +1,35 @@
-# Changes: favourites, in every dimension and in one list (IDEAS §19.190)
+# Changes: a bookcase in your dimension, things resting on things, better drawing
 
-## In the hallway
-- **H** with an item in hand keeps it as a favourite of your personal dimension; H again lets it go. The item page's key line now shows "H: favourite".
-- A page with no title is named by its own text.
-- Files and models' weights can't be favourites yet; the hallway says so if you try.
+## The bookcase
+- The catalogue's last object is **a bookcase**: the corridor's own case, 6 m long with four shelves.
+- It's kept in `data/objects/shelf-items.sieve` with the shelf items, apart from the meshes folder that can be overridden. The pack now holds 24 files (28,370 bytes), packed as 2,885 bytes.
 
-## What's stored, beside the settings file
-- **`favourites/SHA.item`** (`sieve-favourite-v1`) holds the line, the line's shape, the title and the item's digits. It's a reference, never a copy.
-  - SHA is the SHA-256 of the shape and the digits, so the same item kept twice is one favourite.
-  - A file changed by hand no longer matches its name, so it isn't read.
-- **`worlds/personal.favourites`** (`sieve-favourites-v1`) is your dimension's list, one SHA per line, in the order kept.
-  - It's a separate file, so keeping a favourite never rewrites the world file.
+## Things rest on things
+- Held or dropped things rest on the highest upward-facing surface beneath them: the grass, a shelf board, the case's top, or another object's lid.
+- While you hold something, the crosshair rests it on the first such surface it meets within 3 m, so you can stand items on the shelves.
+- A board thinner than one physics step's fall still stops what falls.
 
-## In your dimension
-- The catalogue (Tab) lists your favourites after Sieve's shelf items.
-- A placed favourite stands as its line's shelf item, written as `place fav:SHA ...` in a v2 world.
-- **O** on it opens the hallway on its line with the item in your hand.
-  - This works when the line is shaped as it was when you kept it. If not, it tells you how the line was shaped.
+| Measured here | Came to rest |
+| :--- | :--- |
+| A page dropped from 17 m over the case | on the case's top |
+| A record sleeve dropped onto a shelf | on that shelf's board |
 
-## One list of them all
-- **Main menu > Personal Dimensions > Favourites** lists every favourite: each dimension's, plus the Media Player's melodies.
-- Each row says where it's kept and which line it's from.
-- The list is worked out each time it opens, never stored, so it can't drift from the dimensions' own lists.
+- Only dropped things knock each other along. A placed thing is a surface to land on, not something to push.
 
-## Other
-- `--open-favourite SHA` opens a favourite (kept beside `--settings`) for a picture.
-- Catalogue entries `sieve-favourite-v1` and `sieve-favourites-v1`. The catalogue now has 203 entries, and "document" has 9 doors.
-- Docs:
-  - SPECIFICATIONS §12.0r gives both formats;
-  - MANUAL covers favourites;
-  - IDEAS §19.190 is marked built.
-- CI step 10 checks:
-  - keeping a favourite;
-  - its file and title;
-  - placing and opening it in your dimension;
-  - the combined list;
-  - opening it in the hallway;
-  - letting it go.
+## Better aiming and drawing
+- **Aiming:** E and O pick the face the crosshair actually hits, so the 6 m case no longer hides a small item in front of it.
+- **Faces turned away are left out**, and the rest are drawn far first, so items on a shelf show in front of the case's back panel.
+- **Characters:** a character standing behind something placed is hidden, sphere by sphere and bone by bone.
 
-## Not done yet
-- Each favourite's own cover on its shelf item.
-- Files and models' weights as favourites.
+## Keys
+- **PgUp/PgDn** look up and down by 5°, as the mouse does. This helps keyboard-only use.
+
+## IDEAS
+- §19.187: the bookcase and shelves, marked built.
+- §19.199 (new): one registry for every key.
+  - Each system declares its actions under a section path, with default keys.
+  - They appear on the controls listing by section, and any of them can be changed there.
+  - The minimap zoom (+ and -) comes first. I'm building this next.
 
 ## Files to delete by hand
 - None.

@@ -144,10 +144,16 @@ void PersonalWorld::step(float dt, const bool* keys)
         // its numbers put it instead).
         Placed& p = placed_[size_t(held_)];
         const float ey = height(px_, pz_) + kEye;
-        p.x = px_ + std::sin(yaw_) * std::cos(pitch_) * 2.0f, p.y = ey + std::sin(pitch_) * 2.0f, p.z = pz_ + std::cos(yaw_) * std::cos(pitch_) * 2.0f;
+        const float dx = std::sin(yaw_) * std::cos(pitch_), dy = std::sin(pitch_), dz = std::cos(yaw_) * std::cos(pitch_);
         float low, high, across;
         extent_of(p, low, high, across);
-        p.y = std::max(p.y, ground(p.x, p.z) - low);
+        // Where the crosshair meets a surface facing up within reach (a shelf board, a table top, the
+        // grass), it rests there; else it floats two metres along it.
+        float t = 2.0f;
+        const bool hit = surface_along(px_, ey, pz_, dx, dy, dz, 3.0f, held_, t);
+        p.x = px_ + dx * t, p.z = pz_ + dz * t, p.y = ey + dy * t;
+        if (hit) p.y -= low;
+        p.y = std::max(p.y, surface_below(p.x, p.y + low + 0.05f, p.z, held_) - low);
     }
     physics_step(dt, mx, mz);
 }
@@ -234,6 +240,8 @@ void PersonalWorld::render()
             SDL_FColor base;
             float lift;          // (the grass's lighter crests: its height adds this much light a metre)
             unsigned edges = 7; // the wireframe's: bit k, the edge from point k to the next, is drawn
+            bool obj = false;    // an object's face (its winding outward), not the ground's
+            float obj_depth = 0; // its object's middle's depth from the eye, so objects are drawn whole, far first
         };
         std::vector<World> world;
         const int n = int(2 * kHalf / kCell);
@@ -264,9 +272,15 @@ void PersonalWorld::render()
                 const float dx = p.x - px_, dz = p.z - pz_, d = std::sqrt(dx * dx + dz * dz);
                 for (float u = 2.0f / std::max(d, 2.0f); u < 1.0f && seen; u += 2.0f / std::max(d, 2.0f))
                     seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g + 0.5f - eye_y) * u;
-                if (seen) faces_of(p, faces);
+                if (!seen) continue;
+                faces.clear();
+                faces_of(p, faces);
+                // (the object's middle, its model's box turned with it, as deep as the eye sees it)
+                const auto mid = middle_of(p);
+                const float mx = mid[0] - px_, my = mid[1] - eye_y, mz = mid[2] - pz_;
+                const float od = (mx * std::sin(yaw_) + mz * std::cos(yaw_)) * std::cos(pitch_) + my * std::sin(pitch_);
+                for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7, true, od});
             }
-            for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7});
         }
         struct Tri
         {
@@ -293,7 +307,13 @@ void PersonalWorld::render()
             const float bx = t[2][0] - t[0][0], by = t[2][1] - t[0][1], bz = t[2][2] - t[0][2];
             float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
             const float nl = std::max(1e-6f, std::sqrt(nx * nx + ny * ny + nz * nz));
-            if (ny < 0) nx = -nx, ny = -ny, nz = -nz;
+            if (w.obj)
+            {
+                // An object's face turned away from the eye is behind the object itself: not drawn.
+                const float vx = t[0][0] - px_, vy = t[0][1] - eye, vz = t[0][2] - pz_;
+                if (vx * nx + vy * ny + vz * nz > 0) continue;
+            }
+            else if (ny < 0) nx = -nx, ny = -ny, nz = -nz; // (the ground: the side towards the sky)
             const float lit = std::max(0.0f, (nx * sun[0] + ny * sun[1] + nz * sun[2]) / nl);
             const float cxw = (t[0][0] + t[1][0] + t[2][0]) / 3, cyw = (t[0][1] + t[1][1] + t[2][1]) / 3, czw = (t[0][2] + t[1][2] + t[2][2]) / 3;
             const float shade = 0.55f + 0.45f * lit + w.lift * cyw;
@@ -336,7 +356,9 @@ void PersonalWorld::render()
                 sum += q[2];
             }
             tr.object = size_t(&w - world.data()) >= ground_tris;
-            tr.depth = sum / float(no) - (tr.object ? 1e6f : 0.0f); // (objects after the ground)
+            // (objects after the ground, their faces far first: with the faces turned away left out, a
+            // book on a shelf is nearer than the case's back and boards behind it)
+            tr.depth = sum / float(no) - (tr.object ? 1e6f : 0.0f);
             tris.push_back(tr);
         }
         std::sort(tris.begin(), tris.end(), [](const Tri& a, const Tri& b) { return a.depth > b.depth; });
@@ -395,9 +417,18 @@ void PersonalWorld::render()
             auto at = [&](const sieve::Sphere& s, float& sx, float& sy, float& d) {
                 return project(bx + float(s.x) * unitm, ground + float(s.y - low) * unitm, bz + float(s.z) * unitm, sx, sy, d);
             };
+            // (a sphere hidden behind something placed, a bookcase between you and it, is not drawn, nor
+            // its bones)
+            auto hidden = [&](const sieve::Sphere& s) {
+                if (placed_.empty()) return false;
+                const float wx = bx + float(s.x) * unitm, wy = ground + float(s.y - low) * unitm, wz = bz + float(s.z) * unitm;
+                const float ey = height(px_, pz_) + kEye, vx = wx - px_, vy = wy - ey, vz = wz - pz_, len = std::sqrt(vx * vx + vy * vy + vz * vz);
+                const float o[3] = {px_, ey, pz_}, dir[3] = {vx / len, vy / len, vz / len};
+                return ray_objects(o, dir, len, held_, nullptr) < len - 0.05f;
+            };
             SDL_SetRenderDrawColor(r_, 60, 60, 70, 255);
             for (const auto& s : c.spheres)
-                if (s.parent >= 0)
+                if (s.parent >= 0 && !hidden(s) && !hidden(c.spheres[size_t(s.parent)]))
                 {
                     float x1, y1, d1, x2, y2, d2;
                     if (at(s, x1, y1, d1) && at(c.spheres[size_t(s.parent)], x2, y2, d2)) SDL_RenderLine(r_, x1, y1, x2, y2);
@@ -406,6 +437,7 @@ void PersonalWorld::render()
             {
                 float sx, sy, d;
                 if (!at(s, sx, sy, d)) continue;
+                if (hidden(s)) continue;
                 const float rad = std::max(1.5f, float(s.r) * unitm * f / d);
                 const SDL_FColor col = ci == 0 ? SDL_FColor{0.95f, 0.92f, 0.85f, 1} : SDL_FColor{0.80f, 0.82f, 0.90f, 1};
                 if (wireframe_)
@@ -623,7 +655,8 @@ void PersonalWorld::draw_map()
 // checked against its SHA-256 as installing checks it, nothing written to disk.
 const std::vector<std::string>& PersonalWorld::catalogue()
 {
-    static const std::vector<std::string> kAll = {"pages", "image", "audio", "video", "books", "models", "binary", "tracks", "movies", "worlds", "ai"};
+    // (the shelf items, one a line, then the bookcase they stand on in the hallway)
+    static const std::vector<std::string> kAll = {"pages", "image", "audio", "video", "books", "models", "binary", "tracks", "movies", "worlds", "ai", "bookcase"};
     return kAll;
 }
 
@@ -672,7 +705,7 @@ const ShelfItems& shelf_items()
         for (const std::string& id : PersonalWorld::catalogue())
         {
             // (the books line's item is the template book; every other line's is book-LINE)
-            const std::string file = id == "books" ? "book.obj" : "book-" + id + ".obj";
+            const std::string file = id == "books" ? "book.obj" : id == "bookcase" ? "bookshelf.obj" : "book-" + id + ".obj";
             const auto it = text.find(file);
             std::shared_ptr<const Mesh> m;
             if (it != text.end())
@@ -682,6 +715,21 @@ const ShelfItems& shelf_items()
                     const auto l = text.find(std::filesystem::path(lib).filename().string());
                     return l == text.end() ? std::string() : l->second;
                 });
+            }
+            if (m && id == "bookcase")
+            {
+                // The corridor's left-wall case (its front at x = -1.65, along z 0 to 6), moved to stand as
+                // every object does: its front at x = 0, facing +X, centred across z.
+                auto moved = std::make_shared<Mesh>(*m);
+                moved->lo = {1e9f, 1e9f, 1e9f}, moved->hi = {-1e9f, -1e9f, -1e9f};
+                for (MeshTri& t : moved->tris)
+                    for (Vec3& v : t.p)
+                    {
+                        v.x += 1.65f, v.z -= 3.0f;
+                        moved->lo = {std::min(moved->lo.x, v.x), std::min(moved->lo.y, v.y), std::min(moved->lo.z, v.z)};
+                        moved->hi = {std::max(moved->hi.x, v.x), std::max(moved->hi.y, v.y), std::max(moved->hi.z, v.z)};
+                    }
+                m = moved;
             }
             if (m) out.mesh[id] = m;
             else out.note += (out.note.empty() ? "" : ", ") + file;
@@ -731,6 +779,16 @@ static std::array<float, 3> turned(const float m[3], float yaw, float pitch, flo
     return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
 }
 
+std::array<float, 3> PersonalWorld::middle_of(const Placed& p) const
+{
+    const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
+    if (it == shelf_items().mesh.end()) return {p.x, p.y + 0.2f, p.z};
+    const Mesh& m = *it->second;
+    const float c[3] = {(m.lo.x + m.hi.x) / 2, (m.lo.y + m.hi.y) / 2, (m.lo.z + m.hi.z) / 2};
+    const auto r = turned(c, p.yaw, p.pitch, p.roll);
+    return {p.x + r[0], p.y + r[1], p.z + r[2]};
+}
+
 void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across) const
 {
     low = 0, high = 0.4f, across = 0.2f;
@@ -761,33 +819,116 @@ void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<s
             const auto r = turned(q, p.yaw, p.pitch, p.roll);
             w[size_t(k)] = {p.x + r[0], p.y + r[1], p.z + r[2]};
         }
+        // Wound so its normal points out of the object (the model's own normal, turned with it), so
+        // a face turned away can be left out.
+        const float nq[3] = {t.n.x, t.n.y, t.n.z};
+        const auto n = turned(nq, p.yaw, p.pitch, p.roll);
+        const float ax = w[1][0] - w[0][0], ay = w[1][1] - w[0][1], az = w[1][2] - w[0][2], bx = w[2][0] - w[0][0], by = w[2][1] - w[0][1], bz = w[2][2] - w[0][2];
+        if ((ay * bz - az * by) * n[0] + (az * bx - ax * bz) * n[1] + (ax * by - ay * bx) * n[2] < 0) std::swap(w[1], w[2]);
         out.push_back({w, t.kd});
     }
 }
 
 // ---- holding, placing, dropping (IDEAS 19.192), and physics
 
-int PersonalWorld::aimed() const
+// The highest surface facing up under (x, z) at or below `top`: the grass, or a face of anything
+// placed but `skip` (a shelf board, a box's lid), so things rest on one another.
+float PersonalWorld::surface_below(float x, float top, float z, int skip) const
 {
-    // Along the crosshair from your eye: the nearest object within 6 m whose middle the line passes
-    // within its own reach of.
-    const float ey = height(px_, pz_) + kEye;
-    const float dx = std::sin(yaw_) * std::cos(pitch_), dy = std::sin(pitch_), dz = std::cos(yaw_) * std::cos(pitch_);
-    int best = -1;
-    float bt = 6.0f;
+    float best = ground(x, z);
+    std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>> faces;
     for (size_t i = 0; i < placed_.size(); ++i)
     {
-        if (int(i) == held_) continue;
+        if (int(i) == skip) continue;
+        const Placed& o = placed_[i];
         float low, high, across;
-        extent_of(placed_[i], low, high, across);
-        const float cx = placed_[i].x - px_, cy = placed_[i].y + (low + high) / 2 - ey, cz = placed_[i].z - pz_;
-        const float t = cx * dx + cy * dy + cz * dz;
-        if (t <= 0 || t >= bt) continue;
-        const float ox = cx - dx * t, oy = cy - dy * t, oz = cz - dz * t;
-        const float reach = std::max(0.25f, std::max(across, (high - low) / 2));
-        if (ox * ox + oy * oy + oz * oz <= reach * reach) best = int(i), bt = t;
+        extent_of(o, low, high, across);
+        if ((o.x - x) * (o.x - x) + (o.z - z) * (o.z - z) > across * across + 0.01f || o.y + low > top) continue;
+        faces.clear();
+        faces_of(o, faces);
+        for (const auto& [t, c] : faces)
+        {
+            const float ax = t[1][0] - t[0][0], ay = t[1][1] - t[0][1], az = t[1][2] - t[0][2];
+            const float bx = t[2][0] - t[0][0], by = t[2][1] - t[0][1], bz = t[2][2] - t[0][2];
+            const float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+            const float nl = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (nl < 1e-9f || std::fabs(ny) / nl < 0.7f) continue; // (only what faces up or down: a floor to stand on)
+            // (x, z) inside the triangle's shadow on the ground, and its height there
+            const float d = ax * bz - az * bx;
+            if (std::fabs(d) < 1e-12f) continue;
+            const float u = ((x - t[0][0]) * bz - (z - t[0][2]) * bx) / d, v = (ax * (z - t[0][2]) - az * (x - t[0][0])) / d;
+            if (u < -1e-4f || v < -1e-4f || u + v > 1 + 1e-4f) continue;
+            const float h = t[0][1] + u * ay + v * by;
+            if (h <= top && h > best) best = h;
+        }
     }
     return best;
+}
+
+// Along a line from (x, y, z) in direction (dx, dy, dz): the first surface facing up within `reach`
+// (the grass, or anything placed but `skip`); `t` its distance. False: none.
+bool PersonalWorld::surface_along(float x, float y, float z, float dx, float dy, float dz, float reach, int skip, float& t) const
+{
+    // Stepped a few centimetres at a time, each step asking what is beneath: cheap, and the same on
+    // every machine.
+    constexpr float kStep = 0.04f;
+    for (float s = kStep; s <= reach; s += kStep)
+    {
+        const float px = x + dx * s, py = y + dy * s, pz = z + dz * s;
+        if (surface_below(px, py + 0.001f, pz, skip) >= py - kStep * std::max(0.0f, -dy) - 1e-3f)
+        {
+            t = s;
+            return true;
+        }
+    }
+    return false;
+}
+
+// The nearest face of anything placed (but `skip`) along a line from `o` in direction `d` (a unit
+// vector), nearer than `reach`: its distance, and which it is in `which`; `reach` itself if none.
+float PersonalWorld::ray_objects(const float o[3], const float d[3], float reach, int skip, int* which) const
+{
+    float bt = reach;
+    if (which) *which = -1;
+    std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>> faces;
+    for (size_t i = 0; i < placed_.size(); ++i)
+    {
+        if (int(i) == skip) continue;
+        faces.clear();
+        faces_of(placed_[i], faces);
+        for (const auto& [t, c] : faces)
+        {
+            // (Moller and Trumbore's test, either side of the face)
+            const float e1[3] = {t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]}, e2[3] = {t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]};
+            const float pv[3] = {d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]};
+            const float det = e1[0] * pv[0] + e1[1] * pv[1] + e1[2] * pv[2];
+            if (std::fabs(det) < 1e-9f) continue;
+            const float tv[3] = {o[0] - t[0][0], o[1] - t[0][1], o[2] - t[0][2]};
+            const float u = (tv[0] * pv[0] + tv[1] * pv[1] + tv[2] * pv[2]) / det;
+            if (u < 0 || u > 1) continue;
+            const float qv[3] = {tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]};
+            const float v = (d[0] * qv[0] + d[1] * qv[1] + d[2] * qv[2]) / det;
+            if (v < 0 || u + v > 1) continue;
+            const float dist = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) / det;
+            if (dist > 0 && dist < bt)
+            {
+                bt = dist;
+                if (which) *which = int(i);
+            }
+        }
+    }
+    return bt;
+}
+
+int PersonalWorld::aimed() const
+{
+    // Along the crosshair from your eye: the nearest face of anything placed, within 6 m (each object's
+    // own triangles, so a large thing does not hide a small one before it).
+    const float o[3] = {px_, height(px_, pz_) + kEye, pz_};
+    const float d[3] = {std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_), std::cos(yaw_) * std::cos(pitch_)};
+    int which = -1;
+    ray_objects(o, d, 6.0f, held_, &which);
+    return which;
 }
 
 void PersonalWorld::physics_step(float dt, float move_x, float move_z)
@@ -810,11 +951,12 @@ void PersonalWorld::physics_step(float dt, float move_x, float move_z)
                 p.vx = move_x * 1.2f, p.vz = move_z * 1.2f, p.vy = std::max(p.vy, 1.5f);
                 p.resting = false;
             }
-            // Against the others that move or stand: pushed apart along the line between them.
+            // Against the other dropped things: pushed apart along the line between them.
             for (size_t j = 0; j < placed_.size(); ++j)
             {
                 if (j == i || int(j) == held_) continue;
                 const Placed& o = placed_[j];
+                if (!o.physics) continue; // (a placed thing is a surface to land on, below, not a body to push)
                 float l2, h2, a2;
                 extent_of(o, l2, h2, a2);
                 const float ox = p.x - o.x, oz = p.z - o.z, d = std::sqrt(ox * ox + oz * oz), r = across + a2;
@@ -829,9 +971,10 @@ void PersonalWorld::physics_step(float dt, float move_x, float move_z)
             }
             if (p.resting) continue;
             p.vy -= kGravity * kStep;
+            const float was_y = p.y; // (where it was: a thin board passed in one step still stops it)
             p.x += p.vx * kStep, p.y += p.vy * kStep, p.z += p.vz * kStep;
             p.x = std::clamp(p.x, -kHalf + 1, kHalf - 1), p.z = std::clamp(p.z, -kHalf + 1, kHalf - 1);
-            const float floor = ground(p.x, p.z) - low;
+            const float floor = surface_below(p.x, std::max(p.y, was_y) + low + 0.05f, p.z, int(i)) - low; // (the grass, or a shelf or anything beneath)
             if (p.y <= floor)
             {
                 // On the grass: a bounce that loses most of its speed, and friction across it.
@@ -913,6 +1056,12 @@ void PersonalWorld::press(SDL_Keycode k, SDL_Keymod mod) { key(k, mod); }
 
 void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
 {
+    // Looking up and down from the keyboard as well as the mouse, five degrees a press.
+    if (k == SDLK_PAGEUP || k == SDLK_PAGEDOWN)
+    {
+        pitch_ = std::clamp(pitch_ + (k == SDLK_PAGEUP ? 1.0f : -1.0f) * 5.0f * kPi / 180.0f, -1.3f, 1.3f);
+        return;
+    }
     if (k == SDLK_TAB)
     {
         // One panel at a time: Place while something is in your hand, else the catalogue.

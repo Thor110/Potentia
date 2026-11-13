@@ -98,11 +98,16 @@ private:
     bool unsaved_rest_ = false;           // something came to rest since the last save
     // The object under the crosshair, within reach, or -1.
     int aimed() const;
+    float ray_objects(const float o[3], const float d[3], float reach, int skip, int* which) const;
+    // Surfaces facing up, for resting things on things (a shelf board, a lid, the grass).
+    float surface_below(float x, float top, float z, int skip) const;
+    bool surface_along(float x, float y, float z, float dx, float dy, float dz, float reach, int skip, float& t) const;
     // Physics, in fixed steps of 1/120 s, so the same drop rests in the same place on every machine.
     void physics_step(float dt, float move_x, float move_z);
     // An object's shape as its turns make it: the drop from its origin to its lowest point, and how
     // far it reaches across (for knocks and aiming).
     void extent_of(const Placed& p, float& low, float& high, float& across) const;
+    std::array<float, 3> middle_of(const Placed& p) const; // its model's box's middle, in the world
     std::filesystem::path file_;
     // The panels slide in from the left as the setup menu's do (slide_panel.hpp), one at a time: the
     // catalogue, and while something is in your hand, Place (its exact place and turns).

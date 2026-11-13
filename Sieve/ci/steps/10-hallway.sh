@@ -1505,6 +1505,12 @@ grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
 $H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"
 $H --no-menu --settings fv/s.ini --line text --open-favourite "$SHA" --screenshot fav-hand.png | tr -d '\r' | q "^favourite: in hand$"
 $H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-off.png | tr -d '\r' | q "No longer a favourite"
+# A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
+# is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
+$H --personal-world --world-file pw/bc.world --press "Tab,Up,Return" --screenshot pworld-case.png > /dev/null
+grep -c "^place bookcase " pw/bc.world | q "^1$"
+printf 'sieve-personal-world-v2\nseed 0\nplace bookcase 0 22.9 -57 3.14159274 0 0 fixed\nplace pages -0.1 40 -56.82 0 0 0 physics\nplace audio 1.5 25.0 -56.9 3.14159274 0 0 physics\n' > pw/on.world
+$H --personal-world --world-file pw/on.world --pworld-wait 6 --screenshot pworld-shelf.png | tr -d '\r' | q "pages dropped at -0.10, 2\.[78][0-9], .*audio dropped at 1.50, 1\.9[0-9], "
 # Holding (IDEAS 19.192): E picks up what the crosshair is on, R and T turn it, Return places it where
 # it is held (here a little above the grass, tipped), and the world is written as v2 for it; Q drops one,
 # which falls and comes to rest on the grass; both read back. A v2 line this build does not know is
