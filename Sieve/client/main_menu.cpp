@@ -7,6 +7,7 @@
 // nothing. Every change is applied and saved at once, with no confirm step, so that a setting that
 // makes the window unusable can be undone by changing it back rather than by editing a file.
 #include "main_menu.hpp"
+#include "press_names.hpp"
 #include "cli/media_decode.hpp"
 #include "cli/timings.hpp"
 #include "cli/locate.hpp" // read_file_bytes, sha256_hex (the replay viewer's cache boxes)
@@ -284,48 +285,39 @@ void MainMenu::choose_from_list(int index)
     save();
 }
 
+bool MainMenu::select(const std::string& id)
+{
+    const auto its = items();
+    for (size_t i = 0; i < its.size(); ++i)
+        if (its[i].id == id)
+        {
+            row_ = int(i);
+            return true;
+        }
+    return false;
+}
+
 void MainMenu::back()
 {
     if (!list_.empty()) { list_.clear(); return; }
+    // Back on the row of the screen it came from, found by its name, wherever it is in the list.
     switch (screen_)
     {
     case Screen::Main: row_ = int(items().size()) - 1; return; // Esc on the main screen points at Exit (the last) rather than quitting
     case Screen::Settings:
         if (settings_only_) { result_ = Result::Start; done_ = true; return; } // back to the hallway
         screen_ = Screen::Main;
-        // (back on Settings' own row, wherever it is in the list)
-        row_ = 0;
-        for (const Item& it : items())
-            if (it.id == "settings") break;
-            else ++row_;
+        select("settings");
         return;
-    case Screen::Graphics: screen_ = Screen::Settings; row_ = 0; return;
-    case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;
-    case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
-    case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
-    case Screen::Raid: screen_ = Screen::Settings; row_ = 4; return;
-    case Screen::Game: screen_ = Screen::Settings; row_ = 5; return;
-    case Screen::Replays:
-        screen_ = Screen::Main;
-        row_ = 0;
-        for (const Item& it : items())
-            if (it.id == "replays") break;
-            else ++row_;
-        return;
-    case Screen::Personal:
-        screen_ = Screen::Main;
-        row_ = 0;
-        for (const Item& it : items())
-            if (it.id == "personal") break;
-            else ++row_;
-        return;
-    case Screen::Systems:
-        screen_ = Screen::Main;
-        row_ = 0;
-        for (const Item& it : items())
-            if (it.id == "systems") break;
-            else ++row_;
-        return;
+    case Screen::Graphics: screen_ = Screen::Settings; select("graphics"); return;
+    case Screen::Controls: screen_ = Screen::Settings; select("controls"); return;
+    case Screen::Language: screen_ = Screen::Settings; select("language"); return;
+    case Screen::Programs: screen_ = Screen::Settings; select("programs"); return;
+    case Screen::Raid: screen_ = Screen::Settings; select("raid"); return;
+    case Screen::Game: screen_ = Screen::Settings; select("game_systems"); return;
+    case Screen::Replays: screen_ = Screen::Main; select("replays"); return;
+    case Screen::Personal: screen_ = Screen::Main; select("personal"); return;
+    case Screen::Systems: screen_ = Screen::Main; select("systems"); return;
     }
 }
 
@@ -467,6 +459,13 @@ void MainMenu::change(int dir)
 
 void MainMenu::press(SDL_Keycode key, SDL_Keymod mod)
 {
+    // Item:ID (scripts and CI): the row of that name on this screen chosen, as Up/Down would, so a
+    // script names what it means rather than counting rows (IDEAS 19.188).
+    if (const std::string* id = item_press_id(key))
+    {
+        if (!list_.empty() || !select(*id)) throw std::invalid_argument("--press: no row '" + *id + "' on this screen of the main menu");
+        return;
+    }
     SDL_Event e{};
     e.type = SDL_EVENT_KEY_DOWN;
     e.key.key = key;

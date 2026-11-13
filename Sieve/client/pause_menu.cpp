@@ -48,6 +48,18 @@ void Hallway::open_pause()
     SDL_SetWindowRelativeMouseMode(window_, false);
 }
 
+bool Hallway::pause_select(const std::string& id)
+{
+    if (!pause_open_) return false;
+    for (int i = 0; i < kPauseCount; ++i)
+        if (id == kPauseItems[i].id)
+        {
+            pause_row_ = i;
+            return true;
+        }
+    return false;
+}
+
 void Hallway::close_pause()
 {
     pause_open_ = false;

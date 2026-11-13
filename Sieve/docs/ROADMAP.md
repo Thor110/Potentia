@@ -36,6 +36,17 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    setup menu's YOURS. (*Built 13 November 2026, with a catalogue of Sieve's shelf items to place, kept in
    `data/objects/shelf-items.sieve`, and placements kept as `sieve-personal-world-v1`; also Online, off
    by default, and Game Systems with AI Explorers, IDEAS §19.189.*)
+5c. **After the personal world, in this order** (Edward, 13 November 2026: "try to aim to do things in an
+   order that makes sense and prevents having to go backwards"). First, what the rest leans on:
+   A1 menu rows chosen by name in every script (`Item:ID`; *built*), A2 `sieve-personal-world-v2`
+   specified once for everything the next steps add (a 3D place and three turns, the physics flag,
+   favourites, authors, shelves, your own objects, a layout), A3 a grammar and catalogue entry for every
+   newer format (§19.185), A4 the AI settings under Game Systems (§19.155 a with §19.189), A5 stage 8
+   below. Then the personal dimensions: holding, placing, turning and dropping, with physics (§19.192),
+   favourites and their combined catalogue (§19.190), a bookcase, your own objects, the world as an
+   address; then layouts, the one node viewer (§19.182) and the fractal dimension (§19.191); the face
+   finder (§19.193) and modelling tools (§19.194); AI Explorers walking (§19.189); replay from anywhere
+   and recorded sound's rings; then the long plan's stages below.
 6. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
    tactile Sieve: identity never by colour alone, text size and contrast, the magnifying lens of
    §19.160), 10 (hallway polish).

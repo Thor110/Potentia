@@ -7851,6 +7851,34 @@ raising ground, subdividing, extruding, boolean cutting etc but this is just an 
   12 faces today) holds only small results: larger ones are imported models (§19.159) kept in the store.
 - *Idea only;* after holding and placing (§19.192) and the face finder (§19.193).
 
+**19.195 A spinning hypercube behind the main menu, any visualisation behind any menu, and menus people
+arrange themselves (Edward, 13 November 2026).** His words: "hypercube spinning in the background of just
+the main menu, all other menus can have this option as well, disabled by default", "this could be a
+toggleable option so it could be turned on and off, it could also be replaced with other visualisations",
+"this allows for the sieve of potentia itself to be the framework which all other interpretations of it
+naturally bolt onto", "such that people could set it up in their own way, move the options around etc",
+and "we could also adjust the CI to be simpler by tagging each option menu with a number, then the CI
+just has to find that number rather than go up or down a select set or number of times".
+- *Asked:* a tesseract (the four-dimensional cube) turning slowly behind the main menu, on by default
+  there; the same as a setting for every other menu, off by default; and in place of it, any other
+  visualisation (the rings of §19.175, a world of §19.187, one made from a ruleset of §19.191).
+- *The idea under it:* Sieve as the frame that every interpretation bolts onto: the background, the
+  rows and their order are a person's own arrangement, kept as their settings (and sharable, a layout
+  like any other data), while the systems behind the rows stay the same.
+- *How it would work:* a tesseract is 16 points (each coordinate ±1 in four dimensions) and 32 edges
+  (points differing in one coordinate); turned in two planes at once (xw and yz, say), then projected
+  from four dimensions to three (a perspective divide by the distance in w) and from three to the
+  screen, drawn as lines behind the menu at a low brightness so the text stays readable. It follows Real
+  Graphics as everything does: lines when off; when on, the same with its cells faintly filled.
+- *Menus by name (already built):* the CI no longer counts rows. Each row has a name (`Item:settings`,
+  `Item:raid_listen`; §19.188's first step, 13 November 2026), and a script names the row it means. A
+  name is better than a number here: a number given by position changes when the row moves; a fixed
+  number would work but says nothing to whoever reads the step, while the name is also the row's
+  language key. So menus can be rearranged, by us or by anyone in their own layout, and no step changes.
+- *Planned;* the tesseract first (a small piece), then the setting for every menu and the choice of
+  visualisation, then menu layouts of a person's own (after §19.188's reorder, which becomes the
+  default layout).
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non
@@ -7912,5 +7940,9 @@ eventually and Settings should be renamed Potentia Settings so that it can fit a
   "Down,Down,...,Return"`), so every move changes many of them at once. Done as one change, with a way
   to choose a row by its name (a press such as `Item:replays`, or `--main-menu-item ID`) first, so the
   steps no longer count rows and later moves cost nothing.
-- *Planned only;* in ROADMAP's final tasks.
+- *Planned only;* in ROADMAP's final tasks. (*Its first step built 13 November 2026:* `Item:ID` in
+  `--press` chooses the main menu's or the pause menu's row of that name (client/press_names.hpp), the
+  CI steps reach every row so (17 sequences in steps 04 and 10), and Back returns to the row it came
+  from by name; so moving a row, or adding one, no longer changes any step. The reorder and the rename
+  are what is left.)
 

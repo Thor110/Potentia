@@ -67,6 +67,7 @@ private:
     std::string value_of(const Item& it) const;
     void change(int dir);        // the selected item: act, toggle, step, or open its list
     void back();
+    bool select(const std::string& id); // the row of that name on this screen chosen; false if none
     void open_list(const Item& it);
     void choose_from_list(int index);
     std::vector<std::string> list_labels() const;

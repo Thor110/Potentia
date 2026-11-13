@@ -240,7 +240,7 @@ q "^it: " ai-talk.txt
 $H --no-menu --line ai --walk "0,0" --take --talk "Hello there" --text-to-voice --screenshot ai-voice.png | tr -d '\r' | q "^voice: "
 # CHAT's /say: the words said aloud whatever the setting (11 November 2026).
 $H --no-menu --line ai --walk "0,0" --take --chat --talk "/say Hello from the gallery" --training-dir data/training --screenshot chat-say.png | tr -d '\r' | q "^voice: Hello from the gallery$"
-$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Return,Down,Down,Down" --screenshot tv-row.png | tr -d '\r' | q "^read aloud: Text to Voice"
+$H --main-menu --read-aloud --press "Item:settings,Return,Item:controls,Return,Item:text_to_voice" --screenshot tv-row.png | tr -d '\r' | q "^read aloud: Text to Voice"
 # Sieve's own voice (results/voice-units-2026-11-09.md): a text read into its speech sounds by
 # CMUdict (a number as words), said, and said the same again, sample for sample.
 build/sieve speak Hello, 42 times. --phones --out speak1.wav | tr -d '\r' > speak.txt
@@ -350,7 +350,7 @@ $H --menu --character held.character --press "\`" --screenshot char-held.png | t
 $H --no-menu --character held.character --screenshot char-held-hall.png | tr -d '\r' | q "^character beside you: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
 # Personal Dimensions (IDEAS 19.157): the main menu's screen; YOURS listing a store of three characters
 # (beside the settings file); and the same store standing in the hallway.
-$H --main-menu --press "Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot main-personal.png | q "saved main-personal.png"
+$H --main-menu --press "Item:personal,Return" --screenshot main-personal.png | q "saved main-personal.png"
 mkdir -p pdim/characters
 for spec in "seed=1 limbs=4 joints=3 branches=0 symmetry=bilateral head=yes" "seed=2 limbs=6 joints=2 branches=1 symmetry=radial head=no"; do
   printf 'sieve-character-v1 %s\n' "$spec" > pdim/one.character
@@ -384,7 +384,7 @@ $H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r
 # animations that fit, in the order of their names); the map is kept (sieve-actions-v1) and named in
 # the save, which becomes sieve-save-v2. In the hallway, walking plays the walk; jumping, with none,
 # plays nothing.
-$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Down" --screenshot creator-row.png | tr -d '\r' | q "^read aloud: Character Creator$"
+$H --main-menu --read-aloud --press "Item:creator" --screenshot creator-row.png | tr -d '\r' | q "^read aloud: Character Creator$"
 $H --menu --press "\`,c" --screenshot creator-c.png | tr -d '\r' | q "^character creator: open$"
 rm -rf crt
 mkdir -p crt/animations
@@ -420,7 +420,7 @@ if $H --no-menu --line image --replay rpl/walk.replay --screenshot rpl-elsewhere
 q "the recording began on the text line" rpl-elsewhere.txt
 # The replay viewer (the main menu's Replays): each recording a row, a packed one with its box to be
 # decoded once into the cache, ticked with Space and kept by its SHA-256 in [replays] cached.
-$H --main-menu --settings rpl/v.ini --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Space" --screenshot rpl-viewer.png | tr -d '\r' | q "^read aloud: walk.sieve, [0-9]* bytes  \[x\] cache$"
+$H --main-menu --settings rpl/v.ini --read-aloud --press "Item:replays,Return,Space" --screenshot rpl-viewer.png | tr -d '\r' | q "^read aloud: walk.sieve, [0-9]* bytes  \[x\] cache$"
 grep -q "^cached = $(sha256sum rpl/replays/walk.sieve | cut -c1-64)" rpl/v.ini
 # Stage 4 of the catalogue: Ctrl+K's import is added to its importer's entry, as `sieve import` adds it.
 grep -c " what=import result=whole animations=1 .* joints=3 " "$SIEVE_STATS/model-gltf.stats" > /dev/null
@@ -442,7 +442,7 @@ $exe raid verify --drives raidc1,raidc2 | tr -d '\r' | q "^whole$"
 # remote id is kept beside the key, so the character comes back byte for byte from that machine.
 rm -rf raidn raidn-held raidn.ini
 mkdir -p raidn
-$H --main-menu --settings raidn/raidn.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Return" --screenshot raid-menu.png | tr -d '\r' | q "^read aloud: Share my saves, On$"
+$H --main-menu --settings raidn/raidn.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Return" --screenshot raid-menu.png | tr -d '\r' | q "^read aloud: Share my saves, On$"
 test -s raidn/raid.key
 grep -q "^share = on" raidn/raidn.ini
 printf '[raid]\ndrives = raidn/d1,raidn/d2\npeers = 127.0.0.1:47133\n[online]\nenabled = on\n' >> raidn/raidn.ini
@@ -463,10 +463,10 @@ kill $raidn_serve
 # Keeping others' saves, from the menu: ticked, this machine answers at once on [raid] listen.
 # Online off (the default) keeps it from answering, however it is set; on, it answers.
 printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\nserve = on\n' > raidn/offline.ini
-$H --main-menu --settings raidn/offline.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Down,Down,Down" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134$"
+$H --main-menu --settings raidn/offline.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_listen" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134$"
 test ! -e raidn-held2
 printf '[online]\nenabled = on\n[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
-$H --main-menu --settings raidn/serve.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
+$H --main-menu --settings raidn/serve.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_serve,Return,Item:raid_listen" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
 test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
@@ -492,7 +492,7 @@ $H --menu --settings speaks.ini --press "\`" --screenshot speaks2.png | tr -d '\
 # a view of its own, the whole window, not the setup menu's panel (Edward, 12 November 2026): S turns
 # from FORMATS to LANGUAGE (the five families, writing and information round "language"); a language
 # leads to the scripts it is written in.
-$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Down" --screenshot sys-menu.png | tr -d '\r' | q "^read aloud: Language$"
+$H --main-menu --read-aloud --press "Item:systems,Return,Item:systems_language" --screenshot sys-menu.png | tr -d '\r' | q "^read aloud: Language$"
 $H --menu --system-viewer information --screenshot sys-viewer.png | tr -d '\r' > sys-viewer.txt
 q "^system viewer: open$" sys-viewer.txt
 q "^catalogue: information: " sys-viewer.txt
@@ -1272,7 +1272,7 @@ q "^details: Walking it: " details.txt
 q "^details: On this machine: " details.txt
 closed=$($H --menu --press "I,I" --screenshot details-closed.png | tr -d '\r')
 if grep -q "^details: " <<< "$closed"; then exit 1; fi
-$H --main-menu --press "Down,Down,Down,Down,Down,Down" --screenshot main-cipher.png | q "saved main-cipher.png"
+$H --main-menu --press "Item:cipher" --screenshot main-cipher.png | q "saved main-cipher.png"
 # Read aloud (--read-aloud, unsaved; IDEAS §19.74): what would be said is printed, since there is
 # no voice here. The main menu's item, the setup menu's row with its section and value, a filter
 # with its tick said as on or off, and the File Locator's box as pressed.
@@ -1382,7 +1382,7 @@ $H --manual-nav mnav-long.bin --script X --screenshot mnav-long-x.png | tr -d '\
 ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))
 $H --manual-nav mnav.bin --script "${ups}${zs%,}" --screenshot mnav-undo.png | tr -d '\r' | q "^  rotation 2.8 degrees"
 $H --manual-nav mnav.bin --script "U,${ups}${zs%,}" --screenshot mnav-undo10.png | tr -d '\r' | q "^  rotation 9.8 degrees"
-$H --main-menu --press "Down,Down,Down,Down,Down,Down,Down" --screenshot main-mnav.png | q "saved main-mnav.png"
+$H --main-menu --press "Item:manual_nav" --screenshot main-mnav.png | q "saved main-mnav.png"
 $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
 # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
@@ -1458,12 +1458,15 @@ $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot
 # The Media Player (pause menu, sixth row): with --media-player a silent music player is
 # made for the picture; its settings file goes where --settings says, not beside the program.
 mkdir -p mp
-$H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return" --screenshot media.png | q "saved media.png"
+$H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Item:media,Return" --screenshot media.png | q "saved media.png"
 # Its rings (IDEAS 19.175): R opens them; a C major chord held (C3, C4, E4, G4, C5) lights those
 # five notes of their octaves, one ring an octave, and the lens zooms to the overtones and the waves.
-$H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return,r" --screenshot rings-open.png | tr -d '\r' | q "^rings: zoom 0;"
+$H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Item:media,Return,r" --screenshot rings-open.png | tr -d '\r' | q "^rings: zoom 0;"
 $H --no-menu --rings 48,60,64,67,72 --screenshot rings.png | tr -d '\r' | q "^rings: zoom 0; C3 1.00 C4 1.00 E4 1.00 G4 1.00 C5 1.00$"
 $H --no-menu --rings 48,60,64,67,72 --rings-zoom 2 --screenshot rings-waves.png | tr -d '\r' | q "^rings: zoom 2; "
+# Item:ID presses (IDEAS 19.188): a row chosen by its name; a name the screen has not is refused.
+if $H --main-menu --press "Item:no_such_row" --screenshot noitem.png > /dev/null 2>&1; then exit 1; fi
+$H --main-menu --press "Item:settings,Return,Item:game_systems,Return,Item:ai_explorers" --read-aloud --screenshot item.png | tr -d '\r' | q "^read aloud: AI Explorers"
 # Your personal dimension's world (IDEAS 19.187): a grassy hill with your character on it. Its
 # catalogue is Sieve's shelf items, read from data/objects/shelf-items.sieve (checked, in memory),
 # apart from the meshes folder anyone may change; Tab, Return places the first (a page), Down twice
@@ -1595,19 +1598,19 @@ $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "do
 $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
 test -s portal.png
 test -s noportal.png
-$H --main-menu --press "Down,Down,Down,Down,Down,Return,Return,Return" --screenshot main-res.png | q "saved"
+$H --main-menu --press "Item:settings,Return,Return,Return" --screenshot main-res.png | q "saved"
 # Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
 # turns the glow back off, the two being mutually exclusive. From a settings file that
 # does not exist yet, so the toggles start from their defaults whatever ran before.
 rm -f app.ini
-$H --main-menu --settings app.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Return,Down,Return,Down,Return" --screenshot main-gfx.png > /dev/null
+$H --main-menu --settings app.ini --press "Item:settings,Return,Return,Item:vsync,Return,Item:edge_glow,Return,Item:real_graphics,Return" --screenshot main-gfx.png > /dev/null
 grep -q "^vsync = off" app.ini
 grep -q "^edge_glow = off" app.ini
 grep -q "^real_graphics = on" app.ini
 grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
 # View Distance and Picture Distance, the two rows after the FPS counter, save.
 rm -f vr.ini
-$H --main-menu --settings vr.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Down,Down,Right,Down,Right,Right" --screenshot main-view.png > /dev/null
+$H --main-menu --settings vr.ini --press "Item:settings,Return,Return,Item:view_rooms,Right,Item:picture_rooms,Right,Right" --screenshot main-view.png > /dev/null
 grep -q "^view_rooms = 8" vr.ini
 grep -q "^picture_rooms = 3" vr.ini
 mkdir -p lt/data/lang

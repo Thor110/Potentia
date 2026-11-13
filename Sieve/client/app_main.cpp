@@ -3,6 +3,7 @@
 
 #include "raid_service.hpp"
 #include "personal_world.hpp"
+#include "press_names.hpp"
 #include "replay.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
@@ -257,7 +258,8 @@ const char* kUsage =
     "  --save-view PATH    with the viewer open (--press E,Z,Tab...): save what it shows (F), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=; Click: a left click where the\n"
-    "                      crosshair is), printing where you are\n"
+    "                      crosshair is; Item:ID: the main or pause menu's row named ID, as Up/Down would\n"
+    "                      reach it), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
     "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
@@ -632,6 +634,12 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
         SDL_Keymod mod = SDL_KMOD_NONE;
         if (name.rfind("Shift+", 0) == 0) { mod = SDL_KMOD_LSHIFT; name = name.substr(6); }
         if (name.rfind("Ctrl+", 0) == 0) { mod = SDL_KMOD_LCTRL; name = name.substr(5); }
+        if (name.rfind("Item:", 0) == 0 && name.size() > 5)
+        {
+            out.emplace_back(hallway::item_press(name.substr(5)), SDL_KMOD_NONE); // a menu's row by its name (press_names.hpp)
+            start = end + 1;
+            continue;
+        }
         const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : name == "Click" ? kClickPress : SDL_GetKeyFromName(name.c_str());
         if (key == SDLK_UNKNOWN) throw std::invalid_argument("--press: unknown key '" + name + "'");
         out.emplace_back(key, mod);
@@ -947,6 +955,13 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             e.key.key = key;
             e.key.scancode = SDL_GetScancodeFromKey(key, nullptr); // as a real key brings it (the right-hand panel reads it)
             e.key.mod = mod;
+            if (const std::string* id = hallway::item_press_id(key))
+            {
+                // Item:ID: the pause menu's row of that name (press_names.hpp).
+                if (!hall->pause_select(*id)) throw std::invalid_argument("--press: no row '" + *id + "' in the pause menu (is it open?)");
+                std::cout << hall->status() << "\n";
+                continue;
+            }
             if (key == kClickPress)
             {
                 int w = 0, h = 0;

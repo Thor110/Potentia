@@ -1,25 +1,30 @@
-# Changes: shaded characters, and wireframe everywhere when Real Graphics is off
+# Changes: menu rows by name, world v2 specified, newer formats catalogued
 
-## Characters
-- **Shaded by default:** the CHARACTER page and the Character Creator now draw shaded (`[character] drawing = 3`).
-- **Your existing settings file:** it still says `drawing = 1` (wireframe). Change it once in the creator, or edit that line.
-- **Real Graphics off:** every character is drawn as wireframe, whatever the drawing row says. The row then reads "wireframe (Real Graphics is off)".
+## Menu rows chosen by name (IDEAS §19.188, first step)
+- `--press` now accepts `Item:ID`, which chooses the row with that name on the main menu (any of its screens) or the pause menu, just as Up/Down would reach it. Example: `Item:settings,Return,Item:raid,Return`.
+- An unknown name is refused, with an error saying so.
+- Every CI step that reached a menu row by counting Down presses now names the row instead: 17 sequences in steps 04 and 10.
+- Back returns to the row it came from by name.
+- Moving or adding a menu row no longer changes any CI step. That clears the way for the reorder and personal menu layouts.
 
-## Personal world with Real Graphics off
-The whole world is drawn as wireframe:
-- a black sky;
-- the ground as an open green grid;
-- objects as their edges, filled black so they hide what is behind them;
-- clouds and characters as outlines.
+## Specified, not built yet
+- `sieve-personal-world-v2` (SPECIFICATIONS §12.0r). One version covers everything the next steps need:
+  - 3D place and three turns;
+  - placed or physics;
+  - favourites;
+  - authors;
+  - your own models;
+  - layouts;
+  - the face-finder cache.
 
-With Real Graphics on, it looks as before.
+  A v2 reader keeps lines it doesn't know and writes them back, so newer additions are never lost. A world using none of this is still written as v1.
 
-## Picture options
-`--real-graphics` now also applies to `--menu` pictures, so characters are drawn as the drawing row says.
+## Catalogue
+- New entries: `sieve-save-v1`, `sieve-save-v2`, `sieve-replay-v1` and `sieve-personal-world-v1`. The catalogue now has 200 entries, and all reach "information".
 
-## IDEAS (planned, not built)
-- **§19.193:** a face finder. It removes faces no one can see from placed objects, keeps the original model by its hash, and stores the cut copies in a local cache beside the world.
-- **§19.194:** modelling tools inside the dimensions (raising ground, subdividing, extruding, boolean cuts).
+## Docs
+- ROADMAP 5c: the order of work from here.
+- IDEAS §19.195: a hypercube behind the main menu, replaceable visualisations, and menus people arrange themselves.
 
 ## Files to delete by hand
 - None.

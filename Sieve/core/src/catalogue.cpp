@@ -1,5 +1,6 @@
 // Sieve — the catalogue of formats, stage 1 (see catalogue.hpp).
 #include "sieve/catalogue.hpp"
+#include "sieve/save.hpp"
 #include "sieve/format_stats.hpp"
 
 #include "sieve/alphabet.hpp"
@@ -214,6 +215,14 @@ std::vector<FormatEntry> gather()
         "sieve raid share and fetch (SPECIFICATIONS 12.0o)");
     own(kRaidHeldVersion, "A folder keeping others' sealed chunks", "container", std::string("a file sieve-raid-held: \"") + kRaidHeldVersion + " salt=...\"",
         "sieve raid serve (SPECIFICATIONS 12.0o)");
+    own(kSaveVersion, "A save: your character, its animation and its languages, named together", "container",
+        std::string("first line \"") + kSaveVersion + "\"", "Ctrl+S on the CHARACTER page; the infinite RAID (SPECIFICATIONS 12.0j)");
+    own(kSaveVersion2, "A save that also names its character's actions", "container", std::string("first line \"") + kSaveVersion2 + "\"",
+        "Ctrl+S on the CHARACTER page and in the Character Creator (SPECIFICATIONS 12.0k; IDEAS 19.186)");
+    own("sieve-replay-v1", "A recording of the hallway: where it began and every input with its time", "document",
+        "first line \"sieve-replay-v1\", then \"start line=...\"; often packed as a .sieve", "F12 in the hallway, --record and --replay, the Replays viewer (SPECIFICATIONS 12.0q; IDEAS 19.184)");
+    own("sieve-personal-world-v1", "A personal dimension's world: its seed and what is placed in it", "model-3d",
+        "first line \"sieve-personal-world-v1\", then \"seed N\" and \"place KIND X Z YAW\" lines", "your personal dimension (SPECIFICATIONS 12.0r; IDEAS 19.187)");
     own(kFormatVersion, "An entry of this catalogue", "document", std::string("first line \"") + kFormatVersion + "\"", "sieve catalogue");
     own(kFormatStatVersion, "A figure measured of a format, as it was used", "document", std::string("a line starting \"") + kFormatStatVersion + " date=\"",
         "sieve catalogue --measure and sieve import (SPECIFICATIONS 12.0p)");

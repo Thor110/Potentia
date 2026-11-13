@@ -446,7 +446,7 @@ grep -q "^item_memory_pct = 30" im.ini
 # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
 # setting: Settings, Graphics, then the seventh row.
 rm -f gm.ini
-$H --main-menu --settings gm.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Down,Down,Down,Right" --screenshot gm.png > /dev/null
+$H --main-menu --settings gm.ini --press "Item:settings,Return,Return,Item:graphics_memory,Right" --screenshot gm.png > /dev/null
 grep -q "^graphics_memory_gb = 5" gm.ini
 # sieve-hallway.ini holds every setting there is, the setup menu's and ffmpeg's among
 # them, each with a comment; and written from the defaults, then written again from that
@@ -571,7 +571,7 @@ $H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;-9,0" --screenshot wal
 # There is no setting for it: not in Settings > Graphics, not in a settings file that
 # Graphics has just written, and not on the command line.
 rm -f be.ini
-$H --main-menu --settings be.ini --press "Down,Down,Down,Down,Down,Return,Return,Down,Down,Down,Return" --screenshot be.png > /dev/null
+$H --main-menu --settings be.ini --press "Item:settings,Return,Return,Item:edge_glow,Return" --screenshot be.png > /dev/null
 grep -q "^edge_glow = on" be.ini
 if grep -Eq "binary[_-]edge" be.ini; then exit 1; fi
 # (the help captured first: a hallway that failed to run would print nothing, and pass the check)

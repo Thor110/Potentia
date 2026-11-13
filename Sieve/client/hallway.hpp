@@ -728,6 +728,9 @@ public:
     void close_input();
 
     std::string status();
+    // Item:ID in --press (press_names.hpp): the pause menu's row of that name chosen; false if it is not
+    // open or has no such row.
+    bool pause_select(const std::string& id);
 
     void render();
 
