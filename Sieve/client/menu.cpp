@@ -12,6 +12,7 @@
 // Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
 // alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "raid_service.hpp"
 #include "speech.hpp"
 #include "dialogs.hpp"
 #include "cli/timings.hpp"
@@ -2224,6 +2225,7 @@ void Menu::import_skeleton(const std::string& path)
             return std::string((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
         });
         char_ = sieve::skeleton_character(m);
+        keep_import_stat(sieve::held_import_of(m));
         char_sphere_ = 0;
         char_anim_.reset();
         if (!m.sampled.empty()) char_anim_ = sieve::imported_animation(m, 0);
@@ -2253,6 +2255,22 @@ std::string Menu::animation_line() const
 // An existing model into the chosen sphere (IDEAS 19.159, 19.162): any format the importers read
 // (.obj, .gltf, .glb), brought under the held models' roof, and what was kept and left out said. A
 // glTF's buffers are read beside it, never from outside its folder (sieve::import_uri_is_local).
+// Stage 4 of the catalogue: what an import kept, added to its importer's entry in your stats folder
+// (SIEVE_STATS, else your Sieve data folder), as `sieve import` adds it; the SYSTEMS page shows it.
+// Never in the way of the import itself: a folder that cannot be written is said and passed by.
+void Menu::keep_import_stat(const sieve::HeldImport& h)
+{
+    try
+    {
+        sieve::add_format_stat(sieve::format_stats_folder(), "model-" + h.format, sieve::import_format_stat(h, ""));
+        cat_stats_id_.clear(); // (read again when its entry is next shown)
+    }
+    catch (const std::exception& e)
+    {
+        std::fprintf(stderr, "warning: the import's figures were not kept: %s\n", e.what());
+    }
+}
+
 void Menu::import_model(const std::string& path)
 {
     char_init();
@@ -2279,6 +2297,7 @@ void Menu::import_model(const std::string& path)
         });
         char_.hold(char_sphere_, h.hex);
         char_store();
+        keep_import_stat(h);
         char_note_ = trf("side.char.imported", {utf8_path(path_utf8(path).filename()), std::to_string(std::min<size_t>(h.vertices_in, sieve::kHeldVertices)),
                                                  std::to_string(h.vertices_in), std::to_string(h.faces_kept), std::to_string(h.faces_in)});
         if (!h.left_out.empty())
@@ -3448,6 +3467,8 @@ void Menu::render_side(float W, float H)
         text(r_, x + 14, bottom - 22, tr("side.speaks.footer"), 1, grey);
         return;
     }
+    // What came of a share sent with Ctrl+S (Settings > RAID), said once it is known.
+    if (auto n = raid_service::take_share_note()) char_note_ = *n;
     // A file chosen in a dialog since the last frame: saved or opened now.
     {
         std::optional<std::string> save, load, import, skeleton;
@@ -3495,14 +3516,23 @@ void Menu::render_side(float W, float H)
                         }
                         sieve::Raid raid(drives);
                         const std::string v = raid.put("your character", char_.text());
-                        if (char_anim_) raid.put("your character's animation", char_anim_->text());
-                        raid.put("your save", character_save().text()); // everything chosen, named together
+                        std::vector<std::string> versions{v};
+                        if (char_anim_) versions.push_back(raid.put("your character's animation", char_anim_->text()));
+                        versions.push_back(raid.put("your save", character_save().text())); // everything chosen, named together
                         char_note_ += "; " + trf("side.char.raid", {v.substr(0, 12)});
+                        // Between machines, where sharing is ticked (opt in, Settings > RAID): sent,
+                        // sealed, to the machines named, on a thread of its own; said when done.
+                        if (app_->raid_share)
+                        {
+                            raid_service::share(*app_, app_path_, drives, versions);
+                            char_note_ += "; " + tr("side.char.raid_sharing");
+                        }
                     }
                     catch (const std::exception& e)
                     {
                         char_note_ += "; " + trf("side.char.raid_failed", {e.what()});
                     }
+                else if (app_ && app_->raid_share) char_note_ += "; " + tr("side.char.raid_no_drives"); // (shared from your own RAID first)
             }
         }
         if (load) load_character(*load);
@@ -3548,11 +3578,13 @@ void Menu::render_side(float W, float H)
     {
         // The character as drawn: at rest, or in this frame of its animation (IDEAS 19.170).
         sieve::Character shown = char_;
+        std::vector<std::array<double, 9>> turns; // each sphere's turn in this frame (none: at rest)
         if (char_anim_)
         {
             const uint32_t frame = char_anim_fixed_ >= 0 ? uint32_t(char_anim_fixed_)
                                    : char_anim_playing_ ? uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000)
                                                         : char_anim_paused_;
+            turns = sieve::pose_turns(char_, *char_anim_, frame);
             const auto at = sieve::pose(char_, *char_anim_, frame);
             for (size_t i = 0; i < shown.spheres.size(); ++i)
             {
@@ -3698,7 +3730,8 @@ void Menu::render_side(float W, float H)
             }
         }
         // The models held in spheres (sieve-character-v2): each a wireframe filling its sphere, its
-        // coordinates times the radius, turned with the character; the chosen sphere ringed.
+        // coordinates times the radius, turned with its sphere as the animation turns it, and with
+        // the character; the chosen sphere ringed.
         auto at3 = [&](float px, float py, float pz, float& sx, float& sy) {
             sx = cx + (px * ca - pz * sa) * scale;
             sy = cy - py * scale;
@@ -3709,9 +3742,10 @@ void Menu::render_side(float W, float H)
             const sieve::Sphere& p = shown.spheres[i];
             for (const sieve::HeldEdge& e : sieve::held_model_edges(hex))
             {
+                const auto a = sieve::turned(turns.empty() ? nullptr : &turns[i], e.a), b = sieve::turned(turns.empty() ? nullptr : &turns[i], e.b);
                 float x1, y1, x2, y2;
-                at3(float(p.x) + e.a[0] * float(p.r), float(p.y) + e.a[1] * float(p.r), float(p.z) + e.a[2] * float(p.r), x1, y1);
-                at3(float(p.x) + e.b[0] * float(p.r), float(p.y) + e.b[1] * float(p.r), float(p.z) + e.b[2] * float(p.r), x2, y2);
+                at3(float(p.x) + a[0] * float(p.r), float(p.y) + a[1] * float(p.r), float(p.z) + a[2] * float(p.r), x1, y1);
+                at3(float(p.x) + b[0] * float(p.r), float(p.y) + b[1] * float(p.r), float(p.z) + b[2] * float(p.r), x2, y2);
                 SDL_RenderLine(r_, x1, y1, x2, y2);
             }
         }

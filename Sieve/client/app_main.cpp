@@ -1,6 +1,7 @@
 // Sieve hallway -- the program: its options, the menus, the screenshot and scripting paths used by
 // the checks, and the event loop. The hallway itself is in hallway.hpp and the files beside it.
 
+#include "raid_service.hpp"
 #include "sieve/sha256.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
@@ -1073,7 +1074,11 @@ int run(const Args& a)
         player = std::make_unique<MusicPlayer>(folder, !shot && !a.has("no-music"));
         set_music(player.get());
     }
+    // The RAID between machines, where its serving is ticked (Settings > RAID, opt in only): this machine
+    // keeps others' sealed saves while Sieve runs (never for a picture).
+    if (!shot) raid_service::apply(app, app_path);
     auto finish = [&] {
+        raid_service::stop(); // no more accepted; those answering finished
         player.reset(); // its audio stream goes before SDL does
         stop_speech();  // and the voice's
         release_fonts(); // glyph textures belong to the renderer

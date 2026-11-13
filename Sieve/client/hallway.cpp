@@ -2380,7 +2380,8 @@ void Hallway::draw_character(SDL_Color edge)
             posed.spheres[i].y = int32_t(std::lround(at[i][1]));
             posed.spheres[i].z = int32_t(std::lround(at[i][2]));
         }
-        draw_figure(posed, edge, 0, &*character_);
+        const auto turns = sieve::pose_turns(*character_, *animation_, animation_shown_);
+        draw_figure(posed, edge, 0, &*character_, &turns);
     }
     else if (character_) draw_figure(*character_, edge, 0);
     // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
@@ -2391,7 +2392,7 @@ void Hallway::draw_character(SDL_Color edge)
 
 // One character standing in the hallway: `place` 0 is yours (ahead and to your right); 1, 2, ... are
 // your personal dimension's, ahead and to your left, one after another along the corridor.
-void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest)
+void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest, const std::vector<std::array<double, 9>>* turns)
 {
     if (c.spheres.empty()) return;
     // Where it stands and how far aside: from its rest pose (when it is moving), so its feet and its
@@ -2434,9 +2435,12 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
         const sieve::Sphere& p = c.spheres[i];
         const Vec3 o = world(p);
         const float rad = float(p.r) * scale;
+        const std::array<double, 9>* t = turns && i < turns->size() ? &(*turns)[i] : nullptr; // (turned with its sphere)
         for (const sieve::HeldEdge& e : sieve::held_model_edges(hex))
-            line(o + right * (e.a[0] * rad) + Vec3{0, e.a[1] * rad, 0} + f * (-e.a[2] * rad),
-                 o + right * (e.b[0] * rad) + Vec3{0, e.b[1] * rad, 0} + f * (-e.b[2] * rad));
+        {
+            const auto a = sieve::turned(t, e.a), b = sieve::turned(t, e.b);
+            line(o + right * (a[0] * rad) + Vec3{0, a[1] * rad, 0} + f * (-a[2] * rad), o + right * (b[0] * rad) + Vec3{0, b[1] * rad, 0} + f * (-b[2] * rad));
+        }
     }
     // Rings facing the camera: in the plane of its right and up.
     const Vec3 cf = cam_.forward(), cr = normalize(hallway::cross(cf, Vec3{0, 1, 0})), cu = hallway::cross(cr, cf); // (hallway::cross: the vector one, not walking through a door)

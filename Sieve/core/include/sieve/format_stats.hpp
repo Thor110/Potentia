@@ -37,6 +37,7 @@ struct FormatStat
     std::string date, machine, what, result;
     std::vector<std::pair<std::string, uint64_t>> figures; // in order of key
     uint64_t get(const std::string& key) const;            // 0 if not given
+    bool has(const std::string& key) const;
     std::string text() const;                              // the line, without its line feed
 };
 

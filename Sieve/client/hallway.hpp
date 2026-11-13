@@ -1813,7 +1813,8 @@ private:
     int animation_frame_ = -1;
     uint32_t animation_shown_ = 0;
     std::vector<sieve::Character> personal_; // your personal dimension (the store), drawn beside yours
-    void draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest = nullptr);
+    void draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest = nullptr,
+                     const std::vector<std::array<double, 9>>* turns = nullptr); // (each sphere's turn: its held model turns with it)
     float hall_scale_ = 1, max_scale_ = 16;
     bool character_fits_ = true;
     void draw_character(SDL_Color edge);

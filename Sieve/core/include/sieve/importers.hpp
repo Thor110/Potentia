@@ -69,6 +69,10 @@ struct ImportedModel
         double seconds = 0;
         uint32_t frames = 0;
         std::vector<std::array<double, 4>> turns;
+        // Where each joint stands in each frame (metres, as turns), and whether a translation channel
+        // moved anything: then the animation carries moves as well (sieve-animation-v2).
+        std::vector<std::array<double, 3>> places;
+        bool moved = false;
     };
     std::vector<Sampled> sampled;
     // Each thing the file held that the mesh does not carry, said in a few words

@@ -584,10 +584,13 @@ if(MSVC)
 endif()
 
 add_library(sieve_locate STATIC tools/cli/locate.cpp tools/cli/case_names.cpp tools/cli/gather.cpp tools/cli/delta.cpp tools/cli/text_spans.cpp tools/cli/map.cpp tools/cli/vault.cpp tools/cli/vault_decode.cpp tools/cli/timings.cpp
-    tools/cli/rar_remake.cpp)
+    tools/cli/rar_remake.cpp tools/cli/raid_socket.cpp)
 target_include_directories(sieve_locate PUBLIC tools)
 # The vault checks pictures (PDQ), including files that are pictures, so it reads them (stb).
 target_link_libraries(sieve_locate PUBLIC sieve_core PRIVATE sieve_pdq sieve_image_io sieve_lzma)
+if(WIN32)
+    target_link_libraries(sieve_locate PUBLIC ws2_32) # the RAID between machines (raid_socket.cpp), in sieve and the hallway
+endif()
 target_link_libraries(sieve_lines PUBLIC sieve_locate) # the lines check units against the vault
 # (client/unpack_7z.cpp too: "Optimise Archive Formats" reads a 7z's contents with the installer's
 # own decoder.)
@@ -611,7 +614,6 @@ add_executable(sieve
     tools/cli/train_cmd.cpp
     tools/cli/diffuse.cpp
     tools/cli/cipher_cmd.cpp
-    tools/cli/raid_socket.cpp
     tools/cli/site.cpp
     ${SIEVE_ICON_RC})
 target_link_libraries(sieve PRIVATE sieve_lines sieve_locate sieve_compare)
@@ -744,6 +746,7 @@ if(SIEVE_BUILD_CLIENT)
         client/tailoring.cpp
         client/navigator.cpp
         client/pause_menu.cpp
+        client/raid_service.cpp
         client/speech.cpp
         client/font.cpp
         client/gpu_memory.cpp

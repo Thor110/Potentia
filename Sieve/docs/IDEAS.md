@@ -7174,7 +7174,8 @@ foundations to prepare for moving forward through all formats, scales and visual
   frame, at 30 frames a second, each of a turn's three numbers one of 256 steps, so every animation of
   B bones and F frames is one address among 256^(3BF). Played on any character with as many spheres:
   each sphere moves with its parent's turn. Its roof: 64 bones, 300 frames (ten seconds); a joint's
-  movement and growth (translation, scale) and cubic splines' tangents are named as left out.
+  movement and growth (translation, scale) and cubic splines' tangents are named as left out. (*13 November 2026:* a joint's movement is carried now, as `sieve-animation-v2`'s moves, and a
+  model held in a sphere turns with it; growth and tangents are still named as left out.)
 - *In the hallway (built the same day):* your character plays its animation as it walks beside you,
   standing where its rest pose stands, so its feet and its place hold still while it moves; the
   animation is kept in the store (`animations/<SHA-256>.animation`) and named in the settings file,
@@ -7324,7 +7325,8 @@ stages, each usable alone:
    default); machines found by **the addresses the person gives** (`--peers`), no starting nodes run yet;
    the limit by **IP address first**, as Edward chose (§19.179), kept as a salted hash. Not yet: the
    menu (behind the red warning boxes), peers passing on other peers, the step to verified identity, and
-   who runs the first known nodes.)* *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
+   who runs the first known nodes.)* *(13 November 2026: the menu built, Settings > RAID, its two halves each behind a red box, off until
+   ticked; Ctrl+S shares, and the hallway serves while it runs, up to 32 connections at once.)* *Between machines, opt in only:* behind the red warning boxes of §19.150, a person's store offers
    chunks by name to others and asks for the ones it lacks; a chunk is accepted only if it hashes to
    its name, so nothing can be changed on the way. Before this is built, Edward's decisions: whether
    others' saves are stored encrypted (so a helper cannot read them), how much space each person
@@ -7589,6 +7591,12 @@ state space".
   each of Sieve's own formats, its plugin and its count beside its measured figures.
 - *Planned only:* nothing built yet. A first step: one small format's grammar (the measured-figure
   record) as a plugin, checked by the oracle to admit exactly the lines `read_format_stat` admits.
+  (*Built 13 November 2026:* `data/filters/format-stat-record-v1.sfilter`, 337 states on an ascii95
+  line, FILTER-PLUGINS §22. Its counts are the oracle's to the last digit (5,931,900,000,000 records
+  of the shortest length, 62, which is 10^8 dates times 39^3 one-letter words), and on 69,458 lines,
+  records and records changed by one character, every verdict is the reader's but one kind: keys out
+  of increasing order, which a walk cannot see and the reader alone refuses (403 of them). That is the
+  honest limit of a grammar as a walk: a rule comparing one field with another whole field is not one.)
 - *Kept on disk as .sieve, read on the spot (Edward, the same day):* "we should also be pulling sfilters
   and other sieve files like these catalogs or maps from the sieve state space in the beginning during
   installation, which I think already technically happens naturally through the process of creating a
@@ -7615,3 +7623,36 @@ state space".
   hallway starts, on a thread of their own, and kept in memory for the Node Graph Viewer. The
   repository's own entries stay loose (they are read and reviewed as text); a release may ship them
   packed.
+
+**19.186 Actions to animations, as a format of its own; a character creator on the main menu (Edward,
+13 November 2026). The next idea to work on.** His words: "actions -> animations, will need to be a
+format as well I think", "it will hold actions in-game to the animations that represent them", "so
+that custom characters and the like can be loaded in", "if it doesnt have an animation it wont play
+the animation and will inform the user that animation doesnt exist for this model or let them pick an
+animation from their list of animations for that action", "this may require a charactor creator on
+the main menu so that there is more accessibility and focus as well as room for more controls while
+the setup one just stays simple but can link through to it".
+- *The format* (proposed: `sieve-actions-v1`): canonical text named by its SHA-256, one line an action,
+  each naming the animation that plays it by the animation's SHA-256 (or `none`):
+  `action walk <sha256>`, `action idle <sha256>`, `action wave none`. The actions are the game's own,
+  a fixed vocabulary (walk, run, idle, jump, take a book, turn a page, ...) kept as a catalogue entry,
+  so "no such action" can be checked, and the list grows by a new version. The map is part of the
+  next save version (`sieve-save-v1` holds the character, its animation and its languages today), so
+  Ctrl+S and the RAID carry it with the rest.
+- *A missing animation:* the hallway plays nothing for that action and says so once ("no animation for
+  jump on this character"), never in a loop; where the store holds animations that fit, it offers
+  them to choose from, and the one chosen is written into the map (a new version, as any edit is).
+  Fitting is checked, not guessed: an animation fits a character when it has no more bones than the
+  character has spheres, the rule `pose()` already plays by.
+- *Custom characters:* one loaded with its own map brings its actions with it; one without falls back
+  on the default map where its animations fit.
+- *A character creator on the main menu:* a view of its own, the whole window, as the System Viewer
+  became (13 November 2026): the character large and turning, its spheres and held models, the list of
+  actions with each one's animation played on demand, importing (Ctrl+I, Ctrl+K) and the store. The
+  setup menu's CHARACTER page keeps its few quick settings (seed, limbs, ...) and gains a row that
+  opens the creator.
+- *To decide:* whether the actions are Sieve's fixed list alone or a character may add its own (emotes)
+  as a later version; whether choosing an animation for a missing action edits the character's map
+  (and saves it) or only this session's. Proposed: a fixed list first; a choice edits the map.
+- *Planned only;* the next idea to work on (ROADMAP, "Next, in order", step 4).
+

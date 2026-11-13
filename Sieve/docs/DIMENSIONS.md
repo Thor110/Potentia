@@ -38,7 +38,8 @@ tracks and movies composed of them; models, worlds, AI and binary.
   skeleton (`sieve-character-v3`, Ctrl+K) and its animations onto the animation line.
 - *Animation* (built, §19.170): `sieve-animation-v1`, each bone's turn from rest per frame at 30 a
   second, 256 steps a number, so every animation is an address; played on any character. The roof:
-  64 bones, 300 frames, turns only.
+  64 bones, 300 frames. `sieve-animation-v2` (13 November 2026) adds each bone's move per frame, so
+  a glTF's translation channels (a body walking forward) come in too.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try
   `sieve warp --alphabet dna4 --length 12 GATTACA`. A reader of FASTA files, which would skip the

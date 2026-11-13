@@ -16,6 +16,8 @@
 #include "menu.hpp" // line_sizes_of
 #include "font.hpp"
 #include "music.hpp"
+#include "raid_service.hpp"
+#include "sieve/paths.hpp"
 #include "strings.hpp"
 
 #include <algorithm>
@@ -29,6 +31,13 @@ constexpr int kMinW = 1000, kMinH = 640; // smaller windows draw the menu scaled
 constexpr int kListRows = 10;            // drop-down entries shown at once
 const SDL_Color kWhite{255, 255, 255, 255}, kGrey{150, 150, 150, 255}, kDim{90, 90, 90, 255}, kAccent{0, 255, 255, 255},
                 kRed{255, 70, 70, 255};
+
+// A value cut to fit `px` at double size (8 px a character, twice), "..." where it was cut.
+std::string fit_value(const std::string& v, float px)
+{
+    const size_t cells = size_t(std::max(4.0f, px / 16.0f));
+    return v.size() <= cells ? v : v.substr(0, cells - 3) + "...";
+}
 
 void draw_centred(SDL_Renderer* r, float cx, float y, const std::string& s, float scale, SDL_Color c)
 {
@@ -71,7 +80,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Systems: return {{Kind::Action, "systems_formats"}, {Kind::Action, "systems_language"}, {Kind::Action, "back"}};
     case Screen::Settings:
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
-                {Kind::Action, "back"}};
+                {Kind::Action, "raid"}, {Kind::Action, "back"}};
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
@@ -79,6 +88,10 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "back"}};
     case Screen::Language: return {{Kind::Choice, "language_choice"}, {Kind::Action, "back"}};
     case Screen::Programs: return {{Kind::Program, "ffmpeg"}, {Kind::Action, "back"}};
+    // The infinite RAID between machines (IDEAS 19.176, 19.150): both halves opt in only, each its own
+    // red box; the machines and the address are set in the settings file and shown here.
+    case Screen::Raid:
+        return {{Kind::Toggle, "raid_share"}, {Kind::Info, "raid_peers"}, {Kind::Toggle, "raid_serve"}, {Kind::Info, "raid_listen"}, {Kind::Action, "back"}};
     }
     return {};
 }
@@ -100,6 +113,10 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "invert_mouse_y") return onoff(s_.invert_mouse_y);
     if (it.id == "read_aloud") return speech_available() ? onoff(s_.read_aloud) : tr("value.read_aloud.none");
     if (it.id == "text_to_voice") return speech_available() || sieve_voice_available() ? onoff(s_.text_to_voice) : tr("value.text_to_voice.none");
+    if (it.id == "raid_share") return onoff(s_.raid_share);
+    if (it.id == "raid_serve") return onoff(s_.raid_serve);
+    if (it.id == "raid_peers") return s_.raid_peers.empty() ? tr("value.raid_peers.none") : s_.raid_peers;
+    if (it.id == "raid_listen") return s_.raid_serve ? hallway::raid_service::serving_status() : s_.raid_listen;
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {
@@ -219,6 +236,7 @@ void MainMenu::back()
     case Screen::Controls: screen_ = Screen::Settings; row_ = 1; return;
     case Screen::Language: screen_ = Screen::Settings; row_ = 2; return;
     case Screen::Programs: screen_ = Screen::Settings; row_ = 3; return;
+    case Screen::Raid: screen_ = Screen::Settings; row_ = 4; return;
     case Screen::Personal:
         screen_ = Screen::Main;
         row_ = 0;
@@ -263,6 +281,7 @@ void MainMenu::change(int dir)
         else if (it.id == "graphics") { screen_ = Screen::Graphics; row_ = 0; }
         else if (it.id == "controls") { screen_ = Screen::Controls; row_ = 0; }
         else if (it.id == "language") { screen_ = Screen::Language; row_ = 0; }
+        else if (it.id == "raid") { screen_ = Screen::Raid; row_ = 0; }
         else if (it.id == "programs")
         {
             screen_ = Screen::Programs;
@@ -297,6 +316,30 @@ void MainMenu::change(int dir)
             s_.text_to_voice = !s_.text_to_voice;
             set_text_to_voice(s_.text_to_voice);
         }
+        else if (it.id == "raid_share")
+        {
+            // Opt in: turned on, your key is made if there is none (said, with where), so what is sent
+            // can be read by you alone.
+            s_.raid_share = !s_.raid_share;
+            raid_note_.clear();
+            if (s_.raid_share)
+            {
+                bool made = false;
+                const std::string why = hallway::raid_service::ensure_key(s_, path_, &made);
+                if (!why.empty())
+                {
+                    s_.raid_share = false;
+                    raid_note_ = trf("value.raid_key.failed", {why});
+                }
+                else if (made) raid_note_ = trf("value.raid_key.made", {sieve::u8(hallway::raid_service::key_path(s_, path_))});
+            }
+        }
+        else if (it.id == "raid_serve")
+        {
+            s_.raid_serve = !s_.raid_serve;
+            save();
+            hallway::raid_service::apply(s_, path_); // started or stopped now
+        }
         save();
         return;
     case Kind::Number:
@@ -307,6 +350,7 @@ void MainMenu::change(int dir)
         save();
         return;
     case Kind::Choice: open_list(it); return;
+    case Kind::Info: return;
     case Kind::Program:
         if (dir > 0)
         {
@@ -510,11 +554,12 @@ void MainMenu::render()
                           : screen_ == Screen::Personal ? "screen.personal"
                           : screen_ == Screen::Systems ? "screen.systems"
                           : screen_ == Screen::Programs ? "screen.programs"
+                          : screen_ == Screen::Raid ? "screen.raid"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
-    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs;
+    const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr("help." + its[size_t(row_)].id)).size();
@@ -548,6 +593,19 @@ void MainMenu::render()
         const float yy = y + float(i) * rowh + (it.id == "back" ? 12 : 0);
         const SDL_FRect r{cx - boxw / 2, yy - 8, boxw, rowh - 6};
         item_rects_.emplace_back(r, i);
+        // The RAID's two opt-ins: a red box always (IDEAS 19.150: "strongly labelled and opt in only
+        // red warning type data checkboxes"), filled red while on.
+        const bool red = it.id == "raid_share" || it.id == "raid_serve";
+        if (red)
+        {
+            const bool on = it.id == "raid_share" ? s_.raid_share : s_.raid_serve;
+            SDL_SetRenderDrawColor(r_, 200, 30, 30, on ? 90 : 30);
+            SDL_RenderFillRect(r_, &r);
+            SDL_SetRenderDrawColor(r_, 230, 50, 50, 255);
+            SDL_RenderRect(r_, &r);
+            const SDL_FRect r2{r.x - 2, r.y - 2, r.w + 4, r.h + 4};
+            SDL_RenderRect(r_, &r2);
+        }
         if (sel)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 36);
@@ -566,7 +624,7 @@ void MainMenu::render()
             if (it.kind == Kind::Number) v = "< " + v + " >";
             // A program that is not there is said in red, as every warning that stops something is.
             const bool missing = it.kind == Kind::Program && ffmpeg_version_.empty();
-            draw_text(r_, r.x + r.w - 20 - text_width(v, 2), yy + 2, v, 2, missing ? kRed : sel ? kAccent : kGrey);
+            draw_text(r_, r.x + r.w - 20 - text_width(fit_value(v, r.w / 2), 2), yy + 2, fit_value(v, r.w / 2), 2, missing || red ? kRed : sel ? kAccent : kGrey);
             if (it.id == list_) list_anchor = r;
         }
         item_y = yy + rowh;
@@ -579,7 +637,15 @@ void MainMenu::render()
     {
         const std::string help = tr("help." + its[size_t(row_)].id);
         float hy = item_y + 16;
-        for (const auto& line : split_lines(help)) { draw_centred(r_, cx, hy, line, 1, kGrey); hy += 14; }
+        // (the RAID's opt-ins' help in red: what ticking them does, before it is done)
+        const bool red_help = its[size_t(row_)].id == "raid_share" || its[size_t(row_)].id == "raid_serve";
+        for (const auto& line : split_lines(help)) { draw_centred(r_, cx, hy, line, 1, red_help ? kRed : kGrey); hy += 14; }
+        if (screen_ == Screen::Raid && !raid_note_.empty())
+        {
+            hy += 6;
+            draw_centred(r_, cx, hy, raid_note_, 1, kWhite);
+            hy += 14;
+        }
         // The ffmpeg row: which one is used, or where none was found (in red).
         if (its[size_t(row_)].kind == Kind::Program)
         {

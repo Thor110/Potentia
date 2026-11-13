@@ -1205,7 +1205,9 @@ int raid_between_machines(const Args& a, const std::string& what)
                           << kRaidWarning << std::flush;
             },
             [&](sieve::RaidStream& s, const std::string& from) {
-                const size_t n = held.serve(s, from);
+                const size_t n = held.serve(s, from); // (several at once: RaidHeld keeps its counts one at a time)
+                static std::mutex said;
+                std::lock_guard<std::mutex> lock(said);
                 std::cout << "answered  " << n << (n == 1 ? " request from " : " requests from ") << held.peer_key(from).substr(0, 12) << " (" << held.used_by(from) << " bytes kept for it)\n" << std::flush;
             });
         return 0;
@@ -1416,6 +1418,32 @@ int cmd_catalogue(const Args& a)
         return nullptr;
     };
     const std::filesystem::path stats = sieve::format_stats_folder(a.get("stats-folder", ""));
+    // --check-records FILE: each line read as a measured-figure record (sieve-format-stat-v1), and
+    // said whether it is one and, if not, why (CI sets these beside format-stat-record-v1's verdicts).
+    if (a.has("check-records"))
+    {
+        std::ifstream in(sieve::from_u8(a.get("check-records")), std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + a.get("check-records"));
+        size_t good = 0, bad = 0;
+        std::string l;
+        while (std::getline(in, l))
+        {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            try
+            {
+                (void)sieve::read_format_stat(l);
+                ++good;
+                std::cout << "record     pass  " << l << "\n";
+            }
+            catch (const std::invalid_argument& e)
+            {
+                ++bad;
+                std::cout << "record     FAIL  " << l << "  (" << e.what() << ")\n";
+            }
+        }
+        std::cout << good << " records, " << bad << " not\n";
+        return bad ? 1 : 0;
+    }
     if (a.has("measure"))
     {
         namespace fs = std::filesystem;
@@ -1647,7 +1675,7 @@ int cmd_import(const Args& a)
     {
         const sieve::Animation an = sieve::imported_animation(m, i);
         std::printf("animation %zu \"%s\": %u frames (%.2f s), %u bones, %s %s\n", i, m.sampled[i].name.c_str(), an.frames, double(an.frames) / sieve::kAnimationRate,
-                    an.bones, sieve::kAnimationVersion, an.id().c_str());
+                    an.bones, an.moving() ? sieve::kAnimationVersion2 : sieve::kAnimationVersion, an.id().c_str());
     }
     if (a.has("animation-out"))
     {
@@ -1663,15 +1691,7 @@ int cmd_import(const Args& a)
     // Stage 4 of the catalogue: what this import kept, added to its importer's entry (--no-stats: not).
     if (!a.has("no-stats"))
     {
-        const sieve::HeldImport h = m.mesh.verts.empty() ? sieve::HeldImport{} : sieve::import_model_for_hold(bytes, beside(path));
-        sieve::FormatStat s;
-        s.date = sieve::format_stats_today();
-        s.machine = sieve::format_stats_machine(a.get("machine", ""));
-        s.what = "import";
-        const uint64_t vk = std::min<uint64_t>(h.vertices_in, sieve::kHeldVertices);
-        s.result = m.left_out.empty() && vk == h.vertices_in && h.faces_kept == h.faces_in ? "whole" : "partial";
-        s.figures = {{"animations", m.sampled.size()}, {"faces-in", h.faces_in}, {"faces-kept", h.faces_kept}, {"joints", m.skeleton.size()},
-                     {"left-out", m.left_out.size()}, {"vertices-in", h.vertices_in}, {"vertices-kept", vk}};
+        const sieve::FormatStat s = sieve::import_format_stat(sieve::held_import_of(m), a.get("machine", ""));
         try
         {
             sieve::add_format_stat(sieve::format_stats_folder(a.get("stats-folder", "")), "model-" + m.format, s);

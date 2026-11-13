@@ -76,6 +76,17 @@ for L in 1 2 5 17 40; do
     diff plugin.oracle plugin.engine
   done
 done
+# The measured-figure record's grammar as a plugin (IDEAS 19.185's first step): its counts the
+# oracle's at the lengths around the shortest record (62) and beyond, and every verdict on a corpus
+# of records and of records changed by a character the reader's own (read_format_stat), but for
+# keys out of order, which a walk cannot see and the reader alone refuses.
+for L in 61 62 63 70 90; do
+  python sieve_ref.py plugin ../data/filters/format-stat-record-v1.sfilter --length $L > plugin.oracle
+  $S filters --plugin ../data/filters/format-stat-record-v1.sfilter --length $L | tr -d '\r' > plugin.engine
+  diff plugin.oracle plugin.engine
+done
+python sieve_ref.py plugin ../data/filters/format-stat-record-v1.sfilter --length 62 | grep -c "^survivors  5931900000000$" > /dev/null
+python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for their keys' order alone$" > /dev/null
 # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way
 # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
 # (word lists, follow, first and last, a word in two sets; whole and cut edges).

@@ -378,6 +378,8 @@ q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
 q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones" arm-menu.txt
 grep -q "^line = sieve-character-v3 spheres=3;s 0 -1 0 0 0 1365 body;" arm.ini
 $H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r' | q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
+# Stage 4 of the catalogue: Ctrl+K's import is added to its importer's entry, as `sieve import` adds it.
+grep -c " what=import result=whole animations=1 .* joints=3 " "$SIEVE_STATS/model-gltf.stats" > /dev/null
 # The animation is kept too: in the store beside the settings file, named by its SHA-256 there.
 grep -q "^animation = 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.ini
 test -s animations/2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8.animation
@@ -390,6 +392,34 @@ $H --menu --settings raid.ini --save-character raid-me.character --press "\`" --
 $H --menu --settings raid.ini --save-character raid-me.character --press "\`,G" --screenshot raid2.png > /dev/null
 $exe raid list --drives raidc1,raidc2 | tr -d '\r' | q "  your character  (after "
 $exe raid verify --drives raidc1,raidc2 | tr -d '\r' | q "^whole$"
+# Between machines from the menus (IDEAS 19.176, 19.150), both opt in only behind red boxes in
+# Settings > RAID. Turning sharing on makes the key beside the settings; then Ctrl+S (as
+# --save-character does) also sends your save, sealed, to the machine named, and each version's
+# remote id is kept beside the key, so the character comes back byte for byte from that machine.
+rm -rf raidn raidn-held raidn.ini
+mkdir -p raidn
+$H --main-menu --settings raidn/raidn.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Return" --screenshot raid-menu.png | tr -d '\r' | q "^read aloud: Share my saves, On$"
+test -s raidn/raid.key
+grep -q "^share = on" raidn/raidn.ini
+printf '[raid]\ndrives = raidn/d1,raidn/d2\npeers = 127.0.0.1:47133\n' >> raidn/raidn.ini
+$exe raid serve --held raidn-held --listen 127.0.0.1:47133 > raidn-serve.txt 2>&1 &
+raidn_serve=$!
+trap 'kill $raidn_serve 2>/dev/null || true' EXIT
+python -c "import time
+for _ in range(100):
+    if 'listening' in open('raidn-serve.txt').read(): break
+    time.sleep(0.1)
+else:
+    raise SystemExit('the RAID server did not start (port 47133 taken?)')"
+$H --menu --settings raidn/raidn.ini --save-character raidn/me.character --press "\`" --screenshot raid-share.png | tr -d '\r' | q "^note: .*sending it, sealed, to the machines named"
+test "$(wc -l < raidn/raid-shared.txt)" -eq 2
+$exe raid fetch "$(sed -n 1p raidn/raid-shared.txt | cut -d' ' -f2)" --key raidn/raid.key --peers 127.0.0.1:47133 --out raidn/back.character > /dev/null
+cmp raidn/me.character raidn/back.character
+kill $raidn_serve
+# Keeping others' saves, from the menu: ticked, this machine answers at once on [raid] listen.
+printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
+$H --main-menu --settings raidn/serve.ini --read-aloud --press "Down,Down,Down,Down,Down,Return,Down,Down,Down,Down,Return,Down,Down,Return,Down" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
+test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
@@ -513,6 +543,10 @@ printf '[ai]\nmode = compact\nfilters = near-model-v1\n' > ai-near.ini
 $H --no-menu --line ai --filters ai-near.ini --walk "0,0" --screenshot ai-near.png | tr -d '\r' | sed -n 1p | q "within 2 digits of universalbibliothek's model (7548948481 survivors)"
 # From the main menu: the same locator; Go to it builds the hallway and walks to the file.
 $H --main-menu --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate-menu.png | q "file locator (main menu): open, Go to it offered"
+# Each file it reads is added to its kind's entry (what=read): its size and its .sieve's, no name.
+grep -c " what=read result=read bytes=34 .*sieve=" "$SIEVE_STATS/file-txt.stats" > /dev/null
+if grep -c "a\.txt" "$SIEVE_STATS"/*.stats > /dev/null; then exit 1; fi
+$exe catalogue file-txt | tr -d '\r' | q "^read       in the File Locator "
 # Its search for shorter addresses, given a time for the run (the file's follows), and the
 # keys that move them: [ and ] a file, Shift the run.
 $H --main-menu --locate tests/manifest_fixture --tailored --search-total 2 --screenshot locate-search.png | q "file locator (main menu)"

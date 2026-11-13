@@ -1141,3 +1141,25 @@ loose and packed is one plugin.
   cache's `catalogue/`); maps, already `.sieve`, are decoded at the hallway's start on a thread and kept
   in memory (`cli/map_sieve.hpp`: `prefetch_maps`).
 
+## 22. A format's grammar as a filter: `format-stat-record-v1` (built 13 November 2026; IDEAS §19.185)
+
+The first of Sieve's own formats written as a state space of its own: the measured-figure record
+(`sieve-format-stat-v1`, SPECIFICATIONS §12.0p) as a table-form plugin on an `ascii95` line. A unit of
+length L passes when it is one record of exactly L characters as `read_format_stat` reads it: the
+version, `date=` and ten characters of digits with `-` at the fifth and eighth, `machine=`, `what=` and
+`result=` each a word of 1 to 64 of `a-z`, `0-9`, `.`, `_` and `-`, then any number of `KEY=N` (a word,
+`=`, 1 to 19 digits), one SPACE between fields. 337 states, no parameters; it counts, ranks and
+compacts like any plugin, so `sieve filters --plugin data/filters/format-stat-record-v1.sfilter
+--length 62` says how many records of 62 characters there are (5,931,900,000,000: 10^8 dates times
+39^3 one-character words; none shorter).
+
+**Checked** (CI step 11): its counts are the oracle's at lengths 61, 62, 63, 70 and 90; and
+`tools/check_stat_plugin.py` judges a corpus twice, by the reader (`sieve catalogue --check-records
+FILE`) and by the plugin (`--judge`): 300 records made at random, every edge of the grammar (words of
+64 and 65, numbers of 19 and 20 digits, empty fields, a double SPACE, a trailing one) and each changed
+by one character every way, 69,458 lines. Every verdict is the reader's but one kind. **The limit:**
+the reader also asks that the keys stand in increasing order, each once, and a walk cannot: it would
+have to remember a whole key (up to 64 characters) to weigh the next against it. So the plugin's
+survivors are the reader's records with their keys in any order, and the check requires every
+disagreement to be a line the reader refuses for that reason alone (403 in the corpus).
+

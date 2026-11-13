@@ -105,18 +105,30 @@ std::optional<std::string> RaidHeld::get(const std::string& name) const
     return b;
 }
 
-uint64_t RaidHeld::used() const
+uint64_t RaidHeld::used_locked() const
 {
     uint64_t n = 0;
     for (const auto& p : peers_) n += p.second;
     return n;
 }
 
+uint64_t RaidHeld::used_by_locked(const std::string& k) const
+{
+    const auto at = std::lower_bound(peers_.begin(), peers_.end(), std::make_pair(k, uint64_t(0)));
+    return at != peers_.end() && at->first == k ? at->second : 0;
+}
+
+uint64_t RaidHeld::used() const
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    return used_locked();
+}
+
 uint64_t RaidHeld::used_by(const std::string& peer_address) const
 {
     const std::string k = peer_key(peer_address);
-    const auto at = std::lower_bound(peers_.begin(), peers_.end(), std::make_pair(k, uint64_t(0)));
-    return at != peers_.end() && at->first == k ? at->second : 0;
+    std::lock_guard<std::mutex> lock(mx_);
+    return used_by_locked(k);
 }
 
 void RaidHeld::save_peers() const
@@ -131,11 +143,12 @@ RaidHeld::Put RaidHeld::put(const std::string& name, const std::string& bytes, c
     if (!is_hex64(name)) return {Put::Is::Refused, "not a name (64 hex digits)"};
     if (bytes.size() > kRaidNetMax) return {Put::Is::Refused, "too long"};
     if (sha_hex(bytes) != name) return {Put::Is::Refused, "its bytes are not its name"};
-    if (get(name)) return {Put::Is::Had, ""};
-    if (used() + bytes.size() > limits_.space) return {Put::Is::Refused, "no space left that this machine gives"};
-    if (used_by(peer_address) + bytes.size() > limits_.per_peer) return {Put::Is::Refused, "this address has had as much kept as one address may"};
-    if (!write_file(blob_path(folder_, name), bytes)) return {Put::Is::Refused, "cannot write here"};
     const std::string k = peer_key(peer_address);
+    std::lock_guard<std::mutex> lock(mx_); // (the same chunk, or the last of the space, asked for twice at once)
+    if (get(name)) return {Put::Is::Had, ""};
+    if (used_locked() + bytes.size() > limits_.space) return {Put::Is::Refused, "no space left that this machine gives"};
+    if (used_by_locked(k) + bytes.size() > limits_.per_peer) return {Put::Is::Refused, "this address has had as much kept as one address may"};
+    if (!write_file(blob_path(folder_, name), bytes)) return {Put::Is::Refused, "cannot write here"};
     const auto at = std::lower_bound(peers_.begin(), peers_.end(), std::make_pair(k, uint64_t(0)));
     if (at != peers_.end() && at->first == k)
         at->second += bytes.size();

@@ -60,6 +60,8 @@
 // character so); it reads the same and has the same identity.
 #pragma once
 
+#include "sieve/format_stats.hpp"
+
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -172,11 +174,20 @@ struct HeldImport
     size_t faces_kept = 0;                 // faces that survived the reduction (at most 12)
     std::string format;                    // the importer that read it ("obj", "gltf", "glb")
     std::vector<std::string> left_out;     // what the file held beyond the mesh (importers.hpp)
+    size_t joints = 0, animations = 0;     // its skeleton and animations, as read (for its figures)
 };
 HeldImport import_obj_for_hold(std::string_view obj_text);
 // Any format the importers read (sieve/importers.hpp: .obj, .gltf, .glb), told apart by its content;
 // `load` reads a glTF's buffers beside it. The mesh is brought under the roof as above.
 HeldImport import_model_for_hold(std::string_view bytes, const std::function<std::optional<std::string>(const std::string&)>& load = {});
+// The same from a model already read (a skeleton taken by Ctrl+K); with no mesh in it, its figures
+// alone (no hex).
+struct ImportedModel;
+HeldImport held_import_of(const ImportedModel& m);
+// Stage 4 of the catalogue: what an import kept, as a record (sieve-format-stat-v1) for its
+// importer's entry, "model-" + its format: `sieve import` and the CHARACTER page's Ctrl+I and Ctrl+K
+// alike. "whole" when nothing was left out and every vertex and face kept.
+FormatStat import_format_stat(const HeldImport& h, const std::string& machine);
 
 const char* symmetry_name(Symmetry s);
 // "none", "bilateral" or "radial"; throws std::invalid_argument otherwise.

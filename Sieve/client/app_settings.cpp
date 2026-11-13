@@ -224,6 +224,21 @@ AppSettings AppSettings::load(const fs::path& path)
         else if (section == "raid")
         {
             if (key == "drives") s.raid_drives = value;
+            else if (key == "share") s.raid_share = on_off(value, false);
+            else if (key == "serve") s.raid_serve = on_off(value, false);
+            else if (key == "peers") s.raid_peers = value;
+            else if (key == "key") s.raid_key = value;
+            else if (key == "listen" && !value.empty()) s.raid_listen = value;
+            else if (key == "held") s.raid_held = value;
+            else if (key == "space_mb" || key == "per_peer_mb")
+                try
+                {
+                    const int n = std::clamp(std::stoi(value), 1, 1 << 20);
+                    (key == "space_mb" ? s.raid_space_mb : s.raid_per_peer_mb) = n;
+                }
+                catch (...)
+                {
+                }
         }
         else if (section == "models")
         {
@@ -362,6 +377,14 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
         {"character", "beside_you", on_off(character_beside), "on: your character walks beside you in the hallway (the default); off: not drawn there"},
         {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
+        {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
+        {"raid", "peers", raid_peers, "the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none"},
+        {"raid", "key", raid_key, "your key's file (sieve-raid-key-v1); keep it safe and keep a copy, as without it what others keep for you cannot be read by anyone; empty: raid.key beside these settings, made when share is first turned on"},
+        {"raid", "serve", on_off(raid_serve), "OPT IN ONLY (Settings > RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none"},
+        {"raid", "listen", raid_listen, "with serve on: the address answered on, HOST:PORT (0.0.0.0: every network this machine is on; 127.0.0.1: this machine alone)"},
+        {"raid", "held", raid_held, "with serve on: the folder others' saves are kept in; empty: raid-held beside these settings"},
+        {"raid", "space_mb", std::to_string(raid_space_mb), "with serve on: the most kept for others in all, in MiB (1024 by default)"},
+        {"raid", "per_peer_mb", std::to_string(raid_per_peer_mb), "with serve on: the most kept for any one address, in MiB (64 by default)"},
         {"character", "max_hall_scale", std::to_string(character_max_scale), "how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit)"},
         {"locator", "compare", locator_compare ? "1" : "0", "1: Compare with zip and 7z ticked (the default): what zip (deflate 9) and 7z (LZMA2 9e) make of it and of the instructions, beside Sieve's; 0: Sieve's figures alone, quicker on a large folder"},
         {"locator", "more_formats", locator_more ? "1" : "0", "1: More formats ticked: the comparison with gzip, bzip2, zstd, brotli and lz4 too, each the whole as one stream (slower: brotli above all); 0: zip and 7z only"},

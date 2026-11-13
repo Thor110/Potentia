@@ -705,6 +705,7 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
         }
         ImportedModel::Sampled sm;
         if (const json::Value* nm = a.find("name"); nm && nm->is_string()) sm.name = nm->string();
+        for (const Channel& ch : chans) sm.moved = sm.moved || ch.path == 0;
         sm.seconds = end;
         double want = std::floor(end * kAnimationRate + 1e-9) + 1;
         if (want > kAnimationMaxFrames) ++frames_cut;
@@ -770,11 +771,12 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
                         d[size_t(row * 3 + col)] = sum;
                     }
                 sm.turns.push_back(quaternion_of(d));
+                const Mat& wj = w[joints[order[i]]];
+                sm.places.push_back({wj[12], wj[13], wj[14]});
             }
         }
         out.sampled.push_back(std::move(sm));
     }
-    if (translations) out.left_out.push_back(plural(translations, "translation channel", "translation channels") + ", not carried: the animation line holds turns");
     if (scales) out.left_out.push_back(plural(scales, "scale channel", "scale channels") + ", not carried: the animation line holds turns");
     if (weights) out.left_out.push_back(plural(weights, "morph-weight channel", "morph-weight channels") + ", not carried");
     if (cubic) out.left_out.push_back(plural(cubic, "cubic-spline channel", "cubic-spline channels") + " played as straight lines between their keys");
@@ -925,6 +927,42 @@ Animation imported_animation(const ImportedModel& m, size_t which)
     a.bones = uint32_t(m.skeleton.size());
     a.frames = s.frames;
     for (const auto& q : s.turns) a.turns.push_back(turn_of_quaternion(q[0], q[1], q[2], q[3]));
+    // Its translation channels (sieve-animation-v2): each bone's move, what is left between where the
+    // file puts it and where its parent's turn (as kept, rounded to its steps) puts it from its parent
+    // (as played back, moves rounded), so the rounding never adds up down a limb.
+    if (s.moved && s.places.size() == s.turns.size())
+    {
+        const Character c = skeleton_character(m);
+        const auto& j = m.skeleton;
+        const double metre = kCharacterUnitsPerMetre;
+        a.moves.resize(a.turns.size());
+        std::vector<std::array<double, 3>> at(a.bones);
+        for (uint32_t f = 0; f < a.frames; ++f)
+            for (uint32_t b = 0; b < a.bones; ++b)
+            {
+                const auto& w = s.places[size_t(f) * a.bones + b];
+                const double want[3] = {(w[0] - j[0].x) * metre, (w[1] - j[0].y) * metre, (w[2] - j[0].z) * metre};
+                const Sphere& sp = c.spheres[b];
+                double from[3] = {double(sp.x), double(sp.y), double(sp.z)};
+                if (sp.parent >= 0 && uint32_t(sp.parent) < b)
+                {
+                    const Sphere& q = c.spheres[size_t(sp.parent)];
+                    double t[9];
+                    turn_matrix(a.at(f, uint32_t(sp.parent)), t);
+                    const double o[3] = {double(sp.x - q.x), double(sp.y - q.y), double(sp.z - q.z)};
+                    for (int r = 0; r < 3; ++r) from[r] = at[size_t(sp.parent)][size_t(r)] + t[r * 3] * o[0] + t[r * 3 + 1] * o[1] + t[r * 3 + 2] * o[2];
+                }
+                BoneMove mv;
+                int32_t* comp[3] = {&mv.x, &mv.y, &mv.z};
+                for (int r = 0; r < 3; ++r)
+                {
+                    *comp[r] = int32_t(std::clamp(std::llround(want[r] - from[r]), (long long)kAnimationMoveLeast, (long long)kAnimationMoveMost));
+                    at[b][size_t(r)] = from[r] + *comp[r];
+                }
+                a.moves[size_t(f) * a.bones + b] = mv;
+            }
+        if (!a.moving()) a.moves.clear(); // (nothing moved after all: v1)
+    }
     return a;
 }
 

@@ -17,18 +17,24 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    not the setup menu's sliding panel; the right-hand panel a direct mirror of the left: it slides in
    squashing the dimensions as the left one does, without the white line down its side, its scroll bar
    on its left; and only one of the two panels open at a time.
-3. **This week's loose ends, one session:** the RAID between machines on the menus, behind the red
+3. **This week's loose ends, one session** (*done 13 November 2026: Settings > RAID with its two red boxes, Ctrl+S sharing your save, the hallway serving; `sieve raid serve` 32 connections at once; the File Locator's readings (`what=read`) and the CHARACTER page's imports in the catalogue's figures; glTF translation channels as `sieve-animation-v2`, held models turning with their spheres; §19.185's first step, below*): the RAID between machines on the menus, behind the red
    warning boxes, with Ctrl+S sharing your save, and `sieve raid serve` answering more than one
    connection at once; the File Locator and the hallway's imports adding their figures to the
    catalogue (stage 4); IDEAS §19.185's first step (the measured-figure record's grammar as a filter
    plugin, checked by the oracle to admit exactly what its reader admits); glTF translation channels,
    and held models turning with their spheres.
-4. **Two first steps asked for:** `--record` / `--replay` in the hallway (§19.184), and music
+4. **Actions to animations and a character creator** (Edward, 13 November 2026: "please note it as
+   the next idea to work on"; IDEAS §19.186): `sieve-actions-v1`, each in-game action mapped to the
+   animation that plays it; a missing one said, or chosen from the animations that fit; the map kept
+   in the save; a character creator of its own on the main menu, the setup menu's CHARACTER page linking
+   to it. And with it, the infinite RAID's placement settled with Edward (how many machines keep each
+   piece, mirrored or coded; §19.176).
+5. **Two first steps asked for:** `--record` / `--replay` in the hallway (§19.184), and music
    visualiser rings for Sieve's own notes.
-5. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
+6. **The long plan below, stages 8 to 18**, cheapest first: 8 (docs checked from the code), 9 (the
    tactile Sieve: identity never by colour alone, text size and contrast, the magnifying lens of
    §19.160), 10 (hallway polish).
-6. **Still open from before:** voices measured by word error rate (stage 3b); the website's power
+7. **Still open from before:** voices measured by word error rate (stage 3b); the website's power
    savings page once its figures exist.
 
 **Waiting on Edward:** who runs the RAID's first known nodes, and the step from IP addresses to verified

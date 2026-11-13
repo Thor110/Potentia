@@ -65,6 +65,14 @@ q "^skeleton  3 joints, as sieve-character-v3 22807d23fa4d9b7abfb2895e2e97448ad1
 q "^animation 0 \"wave\": 31 frames (1.03 s), 3 bones, sieve-animation-v1 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" arm.txt
 tr -d '\r' < arm.character | q "^s 2 1 0 8192 0 1024 joint$"
 tr -d '\r' < arm.animation | q "^f 30 808080 8080c0 8080c0$"
+# Its translation channels (sieve-animation-v2): tests/walk.gltf is the same arm whose body also
+# walks 2 m along z over the second. The animation carries a move a bone; at frame 30 the body has
+# moved exactly 8,192 units (2 m at 4,096 a metre), and nothing is said to be left out.
+$exe import tests/walk.gltf --animation-out walk.animation | tr -d '\r' > walk.txt
+q "^animation 0 \"wave-and-walk\": 31 frames (1.03 s), 3 bones, sieve-animation-v2 " walk.txt
+if grep -c "translation" walk.txt > /dev/null; then exit 1; fi
+tr -d '\r' < walk.animation | q "^sieve-animation-v2 bones=3 frames=31 rate=30$"
+tr -d '\r' < walk.animation | q "^f 30 808080800000800000802000 8080c0"
 # The infinite RAID, stage 1 (IDEAS 19.176): a save kept on three folders, two copies of each chunk;
 # one copy damaged and one folder's manifest taken away are found by verify (exit 1), mended by
 # repair, and the save comes back byte for byte.
@@ -103,6 +111,13 @@ $exe raid share save.bin --drives $D --key raid.key --peers $P > share.txt
 tr -d '\r' < share.txt | q "^whole: every piece on as many peers as asked$"
 remote=$(tr -d '\r' < share.txt | awk '$1 == "remote" {print $2}')
 $exe raid share save.bin --drives $D --key raid.key --peers $P | tr -d '\r' | q "^sent      0 pieces, 0 bytes; "
+# Several connections answered at once: with one peer connected and saying nothing, another's share
+# is still answered straight away, not after the silent one's 30 seconds.
+python -c "import socket, subprocess, sys
+idle = socket.create_connection(('127.0.0.1', 47131))
+r = subprocess.run([sys.argv[1], 'raid', 'share', 'save.bin', '--drives', sys.argv[2], '--key', 'raid.key', '--peers', sys.argv[3]], capture_output=True, timeout=20)
+idle.close()
+assert r.returncode == 0, r.stderr" "$exe" "$D" "$P"
 $exe raid fetch $remote --key raid.key --peers $P --out fetched.bin > /dev/null
 cmp save.bin fetched.bin
 $exe raid key --out wrong.key > /dev/null

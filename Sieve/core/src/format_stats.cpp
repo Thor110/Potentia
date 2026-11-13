@@ -79,6 +79,13 @@ uint64_t FormatStat::get(const std::string& key) const
     return 0;
 }
 
+bool FormatStat::has(const std::string& key) const
+{
+    for (const auto& [k, v] : figures)
+        if (k == key) return true;
+    return false;
+}
+
 std::string FormatStat::text() const
 {
     std::string t = std::string(kFormatStatVersion) + " date=" + date + " machine=" + machine + " what=" + what + " result=" + result;
@@ -246,6 +253,40 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
         }
     }
     {
+        // Read in the File Locator: its .sieve made, not installed back; LZMA2 and deflate where Compare
+        // was ticked (added up over those records alone).
+        size_t n = 0, compared = 0;
+        uint64_t bytes = 0, sv = 0, cbytes = 0, lz = 0, df = 0;
+        std::vector<uint64_t> make;
+        std::set<std::string> machines;
+        std::string first, last;
+        for (const auto& s : stats)
+        {
+            if (s.what != "read") continue;
+            ++n;
+            bytes += s.get("bytes");
+            sv += s.get("sieve");
+            if (s.has("lzma2"))
+            {
+                ++compared;
+                cbytes += s.get("bytes");
+                lz += s.get("lzma2");
+                df += s.get("deflate");
+            }
+            if (s.get("bytes")) make.push_back(uint64_t(double(s.get("make-us")) * 1048576.0 / double(s.get("bytes"))));
+            machines.insert(s.machine);
+            if (first.empty() || s.date < first) first = s.date;
+            if (last.empty() || s.date > last) last = s.date;
+        }
+        if (n)
+        {
+            lines.push_back("read       in the File Locator " + from(n, machines, first, last) + ": " + grouped(bytes) + " bytes to " + grouped(sv) + " (" +
+                            percent(sv, bytes) + "), made in " + grouped(median(make) / 1000) + " ms a MiB (median)");
+            if (compared)
+                lines.push_back("           of the " + std::to_string(compared) + " compared: LZMA2 alone " + percent(lz, cbytes) + ", deflate " + percent(df, cbytes));
+        }
+    }
+    {
         size_t n = 0, whole = 0;
         uint64_t vi = 0, vk = 0, fi = 0, fk = 0, joints = 0, anims = 0, left = 0;
         std::set<std::string> machines;
@@ -279,7 +320,8 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
 std::vector<std::string> format_stats_short(const std::vector<FormatStat>& stats)
 {
     std::vector<std::string> lines;
-    size_t packs = 0, lossless = 0, imports = 0;
+    size_t packs = 0, lossless = 0, imports = 0, reads = 0;
+    uint64_t rbytes = 0, rsv = 0;
     uint64_t bytes = 0, sv = 0, lz = 0, vi = 0, vk = 0;
     std::vector<uint64_t> make;
     for (const auto& s : stats)
@@ -291,6 +333,12 @@ std::vector<std::string> format_stats_short(const std::vector<FormatStat>& stats
             sv += s.get("sieve");
             lz += s.get("lzma2");
             if (s.get("bytes")) make.push_back(uint64_t(double(s.get("make-us")) * 1048576.0 / double(s.get("bytes"))));
+        }
+        else if (s.what == "read")
+        {
+            ++reads;
+            rbytes += s.get("bytes");
+            rsv += s.get("sieve");
         }
         else if (s.what == "import")
         {
@@ -305,6 +353,7 @@ std::vector<std::string> format_stats_short(const std::vector<FormatStat>& stats
         lines.push_back("packed " + std::to_string(packs) + "x: " + percent(sv, bytes) + " of its bytes (LZMA2 " + percent(lz, bytes) + ")");
         lines.push_back(std::to_string(lossless) + " of " + std::to_string(packs) + " lossless; " + b + " a MiB to make");
     }
+    if (reads) lines.push_back("read " + std::to_string(reads) + "x in the File Locator: " + percent(rsv, rbytes) + " of its bytes");
     if (imports) lines.push_back("imported " + std::to_string(imports) + "x: " + grouped(vk) + " of " + grouped(vi) + " vertices kept");
     return lines;
 }

@@ -198,6 +198,8 @@ std::vector<FormatEntry> gather()
         "named on the CHARACTER page, grouped on YOURS (IDEAS 19.152)");
     own(kAnimationVersion, "An animation: turns per bone per frame", "animation", std::string("first line \"") + kAnimationVersion + " bones=...\"",
         "the CHARACTER page and the hallway (SPECIFICATIONS 12.0k)");
+    own(kAnimationVersion2, "An animation: turns and moves per bone per frame (glTF translation channels)", "animation",
+        std::string("first line \"") + kAnimationVersion2 + " bones=...\"", "sieve import, Ctrl+K, the CHARACTER page and the hallway (SPECIFICATIONS 12.0k)");
     own(kRaidManifestVersion, "A version of a save in the infinite RAID", "container", std::string("first line \"") + kRaidManifestVersion + "\"",
         "sieve raid (SPECIFICATIONS 12.0l)");
     own(kSealVersion, "Bytes sealed for others to keep (ChaCha20 and HMAC-SHA-256)", "encryption", "12 bytes of nonce, the bytes, 32 bytes of MAC",

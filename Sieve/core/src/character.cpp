@@ -364,10 +364,31 @@ HeldImport import_obj_for_hold(std::string_view obj_text)
 HeldImport import_model_for_hold(std::string_view bytes, const std::function<std::optional<std::string>(const std::string&)>& load)
 {
     const ImportedModel m = read_model(bytes, load);
-    HeldImport out = import_mesh_for_hold(m.mesh);
+    if (m.mesh.verts.empty()) (void)import_mesh_for_hold(m.mesh); // (refused, and why)
+    return held_import_of(m);
+}
+
+HeldImport held_import_of(const ImportedModel& m)
+{
+    HeldImport out = m.mesh.verts.empty() ? HeldImport{} : import_mesh_for_hold(m.mesh);
     out.format = m.format;
     out.left_out = m.left_out;
+    out.joints = m.skeleton.size();
+    out.animations = m.sampled.size();
     return out;
+}
+
+FormatStat import_format_stat(const HeldImport& h, const std::string& machine)
+{
+    FormatStat s;
+    s.date = format_stats_today();
+    s.machine = format_stats_machine(machine);
+    s.what = "import";
+    const uint64_t vk = std::min<uint64_t>(h.vertices_in, kHeldVertices);
+    s.result = h.left_out.empty() && vk == h.vertices_in && h.faces_kept == h.faces_in ? "whole" : "partial";
+    s.figures = {{"animations", h.animations}, {"faces-in", h.faces_in}, {"faces-kept", h.faces_kept}, {"joints", h.joints},
+                 {"left-out", h.left_out.size()}, {"vertices-in", h.vertices_in}, {"vertices-kept", vk}};
+    return s;
 }
 
 namespace {

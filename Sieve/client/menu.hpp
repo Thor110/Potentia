@@ -543,6 +543,7 @@ public:
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
     void import_model(const std::string& path);    // --import-model FILE, and Ctrl+I: a model (.obj, .gltf, .glb) into the chosen sphere
+    void keep_import_stat(const sieve::HeldImport& h); // (its figures, for the catalogue)
     void import_skeleton(const std::string& path); // --import-skeleton FILE, and Ctrl+K: a glTF's skeleton as your character, its first animation playing
     void skeleton_chosen(const std::string& path);
     void set_animation_frame(int frame) { char_anim_fixed_ = frame; } // --animation-frame N: hold the animation at frame N (for pictures)

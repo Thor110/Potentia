@@ -1,0 +1,149 @@
+sieve-filter-v1
+; The measured-figure record (sieve-format-stat-v1, SPECIFICATIONS 12.0p) written as a filter: the
+; first step of IDEAS 19.185, each of Sieve's own formats a state space of its own, its valid
+; documents the survivors of its grammar on a line. A unit of length L on an ascii95 line passes when
+; it is one record of exactly L characters, as read_format_stat reads one: "sieve-format-stat-v1",
+; then date=YYYY-MM-DD, machine=, what= and result= (each word 1 to 64 of a-z, 0-9, '.', '_', '-'),
+; then any number of KEY=N (KEY a word as above, N 1 to 19 digits), one SPACE between fields.
+; One thing the reader asks and a walk cannot: that the keys stand in increasing order, each once (it
+; would have to remember a whole key to weigh the next against it). So its survivors are the reader's
+; records with their keys in any order; CI checks every other verdict is the reader's.
+id        format-stat-record
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     text
+symbols   ascii95
+describe  One sieve-format-stat-v1 record exactly (the keys' order aside): the measured-figure record as a state space of its own (IDEAS 19.185).
+
+class     lower   a-z
+class     digit   0-9
+class     dot     "."
+class     under   "_"
+class     dash    "-"
+class     space   " "
+class     equals  "="
+
+; The states, in the order the record is read:
+;   0-25     "sieve-format-stat-v1 date="     26-35   YYYY-MM-DD
+;   36-44    " machine="                       45-109  the machine's word, 45 + its length so far
+;   110-114  "what="                           115-179 the what's word
+;   180-186  "result="                         187-251 the result's word (with no figures: the end)
+;   252-316  a key, 252 + its length so far    317-336 its number, 317 + its digits so far
+states    337
+start     0
+accept    188..251 318..336
+; the version and date=
+t   0   "s"   1
+t   1   "i"   2
+t   2   "e"   3
+t   3   "v"   4
+t   4   "e"   5
+t   5   "-"   6
+t   6   "f"   7
+t   7   "o"   8
+t   8   "r"   9
+t   9   "m"   10
+t   10  "a"   11
+t   11  "t"   12
+t   12  "-"   13
+t   13  "s"   14
+t   14  "t"   15
+t   15  "a"   16
+t   16  "t"   17
+t   17  "-"   18
+t   18  "v"   19
+t   19  "1"   20
+t   20  " "   21
+t   21  "d"   22
+t   22  "a"   23
+t   23  "t"   24
+t   24  "e"   25
+t   25  "="   26
+; the date: four digits, '-', two, '-', two
+t   26  digit   27
+t   27  digit   28
+t   28  digit   29
+t   29  digit   30
+t   30  dash    31
+t   31  digit   32
+t   32  digit   33
+t   33  dash    34
+t   34  digit   35
+t   35  digit   36
+; machine=
+t   36  " "   37
+t   37  "m"   38
+t   38  "a"   39
+t   39  "c"   40
+t   40  "h"   41
+t   41  "i"   42
+t   42  "n"   43
+t   43  "e"   44
+t   44  "="   45
+; the machine: 1 to 64 word characters, then a SPACE (to 110)
+for k 0 63
+  t   {45 + k}   lower   {45 + k + 1}
+  t   {45 + k}   digit   {45 + k + 1}
+  t   {45 + k}   dot     {45 + k + 1}
+  t   {45 + k}   under   {45 + k + 1}
+  t   {45 + k}   dash    {45 + k + 1}
+done
+for k 1 64
+  t   {45 + k}   space   110
+done
+; what=
+t   110 "w"   111
+t   111 "h"   112
+t   112 "a"   113
+t   113 "t"   114
+t   114 "="   115
+; the what: 1 to 64 word characters, then a SPACE (to 180)
+for k 0 63
+  t   {115 + k}   lower   {115 + k + 1}
+  t   {115 + k}   digit   {115 + k + 1}
+  t   {115 + k}   dot     {115 + k + 1}
+  t   {115 + k}   under   {115 + k + 1}
+  t   {115 + k}   dash    {115 + k + 1}
+done
+for k 1 64
+  t   {115 + k}   space   180
+done
+; result=
+t   180 "r"   181
+t   181 "e"   182
+t   182 "s"   183
+t   183 "u"   184
+t   184 "l"   185
+t   185 "t"   186
+t   186 "="   187
+; the result (with nothing after it, a whole record): 1 to 64 word characters, then a SPACE (to 252)
+for k 0 63
+  t   {187 + k}   lower   {187 + k + 1}
+  t   {187 + k}   digit   {187 + k + 1}
+  t   {187 + k}   dot     {187 + k + 1}
+  t   {187 + k}   under   {187 + k + 1}
+  t   {187 + k}   dash    {187 + k + 1}
+done
+for k 1 64
+  t   {187 + k}   space   252
+done
+; a key: 1 to 64 word characters, then '=' (to 317)
+for k 0 63
+  t   {252 + k}   lower   {252 + k + 1}
+  t   {252 + k}   digit   {252 + k + 1}
+  t   {252 + k}   dot     {252 + k + 1}
+  t   {252 + k}   under   {252 + k + 1}
+  t   {252 + k}   dash    {252 + k + 1}
+done
+for k 1 64
+  t   {252 + k}   equals   317
+done
+; its number: 1 to 19 digits; then the end, or a SPACE and the next key
+for n 0 18
+  t   {317 + n}   digit   {317 + n + 1}
+done
+for n 1 19
+  t   {317 + n}   space   252
+done
+end

@@ -7082,6 +7082,35 @@ void test_character()
         CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=1 rate=25\nf 0 808080\n"); }));
         CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=2 rate=30\nf 0 808080\n"); }));
         CHECK(throws([] { (void)read_animation("sieve-animation-v1 bones=1 frames=1 rate=30\nf 0 80808G\n"); }));
+        // sieve-animation-v2 (glTF translation channels): the same turns and a move a bone; the body
+        // walks a metre forward over the 30 frames, the hand slides half a metre up. Read back the
+        // same; with no move anywhere it is written as v1 (so v1's identities hold), and a v2 text
+        // with none is refused.
+        Animation mv = an;
+        CHECK(!mv.moving() && mv.text().rfind("sieve-animation-v1 ", 0) == 0);
+        mv.moves.assign(mv.turns.size(), BoneMove{});
+        CHECK(mv.text() == an.text() && mv.id() == an.id() && mv.address() == an.address());
+        for (uint32_t f = 0; f <= 30; ++f)
+        {
+            mv.moves[size_t(f) * 3 + 0] = {0, 0, int32_t(4096 * f / 30)};
+            mv.moves[size_t(f) * 3 + 2] = {0, int32_t(2048 * f / 30), 0};
+        }
+        CHECK(mv.moving() && mv.text().rfind("sieve-animation-v2 bones=3 frames=31 rate=30\nf 0 808080800000800000800000 ", 0) == 0);
+        CHECK(read_animation(mv.text()).text() == mv.text() && mv.address().size() == size_t(31) * 3 * 24);
+        const auto m30 = pose(arm, mv, 30);
+        CHECK(std::abs(m30[0][2] - 4096) < 1e-6 && std::abs(m30[1][2] - 4096) < 1e-6 && std::abs(m30[2][0] + 4096) < 1 && std::abs(m30[2][1] - 6144) < 1);
+        Animation least = mv;
+        least.moves[0] = {kAnimationMoveLeast, kAnimationMoveMost, -1};
+        CHECK(read_animation(least.text()).move(0, 0) == least.moves[0]);
+        CHECK(throws([] { (void)read_animation("sieve-animation-v2 bones=1 frames=1 rate=30\nf 0 808080800000800000800000\n"); }));
+        CHECK(throws([] { (void)read_animation("sieve-animation-v2 bones=1 frames=1 rate=30\nf 0 808080\n"); }));
+        CHECK(read_animation("sieve-animation-v2 bones=1 frames=1 rate=30\nf 0 808080800001800000800000\n").move(0, 0) == (BoneMove{1, 0, 0}));
+        // A held model turns with its sphere: the elbow's turn at frame 30, a quarter about z, takes
+        // a point at +x to +y.
+        const auto tt = pose_turns(arm, an, 30);
+        const float px[3] = {1, 0, 0};
+        const auto q = turned(&tt[1], px);
+        CHECK(tt.size() == 3 && std::abs(q[0]) < 1e-3 && std::abs(q[1] - 1) < 1e-3 && turned(nullptr, px)[0] == 1);
 
         // The same arm from a glTF: its skin's joints as the skeleton, its animation sampled.
         std::string bin;
@@ -7462,6 +7491,19 @@ void test_format_stats()
     const auto sh = format_stats_short(png);
     CHECK(sh.size() == 2 && sh[0] == "packed 2x: 40.0% of its bytes (LZMA2 50.0%)" && sh[1] == "1 of 2 lossless; 21.0 s a MiB to make");
     CHECK(format_id_of_file_kind("PNG") == "file-png" && format_id_of_file_kind("?") == "file-unknown-bytes" && format_by_id(format_id_of_file_kind("JPG")));
+    // The File Locator's readings (what=read): LZMA2 and deflate added up over the compared alone.
+    FormatStat rd;
+    rd.date = "2026-11-13";
+    rd.machine = "desk";
+    rd.what = "read";
+    rd.result = "read";
+    rd.figures = {{"bytes", 1000}, {"deflate", 700}, {"lzma2", 600}, {"make-us", 1000}, {"sieve", 500}};
+    FormatStat rd2 = rd;
+    rd2.figures = {{"bytes", 3000}, {"make-us", 3000}, {"sieve", 1500}}; // (Compare unticked)
+    const auto rs = format_stats_summary({rd, rd2});
+    CHECK(rs.size() == 2 && rs[0].find("read       in the File Locator 2 times on 1 machine, 2026-11-13: 4,000 bytes to 2,000 (50.0%)") != std::string::npos);
+    CHECK(rs[1].find("of the 1 compared: LZMA2 alone 60.0%, deflate 70.0%") != std::string::npos);
+    CHECK(format_stats_short({rd, rd2}) == std::vector<std::string>({"read 2x in the File Locator: 50.0% of its bytes"}));
     fs::remove_all(dir, ec);
 }
 

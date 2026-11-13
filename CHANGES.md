@@ -1,9 +1,6 @@
-# Right-hand panel tabs
+# IDEAS 19.186 noted
 
-- **Moving between the tabs (CHARACTER, LANGUAGE, YOURS, SYSTEMS).** PgUp/PgDn already did this, but nothing on screen said so, and the CHARACTER page's footer didn't mention it. Now:
-  - clicking a tab opens its page;
-  - **Ctrl+Left/Right** work as PgUp/PgDn do, for keyboards without Page keys;
-  - "PgUp/PgDn: tabs" is shown at the right end of the tab row on every page.
-- **CI step 10** checks Ctrl+Left/Right. **MANUAL** says how to move between the tabs.
+- **IDEAS §19.186:** actions mapped to animations as a format of their own (`sieve-actions-v1`), plus a character creator on the main menu. Your words are quoted, followed by the proposed design and the open questions.
+- **ROADMAP:** this is now "Next, in order" step 4, the next to work on. Settling how the infinite RAID places its pieces sits beside it in the same step. The later steps move down one.
 
-Checked: CI step 10 passed (857 s), help check passed. No files to delete.
+Docs only. Builds on the loose-ends zip. No files to delete.

@@ -4,8 +4,14 @@
 // (additional term under section 7(b) of the GNU AGPL v3, docs/RAID-NOTICE.md).
 #include "raid_socket.hpp"
 
+#include <atomic>
+#include <condition_variable>
+#include <list>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -24,6 +30,7 @@ constexpr socket_t kNoSocket = INVALID_SOCKET;
 #else
 #include <netdb.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -35,6 +42,8 @@ constexpr socket_t kNoSocket = -1;
 namespace sieve_cli {
 
 namespace {
+
+constexpr size_t kAtOnce = 32; // connections answered at once; more wait to be accepted
 
 void close_socket(socket_t s)
 {
@@ -145,7 +154,7 @@ std::unique_ptr<sieve::RaidStream> raid_connect(const std::string& address, int 
 }
 
 void raid_listen(const std::string& address, size_t connections, int timeout_s, const std::function<void()>& ready,
-                 const std::function<void(sieve::RaidStream&, const std::string&)>& on)
+                 const std::function<void(sieve::RaidStream&, const std::string&)>& on, const std::atomic<bool>* stop)
 {
     start_sockets();
     const auto [host, port] = sieve::raid_split_address(address);
@@ -165,8 +174,48 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
         throw std::runtime_error("cannot listen on " + address + " (in use, or not this machine's address)");
     }
     ready();
+    // Each connection on a thread of its own, so one slow or silent peer does not keep the others
+    // waiting (until its timeout); at most kAtOnce at a time, the next accepted as one finishes.
+    struct Worker
+    {
+        std::thread t;
+        std::shared_ptr<std::atomic<bool>> done;
+    };
+    std::list<Worker> workers;
+    std::mutex mx;
+    std::condition_variable cv;
+    size_t running = 0;
+    auto reap = [&] {
+        for (auto i = workers.begin(); i != workers.end();)
+            if (i->done->load())
+            {
+                i->t.join();
+                i = workers.erase(i);
+            }
+            else ++i;
+    };
     for (size_t n = 0; connections == 0 || n < connections; ++n)
     {
+        {
+            std::unique_lock<std::mutex> lock(mx);
+            cv.wait(lock, [&] { return running < kAtOnce; });
+        }
+        reap();
+        if (stop)
+        {
+            // Waiting for a connection a second at a time, so a stop is seen.
+            bool ready_now = false;
+            while (!stop->load() && !ready_now)
+            {
+                fd_set fds;
+                FD_ZERO(&fds);
+                FD_SET(l, &fds);
+                timeval tv{};
+                tv.tv_sec = 1;
+                ready_now = select(int(l) + 1, &fds, nullptr, nullptr, &tv) > 0;
+            }
+            if (!ready_now) break;
+        }
         sockaddr_storage from{};
         socklen_t from_len = sizeof from;
         const socket_t c = accept(l, reinterpret_cast<sockaddr*>(&from), &from_len);
@@ -174,16 +223,33 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
         char ip[NI_MAXHOST] = {};
         if (getnameinfo(reinterpret_cast<sockaddr*>(&from), from_len, ip, sizeof ip, nullptr, 0, NI_NUMERICHOST) != 0) ip[0] = '\0';
         set_timeouts(c, timeout_s);
-        SocketStream s(c);
-        try
         {
-            on(s, ip);
+            std::lock_guard<std::mutex> lock(mx);
+            ++running;
         }
-        catch (const std::exception&)
-        {
-            // one connection's trouble is not the listener's: the next is answered
-        }
+        auto done = std::make_shared<std::atomic<bool>>(false);
+        workers.push_back({std::thread([&on, &mx, &cv, &running, c, done, address = std::string(ip)] {
+                               {
+                                   SocketStream s(c);
+                                   try
+                                   {
+                                       on(s, address);
+                                   }
+                                   catch (const std::exception&)
+                                   {
+                                       // one connection's trouble is not the listener's: the others are answered
+                                   }
+                               }
+                               {
+                                   std::lock_guard<std::mutex> lock(mx);
+                                   --running;
+                               }
+                               done->store(true);
+                               cv.notify_all();
+                           }),
+                           done});
     }
+    for (auto& w : workers) w.t.join(); // (the last connections answered before it stops)
     close_socket(l);
 }
 

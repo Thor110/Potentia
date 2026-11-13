@@ -51,6 +51,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -107,10 +108,15 @@ public:
 
 private:
     void save_peers() const;
+    uint64_t used_locked() const;
+    uint64_t used_by_locked(const std::string& key) const;
     std::filesystem::path folder_;
     HeldLimits limits_;
     std::string salt_;
     std::vector<std::pair<std::string, uint64_t>> peers_; // key, bytes; in order of key
+    // Several connections are answered at once (sieve raid serve), so the count of what each address
+    // has had kept, and the check against the limits before a chunk is written, are one at a time.
+    mutable std::mutex mx_;
 };
 
 // One machine keeping chunks, as the owner sees it.

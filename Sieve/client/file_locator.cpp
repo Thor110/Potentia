@@ -14,6 +14,9 @@
 #include "cli/locate.hpp"
 #include "cli/pack.hpp"
 #include "cli/timings.hpp"
+#include "sieve/catalogue.hpp"
+#include "sieve/filekind.hpp"
+#include "sieve/format_stats.hpp"
 #include "sieve/mix.hpp" // Prioritise Decoding Speed
 #include "sieve/rope_wave.hpp"
 #include "sieve/stop.hpp"
@@ -767,6 +770,39 @@ void FileLocator::program_from(const std::string& sieve_file, const std::string&
 }
 
 // Reads and measures a file or folder on the worker. `sync`: here and now (scripted runs).
+namespace {
+// Stage 4 of the catalogue: a file's reading, its figures added to its kind's entry in your stats
+// folder (sieve-format-stat-v1, what=read; SPECIFICATIONS 12.0p), as `sieve catalogue --measure`
+// adds a packing's. Its size, its .sieve's, the time the packing took, and what zip and 7z made of it
+// where Compare was ticked and they finished. Never in the way of the reading: a folder that cannot be
+// written is passed by.
+void keep_read_stat(const std::vector<uint8_t>& bytes, const cli::Comparison& c, double pack_seconds)
+{
+    if (pack_seconds < 0 || !c.installer_raw) return;
+    sieve::FormatStat s;
+    s.date = sieve::format_stats_today();
+    s.machine = sieve::format_stats_machine("");
+    s.what = "read";
+    s.result = "read";
+    s.figures.push_back({"bytes", bytes.size()});
+    if (c.compared && c.deflate != cli::kNotMeasured && c.lzma2 != cli::kNotMeasured) // (both, or neither)
+    {
+        s.figures.push_back({"deflate", c.deflate});
+        s.figures.push_back({"lzma2", c.lzma2});
+    }
+    s.figures.push_back({"make-us", uint64_t(pack_seconds * 1e6)});
+    s.figures.push_back({"sieve", c.installer_raw});
+    try
+    {
+        sieve::add_format_stat(sieve::format_stats_folder(), sieve::format_id_of_file_kind(sieve::file_kind(bytes, bytes.size())), s);
+    }
+    catch (const std::exception& e)
+    {
+        std::fprintf(stderr, "warning: the reading's figures were not kept: %s\n", e.what());
+    }
+}
+} // namespace
+
 void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
 {
     if (busy_) return;
@@ -1011,6 +1047,7 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
                 r.made_sound_flac = sieve::cli::sound_mode();
                 r.made_priority = int(sieve::priority());
                 refine_estimate(5);
+                if (!stop_requested()) keep_read_stat(r.bytes, c, r.pack_seconds);
             }
             else if (fs::is_directory(p))
             {
