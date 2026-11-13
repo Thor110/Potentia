@@ -1633,6 +1633,11 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         locator_.event(e);
         return;
     }
+    if (rings_open_) // over the Media Player
+    {
+        rings_event(e);
+        return;
+    }
     if (media_open_) // over the pause menu, like the other tools
     {
         media_event(e, quit);

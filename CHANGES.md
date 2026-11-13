@@ -1,49 +1,39 @@
-# Recording and replay (IDEAS 19.184), and the Replays viewer
+# The music visualiser's rings (IDEAS 19.175)
 
-## The recording format: `sieve-replay-v1` (SPECIFICATIONS §12.0q)
+Builds on the replay zip.
 
-- It keeps where you began: the line, the tile, and the camera exactly.
-- Then, for every frame, it keeps the frame's time, the keys held, and that frame's input events.
-- Playback runs the same steps again, so a recording plays back exactly. Each frame's time is rounded to the microsecond as it's recorded so the steps match.
+## Using the rings
 
-## In the hallway
+- **R** in the Media Player opens them. **R** or **Esc** goes back.
+- There are eleven rings, one for each octave, lowest in the middle.
+- Each ring has twelve sectors, one per note, coloured round a colour wheel from C (red) through the hues to B.
+- A note lights as loud as it is sounding now, then fades by half every 0.35 s. The whole circle turns slowly.
+- Every voice the music player is sounding is shown exactly, including the line's character.
 
-- **F12** starts and stops a recording.
-- Recordings go into `replays/` beside the settings file, packed as `.sieve` (as you asked), and are named by the date and time they began.
-- A recording stops by itself and keeps what it has:
-  - at **30 minutes** (`[replays] max_minutes`), or
-  - when the free space where it's kept, checked every five seconds, falls below **256 MB** (`[replays] min_free_mb`) or twice the recording's size, whichever is more.
+## Zooming
 
-## Replays (main menu, after Character Creator)
+- **+ / -** or the wheel zooms in.
+- One step in shows the overtones: rings of the first eight harmonics, each lit in the colour of the note it falls on.
+- The next step shows each note's own wave, drawn round a circle.
 
-- Lists every recording in `replays/`.
-- **Enter** plays one in the hallway, then hands the hallway back to you.
-- **Space** ticks its **cache** box: a packed recording is then decoded once into the cache (beside the filters' cache) instead of every time it's played. The box is kept by the file's SHA-256 in `[replays] cached`.
+## For pictures
 
-## From the command line
-
-- `--record FILE`: a `.replay` file is plain text, `.sieve` is packed.
-- `--replay FILE`
-- `--replay-cache`
-- With `--screenshot`, a recording is played through and the picture is taken where it ends.
-
-## Limits
-
-- A recording only plays where the hallway starts the same way it did when recorded (the same settings). Otherwise it's refused, saying where it began.
-- Moving the hallway to any recording's start, free cameras and the film studio come next.
+- `--rings NOTES` (MIDI note numbers, for example 48,60,64,67,72) and `--rings-zoom N`.
+- The readout names every lit note.
 
 ## Noted
 
-- IDEAS §19.187 and ROADMAP step 5b: Personal Dimensions opening onto a world of its own, by default a grassy hill under a blue sky with clouds, drawn from a seed rather than copying the XP photograph.
+- **IDEAS §19.175:** as the music gets richer, the rings grow finer until they merge into one continuous circle: pitch as an angle, octave as a distance from the centre.
+- **IDEAS §19.188 and the ROADMAP's final tasks:** the main menu reordered from Start Sieve to Exit Sieve, Settings renamed Potentia Settings, Character Creator and Replays placed in the list, and the CI steps choosing rows by name first.
 
 ## Checked
 
-- CI 10 passed. A 132-frame walk (1,612 bytes as text, 256 packed) ends in the same place whether played as text, packed or cached.
-- Played back while recording, it is written again byte for byte.
-- A recording begun elsewhere is refused.
-- The viewer's cache box is kept.
+- CI 10 passed:
+  - R opens the rings.
+  - A C major chord (C3, C4, E4, G4, C5) lights exactly those five notes.
+  - The waves zoom works.
 
 ## Files
 
-- New: `client/replay.cpp` and `client/replay.hpp`. Re-run CMake.
+- New: `client/rings.cpp` and `client/rings.hpp`. Re-run CMake.
 - No files to delete.

@@ -7296,6 +7296,18 @@ waveforms and audio types in theory".
   the analysis allows.
 - *A first step that could be built:* the rings for Sieve's own notes lines in the media player, the
   colour wheel of notes and the loudness of each, before any recorded sound.
+- *Built 13 November 2026* (Edward: "carry on with music visualiser rings next"): R in the Media Player;
+  eleven octave rings of twelve notes, lit by what the music player is sounding now (every voice, the
+  line's character included) and fading by half every 0.35 s; zoomed, the first eight harmonics, then
+  the waves; `--rings NOTES` for pictures (client/rings.hpp). Next: recorded sound, as a spectrum over
+  time, the same rings.
+- *Scaling to one circle (Edward, the same day):* "those rings should scale up to a single circle in the
+  long run, for if it plays more complex musical pieces such as real music". As the sound grows richer
+  (more voices, recorded music, its spectrum continuous rather than twelve notes an octave), the rings
+  grow finer, sectors splitting into cents and rings into narrower bands, until at the limit they meet
+  as one continuous disc: every pitch an angle and every octave a radius (a spiral of pitch), lit
+  smoothly. The twelve-note rings are then that circle seen at its coarsest, and the lens zooms
+  between the two.
 
 **19.176 The distributed infinite RAID: a plan (Edward, 12 November 2026).** His words: "we also need to
 work on implementing this distributed infinite raid system as an attempt to create a distributed
@@ -7712,4 +7724,20 @@ sky and clouds, something akin to the windows xp background".
   address on it, and a person's own world is theirs to change from there and keep (the store, the
   RAID); the character, its actions (§19.186) and later others' characters walk in it.
 - *Planned only;* after the music visualiser rings (ROADMAP "Next, in order").
+
+**19.188 The main menu reordered, from Start Sieve to Exit Sieve; Settings as Potentia Settings
+(Edward, 13 November 2026). One of the final tasks.** His words: "At some point we need to move the main
+menu options around", "Due to this being hard baked into the CI steps for ordering and navigation",
+"We should just take note of it as an idea for now and rework it in the future", "My thinking is that
+it should be arranged sort of in size from Start Sieve to Exit Sieve", "There may be new options to add
+eventually and Settings should be renamed Potentia Settings so that it can fit accordingly".
+- *The order asked:* Start Sieve, File Locator, Media Player, Filter Designer, AI Training Harness,
+  Personal Dimensions, Encryption Engine, Manual Navigation, System Viewer, Settings (renamed
+  **Potentia Settings**), Exit Sieve. Two added since that list was written, to be placed then: the
+  Character Creator (§19.186) and Replays (§19.184).
+- *Why it waits:* CI steps reach main-menu items by counting Down presses from the top (`--press
+  "Down,Down,...,Return"`), so every move changes many of them at once. Done as one change, with a way
+  to choose a row by its name (a press such as `Item:replays`, or `--main-menu-item ID`) first, so the
+  steps no longer count rows and later moves cost nothing.
+- *Planned only;* in ROADMAP's final tasks.
 

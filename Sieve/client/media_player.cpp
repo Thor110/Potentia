@@ -321,6 +321,38 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     p->set_settings(media_mode_, s);
 }
 
+// ---- the rings (IDEAS 19.175)
+void Hallway::rings_event(const SDL_Event& e)
+{
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) rings_.zoom(e.wheel.y > 0 ? 1 : -1);
+    if (e.type != SDL_EVENT_KEY_DOWN) return;
+    switch (e.key.key)
+    {
+    case SDLK_ESCAPE:
+    case SDLK_R: rings_open_ = false; break;
+    case SDLK_EQUALS:
+    case SDLK_PLUS:
+    case SDLK_KP_PLUS: rings_.zoom(1); break;
+    case SDLK_MINUS:
+    case SDLK_KP_MINUS: rings_.zoom(-1); break;
+    default: break;
+    }
+}
+
+void Hallway::draw_rings(float W, float H)
+{
+    // The notes sounding now (or those held for a picture), the light moving with the clock.
+    const Uint64 now = SDL_GetTicksNS();
+    const float dt = rings_tick_ ? std::min(0.1f, float(double(now - rings_tick_) / 1e9)) : 0.0f;
+    rings_tick_ = now;
+    std::vector<RingNote> notes = rings_held_;
+    if (notes.empty())
+        if (MusicPlayer* p = music())
+            for (const auto& s : p->sounding()) notes.push_back({s.midi, s.level});
+    rings_.step(dt, notes);
+    rings_.draw(r_, W, H);
+}
+
 void Hallway::media_event(const SDL_Event& e, bool& quit)
 {
     MusicPlayer* p = music();
@@ -354,6 +386,13 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
     int& row = media_area_ == 1 ? media_row_ : media_sel_[media_area_];
     const int n = counts[media_area_];
     using K = MediaRow::Kind;
+    if (e.key.key == SDLK_R && !(e.key.mod & SDL_KMOD_CTRL))
+    {
+        // The rings: the music as a circle of notes (IDEAS 19.175).
+        rings_open_ = true;
+        rings_tick_ = 0;
+        return;
+    }
     switch (e.key.key)
     {
     case SDLK_ESCAPE:

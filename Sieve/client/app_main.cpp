@@ -180,6 +180,8 @@ const char* kUsage =
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
     "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
     "                      19.165): the catalogue of formats as a ring of doors\n"
+    "  --rings NOTES       with --screenshot: the Media Player's rings (R there), those MIDI notes (by\n"
+    "                      commas, 60 the middle C) held sounding; --rings-zoom N steps in (0 to 2)\n"
     "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
     "                      input with its time), written each time you leave it; FILE.sieve: packed\n"
     "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
@@ -1688,6 +1690,19 @@ int run(const Args& a)
         if (a.has("save-view")) hall->save_view_to(a.get("save-view"));   // F in the viewer, without the dialog
         if (a.has("sample-degrees"))
             std::cout << hall->sample_degrees(a.get("sample-degrees"), a.get("sample-out", a.get("sample-degrees") + ".sieve"));
+        // The music visualiser's rings (IDEAS 19.175) with those notes held sounding, --rings-zoom steps in.
+        if (a.has("rings"))
+        {
+            std::vector<float> notes;
+            const std::string list = a.get("rings");
+            for (size_t i = 0; i <= list.size();)
+            {
+                const size_t c = std::min(list.find(',', i), list.size());
+                if (c > i) notes.push_back(float(std::stod(list.substr(i, c - i))));
+                i = c + 1;
+            }
+            hall->show_rings(notes, int(a.get_u32("rings-zoom", 0)));
+        }
         // A recording played through (IDEAS 19.184), every frame as it was, then the picture of where it
         // ends; --record FILE with it writes what was played (the same, frame for frame).
         if (a.has("replay"))
@@ -1708,6 +1723,7 @@ int run(const Args& a)
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
         if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         if (!last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n"; // (Text to Voice's reply, or CHAT's /say)

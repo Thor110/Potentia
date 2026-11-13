@@ -1455,6 +1455,11 @@ $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot
 # made for the picture; its settings file goes where --settings says, not beside the program.
 mkdir -p mp
 $H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return" --screenshot media.png | q "saved media.png"
+# Its rings (IDEAS 19.175): R opens them; a C major chord held (C3, C4, E4, G4, C5) lights those
+# five notes of their octaves, one ring an octave, and the lens zooms to the overtones and the waves.
+$H --no-menu --media-player --settings mp/hallway.ini --press "Escape,Down,Down,Down,Down,Down,Return,r" --screenshot rings-open.png | tr -d '\r' | q "^rings: zoom 0;"
+$H --no-menu --rings 48,60,64,67,72 --screenshot rings.png | tr -d '\r' | q "^rings: zoom 0; C3 1.00 C4 1.00 E4 1.00 G4 1.00 C5 1.00$"
+$H --no-menu --rings 48,60,64,67,72 --rings-zoom 2 --screenshot rings-waves.png | tr -d '\r' | q "^rings: zoom 2; "
 out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
 echo "$out" | tail -2 | sed -n 1p | q "went to 1"
 if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi

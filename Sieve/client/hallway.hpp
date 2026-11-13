@@ -54,6 +54,7 @@
 #include "sieve/audio.hpp"
 #include "sieve/character.hpp"
 #include "sieve/actions.hpp"
+#include "rings.hpp"
 #include "sieve/animation.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
@@ -1447,6 +1448,18 @@ public:
     // WORLD's character. At every change of line, and when the hallway is back from a menu.
     void music_line();
     void open_media_player();
+    // --rings NOTES (with --screenshot): the rings open, those MIDI notes held sounding at full
+    // loudness for a second, zoomed `zoom` steps in; and what they show, for the readout.
+    void show_rings(const std::vector<float>& notes, int zoom)
+    {
+        rings_open_ = true;
+        rings_held_.clear();
+        for (const float m : notes) rings_held_.push_back({m, 1.0f});
+        for (int i = 0; i < 60; ++i) rings_.step(1.0f / 60, rings_held_);
+        rings_.zoom(zoom);
+    }
+    std::string rings_report() const { return rings_.report(); }
+    bool rings_open() const { return rings_open_; }
     // Walk to a melody of the music: on the audio line (or the tracks line, for a track), facing
     // it, the item in hand. One of another length or note set than this hallway's audio line, or a
     // track of another number of units than its tracks', cannot be reached here: request() is then
@@ -1486,6 +1499,15 @@ private:
     void draw_media_player(float W, float H);
     bool media_open_ = false, media_had_mouse_ = false;
     bool media_from_main_ = false; // opened from the main menu: Esc goes back to it
+    // The music visualiser's rings (IDEAS 19.175, rings.hpp): R in the Media Player opens them over
+    // everything, the notes sounding now lit round the circle; + and - (or the wheel) zoom the lens;
+    // R or Esc closes them. --rings NOTES (a picture) holds those notes sounding instead.
+    bool rings_open_ = false;
+    Rings rings_;
+    Uint64 rings_tick_ = 0;
+    std::vector<RingNote> rings_held_;
+    void rings_event(const SDL_Event& e);
+    void draw_rings(float W, float H);
 
     // ---- the item viewer (viewer.cpp): Z, or a click on the thing in hand, opens it over the
     // whole window, scrolled both ways and zoomed

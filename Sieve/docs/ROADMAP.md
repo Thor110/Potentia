@@ -29,7 +29,7 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    in the save; a character creator of its own on the main menu, the setup menu's CHARACTER page linking
    to it. (*The infinite RAID's placement, settled with Edward and built 13 November 2026: 3 copies by
    default, mirrored, kept whole by its owner's checks, Settings > Infinite RAID; docs/INFINITE-RAID.md.*)
-5. **Two first steps asked for:** (*recording and replay built 13 November 2026: `sieve-replay-v1`, F12, the Replays viewer with its cache boxes*) `--record` / `--replay` in the hallway (§19.184), and music
+5. **Two first steps asked for:** (*both built 13 November 2026: recording and replay, `sieve-replay-v1`, F12, the Replays viewer with its cache boxes; and the music visualiser's rings, R in the Media Player*) `--record` / `--replay` in the hallway (§19.184), and music
    visualiser rings for Sieve's own notes.
 5b. **Personal Dimensions into a world of its own** (Edward, 13 November 2026; IDEAS §19.187): an empty 3D
    world, by default a grassy hill under a blue sky with clouds, drawn from a seed, in place of the
@@ -39,6 +39,11 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    §19.160), 10 (hallway polish).
 7. **Still open from before:** voices measured by word error rate (stage 3b); the website's power
    savings page once its figures exist.
+
+**Final tasks (to do near the end, each as one change):** the main menu reordered from Start Sieve to
+Exit Sieve, Settings renamed Potentia Settings, the Character Creator and Replays placed in it, and the
+CI steps made to choose rows by name first so that ordering stops being baked into them (Edward, 13
+November 2026; IDEAS §19.188).
 
 **Waiting on Edward:** who runs the RAID's first known nodes, and the step from IP addresses to verified
 identity (§19.178, §19.179); which open registries the catalogue takes in, each licence checked

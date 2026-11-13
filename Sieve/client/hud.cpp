@@ -437,6 +437,7 @@ void Hallway::draw_hud(int w, int h)
     if (nav_open_) draw_navigator(W, H); // over everything, the pause menu too: a screen of its own
     if (locator_.is_open()) locator_.draw(W, H);
     if (media_open_) draw_media_player(W, H);
+    if (rings_open_) draw_rings(W, H);
     if (graph_open_) draw_graph_view(W, H);
 }
 

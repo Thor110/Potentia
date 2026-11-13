@@ -565,6 +565,26 @@ std::optional<MusicMelody> MusicPlayer::now_playing(MusicMode m) const
     return playing_[int(m)];
 }
 
+std::vector<MusicPlayer::Sounding> MusicPlayer::sounding() const
+{
+    std::lock_guard<std::mutex> lock(mx_);
+    std::vector<Sounding> out;
+    auto from = [&](const Channel& c) {
+        if (!c.active || c.done) return;
+        for (const Part& p : c.parts)
+        {
+            if (p.note >= p.to || p.note >= c.notes.size()) continue;
+            const uint32_t d = c.notes[p.note], midi = c.set.midi(d);
+            if (!midi) continue; // a rest
+            const uint32_t pitch = d / c.set.duration_count();
+            out.push_back({float(int(midi) + c.shift[std::min<uint32_t>(pitch, 61)]), std::clamp(c.gain * c.level, 0.0f, 1.0f)});
+        }
+    };
+    for (const Channel& c : music_) from(c);
+    from(item_);
+    return out;
+}
+
 std::string MusicPlayer::status() const
 {
     std::lock_guard<std::mutex> lock(mx_);

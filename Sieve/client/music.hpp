@@ -170,6 +170,13 @@ public:
 
     std::optional<MusicMelody> now_playing(MusicMode m) const;
     std::string status() const;                // what went wrong last, if anything
+    // The notes sounding now, every voice of every channel heard (IDEAS 19.175, the rings): each one's
+    // pitch as played (the line's character included) and how loud its channel is.
+    struct Sounding
+    {
+        float midi = 0, level = 0;
+    };
+    std::vector<Sounding> sounding() const;
     bool audio() const { return stream_ != nullptr; }
 
     // The "Now playing" box, for a few seconds after a melody begins: every screen draws it last.
