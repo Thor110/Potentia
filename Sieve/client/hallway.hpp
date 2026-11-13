@@ -53,6 +53,7 @@
 
 #include "sieve/audio.hpp"
 #include "sieve/character.hpp"
+#include "sieve/actions.hpp"
 #include "sieve/animation.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
@@ -1095,6 +1096,20 @@ public:
         animation_ = std::move(a);
         animation_frame_ = frame;
     }
+    // Its actions (IDEAS 19.186): which animation plays each thing it does, from its map and the
+    // animations the map names (those found in the store). With a map, what it does picks the
+    // animation (standing idle, walking, running with Shift, reading what you hold); an action with
+    // none, or with one that does not fit or was not found, plays nothing, and you are told once.
+    // Without a map, the one animation above plays whatever it does, as before.
+    void set_actions(std::optional<sieve::ActionMap> m, std::vector<sieve::Animation> anims)
+    {
+        actions_ = std::move(m);
+        action_anims_ = std::move(anims);
+        action_said_ = 0;
+    }
+    void set_action(int a) { action_forced_ = a; } // --action NAME: held at that action (for a picture)
+    bool has_actions() const { return actions_.has_value(); }
+    std::string action_line() const;               // "walk: SHA-256" or "walk: none", for the readout
     // The frame drawn last (for the readout); -1 with no animation.
     int animation_frame_drawn() const { return animation_ ? int(animation_shown_) : -1; }
     size_t personal_count() const { return personal_.size(); }
@@ -1810,6 +1825,12 @@ private:
     bool fps_counter_ = false;
     std::optional<sieve::Character> character_;
     std::optional<sieve::Animation> animation_;
+    std::optional<sieve::ActionMap> actions_;
+    std::vector<sieve::Animation> action_anims_;
+    sieve::Action action_now_ = sieve::Action::Idle;
+    int action_forced_ = -1;
+    uint32_t action_said_ = 0; // a bit an action: told already that it has no animation
+    const sieve::Animation* action_animation(); // the animation of what it is doing now, or none (told once)
     int animation_frame_ = -1;
     uint32_t animation_shown_ = 0;
     std::vector<sieve::Character> personal_; // your personal dimension (the store), drawn beside yours

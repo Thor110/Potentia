@@ -177,6 +177,10 @@ const char* kUsage =
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
     "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
     "                      19.165): the catalogue of formats as a ring of doors\n"
+    "  --action NAME       hold your character at one action for a picture (idle, walk, run, jump, take,\n"
+    "                      read, wave): it plays that action's animation from its map, or none\n"
+    "  --creator           with --menu: the Character Creator instead (the whole window, as the main menu's\n"
+    "                      Character Creator opens it): your character and its actions\n"
     "  --system-viewer ID  with --menu: the System Viewer instead (the whole window, as the main menu's\n"
     "                      System Viewer opens it), standing at entry ID\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
@@ -661,6 +665,21 @@ std::optional<sieve::Animation> animation_of(const AppSettings& app, const std::
     }
     if (a.has("character") || app.character_animation.empty()) return std::nullopt; // (a character by name plays nothing unless asked)
     return stored_animation(animation_store_dir(app_path), app.character_animation);
+}
+
+// Your character's actions (IDEAS 19.186): the settings file's [character] actions (its map's SHA-256,
+// read from the store), and every animation the map names that the store holds; none with
+// --no-character, or for a character asked for by name.
+std::pair<std::optional<sieve::ActionMap>, std::vector<sieve::Animation>> actions_of(const AppSettings& app, const std::filesystem::path& app_path, const Args& a)
+{
+    if (a.has("no-character") || a.has("character") || app.character_actions.empty()) return {};
+    auto m = stored_actions(actions_store_dir(app_path), app.character_actions);
+    if (!m) return {};
+    std::vector<sieve::Animation> anims;
+    for (const auto& id : m->animation)
+        if (!id.empty() && std::none_of(anims.begin(), anims.end(), [&](const sieve::Animation& x) { return x.id() == id; }))
+            if (auto an = stored_animation(animation_store_dir(app_path), id)) anims.push_back(std::move(*an));
+    return {std::move(m), std::move(anims)};
 }
 
 // Builds the hallway from options, and applies the start-up and scripting options.
@@ -1336,6 +1355,7 @@ int run(const Args& a)
         if (a.has("save-character")) menu.character_chosen(a.get("save-character"), true); // as Ctrl+S does, saved as the menu is drawn
         if (a.has("catalogue-entry")) menu.open_catalogue(a.get("catalogue-entry"));
         if (a.has("system-viewer")) menu.open_viewer(a.get("system-viewer"));
+        if (a.has("creator")) menu.open_creator(true);
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
         keep_setup(settings, menu.settings());
@@ -1350,6 +1370,9 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         // Only one of the two panels is in at a time (and neither in the System Viewer).
         if (menu.viewer()) std::cout << "system viewer: open\ncatalogue: " << menu.catalogue_line() << "\n";
+        else if (menu.creator())
+            std::cout << "character creator: open\ncharacter: " << menu.character_id() << "\nactions: " << menu.actions_line() << "\nsave: " << menu.save_line() << "\n"
+                      << (menu.character_note().empty() ? std::string() : "note: " + menu.character_note() + "\n");
         else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
@@ -1405,6 +1428,11 @@ int run(const Args& a)
                 hall->set_max_scale(float(app.character_max_scale));
                 hall->set_character(std::move(ch));
                 hall->set_animation(animation_of(app, app_path, a), a.has("animation-frame") ? int(a.get_u32("animation-frame", 0)) : -1);
+                {
+                    auto [map, anims] = actions_of(app, app_path, a);
+                    hall->set_actions(std::move(map), std::move(anims));
+                    if (a.has("action")) hall->set_action(int(sieve::action_from_name(a.get("action")))); // (a picture of one action)
+                }
                 // Your personal dimension: the store beside the settings file (or --character-store DIR).
                 if (!a.has("no-character"))
                 {
@@ -1530,6 +1558,7 @@ int run(const Args& a)
         hall->render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "saved " << a.get("screenshot") << "\n";
+        if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         if (!last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n"; // (Text to Voice's reply, or CHAT's /say)
         hall->release_textures();
@@ -1578,6 +1607,7 @@ int run(const Args& a)
     bool show_main = show_menu;
     bool open_yours = false; // Personal Dimensions chosen: the setup menu opens with YOURS on the right
     std::string open_system; // the System Viewer chosen: it opens on that system, the whole window (Esc: the main menu)
+    bool open_creator = false; // the Character Creator chosen: the whole window, Esc back to the main menu
     bool first = true;
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
@@ -1646,6 +1676,7 @@ int run(const Args& a)
             }
             if (r == MainMenu::Result::Personal) open_yours = true; // the setup menu, its right-hand panel on YOURS
             if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
+            if (r == MainMenu::Result::Creator) open_creator = true;
             if (r == MainMenu::Result::ManualNav)
             {
                 // Manual Navigation, and back to the main menu from it. Keep a log and the undo depth
@@ -1678,6 +1709,8 @@ int run(const Args& a)
             open_yours = false;
             if (!open_system.empty()) menu.open_viewer(open_system); // the System Viewer: the window its own, Esc back here
             open_system.clear();
+            if (open_creator) menu.open_creator(true); // the Character Creator: the same, Esc back here
+            open_creator = false;
             const Menu::Result r = menu.run();
             keep_setup(settings, menu.settings());
             if (r == Menu::Result::Quit) break;
@@ -1747,6 +1780,10 @@ int run(const Args& a)
         hall->set_max_scale(float(app.character_max_scale));
         hall->set_character(character_of(app, ha));
         hall->set_animation(animation_of(app, app_path, ha));
+        {
+            auto [map, anims] = actions_of(app, app_path, ha);
+            hall->set_actions(std::move(map), std::move(anims));
+        }
         if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(ha.has("character-store") ? std::filesystem::path(ha.get("character-store")) : character_store_dir(app_path)).characters);
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;

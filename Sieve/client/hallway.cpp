@@ -1448,6 +1448,14 @@ void Hallway::step_trail(int dir)
 // ---- movement and doors
 void Hallway::update(float dt, const bool* keys)
 {
+    // What your character is doing (IDEAS 19.186), for the animation it plays: reading what you hold,
+    // standing, walking, or running with Shift.
+    {
+        const bool still = input_ != Input::None || nav_open_ || pause_open_ || locator_.is_open();
+        const bool moving = !still && !in_hand_ && (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_D]);
+        const bool shift = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+        action_now_ = in_hand_ ? sieve::Action::Read : moving ? (shift ? sieve::Action::Run : sieve::Action::Walk) : sieve::Action::Idle;
+    }
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
     if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || locator_.is_open()) return;
     // Your stride shrinks as the hallway grows to fit your character (hall_scale_).
@@ -2365,22 +2373,49 @@ void Hallway::set_character(std::optional<sieve::Character> c)
 // the floor, at its own size (4096 units a metre) seen through the hallway's scale, facing along the
 // corridor; its bones as
 // lines and each sphere as a ring facing you, in the line's edge colour (the head lighter).
+const sieve::Animation* Hallway::action_animation()
+{
+    const sieve::Action a = action_forced_ >= 0 ? sieve::Action(action_forced_) : action_now_;
+    const std::string& id = actions_->of(a);
+    for (const auto& an : action_anims_)
+        if (an.id() == id && character_ && sieve::animation_fits(*character_, an)) return &an;
+    // None for it: it stands at rest, and you are told once (with how to give it one).
+    if (!(action_said_ & (1u << unsigned(a))))
+    {
+        action_said_ |= 1u << unsigned(a);
+        message(trf("msg.no_action_animation", {sieve::action_name(a)}));
+    }
+    return nullptr;
+}
+
+std::string Hallway::action_line() const
+{
+    const sieve::Action a = action_forced_ >= 0 ? sieve::Action(action_forced_) : action_now_;
+    if (!actions_) return std::string(sieve::action_name(a)) + ": (no map: its one animation)";
+    const std::string& id = actions_->of(a);
+    for (const auto& an : action_anims_)
+        if (an.id() == id && character_ && sieve::animation_fits(*character_, an)) return std::string(sieve::action_name(a)) + ": " + id;
+    return std::string(sieve::action_name(a)) + ": none";
+}
+
 void Hallway::draw_character(SDL_Color edge)
 {
-    if (character_ && animation_)
+    // The animation it plays: its action's, where it has a map of actions (IDEAS 19.186), else its one.
+    const sieve::Animation* playing = actions_ ? action_animation() : animation_ ? &*animation_ : nullptr;
+    if (character_ && playing)
     {
         // In this frame of its animation (IDEAS 19.170): each sphere moved with its parent's turn.
         animation_shown_ = animation_frame_ >= 0 ? uint32_t(animation_frame_) : uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);
-        animation_shown_ %= std::max<uint32_t>(1, animation_->frames);
+        animation_shown_ %= std::max<uint32_t>(1, playing->frames);
         sieve::Character posed = *character_;
-        const auto at = sieve::pose(*character_, *animation_, animation_shown_);
+        const auto at = sieve::pose(*character_, *playing, animation_shown_);
         for (size_t i = 0; i < posed.spheres.size(); ++i)
         {
             posed.spheres[i].x = int32_t(std::lround(at[i][0]));
             posed.spheres[i].y = int32_t(std::lround(at[i][1]));
             posed.spheres[i].z = int32_t(std::lround(at[i][2]));
         }
-        const auto turns = sieve::pose_turns(*character_, *animation_, animation_shown_);
+        const auto turns = sieve::pose_turns(*character_, *playing, animation_shown_);
         draw_figure(posed, edge, 0, &*character_, &turns);
     }
     else if (character_) draw_figure(*character_, edge, 0);

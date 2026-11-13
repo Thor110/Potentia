@@ -32,8 +32,9 @@ void CharacterSave::speak(const std::string& id, bool yes)
 
 std::string CharacterSave::text() const
 {
-    std::string t = std::string(kSaveVersion) + "\ncharacter " + character + "\n";
+    std::string t = std::string(actions.empty() ? kSaveVersion : kSaveVersion2) + "\ncharacter " + character + "\n";
     if (!animation.empty()) t += "animation " + animation + "\n";
+    if (!actions.empty()) t += "actions " + actions + "\n";
     for (const auto& s : speaks) t += "speaks " + s + "\n";
     return t;
 }
@@ -50,7 +51,9 @@ CharacterSave read_save(const std::string& text)
         lines.push_back(text.substr(i, e - i));
         i = e + 1;
     }
-    if (lines.size() < 2 || lines[0] != kSaveVersion) throw std::invalid_argument(std::string("not a save: it does not start with ") + kSaveVersion);
+    const bool v2 = !lines.empty() && lines[0] == kSaveVersion2;
+    if (lines.size() < 2 || (!v2 && lines[0] != kSaveVersion))
+        throw std::invalid_argument(std::string("not a save: it does not start with ") + kSaveVersion + " or " + kSaveVersion2);
     CharacterSave s;
     if (lines[1].rfind("character ", 0) != 0 || !is_hex64(lines[1].substr(10))) throw std::invalid_argument("its second line is \"character\" and a SHA-256");
     s.character = lines[1].substr(10);
@@ -59,6 +62,13 @@ CharacterSave read_save(const std::string& text)
     {
         if (!is_hex64(lines[i].substr(10))) throw std::invalid_argument("its animation is not a SHA-256");
         s.animation = lines[i++].substr(10);
+    }
+    if (v2)
+    {
+        // (a v2 save has its map; one without is written as v1, so has no other way to be said)
+        if (i >= lines.size() || lines[i].rfind("actions ", 0) != 0 || !is_hex64(lines[i].substr(8)))
+            throw std::invalid_argument("a sieve-save-v2 names its actions' map (\"actions\" and a SHA-256) after the animation");
+        s.actions = lines[i++].substr(8);
     }
     for (; i < lines.size(); ++i)
     {

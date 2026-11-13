@@ -23,7 +23,7 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    catalogue (stage 4); IDEAS §19.185's first step (the measured-figure record's grammar as a filter
    plugin, checked by the oracle to admit exactly what its reader admits); glTF translation channels,
    and held models turning with their spheres.
-4. **Actions to animations and a character creator** (Edward, 13 November 2026: "please note it as
+4. **Actions to animations and a character creator** (*built 13 November 2026: `sieve-actions-v1`, `sieve-save-v2`, the Character Creator, the hallway playing by action*) (Edward, 13 November 2026: "please note it as
    the next idea to work on"; IDEAS §19.186): `sieve-actions-v1`, each in-game action mapped to the
    animation that plays it; a missing one said, or chosen from the animations that fit; the map kept
    in the save; a character creator of its own on the main menu, the setup menu's CHARACTER page linking

@@ -26,6 +26,7 @@
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
 #include "sieve/save.hpp"
+#include "sieve/actions.hpp"
 #include "sieve/filekind.hpp"
 #include "sieve/json.hpp"
 #include "sieve/safetensors.hpp"
@@ -7545,6 +7546,48 @@ void test_save()
     CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks z\nspeaks a\n"); }));          // out of order
     CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks a\nspeaks a\n"); }));          // twice
     CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nspeaks a\nanimation " + std::string(64, 'c') + "\n"); }));
+    // sieve-save-v2 (IDEAS 19.186): its actions' map after the animation; none, and it is v1 as before.
+    const std::string v1 = s.text();
+    s.actions = std::string(64, 'd');
+    CHECK(s.text() == "sieve-save-v2\ncharacter " + s.character + "\nanimation " + std::string(64, 'a') + "\nactions " + std::string(64, 'd') + "\nspeaks language-english\n");
+    CHECK(read_save(s.text()).actions == s.actions && read_save(s.text()).id() == s.id());
+    s.actions.clear();
+    CHECK(s.text() == v1);
+    CHECK(throws([&] { (void)read_save("sieve-save-v2\ncharacter " + std::string(64, 'b') + "\n"); }));           // v2 with no map
+    CHECK(throws([&] { (void)read_save("sieve-save-v1\ncharacter " + std::string(64, 'b') + "\nactions " + std::string(64, 'd') + "\n"); })); // a map in v1
+}
+
+// Actions to animations (IDEAS 19.186, sieve-actions-v1): every action once, in order, each a SHA-256
+// or none; read back the same; an animation fits a character with as many spheres as it has bones.
+void test_actions()
+{
+    ActionMap m;
+    CHECK(m.empty() && m.text().rfind("sieve-actions-v1\naction idle none\naction walk none\n", 0) == 0);
+    CHECK(read_actions(m.text()).text() == m.text() && m.text().size() == std::string("sieve-actions-v1\n").size() + 118);
+    m.set(Action::Walk, std::string(64, 'a'));
+    m.set(Action::Wave, std::string(64, 'b'));
+    CHECK(!m.empty() && m.of(Action::Walk) == std::string(64, 'a') && read_actions(m.text()).id() == m.id());
+    CHECK(action_from_name("run") == Action::Run && std::string(action_name(Action::Read)) == "read");
+    CHECK(throws([] { (void)action_from_name("fly"); }));
+    const std::string t = m.text();
+    CHECK(throws([&] { (void)read_actions(t.substr(0, t.size() - 1)); }));                                         // no last line feed
+    std::string swapped = t;
+    swapped.replace(swapped.find("action idle"), 11, "action walk");
+    CHECK(throws([&] { (void)read_actions(swapped); }));                                                             // out of order
+    CHECK(throws([&] { (void)read_actions("sieve-actions-v1\naction idle none\n"); }));                             // too few
+    std::string bad = t;
+    bad.replace(bad.find(std::string(64, 'a')), 64, std::string(64, 'A'));
+    CHECK(throws([&] { (void)read_actions(bad); }));                                                                 // not a SHA-256
+    // Fitting: the arm (3 spheres) plays a 3-bone animation, not a 4-bone one.
+    Character arm = unfold_character(CharacterSettings{});
+    Animation a;
+    a.bones = uint32_t(arm.spheres.size());
+    a.frames = 1;
+    a.turns.assign(a.bones, BoneTurn{});
+    CHECK(animation_fits(arm, a));
+    a.bones += 1;
+    a.turns.push_back(BoneTurn{});
+    CHECK(!animation_fits(arm, a));
 }
 
 // The catalogue of formats, stage 1 (IDEAS 19.165): gathered from the code; ids unique; every link
@@ -7675,6 +7718,7 @@ void run_all(int argc, char** argv)
     RUN(test_format_stats());
     RUN(test_catalogue());
     RUN(test_save());
+    RUN(test_actions());
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());

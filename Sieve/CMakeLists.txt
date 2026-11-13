@@ -49,6 +49,7 @@ add_library(sieve_core STATIC
     core/src/raid.cpp
     core/src/catalogue.cpp
     core/src/save.cpp
+    core/src/actions.cpp
     core/src/seal.cpp
     core/src/raid_net.cpp
     core/src/format_stats.cpp

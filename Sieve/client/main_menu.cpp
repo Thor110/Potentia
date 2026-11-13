@@ -73,7 +73,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Main:
         // (Manual Navigation after the rest, before Exit: the CI's walks through this menu count rows.)
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "exit"}};
+                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
     case Screen::Personal: return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
@@ -275,6 +275,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
+        else if (it.id == "creator") { result_ = Result::Creator; done_ = true; } // the character creator (IDEAS 19.186)
         else if (it.id == "systems_formats") { system_root_ = "information"; result_ = Result::Systems; done_ = true; }
         else if (it.id == "systems_language") { system_root_ = "language"; result_ = Result::Systems; done_ = true; }
         else if (it.id == "personal_others" || it.id == "personal_groups") {} // (not built yet: its help line says so)

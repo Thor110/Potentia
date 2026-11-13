@@ -9,6 +9,7 @@
 
 #include "app_settings.hpp"
 #include "sieve/character.hpp"
+#include "sieve/actions.hpp"
 #include "sieve/animation.hpp"
 
 #include <algorithm>
@@ -59,6 +60,60 @@ inline std::optional<sieve::Animation> stored_animation(const std::filesystem::p
         sieve::Animation a = sieve::read_animation(text);
         if (a.id() != id) return std::nullopt;
         return a;
+    }
+    catch (const std::exception&)
+    {
+        return std::nullopt;
+    }
+}
+
+// Every animation in the store, read and checked against its name (at most `limit`, by name): the
+// ones the character creator offers for an action.
+inline std::vector<sieve::Animation> stored_animations(const std::filesystem::path& dir, size_t limit = 256)
+{
+    std::vector<sieve::Animation> out;
+    std::error_code ec;
+    std::vector<std::string> ids;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec))
+        if (e.path().extension() == ".animation") ids.push_back(e.path().stem().string());
+    std::sort(ids.begin(), ids.end());
+    for (const auto& id : ids)
+    {
+        if (out.size() >= limit) break;
+        if (auto a = stored_animation(dir, id)) out.push_back(std::move(*a));
+    }
+    return out;
+}
+
+// The action maps' store (IDEAS 19.186): `actions` beside the settings file, each map kept as
+// <SHA-256>.actions (sieve-actions-v1), as animations are.
+inline std::filesystem::path actions_store_dir(const std::filesystem::path& app_path)
+{
+    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "actions";
+}
+
+inline bool store_actions(const std::filesystem::path& dir, const sieve::ActionMap& m)
+{
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const std::filesystem::path f = dir / (m.id() + ".actions");
+    if (std::filesystem::exists(f, ec)) return true;
+    std::ofstream out(f, std::ios::binary);
+    out << m.text();
+    return bool(out);
+}
+
+inline std::optional<sieve::ActionMap> stored_actions(const std::filesystem::path& dir, const std::string& id)
+{
+    if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos) return std::nullopt;
+    std::ifstream in(dir / (id + ".actions"), std::ios::binary);
+    if (!in) return std::nullopt;
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    try
+    {
+        sieve::ActionMap m = sieve::read_actions(text);
+        if (m.id() != id) return std::nullopt;
+        return m;
     }
     catch (const std::exception&)
     {

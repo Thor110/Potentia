@@ -7676,5 +7676,13 @@ the setup one just stays simple but can link through to it".
 - *To decide:* whether the actions are Sieve's fixed list alone or a character may add its own (emotes)
   as a later version; whether choosing an animation for a missing action edits the character's map
   (and saves it) or only this session's. Proposed: a fixed list first; a choice edits the map.
-- *Planned only;* the next idea to work on (ROADMAP, "Next, in order", step 4).
+- *Built 13 November 2026* (Edward: "carry on with actions to animations next and character creator
+  next"): `sieve-actions-v1` with the seven actions above (idle, walk, run, jump, take, read, wave),
+  `sieve-save-v2` naming the map (v1 kept for saves without one), the map kept beside the settings
+  (`actions/`, `[character] actions`) and in the RAID with Ctrl+S; the **Character Creator** on the
+  main menu and from the CHARACTER page (C), the whole window, its actions chosen from the store's
+  animations that fit, each played on demand; the hallway playing idle, walk, run and read by what you
+  do, an action with none said once. Decided as proposed: a fixed list first, a choice edits the map.
+  Still to come: jump, take and wave played when the hallway has those moments; a character's own
+  actions (emotes) as a later version.
 

@@ -1,25 +1,46 @@
-# Infinite RAID: 3 copies, checking, and its own document
+# Actions to animations, and the Character Creator (IDEAS 19.186)
 
-Builds on the loose-ends zip and the IDEAS §19.186 zip.
+## The action map: `sieve-actions-v1`
 
-## What changed
+- Covers seven actions: idle, walk, run, jump, take, read and wave.
+- Each action names the animation that plays it, by SHA-256, or `none`.
+- An animation **fits** a character when it has no more bones than the character has spheres.
+- Maps are stored as `actions/<SHA-256>.actions` beside the settings file, and `[character] actions` names the one in use.
+- With `[raid] drives` set, Ctrl+S also keeps the map in the RAID.
 
-- **3 copies by default.** Each piece shared now goes to 3 machines, or to each of them where there are fewer (it was 2). Set it with `[raid] copies` or `--peer-copies`. The index and manifest now go to as many machines as the chunks, not to every one.
-- **Kept whole by its owner.** New command: `sieve raid check REMOTE --key KEY --peers ...`. It asks every machine which pieces it still holds and puts any kept on too few back on the next machines. `--no-repair` only reports.
-- **Settings > Infinite RAID** (renamed from RAID) gains two rows:
-  - **Copies**: how many machines keep each piece.
-  - **Check my shares**: checks every save shared from this machine and repairs what is short.
-- **docs/INFINITE-RAID.md** (new) covers:
-  - what the RAID is for, in your words: helping humanity preserve all data of all types;
-  - how it works and why 3 copies;
-  - its safety valves and checks, with limits as rules over tags, an open and versioned list where the IP address is only the first tag;
-  - what comes next: different networks, erasure coding, finding machines, identity, all data of all types, compute;
-  - where everything is.
-- **Docs:** IDEAS §19.176 records the placement decisions and §19.179 the safety-valve principle. RAID-NOTICE, the README, MANUAL, SPECIFICATIONS and ROADMAP are updated.
+## The save: `sieve-save-v2`
+
+- Adds an `actions SHA-256` line, so a custom character brings its actions with it.
+- A save without a map is still written as v1, so every existing save keeps its id.
+
+## The Character Creator
+
+- Opens from the main menu (after the System Viewer) or with **C** on the CHARACTER page. It uses the whole window.
+- The character's settings are on the left and the character is drawn large on the right; drag, the wheel, or [ and ] turn it.
+- The seven actions are listed below the settings, each with its animation:
+  - **Tab** switches between the settings and the actions.
+  - **Left/Right** go through `none` and every animation in your store that fits. One that doesn't fit, or isn't in the store, is shown in red.
+  - **Enter** plays the chosen action's animation, or says there is none.
+- Ctrl+S/O/I/K work as on the CHARACTER page. **Esc** goes back to where you opened it.
+
+## In the hallway
+
+- With a map, your character plays idle when you stand, walk when you move, run with Shift, and read while you hold an item.
+- An action with no animation plays nothing, and the hallway says so once for each action.
+- Without a map, its one animation plays whatever it does, as before.
+- For pictures: `--action NAME` holds one action, and `--creator` (with `--menu`) opens the creator.
+
+## Still to come
+
+- Jump, take and wave are in the map but not yet triggered in the hallway.
+- Characters having their own extra actions (emotes) would be a later version.
 
 ## Checked
 
-- Unit tests: one machine loses everything; check finds every piece short, puts each back, then finds the save whole without sending anything more.
-- CI 01, 04 (three servers this time, including the same loss and repair) and 10: all passed.
+- Unit tests for the format and save v2.
+- CI 01, 04 and 10 passed, with new checks for the main menu row, C on the CHARACTER page, setting idle and walk in the creator, the map kept, and the hallway playing walk and saying jump has none.
 
-No files to delete.
+## Files
+
+- New: `core/include/sieve/actions.hpp` and `core/src/actions.cpp`. Re-run CMake.
+- No files to delete.

@@ -1640,9 +1640,15 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         else if (e.type == SDL_EVENT_KEY_DOWN) cat_key(e.key.key);
         return;
     }
+    // The character creator: its own keys (the drag above still turns the character).
+    if (creator_ && !char_dragging_)
+    {
+        if (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_MOUSE_WHEEL) creator_key(e, done, result);
+        if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN && e.type != SDL_EVENT_MOUSE_MOTION && e.type != SDL_EVENT_MOUSE_BUTTON_UP) return;
+    }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
     // The character on its pedestal, turned by a drag across it (the right-hand panel's CHARACTER).
-    if (side_open_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
+    if ((side_open_ || creator_) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
     {
         char_dragging_ = true;
         char_drag_x_ = e.button.x;
@@ -1787,29 +1793,8 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     {
         if (e.key.key == SDLK_ESCAPE) set_side(false);
         else if (e.key.key == SDLK_TAB) toggle_panel(); // the settings instead (only one panel is in at a time)
-        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_S)
-        {
-            // Save the character as a .character file (its text: settings, then its spheres).
-            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-            const std::string start = std::string(docs ? docs : "") + char_.id().substr(0, 12) + ".character";
-            static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
-            save_file_dialog(character_saved, this, window_, kChar, 1, start.c_str(), this);
-        }
-        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_I && side_page_ == 0)
-        {
-            static const SDL_DialogFileFilter kObj[] = {{"Models (OBJ, glTF)", "obj;gltf;glb"}};
-            open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
-        }
-        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_K && side_page_ == 0)
-        {
-            static const SDL_DialogFileFilter kGltf[] = {{"glTF models with a skeleton", "gltf;glb"}};
-            open_file_dialog(skeleton_opened, this, window_, kGltf, 1, nullptr, false, false, this);
-        }
-        else if ((e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_O)
-        {
-            static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
-            open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
-        }
+        else if ((side_page_ == 0 || (e.key.key != SDLK_I && e.key.key != SDLK_K)) && char_ctrl_key(e)) {} // (Ctrl+I and K: the CHARACTER page's alone)
+        else if (side_page_ == 0 && !(e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_C) open_creator(false); // the character creator
         else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN ||
                  ((e.key.mod & SDL_KMOD_CTRL) && (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)))
         {
@@ -2115,6 +2100,8 @@ void Menu::char_init()
                 speaks_from_settings();
                 if (!app_->character_animation.empty())
                     char_anim_ = stored_animation(animation_store_dir(app_path_), app_->character_animation);
+                if (!app_->character_actions.empty())
+                    if (auto m = stored_actions(actions_store_dir(app_path_), app_->character_actions)) char_actions_ = *m;
                 return;
             }
             catch (const std::exception& e)
@@ -2147,6 +2134,7 @@ sieve::CharacterSave Menu::character_save() const
     sieve::CharacterSave s;
     s.character = char_.id();
     if (char_anim_) s.animation = char_anim_->id();
+    if (!char_actions_.empty()) s.actions = char_actions_.id(); // (sieve-save-v2)
     for (const auto& id : speaks_) s.speak(id, true);
     return s;
 }
@@ -2168,6 +2156,8 @@ void Menu::char_store()
     }
     app_->character_animation.clear();
     if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
+    app_->character_actions.clear();
+    if (!char_actions_.empty() && store_actions(actions_store_dir(app_path_), char_actions_)) app_->character_actions = char_actions_.id();
     app_->character_drawing = char_draw_;
     save_app();
 }
@@ -2649,6 +2639,185 @@ void Menu::render_speaks(float x, float top, float bottom)
     side_scrollbar(x, y, room, side_scroll_, side_scroll_max_, content);
 }
 
+// Ctrl+S saves the character, Ctrl+O opens one, Ctrl+I takes a model into the chosen sphere and
+// Ctrl+K a glTF's skeleton as the character: the CHARACTER page's keys, and the creator's.
+bool Menu::char_ctrl_key(const SDL_Event& e)
+{
+    if (e.type != SDL_EVENT_KEY_DOWN || !(e.key.mod & SDL_KMOD_CTRL)) return false;
+    if (e.key.key == SDLK_S)
+    {
+        // Save the character as a .character file (its text: settings, then its spheres).
+        const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+        const std::string start = std::string(docs ? docs : "") + char_.id().substr(0, 12) + ".character";
+        static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
+        save_file_dialog(character_saved, this, window_, kChar, 1, start.c_str(), this);
+        return true;
+    }
+    if (e.key.key == SDLK_I)
+    {
+        static const SDL_DialogFileFilter kObj[] = {{"Models (OBJ, glTF)", "obj;gltf;glb"}};
+        open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
+        return true;
+    }
+    if (e.key.key == SDLK_K)
+    {
+        static const SDL_DialogFileFilter kGltf[] = {{"glTF models with a skeleton", "gltf;glb"}};
+        open_file_dialog(skeleton_opened, this, window_, kGltf, 1, nullptr, false, false, this);
+        return true;
+    }
+    if (e.key.key == SDLK_O)
+    {
+        static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
+        open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------- the character creator (IDEAS 19.186)
+
+void Menu::open_creator(bool from_main)
+{
+    char_init();
+    creator_ = true;
+    creator_from_main_ = from_main;
+    creator_focus_ = 0;
+    creator_said_.clear();
+    // The animations it may choose from: the store's, the one playing kept there first.
+    if (char_anim_) store_animation(animation_store_dir(app_path_), *char_anim_);
+    creator_anims_ = stored_animations(animation_store_dir(app_path_));
+    if (from_main)
+    {
+        side_open_ = false;
+        side_ = 0;
+        panel_open_ = false;
+        panel_ = 0;
+    }
+}
+
+std::string Menu::actions_line() const
+{
+    std::string t = char_actions_.empty() ? std::string("none") : char_actions_.id().substr(0, 12);
+    for (size_t i = 0; i < sieve::kActionCount; ++i)
+        t += std::string(i ? ", " : ": ") + sieve::kActionNames[i] + " " + (char_actions_.animation[i].empty() ? std::string("none") : char_actions_.animation[i].substr(0, 12));
+    return t;
+}
+
+// The creator's keys: Tab between the character's rows and the actions; on the actions, Up/Down
+// choose one, Left/Right go through the animations that fit (and none), Enter plays the chosen
+// one on the character; Ctrl+S/O/I/K as on the CHARACTER page; Esc back the way it came.
+bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
+{
+    if (e.type == SDL_EVENT_MOUSE_WHEEL)
+    {
+        char_turn_ += e.wheel.y * 0.26f;
+        return true;
+    }
+    if (e.type != SDL_EVENT_KEY_DOWN) return false;
+    const SDL_Keycode k = e.key.key;
+    if (k == SDLK_ESCAPE)
+    {
+        creator_ = false;
+        if (creator_from_main_)
+        {
+            done = true;
+            result = Result::Back;
+        }
+        return true;
+    }
+    if (k == SDLK_TAB)
+    {
+        creator_focus_ = 1 - creator_focus_;
+        return true;
+    }
+    if (char_ctrl_key(e)) return true;
+    if (creator_focus_ == 0)
+    {
+        char_key(k, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        return true;
+    }
+    const int n = int(sieve::kActionCount);
+    if (k == SDLK_UP) creator_action_ = (creator_action_ + n - 1) % n;
+    else if (k == SDLK_DOWN) creator_action_ = (creator_action_ + 1) % n;
+    else if (k == SDLK_LEFT || k == SDLK_RIGHT)
+    {
+        // The choices: none, then each stored animation that fits this character.
+        std::vector<std::string> choices{""};
+        for (const auto& a : creator_anims_)
+            if (sieve::animation_fits(char_, a)) choices.push_back(a.id());
+        const sieve::Action act = sieve::Action(creator_action_);
+        auto at = std::find(choices.begin(), choices.end(), char_actions_.of(act));
+        int i = at == choices.end() ? 0 : int(at - choices.begin());
+        const int m = int(choices.size());
+        i = (i + (k == SDLK_RIGHT ? 1 : m - 1)) % m;
+        char_actions_.set(act, choices[size_t(i)]);
+        char_store();
+        char_note_ = trf("creator.set", {sieve::action_name(act), choices[size_t(i)].empty() ? tr("creator.none") : choices[size_t(i)].substr(0, 12)});
+    }
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE)
+    {
+        // Played on the character: the action's animation, or said that it has none.
+        const sieve::Action act = sieve::Action(creator_action_);
+        const std::string& id = char_actions_.of(act);
+        const auto it = std::find_if(creator_anims_.begin(), creator_anims_.end(), [&](const sieve::Animation& a) { return a.id() == id; });
+        if (id.empty() || it == creator_anims_.end()) char_note_ = trf("creator.missing", {sieve::action_name(act)});
+        else
+        {
+            char_anim_ = *it;
+            char_anim_playing_ = true;
+            char_note_ = trf("creator.playing", {sieve::action_name(act), id.substr(0, 12)});
+        }
+    }
+    return true;
+}
+
+void Menu::render_creator(float W, float H)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255}, warm{230, 200, 120, 255}, red{255, 90, 90, 255};
+    text(r_, 20, 16, tr("creator.title"), 3, white);
+    text(r_, 20, 48, tr("creator.subtitle"), 1, grey);
+    // The left column: the character's rows, then its actions; the right: the character, large.
+    const float colw = std::min(560.0f, W * 0.42f), x = 20, top = 64;
+    text(r_, x + 14, top + 22, tr(creator_focus_ == 0 ? "creator.focus.character" : "creator.focus.actions"), 1, warm);
+    float y = render_char_rows(x, top, colw) + 6;
+    text(r_, x + 14, y, tr("creator.actions"), 2, creator_focus_ == 1 ? warm : white);
+    y += 26;
+    for (int i = 0; i < int(sieve::kActionCount); ++i)
+    {
+        const bool on = creator_focus_ == 1 && i == creator_action_;
+        if (on)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
+            const SDL_FRect sel{x + 8, y - 3, colw - 16, 14};
+            SDL_RenderFillRect(r_, &sel);
+        }
+        const std::string& id = char_actions_.animation[size_t(i)];
+        const auto it = std::find_if(creator_anims_.begin(), creator_anims_.end(), [&](const sieve::Animation& a) { return a.id() == id; });
+        std::string v;
+        SDL_Color c = on ? white : grey;
+        if (id.empty()) v = tr("creator.none");
+        else if (it == creator_anims_.end())
+        {
+            v = trf("creator.not_stored", {id.substr(0, 12)});
+            c = red;
+        }
+        else if (!sieve::animation_fits(char_, *it))
+        {
+            v = trf("creator.no_fit", {id.substr(0, 12), std::to_string(it->bones), std::to_string(char_.spheres.size())});
+            c = red;
+        }
+        else v = trf("creator.anim", {id.substr(0, 12), std::to_string(it->frames), std::to_string(it->bones)});
+        text(r_, x + 14, y, (on ? "> " : "  ") + std::string(sieve::kActionNames[size_t(i)]), 1, on ? white : grey);
+        text(r_, x + 120, y, fit_cells(v, size_t((colw - 130) / 8)), 1, c);
+        y += 16;
+    }
+    size_t fitting = 0;
+    for (const auto& a : creator_anims_) fitting += sieve::animation_fits(char_, a) ? 1 : 0;
+    text(r_, x + 14, y + 6, trf("creator.store", {std::to_string(creator_anims_.size()), std::to_string(fitting)}), 1, grey);
+    render_char_drawing(x + colw + 20, 70, W - (x + colw + 20) - 20, H - 70 - 40);
+    text(r_, 20, H - 24, tr("creator.footer"), 1, grey);
+}
+
 void Menu::open_viewer(const std::string& id)
 {
     open_catalogue(id);
@@ -2972,6 +3141,11 @@ void Menu::render()
     if (viewer_)
     {
         render_viewer(W, H); // (and nothing of the setup: its lines are not counted for it)
+        return;
+    }
+    if (creator_)
+    {
+        render_creator(W, H); // (the same: the whole window is the character's)
         return;
     }
 
@@ -3467,6 +3641,16 @@ void Menu::render_side(float W, float H)
         text(r_, x + 14, bottom - 22, tr("side.speaks.footer"), 1, grey);
         return;
     }
+    const float yy = render_char_rows(x, top, kSideW);
+    render_char_drawing(x + 14, yy, kSideW - 28, (bottom - 34) - yy);
+    text(r_, x + 14, bottom - 22, tr("side.footer"), 1, grey);
+}
+
+// The CHARACTER page's rows, and the lines under them (what it is, what it plays, the last note):
+// from `top`, `width` wide; returns where the drawing may start.
+float Menu::render_char_rows(float x, float top, float width)
+{
+    const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
     // What came of a share sent with Ctrl+S (Settings > RAID), said once it is known.
     if (auto n = raid_service::take_share_note()) char_note_ = *n;
     // A file chosen in a dialog since the last frame: saved or opened now.
@@ -3518,6 +3702,7 @@ void Menu::render_side(float W, float H)
                         const std::string v = raid.put("your character", char_.text());
                         std::vector<std::string> versions{v};
                         if (char_anim_) versions.push_back(raid.put("your character's animation", char_anim_->text()));
+                        if (!char_actions_.empty()) versions.push_back(raid.put("your character's actions", char_actions_.text()));
                         versions.push_back(raid.put("your save", character_save().text())); // everything chosen, named together
                         char_note_ += "; " + trf("side.char.raid", {v.substr(0, 12)});
                         // Between machines, where sharing is ticked (opt in, Settings > RAID): sent,
@@ -3555,7 +3740,7 @@ void Menu::render_side(float W, float H)
         if (on)
         {
             SDL_SetRenderDrawColor(r_, 255, 255, 255, 40);
-            const SDL_FRect sel{x + 8, y - 3, kSideW - 16, 14};
+            const SDL_FRect sel{x + 8, y - 3, width - 16, 14};
             SDL_RenderFillRect(r_, &sel);
         }
         text(r_, x + 14, y, (on ? "> " : "  ") + tr(kLabels[i]), 1, on ? white : grey);
@@ -3565,14 +3750,18 @@ void Menu::render_side(float W, float H)
     const std::string ctext = char_.text();
     text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16), ctext.substr(0, ctext.find(' '))}), 1, grey);
     if (char_anim_)
-        text(r_, x + 14, y + 18, fit_cells(trf("side.char.playing", {char_anim_->id().substr(0, 12), std::to_string(char_anim_->frames), char_anim_playing_ ? tr("side.char.anim_on") : tr("side.char.anim_off")}), size_t((kSideW - 28) / 8)), 1, grey);
+        text(r_, x + 14, y + 18, fit_cells(trf("side.char.playing", {char_anim_->id().substr(0, 12), std::to_string(char_anim_->frames), char_anim_playing_ ? tr("side.char.anim_on") : tr("side.char.anim_off")}), size_t((width - 28) / 8)), 1, grey);
     else if (char_.given) text(r_, x + 14, y + 18, tr("side.char.no_species"), 1, grey);
     else text(r_, x + 14, y + 18, trf("side.char.species", {sieve::species_id(char_.settings).substr(0, 12)}), 1, grey);
-    if (!char_note_.empty()) text(r_, x + 14, y + 32, fit_cells(char_note_, size_t((kSideW - 28) / 8)), 1, white);
+    if (!char_note_.empty()) text(r_, x + 14, y + 32, fit_cells(char_note_, size_t((width - 28) / 8)), 1, white);
+    return y + 48;
+}
+
     // The drawing: each sphere a circle, each bone a line to its parent, seen from the side, standing
     // on a pedestal; a drag across it (or [ and ]) turns it about the upright. Scaled to fit the box
     // below the rows.
-    const float bx = x + 14, by = y + 48, bw = kSideW - 28, bh = (bottom - 34) - by;
+void Menu::render_char_drawing(float bx, float by, float bw, float bh)
+{
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
     {
@@ -3762,7 +3951,6 @@ void Menu::render_side(float W, float H)
             }
         }
     }
-    text(r_, x + 14, bottom - 22, tr("side.footer"), 1, grey);
 }
 
 // ---------------------------------------------------------------- filters overlay

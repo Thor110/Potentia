@@ -378,6 +378,25 @@ q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
 q "^animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8 31 frames, 3 bones" arm-menu.txt
 grep -q "^line = sieve-character-v3 spheres=3;s 0 -1 0 0 0 1365 body;" arm.ini
 $H --menu --settings arm.ini --press "\`" --screenshot char-arm2.png | tr -d '\r' | q "^character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7"
+# The character creator and actions to animations (IDEAS 19.186): on the main menu after the System
+# Viewer, and from the CHARACTER page with C. With the walking arm as the character and the arm's
+# wave in the store too, idle is given the wave and walk the walk (Left/Right go through none and the
+# animations that fit, in the order of their names); the map is kept (sieve-actions-v1) and named in
+# the save, which becomes sieve-save-v2. In the hallway, walking plays the walk; jumping, with none,
+# plays nothing.
+$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down,Down,Down" --screenshot creator-row.png | tr -d '\r' | q "^read aloud: Character Creator$"
+$H --menu --press "\`,c" --screenshot creator-c.png | tr -d '\r' | q "^character creator: open$"
+rm -rf crt
+mkdir -p crt/animations
+$exe import tests/arm.gltf --animation-out crt/animations/2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8.animation --no-stats > /dev/null
+$H --menu --settings crt/c.ini --import-skeleton tests/walk.gltf --creator --animation-frame 15 --press "Tab,Right,Down,Right,Right,Return" --screenshot creator.png | tr -d '\r' > creator.txt
+q "^actions: [0-9a-f]\{12\}: idle 2a5cb1d00e4a, walk 45adcf033beb, run none, jump none, take none, read none, wave none$" creator.txt
+q "^note: walk: playing 45adcf033beb$" creator.txt
+amap=$(sed -n 's/^actions = \([0-9a-f]\{64\}\).*/\1/p' crt/c.ini)
+test -n "$amap"
+head -1 "crt/actions/$amap.actions" | tr -d '\r' | q "^sieve-actions-v1$"
+$H --settings crt/c.ini --no-menu --action walk --animation-frame 15 --screenshot crt-walk.png | tr -d '\r' | q "^action: walk: 45adcf033beb3fc647acd80ff8053472d5f3bef3561cf2510e6208ae6894acb1$"
+$H --settings crt/c.ini --no-menu --action jump --screenshot crt-jump.png | tr -d '\r' | q "^action: jump: none$"
 # Stage 4 of the catalogue: Ctrl+K's import is added to its importer's entry, as `sieve import` adds it.
 grep -c " what=import result=whole animations=1 .* joints=3 " "$SIEVE_STATS/model-gltf.stats" > /dev/null
 # The animation is kept too: in the store beside the settings file, named by its SHA-256 there.

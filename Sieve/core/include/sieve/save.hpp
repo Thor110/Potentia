@@ -11,6 +11,11 @@
 //     speaks ID                 (one a language, in the order of their ids, each once)
 // Each line ends in a line feed; nothing else. Its identity is the SHA-256 of that text, so a
 // change to anything in it (another language, another seed) is a new version of the save.
+//
+// "sieve-save-v2" (13 November 2026, IDEAS 19.186): the same, and after the animation (where there
+// is one) the character's map of actions to animations (sieve-actions-v1, sieve/actions.hpp):
+//     actions SHA-256
+// A save with no map is written as v1, so every v1 save keeps its identity; both are read.
 #pragma once
 
 #include <string>
@@ -19,11 +24,13 @@
 namespace sieve {
 
 inline constexpr const char* kSaveVersion = "sieve-save-v1";
+inline constexpr const char* kSaveVersion2 = "sieve-save-v2";
 
 struct CharacterSave
 {
     std::string character;           // the character's SHA-256
     std::string animation;           // its animation's SHA-256, or empty
+    std::string actions;             // its map of actions to animations' SHA-256 (v2), or empty
     std::vector<std::string> speaks; // language entries' ids, kept in order and each once
     void speak(const std::string& id, bool yes); // adds or takes away one, keeping the order
     std::string text() const;

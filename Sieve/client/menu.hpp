@@ -539,7 +539,27 @@ private:
     int char_anim_fixed_ = -1;                  // a frame to hold at, or -1 to play by the clock
     uint32_t char_anim_paused_ = 0;             // the frame it stopped at
     std::string char_note_;      // the last save's or open's result, shown under the drawing
+    // Its actions (IDEAS 19.186, sieve-actions-v1): which animation plays each thing it does.
+    sieve::ActionMap char_actions_;
+    // The CHARACTER page drawn in two parts, so the character creator can lay them out its own way:
+    // the rows and the lines under them (from y, returning where they end), and the drawing.
+    float render_char_rows(float x, float top, float width);
+    void render_char_drawing(float bx, float by, float bw, float bh);
+    // The character creator (IDEAS 19.186): the CHARACTER page and the actions, the whole window.
+    bool creator_ = false;
+    bool creator_from_main_ = false; // opened from the main menu (Esc: back there), not the setup menu
+    int creator_focus_ = 0;          // 0 the character's rows, 1 the actions
+    int creator_action_ = 0;         // the action chosen
+    std::vector<sieve::Animation> creator_anims_; // the store's animations, read as the creator opens
+    std::vector<std::string> creator_said_;       // (the actions told missing, so each is said once)
+    void render_creator(float W, float H);
+    bool creator_key(const SDL_Event& e, bool& done, Result& result);
+    bool char_ctrl_key(const SDL_Event& e); // Ctrl+S/O/I/K, the CHARACTER page's and the creator's
 public:
+    // The character creator, from the main menu (from_main) or the setup menu's CHARACTER page (C).
+    void open_creator(bool from_main);
+    bool creator() const { return creator_; }
+    std::string actions_line() const; // "ID: idle SHA12|none, walk ..." for a picture's report
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
     void import_model(const std::string& path);    // --import-model FILE, and Ctrl+I: a model (.obj, .gltf, .glb) into the chosen sphere

@@ -28,7 +28,7 @@ class MainMenu
 public:
     MainMenu(SDL_Window* window, SDL_Renderer* renderer, AppSettings& settings, std::filesystem::path settings_path, DisplayInfo display);
 
-    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Systems, Quit };
+    enum class Result { Start, Locator, Media, Designer, Harness, Cipher, ManualNav, Personal, Systems, Creator, Quit };
     Result run();
     // The system chosen in the System Viewer (Result::Systems): the entry it stands at to begin with
     // ("information" for FORMATS, "language" for LANGUAGE).

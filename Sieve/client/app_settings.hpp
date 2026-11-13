@@ -139,6 +139,9 @@ struct AppSettings
     std::string character_animation;
     // The languages it speaks (IDEAS 19.183): ids of the language catalogue, separated by commas.
     std::string character_speaks;
+    // Its actions (IDEAS 19.186): the SHA-256 of its map of actions to animations (sieve-actions-v1),
+    // read from the actions folder beside the settings file; empty: none, so the one animation plays.
+    std::string character_actions;
     // [raid] drives (IDEAS 19.176): folders, separated by commas, where each character saved with
     // Ctrl+S is also kept in the infinite RAID as a new version; empty: not kept there.
     std::string raid_drives;
