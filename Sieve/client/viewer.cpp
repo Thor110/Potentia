@@ -23,6 +23,7 @@
 
 #include "hallway.hpp"
 #include "gpu_memory.hpp"
+#include "picture_source.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -200,6 +201,7 @@ std::string Hallway::view_label(ViewKind k) const
     case ViewKind::Shape: return tr("view.tab.shape");
     case ViewKind::Cover: return tr("view.tab.cover");
     case ViewKind::Title: return tr("view.tab.title");
+    case ViewKind::Opened: return tr(view_opened_.viewer == "text" ? "view.tab.text" : "view.tab.pixels");
     case ViewKind::Raw: break;
     }
     // What the thing itself is, on this line.
@@ -407,6 +409,25 @@ void Hallway::view_show(size_t at)
         view_.heading = named + tr("view.shape");
         break;
     }
+    case ViewKind::Opened:
+    {
+        const OpenedFile& o = view_opened_;
+        if (o.viewer == "text")
+        {
+            view_.rows = page_rows(utf8_decode(o.text), view_aspect_, view_.cols);
+            view_.heading = named + trf("view.opened.text", {o.kind, std::to_string(o.text.size())});
+        }
+        else
+        {
+            view_.picture = true;
+            view_.px = o.px;
+            view_.pw = o.w;
+            view_.ph = o.h;
+            view_.frames = o.frames;
+            view_.heading = named + trf("view.opened.picture", {o.kind, std::to_string(o.w), std::to_string(o.h)});
+        }
+        break;
+    }
     case ViewKind::Picture:
     {
         // The picture on the item, drawn again by the same painter as the shelf's, larger, on a
@@ -452,6 +473,9 @@ void Hallway::open_viewer()
     }
     // The views it has: itself, and what was made of it for the shelf.
     view_kinds_ = {ViewKind::Raw};
+    view_opened_ = OpenedFile{};
+    // A file opens first in the viewer made for its kind, where there is one; its bytes come next.
+    if (bk.is_file && open_file_by_kind(file_of(bk))) view_kinds_.insert(view_kinds_.begin(), ViewKind::Opened);
     // A model or a world opens on itself in three dimensions, turned as on its page; its .obj text next.
     if (bk.model || bk.world) view_kinds_.insert(view_kinds_.begin(), ViewKind::Shape);
     if (face_painter(bk)) view_kinds_.push_back(ViewKind::Picture);
@@ -464,14 +488,69 @@ void Hallway::open_viewer()
     // A file opens in the viewer made for its kind. Where none is made yet, it is shown as its bytes
     // and the kind is flagged, so the viewers still to be made are known (Edward, 13 November 2026: "if
     // one doesnt exist it should flag it to us and tell us a new viewer needs to be created").
-    if (bk.is_file && !view_.bytes.empty()) flag_missing_viewer(file_type(view_.bytes, view_.bytes.size()));
+    if (bk.is_file && view_kinds_[0] == ViewKind::Raw && !view_.bytes.empty()) flag_missing_viewer(file_type(view_.bytes, view_.bytes.size()));
 }
 
-// The kinds of file with a viewer of their own here; every other kind is shown as its bytes. (None yet:
-// pictures, sound and the rest open in their own viewers on their own lines, not as files.)
+// The viewers made for kinds of file (file-kinds-v1), as data: a kind not listed has none yet, and is
+// shown as its bytes and flagged. Pictures are made by sieve-view's reader (picture_source.cpp: every
+// limit a hostile file could push against checked before anything is decoded); text is shown as text.
 namespace {
-bool has_file_viewer(const std::string& /*kind*/) { return false; }
+struct FileViewer
+{
+    const char* kind;
+    const char* viewer;
+};
+constexpr FileViewer kFileViewers[] = {
+    {"PNG", "picture"}, {"JPG", "picture"}, {"GIF", "picture"}, {"BMP", "picture"},
+    {"TXT", "text"},    {"BOOK", "text"},   {"MANIFEST", "text"},
+};
+const char* viewer_of_kind(const std::string& kind)
+{
+    for (const FileViewer& v : kFileViewers)
+        if (kind == v.kind) return v.viewer;
+    return nullptr;
+}
+bool has_file_viewer(const std::string& kind) { return viewer_of_kind(kind) != nullptr; }
 } // namespace
+
+// Makes the file ready in the viewer made for its kind; false where its kind has none, or that viewer
+// could not show it (a picture cut short: it is then shown as its bytes, and why is said).
+bool Hallway::open_file_by_kind(const std::vector<uint8_t>& bytes)
+{
+    OpenedFile& o = view_opened_;
+    o.kind = file_type(bytes, bytes.size());
+    const char* viewer = viewer_of_kind(o.kind);
+    if (!viewer || bytes.empty()) return false;
+    o.viewer = viewer;
+    if (o.viewer == "text")
+    {
+        o.text.assign(bytes.begin(), bytes.end());
+        return true;
+    }
+    try
+    {
+        sieve::view::Picture p;
+        p.file = bytes;
+        sieve::view::make_pixels(p, true);
+        o.w = p.pixels.width;
+        o.h = p.pixels.height;
+        o.frames = uint32_t(1 + p.more.size());
+        o.px.reserve(size_t(o.w) * o.h * o.frames);
+        for (size_t f = 0; f < o.frames; ++f)
+        {
+            const RgbaImage& img = p.frame(f);
+            for (size_t i = 0; i + 3 < img.rgba.size(); i += 4)
+                o.px.push_back(uint32_t(img.rgba[i + 3]) << 24 | uint32_t(img.rgba[i]) << 16 | uint32_t(img.rgba[i + 1]) << 8 | img.rgba[i + 2]);
+        }
+        return o.w > 0 && o.h > 0;
+    }
+    catch (const std::exception& e)
+    {
+        o.why_not = e.what();
+        message(trf("view.opened.not", {o.kind, o.why_not}));
+        return false;
+    }
+}
 
 void Hallway::flag_missing_viewer(const std::string& kind)
 {
@@ -505,6 +584,7 @@ void Hallway::close_viewer()
     view_drag_ = false;
     view_ = ViewDoc{}; // a picture's pixels, a file's bytes
     view_kinds_.clear();
+    view_opened_ = OpenedFile{};
     view_buttons_.clear();
     if (view_tex_) gpu::destroy(view_tex_);
     view_tex_ = nullptr;
@@ -819,7 +899,7 @@ void Hallway::draw_viewer(float W, float H)
     };
     for (size_t i = 0; i < view_kinds_.size(); ++i) bx += button(bx, view_label(view_kinds_[i]), i == view_at_, int(i)) + 6;
     {
-        const std::string save = tr(view_kinds_.empty() || view_kinds_[view_at_] == ViewKind::Raw ? "view.save.raw"
+        const std::string save = tr(view_kinds_.empty() || view_kinds_[view_at_] == ViewKind::Raw || view_kinds_[view_at_] == ViewKind::Opened ? "view.save.raw"
                                     : view_kinds_[view_at_] == ViewKind::Title                    ? "view.save.text"
                                                                                                   : "view.save.png");
         button(W - 14 - (text_width(save, 1) + 16), save, false, -1);

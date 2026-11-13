@@ -1528,7 +1528,22 @@ private:
     // whole window, scrolled both ways and zoomed
     // What the thing can be seen as, the buttons along the top: what it is (its text, pixels, notes,
     // .obj or bytes), the picture on the item, its cover, and its title.
-    enum class ViewKind { Raw, Picture, Cover, Title, Shape }; // Shape: a model or a world in 3D, turned with the keys
+    // Shape: a model or a world in 3D, turned with the keys. Opened: a file shown by the viewer made for
+    // its kind (a picture's pixels, a text's text), where one is (IDEAS 19.200).
+    enum class ViewKind { Raw, Picture, Cover, Title, Shape, Opened };
+    // A file opened by its kind, made once when the viewer opens: a picture (its frames, ARGB, one after
+    // another), or text.
+    struct OpenedFile
+    {
+        std::string kind;     // file-kinds-v1
+        std::string viewer;   // "picture" or "text"
+        std::vector<uint32_t> px;
+        uint32_t w = 0, h = 0, frames = 1;
+        std::string text;     // UTF-8
+        std::string why_not;  // where its viewer could not show it, why
+    };
+    OpenedFile view_opened_;
+    bool open_file_by_kind(const std::vector<uint8_t>& bytes);
     struct ViewDoc
     {
         std::string heading;               // what is open, above it

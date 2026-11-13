@@ -732,6 +732,7 @@ if(SIEVE_BUILD_CLIENT)
     add_executable(hallway WIN32
         ${SIEVE_ICON_RC}
         client/app_main.cpp
+        client/picture_source.cpp
         client/app_settings.cpp
         client/binary_edge.cpp
         client/designer.cpp

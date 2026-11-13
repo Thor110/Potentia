@@ -1516,6 +1516,11 @@ grep -c "^index [0-9a-f]*$" "fm/favourites/$MSHA.item" | q "^1$"
 $H --no-menu --settings fm/s.ini --line models --open-favourite "$MSHA" --screenshot fav-model-open.png | tr -d '\r' | sed -n 1,2p | tr '\n' ' ' | q "^favourite: in hand viewer: 3D $"
 $H --no-menu --settings fm/s.ini --line binary --press "e,z" --screenshot noviewer.png 2>&1 | tr -d '\r' | q "^viewer: none for .* files yet$"
 grep -c . fm/viewers-needed.txt | q "^1$"
+# A file whose kind has a viewer opens in it first, its bytes next: a PNG as its picture (read as
+# sieve-view reads one, every limit checked first), a text file as its text; neither is flagged.
+$H --no-menu --settings fm/s.ini --line image --walk "0,0" --press "E,J,Z" --screenshot openpng.png 2>&1 | tr -d '\r' | q "viewing its PIXELS, 10 x 10 at "
+$H --no-menu --settings fm/s.ini --warp "hello world" --press "J,Z" --screenshot opentxt.png 2>&1 | tr -d '\r' | q "viewing its TEXT, "
+grep -c . fm/viewers-needed.txt | q "^1$"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Up,Return" --screenshot pworld-case.png > /dev/null

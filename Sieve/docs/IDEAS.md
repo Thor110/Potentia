@@ -8037,8 +8037,11 @@ be charted and fold the system in on itself to link everything from every concei
   its viewer; models, worlds and books can be favourites, kept by their place on the line (so one kept
   from a compacted line opens with the filters off); a file, which has no viewer of its own yet, is
   shown as hex and its kind (file-kinds-v1) noted once in `viewers-needed.txt` beside the settings.
-  *Next:* files opened by their kind in the viewers that exist (a PNG as a picture, a WAV as sound), so
-  only kinds with none are flagged; and choosing a viewer or a part where an item has several.
+  Then files by their kind: a table (kind to viewer, client/viewer.cpp) sends PNG, JPEG, GIF and BMP to
+  the picture viewer (sieve-view's reader, picture_source.cpp, its limits checked first) and text kinds
+  (TXT, BOOK, MANIFEST) to the text view; only kinds with neither are flagged. *Next:* sound (WAV,
+  FLAC, MP3, MID) to the audio line's player, models (.obj, glTF) to the 3D view, archives to a listing
+  of their members; and choosing a viewer or a part where an item has several.
 
 **19.201 A documentation viewer on the main menu, laid out as a help library (Edward, 13 November 2026).
 An idea for now.** His words: "we should also add a documentation viewer to the main menu", "which would
@@ -8079,6 +8082,22 @@ and user is something that requires a user to test it such as myself".
   run only the steps that depend on them.
 - *Fits with:* the CI's `Item:ID` presses (rows chosen by name, so a shot survives a menu's reordering),
   §19.196 (screens as data: the list of screens is the list of shots), and task 32 (the website).
+
+**19.203 The Character Creator: limbs added, taken away and dragged by their joints (Edward, 13 November
+2026). An idea for now.** His words: "the character creator needs the ability to add and remove limbs, as
+well as drag them around by their connections, think spore or the sims".
+- *What it would be:* on the Character Creator's drawing, a click picks a sphere (a joint); dragging it
+  moves it, and the limb beyond it follows, its bones keeping their lengths unless a key stretches them.
+  A key (or a button by the sphere) grows a new limb from the chosen sphere, and another takes away the
+  chosen limb and all beyond it; a limb's joints can be added or taken away the same way. Mirrored
+  characters (bilateral or radial symmetry) change on every side at once, as the symmetry says.
+- *What it changes:* a character edited so is no longer made from its seed alone. It is kept as its
+  spheres (as a character made from a glTF skeleton is, `sieve-character-v3`), its seed and settings
+  shown as `-`, and its SHA-256 still names it; an edit can be undone, and its actions' animations are
+  checked again against its bones.
+- *Fits with:* §19.186 (the Character Creator and its actions), §19.194 (modelling tools in the
+  dimensions: the same dragging of points), and §19.196 (one shared way of doing a thing: dragging a
+  joint here and moving an object in a dimension should feel the same).
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

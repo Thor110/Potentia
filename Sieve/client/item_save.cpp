@@ -193,7 +193,8 @@ std::optional<std::pair<std::vector<uint8_t>, std::string>> Hallway::view_file()
     const Book& bk = *in_hand_;
     switch (view_kinds_[view_at_])
     {
-    case ViewKind::Raw: return std::nullopt;
+    case ViewKind::Raw:
+    case ViewKind::Opened: return std::nullopt; // (the file itself)
     case ViewKind::Title:
     {
         std::string t = bk.parts ? utf8_encode(unit_line(LineKind::Text).space.text_of(bk.parts->title)) : title_text(bk);
