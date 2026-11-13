@@ -77,7 +77,10 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
                 {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "replays"}, {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
-    case Screen::Personal: return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
+    case Screen::Personal:
+        return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_features"}, {Kind::Action, "personal_others"}, {Kind::Action, "personal_groups"}, {Kind::Action, "back"}};
+    // A dimension's features (IDEAS 19.197): each to be turned on or off by whoever walks it.
+    case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
     case Screen::Systems: return {{Kind::Action, "systems_formats"}, {Kind::Action, "systems_language"}, {Kind::Action, "back"}};
     case Screen::Settings:
@@ -137,6 +140,8 @@ std::string MainMenu::value_of(const Item& it) const
         return size + "  [" + (replay_cached(i) ? "x" : " ") + "] " + tr("value.replay.cache");
     }
     if (it.id == "online") return onoff(s_.online);
+    if (it.id == "personal_map") return onoff(s_.personal_map);
+    if (it.id == "personal_compass") return onoff(s_.personal_compass);
     if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
@@ -315,6 +320,7 @@ void MainMenu::back()
     case Screen::Programs: screen_ = Screen::Settings; select("programs"); return;
     case Screen::Raid: screen_ = Screen::Settings; select("raid"); return;
     case Screen::Game: screen_ = Screen::Settings; select("game_systems"); return;
+    case Screen::Features: screen_ = Screen::Personal; select("personal_features"); return;
     case Screen::Replays: screen_ = Screen::Main; select("replays"); return;
     case Screen::Personal: screen_ = Screen::Main; select("personal"); return;
     case Screen::Systems: screen_ = Screen::Main; select("systems"); return;
@@ -339,6 +345,7 @@ void MainMenu::change(int dir)
         else if (it.id == "manual_nav") { result_ = Result::ManualNav; done_ = true; }
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
+        else if (it.id == "personal_features") { screen_ = Screen::Features; row_ = 0; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
         else if (it.id == "creator") { result_ = Result::Creator; done_ = true; } // the character creator (IDEAS 19.186)
         else if (it.id == "replays") { read_replays(); screen_ = Screen::Replays; row_ = 0; }
@@ -400,6 +407,8 @@ void MainMenu::change(int dir)
             hallway::raid_service::apply(s_, path_);
         }
         else if (it.id == "ai_explorers") s_.ai_explorers = !s_.ai_explorers;
+        else if (it.id == "personal_map") s_.personal_map = !s_.personal_map;
+        else if (it.id == "personal_compass") s_.personal_compass = !s_.personal_compass;
         else if (it.id == "raid_share")
         {
             // Opt in: turned on, your key is made if there is none (said, with where), so what is sent
@@ -659,12 +668,13 @@ void MainMenu::render()
                           : screen_ == Screen::Raid ? "screen.raid"
                           : screen_ == Screen::Replays ? "screen.replays"
                           : screen_ == Screen::Game ? "screen.game"
+                          : screen_ == Screen::Features ? "screen.features"
                                                         : nullptr;
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
-                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game;
+                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features;
     const float rowh = screen_ == Screen::Main ? 44.0f : 36.0f, boxw = std::min(W - 60, 760.0f);
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();

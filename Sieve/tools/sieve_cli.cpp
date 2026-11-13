@@ -1409,6 +1409,32 @@ sieve::FormatStat measure_one_file(const Args& a, const std::filesystem::path& f
 
 int cmd_catalogue(const Args& a)
 {
+    // --check-records FILE (first: it needs nothing else, so nothing else can stop it): each line read as a measured-figure record (sieve-format-stat-v1), and
+    // said whether it is one and, if not, why (CI sets these beside format-stat-record-v1's verdicts).
+    if (a.has("check-records"))
+    {
+        std::ifstream in(sieve::from_u8(a.get("check-records")), std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + a.get("check-records"));
+        size_t good = 0, bad = 0;
+        std::string l;
+        while (std::getline(in, l))
+        {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            try
+            {
+                (void)sieve::read_format_stat(l);
+                ++good;
+                std::cout << "record     pass  " << l << "\n";
+            }
+            catch (const std::exception& e) // (any reason it is not one: a verdict for every line)
+            {
+                ++bad;
+                std::cout << "record     FAIL  " << l << "  (" << e.what() << ")\n";
+            }
+        }
+        std::cout << good << " records, " << bad << " not\n";
+        return bad ? 1 : 0;
+    }
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
     // data/catalogue and data/languages in the Sieve folder, else beside the program (where the build
     // copies them): one web (IDEAS 19.183). --folder DIR reads that one folder instead.
@@ -1437,32 +1463,6 @@ int cmd_catalogue(const Args& a)
         return nullptr;
     };
     const std::filesystem::path stats = sieve::format_stats_folder(a.get("stats-folder", ""));
-    // --check-records FILE: each line read as a measured-figure record (sieve-format-stat-v1), and
-    // said whether it is one and, if not, why (CI sets these beside format-stat-record-v1's verdicts).
-    if (a.has("check-records"))
-    {
-        std::ifstream in(sieve::from_u8(a.get("check-records")), std::ios::binary);
-        if (!in) throw std::invalid_argument("cannot read " + a.get("check-records"));
-        size_t good = 0, bad = 0;
-        std::string l;
-        while (std::getline(in, l))
-        {
-            if (!l.empty() && l.back() == '\r') l.pop_back();
-            try
-            {
-                (void)sieve::read_format_stat(l);
-                ++good;
-                std::cout << "record     pass  " << l << "\n";
-            }
-            catch (const std::invalid_argument& e)
-            {
-                ++bad;
-                std::cout << "record     FAIL  " << l << "  (" << e.what() << ")\n";
-            }
-        }
-        std::cout << good << " records, " << bad << " not\n";
-        return bad ? 1 : 0;
-    }
     if (a.has("measure"))
     {
         namespace fs = std::filesystem;

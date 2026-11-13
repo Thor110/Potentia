@@ -12,6 +12,7 @@
 // Rows are numbered, and the numbers appear in the row table, the filter mapping and the tests
 // alike, so a row inserted in the middle moves everything after it.
 #include "menu.hpp"
+#include "slide_panel.hpp"
 #include "raid_service.hpp"
 #include "speech.hpp"
 #include "dialogs.hpp"
@@ -99,9 +100,9 @@ constexpr float kMapX = 620;
 // The settings panel (Menu::panel_): how long it takes to slide in or out, how long the dimensions
 // must be calculating before it slides out (a fifth of a second, as CALCULATING waits before it
 // shows, so a quick count does not flick it), and the SETTINGS tab at the left edge while it is out.
-constexpr float kPanelSlideMs = 180;
+constexpr float kPanelSlideMs = kSlideMs; // (slide_panel.hpp: every sliding panel the same)
 constexpr Uint64 kPanelCalcNs = 200'000'000;
-constexpr float kPanelTabW = 20;
+constexpr float kPanelTabW = kSlideTabW;
 // The right-hand panel's width (Menu::side_), and its tab's.
 constexpr float kSideW = 460;
 // The map's columns are never narrower than this (a line's name and its glass, and its figures).

@@ -18,6 +18,9 @@ exe=build/sieve
 W="it was the best of times"
 book() { grep -o 'first book [0-9a-f.]*' | tail -1; }
 $H --screenshot hallway.png --size 640x360
+# docs/SETTINGS.md is written from the code (tools/settings_doc.py, IDEAS 19.134): it must say what
+# --write-settings writes, every setting, its default and what it is.
+python tools/settings_doc.py "$H" --check
 test -s hallway.png
 # The metrics list (hallway --metrics, no window): every line under the reference filters,
 # as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954%.
@@ -471,10 +474,10 @@ test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
-# pages line as its alphabet. (document's 6: text and image above it; the manifest, PDF and the
-# catalogue's two record formats beneath.)
+# pages line as its alphabet. (document's 7: text and image above it; the manifest, PDF, the
+# catalogue's two record formats and the hallway's recordings, sieve-replay-v1, beneath.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 6 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 7 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
@@ -1482,6 +1485,29 @@ grep -c "^place audio " pw/p.world | q "^1$"
 $H --personal-world --world-file pw/p.world --screenshot pworld2.png | tr -d '\r' | q "; 2 objects placed$"
 $H --personal-world --world-file pw/p.world --press "Backspace" --screenshot pworld3.png | tr -d '\r' | q "; 1 objects placed$"
 grep -c "^place " pw/p.world | q "^1$"
+# Its features (IDEAS 19.197), Personal Dimensions > Features: the map and the compass, each on until
+# turned off there, and kept in the settings file.
+$H --personal-world --world-file pw/p.world --screenshot pworld-features.png | tr -d '\r' | q "^features: map on, compass on$"
+$H --main-menu --settings pw/f.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_map,Return" --screenshot features-menu.png > /dev/null
+grep -c "^map = off" pw/f.ini | q "^1$"
+$H --personal-world --settings pw/f.ini --world-file pw/p.world --screenshot pworld-nomap.png | tr -d '\r' | q "^features: map off, compass on$"
+# Holding (IDEAS 19.192): E picks up what the crosshair is on, R and T turn it, Return places it where
+# it is held (here a little above the grass, tipped), and the world is written as v2 for it; Q drops one,
+# which falls and comes to rest on the grass; both read back. A v2 line this build does not know is
+# kept and written back.
+$H --personal-world --world-file pw/h.world --pworld-look -45 --press "Tab,Return,Tab,e,r,r,t,Return" --screenshot pworld-held.png | tr -d '\r' | q "; pages placed at [-0-9.]*, 0\.[0-9]*, "
+head -1 pw/h.world | tr -d '\r' | q "^sieve-personal-world-v2$"
+grep -c " fixed$" pw/h.world | q "^1$"
+$H --personal-world --world-file pw/d.world --pworld-look -45 --press "Tab,Return,Tab,e,Q" --pworld-wait 3 --screenshot pworld-drop.png | tr -d '\r' | q "; pages dropped at [-0-9.]*, 0\.00, "
+grep -c " physics$" pw/d.world | q "^1$"
+$H --personal-world --world-file pw/d.world --screenshot pworld-drop2.png | tr -d '\r' | q "; pages dropped at [-0-9.]*, 0\.00, "
+# Place (Tab while holding, a panel sliding in as the setup menu's do): exact numbers typed into its
+# rows, then placed there: x 1.5, y 25 m, a 45 degree turn, tipped 10 by two steps of 5.
+$H --personal-world --world-file pw/x.world --pworld-look -45 --press "Tab,Return,Tab,e,Tab,1,.,5,Return,Down,2,5,Return,Down,Down,4,5,Return,Down,Right,Right,Down,Down,Return" --screenshot pworld-place.png | tr -d '\r' | q "; pages placed at 1\.50, "
+grep -c "^place pages 1.5 25 [-0-9.]* 0.785398185 0.17453292 0 fixed$" pw/x.world | q "^1$"
+printf 'sieve-personal-world-v2\nseed 0\nfuture-thing 1 2 3\nplace pages 0 30 -55 0 0 0 fixed\n' > pw/k.world
+$H --personal-world --world-file pw/k.world --press "Backspace" --screenshot pworld-kept.png | tr -d '\r' | q "; 0 objects placed$"
+grep -c "^future-thing 1 2 3$" pw/k.world | q "^1$"
 printf 'sieve-personal-world-v1\nseed 0\nplace nothing-such 0 0 0\nplace pages 1 2 3\n' > pw/bad.world
 $H --personal-world --world-file pw/bad.world --screenshot pworld4.png | tr -d '\r' | q "; 1 objects placed$"
 out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)

@@ -6075,6 +6075,10 @@ after it became the Priority button). Two ways, by kind of text:
   (FORMATS.md), once those are one table in the code that the packer reads too.
 - *Checked prose:* the explanations stay written by hand, and the CI looks in them for facts that
   go out of date (a version named as the default, a box that became a button).
+- *First generated block built (13 November 2026, ROADMAP 5c A5):* docs/SETTINGS.md, every setting with
+  its default and what it is, written by `tools/settings_doc.py` from `hallway --write-settings` (the
+  settings' own table), and CI step 10 fails where the committed file differs. Next: each screen's keys
+  from data/lang/en.txt, and the newest frozen version and default training version named in prose.
 
 **19.135 Sieve's own voice (Edward, 9 November 2026; begun).** "we should also gather some voice
 samples from public domain spaces that can be used to train the new small voice model ... make it a
@@ -6837,7 +6841,11 @@ trilogy engine reimplementation of mine altengine previously discussed".
   option: the same switch, named the same, so a test in one is a test in the other.
 - *Built so far:* nothing spawns yet (the character beside you is yours, not an AI), so the switch
   waits for the first spawned characters; it is to be built with them, not before, so it is never a
-  setting that does nothing.
+  setting that does nothing. (*Settled 13 November 2026, with §19.189:* both live on Settings > Game
+  Systems under `[game]`. **AI in the hallway** is the AI Explorers toggle already there
+  (`[game] ai_explorers`, off by default): one switch, the same as ALTEngine's "disable AI spawn". **AI-made
+  content** will be `[game] ai_content` (shown, marked or hidden) on the same screen, added when there is
+  content it acts on, so no setting is ever one that does nothing.)
 - *A human-written Sieve beside an AI-written one:* Sieve as it stands is AI-assisted throughout
   (the README says so, §9.7, §19.66). A second Sieve written by hand (in assembly, or any language a
   person chooses) would be its own line in the source tree (§19.11 c), named as human-made by its
@@ -7803,6 +7811,16 @@ and leave its physics flag on so that it can be kicked or bounce / interact with
   RAID uses (§19.178), a single author (you) until that exists; and a small physics step (gravity,
   ground and box contacts, rest) run the same on every machine, so a dropped thing comes to rest in the
   same place everywhere (fixed time step, as replay's, §19.184).
+- *Built 13 November 2026 (the first part):* E (or a click) picks up what the crosshair is on into your
+  hand, two metres along the crosshair; R, T and G turn it about the vertical, its side and its front
+  (15 degrees, Shift the other way); Return (or a click) places it exactly there, floating if in the air;
+  Q drops it, and a fixed 1/120 s physics step (gravity, the grass, a small bounce, friction, knocks when
+  walked into, things pushed apart) brings it to rest; Esc puts it back. O opens (for shelf items it says
+  they are not items of a line). Every world is yours alone, so you are always its author for now. Kept as
+  `sieve-personal-world-v2` (SPECIFICATIONS §12.0r) once anything is off the ground, tipped or dropped;
+  lines it does not know are kept and written back. Measured here: a page dropped from the hand comes
+  to rest on the grass within 3 s; a book walked into is knocked 2.6 m on and rests. *Left:* turning as it
+  falls (it falls upright as it was held), and visitors (with identity).
 - *Order:* with favourites, in one new world version: `sieve-personal-world-v2` carries the 3D place,
   the three turns, the physics flag, favourites and authors together, so the file is not bumped again for
   each (v1 stays readable; a world using none of them is still written as v1).
@@ -7879,6 +7897,83 @@ just has to find that number rather than go up or down a select set or number of
   visualisation, then menu layouts of a person's own (after §19.188's reorder, which becomes the
   default layout).
 
+**19.196 Menus and layouts as data: a state space of the interface, and everything dynamic and modular
+(Edward, 13 November 2026). An idea for now, and a rule to build by.** His words: "all sliding windows
+should work the same way as they do in the sieve setup menu throughout the system", "sliding menus and
+menu menus as well as any other type of menu or layout can become a system of data types that can
+further be used to shuffle up the way things are laid out, so people could remove or disable menus at
+will or change the way they are presented to the user", "this would slowly fold out into another state
+space for UI or accessibility, not sure which state space currently but it would fold out into one like
+many others, the name isn't that important", "the aim should be for everything and anything to be
+dynamic and modular", and "such that in theory anyone could turn it into anything, this is something we
+should always keep in mind when building systems for sieve".
+- *Built toward it, the same day:* one sliding panel for everything (`client/slide_panel.hpp`: the setup
+  menu's 180 ms slide and its tab at the edge); the setup menu's settings panel takes its timing from it,
+  and the personal world's catalogue and Place panels are made of it. Menu rows have names (`Item:ID`,
+  §19.188), so a layout can name what it moves.
+- *The idea:* every menu, panel and row a piece of data (what it is, where it stands, whether it is
+  shown, how it is drawn), so a person's layout can move, hide, add or restyle any of them, and layouts
+  are kept, shared and walked like any other data: a state space of interfaces, with accessibility as
+  one of its directions (larger text, read aloud, fewer rows; §19.143, §19.160). Its name can wait.
+- *The rule kept from now on:* build each system so it can be taken apart and put together otherwise:
+  its parts named, its state as data, its look apart from what it does, nothing fixed that need not be.
+  Written into the ROADMAP's rules.
+
+**19.197 A map and a compass in the personal dimensions, each a feature to turn on or off (Edward, 13
+November 2026).** His words: "a map and a compass would be worthwhile features to add to the personal
+dimensions system, these should be accessible and togglable under a dimension -> feature settings page
+so that they can be turned on or off for users that do or dont want them". *Built the same day:* the
+compass along the top (the 120 degrees about where you face, a tick every 15, N, E, S and W, the bearing
+in degrees; north is +z, the way a world first faces you), the map at the top right (the whole world
+from above, north up, the ground shaded by height or, with Real Graphics off, drawn as contours; what is
+placed as dots, yellow while a dropped thing still moves; your characters as rings; you as an arrow),
+and Main menu > Personal Dimensions > Features, where each is turned on or off (`[personal] map`,
+`compass`, both on by default). The features page is the place for every later one (a clock, the
+grid, a trail of where you walked), each its own row, as §19.196 asks. *Next:* the map zoomed in and
+out, places marked on it, and other people's dimensions' features as their authors set them.
+- *The map and what is over your head (Edward, the same day):* "we will also need a way to determine if
+  line of sight is blocked for minimap rendering, for example a roof above a player, in this instance the
+  roof would not be drawn unless it was underneath the player, this would allow for dynamic mapping of
+  building interiors onto the minimap". So the map draws, at each place, the highest surface that is
+  still below you, not simply the highest: a roof above your head is left out (it hides nothing on the
+  map), a floor under you is drawn, and walking inside a building shows its rooms; on the stairs the map
+  changes floor with you. How: for each map cell, the surfaces there (ground and objects' upward faces)
+  sorted by height, and the first under your feet (with a margin of a storey, so a step does not flicker)
+  is drawn; walls are drawn where a surface drawn and one not drawn meet. Cheap enough to work out
+  again whenever you change level, not every frame. Waits for things to build with (the bookcase, your
+  own objects, the modelling tools of §19.194): today the world has ground and small objects only.
+
+**19.198 A door that makes a maze: an object with settings, its space inside it or in the world (Edward,
+13 November 2026). An idea for now.** His words: "a default object we could place in the world is a door
+with a maze generator, the door would have settings and would generate a maze space accordingly, the
+maze could either be in its own 'dimension' IE : not physically in the personal dimension space or it
+could be a part of the personal dimension space, this would be toggleable", "many togglable settings
+like this would only be accessible to the author of the personal dimension", and "realistically it is
+just door(data) + ruleset(mazes) so it already follows along from the core concepts and systems
+naturally".
+- *What it is:* a door in the catalogue. Placed, it carries settings (the maze's size, its seed, its
+  kind of cell: squares, hexagons, the layouts of §19.191; how winding; one way through or many) and
+  one switch: **its own space** (walking through the door takes you into the maze, a dimension of its
+  own, and its far door brings you back) or **in the world** (the maze's walls stand on the hill, beside
+  the door). The same seed and settings make the same maze on every machine, as a world's seed makes
+  its hill.
+- *How it fits:* data + ruleset (§19.191): the door is the data, a maze generator (a recursive
+  backtracker, Prim's or Wilson's algorithm, each a ruleset) is the ruleset, and the maze is the item
+  they make, kept as the door's settings, never as its walls. A maze in its own space is a dimension
+  like any other, so it has its own features (§19.197), its map drawn as it is explored.
+- *Authors only:* the door's settings, and the like for every object with settings, are changed only by
+  the dimension's authors (§19.192); a visitor walks the maze as it is set.
+- *In the world file:* a v2 `place door ...` line, followed by its settings as a `settings` line naming
+  that object (a later line kind, kept by older builds as §12.0r's v2 keeps every line it does not know).
+- *Where its rules come from (Edward, the same day):* "its rules can be pulled from the fractal
+  dimension accordingly, the fractal dimension itself would be fractal in nature as there would be sub
+  dimensions for things like maze generation algorithms and much more". So the maze generator is not
+  written into the door: it is chosen from the fractal dimension (§19.191), which is itself made of
+  dimensions (mazes, tilings, L-systems, iterated function systems, and more as they come), each a
+  line of its own rulesets, each able to hold dimensions of its own; the door names the ruleset it
+  uses by its address, so a new maze generator found there is one a door can use at once.
+- *Idea only;* after favourites (§19.190) and the layouts of §19.191, whose cells it uses.
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non
@@ -7901,6 +7996,9 @@ about anything else using an object and a ruleset or a ruleset and a ruleset".
   (tilings, L-systems, iterated function systems, substitution rules), so the dimension of rulesets is a
   line like any other, every ruleset of the grammar up to its length at its address, walked, filtered
   (does it terminate, does it tile) and favourited (§19.190).
+- *Fractal in itself (Edward, 13 November 2026):* the fractal dimension has sub-dimensions (maze
+  generation algorithms among them, §19.198, "and much more"), each a line of rulesets of one family,
+  each free to hold sub-dimensions of its own, so the dimension of rules has the shape of what it holds.
 - *Third part: making things.* A ruleset applied to an object (a shelf item, a picture, a model, a
   world) makes another: an iterated function system drawn from a picture's pieces, an L-system grown from
   a model, a world's ground laid out by a tiling. A ruleset applied to a ruleset makes a ruleset: one

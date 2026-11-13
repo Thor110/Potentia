@@ -33,6 +33,7 @@
 #include <SDL3/SDL.h>
 
 #include "sieve/character.hpp"
+#include "slide_panel.hpp"
 
 #include <array>
 #include <cstdint>
@@ -55,10 +56,14 @@ public:
     // For pictures and tests: a key as if pressed and held for `seconds`, the frame drawn, and where
     // you stand.
     void hold(SDL_Scancode key, float seconds);
-    void press(SDL_Keycode key); // the catalogue's keys (Tab, Up, Down, Enter, Backspace), as if typed
+    void press(SDL_Keycode key, SDL_Keymod mod = SDL_KMOD_NONE); // the world's keys, as if typed
+    void look(float pitch_degrees) { pitch_ = pitch_degrees * 3.14159265f / 180.0f; } // (for pictures and tests)
     void render();
+    void settle_panels() { cat_panel_.settle(), place_panel_.settle(); } // (a picture: the panels where they are going)
     // Real Graphics off: the characters drawn as the wireframe (rings and bones), as everywhere else.
     void set_wireframe(bool on) { wireframe_ = on; }
+    // Its features (IDEAS 19.197), as Personal Dimensions > Features has them: the map and the compass.
+    void set_features(bool map, bool compass) { show_map_ = map, show_compass_ = compass; }
     std::string report() const;
     float height(float x, float z) const; // the ground's height there, in metres
     float ground(float x, float z) const; // the same as drawn (the cells' flat triangles)
@@ -77,18 +82,39 @@ private:
     struct Placed
     {
         std::string kind;
-        float x = 0, z = 0, yaw = 0;
+        float x = 0, y = 0, z = 0;           // where it stands (y up; its foot, the model's y = 0)
+        float yaw = 0, pitch = 0, roll = 0;  // its turns, in that order (sieve-personal-world-v2)
+        bool physics = false;                // dropped: falls, rests and can be knocked; else placed
+        float vx = 0, vy = 0, vz = 0;        // (physics: its velocity, metres a second)
+        bool resting = true;
     };
     std::vector<Placed> placed_;
+    std::vector<std::string> kept_lines_; // a v2 file's lines this build does not know, written back unchanged
+    int held_ = -1;                       // the object in your hand (picked up to the cursor), or none
+    Placed held_from_;                    // where it was, for Esc (put back)
+    float physics_left_ = 0;              // time not yet stepped by the fixed physics step
+    bool unsaved_rest_ = false;           // something came to rest since the last save
+    // The object under the crosshair, within reach, or -1.
+    int aimed() const;
+    // Physics, in fixed steps of 1/120 s, so the same drop rests in the same place on every machine.
+    void physics_step(float dt, float move_x, float move_z);
+    // An object's shape as its turns make it: the drop from its origin to its lowest point, and how
+    // far it reaches across (for knocks and aiming).
+    static void extent_of(const Placed& p, float& low, float& high, float& across);
     std::filesystem::path file_;
-    bool catalogue_open_ = false;
+    // The panels slide in from the left as the setup menu's do (slide_panel.hpp), one at a time: the
+    // catalogue, and while something is in your hand, Place (its exact place and turns).
+    SlidePanel cat_panel_, place_panel_;
+    int place_row_ = 0;       // Place: the row chosen (x, y, z, yaw, pitch, roll, then "place it")
+    std::string place_edit_;  // Place: a number being typed into the chosen row
+    void place_key(SDL_Keycode k, SDL_Keymod mod);
     int catalogue_row_ = 0;
     std::string note_;
     void load();
     void save();
-    void key(SDL_Keycode k);
+    void key(SDL_Keycode k, SDL_Keymod mod = SDL_KMOD_NONE);
     // An object's faces, in the world: triangles (three points each) and their colour.
-    static void faces_of(const Placed& p, float ground, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out);
+    static void faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out);
     bool project(float x, float y, float z, float& sx, float& sy, float& depth) const;
     SDL_Window* window_;
     SDL_Renderer* r_;
@@ -98,6 +124,12 @@ private:
     std::vector<Cloud> clouds_;
     float px_ = 0, pz_ = -60, yaw_ = 0, pitch_ = -0.05f; // where you stand, and which way you look
     bool wireframe_ = false;
+    bool show_map_ = true, show_compass_ = true;
+    void draw_map();
+    void draw_compass();
+    // Whether you may pick things up and place them here (an author) or only open them (a visitor):
+    // every world is yours alone until identity exists (IDEAS 19.178), so always an author for now.
+    bool author_ = true;
     float wind_ = 0;                                     // how far the clouds have drifted
     float W_ = 1280, H_ = 720;
 };

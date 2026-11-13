@@ -239,6 +239,11 @@ AppSettings AppSettings::load(const fs::path& path)
         {
             if (key == "enabled") s.online = on_off(value, false);
         }
+        else if (section == "personal")
+        {
+            if (key == "map") s.personal_map = on_off(value, true);
+            else if (key == "compass") s.personal_compass = on_off(value, true);
+        }
         else if (section == "game")
         {
             if (key == "ai_explorers") s.ai_explorers = on_off(value, false);
@@ -412,6 +417,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"replays", "min_free_mb", std::to_string(replays_min_free_mb), "the least free space, in MB, kept where recordings are written: checked every few seconds while one runs, and below it (or below twice the recording's size, if more) the recording stops and is kept (256 by default)"},
         {"replays", "cached", replays_cached, "recordings kept as .sieve that are decoded once into the cache (beside the filters') rather than each time they are played, useful for long ones: their files' SHA-256s, separated by commas (the replay viewer's checkbox, one a recording); empty: none"},
         {"online", "enabled", on_off(online), "off (the default): nothing in Sieve reaches another machine, whatever else is set (Sieve needs no network); on: the online systems may run where their own settings are on too (the infinite RAID's share and serve)"},
+        {"personal", "map", on_off(personal_map), "your personal dimension's map, top right: the hill from above, you and what is placed (IDEAS 19.197); on by default"},
+        {"personal", "compass", on_off(personal_compass), "your personal dimension's compass, along the top: which way you face, north being +z (IDEAS 19.197); on by default"},
         {"game", "ai_explorers", on_off(ai_explorers), "AI Explorers in the state space (IDEAS 19.189): off (the default) or on; not built yet, so nothing reads it until they are"},
         {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
         {"raid", "copies", std::to_string(raid_copies), "with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer"},

@@ -186,7 +186,11 @@ const char* kUsage =
     "                      commas, 60 the middle C) held sounding; --rings-zoom N steps in (0 to 2)\n"
     "  --personal-world    with --screenshot: your personal dimension's world (a grassy hill, your characters),\n"
     "                      --pworld-walk S walked first, --press to its catalogue (Tab, Up, Down, Return,\n"
-    "                      Backspace), --pworld-back S walked back after; --world-file FILE what is placed\n"
+    "                      Backspace; E picks up what the crosshair is on, R/T/G turn it, Return places it, Q\n"
+    "                      drops it; Tab while holding opens Place: exact numbers), --pworld-look DEG looks up or\n"
+    "                      down first, --pworld-wait S lets what was dropped fall, --no-map and --no-compass\n"
+    "                      leave those out (as Personal Dimensions > Features can), --pworld-back S walked\n"
+    "                      back after; --world-file FILE what is placed\n"
     "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
     "                      input with its time), written each time you leave it; FILE.sieve: packed\n"
     "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
@@ -1514,13 +1518,22 @@ int run(const Args& a)
                                                               : std::filesystem::path();
         hallway::PersonalWorld world(window, renderer, std::move(chars), wf);
         world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
+        world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
         if (a.has("pworld-walk")) world.hold(SDL_SCANCODE_W, std::stof(a.get("pworld-walk")));
+        if (a.has("pworld-look")) world.look(std::stof(a.get("pworld-look")));
         if (a.has("press"))
-            for (const auto& [key, mod] : parse_presses(a.get("press"))) world.press(key);
+            for (const auto& [key, mod] : parse_presses(a.get("press")))
+            {
+                world.press(key, mod);
+                world.hold(SDL_SCANCODE_UNKNOWN, 1.0f / 60); // (a frame between keys: what is held follows the crosshair)
+            }
+        if (a.has("pworld-wait")) world.hold(SDL_SCANCODE_UNKNOWN, std::stof(a.get("pworld-wait"))); // (what was dropped falls and rests)
+        world.settle_panels(); // (a picture shows the panels where they are going, as the setup menu's do)
         if (a.has("pworld-back")) world.hold(SDL_SCANCODE_S, std::stof(a.get("pworld-back"))); // (to see what was placed)
         world.render();
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "personal world: " << world.report() << "\n";
+        std::cout << "features: map " << (app.personal_map && !a.has("no-map") ? "on" : "off") << ", compass " << (app.personal_compass && !a.has("no-compass") ? "on" : "off") << "\n";
         if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
         return finish();
@@ -1900,6 +1913,7 @@ int run(const Args& a)
                 for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
                 hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
                 world.set_wireframe(!app.real_graphics);
+                world.set_features(app.personal_map, app.personal_compass);
                 if (world.run() == hallway::PersonalWorld::Result::Quit) break;
                 continue;
             }

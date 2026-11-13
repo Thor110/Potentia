@@ -102,11 +102,16 @@ def main():
     path = os.path.join(work, "stat-records.txt")
     with open(path, "w", encoding="ascii", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
-    reader = subprocess.run([sieve, "catalogue", "--check-records", path], capture_output=True, text=True).stdout.splitlines()
-    judge = subprocess.run([sieve, "filters", "--plugin", plugin, "--length", "100", "--judge", path], capture_output=True, text=True).stdout.splitlines()
-    reader = [l for l in reader if l.startswith("record ")]
-    judge = [l for l in judge if l.startswith("judge ")]
-    assert len(reader) == len(lines) == len(judge), (len(reader), len(lines), len(judge))
+    # (bytes, decoded as UTF-8 here: a reason may hold any character, whatever the system's code page)
+    rr = subprocess.run([sieve, "catalogue", "--check-records", path], capture_output=True)
+    jr = subprocess.run([sieve, "filters", "--plugin", plugin, "--length", "100", "--judge", path], capture_output=True)
+    reader = [l for l in rr.stdout.decode("utf-8", "replace").splitlines() if l.startswith("record ")]
+    judge = [l for l in jr.stdout.decode("utf-8", "replace").splitlines() if l.startswith("judge ")]
+    if not len(reader) == len(lines) == len(judge):
+        # Say why, from each program's own words, rather than only the counts.
+        raise SystemExit(f"verdicts: {len(reader)} from the reader (exit {rr.returncode}), {len(judge)} from the plugin (exit {jr.returncode}), "
+                         f"for {len(lines)} lines\nthe reader said: {rr.stderr.decode('utf-8', 'replace')[-2000:]}\n"
+                         f"the plugin said: {jr.stderr.decode('utf-8', 'replace')[-2000:]}")
     agree = order = 0
     for line, rv, jv in zip(lines, reader, judge):
         r_pass = rv.split()[1] == "pass"

@@ -160,6 +160,9 @@ struct AppSettings
     // Game systems (Settings > Game Systems): AI Explorers, AI-driven explorers walking the state
     // space (IDEAS 19.189), off by default; the switch they will answer to, ready before they come.
     bool ai_explorers = false;
+    // Your personal dimension's features (IDEAS 19.197): the map and the compass, each on by default and
+    // each to be turned off (Personal Dimensions > Features).
+    bool personal_map = true, personal_compass = true;
     std::string raid_peers, raid_key, raid_listen = "0.0.0.0:47100", raid_held;
     int raid_space_mb = 1024, raid_per_peer_mb = 64;
     // Recordings kept packed (.sieve) that are decoded once into the cache rather than each time they

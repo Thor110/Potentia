@@ -36,6 +36,12 @@ roadmap then freeze v34". Each step finished before the next, unless said.
    setup menu's YOURS. (*Built 13 November 2026, with a catalogue of Sieve's shelf items to place, kept in
    `data/objects/shelf-items.sieve`, and placements kept as `sieve-personal-world-v1`; also Online, off
    by default, and Game Systems with AI Explorers, IDEAS §19.189.*)
+**A rule for everything built from here** (Edward, 13 November 2026; IDEAS §19.196): "the aim should be
+for everything and anything to be dynamic and modular, such that in theory anyone could turn it into
+anything". So each system's parts are named, its state is data, its look is kept apart from what it
+does, one way of doing a thing is shared rather than copied (one sliding panel, `client/slide_panel.hpp`),
+and nothing is fixed that need not be.
+
 5c. **After the personal world, in this order** (Edward, 13 November 2026: "try to aim to do things in an
    order that makes sense and prevents having to go backwards"). First, what the rest leans on:
    A1 menu rows chosen by name in every script (`Item:ID`; *built*), A2 `sieve-personal-world-v2`

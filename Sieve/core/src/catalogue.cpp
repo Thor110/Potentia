@@ -223,6 +223,9 @@ std::vector<FormatEntry> gather()
         "first line \"sieve-replay-v1\", then \"start line=...\"; often packed as a .sieve", "F12 in the hallway, --record and --replay, the Replays viewer (SPECIFICATIONS 12.0q; IDEAS 19.184)");
     own("sieve-personal-world-v1", "A personal dimension's world: its seed and what is placed in it", "model-3d",
         "first line \"sieve-personal-world-v1\", then \"seed N\" and \"place KIND X Z YAW\" lines", "your personal dimension (SPECIFICATIONS 12.0r; IDEAS 19.187)");
+    own("sieve-personal-world-v2", "A personal dimension's world in three dimensions: places, turns, placed or dropped", "model-3d",
+        "first line \"sieve-personal-world-v2\", then \"seed N\" and \"place KIND X Y Z YAW PITCH ROLL fixed|physics\" lines",
+        "your personal dimension: holding, placing and dropping (SPECIFICATIONS 12.0r; IDEAS 19.192)");
     own(kFormatVersion, "An entry of this catalogue", "document", std::string("first line \"") + kFormatVersion + "\"", "sieve catalogue");
     own(kFormatStatVersion, "A figure measured of a format, as it was used", "document", std::string("a line starting \"") + kFormatStatVersion + " date=\"",
         "sieve catalogue --measure and sieve import (SPECIFICATIONS 12.0p)");

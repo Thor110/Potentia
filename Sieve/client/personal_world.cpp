@@ -53,8 +53,9 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
     : window_(window), r_(renderer), characters_(std::move(characters)), file_(std::move(world_file)), seed_(seed)
 {
     load(); // (what was placed before, and the world's seed)
-    // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed.
-    uint64_t s = seed ^ 0x5049455253ull; // ("PIERS": the world's own stream)
+    // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed (the
+    // world file's, where it has one).
+    uint64_t s = seed_ ^ 0x5049455253ull; // ("PIERS": the world's own stream)
     swells_.push_back({(unit(s) - 0.5f) * 40.0f, 40.0f + (unit(s) - 0.5f) * 40.0f, 150.0f + unit(s) * 40.0f, 26.0f + unit(s) * 8.0f});
     for (int i = 0; i < 6; ++i)
         swells_.push_back({(unit(s) - 0.5f) * 500.0f, (unit(s) - 0.5f) * 500.0f, 40.0f + unit(s) * 60.0f, 3.0f + unit(s) * 10.0f});
@@ -66,6 +67,9 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
         for (int k = 0; k < puffs; ++k) c.puffs.push_back({(unit(s) - 0.5f) * 2.2f * c.size, (unit(s) - 0.3f) * 0.5f * c.size, (0.45f + unit(s) * 0.4f) * c.size});
         clouds_.push_back(std::move(c));
     }
+    // (a v1 world's objects stand on the ground, which is known only now)
+    for (Placed& p : placed_)
+        if (std::isnan(p.y)) p.y = ground(p.x, p.z);
 }
 
 // The ground as drawn: the height of the cell's triangle there (each 10 m cell two flat triangles
@@ -115,16 +119,29 @@ void PersonalWorld::step(float dt, const bool* keys)
     if (keys[SDL_SCANCODE_A]) fx -= 1;
     if (keys[SDL_SCANCODE_LEFT]) yaw_ -= 1.6f * dt;
     if (keys[SDL_SCANCODE_RIGHT]) yaw_ += 1.6f * dt;
+    float mx = 0, mz = 0; // (how you move, metres a second, for knocks)
     if (fx != 0 || fz != 0)
     {
         const float n = std::sqrt(fx * fx + fz * fz);
         fx /= n, fz /= n;
-        px_ += (fz * std::sin(yaw_) + fx * std::cos(yaw_)) * speed * dt;
-        pz_ += (fz * std::cos(yaw_) - fx * std::sin(yaw_)) * speed * dt;
+        mx = (fz * std::sin(yaw_) + fx * std::cos(yaw_)) * speed, mz = (fz * std::cos(yaw_) - fx * std::sin(yaw_)) * speed;
+        px_ += mx * dt, pz_ += mz * dt;
         px_ = std::clamp(px_, -kHalf + 5, kHalf - 5);
         pz_ = std::clamp(pz_, -kHalf + 5, kHalf - 5);
     }
     wind_ += dt * 2.0f;
+    if (held_ >= 0 && !place_panel_.open)
+    {
+        // In your hand: two metres along the crosshair, never under the grass (with Place open, where
+        // its numbers put it instead).
+        Placed& p = placed_[size_t(held_)];
+        const float ey = height(px_, pz_) + kEye;
+        p.x = px_ + std::sin(yaw_) * std::cos(pitch_) * 2.0f, p.y = ey + std::sin(pitch_) * 2.0f, p.z = pz_ + std::cos(yaw_) * std::cos(pitch_) * 2.0f;
+        float low, high, across;
+        extent_of(p, low, high, across);
+        p.y = std::max(p.y, ground(p.x, p.z) - low);
+    }
+    physics_step(dt, mx, mz);
 }
 
 void PersonalWorld::hold(SDL_Scancode key, float seconds)
@@ -139,6 +156,9 @@ void PersonalWorld::render()
     int w = 0, h = 0;
     SDL_GetRenderOutputSize(r_, &w, &h);
     W_ = float(w), H_ = float(h);
+    cat_panel_.step();
+    place_panel_.step();
+    if (held_ < 0) place_panel_.open = false, place_panel_.shown = 0;
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
     // The sky: deep blue overhead to pale at the horizon (where a level line meets the screen).
     const float f = (H_ / 2) / std::tan(kFov / 2), horizon = H_ / 2 + std::tan(pitch_) * f;
@@ -231,12 +251,12 @@ void PersonalWorld::render()
             const float eye_y = height(px_, pz_) + kEye;
             for (const Placed& p : placed_)
             {
-                const float g = ground(p.x, p.z);
+                const float g = p.y;
                 bool seen = true;
                 const float dx = p.x - px_, dz = p.z - pz_, d = std::sqrt(dx * dx + dz * dz);
                 for (float u = 2.0f / std::max(d, 2.0f); u < 1.0f && seen; u += 2.0f / std::max(d, 2.0f))
                     seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g + 0.5f - eye_y) * u;
-                if (seen) faces_of(p, g, faces);
+                if (seen) faces_of(p, faces);
             }
             for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7});
         }
@@ -405,20 +425,184 @@ void PersonalWorld::render()
         }
     }
     const SDL_Color white{255, 255, 255, 255}, grey{200, 200, 210, 255};
+    if (show_map_) draw_map();
+    if (show_compass_) draw_compass();
+    // The crosshair, and what it rests on: the keys for it (an author's; a visitor may only open).
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 200);
+    SDL_RenderLine(r_, W_ / 2 - 6, H_ / 2, W_ / 2 + 6, H_ / 2);
+    SDL_RenderLine(r_, W_ / 2, H_ / 2 - 6, W_ / 2, H_ / 2 + 6);
+    if (held_ >= 0) draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf("pworld.holding", {tr("pworld.object." + placed_[size_t(held_)].kind)}), 1, white);
+    else if (const int a = aimed(); a >= 0)
+        draw_text(r_, W_ / 2 + 14, H_ / 2 + 10, trf(author_ ? "pworld.aim" : "pworld.aim.visitor", {tr("pworld.object." + placed_[size_t(a)].kind)}), 1, white);
     draw_text(r_, 20, 16, tr("pworld.title"), 2, white);
-    if (catalogue_open_)
+    if (cat_panel_.shown > 0)
     {
-        // The catalogue: a list on a dark plate at the left, the one chosen marked.
+        // The catalogue: a list on a dark plate sliding in at the left, the one chosen marked.
         const auto& cat = catalogue();
-        const SDL_FRect plate{12, 48, 260, 34 + float(cat.size()) * 18};
+        const float x = cat_panel_.left(300);
+        const SDL_FRect plate{x, 48, 290, 34 + float(cat.size()) * 18};
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
         SDL_RenderFillRect(r_, &plate);
-        draw_text(r_, 22, 56, tr("pworld.catalogue"), 1, white);
+        draw_text(r_, x + 22, 56, tr("pworld.catalogue"), 1, white);
         for (size_t i = 0; i < cat.size(); ++i)
-            draw_text(r_, 22, 76 + float(i) * 18, (int(i) == catalogue_row_ ? "> " : "  ") + tr("pworld.object." + cat[i]), 1, int(i) == catalogue_row_ ? white : grey);
+            draw_text(r_, x + 22, 76 + float(i) * 18, (int(i) == catalogue_row_ ? "> " : "  ") + tr("pworld.object." + cat[i]), 1, int(i) == catalogue_row_ ? white : grey);
     }
+    if (place_panel_.shown > 0 && held_ >= 0)
+    {
+        // Place: the thing in your hand's exact place (metres) and turns (degrees), each row editable.
+        const Placed& p = placed_[size_t(held_)];
+        const float x = place_panel_.left(300);
+        const SDL_FRect plate{x, 48, 290, 34 + 8 * 18};
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
+        SDL_RenderFillRect(r_, &plate);
+        draw_text(r_, x + 22, 56, trf("pworld.place.title", {tr("pworld.object." + p.kind)}), 1, white);
+        const float deg = 180.0f / kPi;
+        const double values[6] = {p.x, p.y, p.z, p.yaw * deg, p.pitch * deg, p.roll * deg};
+        static const char* const kRows[7] = {"pworld.place.x", "pworld.place.y", "pworld.place.z", "pworld.place.yaw", "pworld.place.pitch", "pworld.place.roll", "pworld.place.go"};
+        for (int i = 0; i < 7; ++i)
+        {
+            std::string line = (i == place_row_ ? "> " : "  ") + tr(kRows[i]);
+            if (i < 6)
+            {
+                char b[48];
+                std::snprintf(b, sizeof b, i < 3 ? "%.3f" : "%.2f", values[i]);
+                line += "  " + (i == place_row_ && !place_edit_.empty() ? place_edit_ + "_" : std::string(b));
+                if (i == 1)
+                {
+                    std::snprintf(b, sizeof b, "  (%.3f %s)", double(p.y - ground(p.x, p.z)), tr("pworld.place.above").c_str());
+                    line += b;
+                }
+            }
+            draw_text(r_, x + 22, 76 + float(i) * 18, line, 1, i == place_row_ ? white : grey);
+        }
+    }
+    // Their tabs at the left edge while they are out: Place while something is held, else the catalogue.
+    if (held_ >= 0) place_panel_.draw_tab(r_, 80, tr("pworld.place.tab"));
+    else cat_panel_.draw_tab(r_, 80, tr("pworld.catalogue.tab"));
     if (!note_.empty()) draw_text(r_, 20, H_ - 42, note_, 1, white);
-    draw_text(r_, 20, H_ - 24, tr(catalogue_open_ ? "pworld.footer.catalogue" : "pworld.footer"), 1, white);
+    draw_text(r_, 20, H_ - 24, tr(cat_panel_.open ? "pworld.footer.catalogue" : place_panel_.open ? "pworld.footer.place" : held_ >= 0 ? "pworld.footer.holding" : "pworld.footer"), 1, white);
+}
+
+// ---- the map and the compass (IDEAS 19.197)
+
+// The compass, along the top: a strip of the 120 degrees about where you face, a tick every 15, N, E,
+// S and W at 0, 90, 180 and 270 (north +z, east +x), the way you face marked in its middle with its
+// bearing in degrees.
+void PersonalWorld::draw_compass()
+{
+    const float cx = W_ / 2, top = 12, w = 360, span = 120;
+    float heading = std::fmod(yaw_ * 180.0f / kPi, 360.0f);
+    if (heading < 0) heading += 360;
+    const SDL_FRect strip{cx - w / 2, top, w, 22};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, wireframe_ ? 255 : 120);
+    SDL_RenderFillRect(r_, &strip);
+    SDL_SetRenderDrawColor(r_, 200, 200, 210, 255);
+    SDL_RenderRect(r_, &strip);
+    for (int d = 0; d < 360; d += 15)
+    {
+        float off = float(d) - heading;
+        while (off > 180) off -= 360;
+        while (off < -180) off += 360;
+        if (std::fabs(off) > span / 2) continue;
+        const float x = cx + off / span * w;
+        const bool cardinal = d % 90 == 0;
+        SDL_RenderLine(r_, x, top + 22, x, top + (cardinal ? 12 : 17));
+        if (cardinal)
+        {
+            static const char* const kN[4] = {"N", "E", "S", "W"};
+            draw_text(r_, x - 4, top + 3, kN[d / 90], 1, SDL_Color{255, 255, 255, 255});
+        }
+    }
+    SDL_SetRenderDrawColor(r_, 255, 210, 80, 255);
+    SDL_RenderLine(r_, cx, top - 2, cx, top + 24);
+    char b[16];
+    std::snprintf(b, sizeof b, "%03d", int(std::lround(heading)) % 360);
+    draw_text(r_, cx - text_width(b, 1) / 2, top + 28, b, 1, SDL_Color{255, 210, 80, 255});
+}
+
+// The map, top right: the whole world from above, north up, its ground shaded by height (contours
+// while Real Graphics is off), what is placed as dots, your characters as rings, you as an arrow.
+void PersonalWorld::draw_map()
+{
+    constexpr int kCells = 32;
+    const float size = 180, x0 = W_ - size - 16, y0 = 16, cell = size / kCells;
+    const SDL_FRect frame{x0, y0, size, size};
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, wireframe_ ? 255 : 150);
+    SDL_RenderFillRect(r_, &frame);
+    auto at = [&](float wx, float wz) { return SDL_FPoint{x0 + (wx + kHalf) / (2 * kHalf) * size, y0 + (kHalf - wz) / (2 * kHalf) * size}; };
+    float lo = 1e9f, hi = -1e9f, hs[kCells][kCells];
+    for (int i = 0; i < kCells; ++i)
+        for (int j = 0; j < kCells; ++j)
+        {
+            hs[i][j] = height(-kHalf + (float(i) + 0.5f) * 2 * kHalf / kCells, kHalf - (float(j) + 0.5f) * 2 * kHalf / kCells);
+            lo = std::min(lo, hs[i][j]), hi = std::max(hi, hs[i][j]);
+        }
+    const float band = std::max(1.0f, (hi - lo) / 8); // (eight bands of height)
+    for (int i = 0; i < kCells; ++i)
+        for (int j = 0; j < kCells; ++j)
+        {
+            const float t = (hs[i][j] - lo) / std::max(1e-3f, hi - lo);
+            if (!wireframe_)
+            {
+                SDL_SetRenderDrawColorFloat(r_, kGrass.r * (0.6f + 0.6f * t), kGrass.g * (0.6f + 0.6f * t), kGrass.b * (0.6f + 0.6f * t), 1);
+                const SDL_FRect c{x0 + float(i) * cell, y0 + float(j) * cell, cell + 0.5f, cell + 0.5f};
+                SDL_RenderFillRect(r_, &c);
+            }
+            else
+            {
+                // A contour where the band of height changes to the next cell east or south.
+                SDL_SetRenderDrawColorFloat(r_, kGrass.r, kGrass.g, kGrass.b, 1);
+                const int b0 = int((hs[i][j] - lo) / band);
+                if (i + 1 < kCells && int((hs[i + 1][j] - lo) / band) != b0)
+                    SDL_RenderLine(r_, x0 + float(i + 1) * cell, y0 + float(j) * cell, x0 + float(i + 1) * cell, y0 + float(j + 1) * cell);
+                if (j + 1 < kCells && int((hs[i][j + 1] - lo) / band) != b0)
+                    SDL_RenderLine(r_, x0 + float(i) * cell, y0 + float(j + 1) * cell, x0 + float(i + 1) * cell, y0 + float(j + 1) * cell);
+            }
+        }
+    SDL_SetRenderDrawColor(r_, 200, 200, 210, 255);
+    SDL_RenderRect(r_, &frame);
+    // What is placed: a dot each (yellow while dropped and moving).
+    for (const Placed& p : placed_)
+    {
+        const SDL_FPoint q = at(p.x, p.z);
+        SDL_SetRenderDrawColor(r_, 255, p.physics && !p.resting ? 220 : 255, p.physics && !p.resting ? 60 : 255, 255);
+        const SDL_FRect d{q.x - 1.5f, q.y - 1.5f, 3, 3};
+        SDL_RenderFillRect(r_, &d);
+    }
+    // Your characters, as rings where they stand (the first before you, the rest round the hilltop).
+    SDL_SetRenderDrawColor(r_, 200, 205, 230, 255);
+    for (size_t ci = 0; ci < characters_.size(); ++ci)
+    {
+        float bx = 0, bz = -52;
+        if (ci > 0)
+        {
+            const float a = 2 * kPi * float(ci - 1) / float(std::max<size_t>(1, characters_.size() - 1));
+            bx = swells_.empty() ? 0 : swells_[0].x + 14 * std::cos(a), bz = swells_.empty() ? 0 : swells_[0].z + 14 * std::sin(a);
+        }
+        const SDL_FPoint q = at(bx, bz);
+        for (int k = 0; k < 8; ++k)
+        {
+            const float a0 = 2 * kPi * float(k) / 8, a1 = 2 * kPi * float(k + 1) / 8;
+            SDL_RenderLine(r_, q.x + 3 * std::cos(a0), q.y + 3 * std::sin(a0), q.x + 3 * std::cos(a1), q.y + 3 * std::sin(a1));
+        }
+    }
+    // You: an arrow pointing the way you face.
+    const SDL_FPoint me = at(px_, pz_);
+    const float fx = std::sin(yaw_), fz = std::cos(yaw_); // (forward; on the map, +z is up)
+    const SDL_FPoint tip{me.x + fx * 8, me.y - fz * 8}, l{me.x - fx * 4 - fz * 4, me.y + fz * 4 - fx * 4}, r{me.x - fx * 4 + fz * 4, me.y + fz * 4 + fx * 4};
+    const SDL_FColor gold{1.0f, 0.82f, 0.31f, 1};
+    if (wireframe_)
+    {
+        SDL_SetRenderDrawColorFloat(r_, gold.r, gold.g, gold.b, 1);
+        const SDL_FPoint loop[4] = {tip, l, r, tip};
+        SDL_RenderLines(r_, loop, 4);
+    }
+    else
+    {
+        const SDL_Vertex v[3] = {{tip, gold, {}}, {l, gold, {}}, {r, gold, {}}};
+        SDL_RenderGeometry(r_, nullptr, v, 3, nullptr, 0);
+    }
+    draw_text(r_, x0 + 4, y0 + size + 4, "N ^", 1, SDL_Color{200, 200, 210, 255});
 }
 
 // ---- the catalogue of objects, and what is placed
@@ -503,43 +687,269 @@ const ShelfItems& shelf_items()
 
 std::string PersonalWorld::catalogue_note() { return shelf_items().note; }
 
-// An object's faces in the world: its shelf item's triangles, standing on the ground at its place
-// (the model's foot, y = 0, on the grass), turned by its yaw. A model's front faces +X; turned so it
-// faces back along the yaw it was placed with.
-void PersonalWorld::faces_of(const Placed& p, float ground, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out)
+// An object's model point turned by its yaw, pitch and roll and moved to its place. The model's front
+// faces +X, its up +Y, its side +Z: roll turns about the front, pitch about the side, then yaw about
+// the vertical, so +X ends along the yaw's forward ((sin, cos) in x and z) tipped by the pitch.
+static std::array<float, 3> turned(const float m[3], float yaw, float pitch, float roll)
+{
+    const float cr = std::cos(roll), sr = std::sin(roll), cp = std::cos(pitch), sp = std::sin(pitch), cy = std::cos(yaw), sy = std::sin(yaw);
+    // roll, about X
+    const float x1 = m[0], y1 = m[1] * cr - m[2] * sr, z1 = m[1] * sr + m[2] * cr;
+    // pitch, about Z (the front up for a positive pitch)
+    const float x2 = x1 * cp - y1 * sp, y2 = x1 * sp + y1 * cp, z2 = z1;
+    // yaw: +X onto (sin, cos), +Z onto (cos, -sin)
+    return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
+}
+
+void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across)
+{
+    low = 0, high = 0.4f, across = 0.2f;
+    const auto it = shelf_items().mesh.find(p.kind);
+    if (it == shelf_items().mesh.end()) return;
+    const Mesh& m = *it->second;
+    low = 1e9f, high = -1e9f, across = 0;
+    for (int c = 0; c < 8; ++c)
+    {
+        const float q[3] = {(c & 1) ? m.hi.x : m.lo.x, (c & 2) ? m.hi.y : m.lo.y, (c & 4) ? m.hi.z : m.lo.z};
+        const auto w = turned(q, p.yaw, p.pitch, p.roll);
+        low = std::min(low, w[1]), high = std::max(high, w[1]);
+        across = std::max(across, std::sqrt(w[0] * w[0] + w[2] * w[2]));
+    }
+}
+
+// An object's faces in the world: its shelf item's triangles, turned and placed.
+void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out)
 {
     const auto it = shelf_items().mesh.find(p.kind);
     if (it == shelf_items().mesh.end()) return;
-    const float c = std::cos(p.yaw), s = std::sin(p.yaw);
     for (const MeshTri& t : it->second->tris)
     {
         std::array<std::array<float, 3>, 3> w{};
         for (int k = 0; k < 3; ++k)
         {
-            // (+X turned onto the yaw's own forward, (sin, cos) in x and z)
-            const Vec3& q = t.p[k];
-            w[size_t(k)] = {p.x + q.x * s + q.z * c, ground + q.y, p.z + q.x * c - q.z * s};
+            const float q[3] = {t.p[k].x, t.p[k].y, t.p[k].z};
+            const auto r = turned(q, p.yaw, p.pitch, p.roll);
+            w[size_t(k)] = {p.x + r[0], p.y + r[1], p.z + r[2]};
         }
         out.push_back({w, t.kd});
     }
 }
 
-void PersonalWorld::press(SDL_Keycode k) { key(k); }
+// ---- holding, placing, dropping (IDEAS 19.192), and physics
 
-void PersonalWorld::key(SDL_Keycode k)
+int PersonalWorld::aimed() const
 {
-    const int n = int(catalogue().size());
+    // Along the crosshair from your eye: the nearest object within 6 m whose middle the line passes
+    // within its own reach of.
+    const float ey = height(px_, pz_) + kEye;
+    const float dx = std::sin(yaw_) * std::cos(pitch_), dy = std::sin(pitch_), dz = std::cos(yaw_) * std::cos(pitch_);
+    int best = -1;
+    float bt = 6.0f;
+    for (size_t i = 0; i < placed_.size(); ++i)
+    {
+        if (int(i) == held_) continue;
+        float low, high, across;
+        extent_of(placed_[i], low, high, across);
+        const float cx = placed_[i].x - px_, cy = placed_[i].y + (low + high) / 2 - ey, cz = placed_[i].z - pz_;
+        const float t = cx * dx + cy * dy + cz * dz;
+        if (t <= 0 || t >= bt) continue;
+        const float ox = cx - dx * t, oy = cy - dy * t, oz = cz - dz * t;
+        const float reach = std::max(0.25f, std::max(across, (high - low) / 2));
+        if (ox * ox + oy * oy + oz * oz <= reach * reach) best = int(i), bt = t;
+    }
+    return best;
+}
+
+void PersonalWorld::physics_step(float dt, float move_x, float move_z)
+{
+    constexpr float kStep = 1.0f / 120, kGravity = 9.81f;
+    physics_left_ += dt;
+    while (physics_left_ >= kStep)
+    {
+        physics_left_ -= kStep;
+        for (size_t i = 0; i < placed_.size(); ++i)
+        {
+            Placed& p = placed_[i];
+            if (!p.physics || int(i) == held_) continue;
+            float low, high, across;
+            extent_of(p, low, high, across);
+            // Walked into: knocked the way you walk, and up a little.
+            const float hx = p.x - px_, hz = p.z - pz_;
+            if ((move_x != 0 || move_z != 0) && hx * hx + hz * hz < (across + 0.35f) * (across + 0.35f) && p.y + low < height(px_, pz_) + 1.0f)
+            {
+                p.vx = move_x * 1.2f, p.vz = move_z * 1.2f, p.vy = std::max(p.vy, 1.5f);
+                p.resting = false;
+            }
+            // Against the others that move or stand: pushed apart along the line between them.
+            for (size_t j = 0; j < placed_.size(); ++j)
+            {
+                if (j == i || int(j) == held_) continue;
+                const Placed& o = placed_[j];
+                float l2, h2, a2;
+                extent_of(o, l2, h2, a2);
+                const float ox = p.x - o.x, oz = p.z - o.z, d = std::sqrt(ox * ox + oz * oz), r = across + a2;
+                if (d < r && d > 1e-4f && p.y + low < o.y + h2 && o.y + l2 < p.y + high)
+                {
+                    const float push = (r - d) / d * 0.5f;
+                    p.x += ox * push, p.z += oz * push;
+                    const float along = (p.vx * ox + p.vz * oz) / d;
+                    if (along < 0) p.vx -= 1.4f * along * ox / d, p.vz -= 1.4f * along * oz / d;
+                    p.resting = false;
+                }
+            }
+            if (p.resting) continue;
+            p.vy -= kGravity * kStep;
+            p.x += p.vx * kStep, p.y += p.vy * kStep, p.z += p.vz * kStep;
+            p.x = std::clamp(p.x, -kHalf + 1, kHalf - 1), p.z = std::clamp(p.z, -kHalf + 1, kHalf - 1);
+            const float floor = ground(p.x, p.z) - low;
+            if (p.y <= floor)
+            {
+                // On the grass: a bounce that loses most of its speed, and friction across it.
+                p.y = floor;
+                p.vy = p.vy < -1.0f ? -p.vy * 0.3f : 0.0f;
+                p.vx *= 0.92f, p.vz *= 0.92f;
+                if (p.vy == 0 && p.vx * p.vx + p.vz * p.vz < 0.01f)
+                {
+                    p.vx = p.vz = 0;
+                    p.resting = true;
+                    unsaved_rest_ = true;
+                }
+            }
+        }
+    }
+    if (unsaved_rest_)
+    {
+        bool all = true;
+        for (const Placed& p : placed_) all = all && (!p.physics || p.resting);
+        if (all) unsaved_rest_ = false, save(); // (where each came to rest)
+    }
+}
+
+// Place: Up/Down choose a row; Left/Right move it a step (a tenth of a metre, or 5 degrees; Shift ten
+// times that); a number typed (digits, '.', '-') and Return sets it exactly; Return on "place it here"
+// (or with nothing typed) places it; Backspace takes back a digit; Q still drops it.
+void PersonalWorld::place_key(SDL_Keycode k, SDL_Keymod mod)
+{
+    Placed& p = placed_[size_t(held_)];
+    const float deg = kPi / 180.0f;
+    float* const vals[6] = {&p.x, &p.y, &p.z, &p.yaw, &p.pitch, &p.roll};
+    const bool digit = (k >= SDLK_0 && k <= SDLK_9) || k == SDLK_PERIOD || k == SDLK_MINUS || (k >= SDLK_KP_1 && k <= SDLK_KP_0) || k == SDLK_KP_PERIOD || k == SDLK_KP_MINUS;
+    if (k == SDLK_UP) place_row_ = (place_row_ + 6) % 7, place_edit_.clear();
+    else if (k == SDLK_DOWN) place_row_ = (place_row_ + 1) % 7, place_edit_.clear();
+    else if ((k == SDLK_LEFT || k == SDLK_RIGHT) && place_row_ < 6)
+    {
+        const float step = (place_row_ < 3 ? 0.1f : 5.0f * deg) * ((mod & SDL_KMOD_SHIFT) ? 10.0f : 1.0f);
+        *vals[place_row_] += k == SDLK_RIGHT ? step : -step;
+        place_edit_.clear();
+    }
+    else if (digit && place_row_ < 6 && place_edit_.size() < 16)
+    {
+        char c = '0';
+        if (k >= SDLK_0 && k <= SDLK_9) c = char('0' + (k - SDLK_0));
+        else if (k >= SDLK_KP_1 && k <= SDLK_KP_9) c = char('1' + (k - SDLK_KP_1));
+        else if (k == SDLK_KP_0) c = '0';
+        else if (k == SDLK_PERIOD || k == SDLK_KP_PERIOD) c = '.';
+        else c = '-';
+        place_edit_ += c;
+    }
+    else if (k == SDLK_BACKSPACE && !place_edit_.empty()) place_edit_.pop_back();
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
+    {
+        if (!place_edit_.empty() && place_row_ < 6)
+        {
+            try
+            {
+                const float v = std::stof(place_edit_);
+                *vals[place_row_] = place_row_ < 3 ? v : v * deg;
+            }
+            catch (...)
+            {
+                note_ = tr("pworld.place.bad");
+            }
+            place_edit_.clear();
+            return;
+        }
+        place_panel_.open = false;
+        key(SDLK_RETURN); // (placed where its numbers put it)
+    }
+    else if (k == SDLK_Q)
+    {
+        place_panel_.open = false;
+        key(SDLK_Q);
+    }
+}
+
+void PersonalWorld::press(SDL_Keycode k, SDL_Keymod mod) { key(k, mod); }
+
+void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
+{
     if (k == SDLK_TAB)
     {
-        catalogue_open_ = !catalogue_open_;
+        // One panel at a time: Place while something is in your hand, else the catalogue.
+        if (held_ >= 0) place_panel_.toggle(), cat_panel_.open = false, place_edit_.clear();
+        else cat_panel_.toggle(), place_panel_.open = false;
         return;
     }
-    if (catalogue_open_ && k == SDLK_UP) catalogue_row_ = (catalogue_row_ + n - 1) % n;
-    else if (catalogue_open_ && k == SDLK_DOWN) catalogue_row_ = (catalogue_row_ + 1) % n;
-    else if (catalogue_open_ && (k == SDLK_RETURN || k == SDLK_KP_ENTER))
+    if (place_panel_.open && held_ >= 0)
+    {
+        place_key(k, mod);
+        return;
+    }
+
+    const int n = int(catalogue().size());
+    if (held_ >= 0)
+    {
+        // In your hand: turned 15 degrees a press (Shift: the other way), then placed where it is or
+        // dropped; Esc puts it back where it was.
+        Placed& p = placed_[size_t(held_)];
+        const float step = (mod & SDL_KMOD_SHIFT) ? -kPi / 12 : kPi / 12;
+        if (k == SDLK_R) p.yaw += step;
+        else if (k == SDLK_T) p.pitch += step;
+        else if (k == SDLK_G) p.roll += step;
+        else if (k == SDLK_RETURN || k == SDLK_KP_ENTER)
+        {
+            p.physics = false, p.resting = true;
+            note_ = trf("pworld.placed_here", {tr("pworld.object." + p.kind)});
+            held_ = -1;
+            save();
+        }
+        else if (k == SDLK_Q)
+        {
+            p.physics = true, p.resting = false, p.vx = p.vy = p.vz = 0;
+            note_ = trf("pworld.dropped", {tr("pworld.object." + p.kind)});
+            held_ = -1;
+            save();
+        }
+        else if (k == SDLK_ESCAPE)
+        {
+            p = held_from_;
+            held_ = -1;
+            note_.clear();
+        }
+        return;
+    }
+    if (!cat_panel_.open && (k == SDLK_E || k == SDLK_O))
+    {
+        const int a = aimed();
+        if (a < 0) return;
+        if (k == SDLK_E && author_)
+        {
+            held_ = a;
+            held_from_ = placed_[size_t(a)];
+            note_.clear();
+        }
+        else note_ = trf("pworld.open", {tr("pworld.object." + placed_[size_t(a)].kind)}); // (a visitor's E too)
+        return;
+    }
+    if (cat_panel_.open && k == SDLK_UP) catalogue_row_ = (catalogue_row_ + n - 1) % n;
+    else if (cat_panel_.open && k == SDLK_DOWN) catalogue_row_ = (catalogue_row_ + 1) % n;
+    else if (cat_panel_.open && (k == SDLK_RETURN || k == SDLK_KP_ENTER))
     {
         // Four metres before you, on the ground, turned to face you.
-        Placed p{catalogue()[size_t(catalogue_row_)], px_ + kPlaceAhead * std::sin(yaw_), pz_ + kPlaceAhead * std::cos(yaw_), yaw_ + kPi};
+        Placed p;
+        p.kind = catalogue()[size_t(catalogue_row_)];
+        p.x = px_ + kPlaceAhead * std::sin(yaw_), p.z = pz_ + kPlaceAhead * std::cos(yaw_), p.yaw = yaw_ + kPi;
+        p.y = ground(p.x, p.z);
         placed_.push_back(p);
         note_ = trf("pworld.placed", {tr("pworld.object." + p.kind), std::to_string(placed_.size())});
         save();
@@ -559,6 +969,7 @@ void PersonalWorld::key(SDL_Keycode k)
         {
             note_ = trf("pworld.removed", {tr("pworld.object." + placed_[best].kind)});
             placed_.erase(placed_.begin() + long(best));
+            if (held_ > int(best)) --held_;
             save();
         }
     }
@@ -576,11 +987,21 @@ std::string g9(double v)
 void PersonalWorld::save()
 {
     if (file_.empty()) return;
+    // v1 while everything stands on the ground, turned only about the vertical and placed; v2 (the
+    // 3D place, three turns, placed or dropped) as soon as anything is more, or the file held lines
+    // this build keeps without reading.
+    bool v2 = !kept_lines_.empty();
+    for (const Placed& p : placed_) v2 = v2 || p.physics || p.pitch != 0 || p.roll != 0 || std::fabs(p.y - ground(p.x, p.z)) > 1e-4f;
     std::error_code ec;
     std::filesystem::create_directories(file_.parent_path(), ec);
     std::ofstream out(file_, std::ios::binary);
-    out << "sieve-personal-world-v1\nseed " << seed_ << "\n";
-    for (const Placed& p : placed_) out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.z) << " " << g9(p.yaw) << "\n";
+    out << (v2 ? "sieve-personal-world-v2" : "sieve-personal-world-v1") << "\nseed " << seed_ << "\n";
+    for (const std::string& l : kept_lines_) out << l << "\n";
+    for (const Placed& p : placed_)
+        if (v2)
+            out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.y) << " " << g9(p.z) << " " << g9(p.yaw) << " " << g9(p.pitch) << " " << g9(p.roll) << " "
+                << (p.physics ? "physics" : "fixed") << "\n";
+        else out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.z) << " " << g9(p.yaw) << "\n";
     if (!out) note_ = trf("pworld.unwritable", {file_.string()});
 }
 
@@ -591,17 +1012,19 @@ void PersonalWorld::load()
     if (!in) return;
     std::string l;
     size_t skipped = 0, line = 0;
+    int version = 0;
     while (std::getline(in, l))
     {
         if (!l.empty() && l.back() == '\r') l.pop_back();
         ++line;
         if (line == 1)
         {
-            if (l != "sieve-personal-world-v1") return; // not one: left as it is, nothing read
+            version = l == "sieve-personal-world-v1" ? 1 : l == "sieve-personal-world-v2" ? 2 : 0;
+            if (!version) return; // not one: left as it is, nothing read
             continue;
         }
         std::istringstream ss(l);
-        std::string word, kind;
+        std::string word, how;
         Placed p;
         if (!(ss >> word)) continue;
         if (word == "seed")
@@ -611,7 +1034,26 @@ void PersonalWorld::load()
             continue;
         }
         const auto& cat = catalogue();
-        if (word == "place" && (ss >> p.kind >> p.x >> p.z >> p.yaw) && std::find(cat.begin(), cat.end(), p.kind) != cat.end()) placed_.push_back(p);
+        if (word != "place")
+        {
+            // v2: kept as it is and written back, so a later build's lines are never lost here.
+            if (version == 2) kept_lines_.push_back(l);
+            else ++skipped;
+            continue;
+        }
+        bool ok = false;
+        if (version == 1)
+        {
+            ok = bool(ss >> p.kind >> p.x >> p.z >> p.yaw);
+            p.y = std::nanf(""); // (on the ground, once the ground is made)
+        }
+        else
+        {
+            ok = bool(ss >> p.kind >> p.x >> p.y >> p.z >> p.yaw >> p.pitch >> p.roll >> how) && (how == "fixed" || how == "physics");
+            p.physics = how == "physics";
+            p.resting = !p.physics; // (a dropped one settles from where it was written)
+        }
+        if (ok && std::find(cat.begin(), cat.end(), p.kind) != cat.end()) placed_.push_back(p);
         else ++skipped;
     }
     if (skipped) note_ = trf("pworld.skipped", {std::to_string(skipped)});
@@ -622,7 +1064,18 @@ std::string PersonalWorld::report() const
     char b[160];
     std::snprintf(b, sizeof b, "seed %llu; you at %.1f, %.1f, ground %.2f m; %zu characters; %zu objects placed", (unsigned long long)seed_, double(px_), double(pz_),
                   double(height(px_, pz_)), characters_.size(), placed_.size());
-    return b;
+    std::string t = b;
+    for (size_t i = 0; i < placed_.size(); ++i)
+        if (int(i) == held_ || placed_[i].physics || std::fabs(placed_[i].y - ground(placed_[i].x, placed_[i].z)) > 1e-3f)
+        {
+            // (each one held, dropped or off the ground: where it is)
+            char o[160];
+            std::snprintf(o, sizeof o, "; %s %s at %.2f, %.2f, %.2f%s", placed_[i].kind.c_str(), int(i) == held_ ? "held" : placed_[i].physics ? "dropped" : "placed",
+                          double(placed_[i].x), double(placed_[i].y - ground(placed_[i].x, placed_[i].z)), double(placed_[i].z),
+                          placed_[i].physics && !placed_[i].resting ? " (moving)" : "");
+            t += o;
+        }
+    return t;
 }
 
 PersonalWorld::Result PersonalWorld::run()
@@ -635,18 +1088,29 @@ PersonalWorld::Result PersonalWorld::run()
         SDL_Event e;
         while (SDL_PollEvent(&e))
         {
-            if (e.type == SDL_EVENT_QUIT) return Result::Quit;
+            if (e.type == SDL_EVENT_QUIT)
+            {
+                save();
+                return Result::Quit;
+            }
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
             {
-                if (catalogue_open_)
+                if (cat_panel_.open || place_panel_.open)
                 {
-                    catalogue_open_ = false;
+                    cat_panel_.open = place_panel_.open = false;
                     continue;
                 }
+                if (held_ >= 0)
+                {
+                    key(SDLK_ESCAPE); // (put back where it was)
+                    continue;
+                }
+                save();
                 SDL_SetWindowRelativeMouseMode(window_, false);
                 return Result::Back;
             }
-            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) key(e.key.key);
+            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) key(e.key.key, e.key.mod);
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) key(held_ >= 0 ? SDLK_RETURN : SDLK_E); // (click: pick up, or place)
             if (e.type == SDL_EVENT_MOUSE_MOTION)
             {
                 yaw_ += e.motion.xrel * 0.0025f;
