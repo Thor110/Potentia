@@ -61,6 +61,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 23. **Your character is you** in the hallway: not drawn (no figure ahead and to your right); the hallway's scale still follows its size, and its actions still play (the output says `your character:`).
 - [ ] 24. **The System Viewer from your dimension's pause menu** comes back to your dimension on Esc (it went to the main menu). Not checked by CI: the return is beyond what a screenshot run reaches.
 - [ ] 25. **Your characters are objects in your dimension**: yours stands ahead of where you begin, as before. Look at it, E picks it up, R/T/G turn it, Return places it, Q drops it, Backspace takes it away (and it stays away next time); the catalogue (Tab) ends with "your character" and your store's, to place them again. Change your character on the CHARACTER page and the one in your world changes with it.
+- [ ] 26. **The Character Creator tilts** (and the CHARACTER page): drag up and down, Shift+[ and Shift+], or Shift with the wheel, 15 degrees a press up to 85 either way; **Home** puts the view back as it opens. Try each drawing tilted; the voxels and the pedestal should look right from above and below.
 
 ---
 
@@ -98,7 +99,7 @@ run before a release package, and after each of the three reviews. Each batch is
 - P8. Day and night, on or off, the day's length set and kept in the dimension's file (19.222).
 
 ### List R: characters and the renderer `[10]` + you, one sitting in the Character Creator
-- R1 (R4). The Character Creator's view tilted as well as turned (diagonal rotation).
+- [x] R1 (R4). The Character Creator's view tilted as well as turned (diagonal rotation), and Home to reset it. *Made 14 November 2026.*
 - R2. The four drawings as one global setting under Settings > Graphics, as well as in the Creator.
 - R3. The voxels' cell size made the same for everything, with that switchable (19.215), then greedy meshing.
 - R4. Add/remove limbs and drag joints (19.203).
@@ -123,7 +124,7 @@ run before a release package, and after each of the three reviews. Each batch is
 - S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198).
 
 ### List T: testing itself (its own CI change, checked by running it)
-- T1. Screenshots made by a tool, and the CI runner running only the steps a change reaches (19.202).
+- [x] T1. Screenshots made by a tool, and the CI runner running only the steps a change reaches (19.202). *First step made 14 November 2026: `ci/run.sh --changed`, `tools/screenshots.py`.*
   This is what makes batches cheap without picking the steps by hand, so it could go into the first batch.
 
 ### List O: optimisations left by the reviews (Sieve/docs/OPTIMISATIONS.md), each with its own CI

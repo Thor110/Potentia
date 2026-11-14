@@ -33,7 +33,9 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <memory>
 #include <functional>
 #include <limits>
@@ -522,11 +524,25 @@ private:
     void yours_key(SDL_Keycode key);
     void render_yours(float x, float top, float bottom);
     // The pedestal under the character (IDEAS §19.150): a click and drag on the drawing turns it, as
-    // [ and ] do from the keys (15 degrees a press).
-    float char_turn_ = 0.6f;     // radians about the upright
+    // [ and ] do from the keys (15 degrees a press); and tilts it (Edward, 14 November 2026: "add
+    // diagonal rotation to the character creator viewer"), dragging up and down, Shift+[ and Shift+]
+    // (15 degrees a press, up to 85 either way) or Shift with the wheel. Home puts both back as the
+    // view opens ("make sure there is a reset orientation key").
+    static constexpr float kCharTurn0 = 0.6f, kCharTiltMost = 1.4835299f; // (85 degrees)
+    float char_turn_ = kCharTurn0; // radians about the upright
+    float char_tilt_ = 0;          // radians about the across: positive, seen from above
     MeshBatch char_batch_;       // the character drawn by the renderer every space shares (square-on)
     bool char_dragging_ = false;
-    float char_drag_x_ = 0;
+    float char_drag_x_ = 0, char_drag_y_ = 0;
+    void char_tilt_by(float by) { char_tilt_ = std::clamp(char_tilt_ + by, -kCharTiltMost, kCharTiltMost); }
+public:
+    // (for pictures and tests) how the character is seen: "turned T degrees, tilted U degrees"
+    std::string character_view_line() const
+    {
+        const auto deg = [](float r) { return std::to_string(int(std::lround(r * 57.29578f))); };
+        return "turned " + deg(char_turn_) + " degrees, tilted " + deg(char_tilt_) + " degrees";
+    }
+private:
     SDL_FRect char_drag_ = {};   // the drawing's box, where a drag turns it
     void char_key(SDL_Keycode key, bool shift);
     void char_init();            // from the settings file's [character], once

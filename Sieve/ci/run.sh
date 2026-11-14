@@ -5,6 +5,10 @@
 #   ci/run.sh                      every step (those marked "only: Linux" only on Linux)
 #   ci/run.sh 10 web               steps by number, or by a word of their file's name
 #   ci/run.sh --list               the steps, and what each checks
+#   ci/run.sh --changed            only the steps the files changed since the last commit reach
+#   ci/run.sh --changed-since REF  only the steps the files changed since REF reach (ci/reach.txt
+#                                  says which; the help check is run as well); with --dry, only
+#                                  what they reach is shown
 #   ci/run.sh --build DIR 03       the build to use (default: build/, else out/build/x64-Release,
 #                                  else out/build/linux-release)
 #   ci/run.sh --keep 10            keep the folder it ran in (it is kept anyway when a step fails)
@@ -17,14 +21,17 @@
 # a .trace beside its log as they start, so the last line of one says where a step is.
 set -o pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
-build="" keep=0 list=0 clean=0 asked=()
+build="" keep=0 list=0 clean=0 asked=() changed="" dry=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --build) build="$2"; shift 2 ;;
         --keep) keep=1; shift ;;
         --clean) clean=1; shift ;;
         --list) list=1; shift ;;
-        -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --changed) changed=HEAD; shift ;;
+        --dry) dry=1; shift ;;
+        --changed-since) changed="$2"; shift 2 ;;
+        -h|--help) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) asked+=("$1"); shift ;;
     esac
 done
@@ -73,6 +80,45 @@ if [ "$list" = 1 ]; then
         printf '%-22s %s%s\n' "$(basename "$s" .sh)" "$(sed -n '2s/^# Sieve CI, step [0-9]*: //p' "$s")" "$(grep -q '^# only: Linux' "$s" && echo '  (Linux only)')"
     done
     exit 0
+fi
+# Only what a change reaches (IDEAS 19.202): the files changed since REF (and those not yet added),
+# each mapped to its steps by the first rule of ci/reach.txt it matches, or to every step where none
+# does, and to any step whose script names it. Each file is shown with what it reaches and why.
+if [ -n "$changed" ]; then
+    command -v git > /dev/null 2>&1 || { echo "--changed needs git"; exit 2; }
+    files="$(cd "$here" && { git diff --name-only --relative "$changed" -- . ; git ls-files --others --exclude-standard -- . ; } | sort -u)"
+    [ -n "$files" ] || { echo "nothing changed since $changed"; exit 0; }
+    reached=()
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        why="" got=""
+        while read -r pat stepsof; do
+            case "$pat" in ''|'#'*) continue ;; esac
+            # (unquoted, so the pattern's * matches across folders too)
+            if [[ "$f" == $pat ]]; then why="$pat"; got="$stepsof"; break; fi
+        done < "$here/ci/reach.txt"
+        if [ -z "$why" ]; then why="no rule: every step"; got="all"; fi
+        # A step's own script reaches that step.
+        case "$f" in ci/steps/[0-9][0-9]-*.sh) got="${f:9:2}"; why="its own script" ;; esac
+        [ "$got" = "all" ] && got="$(for s in "${steps[@]}"; do basename "$s" .sh | cut -c1-2; done | tr '\n' ' ')"
+        [ "$got" = "none" ] && got=""
+        # A file named in a step's commands (by its path within Sieve/; not in its comments) reaches
+        # that step too.
+        for s in "${steps[@]}"; do
+            # (counted, not grep -q: with pipefail, -q stopping at the first match would fail the pipe)
+            if [ "$(grep -v '^[[:space:]]*#' "$s" | grep -cF -- "$f")" -gt 0 ]; then got="$got $(basename "$s" .sh | cut -c1-2)"; fi
+        done
+        got="$(echo $got | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ *$//')"
+        printf 'reaches   %-44s %s (%s)\n' "$f" "${got:-no step}" "$why"
+        for n in $got; do reached+=("$n"); done
+    done <<< "$files"
+    asked=($(printf '%s\n' "${reached[@]}" | sort -u))
+    # The checks every change gets: the help, and the settings file against the code.
+    py="$(command -v python3 || command -v python)"
+    (cd "$here" && "$py" -I tools/check_help.py) || exit 1
+    if [ ${#asked[@]} -eq 0 ]; then echo "no step reached: nothing more to run"; exit 0; fi
+    echo "steps     ${asked[*]}"
+    [ "$dry" = 1 ] && exit 0
 fi
 # Which steps: every one, or those whose number or name the words give.
 chosen=()

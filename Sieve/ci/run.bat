@@ -5,6 +5,7 @@ rem
 rem   ci\run.bat                     every step (the Linux-only ones are skipped)
 rem   ci\run.bat 03 web              steps by number, or by a word of their name
 rem   ci\run.bat --list              the steps
+rem   ci\run.bat --changed           only the steps the uncommitted changes reach
 rem   ci\run.bat --build C:\path\to\build 10
 rem
 rem It uses out\build\x64-Release unless --build names another. The window stays open at the end.

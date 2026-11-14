@@ -1,59 +1,37 @@
-# Review 3 (the code compared with its documentation): every finding made to agree
+# T1: CI only where a change reaches, and the screenshots kept as data (IDEAS 19.202, first step)
 
-57 findings, none refuted: 44 where the documentation or a comment was wrong, 13 where the code was. Each is now made to agree.
+## Only the steps a change reaches
+- **`ci/run.sh --changed`** runs only the CI steps the uncommitted changes reach. **`--changed-since REF`** does the same for everything changed since a commit (for example `origin/main`). **`--dry`** shows what they reach without running anything. `ci\run.bat --changed` works too.
+- **Which steps:** each changed file is shown with the steps it reaches and why. The map is `ci/reach.txt`, a list of patterns kept as data:
+  - the hallway's sources (and the data only it reads) reach steps 03, 04, 10 and 11, every step that runs the hallway;
+  - the unit tests reach 01;
+  - the reference oracle reaches the steps that run it;
+  - documents, results and the Python tools the CI does not run reach none;
+  - the CI's runner reaches every step, and a step's own script reaches that step.
+- **Also:** a file named in a step's commands reaches that step (a fixture, or a tool the step runs: `docs/MANUAL.md` reaches 10 and 11, which pack it).
+- **Missing rules are safe:** a file that matches no rule reaches every step, so a rule left out costs a longer run, never a missed check. The core library, the command line and the build files fall through to every step on purpose.
+- **The help check** is run for every change.
 
-## The code (13, with the comments)
-**Three real bugs:**
-- **A replay of long typed text plays back.** The recorder wrote a typed-text event of any length, but the reader refused one over 32 bytes (about 11 CJK characters from an input method), so such a recording could not be played. The reader now takes what the writer writes; there is no need for a cap, as the text is no longer than its line. Checked: a 36-byte event recorded and played back, the second recording byte for byte the first. The build before refused it. CI step 10 checks it.
-- **A world's own objects are kept.** `place model:SHA` lines (objects of your own, from a later build) were skipped and then lost when the world was saved, though the spec promised them kept. They are now kept and written back with the world's other unread lines, and not drawn until own objects are built. Checked: the line survives a save; the old build rewrote the file without it. CI step 10.
-- **Keep others' saves says when Online is off.** Its Answering on row now reads "…: not answering, as Online is off (Settings > Online)" where it showed only the address. CI step 10.
+## The screenshots as data
+- **`tools/shots.txt`** lists 19 shots, each with the files it is made from and the hallway's arguments for it:
+  - the main menu, the setup menu, the CHARACTER page, YOURS;
+  - the Character Creator's four drawings and its tilt;
+  - the hallway (wireframe, Real Graphics, its pause menu);
+  - your dimension (wireframe, Real Graphics, its catalogue, its pause menu);
+  - Settings > Keys, Replays, and a file in the viewer.
+- **`tools/screenshots.py --hallway build/hallway --out shots/`** makes them as `NAME-vVERSION.png` and keeps `shots.tsv` beside them: each shot's version, and the SHA-256 of its inputs and of its picture.
+  - A shot whose inputs have not changed is not made again (`--all` makes every one).
+  - One made again with the same picture keeps its old version tag.
+  - Nothing personal is read: its own HOME, settings, and seed 99's character.
+- **Tried:** the first run made all 19. A second run made none, as nothing had changed. With `--all`, 15 came out the same picture. The other 4 differ from run to run by a mark drawn from the clock (the setup menu, the CHARACTER page, YOURS, the hallway's pause menu), so they are remade whenever they are asked for.
+- **Still to come:** the website reading the listing (task 32).
 
-**Words on screen and in help:**
-- Your dimension's footer says "Esc: pause menu" (it said main menu).
-- O on a character says a character is not an item of a line and does not open. On a favourite no longer kept it says it stands as a sheet of paper until taken away. Before, both called it one of Sieve's shelf items. CI step 10.
-- "Settings > Infinite RAID", as the menu calls it, in the share note, the CHARACTER page and the settings file's comments (it said Settings > RAID).
-- `sieve raid` with nothing after it names check too, and the help's `--key` and `--peers` say check uses them. CI step 04.
-- The catalogue entries for actions and saves point to SPECIFICATIONS 12.0n, where they are specified; their versions change accordingly. CI step 04.
-- The help of `--v35-draft`, `--v33-draft` and `--sound-temporary` is as things stand since the v34 freeze.
-- The hallway's `--help` says your character is you in the hallway, `--animation` takes v1 or v2, and `--catalogue-entry` opens SYSTEMS.
-- Features' help names its third toggle.
-- `sieve import`'s help and `--formats` say joints' moves are carried (v2) and only their growth is left out.
-- `sieve catalogue`'s help names data/languages, the kinds the hand-written entries add, and what `--folder` does.
-
-**Comments made true:** your character in the hallway; the pause rows; the personal world's header (Esc, both file versions); the RAID's folder id; the side pages; char_store; text_width; the music modes.
-
-## The documentation (44)
-- **MANUAL:**
-  - the main menu's thirteen rows and Settings' six screens;
-  - the Personal Dimensions screen's five rows;
-  - when a world is written as v2;
-  - which keys can be changed (Esc and a few others are fixed);
-  - when a favourite kept by its place opens: unless its line is compacted;
-  - O on a character;
-  - Ctrl+S's fourth version (your character's actions);
-  - Keep others' saves with Online off;
-  - the drawings (Pixels, Voxels, bones only in the wireframe);
-  - YOURS as the third tab.
-- **SPECIFICATIONS:**
-  - v1 worlds include the bookcase;
-  - what is kept of a v2 world's unread lines, and what is said;
-  - a favourite's index line;
-  - what is hashed into a RAID folder's id.
-- **FEATURES:** the older-version switches as they stand.
-- **ROADMAP and IDEAS 19.187:** Esc in your dimension.
-- **The catalogue's entry count:** the number given now.
+## Checked
+- `ci/run.sh --changed --dry` and `--changed-since HEAD~1 --dry` show the files and steps as above.
+- `ci/run.sh 02` still runs as before.
 
 ## REVIEW-ROUND.md
-- Section 4: review 3 ticked (5, 5a, 5b).
-- Item 22: your store's characters, not yours, are the spheres in the hallway.
-- Item 2: the bookcase is the last of Sieve's own objects, before your favourites and characters.
-
-## The second look
-- **The code side:** one reviewer found a CI check that the Online-off fix made wrong (it expected the address alone, and a second check of the same row had been added). Fixed: one check, expecting the new words.
-- **The documentation:** one reviewer found one sentence wrong. A favourite kept by its place opens unless its line is compacted, not "only while off or marking". Fixed.
-
-## CI
-- Steps 01, 04 and 10: all passed.
+- T1 ticked (in the last zip).
 
 ## Files to delete by hand
 - None.

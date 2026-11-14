@@ -1654,12 +1654,15 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     {
         char_dragging_ = true;
         char_drag_x_ = e.button.x;
+        char_drag_y_ = e.button.y;
         return;
     }
     if (char_dragging_ && e.type == SDL_EVENT_MOUSE_MOTION)
     {
         char_turn_ += (e.motion.x - char_drag_x_) * 0.01f;
+        char_tilt_by((e.motion.y - char_drag_y_) * 0.01f); // (down tips its top towards you)
         char_drag_x_ = e.motion.x;
+        char_drag_y_ = e.motion.y;
         return;
     }
     if (char_dragging_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP)
@@ -2708,7 +2711,8 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
 {
     if (e.type == SDL_EVENT_MOUSE_WHEEL)
     {
-        char_turn_ += e.wheel.y * 0.26f;
+        if (SDL_GetModState() & SDL_KMOD_SHIFT) char_tilt_by(e.wheel.y * 0.26f); // (Shift: it tilts)
+        else char_turn_ += e.wheel.y * 0.26f;
         return true;
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return false;
@@ -3054,8 +3058,18 @@ void Menu::char_key(SDL_Keycode key, bool shift)
             char_anim_playing_ = !char_anim_playing_;
         }
         return;
-    case SDLK_LEFTBRACKET: char_turn_ -= 0.2617994f; return; // 15 degrees
-    case SDLK_RIGHTBRACKET: char_turn_ += 0.2617994f; return;
+    case SDLK_LEFTBRACKET: // 15 degrees; with Shift, tilted
+        if (shift) char_tilt_by(-0.2617994f);
+        else char_turn_ -= 0.2617994f;
+        return;
+    case SDLK_RIGHTBRACKET:
+        if (shift) char_tilt_by(0.2617994f);
+        else char_turn_ += 0.2617994f;
+        return;
+    case SDLK_HOME: // the view as it opens: turned as at first, not tilted
+        char_turn_ = kCharTurn0;
+        char_tilt_ = 0;
+        return;
     case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
     case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
     case SDLK_R:
@@ -3744,18 +3758,37 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         const float scale = std::min(bw / (2.4f * reach), bh / (2.6f * tall));
         const float cx = bx + bw / 2, cy = by + bh / 2 - bh * 0.04f;
         const float turn = char_turn_, ca = std::cos(turn), sa = std::sin(turn);
-        // The pedestal: a disc under the lowest sphere, seen a little from above (its depth a
-        // quarter of its width), with eight spokes that turn with the character.
         int32_t low, high;
         char_.vertical(low, high);
-        const float py = cy - float(low) * scale + 6, prx = reach * 1.15f * scale, pry = prx * 0.25f;
+        // The view: turned about the upright, then tilted about the across through the character's
+        // middle height (Edward, 14 November 2026: the diagonal rotation). Camera space: x across, y up,
+        // z away from you; `view` takes a point, `view_dir` a direction (no middle to turn about).
+        // Not tilted, it is the turn alone, exactly as before the tilt was added.
+        const float ct = std::cos(char_tilt_), st = std::sin(char_tilt_), mid = 0.5f * float(low + high);
+        auto view = [&](float px, float py3, float pz) {
+            const float x = px * ca - pz * sa, d = px * sa + pz * ca;
+            if (char_tilt_ == 0) return Vec3{x, py3, -d};
+            const float y = py3 - mid;
+            return Vec3{x, y * ct - d * st + mid, -(y * st + d * ct)};
+        };
+        auto view_dir = [&](float px, float py3, float pz) {
+            const float x = px * ca - pz * sa, d = px * sa + pz * ca;
+            return Vec3{x, py3 * ct - d * st, -(py3 * st + d * ct)};
+        };
+        // The pedestal: a disc under the lowest sphere, seen a little from above (its depth a quarter of
+        // its width, untilted; tilted, as much more or less as the tilt makes it), with eight spokes that
+        // turn with the character.
+        const float elev = std::asin(0.25f) + char_tilt_, ratio = char_tilt_ == 0 ? 0.25f : std::sin(elev);
+        const Vec3 foot = view(0, float(low), 0);
+        const float rim = char_tilt_ == 0 ? 8.0f : 8.0f * std::cos(elev) / std::cos(std::asin(0.25f));
+        const float py = cy - foot.y * scale + 6, prx = reach * 1.15f * scale, pry = prx * ratio;
         SDL_SetRenderDrawColor(r_, 110, 110, 110, 255);
         // Its top rim and its bottom rim (one colour, so it does not matter which is drawn first).
         constexpr int kRim = 48;
-        outline_ellipse(r_, cx, py, prx, pry, kRim);
-        outline_ellipse(r_, cx, py + 8, prx, pry, kRim);
-        SDL_RenderLine(r_, cx - prx, py, cx - prx, py + 8);
-        SDL_RenderLine(r_, cx + prx, py, cx + prx, py + 8);
+        outline_ellipse(r_, cx, py, prx, std::fabs(pry), kRim);
+        outline_ellipse(r_, cx, py + rim, prx, std::fabs(pry), kRim);
+        SDL_RenderLine(r_, cx - prx, py, cx - prx, py + rim);
+        SDL_RenderLine(r_, cx + prx, py, cx + prx, py + rim);
         SDL_SetRenderDrawColor(r_, 70, 70, 70, 255);
         for (int k = 0; k < 8; ++k)
         {
@@ -3763,10 +3796,10 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             SDL_RenderLine(r_, cx, py, cx + prx * std::cos(a), py + pry * std::sin(a));
         }
         auto at = [&](const sieve::Sphere& p, float& sx, float& sy, float& depth) {
-            const float px = float(p.x), pz = float(p.z);
-            sx = cx + (px * ca - pz * sa) * scale;
-            sy = cy - float(p.y) * scale;
-            depth = px * sa + pz * ca;
+            const Vec3 v = view(float(p.x), float(p.y), float(p.z));
+            sx = cx + v.x * scale;
+            sy = cy - v.y * scale;
+            depth = -v.z;
         };
         // The spheres and bones in three dimensions, drawn square-on by the renderer every space shares
         // (MeshBatch, IDEAS 19.207): each sphere's depth worked out at every pixel, so spheres cut into one
@@ -3780,10 +3813,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             const bool head = p.kind == sieve::Sphere::Head;
             return SDL_FColor{v / 255.0f, (head ? v : v * 0.85f) / 255.0f, (head ? v * 0.7f : v) / 255.0f, 1.0f};
         };
-        auto cam_of = [&](const sieve::Sphere& p) {
-            const float px = float(p.x), pz = float(p.z);
-            return Vec3{px * ca - pz * sa, float(p.y), -(px * sa + pz * ca)};
-        };
+        auto cam_of = [&](const sieve::Sphere& p) { return view(float(p.x), float(p.y), float(p.z)); };
         {
             // (the size the menu is laid out at: larger than the window where it is scaled down to fit)
             int ow = 0, oh = 0;
@@ -3843,7 +3873,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             }
             auto filled = [&](int x, int y, int z) { return x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz && owner[idx(x, y, z)] >= 0; };
             // A character-space point to camera space (turned as the spheres are).
-            auto camp = [&](float px, float py, float pz) { return Vec3{px * ca - pz * sa, py, -(px * sa + pz * ca)}; };
+            auto camp = [&](float px, float py, float pz) { return view(px, py, pz); };
             const Vec3 light = normalize(Vec3{-0.45f, 0.55f, -0.70f}); // (from the upper left, towards you)
             static const int kDir[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
             for (int z = 0; z < nz; ++z)
@@ -3858,7 +3888,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
                         for (const auto& dv : kDir)
                         {
                             if (filled(x + dv[0], y + dv[1], z + dv[2])) continue; // (inside: hidden)
-                            const Vec3 n = camp(float(dv[0]), float(dv[1]), float(dv[2]));
+                            const Vec3 n = view_dir(float(dv[0]), float(dv[1]), float(dv[2]));
                             if (n.z >= 0) continue; // (turned away)
                             // The face's four corners: on the side dv points to.
                             Vec3 q[4];
@@ -3917,8 +3947,9 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         // coordinates times the radius, turned with its sphere as the animation turns it, and with
         // the character; the chosen sphere ringed.
         auto at3 = [&](float px, float py, float pz, float& sx, float& sy) {
-            sx = cx + (px * ca - pz * sa) * scale;
-            sy = cy - py * scale;
+            const Vec3 v = view(px, py, pz);
+            sx = cx + v.x * scale;
+            sy = cy - v.y * scale;
         };
         SDL_SetRenderDrawColor(r_, 120, 255, 160, 255);
         for (const auto& [i, hex] : shown.holds)

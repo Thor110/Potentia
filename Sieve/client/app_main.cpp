@@ -1609,7 +1609,7 @@ int run(const Args& a)
         if (menu.viewer()) std::cout << "system viewer: open\ncatalogue: " << menu.catalogue_line() << "\n";
         else if (menu.creator())
             std::cout << "character creator: open\ncharacter: " << menu.character_id() << "\nactions: " << menu.actions_line() << "\nsave: " << menu.save_line() << "\n"
-                      << (menu.character_note().empty() ? std::string() : "note: " + menu.character_note() + "\n");
+                      << (menu.character_note().empty() ? std::string() : "note: " + menu.character_note() + "\n") << "character view: " << menu.character_view_line() << "\n";
         else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
@@ -1621,6 +1621,7 @@ int run(const Args& a)
         else if (menu.side_open())
         {
             std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
+            std::cout << "character view: " << menu.character_view_line() << "\n";
             if (!menu.animation_line().empty()) std::cout << "animation: " << menu.animation_line() << "\n";
             const std::string sp = sieve::join_fields(menu.speaks(), ',');
             std::cout << "speaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";

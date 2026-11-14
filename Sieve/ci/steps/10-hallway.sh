@@ -402,6 +402,13 @@ q "^note: walk: playing 45adcf033beb$" creator.txt
 amap=$(sed -n 's/^actions = \([0-9a-f]\{64\}\).*/\1/p' crt/c.ini)
 test -n "$amap"
 head -1 "crt/actions/$amap.actions" | tr -d '\r' | q "^sieve-actions-v1$"
+# The view tilts as well as turns (Edward, 14 November 2026), 15 degrees a Shift+] (up to 85), and Home
+# puts it back as it opens: the same picture as one never turned or tilted.
+$H --menu --settings crt/c.ini --creator --press "Shift+],Shift+],Shift+]" --screenshot creator-tilt.png | tr -d '\r' | q "^character view: turned 34 degrees, tilted 45 degrees$"
+$H --menu --settings crt/c.ini --creator --press "Shift+[,Shift+[,Shift+[,Shift+[,Shift+[,Shift+[,Shift+[" --screenshot creator-tilt2.png | tr -d '\r' | q "^character view: turned 34 degrees, tilted -85 degrees$"
+$H --menu --settings crt/c.ini --creator --animation-frame 15 --press "Shift+],],],Home" --screenshot creator-home.png | tr -d '\r' | q "^character view: turned 34 degrees, tilted 0 degrees$"
+$H --menu --settings crt/c.ini --creator --animation-frame 15 --screenshot creator-still.png > /dev/null
+cmp creator-home.png creator-still.png
 $H --settings crt/c.ini --no-menu --action walk --animation-frame 15 --screenshot crt-walk.png | tr -d '\r' | q "^action: walk: 45adcf033beb3fc647acd80ff8053472d5f3bef3561cf2510e6208ae6894acb1$"
 $H --settings crt/c.ini --no-menu --action jump --screenshot crt-jump.png | tr -d '\r' | q "^action: jump: none$"
 # Recording and replay (IDEAS 19.184, sieve-replay-v1): a recording's start written where the

@@ -1,0 +1,44 @@
+# Which CI steps a changed file reaches, for ci/run.sh --changed (IDEAS 19.202: "the CI runner would
+# take a change's files and run only the steps that depend on them").
+#
+# One rule a line: a pattern (bash's, against the path within Sieve/; * reaches across folders) and the
+# steps it reaches (numbers, or "none" for a file no step runs, or "all"). The first rule a file
+# matches is the one used. A file that matches no rule reaches every step: a rule left out costs a
+# longer run, never a missed check. Besides its rule, a file reaches every step whose script names it
+# (a fixture, a script a step runs: named by its path within Sieve/). Kept as broad as the programs are shared: what the hallway is
+# built from reaches every step that runs the hallway (03, 04, 10, 11), what the library and the command
+# line are built from reaches every step.
+
+# Words for people: nothing runs them (the help and settings checks are run for every change anyway).
+docs/*                  none
+*.md                    none
+results/*               none
+metrics/*               none
+context/*               none
+web/*                   none
+third_party_licenses/*  none
+tools/shots.txt         none
+# (the Python tools a step runs are named in its script, and reach it by that)
+tools/*.py              none
+
+# The CI itself: a step's own script reaches that step (below, by its name); the runner, every step.
+ci/reach.txt            none
+ci/README.md            none
+ci/*                    all
+
+# The unit tests.
+tests/*                 01
+
+# The hallway (client/) and what only it reads: every step that runs it.
+client/*                03 04 10 11
+data/lang/*             03 04 10 11
+data/fonts/*            03 04 10 11
+data/icons/*            03 04 10 11
+data/meshes/*           03 04 10 11
+data/objects/*          03 04 10 11
+
+# The reference oracle (Python): the steps that run it.
+reference/*             02 03 04 10 11
+
+# Everything else (core/, tools/, engine/, cmake/, CMakeLists.txt, data/ that the library reads, the
+# third-party sources): every step, by the fall-through.

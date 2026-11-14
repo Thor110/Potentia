@@ -8126,6 +8126,20 @@ and user is something that requires a user to test it such as myself".
   run only the steps that depend on them.
 - *Fits with:* the CI's `Item:ID` presses (rows chosen by name, so a shot survives a menu's reordering),
   §19.196 (screens as data: the list of screens is the list of shots), and task 32 (the website).
+- *Built, its first step (14 November 2026):*
+  - **Only what a change reaches:** `ci/run.sh --changed` (and `--changed-since REF`, with `--dry` to show
+    without running) maps each changed file to its steps by `ci/reach.txt`, a list of patterns kept as data
+    (the hallway's sources reach steps 03, 04, 10 and 11; the unit tests 01; words for people none). A file
+    that matches no rule reaches every step, so a rule left out costs a longer run, never a missed check.
+    A step's own script reaches that step, and a file named in a step's script reaches it too. It shows
+    each file, what it reaches and why, and runs the help check whatever was changed.
+  - **Screenshots as data:** `tools/shots.txt` lists 19 shots (the menus, the Character Creator's four
+    drawings and its tilt, the hallway, your dimension, Keys, Replays, a viewer), each with the files it
+    is made from and the hallway's arguments for it. `tools/screenshots.py` makes them as
+    `NAME-vVERSION.png` and keeps `shots.tsv` beside them (each shot's version, inputs and picture by
+    SHA-256): a shot whose inputs are unchanged is not made again, and one made again with the same picture
+    keeps its old version tag. Four shots differ from run to run by a mark drawn from the clock, so they
+    are remade each time they are asked for; the website (task 32) is still to read the listing.
 
 **19.203 The Character Creator: limbs added, taken away and dragged by their joints (Edward, 13 November
 2026). An idea for now.** His words: "the character creator needs the ability to add and remove limbs, as

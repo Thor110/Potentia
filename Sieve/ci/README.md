@@ -26,6 +26,8 @@ ci/run.sh                     # every step (the Linux-only ones only on Linux)
 ci/run.sh 03 10               # steps by number
 ci/run.sh web oracle          # or by a word of their name
 ci/run.sh --list              # the steps
+ci/run.sh --changed           # only the steps the uncommitted changes reach (ci/reach.txt)
+ci/run.sh --changed-since origin/main --dry   # what a branch's changes reach, shown, not run
 ci/run.sh --build out/build/linux-release 01
 ```
 
