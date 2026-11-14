@@ -98,14 +98,19 @@ def main():
     table = read_table(table_path)
     work = tempfile.mkdtemp(prefix="sieve-shots-")
     files = {"c.character": CHARACTER, "w.world": WORLD}
-    for k in range(4):
+    # (one for each character drawing: 0 pixels, 1 wireframe, 2 voxels, 3 shaded, 4 the skin, IDEAS 19.225;
+    # 5 the skin's quads and 6 the smooth skin, IDEAS 19.214)
+    for k in range(7):
         files[f"d{k}.ini"] = f"[character]\ndrawing = {k}\n[graphics]\nreal_graphics = on\n"
+    # (the voxels on the world lattice with their faces joined, IDEAS 19.216 and 19.215)
+    files["vl.ini"] = "[character]\ndrawing = 2\nvoxel_size = 1\nvoxel_joined = on\n[graphics]\nreal_graphics = on\n"
     for name, text in files.items():
         with open(os.path.join(work, name), "w", newline="\n") as f:
             f.write(text)
     stand = {"{character}": os.path.join(work, "c.character"), "{world}": os.path.join(work, "w.world")}
-    for k in range(4):
+    for k in range(7):
         stand[f"{{d{k}}}"] = os.path.join(work, f"d{k}.ini")
+    stand["{vl}"] = os.path.join(work, "vl.ini")
     env = dict(os.environ, SDL_VIDEO_DRIVER=os.environ.get("SDL_VIDEO_DRIVER", "offscreen"), HOME=work, USERPROFILE=work)
     made = kept = same = 0
     try:

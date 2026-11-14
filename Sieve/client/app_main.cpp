@@ -31,6 +31,7 @@
 #include "sieve/llm.hpp"
 #include "cli/timings.hpp"
 #include "hallway.hpp"
+#include "character_look.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sound.hpp"
 
@@ -225,6 +226,9 @@ const char* kUsage =
     "                      read, wave): it plays that action's animation from its map, or none\n"
     "  --creator           with --menu: the Character Creator instead (the whole window, as the main menu's\n"
     "                      Character Creator opens it): your character and its actions\n"
+    "  --creator-drag DX,DY  with --creator: after --press, the chosen sphere dragged DX, DY pixels by the\n"
+    "                      mouse, as a person would (IDEAS 19.203; the editing keys are on Settings >\n"
+    "                      Controls > Keys, and --press can give them)\n"
     "  --system-viewer ID  with --menu: the System Viewer instead (the whole window, as the main menu's\n"
     "                      System Viewer opens it), standing at entry ID\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
@@ -305,7 +309,8 @@ const char* kUsage =
     "                      given; changes no address,\n"
     "                      only the tile and slot that name a unit's place in the corridor)\n"
     "  --fps-counter       show the FPS counter\n"
-    "  --bench N           before the screenshot, time N frames and print the frame rate\n"
+    "  --bench N           before the screenshot, time N frames and print the frame rate (the hallway, or\n"
+    "                      with --personal-world your dimension)\n"
     "  --settle N          before the screenshot, draw N frames standing still, so the item pictures arrive\n"
     "  --sample-degrees DIR   every dimension's item at each whole degree 0-359, saved into DIR as its\n"
     "                      file named by its title (pictures one pixel a pixel, as J reads them), and DIR\n"
@@ -1770,6 +1775,8 @@ int run(const Args& a)
                                                               : std::filesystem::path();
         hallway::PersonalWorld world(window, renderer, std::move(chars), yours, wf);
         world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
+        world.set_character_drawing(app.character_drawing);
+        world.set_voxels(voxel_choice_of(app));
         world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
         world.set_hallway_tools(app.personal_hallway_tools);
         set_turning(world, app);
@@ -1849,9 +1856,24 @@ int run(const Args& a)
         if (a.has("pworld-wait")) world.hold(SDL_SCANCODE_UNKNOWN, std::stof(a.get("pworld-wait"))); // (what was dropped falls and rests)
         world.settle_panels(); // (a picture shows the panels where they are going, as the setup menu's do)
         if (a.has("pworld-back")) world.hold(SDL_SCANCODE_S, std::stof(a.get("pworld-back"))); // (to see what was placed)
+        if (a.has("bench"))
+        {
+            // Frame timing (IDEAS 19.214's drawings measured): N frames drawn as they stand, timed.
+            const uint32_t n = a.get_positive("bench", 60);
+            world.render();
+            const Uint64 t0 = SDL_GetTicksNS();
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                world.render();
+                SDL_RenderPresent(renderer);
+            }
+            const double ms = double(SDL_GetTicksNS() - t0) / 1e6 / n;
+            std::cout << "bench: " << n << " frames, " << ms << " ms per frame (" << 1000.0 / ms << " fps), renderer " << SDL_GetRendererName(renderer) << "\n";
+        }
         world.render();
         shoot();
         std::cout << "personal world: " << world.report() << "\n";
+        if (const std::string t = world.drawing_report(); !t.empty()) std::cout << "characters: " << t << "\n"; // (only where not shaded: IDEAS 19.214)
         if (const std::string t = world.turning_report(); !t.empty()) std::cout << "turning: " << t << "\n"; // (only while something is held)
         if (const std::string t = world.day_report(); !t.empty()) std::cout << "day: " << t << "\n"; // (only while day and night is on)
         if (const std::string t = world.shaper_report(); !t.empty()) std::cout << "shaper: " << t << "\n"; // (only while the ground shaper is out)
@@ -1913,6 +1935,14 @@ int run(const Args& a)
         if (a.has("creator")) menu.open_creator(true);
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) menu.press(key, mod);
+        if (a.has("creator-drag"))
+        {
+            // The chosen sphere dragged by the mouse in the creator (IDEAS 19.203), after the presses.
+            const std::string d = a.get("creator-drag");
+            const size_t comma = d.find(',');
+            if (comma == std::string::npos) throw std::invalid_argument("--creator-drag: DX,DY in pixels, e.g. 40,-30");
+            menu.drag_chosen(std::stof(d.substr(0, comma)), std::stof(d.substr(comma + 1)));
+        }
         keep_setup(settings, menu.settings());
         menu.render();              // starts the counting workers
         // A picture shows the counts, not "counting..." (--busy: while they are still being
@@ -1926,8 +1956,14 @@ int run(const Args& a)
         // Only one of the two panels is in at a time (and neither in the System Viewer).
         if (menu.viewer()) std::cout << "system viewer: open\ncatalogue: " << menu.catalogue_line() << "\n";
         else if (menu.creator())
+        {
             std::cout << "character creator: open\ncharacter: " << menu.character_id() << "\nactions: " << menu.actions_line() << "\nsave: " << menu.save_line() << "\n"
                       << (menu.character_note().empty() ? std::string() : "note: " + menu.character_note() + "\n") << "character view: " << menu.character_view_line() << "\n";
+            // Editing by its joints (IDEAS 19.203), said only once a sphere was picked or an editing key
+            // pressed, so a readout of the creator untouched is as it was; its time only once an edit was made.
+            if (!menu.edit_line().empty()) std::cout << "character edit: " << menu.edit_line() << "\n";
+            if (menu.edit_ms() > 0) std::cout << "character edit time: " << menu.edit_ms() << " ms (the last edit)\n";
+        }
         else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
@@ -1945,6 +1981,16 @@ int run(const Args& a)
             std::cout << "speaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";
             if (!menu.character_note().empty()) std::cout << "note: " << menu.character_note() << "\n";
         }
+        // How characters are drawn (IDEAS 19.214), said only where it is not shaded (the default), so a
+        // readout that does not use the choice is as it was.
+        if (app.character_drawing != hallway::kDrawDefault)
+            std::cout << "character drawing: " << hallway::character_drawing_name(app.character_drawing) << (app.real_graphics ? "" : " (the wireframe while Real Graphics is off)") << "\n";
+        // The voxels' cell and faces (IDEAS 19.216, 19.215), said only where the lattice or joining is chosen
+        // (so a readout of today's cubes is as it was) and voxels were drawn.
+        if (voxel_choice_of(app).chosen() && !menu.voxels_line().empty()) std::cout << "voxels: " << menu.voxels_line() << "\n";
+        // The skin (IDEAS 19.225): its cell, blend, grid, triangles and the time it took to make, said only
+        // where it was drawn.
+        if (!menu.skin_line().empty()) std::cout << "skin: " << menu.skin_line() << "\n";
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         for (const auto& [kind, text] : menu.details_lines()) std::cout << "details: " << text << "\n"; // (I, or the dots: a line's details)
@@ -1972,6 +2018,8 @@ int run(const Args& a)
             hall->set_closeup_px(closeup_setting(a.get("close-up", "screen"), kCloseUpScreen));
             hall->set_graphics_memory(app.graphics_memory_gb);
             hall->set_fps_counter(app.fps_counter || a.has("fps-counter"));
+            hall->set_character_drawing(app.character_drawing);
+            hall->set_voxels(voxel_choice_of(app));
             {
                 auto ch = character_of(app, a);
                 // (said only when asked for by name: other scripts read the readout's last lines)
@@ -2134,6 +2182,8 @@ int run(const Args& a)
         hall->render();
         shoot();
         std::cout << "saved " << a.get("screenshot") << "\n";
+        // How the characters standing in the hallway were drawn (IDEAS 19.214), said only where not shaded.
+        if (const std::string t = hall->drawing_report(); !t.empty()) std::cout << "characters: " << t << "\n";
         if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
         if (const std::string t = hall->media_report(); !t.empty()) std::cout << "media: " << t << "\n"; // (only while the Media Player shows PERSONAL)
         if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
@@ -2217,6 +2267,8 @@ int run(const Args& a)
             if (app.personal_open_in_place && !lent) lent = lend_viewer(window, renderer, a, settings, filters, app, app_path.parent_path());
             world.set_in_place(app.personal_open_in_place ? lent.get() : nullptr);
             world.set_wireframe(!app.real_graphics);
+            world.set_character_drawing(app.character_drawing);
+            world.set_voxels(voxel_choice_of(app));
             world.set_features(app.personal_map, app.personal_compass);
             world.set_hallway_tools(app.personal_hallway_tools);
             set_turning(world, app);
@@ -2491,6 +2543,8 @@ int run(const Args& a)
         hall->set_closeup_px(closeup_setting(ha.get("close-up", "screen"), kCloseUpScreen));
         hall->set_graphics_memory(app.graphics_memory_gb);
         hall->set_fps_counter(app.fps_counter);
+        hall->set_character_drawing(app.character_drawing);
+        hall->set_voxels(voxel_choice_of(app));
         hall->set_max_scale(float(app.character_max_scale));
         hall->set_character(character_of(app, ha));
         hall->set_animation(animation_of(app, app_path, ha));
@@ -2869,6 +2923,8 @@ int run(const Args& a)
             hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
             hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
             hall->set_fps_counter(app.fps_counter);
+            hall->set_character_drawing(app.character_drawing);
+            hall->set_voxels(voxel_choice_of(app));
             // (and the view distance and graphics memory, as Settings > Graphics now has them)
             set_view(app.view_rooms, app.picture_rooms);
             hall->set_graphics_memory(app.graphics_memory_gb);

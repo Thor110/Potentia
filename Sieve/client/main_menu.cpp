@@ -17,6 +17,7 @@
 
 #include "dimensions.hpp"
 #include "menu.hpp" // line_sizes_of
+#include "character_look.hpp" // kDrawCount
 #include "font.hpp"
 #include "music.hpp"
 #include "raid_service.hpp"
@@ -106,7 +107,13 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"}, {Kind::Number, "axis_colours"},
-                {Kind::Action, "back"}};
+                {Kind::Number, "character_drawing"}, {Kind::Action, "character_voxels"}, {Kind::Action, "back"}};
+    // How big a voxel is and whether the voxels' faces are joined (IDEAS 19.216, 19.215), for the voxels
+    // and pixels of Character Drawing; then the skin's blend and detail (IDEAS 19.225), its grid the
+    // voxels' cell halved, so it is set beside them.
+    case Screen::Voxels:
+        return {{Kind::Number, "voxel_size"}, {Kind::Number, "voxel_base_mm"}, {Kind::Number, "voxel_across"}, {Kind::Toggle, "voxel_joined"},
+                {Kind::Number, "skin_blend"}, {Kind::Number, "skin_detail"}, {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "keys"}, {Kind::Action, "back"}};
     // Every key of every system that has moved onto the registry (keys.hpp), by section: Enter, then the
     // key wanted; Backspace puts back the default.
@@ -185,6 +192,15 @@ std::string MainMenu::value_of(const Item& it) const
             if (presets[i] == s_.axis_colours) return tr("value.axis_colours." + std::to_string(i));
         return s_.axis_colours;
     }
+    // How characters are drawn everywhere (IDEAS 19.214): the Character Creator's drawing row, the same
+    // setting, by the short name of each drawing (the row has less room than the Creator's).
+    if (it.id == "character_drawing") return tr("value.character_drawing." + std::to_string(s_.character_drawing));
+    if (it.id == "voxel_size") return tr("value.voxel_size." + std::to_string(s_.character_voxel_size));
+    if (it.id == "voxel_base_mm") return trf("value.voxel_base_mm", {std::to_string(s_.character_voxel_base_mm)});
+    if (it.id == "voxel_across") return trf("value.voxel_across", {std::to_string(s_.character_voxel_across)});
+    if (it.id == "voxel_joined") return onoff(s_.character_voxel_joined);
+    if (it.id == "skin_blend") return trf("value.skin_blend", {std::to_string(s_.character_skin_blend)});
+    if (it.id == "skin_detail") return tr("value.skin_detail." + std::to_string(s_.character_skin_detail));
     if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
@@ -409,6 +425,7 @@ void MainMenu::back()
     case Screen::Raid: screen_ = Screen::Settings; select("raid"); return;
     case Screen::Game: screen_ = Screen::Settings; select("game_systems"); return;
     case Screen::Features: screen_ = Screen::Personal; select("personal_features"); return;
+    case Screen::Voxels: screen_ = Screen::Graphics; select("character_voxels"); return;
     case Screen::Favourites: screen_ = Screen::Personal; select("personal_favourites"); return;
     case Screen::Keys: key_capture_ = -1; screen_ = Screen::Controls; select("keys"); return;
     case Screen::Replays: screen_ = Screen::Main; select("replays"); return;
@@ -436,6 +453,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "personal_features") { screen_ = Screen::Features; row_ = 0; }
+        else if (it.id == "character_voxels") { screen_ = Screen::Voxels; row_ = 0; }
         else if (it.id == "keys") { screen_ = Screen::Keys; row_ = 0; key_capture_ = -1; }
         else if (it.id == "personal_favourites") { favourite_rows_ = hallway::all_favourites(path_.parent_path()); screen_ = Screen::Favourites; row_ = 0; }
         else if (it.id == "systems") { screen_ = Screen::Systems; row_ = 0; }
@@ -504,6 +522,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal_hallway_tools") s_.personal_hallway_tools = !s_.personal_hallway_tools;
         else if (it.id == "personal_turning_rings") s_.personal_turning_rings = !s_.personal_turning_rings;
         else if (it.id == "personal_day_night") s_.personal_day_night = !s_.personal_day_night;
+        else if (it.id == "voxel_joined") s_.character_voxel_joined = !s_.character_voxel_joined;
         else if (it.id == "personal_catalogue_covers") s_.personal_catalogue_covers = !s_.personal_catalogue_covers;
         else if (it.id == "personal_open_in_place") s_.personal_open_in_place = !s_.personal_open_in_place;
         else if (it.id == "raid_share")
@@ -537,6 +556,12 @@ void MainMenu::change(int dir)
         else if (it.id == "view_rooms") s_.view_rooms = std::clamp(s_.view_rooms + dir, 2, 64);
         else if (it.id == "picture_rooms") s_.picture_rooms = std::clamp(s_.picture_rooms + dir, 0, 8);
         else if (it.id == "raid_copies") s_.raid_copies = std::clamp(s_.raid_copies + dir, 1, 16);
+        else if (it.id == "character_drawing") s_.character_drawing = (s_.character_drawing + kDrawCount + dir) % kDrawCount; // (as the Creator's row steps it)
+        else if (it.id == "voxel_size") s_.character_voxel_size = (s_.character_voxel_size + 2 + dir) % 2;
+        else if (it.id == "voxel_base_mm") s_.character_voxel_base_mm = std::clamp(s_.character_voxel_base_mm + dir, 1, 100);
+        else if (it.id == "voxel_across") s_.character_voxel_across = std::clamp(s_.character_voxel_across + dir, 1, 8);
+        else if (it.id == "skin_blend") s_.character_skin_blend = std::clamp(s_.character_skin_blend + 10 * dir, 0, 200);
+        else if (it.id == "skin_detail") s_.character_skin_detail = std::clamp(s_.character_skin_detail + dir, 0, 3);
         else if (it.id == "axis_colours")
         {
             // The presets in turn (from colours of one's own, Right goes to the first, Left to the last).
@@ -841,6 +866,7 @@ void MainMenu::render()
                           : screen_ == Screen::Features ? "screen.features"
                           : screen_ == Screen::Favourites ? "screen.favourites"
                           : screen_ == Screen::Keys ? "screen.keys"
+                          : screen_ == Screen::Voxels ? "screen.voxels"
                                                         : nullptr;
     // A few words under the heading, saying what the screen is for (where a screen has them).
     const char* intro = screen_ == Screen::Replays ? "intro.replays" : nullptr;
@@ -849,10 +875,12 @@ void MainMenu::render()
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
     const bool pairs = screen_ == Screen::Graphics || screen_ == Screen::Controls || screen_ == Screen::Language || screen_ == Screen::Programs || screen_ == Screen::Raid ||
-                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features || screen_ == Screen::Favourites || screen_ == Screen::Keys;
+                       screen_ == Screen::Replays || screen_ == Screen::Settings || screen_ == Screen::Game || screen_ == Screen::Features || screen_ == Screen::Favourites || screen_ == Screen::Keys ||
+                       screen_ == Screen::Voxels;
     // (Keys: many rows, so smaller, and a window of them about the one chosen that scrolls with it)
     const bool compact = screen_ == Screen::Keys;
-    const float rowh = screen_ == Screen::Main ? 44.0f : compact ? 22.0f : 36.0f, boxw = std::min(W - 60, compact ? 900.0f : 760.0f);
+    float rowh = screen_ == Screen::Main ? 44.0f : compact ? 22.0f : 36.0f;
+    const float boxw = std::min(W - 60, compact ? 900.0f : 760.0f);
     const int shown = compact ? std::max(4, int((H - 50 - (50 + 8 * ts + 60) - 40 - 140) / rowh)) : int(its.size());
     const int first = compact ? std::clamp(row_ - shown / 2, 0, std::max(0, int(its.size()) - shown)) : 0;
     size_t help_lines = 0, key_lines = 0;
@@ -862,10 +890,21 @@ void MainMenu::render()
     for (const auto& it : its) has_back = has_back || it.id == "back";
     // The help block is sized for the tallest item's help, so the block does not jump as you move.
     for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr(help_key(it))).size());
-    const float block = (heading ? 40.0f : 0.0f) + float(intro_lines.size()) * 16 + (intro_lines.empty() ? 0.0f : 12.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
+    float block = (heading ? 40.0f : 0.0f) + float(intro_lines.size()) * 16 + (intro_lines.empty() ? 0.0f : 12.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
     float top = 50 + 8 * ts + 60;
     const float bottom = H - 50;
+    // Rows drawn closer where the screen would otherwise run into the key list at the foot (Settings >
+    // Graphics since its Character Drawing row, IDEAS 19.214, at 720 rows high), never closer than 28
+    // pixels. Only the screens named here: the others keep their spacing, so their pictures are as they
+    // were, until one of them grows too.
+    const bool fit_rows = screen_ == Screen::Graphics;
+    if (fit_rows && block > bottom - top && !its.empty())
+    {
+        const float less = std::min(rowh - 28.0f, (block - (bottom - top)) / float(its.size()));
+        rowh -= less;
+        block -= less * float(its.size());
+    }
     // (The main screen's completion estimate, each line's walk time, was drawn here until 9 November
     // 2026; it is now the Start Sieve map's, with the other figures of each line: Edward, "they
     // overcomplicate the main menu".)
@@ -949,6 +988,31 @@ void MainMenu::render()
         // (the RAID's opt-ins' help in red: what ticking them does, before it is done)
         const bool red_help = its[size_t(row_)].id == "raid_share" || its[size_t(row_)].id == "raid_serve";
         for (const auto& line : split_lines(help)) { draw_centred(r_, cx, hy, line, 1, red_help ? kRed : kGrey); hy += 14; }
+        // Settings > Controls > Keys: every key given to two actions read on the same screen, in red, by
+        // their names (two of them, then how many more).
+        if (screen_ == Screen::Keys)
+        {
+            const auto clashes = hallway::Keys::get().clashes();
+            auto name_of = [&](const std::string& full_id) {
+                for (const auto& row : key_rows())
+                    if (row.full_id == full_id) return tr("keys.section." + row.section) + ": " + tr(row.name_key);
+                return full_id;
+            };
+            for (size_t i = 0; i < clashes.size() && i < 2; ++i)
+            {
+                hy += 6;
+                for (const auto& line : split_lines(trf("keys.clash", {clashes[i].chord, name_of(clashes[i].a), name_of(clashes[i].b)})))
+                {
+                    draw_centred(r_, cx, hy, line, 1, kRed);
+                    hy += 14;
+                }
+            }
+            if (clashes.size() > 2)
+            {
+                draw_centred(r_, cx, hy, trf("keys.clash.more", {std::to_string(clashes.size() - 2)}), 1, kRed);
+                hy += 14;
+            }
+        }
         if (screen_ == Screen::Raid)
             if (auto n = hallway::raid_service::take_check_note()) raid_note_ = *n; // (a check finishing)
         if (screen_ == Screen::Raid && !raid_note_.empty())

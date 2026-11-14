@@ -70,6 +70,11 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 32. **Favourites' covers** (P6): Tab in your dimension, each favourite with a picture shows a small copy left of its row and the chosen one larger below the list. Off on Features.
 - [ ] 33. **Turning rings** (P7): hold something; three rings round it (x red, y green, z blue). After R, T or G that ring is bright and the wheel turns it 15 degrees a notch. Settings > Graphics > Axis Colours steps to Okabe and Ito's; Features has the rings on/off and the wheel's step.
 - [ ] 34. **Day and night** (P8): Features > Day and night on; the sun, sky, light and stars follow the time of day (UTC). **L** sets the day's length in seconds (try 60 to watch a whole day). Is the night too dark or too light? Off, the dimension looks as before.
+- [ ] 35. **One drawing everywhere** (R2): Settings > Graphics > **Character Drawing** (the last row before Back) and the Creator's drawing row change the same setting. Choose voxels: the Creator, the CHARACTER page, your dimension and your stored characters in the hallway all draw cubes. Back to shaded, everything looks as before.
+- [ ] 36. **Voxel size and joined faces** (R3): Settings > Graphics > **Character Voxels**. Voxel Size on the world lattice (Lattice Base, Thinnest Part) and Join Voxel Faces on: the picture should look the same, with the readout saying fewer faces. Does the lattice look right on your characters? (Seed 12345 breaks apart on it. The height rule stays the default, decided 14 November: see IDEAS 19.216.)
+- [ ] 37. **The skin** (R6): drawing **skin** (one Right from shaded), then Skin Blend (0 to 200%) and Skin Detail on Character Voxels. Is the surface smooth where spheres meet, and does it follow the joints while an action plays?
+- [ ] 38. **Quads and smooth** (R5): drawings **quads** and **smooth** (two and three Rights from shaded): quads drawn with darker sides, smooth lit softly across each face. Its outline still shows the skin's facets (subdivision is left for later).
+- [ ] 39. **Editing by the joints** (R4), in the Creator: click a sphere to choose it, drag it (the limb beyond follows); **.** and **Comma** step through spheres, **N** grows a limb, **X** takes it away, **J** / **Shift+J** add or take out a joint, **T** stretching, **Ctrl+arrows** nudge, **Ctrl+Z** undo. A bilateral or radial character changes on every side at once; Ctrl+S saves it as a v4 character. Settings > Controls > Keys lists these and the Creator's own keys (A, [ ], Home, R, G, the files); give one an editing key's key and that screen names the clash in red.
 
 ---
 
@@ -109,11 +114,11 @@ run before a release package, and after each of the three reviews. Each batch is
 
 ### List R: characters and the renderer `[10]` + you, one sitting in the Character Creator
 - [x] R1 (R4). The Character Creator's view tilted as well as turned (diagonal rotation), and Home to reset it. *Made 14 November 2026.*
-- R2. The four drawings as one global setting under Settings > Graphics, as well as in the Creator.
-- R3. The voxels' cell size made the same for everything, with that switchable (19.215), then greedy meshing.
-- R4. Add/remove limbs and drag joints (19.203).
-- R5. A shell grown over the spheres, for quads and smooth surfaces (19.214).
-- R6. The skin: a stage of the mesh scaling system wrapping the spheres in one smooth surface (a field, marching cubes), its blend a setting, measured against the other drawings (19.225). R5's first step.
+- [x] R2. The four drawings as one global setting under Settings > Graphics, as well as in the Creator. *Made 14 November 2026.*
+- [x] R3. The voxels' cell size made the same for everything, with that switchable (19.215), then greedy meshing. *Made 14 November 2026.*
+- [x] R4. Add/remove limbs and drag joints (19.203). *Made 14 November 2026.*
+- [x] R5. A shell grown over the spheres, for quads and smooth surfaces (19.214). *Made 14 November 2026.*
+- [x] R6. The skin: a stage of the mesh scaling system wrapping the spheres in one smooth surface (a field, marching cubes), its blend a setting, measured against the other drawings (19.225). R5's first step. *Made 14 November 2026.*
 
 ### List M: menus and keys `[04]` + `[10]` + you, one sitting in Settings > Keys
 - M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so

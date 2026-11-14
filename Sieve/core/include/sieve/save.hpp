@@ -1,7 +1,7 @@
 // Sieve — a character's save (IDEAS 19.150, 19.183): everything chosen in character creation, named
 // together, so it is kept, versioned and shared as one (the infinite RAID, sieve/raid.hpp).
 //
-// "sieve-save-v1". The character itself (sieve-character-v1 to v3) is named by its SHA-256, as is
+// "sieve-save-v1". The character itself (sieve-character-v1 to v4) is named by its SHA-256, as is
 // its animation (sieve-animation-v1), and every other system that joins character creation adds a
 // line of its own; the first is the spoken languages, entries of the language catalogue
 // (data/languages, sieve/catalogue.hpp):

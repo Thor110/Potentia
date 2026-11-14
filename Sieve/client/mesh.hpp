@@ -160,6 +160,11 @@ public:
     void add_sphere_cam(Vec3 centre, float radius, const SphereLook& look);
     void add_edge_cam(Vec3 a, Vec3 b, uint32_t argb);
     void add_face_cam(const Vec3 cam3[3], uint32_t argb);
+    // A face whose colour runs smoothly between a colour at each corner (Gouraud's shading: each pixel's
+    // red, green and blue taken across the face on the screen as its corners give them), for a surface
+    // lit at its vertices rather than its faces (IDEAS 19.214's smooth drawing). Otherwise as add_face.
+    void add_face_shaded(const Vec3 world[3], const uint32_t argb[3]);
+    void add_face_shaded_cam(const Vec3 cam3[3], const uint32_t argb[3]);
     // Rasterises everything added and draws it over the whole render target.
     void draw(SDL_Renderer* r);
     size_t drawn() const { return drawn_; } // triangles in the last draw
@@ -181,6 +186,8 @@ private:
         float ymin, ymax;
         const sieve::RgbaImage* picture = nullptr; // a picture's face: u/z and v/z planar too
         float Au = 0, Bu = 0, Cu = 0, Av = 0, Bv = 0, Cv = 0;
+        bool shaded = false; // a colour a corner: red, green and blue each a plane over the screen
+        float Ac[3] = {0, 0, 0}, Bc[3] = {0, 0, 0}, Cc[3] = {0, 0, 0};
     };
     struct Edge
     {
@@ -194,8 +201,9 @@ private:
         float zc, r, k;     // its centre's depth and radius in camera space, and camera units a pixel
         SphereLook look;
     };
-    void push(const Vec3* cam3, uint32_t colour, float bias, const float (*uv)[2] = nullptr, const sieve::RgbaImage* picture = nullptr);
-    void clip_push(const Vec3* cam3, uint32_t colour, float bias);
+    void push(const Vec3* cam3, uint32_t colour, float bias, const float (*uv)[2] = nullptr, const sieve::RgbaImage* picture = nullptr, const Vec3* rgb = nullptr);
+    // `rgb`, where given, is a colour a corner (red, green and blue from 0 to 255), cut with the corners.
+    void clip_push(const Vec3* cam3, uint32_t colour, float bias, const Vec3* rgb = nullptr);
     // Where a camera-space point lands, and its nearness (larger nearer: 1 / depth with perspective,
     // a large number less the depth square-on; either is planar on the screen).
     Point2 project(Vec3 c) const;

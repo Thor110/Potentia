@@ -233,7 +233,13 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "animation") s.character_animation = value;
             else if (key == "actions") s.character_actions = value;
             else if (key == "speaks") s.character_speaks = value;
-            else if (key == "drawing" && value.size() == 1 && value[0] >= '0' && value[0] <= '3') s.character_drawing = value[0] - '0';
+            else if (key == "drawing" && value.size() == 1 && value[0] >= '0' && value[0] <= '6') s.character_drawing = value[0] - '0';
+            else if (key == "voxel_size" && value.size() == 1 && value[0] >= '0' && value[0] <= '1') s.character_voxel_size = value[0] - '0';
+            else if (key == "voxel_base_mm") read_int_in(value, 1, 100, s.character_voxel_base_mm);
+            else if (key == "voxel_across") read_int_in(value, 1, 8, s.character_voxel_across);
+            else if (key == "voxel_joined") s.character_voxel_joined = on_off(value, false);
+            else if (key == "skin_blend") read_int_in(value, 0, 200, s.character_skin_blend);
+            else if (key == "skin_detail") read_int_in(value, 0, 3, s.character_skin_detail);
             else if (key == "beside_you") s.character_beside = on_off(value, true);
             else if (key == "max_hall_scale") read_int_in(value, 1, 64, s.character_max_scale);
         }
@@ -417,7 +423,13 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "speaks", character_speaks, "the languages your character speaks (IDEAS 19.183): ids of the language catalogue (data/languages), separated by commas; empty: none chosen"},
         {"character", "actions", character_actions, "your character's actions (IDEAS 19.186): the SHA-256 of its map of each action (idle, walk, run, ...) to the animation that plays it, read from the actions folder beside this file; empty: none, and its one animation plays whatever it does"},
         {"character", "animation", character_animation, "the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none"},
-        {"character", "drawing", std::to_string(character_drawing), "how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded"},
+        {"character", "drawing", std::to_string(character_drawing), "how characters are drawn everywhere with Real Graphics on (IDEAS 19.214): the Character Creator, the CHARACTER page, your personal dimension and the hallway; one setting, changed on Settings > Graphics (Character Drawing) and by the Creator's drawing row alike: 0 pixels, 1 wireframe, 2 voxels, 3 shaded (the default), 4 skin (one smooth surface over the spheres, IDEAS 19.225), 5 quads (the skin as its four-sided faces, their sides drawn), 6 smooth (the skin lit at its corners, its normals averaged across the faces round them; both IDEAS 19.214); with Real Graphics off, the wireframe"},
+        {"character", "voxel_size", std::to_string(character_voxel_size), "how big a voxel is (IDEAS 19.216), for characters drawn as voxels or pixels everywhere, on Settings > Graphics > Character Voxels: 0 the character's height in 16 cells (the default, as before); 1 one lattice for every character, cells of voxel_base_mm times a power of two, each character taking the coarsest at which its smallest sphere is still voxel_across cells wide (never more than 256 cells across its widest side), its grid anchored at its centre"},
+        {"character", "voxel_base_mm", std::to_string(character_voxel_base_mm), "the lattice's finest cell, in millimetres, 1 to 100 (10 by default); used with voxel_size 1"},
+        {"character", "voxel_across", std::to_string(character_voxel_across), "on the lattice, a character's smallest sphere is at least this many cells wide, 1 to 8 (2 by default); used with voxel_size 1"},
+        {"character", "voxel_joined", on_off(character_voxel_joined), "on: greedy meshing (IDEAS 19.215), the voxels' faces that lie in one plane, face the same way and share a colour drawn as one rectangle, the lines between their cells drawn as before, so the picture is the same with fewer faces; off: each face drawn on its own (the default)"},
+        {"character", "skin_blend", std::to_string(character_skin_blend), "the skin (drawings 4 to 6, IDEAS 19.225), on Settings > Graphics > Character Voxels (Skin Blend): how full it fills the creases where spheres meet, as a percentage of the spheres' mean radius, 0 to 200 (50 by default); 0 is the spheres' plain union, every crease kept"},
+        {"character", "skin_detail", std::to_string(character_skin_detail), "the skin's grid: the voxels' cell (by voxel_size's rule) halved this many times, 0 to 3 (1 by default); finer is smoother and costs more (never more than 160 cells across a character's widest side; past that its cells are doubled)"},
         {"character", "beside_you", on_off(character_beside), "on: your character is you in the hallway, not drawn, its size setting the hallway's scale and its actions played (the default); off: left out there"},
         {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
         {"replays", "max_minutes", std::to_string(replays_max_minutes), "the longest a recording runs (F12 in the hallway starts and stops one), in minutes; at it, the recording stops and is kept (30 by default)"},

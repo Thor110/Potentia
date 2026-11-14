@@ -8210,6 +8210,45 @@ well as drag them around by their connections, think spore or the sims".
 - *Fits with:* §19.186 (the Character Creator and its actions), §19.194 (modelling tools in the
   dimensions: the same dragging of points), and §19.196 (one shared way of doing a thing: dragging a
   joint here and moving an object in a dimension should feel the same).
+- *Built on 14 November 2026 (R4, the first working version):* in the Character Creator a click on a sphere
+  picks it (of the spheres under the pointer, the one whose middle it is nearest, as a share of its radius
+  as seen) and a drag moves it, the limb beyond it following and its bone keeping its length (taken onto
+  the sphere round its parent) unless stretching is on (**T**, a toggle). Keys on the registry, a section
+  of their own ("The Character Creator: editing", `creator.edit/...` in `[keys]`) after every other, so no
+  row of Settings > Controls > Keys moved: **.** and **,** choose a sphere (the sphere row's own), **N**
+  grows a limb of one joint from it, **X** takes it and all beyond it away, **J** adds a joint after it,
+  **Shift+J** takes it out, **Ctrl+arrows** move it a step as seen, **Ctrl+Z** undoes (256 kept). One
+  library for the edits, `sieve/character_edit.hpp`, each made to the chosen sphere and its images:
+  under bilateral symmetry a sphere and its mirror (a sphere alone stays on the middle plane, and a limb
+  grown from it leaning to a side comes as a pair), under radial symmetry the same sphere of every limb,
+  turned as its limb is (a limb from the body grows on every turn). An edited character is kept as its
+  spheres with its symmetry, `sieve-character-v4` (SPECIFICATIONS 12.0j: v3's sphere lines and an
+  `i SPHERE OF MIRROR TURN` line for each image; with no symmetry it is a v3), its seed and settings
+  shown as `-`, named by its SHA-256; v1 to v3 read as before, a seed-made file is unchanged until edited,
+  and the build before this refuses a v4 plainly. It reads back from the settings file and a saved file
+  the same, and is you in the hallway and your dimension. After each edit its actions are checked again
+  against its bones: those whose animation now has more bones than it has spheres are named, and an
+  animation playing that no longer fits is taken off. Nothing of it shows until a sphere is picked or an
+  editing key pressed. `--press` gives the keys and `--creator-drag DX,DY` drags the chosen sphere with
+  the mouse, for CI and pictures (`character edit:` in the readout); 15 checks in CI step 10, the edits'
+  rules in the unit tests (seed 99's character: 10 mirrored pairs found among its 27 spheres; a drag
+  keeps every bone within 2 units of its length and the mirror exact; grow then take away, and add then
+  take out a joint, give the same text back).
+  - *Measured* (this machine, offscreen, 1280x720, seed 99's character, shaded; 200 frames of the Creator
+    timed with a stopwatch round its drawing, three runs each): 7.03 to 7.18 ms a frame untouched, 7.25 to
+    7.73 ms with a sphere picked (two rings of 32 segments and two lines of text more), 7.40 to 7.69 ms
+    edited (31 spheres, two edits). An edit takes 0.02 to 0.04 ms on its 27 to 31 spheres, and 0.54 to
+    0.81 ms on the largest seed-made character (16 limbs of 12 joints and 3 branches, 482 spheres), most
+    of it finding the mirrored pairs again. The Creator untouched, the CHARACTER page, your dimension,
+    Settings > Controls > Keys (its first screen) and a v3 skeleton came out byte for byte as with the
+    build before list R where nothing else of list R changed them (pictures that differ from run to run
+    by the clock or the counting aside).
+  - *Left:* the drag moves the limb beyond as it is (translated), not turned with its bone; no buttons by
+    the sphere (keys and the mouse only); the edits work on the character at rest (while an animation
+    plays, a click picks the sphere where it is seen, but the move is made to the rest pose); an edit's
+    undo list is not kept between runs; the spheres' sizes cannot yet be changed by hand (§19.213's body
+    piece needs it); radial characters of more than 8 limbs share turns, so two limbs take the same
+    turned edit; and §19.196's "the same feel" as moving an object in a dimension is not yet shared code.
 
 **19.204 A catalogue of personal dimensions to start from: templates (Edward, 14 November 2026). An idea
 for now.** His words: "we need a catalogue of default personal dimensions you can start with", "from
@@ -8464,6 +8503,76 @@ a picture made from screenshots of the project showing one character at several 
   overlap, as metaballs or a convolution surface do), which voxels, triangles, quads and NURBS patches
   would then each be drawings of. Until that shell exists, smooth surfaces have nothing of their own to
   smooth.
+- *Built on 14 November 2026 (the first part: one drawing for every space):* the characters' drawing is
+  one setting, `[character] drawing`, shown in two places that change the same value: the Character
+  Creator's drawing row and **Settings > Graphics > Character Drawing** (a new last row before Back; the
+  screen's rows drawn a little closer at 720 rows so the help and the key list still fit). With Real
+  Graphics on it is applied wherever characters are drawn: the Creator and the CHARACTER page as before,
+  your personal dimension, and your store's characters standing in the hallway (your own is you there,
+  and is still not drawn). Every space can draw all four: shaded as before; wireframe as rings; pixels as
+  squares of one size for each character (its cell as seen at its middle, on a grid fixed to the screen);
+  voxels as the same cubes the Creator draws, made by one shared function now in the library
+  (`sieve::voxel_faces`, `sieve::voxel_cell`, moved out of the Creator with its arithmetic unchanged) and
+  placed, turned and lit by one shared client function (`add_character_drawing`, client/character_look.*).
+  Real Graphics off, every space draws the wireframe as before and says so in its readout ("drawn as
+  wireframe (Real Graphics is off; voxels chosen)"); the readouts say `characters: drawn as ...` (your
+  dimension, the hallway) and `character drawing: ...` (the setup menu) only where the choice is not
+  shaded, so the default changes no readout. Measured: with shaded (the default) the Creator in all four
+  drawings and with Real Graphics off, the CHARACTER page's drawing, and your dimension (Real Graphics on
+  and off, from afar and from 3 m) came out byte for byte as before list R (PNG and stdout); the hallway's
+  and the setup menu's pictures differed from the old program's only where two runs of the old program
+  differ from each other (the book under the crosshair, the opening-time figure). Cubes: seed 99's
+  character (5 limbs, 1 branch) is 2,896 faces at a cell of 80.3 units; your dimension drew 2,458
+  triangles of cubes from 3 m (that character and the store's two) and 1,686 for the default character;
+  the hallway 14,478 for the store's two. Frame times, software renderer at 1280x720 on 4 cores, 120
+  frames with --bench, two runs each: the hallway shaded 20.2 and 25.1 ms, pixels 20.3 and 21.2,
+  wireframe 21.2 and 24.3, voxels 24.4 and 25.1; your dimension shaded 16.8 and 17.1, pixels 17.9 and
+  17.6, wireframe 17.0 and 18.0, voxels 17.4 and 19.9 (the runs vary by as much as the drawings do; the
+  voxels cost at most about 4 ms a frame here). *Left:* a drawing per space and by distance; the cubes
+  made again every frame (kept per character they would cost nothing for a still one); greedy meshing
+  (§19.215); quads and smooth surfaces; the held models, still drawn as lines in every drawing, and your
+  dimension's map, which draws characters as rings whatever is chosen.
+- *Built on 14 November 2026 (the rest, R5: quads and smooth surfaces, on §19.225's skin):* two more
+  choices of `[character] drawing`, after the skin: **quads** (5) and **smooth** (6), on Settings >
+  Graphics > Character Drawing and the Creator's drawing row alike (two and three Rights from shaded; the
+  five before keep their numbers, shaded still the default), drawn wherever characters are (the Creator and
+  the CHARACTER page, your dimension, the hallway's store characters). Both are drawings of the same skin,
+  made once by `sieve::skin_mesh` and kept as before. *Quads:* surface nets makes four-sided faces by
+  construction, so the skin now keeps them (`SkinMesh::quads`, four vertices a face, wound as the triangles
+  are, face q being triangles 2q and 2q + 1); each face turned towards the eye is drawn in one colour (its
+  corners' normals averaged for the light, its sphere the one most corners share) with its four sides drawn
+  darker over it, so the faces read as quads. *Smooth:* each vertex's normal averaged across the faces
+  round it (`sieve::skin_smooth_normals`, each triangle's normal weighted by its area), each corner of a
+  triangle lit by its own and coloured as its own sphere, the colour running across the face: MeshBatch
+  gained faces with a colour a corner (`add_face_shaded`, Gouraud's shading, each of red, green and blue a
+  plane over the screen, cut at the near plane with the corners). One shared function draws the skin's
+  three drawings in every space (`add_skin_drawing`, client/character_look.*); the skin itself is drawn by
+  it with the arithmetic it had, and came out byte for byte as before (the Creator and your dimension, seed
+  99). Readouts: the Creator's `skin:` line says `Q quads made, D drawn` for the quads and adds `normals
+  averaged in M ms` for the smooth drawing; your dimension's and the hallway's say `characters: drawn as
+  quads, N quads of skin` and `characters: drawn as smooth, N triangles of smooth skin`. Measured (one run
+  each, the Creator's readout; at 1, 2 and 4 cells to a voxel): seed 99 2,890, 11,590 and 46,574 quads,
+  1,466, 5,872 and 23,515 drawn; seed 42 2,308, 10,132 and 42,518 (1,155, 5,059, 21,271 drawn); seed 7
+  4,380 and 17,590 (made coarser to fit at 4); the smooth drawing the skin's triangles (seed 99 5,780,
+  23,180 and 93,148, about half drawn), its normals averaged in 0.05, 0.16 and 0.56 ms (seed 42 0.03, 0.12
+  and 0.88). Time a frame, software renderer at 1280x720 on 4 cores, 120 frames with --bench, two runs:
+  the hallway with seeds 7, 42 and 99 in the store, shaded 22.5 and 21.6 ms, skin 30.5 and 28.2, quads 30.6
+  and 31.3 (19,777 quads), smooth 31.5 and 32.4 (39,630 triangles); your dimension with seed 99 as you and
+  the three in the store, from 1 m walked, shaded 16.9 and 16.9, skin 19.1 and 18.9, quads 19.8 and 20.9
+  (10,706 quads), smooth 23.2 and 22.2 (21,433 triangles). The unit tests: one sphere's quads closed (every
+  side between two faces, V - E + F = 2), each face its two triangles; seed 99's quads with no side open;
+  the averaged normals of length one, outwards, within a few degrees of a sphere's own (mean 1 - cosine
+  0.00035, where the field's slope from one cell gives 0.00013: the field's is the nearer the true sphere,
+  the averaged the nearer the faces drawn). Not chosen, nothing changes: drawings 0 to 4 in the Creator and
+  your dimension came out byte for byte as the program before this item, and shaded, Real Graphics off and
+  the CHARACTER page byte for byte as the program before list R (the Creator's stdout differing only by
+  R2's `character drawing:` line; the CHARACTER page's setup-menu picture only in the timing figure, which
+  differs between two runs of either). The one change to what was there: the drawing row now goes round
+  seven, so three Rights from shaded reach smooth. *Left:* subdivision (one step of Catmull and Clark's on
+  the quads, for a silhouette as smooth as the light) and NURBS or other patches fitted to the quads; quads
+  merged where they lie flat, and their sides drawn once rather than by both faces; the averaged normals
+  kept with the skin rather than worked out each frame; Gouraud's colours taken with perspective (straight
+  across the screen now, which shows only on large faces); a drawing per space and by distance.
 
 **19.215 Greedy meshing for the voxels (Edward, 14 November 2026). An idea for now, for later.** His
 words: "we should also seek to implement greedy meshing for the voxel system such that less faces are
@@ -8476,6 +8585,35 @@ drawn at once in the long run".
   hundreds for one character), and the worlds' voxel drawing if §19.214's choice is built; with
   lighting by face direction, the joined faces keep their shading. The edges between cells, drawn now to
   show the cubes, would then be drawn as lines over the joined faces where wanted.
+- *Built on 14 November 2026 (R3, with §19.216's cell size):* **Join Voxel Faces**, `[character]
+  voxel_joined`, on Settings > Graphics > Character Voxels, off by default. One shared function in the
+  library, `sieve::join_voxel_faces` (sieve/character_voxels.hpp), takes the faces a space will draw and
+  a colour for each, and returns the fewest rectangles of one colour it finds by the sweep above (each
+  plane's faces in row order, a rectangle grown along its row, then down as many rows as match its whole
+  width); a rectangle's corners are its corner faces' own, so it covers exactly the cells it stands for.
+  Every space that draws voxels uses it (the Creator and the CHARACTER page, your dimension and the
+  hallway, through `add_character_drawing`); each cell's edges are still drawn as lines, as before. The
+  colour joined on is the one drawn: in the Creator each cell's own (nearer brighter), elsewhere one a
+  sphere and facing. Measured: the pictures are the same, byte for byte, joined and not (the Creator at
+  1280x720 for the four characters below, on both cell rules; your dimension from 3 m on both); the
+  hallway's differ only inside the box two runs of the same program differ in (the book under the
+  crosshair). Faces seen and drawn in the Creator, apart then joined: seed 99 (5 limbs, 1 branch) 951 and
+  611; seed 7 (8 limbs, 4 joints, 2 branches, radial) 1,392 and 895; seed 12345 (3 limbs, 6 joints, no
+  head) 230 and 133; seed 42 (16 limbs, 12 joints, 3 branches) 759 and 459; on the lattice 904 and 553,
+  3,093 and 1,932, 639 and 376, 10,046 and 5,789. Triangles of cubes: your dimension 2,458 and 1,072 (on
+  the lattice 2,352 and 1,044); the hallway with seeds 7, 42 and 99 in the store 9,408 and 4,568 (on the
+  lattice 42,140 and 19,700). All of seed 99's 2,896 faces, one colour a sphere, join into 1,346; one
+  sphere 80 cells across in one colour, 30,144 into 12,912 (the unit tests). Time a frame, software
+  renderer at 1280x720 on 4 cores, 120 frames with --bench, two runs each: the hallway apart 23.6 and
+  24.0 ms, joined 23.3 and 24.3; on the lattice 35.0 and 35.2, joined 38.1 and 37.3; your dimension
+  apart 18.2 and 18.1, joined 16.9 and 16.9; on the lattice 17.2 and 17.1, joined 18.0 and 18.3. So
+  about half the triangles, and no frame faster to speak of: this renderer's time goes in filling pixels
+  and drawing the cells' edges, which joining leaves as they were, and the joining is done every frame
+  (2.6 ms for seed 42's 29,808 lattice faces into 14,370 rectangles, one core, beside 4.4 ms to make the
+  faces). *Left:* the cubes and their rectangles kept per character, made once rather than every frame
+  (then joining costs nothing for a still character); the edges drawn only where wanted (round each
+  rectangle, or every cell), a setting; joining across depth colours in the Creator (a colour a sphere
+  there would join far more, but change the picture); the worlds' meshes, when voxelised (§19.216).
 
 **19.216 Voxels for everything, and how big a voxel is (Edward, 14 November 2026). An idea for now.** His
 words: "I wonder how the hallway would look rendered as voxels, does that function yet?", "I don't know
@@ -8516,6 +8654,38 @@ from there to add more detail/depth".
   is seen from above, below and every angle between, the square-on camera turned by both; the pedestal
   tilting with it. The drawings it offers are the same list as Settings > Graphics' global choice (one
   list of drawings, §19.196), each also choosable there for one space or for all.
+- *Built on 14 November 2026 (R3, the first part of how big a voxel is; Edward's switch):* **Voxel Size**,
+  `[character] voxel_size`, on Settings > Graphics > Character Voxels (a new row under Character Drawing
+  opens it, with Lattice Base, Thinnest Part and Join Voxel Faces, §19.215): *height in 16 cells*, today's
+  rule and the default, or *world lattice*: cells of the base (`voxel_base_mm`, 10 mm by default, 1 to 100)
+  times a power of two, each character taking the coarsest level at which its smallest sphere is still
+  `voxel_across` cells wide (2 by default, 1 to 8), from the character at rest; its grid anchored at whole
+  cells from its centre, so cells of one size line up. So that one tiny sphere cannot ask for a grid too
+  large, the level steps coarser while the character's widest side would be more than 256 cells (said in
+  the readout as "made coarser to fit"). One library function (`sieve::voxel_cell_of`) for every space,
+  for the voxels and the pixels' squares alike. Measured (Creator, 1280x720; faces seen): seed 99 80.3
+  units and 951 faces by height, 81.9 units (20 mm, level 1) and 904 on the lattice; seed 7 60.4 and 1,392,
+  41.0 (10 mm, level 0) and 3,093; seed 12345 135.6 and 230, 81.9 (20 mm) and 639; seed 42 137.8 and 759,
+  41.0 (10 mm) and 10,046; the hallway with those three in the store 9,408 triangles of cubes by height,
+  42,140 on the lattice, a frame 23.6 and 24.0 ms against 35.0 and 35.2 (software renderer, 4 cores, 120
+  frames, two runs). The pictures: on the lattice seed 7 is finer, and seed 42 keeps its thin limbs whole
+  where by height their tips break into loose cubes; seed 99 is much the same; seed 12345's upright limb falls apart
+  into separate blobs on the lattice (its spheres do not touch, and the coarser cells by height bridged
+  them). So the lattice is not no worse everywhere, costs up to thirteen times the faces, and today's rule
+  stays the default. Off (the default) every picture and readout is as before. *Left:* the distance steps
+  (a level coarser as cells grow smaller than a pixel or two) and the user's bias (one level finer); the
+  lattice anchored in the world rather than at each character's centre (a character turns, so its cells
+  can only line up with another's while both stand square); the 256-cell limit as a setting; the meshes
+  voxelised (the rest of this entry).
+- *The default, decided 14 November 2026.* Edward: "realistically I am unsure on what the default size
+  should be ... we have to make sure they can fit, but most of this skeletal nature is just for the state
+  space side of things ... I envisioned human like characters walking around for the core game story ...
+  for now choose what you think is best on that". Chosen: the height rule stays the default. It always
+  fits (since the review, a character far wider than it is tall has its cells grown to fit 256 across),
+  never breaks a character apart, and costs the fewest faces; the state space's characters, of any shape,
+  are what it draws today. The lattice stays one setting away, and is the one to look at again when
+  human-like characters for the story are made: they share one size, so one lattice (and a world-anchored
+  grid) would make their cells line up from one to the next, which the height rule cannot.
 
 **19.217 Dimensions as plugins in the setup menu: each one on or off, and room for others' (Edward, 14
 November 2026). An idea for now.** His words: "a plugin system for the state space setup viewer", "this
@@ -8741,6 +8911,57 @@ system".
   becomes a default; how tight it hugs (its blend) a setting. The skin as a mesh can be written out as
   .obj like any other (§19.226). It is the first step §19.214's smooth surfaces need (a surface from the
   spheres, which quads and patches can then be fitted to). Planned only.
+- *Built on 14 November 2026 (R6, the first working version):* **skin**, the fifth choice of `[character]
+  drawing` (4; the four before keep their numbers), on Settings > Graphics > Character Drawing and the
+  Creator's drawing row alike, and drawn wherever characters are (the Creator and the CHARACTER page, your
+  dimension, the hallway's store characters). One library function, `sieve::skin_mesh`
+  (sieve/character_skin.hpp): each sphere's distance from its surface, joined in the spheres' order by the
+  quadratic smooth minimum (the plain minimum where two distances differ by the blend or more, at most a
+  quarter of the blend below it where they are near), worked out at the corners of a grid fixed to the
+  character (whole cells from its centre, so the grid holds still as it moves) and only within the blend
+  and two cells of each sphere; the surface made by surface nets (a vertex in each cell the surface crosses,
+  the average of its edge crossings; a quad, split along its shorter diagonal, across each grid edge it
+  crosses, turned to face where the field rises); each vertex's normal the field's slope there, and its
+  sphere the one nearest the cell corner nearest it. Its cell is R3's voxel cell (`voxel_cell_of`, either
+  rule) halved **Skin Detail** times (`[character] skin_detail`, 0 to 3, shown as 1, 2, 4 or 8 cells to a
+  voxel, 2 by default), doubled back while the character's widest side would pass 160 cells; its blend
+  **Skin Blend** (`[character] skin_blend`, 0 to 200% of the spheres' mean radius, 50 by default, 0 the
+  plain union), both on Settings > Graphics > Character Voxels after Join Voxel Faces. Drawn by MeshBatch as
+  faces, those turned towards the eye, each triangle the colour of its sphere's look and lit as the shaded
+  spheres are (Lambert's cosine from the upper left over the look's ambient light; in the Creator, nearer
+  brighter as there). Made from the spheres as posed in each frame, so it follows the joints as an action
+  plays (the imported walk at frames 0, 8 and 15: its three spheres move, 1,764 to 1,808 triangles made in
+  0.31 to 0.81 ms); the skins last made are kept with what they were made from (twice as many as the
+  space draws characters in a frame, and at least eight), so a still character is made once however many
+  are in sight. Readouts: the Creator's `skin: cell C units (the voxels' halved N times), blend B units
+  (P%), grid X x Y x Z, T triangles made, D drawn, made in M ms`; your dimension's and the hallway's
+  `characters: drawn as skin, N triangles of skin`. Measured (one core, the make time as the readout gives
+  it, two runs; triangles made, about half drawn): seed 99 (5 limbs, 1 branch) at 1, 2 and 4 cells to a
+  voxel 5,780 triangles in 1.42 and 1.34 ms, 23,180 in 11.0 and 12.8 ms, 93,148 in 64.0 and 76.5 ms; seed
+  42 (16 limbs, 12 joints, 3 branches) 4,616 in 3.0 and 2.0 ms, 20,264 in 11.1 and 16.4, 85,036 in 73.1 and
+  110.8; seed 7 (8 limbs, 4 joints, 2 branches, radial) 8,760 in 3.6 and 4.3, 35,180 in 16.0 and 20.7 (at 4
+  cells a voxel made coarser to fit, so the same); seed 12345 (3 limbs, 6 joints, no head) 26,548 in 12.1
+  and 12.2 at every detail (its cell made coarser to fit from the first). Against the voxels: seed 99's
+  2,896 cube faces. Time a frame, software renderer at 1280x720 on 4 cores, 120 frames with --bench, two
+  runs: the hallway with seeds 7, 42 and 99 in the store, shaded 21.3 and 20.5 ms, skin 24.5 and 24.6 ms
+  (39,630 triangles of skin; before skins were kept, 61.1 and 59.1 ms); your dimension with seed 99 as
+  you and the three in the store, shaded 16.8 and 17.1, skin 17.7 and 17.5 (21,433 triangles; before
+  keeping, 40.5 and 40.9). The unit tests: one sphere's skin closed (every edge between two triangles, V - E
+  + F = 2), on the sphere to within a cell, its normals and winding outwards; two spheres of radius 100,
+  160 apart, their neck 62.4 units across with no blend (60 by arithmetic) and 96.6 with a blend of 100
+  (96); seed 99's skin pinned at 23,180 triangles with no edge left open. Not chosen, nothing changes: the
+  Creator in the four drawings, shaded by default and with Real Graphics off, and your dimension (from
+  afar, from 3 m with seed 99, and Real Graphics off) came out byte for byte as the program before list R
+  (the Creator's stdout differing only by R2's `character drawing:` line); the hallway's and the setup
+  menu's pictures differ from that program's in the filters' label, the item box and the setup menu's line
+  bars, from changes in the tree before this item, and two runs of this program agree byte for byte. The
+  one change to what was there: stepping the drawing row now goes round five, so three Rights from shaded
+  reach wireframe, not voxels (CI step 10 now steps Left once). *Left:* lighting each vertex rather than
+  each triangle (MeshBatch has one colour a face; the facets show at 1 cell to a voxel); thin parts below
+  a cell are lost or flattened (seed 42's finest limb tips, as the voxels by height lose them; the lattice
+  rule keeps them); the blend fills creases but never bridges a gap (a smooth minimum cannot; metaballs
+  would, a choice to add); the skin made on more than one thread; written out as .obj (§19.226); dual contouring for sharper edges; quads and patches
+  fitted to it (§19.214).
 
 **19.226 Import and export for a personal dimension (Edward, 14 November 2026). An idea for now.** His
 words: "we should add an import and export feature for personal dimensions such that we can import or
@@ -8767,6 +8988,32 @@ that is relevant to what exists in the world space".
 - *As everything else:* the formats it writes (.obj, .png, .txt, .safetensors) are the ones Sieve
   already reads and writes; the choices are settings shown to the person, the paths those they pick.
   Planned only.
+
+**19.227 Greedy meshing that keeps every voxel's colour (Edward, 14 November 2026). An idea for now.**
+His words: "we will also need to make sure that the greedy meshing system preserves the texel colours or
+textures ... which should be as simple as building up a single texture map or uv coordinate system ...
+compile and cache the 'texture' which can stay in place until breaking apart of voxels is implemented at
+which point they can recover or fold backwards through the way it was built to break apart". Today's
+joining (§19.215) joins only faces of one colour, so the picture is kept but a character of many colours
+joins little.
+- *The texture:* faces joined across colours, the colour then read from a texture. Either one texture map
+  (each joined rectangle given a place in an atlas of its cells' colours, with its UVs), or the voxel
+  grid's colours as a three-dimensional texture read at each point of the face: no packing, the face's
+  position its own coordinates, the colours exact. The second where the renderer can read one, the first
+  where it cannot.
+- *Compiled and kept:* the voxel grid stays the one true record; the joined mesh and its texture are made
+  from it and kept by the grid's SHA-256, made again only when the grid changes.
+- *Breaking apart:* the grid in chunks, only the chunks that change made again; for the look of folding
+  back, each joined face keeps the cells it came from, so it can be split back into them in the order it
+  was built. Ties to §19.215, §19.216 and §19.225.
+
+**19.228 A face that shows feeling (Edward, 14 November 2026). An idea for later.** His words: "we are
+also going to need an advanced facial system a sub skeletal structural series of constraints that allow
+for emotion and facial expressions this would be another generated structure centred on the head region
+however this may have to remain an idea until we can look at hooking up the DNA dimension and the
+character generation systems in the far future". A generated set of constraints under the head's sphere,
+as limbs are generated today, driven by expressions as the body is driven by actions (§19.186). Waits on
+the DNA dimension (§19.139) and character generation being joined.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

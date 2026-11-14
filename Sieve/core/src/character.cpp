@@ -510,12 +510,48 @@ void check_given(const std::vector<Sphere>& sp)
     }
 }
 
+// A v4's images, checked: one a sphere (or none), each the image of an earlier sphere that is itself no
+// image, mirrored and turned as its symmetry allows (bilateral: mirrored, not turned; radial: turned only).
+void check_images(const std::vector<Sphere>& sp, Symmetry sym, const std::vector<SphereImage>& im)
+{
+    if (sym == Symmetry::None)
+    {
+        for (const SphereImage& m : im)
+            if (m.of >= 0) throw std::invalid_argument("a character of no symmetry has no images");
+        return;
+    }
+    if (!im.empty() && im.size() != sp.size()) throw std::invalid_argument("not one image a sphere");
+    std::vector<int> count(im.size(), 0);
+    for (size_t i = 0; i < im.size(); ++i)
+    {
+        const SphereImage& m = im[i];
+        if (m.of < 0) continue;
+        const std::string n = "sphere " + std::to_string(i);
+        if (size_t(m.of) >= i) throw std::invalid_argument(n + " is the image of a sphere after it");
+        if (im[size_t(m.of)].of >= 0) throw std::invalid_argument(n + " is the image of a sphere that is itself an image");
+        if (sym == Symmetry::Bilateral && (m.mirror != 1 || m.turn != 0 || ++count[size_t(m.of)] > 1))
+            throw std::invalid_argument(n + ": a bilateral image is its sphere mirrored, and a sphere has one");
+        if (sym == Symmetry::Radial && (m.mirror != 0 || m.turn > 7)) throw std::invalid_argument(n + ": a radial image is its sphere turned 0 to 7 eighths");
+    }
+}
+
 Character read_given(const std::vector<std::string>& lines)
 {
-    // lines[0]: "sieve-character-v3 spheres=N"
-    const std::string head = std::string(kCharacterVersion3) + " spheres=";
-    if (lines[0].rfind(head, 0) != 0) throw std::invalid_argument("a sieve-character-v3's first line is \"sieve-character-v3 spheres=N\"");
-    const std::string n = lines[0].substr(head.size());
+    // lines[0]: "sieve-character-v3 spheres=N", or "sieve-character-v4 spheres=N symmetry=S"
+    const bool v4 = lines[0].rfind(std::string(kCharacterVersion4) + " ", 0) == 0;
+    const std::string head = std::string(v4 ? kCharacterVersion4 : kCharacterVersion3) + " spheres=";
+    if (lines[0].rfind(head, 0) != 0)
+        throw std::invalid_argument(v4 ? "a sieve-character-v4's first line is \"sieve-character-v4 spheres=N symmetry=S\"" : "a sieve-character-v3's first line is \"sieve-character-v3 spheres=N\"");
+    std::string n = lines[0].substr(head.size());
+    Symmetry sym = Symmetry::None;
+    if (v4)
+    {
+        const size_t sp = n.find(" symmetry=");
+        if (sp == std::string::npos) throw std::invalid_argument("a sieve-character-v4's first line is \"sieve-character-v4 spheres=N symmetry=S\"");
+        sym = symmetry_from_name(n.substr(sp + 10));
+        if (sym == Symmetry::None) throw std::invalid_argument("a sieve-character-v4 keeps a symmetry (one of none is v3)");
+        n = n.substr(0, sp);
+    }
     if (n.empty() || n.size() > 5 || n.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("spheres: not a number: " + n);
     const size_t count = std::stoul(n);
     if (lines.size() < count + 1) throw std::invalid_argument("it names " + n + " spheres but has fewer lines");
@@ -539,8 +575,26 @@ Character read_given(const std::vector<std::string>& lines)
         else throw std::invalid_argument("sphere " + std::to_string(i) + "'s kind is not body, head or joint");
         sp.push_back(s);
     }
-    Character c = given_character(std::move(sp));
-    for (size_t i = count + 1; i < lines.size(); ++i) read_held_line(c, lines[i]);
+    size_t at = count + 1;
+    std::vector<SphereImage> images;
+    if (v4)
+    {
+        images.resize(count);
+        uint64_t last = 0;
+        for (; at < lines.size() && lines[at].rfind("i ", 0) == 0; ++at)
+        {
+            std::istringstream in(lines[at]);
+            std::string tag, extra;
+            long long idx, of, mirror, turn;
+            if (!(in >> tag >> idx >> of >> mirror >> turn) || (in >> extra) || idx < 1 || idx >= (long long)count || of < 0 || of >= idx || mirror < 0 || mirror > 1 || turn < 0 || turn > 7)
+                throw std::invalid_argument("not an image's line \"i SPHERE OF MIRROR TURN\": " + lines[at]);
+            if (uint64_t(idx) <= last) throw std::invalid_argument("the images' lines are not in the order of their spheres");
+            last = uint64_t(idx);
+            images[size_t(idx)] = SphereImage{int32_t(of), uint8_t(mirror), uint8_t(turn)};
+        }
+    }
+    Character c = v4 ? given_character(std::move(sp), sym, std::move(images)) : given_character(std::move(sp));
+    for (size_t i = at; i < lines.size(); ++i) read_held_line(c, lines[i]);
     if (c.text() != [&] { std::string t; for (const auto& l : lines) t += l + "\n"; return t; }())
         throw std::invalid_argument("not in its canonical form (spheres or held models out of order, or numbers written otherwise)");
     return c;
@@ -554,6 +608,18 @@ Character given_character(std::vector<Sphere> spheres)
     Character c;
     c.given = true;
     c.spheres = std::move(spheres);
+    return c;
+}
+
+Character given_character(std::vector<Sphere> spheres, Symmetry symmetry, std::vector<SphereImage> images)
+{
+    check_given(spheres);
+    check_images(spheres, symmetry, images);
+    Character c;
+    c.given = true;
+    c.spheres = std::move(spheres);
+    c.given_symmetry = symmetry;
+    if (symmetry != Symmetry::None) c.images = std::move(images);
     return c;
 }
 
@@ -573,7 +639,7 @@ Character read_character(const std::string& text_in)
     if (text.find('\n') == std::string::npos && text.find(';') != std::string::npos)
         for (char& ch : text)
             if (ch == ';') ch = '\n';
-    if (text.rfind(std::string(kCharacterVersion3) + " ", 0) == 0)
+    if (text.rfind(std::string(kCharacterVersion3) + " ", 0) == 0 || text.rfind(std::string(kCharacterVersion4) + " ", 0) == 0)
     {
         return read_given(text_lines(text));
     }
@@ -582,7 +648,7 @@ Character read_character(const std::string& text_in)
     if (!first.empty() && first.back() == '\r') first.pop_back();
     const std::vector<std::string> words = split_nonempty(first, ' ');
     if (words.empty() || (words[0] != kCharacterVersion && words[0] != kCharacterVersion2))
-        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + ", " + kCharacterVersion2 + " or " + kCharacterVersion3);
+        throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + ", " + kCharacterVersion2 + ", " + kCharacterVersion3 + " or " + kCharacterVersion4);
     const bool v2 = words[0] == kCharacterVersion2;
     CharacterSettings s;
     bool seen[6] = {};
@@ -653,8 +719,10 @@ Character read_character(const std::string& text_in)
 
 std::string Character::text() const
 {
-    std::string t = given ? std::string(kCharacterVersion3) + " spheres=" + std::to_string(spheres.size()) + "\n"
-                          : std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + settings_words(settings) + "\n";
+    const bool v4 = given && given_symmetry != Symmetry::None;
+    std::string t = v4      ? std::string(kCharacterVersion4) + " spheres=" + std::to_string(spheres.size()) + " symmetry=" + symmetry_name(given_symmetry) + "\n"
+                    : given ? std::string(kCharacterVersion3) + " spheres=" + std::to_string(spheres.size()) + "\n"
+                            : std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + settings_words(settings) + "\n";
     static const char* const kKinds[] = {"body", "head", "joint"};
     for (size_t i = 0; i < spheres.size(); ++i)
     {
@@ -662,6 +730,9 @@ std::string Character::text() const
         t += "s " + std::to_string(i) + " " + std::to_string(p.parent) + " " + std::to_string(p.x) + " " + std::to_string(p.y) + " " +
              std::to_string(p.z) + " " + std::to_string(p.r) + " " + kKinds[p.kind] + "\n";
     }
+    if (v4)
+        for (size_t i = 0; i < images.size(); ++i)
+            if (images[i].of >= 0) t += "i " + std::to_string(i) + " " + std::to_string(images[i].of) + " " + std::to_string(images[i].mirror) + " " + std::to_string(images[i].turn) + "\n";
     for (const auto& [i, hex] : holds) t += "h " + std::to_string(i) + " " + hex + "\n";
     return t;
 }

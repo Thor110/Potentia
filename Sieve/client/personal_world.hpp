@@ -43,6 +43,7 @@
 #include "sieve/character.hpp"
 #include "sieve/worldspace.hpp"
 #include "mesh.hpp"
+#include "character_look.hpp"
 #include "slide_panel.hpp"
 #include "favourites.hpp"
 #include "dialogs.hpp"
@@ -95,6 +96,13 @@ public:
     void settle_panels() { cat_panel_.settle(), place_panel_.settle(), day_panel_.settle(), worlds_panel_.settle(); } // (a picture: the panels where they are going)
     // Real Graphics off: the characters drawn as the wireframe (rings and bones), as everywhere else.
     void set_wireframe(bool on) { wireframe_ = on; }
+    // How the characters are drawn with Real Graphics on (IDEAS 19.214): [character] drawing, every space's
+    // one setting (character_look.hpp); shaded by default, as they always were here.
+    void set_character_drawing(int drawing) { char_drawing_ = drawing; }
+    // How big their voxels are and whether the voxels' faces are joined (IDEAS 19.216, 19.215).
+    void set_voxels(const VoxelChoice& v) { voxels_ = v; }
+    // (for pictures and tests) what the readout says of it: empty for shaded (as before the choice came).
+    std::string drawing_report() const;
     // Its features (IDEAS 19.197), as Personal Dimensions > Features has them: the map and the compass.
     void set_features(bool map, bool compass) { show_map_ = map, show_compass_ = compass; }
     // Turning what you hold (IDEAS 19.221), as Personal Dimensions > Features and Settings > Graphics have
@@ -468,6 +476,10 @@ private:
     std::vector<Cloud> clouds_;
     float px_ = 0, pz_ = -60, yaw_ = 0, pitch_ = -0.05f; // where you stand, and which way you look
     bool wireframe_ = false;
+    int char_drawing_ = 3;   // [character] drawing (character_look.hpp's kDrawShaded)
+    size_t char_tris_ = 0;   // the characters' cubes' triangles in the last frame drawn
+    size_t char_unjoined_ = 0; // the same with each face on its own (for the readout, where joined)
+    VoxelChoice voxels_;       // [character] voxel_size and the rows beside it
     bool show_map_ = true, show_compass_ = true;
     void draw_map();
     void draw_compass();

@@ -43,6 +43,9 @@ add_library(sieve_core STATIC
     core/src/modelsieve.cpp
     core/src/worldspace.cpp
     core/src/character.cpp
+    core/src/character_voxels.cpp
+    core/src/character_skin.cpp
+    core/src/character_edit.cpp
     core/src/importers.cpp
     core/src/dimensions.cpp
     core/src/animation.cpp
@@ -767,6 +770,7 @@ if(SIEVE_BUILD_CLIENT)
         client/chat.cpp
         client/viewer.cpp
         client/mesh.cpp
+        client/character_look.cpp
         client/music.cpp
         client/strings.cpp
         client/synth.cpp

@@ -56,6 +56,19 @@
 // least 1 and every coordinate within 2^28; then its held models' lines, if it holds any, as in v2.
 // It has no seed and no settings; its identity is the SHA-256 of its text, as for every version.
 //
+// "sieve-character-v4" (IDEAS 19.203): a character of given spheres that keeps its symmetry, so that an
+// edit made by hand to one side is made on every side at once. It is what a character becomes once its
+// joints are dragged, limbs grown or taken away, or joints added or taken away in the Character Creator
+// (sieve/character_edit.hpp). Its first line is "sieve-character-v4 spheres=N symmetry=S" (S bilateral
+// or radial); then its N sphere lines, as v3's; then one line for each sphere that is the image of
+// another, in the order of the spheres:
+//     i SPHERE OF MIRROR TURN    (OF before SPHERE and the first of its set, itself no image; MIRROR 1
+//                                 when x is negated, then TURN eighths of a turn about the upright, from
+//                                 +x towards +z: bilateral images are "1 0", radial ones "0 TURN")
+// then its held models' lines, as v2's. A character edited with no symmetry is written as v3, so each
+// character has one text: a v4 of symmetry none is refused. Older builds refuse a v4 plainly (it does not
+// start with a version they read); every v1 to v3 file reads as before.
+//
 // Any version may also be written on one line with ';' between its lines (the settings file keeps a
 // character so); it reads the same and has the same identity.
 #pragma once
@@ -74,6 +87,7 @@ namespace sieve {
 inline constexpr const char* kCharacterVersion = "sieve-character-v1";
 inline constexpr const char* kCharacterVersion2 = "sieve-character-v2";
 inline constexpr const char* kCharacterVersion3 = "sieve-character-v3";
+inline constexpr const char* kCharacterVersion4 = "sieve-character-v4";
 // The models a sphere may hold: the models line at its default shape (eight vertices, twelve faces,
 // sixteen coordinates), positional.
 inline constexpr uint32_t kHeldVertices = 8, kHeldFaces = 12, kHeldCoords = 16;
@@ -104,6 +118,15 @@ struct Sphere
     enum Kind : uint8_t { Body = 0, Head = 1, Joint = 2 } kind = Joint;
 };
 
+// Which sphere a sphere is the image of under its character's symmetry (v4): `of` -1 for none (the first
+// of its set, or alone), else that sphere, mirrored (x negated) and then turned `turn` eighths of a turn
+// about the upright.
+struct SphereImage
+{
+    int32_t of = -1;
+    uint8_t mirror = 0, turn = 0;
+};
+
 struct Character
 {
     CharacterSettings settings;
@@ -112,7 +135,11 @@ struct Character
     std::vector<std::pair<uint32_t, std::string>> holds;
     // v3: the spheres are given, not unfolded from the settings (which are then unused).
     bool given = false;
-    std::string text() const;     // the canonical text (above): v1, v2 where it holds models, v3 where given
+    // v4: the symmetry a character of given spheres keeps (none: it is v3), and each sphere's image (empty,
+    // or one a sphere).
+    Symmetry given_symmetry = Symmetry::None;
+    std::vector<SphereImage> images;
+    std::string text() const;     // the canonical text (above): v1, v2 where it holds models, v3 where given, v4 where it keeps a symmetry
     std::string one_line() const; // the text with ';' between its lines (for the settings file)
     // Puts a model in a sphere (an empty address takes it out), checked: the sphere must exist and
     // the address be a model of the held models' line. Throws std::invalid_argument otherwise.
@@ -146,6 +173,9 @@ CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps =
 // A character of given spheres (v3), checked as read_character checks one. Throws
 // std::invalid_argument saying what is wrong.
 Character given_character(std::vector<Sphere> spheres);
+// A character of given spheres that keeps a symmetry (v4; none makes a v3, its images then all -1),
+// checked as read_character checks one.
+Character given_character(std::vector<Sphere> spheres, Symmetry symmetry, std::vector<SphereImage> images);
 
 // A character read back from its text (a .character file): the first line's settings unfolded,
 // and, where sphere lines follow, every one checked against the unfolding. Throws

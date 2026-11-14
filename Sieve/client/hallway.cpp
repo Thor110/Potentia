@@ -5,9 +5,11 @@
 #include "hallway.hpp"
 #include "favourites.hpp"
 #include "gpu_memory.hpp"
+#include "character_look.hpp"
 
 #include "cli/image_io.hpp"
 #include "sieve/paths.hpp"
+#include "sieve/character_voxels.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
 #include "cli/timings.hpp"
@@ -2541,6 +2543,8 @@ std::string Hallway::action_line() const
     return std::string(sieve::action_name(a)) + ": none";
 }
 
+std::string Hallway::drawing_report() const { return character_drawing_report(char_drawing_, real_graphics_, figure_tris_, voxels_, figure_unjoined_); }
+
 void Hallway::draw_character(SDL_Color edge, MeshBatch* into)
 {
     // The animation it plays: its action's, where it has a map of actions (IDEAS 19.186), else its one.
@@ -2559,6 +2563,8 @@ void Hallway::draw_character(SDL_Color edge, MeshBatch* into)
     // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
     // other side, a short line of their own, a little dimmer (at most eight drawn).
     const SDL_Color dim{Uint8(edge.r * 0.7f), Uint8(edge.g * 0.7f), Uint8(edge.b * 0.7f), 255};
+    if (into) figure_tris_ = figure_unjoined_ = 0; // (counted afresh each frame the renderer draws them)
+    if (into) skins_kept_for(std::min<size_t>(personal_.size(), 8));
     for (size_t i = 0; i < personal_.size() && i < 8; ++i) draw_figure(personal_[i], dim, int(i) + 1, nullptr, nullptr, into);
 }
 
@@ -2600,15 +2606,20 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
         auto argb = [](int r, int g, int b) { return 0xFF000000u | uint32_t(std::clamp(r, 0, 255)) << 16 | uint32_t(std::clamp(g, 0, 255)) << 8 | uint32_t(std::clamp(b, 0, 255)); };
         for (const sieve::Sphere& p : c.spheres)
             if (p.parent >= 0) into->add_edge(world(p), world(c.spheres[size_t(p.parent)]), argb(int(edge.r * 0.6f), int(edge.g * 0.6f), int(edge.b * 0.6f)));
-        for (const sieve::Sphere& p : c.spheres)
-        {
+        // Drawn as [character] drawing says, every space's one setting (IDEAS 19.214; shaded by default,
+        // as it always was here): a point of its own placed as world() places its spheres.
+        CharacterPlacing at;
+        at.metres = scale;
+        at.point = [&](float x, float y, float z) { return base + right * (x * scale) + Vec3{0, (y - float(low)) * scale, 0} + f * (-z * scale); };
+        at.direction = [&](float x, float y, float z) { return right * x + Vec3{0, y, 0} + f * (-z); };
+        figure_tris_ += add_character_drawing(*into, cam_, char_drawing_, c.spheres, voxels_.cell(r), at, [&](const sieve::Sphere& p) {
             MeshBatch::SphereLook look;
             look.style = MeshBatch::SphereLook::Style::Shaded;
             look.ambient = 0.3f;
             look.min_radius = 1.0f;
             look.argb = p.kind == sieve::Sphere::Head ? argb(edge.r + 90, edge.g + 90, edge.b + 60) : argb(edge.r, edge.g, edge.b);
-            into->add_sphere(world(p), float(p.r) * scale, look);
-        }
+            return look;
+        }, voxels_, &figure_unjoined_);
         return;
     }
     // (with Real Graphics, the bones and spheres are in the models' image already: only what it holds)

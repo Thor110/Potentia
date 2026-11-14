@@ -18,6 +18,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace hallway {
@@ -67,8 +68,16 @@ public:
     void set(const std::string& full_id, const std::string& keys);
     // What differs from the defaults, to be kept in the settings file.
     std::map<std::string, std::string> overrides() const;
-    // Actions in one section whose keys are the same: "personal dimension: E is pick up and open".
-    std::vector<std::string> clashes() const;
+    // Two sections whose keys are read on the same screen (the Character Creator's fixed keys and its
+    // editing keys), so a key given to one must not be given to the other: checked together by clashes().
+    void together(const std::string& section_a, const std::string& section_b);
+    // Two actions whose keys are the same, in one section or in two sections said together: the key, and
+    // the two actions' full ids (Settings > Controls > Keys names them in red).
+    struct Clash
+    {
+        std::string chord, a, b;
+    };
+    std::vector<Clash> clashes() const;
 
 private:
     struct Entry
@@ -80,7 +89,46 @@ private:
     std::vector<Entry> entries_;
     std::map<std::string, size_t> index_; // full id to entry
     std::map<std::string, std::string> pending_; // set before its system declared it (read from settings first)
+    std::vector<std::pair<std::string, std::string>> together_; // sections checked together for clashes
     const Entry* find(const std::string& full_id) const;
 };
+
+// The Character Creator's editing keys (IDEAS 19.203): the chosen sphere the next or the one before, a limb
+// grown from it or taken away with all beyond it, a joint added after it or it taken out, stretching
+// bones on or off, the chosen sphere moved a step up, down, left or right as seen, and the last edit
+// undone. Declared after the personal dimension's (personal_world.cpp), so they are listed last.
+namespace creator_keys {
+extern const std::string& kNextSphere;
+extern const std::string& kPreviousSphere;
+extern const std::string& kGrow;
+extern const std::string& kRemoveLimb;
+extern const std::string& kAddJoint;
+extern const std::string& kRemoveJoint;
+extern const std::string& kStretch;
+extern const std::string& kNudgeUp;
+extern const std::string& kNudgeDown;
+extern const std::string& kNudgeLeft;
+extern const std::string& kNudgeRight;
+extern const std::string& kUndo;
+// The Creator's own keys besides (IDEAS 19.199: every key on the registry), read by the CHARACTER page
+// too: play or pause the animation, take it off, turn the view, tilt it, the view as it opens, a seed at
+// random (on the held-model row, a model at random), the next character of the seed walk and ten on, the
+// chosen sphere's held model taken away, and the files (save, a model, a skeleton, open a character).
+extern const std::string& kPlay;
+extern const std::string& kTakeOff;
+extern const std::string& kTurnLeft;
+extern const std::string& kTurnRight;
+extern const std::string& kTiltUp;
+extern const std::string& kTiltDown;
+extern const std::string& kViewHome;
+extern const std::string& kRandom;
+extern const std::string& kNext;
+extern const std::string& kNextTen;
+extern const std::string& kEmptySphere;
+extern const std::string& kSave;
+extern const std::string& kImportModel;
+extern const std::string& kSkeleton;
+extern const std::string& kOpen;
+} // namespace creator_keys
 
 } // namespace hallway

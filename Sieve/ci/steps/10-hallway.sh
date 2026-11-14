@@ -411,6 +411,142 @@ $H --menu --settings crt/c.ini --creator --animation-frame 15 --screenshot creat
 cmp creator-home.png creator-still.png
 $H --settings crt/c.ini --no-menu --action walk --animation-frame 15 --screenshot crt-walk.png | tr -d '\r' | q "^action: walk: 45adcf033beb3fc647acd80ff8053472d5f3bef3561cf2510e6208ae6894acb1$"
 $H --settings crt/c.ini --no-menu --action jump --screenshot crt-jump.png | tr -d '\r' | q "^action: jump: none$"
+# One drawing of characters for every space (IDEAS 19.214): Settings > Graphics > Character Drawing is
+# the Creator's drawing row ([character] drawing), one step Left from shaded being voxels (since the
+# skin, its quads and its smooth drawing came after it, three Rights from shaded reach the smooth
+# drawing); the Creator, your dimension and the hallway then draw voxels, and say so; with Real Graphics
+# off, each says
+# it draws the wireframe; shaded (the default) says nothing, as before.
+rm -rf cdr
+mkdir -p cdr
+touch cdr/g.ini
+$H --main-menu --settings cdr/g.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_drawing,Left" --screenshot cdr-graphics.png > /dev/null
+grep -c "^drawing = 2 " cdr/g.ini | q "^1$"
+$H --menu --real-graphics --settings cdr/g.ini --creator --screenshot cdr-creator.png | tr -d '\r' | q "^character drawing: voxels$"
+$H --menu --settings cdr/g.ini --creator --screenshot cdr-creator-off.png | tr -d '\r' | q "^character drawing: voxels (the wireframe while Real Graphics is off)$"
+$H --personal-world --real-graphics --settings cdr/g.ini --pworld-look -10 --screenshot cdr-pworld.png | tr -d '\r' | q "^characters: drawn as voxels, [1-9][0-9]* triangles of cubes$"
+$H --personal-world --settings cdr/g.ini --pworld-look -10 --screenshot cdr-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; voxels chosen)$"
+$H --no-menu --real-graphics --settings cdr/g.ini --character-store pdim/characters --screenshot cdr-hall.png | tr -d '\r' | q "^characters: drawn as voxels, [1-9][0-9]* triangles of cubes$"
+$H --menu --real-graphics --creator --screenshot cdr-shaded.png | tr -d '\r' > cdr/shaded.txt
+test "$(grep -c "^character drawing:" cdr/shaded.txt || true)" = 0 # (grep -c counts 0 and fails: "|| true" keeps its 0 and the ERR trap quiet)
+# A character far wider than it is tall, drawn as voxels: its cells grow to fit its widest side in 256,
+# so the hallway draws it (it asked for a grid too large to hold, and the hallway stopped, before).
+rm -rf cdr/wide
+mkdir -p cdr/wide
+printf 'sieve-character-v3 spheres=2\ns 0 -1 0 0 0 40 body\ns 1 0 100000000 0 0 40 joint\n' > cdr/wide.character
+cp cdr/wide.character "cdr/wide/$(sha256sum cdr/wide.character | cut -d' ' -f1).character"
+$H --no-menu --real-graphics --settings cdr/g.ini --character-store cdr/wide --screenshot cdr-wide.png | tr -d '\r' | q "^characters: drawn as voxels, "
+# The Creator's own keys are on the registry (Settings > Controls > Keys): given another key, it is that
+# key that turns the view (three presses, 15 degrees each, from the 34 it opens at).
+printf '[keys]\ncreator/turn_left = K\n' > cdr/k.ini
+$H --menu --real-graphics --settings cdr/k.ini --creator --press "K,K,K" --screenshot cdr-k.png | tr -d '\r' | q "^character view: turned -11 degrees"
+# How big a voxel is, and greedy meshing (IDEAS 19.216, 19.215): Settings > Graphics > Character Voxels
+# sets [character] voxel_joined and voxel_size. Joined, the Creator draws the same picture, byte for byte,
+# with fewer faces, and says how many; on the world lattice its cell is a power of two of the base, said
+# with its level, and your dimension says its cubes are on the lattice and how many triangles joining
+# saved. Neither chosen, the readout says nothing of either, as before.
+rm -rf cvx
+mkdir -p cvx
+printf '[character]\ndrawing = 2\n' > cvx/a.ini
+cp cvx/a.ini cvx/j.ini
+$H --main-menu --settings cvx/j.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:voxel_joined,Return" --screenshot cvx-menu.png > /dev/null
+grep -c "^voxel_joined = on " cvx/j.ini | q "^1$"
+$H --menu --real-graphics --settings cvx/a.ini --creator --screenshot cvx-apart.png | tr -d '\r' > cvx/a.txt
+test "$(grep -c "^voxels:" cvx/a.txt || true)" = 0
+$H --menu --real-graphics --settings cvx/j.ini --creator --screenshot cvx-joined.png | tr -d '\r' | q "^voxels: cell [0-9.]* units (its height in 16 cells), [1-9][0-9]* faces seen, drawn as [1-9][0-9]* rectangles$"
+cmp cvx-apart.png cvx-joined.png
+cp cvx/j.ini cvx/l.ini
+$H --main-menu --settings cvx/l.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:voxel_size,Right" --screenshot cvx-menu2.png > /dev/null
+grep -c "^voxel_size = 1 " cvx/l.ini | q "^1$"
+$H --menu --real-graphics --settings cvx/l.ini --creator --screenshot cvx-lattice.png | tr -d '\r' | q "^voxels: cell [0-9.]* units (the lattice: [0-9]* mm, level [0-9]*), [1-9][0-9]* faces seen, drawn as [1-9][0-9]* rectangles$"
+$H --personal-world --real-graphics --settings cvx/l.ini --pworld-look -10 --screenshot cvx-pworld.png | tr -d '\r' | q "^characters: drawn as voxels, [1-9][0-9]* triangles of cubes ([1-9][0-9]* before joining), cells on the lattice$"
+# The skin (IDEAS 19.225): one Right from shaded on Settings > Graphics > Character Drawing is the skin,
+# drawing 4; Skin Blend steps by ten, and Skin Detail by one, on Settings > Graphics > Character Voxels.
+# The Creator says its cell (the voxels' halved, once by default), blend, grid, triangles and the time it
+# took to make; your dimension and the hallway say how many triangles of skin they drew; with Real
+# Graphics off each draws the wireframe and says so. Its blend 0 is the spheres' plain union, and the
+# same skin made twice is the same picture, byte for byte.
+rm -rf skn
+mkdir -p skn
+touch skn/s.ini
+$H --main-menu --settings skn/s.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_drawing,Right" --screenshot skn-graphics.png > /dev/null
+grep -c "^drawing = 4 " skn/s.ini | q "^1$"
+cp skn/s.ini skn/b.ini
+cp skn/s.ini skn/off.ini
+$H --main-menu --settings skn/b.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:skin_blend,Left,Left,Left,Left,Left,Item:skin_detail,Right" --screenshot skn-menu.png > /dev/null
+grep -c "^skin_blend = 0 " skn/b.ini | q "^1$"
+grep -c "^skin_detail = 2 " skn/b.ini | q "^1$"
+$H --menu --real-graphics --settings skn/s.ini --character c99.character --creator --screenshot skn-creator.png | tr -d '\r' > skn/creator.txt
+q "^character drawing: skin$" skn/creator.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" skn/creator.txt
+$H --menu --real-graphics --settings skn/s.ini --character c99.character --creator --screenshot skn-creator2.png > /dev/null
+cmp skn-creator.png skn-creator2.png
+$H --menu --real-graphics --settings skn/b.ini --character c99.character --creator --screenshot skn-union.png | tr -d '\r' | q "^skin: cell 20\.1 units (the voxels' halved 2 times), blend 0\.0 units (0%), "
+$H --menu --settings skn/off.ini --character c99.character --creator --screenshot skn-off.png | tr -d '\r' | q "^character drawing: skin (the wireframe while Real Graphics is off)$"
+$H --personal-world --real-graphics --settings skn/s.ini --pworld-look -10 --screenshot skn-pworld.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin$"
+$H --personal-world --settings skn/off.ini --pworld-look -10 --screenshot skn-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; skin chosen)$"
+$H --no-menu --real-graphics --settings skn/s.ini --character-store pdim/characters --screenshot skn-hall.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin$"
+# The skin's quads and its smooth drawing (IDEAS 19.214): two and three Rights from shaded on Settings >
+# Graphics > Character Drawing, drawings 5 and 6. The Creator says how many quads the skin is and how many
+# it drew, and for the smooth drawing how long its normals took to average across the faces; your
+# dimension and the hallway say how many quads, or triangles of smooth skin, they drew; with Real Graphics
+# off each draws the wireframe and says so; the same drawn twice is the same picture, byte for byte.
+rm -rf sqd
+mkdir -p sqd
+touch sqd/q.ini
+touch sqd/m.ini
+$H --main-menu --settings sqd/q.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_drawing,Right,Right" --screenshot sqd-graphics.png > /dev/null
+grep -c "^drawing = 5 " sqd/q.ini | q "^1$"
+$H --main-menu --settings sqd/m.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_drawing,Right,Right,Right" --screenshot sqd-graphics2.png > /dev/null
+grep -c "^drawing = 6 " sqd/m.ini | q "^1$"
+cp sqd/q.ini sqd/off.ini
+$H --menu --real-graphics --settings sqd/q.ini --character c99.character --creator --screenshot sqd-quads.png | tr -d '\r' > sqd/quads.txt
+q "^character drawing: quads$" sqd/quads.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 11590 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms" sqd/quads.txt
+$H --menu --real-graphics --settings sqd/q.ini --character c99.character --creator --screenshot sqd-quads2.png > /dev/null
+cmp sqd-quads.png sqd-quads2.png
+$H --menu --real-graphics --settings sqd/m.ini --character c99.character --creator --screenshot sqd-smooth.png | tr -d '\r' > sqd/smooth.txt
+q "^character drawing: smooth$" sqd/smooth.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, normals averaged in [0-9.]* ms$" sqd/smooth.txt
+$H --menu --real-graphics --settings sqd/m.ini --character c99.character --creator --screenshot sqd-smooth2.png > /dev/null
+cmp sqd-smooth.png sqd-smooth2.png
+$H --menu --settings sqd/off.ini --character c99.character --creator --screenshot sqd-off.png | tr -d '\r' | q "^character drawing: quads (the wireframe while Real Graphics is off)$"
+$H --personal-world --real-graphics --settings sqd/q.ini --pworld-look -10 --screenshot sqd-pworld.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin$"
+$H --personal-world --real-graphics --settings sqd/m.ini --pworld-look -10 --screenshot sqd-pworld2.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin$"
+$H --personal-world --settings sqd/off.ini --pworld-look -10 --screenshot sqd-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; quads chosen)$"
+$H --no-menu --real-graphics --settings sqd/q.ini --character-store pdim/characters --screenshot sqd-hall.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin$"
+$H --no-menu --real-graphics --settings sqd/m.ini --character-store pdim/characters --screenshot sqd-hall2.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin$"
+# Editing a character by its joints (IDEAS 19.203): in the Character Creator . chooses the next sphere,
+# J adds a joint after it and N grows a limb from it, on both sides of a mirrored character at once; the
+# character is kept as its spheres (sieve-character-v4, its symmetry kept) in the settings file, reads back
+# the same, and two Ctrl+Z give the seed's character again. X takes a limb away and all beyond it (and its
+# mirror), the body is never taken, and a drag with the mouse moves the chosen sphere and its mirror.
+# Taking a joint out of a skeleton with an animation on an action names the action that no longer fits.
+# The editing keys are listed on Settings > Controls > Keys after every other, and one changed there is
+# used. Nothing of it shows until a sphere is chosen, so the creator untouched reads as before.
+rm -rf ced
+mkdir -p ced
+touch ced/e.ini
+touch ced/u.ini
+touch ced/k.ini
+$H --menu --real-graphics --settings ced/e.ini --character c99.character --creator --press ".,.,J,N" --screenshot ced-keys.png | tr -d '\r' > ced/keys.txt
+q "^character: b9ed8e57e12483279bb41ef0f382e697ce45ff3edc81daffb91336b35673324a$" ced/keys.txt
+q "^character edit: sieve-character-v4 spheres=31 symmetry=bilateral; sphere 8 chosen, its images: 1; edits to undo: 2; stretch off$" ced/keys.txt
+q "^note: a limb grown from it; actions checked against its 31 spheres: all fit$" ced/keys.txt
+grep -c "^line = sieve-character-v4 spheres=31 symmetry=bilateral;s 0 -1 0 0 0 569 body;" ced/e.ini | q "^1$"
+$H --menu --real-graphics --settings ced/e.ini --creator --screenshot ced-back.png | tr -d '\r' | q "^character: b9ed8e57e12483279bb41ef0f382e697ce45ff3edc81daffb91336b35673324a$"
+$H --menu --real-graphics --settings ced/u.ini --character c99.character --creator --press ".,.,J,N,Ctrl+Z,Ctrl+Z" --screenshot ced-undo.png | tr -d '\r' | q "^character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2$"
+grep -c "^line = sieve-character-v1 seed=99 limbs=5 joints=3 branches=1 symmetry=bilateral head=yes " ced/u.ini | q "^1$"
+$H --menu --real-graphics --character c99.character --creator --press ".,.,X" --screenshot ced-cut.png | tr -d '\r' | q "^character edit: sieve-character-v4 spheres=17 symmetry=bilateral; sphere 0 chosen"
+$H --menu --real-graphics --character c99.character --creator --press "X" --screenshot ced-body.png | tr -d '\r' | q "^note: not edited: the body stays where it is: choose another sphere$"
+$H --menu --real-graphics --character c99.character --creator --press ".,." --creator-drag 60,-80 --screenshot ced-drag.png | tr -d '\r' | q "^character edit: sieve-character-v4 spheres=27 symmetry=bilateral; sphere 2 chosen, its images: 1; edits to undo: 1; stretch off$"
+$H --menu --real-graphics --import-skeleton tests/arm.gltf --animation-frame 5 --creator --press "Tab,Right,Tab,.,.,Shift+J" --screenshot ced-unfit.png | tr -d '\r' | q "^note: the joint taken out of its limb; actions checked against its 2 spheres; more bones than spheres now, so not played: idle$"
+$H --main-menu --settings ced/k.ini --read-aloud --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:39" --screenshot ced-keyrow.png | tr -d '\r' | q "^read aloud: The Character Creator: editing: choose the next sphere, \.$"
+$H --main-menu --settings ced/k.ini --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:41,Return,M" --screenshot ced-keyset.png > /dev/null
+grep -c "^creator.edit/grow = M " ced/k.ini | q "^1$"
+$H --menu --real-graphics --settings ced/k.ini --character c99.character --creator --press ".,.,M" --screenshot ced-m.png | tr -d '\r' | q "^note: a limb grown from it; "
+$H --menu --real-graphics --character c99.character --creator --screenshot ced-none.png | tr -d '\r' > ced/none.txt
+test "$(grep -c "^character edit" ced/none.txt || true)" = 0
 # Recording and replay (IDEAS 19.184, sieve-replay-v1): a recording's start written where the
 # hallway begins; frames added (W held for 1.5 s, the mouse turned, S held, Q pressed); played through,
 # it ends where it ends every time, as plain text, packed as .sieve, and packed and cached; played while

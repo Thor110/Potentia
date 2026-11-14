@@ -24,6 +24,7 @@
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
 #include "mesh.hpp"
+#include "character_look.hpp" // SkinReport
 #include "display.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
@@ -542,9 +543,21 @@ public:
         const auto deg = [](float r) { return std::to_string(int(std::lround(r * 57.29578f))); };
         return "turned " + deg(char_turn_) + " degrees, tilted " + deg(char_tilt_) + " degrees";
     }
+    // (for pictures and tests) the voxels as last drawn (IDEAS 19.216, 19.215): "cell C units (rule), F
+    // faces drawn as R" (R rectangles where joined, else the faces' own), or empty where they were not.
+    std::string voxels_line() const
+    {
+        if (vox_cell_line_.empty() || vox_faces_ == 0) return std::string();
+        return "cell " + vox_cell_line_ + ", " + std::to_string(vox_faces_) + " faces seen, drawn as " + std::to_string(vox_drawn_) + (vox_drawn_ == vox_faces_ ? " faces" : " rectangles");
+    }
+    // (for pictures and tests) the skin's cost as last drawn (IDEAS 19.225), or empty where it was not.
+    std::string skin_line() const { return skin_report_.cell == 0 ? std::string() : skin_report_.line(app_ ? voxel_choice_of(*app_) : VoxelChoice{}, char_draw()); }
 private:
+    std::string vox_cell_line_;  // (the voxels' cell, its rule said, as last drawn)
+    SkinReport skin_report_;
+    size_t vox_faces_ = 0, vox_drawn_ = 0;
     SDL_FRect char_drag_ = {};   // the drawing's box, where a drag turns it
-    void char_key(SDL_Keycode key, bool shift);
+    void char_key(const SDL_Event& e);
     void char_init();            // from the settings file's [character], once
     void char_store();           // into it, and saved, after a change
     bool char_ready_ = false;
@@ -566,6 +579,9 @@ private:
     void render_char_drawing(float bx, float by, float bw, float bh);
     // Real Graphics off: every character drawn as the wireframe, whatever the drawing row says.
     bool char_draw_forced() const { return app_ && !app_->real_graphics; }
+    // The drawing chosen: the settings' own (IDEAS 19.214: one setting for every space, Settings > Graphics
+    // changing the same one), or the page's where there are no settings.
+    int char_draw() const { return app_ ? app_->character_drawing : char_draw_; }
     // The character creator (IDEAS 19.186): the CHARACTER page and the actions, the whole window.
     bool creator_ = false;
     bool creator_from_main_ = false; // opened from the main menu (Esc: back there), not the setup menu
@@ -582,14 +598,46 @@ private:
         return creator_anims_.end();
     }
     std::vector<std::string> creator_said_;       // (the actions told missing, so each is said once)
+    // Editing by its joints (IDEAS 19.203, sieve/character_edit.hpp): a click on the drawing picks a
+    // sphere (the sphere row's own, char_sphere_) and a drag moves it; the editing keys (keys.hpp,
+    // creator_keys) grow, take away, add and take out joints and undo. Nothing of it is shown until a
+    // sphere is picked or an editing key pressed, so the creator is as it was until then.
+    bool char_editing_ = false;                   // a sphere picked or an editing key pressed
+    bool char_hand_edited_ = false;               // the character was edited here (its seed shown as -)
+    bool char_stretch_ = false;                   // T: bones stretch as their joints are dragged
+    std::vector<sieve::Character> char_undo_;     // the character before each edit, the latest last
+    bool char_moving_ = false;                    // a sphere is being dragged
+    sieve::Character char_move_from_;             // (the character as the drag began, each move made from it)
+    double char_move_start_[3] = {0, 0, 0};       // (the sphere's place as the drag began)
+    // The drawing as last made, for picking and for turning a drag into a move: each sphere's place on
+    // the screen, its radius there and its nearness, and the view.
+    struct CharPick
+    {
+        float x, y, r, near;
+    };
+    std::vector<CharPick> char_pick_;
+    float char_view_scale_ = 1;
+    std::string char_images_key_;                 // (the chosen sphere's images, worked out once a change)
+    std::vector<uint32_t> char_images_;
+    double char_edit_ms_ = 0;                     // the last edit's time, for the readout
+    bool creator_edit_key(const SDL_Event& e);
+    void char_edit(const char* what, const std::function<uint32_t(sieve::Character&)>& edit);
+    void char_view_vector(float sx, float sy, double out[3]) const; // a move on the screen as one in the character
+    std::string creator_recheck();                // its actions checked again against its bones
+    bool creator_pick(float x, float y);          // a click on the drawing: a sphere picked, a drag begun
     void render_creator(float W, float H);
     bool creator_key(const SDL_Event& e, bool& done, Result& result);
-    bool char_ctrl_key(const SDL_Event& e); // Ctrl+S/O/I/K, the CHARACTER page's and the creator's
+    bool char_ctrl_key(const SDL_Event& e); // its files (Ctrl+S/O/I/K by default), the CHARACTER page's and the creator's
 public:
     // The character creator, from the main menu (from_main) or the setup menu's CHARACTER page (C).
     void open_creator(bool from_main);
     bool creator() const { return creator_; }
     std::string actions_line() const; // "ID: idle SHA12|none, walk ..." for a picture's report
+    std::string edit_line() const;    // (for a picture's report) the editing's state, or empty where nothing was edited or picked
+    double edit_ms() const { return char_edit_ms_; } // (the same) the last edit's time, in milliseconds
+    // --creator-drag DX,DY: the chosen sphere dragged by the mouse, as a person would (IDEAS 19.203): the
+    // drawing made, a press on the chosen sphere's middle, a move of DX, DY pixels and the button let go.
+    void drag_chosen(float dx, float dy);
     void character_chosen(const std::string& path, bool save);
     void load_character(const std::string& path); // --character FILE, and Ctrl+O
     void import_model(const std::string& path);    // --import-model FILE, and Ctrl+I: a model (.obj, .gltf, .glb) into the chosen sphere

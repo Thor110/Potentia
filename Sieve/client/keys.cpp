@@ -161,17 +161,28 @@ std::map<std::string, std::string> Keys::overrides() const
     return out;
 }
 
-std::vector<std::string> Keys::clashes() const
+void Keys::together(const std::string& section_a, const std::string& section_b)
 {
-    std::vector<std::string> out;
+    together_.emplace_back(section_a, section_b);
+}
+
+std::vector<Keys::Clash> Keys::clashes() const
+{
+    auto asked_together = [&](const std::string& a, const std::string& b) {
+        if (a == b) return true;
+        for (const auto& [x, y] : together_)
+            if ((x == a && y == b) || (x == b && y == a)) return true;
+        return false;
+    };
+    std::vector<Clash> out;
     for (size_t i = 0; i < entries_.size(); ++i)
         for (size_t j = i + 1; j < entries_.size(); ++j)
         {
-            if (entries_[i].action.section != entries_[j].action.section) continue;
+            if (!asked_together(entries_[i].action.section, entries_[j].action.section)) continue;
             for (const KeyChord& a : entries_[i].chords)
                 for (const KeyChord& b : entries_[j].chords)
                     if (a.key == b.key && a.mod == b.mod)
-                        out.push_back(entries_[i].action.section + ": " + chord_name(a) + " is " + entries_[i].action.id + " and " + entries_[j].action.id);
+                        out.push_back({chord_name(a), entries_[i].action.section + "/" + entries_[i].action.id, entries_[j].action.section + "/" + entries_[j].action.id});
         }
     return out;
 }

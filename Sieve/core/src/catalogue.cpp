@@ -197,6 +197,8 @@ std::vector<FormatEntry> gather()
         "the CHARACTER page and the hallway (SPECIFICATIONS 12.0j)");
     own(kCharacterVersion3, "A character of given spheres (an imported skeleton)", "character",
         std::string("first line \"") + kCharacterVersion3 + " spheres=N\"", "Ctrl+K and sieve import (SPECIFICATIONS 12.0j)");
+    own(kCharacterVersion4, "A character of given spheres that keeps its symmetry (edited by its joints)", "character",
+        std::string("first line \"") + kCharacterVersion4 + " spheres=N symmetry=S\"", "the Character Creator's editing (SPECIFICATIONS 12.0j, IDEAS 19.203)");
     own("sieve-species-v1", "A species: a character's settings with the seed free", "character", "\"sieve-species-v1 limbs=...\"",
         "named on the CHARACTER page, grouped on YOURS (IDEAS 19.152)");
     own(kAnimationVersion, "An animation: turns per bone per frame", "animation", std::string("first line \"") + kAnimationVersion + " bones=...\"",

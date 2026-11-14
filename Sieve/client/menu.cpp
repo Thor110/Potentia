@@ -23,9 +23,11 @@
 #include "font.hpp"
 #include "gpu_memory.hpp"
 #include "mesh.hpp"
+#include "character_look.hpp"
 #include "strings.hpp"
 #include "theme.hpp"
 #include "world.hpp"
+#include "keys.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "cli/plugins.hpp"
@@ -53,6 +55,8 @@
 #include "sieve/text.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
+#include "sieve/character_voxels.hpp"
+#include "sieve/character_edit.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -1649,6 +1653,43 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN && e.type != SDL_EVENT_MOUSE_MOTION && e.type != SDL_EVENT_MOUSE_BUTTON_UP) return;
     }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
+    // In the creator, a sphere under the click is picked and dragged (IDEAS 19.203): each move made from
+    // the character as the drag began, so the bones keep their lengths however far it goes; kept, and its
+    // actions checked again, as the button is let go.
+    if (creator_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && inside(char_drag_, e.button.x, e.button.y) && creator_pick(e.button.x, e.button.y))
+        return;
+    if (char_moving_ && e.type == SDL_EVENT_MOUSE_MOTION)
+    {
+        double by[3];
+        char_view_vector(e.motion.x - char_drag_x_, e.motion.y - char_drag_y_, by);
+        const double to[3] = {char_move_start_[0] + by[0], char_move_start_[1] + by[1], char_move_start_[2] + by[2]};
+        const bool stretch = char_stretch_ || Keys::get().held(creator_keys::kStretch, SDL_GetKeyboardState(nullptr));
+        try
+        {
+            sieve::Character c = char_move_from_;
+            const uint32_t chosen = sieve::edit_move(c, char_sphere_, to, stretch);
+            char_ = std::move(c);
+            char_sphere_ = chosen;
+        }
+        catch (const std::exception& ex)
+        {
+            char_note_ = trf("creator.edit.refused", {ex.what()});
+        }
+        return;
+    }
+    if (char_moving_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+    {
+        char_moving_ = false;
+        if (char_.text() != char_move_from_.text())
+        {
+            char_undo_.push_back(std::move(char_move_from_));
+            if (char_undo_.size() > 256) char_undo_.erase(char_undo_.begin());
+            char_hand_edited_ = true;
+            char_store();
+            char_note_ = tr("creator.edit.moved") + "; " + creator_recheck();
+        }
+        return;
+    }
     // The character on its pedestal, turned by a drag across it (the right-hand panel's CHARACTER).
     if ((side_.open || creator_) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
     {
@@ -1798,7 +1839,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     {
         if (e.key.key == SDLK_ESCAPE) set_side(false);
         else if (e.key.key == SDLK_TAB) toggle_panel(); // the settings instead (only one panel is in at a time)
-        else if ((side_page_ == 0 || (e.key.key != SDLK_I && e.key.key != SDLK_K)) && char_ctrl_key(e)) {} // (Ctrl+I and K: the CHARACTER page's alone)
+        else if ((side_page_ == 0 || (!Keys::get().is(creator_keys::kImportModel, e) && !Keys::get().is(creator_keys::kSkeleton, e))) && char_ctrl_key(e)) {} // (a model and a skeleton: the CHARACTER page's alone)
         else if (side_page_ == 0 && !(e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_C) open_creator(false); // the character creator
         else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN ||
                  ((e.key.mod & SDL_KMOD_CTRL) && (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)))
@@ -1813,7 +1854,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         else if (side_page_ == 1) yours_key(e.key.key);
         else if (side_page_ == 2) cat_key(e.key.key);
         else if (side_page_ == 3) speak_key(e.key.key);
-        else char_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        else char_key(e);
         return;
     }
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0, ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
@@ -2094,7 +2135,6 @@ void Menu::char_init()
     char_ready_ = true;
     if (app_)
     {
-        char_draw_ = app_->character_drawing;
         if (!app_->character.empty())
             try
             {
@@ -2154,7 +2194,6 @@ void Menu::char_store()
     if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
     app_->character_actions.clear();
     if (!char_actions_.empty() && store_actions(actions_store_dir(app_path_), char_actions_)) app_->character_actions = char_actions_.id();
-    app_->character_drawing = char_draw_;
     save_app();
 }
 
@@ -2222,6 +2261,7 @@ void Menu::import_skeleton(const std::string& path)
         const std::filesystem::path folder = path_utf8(path).parent_path();
         const sieve::ImportedModel m = sieve::read_model(bytes, creator_loader_beside(folder, false));
         char_ = sieve::skeleton_character(m);
+        char_hand_edited_ = false;
         keep_import_stat(sieve::held_import_of(m));
         char_sphere_ = 0;
         char_anim_.reset();
@@ -2637,12 +2677,15 @@ void Menu::render_speaks(float x, float top, float bottom)
     side_scrollbar(x, y, room, side_scroll_, side_scroll_max_, content);
 }
 
-// Ctrl+S saves the character, Ctrl+O opens one, Ctrl+I takes a model into the chosen sphere and
-// Ctrl+K a glTF's skeleton as the character: the CHARACTER page's keys, and the creator's.
+// Its files, by the keys on the registry (Ctrl+S, O, I and K by default): save the character, open one,
+// take a model into the chosen sphere, or a glTF's skeleton as the character; the CHARACTER page's keys,
+// and the creator's.
 bool Menu::char_ctrl_key(const SDL_Event& e)
 {
-    if (e.type != SDL_EVENT_KEY_DOWN || !(e.key.mod & SDL_KMOD_CTRL)) return false;
-    if (e.key.key == SDLK_S)
+    namespace ck = creator_keys;
+    const Keys& keys = Keys::get();
+    if (e.type != SDL_EVENT_KEY_DOWN) return false;
+    if (keys.is(ck::kSave, e))
     {
         // Save the character as a .character file (its text: settings, then its spheres).
         const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
@@ -2651,19 +2694,19 @@ bool Menu::char_ctrl_key(const SDL_Event& e)
         save_file_dialog(character_saved, this, window_, kChar, 1, start.c_str(), this);
         return true;
     }
-    if (e.key.key == SDLK_I)
+    if (keys.is(ck::kImportModel, e))
     {
         static const SDL_DialogFileFilter kObj[] = {{"Models (OBJ, glTF)", "obj;gltf;glb"}};
         open_file_dialog(obj_opened, this, window_, kObj, 1, nullptr, false, false, this);
         return true;
     }
-    if (e.key.key == SDLK_K)
+    if (keys.is(ck::kSkeleton, e))
     {
         static const SDL_DialogFileFilter kGltf[] = {{"glTF models with a skeleton", "gltf;glb"}};
         open_file_dialog(skeleton_opened, this, window_, kGltf, 1, nullptr, false, false, this);
         return true;
     }
-    if (e.key.key == SDLK_O)
+    if (keys.is(ck::kOpen, e))
     {
         static const SDL_DialogFileFilter kChar[] = {{"Sieve characters", "character"}};
         open_file_dialog(character_opened, this, window_, kChar, 1, nullptr, false, false, this);
@@ -2732,10 +2775,11 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         creator_focus_ = 1 - creator_focus_;
         return true;
     }
+    if (creator_edit_key(e)) return true;
     if (char_ctrl_key(e)) return true;
     if (creator_focus_ == 0)
     {
-        char_key(k, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        char_key(e);
         return true;
     }
     const int n = int(sieve::kActionCount);
@@ -2772,6 +2816,190 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         }
     }
     return true;
+}
+
+// ---------------------------------------------------------------- editing by its joints (IDEAS 19.203)
+
+// A move of (sx, sy) pixels on the drawing (right and down) as a move in the character, in its units: the
+// view's turn and tilt undone (render_char_drawing's `view_dir`, turned back), at the drawing's scale.
+void Menu::char_view_vector(float sx, float sy, double out[3]) const
+{
+    const double X = double(sx) / double(char_view_scale_), Y = -double(sy) / double(char_view_scale_);
+    const double ca = std::cos(double(char_turn_)), sa = std::sin(double(char_turn_)), ct = std::cos(double(char_tilt_)), st = std::sin(double(char_tilt_));
+    const double py = Y * ct, d = -Y * st;
+    out[0] = X * ca + d * sa;
+    out[1] = py;
+    out[2] = -X * sa + d * ca;
+}
+
+// Its actions checked again against its bones (an action's animation plays where it has no more bones
+// than the character has spheres): those that no longer fit are named, and an animation playing that no
+// longer fits is taken off, since it cannot be played on it.
+std::string Menu::creator_recheck()
+{
+    std::string unfit;
+    for (size_t i = 0; i < sieve::kActionCount; ++i)
+    {
+        const auto it = creator_anim(char_actions_.animation[i]);
+        if (it != creator_anims_.end() && !sieve::animation_fits(char_, *it)) unfit += (unfit.empty() ? "" : ", ") + std::string(sieve::kActionNames[i]);
+    }
+    if (char_anim_ && !sieve::animation_fits(char_, *char_anim_))
+    {
+        char_anim_.reset();
+        char_anim_id_.reset();
+    }
+    creator_said_.clear();
+    const std::string n = std::to_string(char_.spheres.size());
+    return unfit.empty() ? trf("creator.edit.fit", {n}) : trf("creator.edit.unfit", {unfit, n});
+}
+
+// One edit, made to a copy, so a refused edit leaves the character as it was; kept, with the character
+// before it on the undo list, the chosen sphere the one the edit gives back.
+void Menu::char_edit(const char* what, const std::function<uint32_t(sieve::Character&)>& edit)
+{
+    sieve::Character c = char_;
+    try
+    {
+        const auto t0 = std::chrono::steady_clock::now();
+        const uint32_t chosen = edit(c);
+        char_edit_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        char_undo_.push_back(std::move(char_));
+        if (char_undo_.size() > 256) char_undo_.erase(char_undo_.begin()); // (the oldest let go)
+        char_ = std::move(c);
+        char_sphere_ = chosen;
+        char_hand_edited_ = true;
+        char_editing_ = true;
+        char_store();
+        char_note_ = tr(what) + "; " + creator_recheck();
+    }
+    catch (const std::exception& e)
+    {
+        char_editing_ = true;
+        char_note_ = trf("creator.edit.refused", {e.what()});
+    }
+}
+
+// The editing keys (on the registry, so Settings > Controls > Keys lists them and they can be changed).
+bool Menu::creator_edit_key(const SDL_Event& e)
+{
+    namespace ck = creator_keys;
+    const Keys& keys = Keys::get();
+    const uint32_t n = uint32_t(char_.spheres.size());
+    if (n == 0) return false;
+    if (char_moving_) return false; // (a sphere being dragged: its move is made from the character as the drag began)
+    if (keys.is(ck::kNextSphere, e) || keys.is(ck::kPreviousSphere, e))
+    {
+        char_sphere_ = (char_sphere_ + (keys.is(ck::kNextSphere, e) ? 1 : n - 1)) % n;
+        char_editing_ = true;
+        char_note_ = trf("creator.edit.chosen", {std::to_string(char_sphere_), std::to_string(n)});
+        return true;
+    }
+    if (keys.is(ck::kStretch, e))
+    {
+        char_stretch_ = !char_stretch_;
+        char_editing_ = true;
+        char_note_ = tr(char_stretch_ ? "creator.edit.stretch_on" : "creator.edit.stretch_off");
+        return true;
+    }
+    if (keys.is(ck::kUndo, e))
+    {
+        char_editing_ = true;
+        if (char_undo_.empty())
+        {
+            char_note_ = tr("creator.edit.nothing");
+            return true;
+        }
+        char_ = std::move(char_undo_.back());
+        char_undo_.pop_back();
+        char_sphere_ = std::min<uint32_t>(char_sphere_, uint32_t(char_.spheres.size() - 1));
+        if (!char_.given) char_settings_ = char_.settings; // (back to a seed-made character: its settings again)
+        if (!char_.given) char_hand_edited_ = false;
+        char_store();
+        char_note_ = tr("creator.edit.undone") + "; " + creator_recheck();
+        return true;
+    }
+    const uint32_t s = char_sphere_;
+    if (keys.is(ck::kGrow, e)) char_edit("creator.edit.grown", [s](sieve::Character& c) { return sieve::edit_grow(c, s); });
+    else if (keys.is(ck::kRemoveLimb, e)) char_edit("creator.edit.limb_removed", [s](sieve::Character& c) { return sieve::edit_remove_limb(c, s); });
+    else if (keys.is(ck::kAddJoint, e)) char_edit("creator.edit.joint_added", [s](sieve::Character& c) { return sieve::edit_add_joint(c, s); });
+    else if (keys.is(ck::kRemoveJoint, e)) char_edit("creator.edit.joint_removed", [s](sieve::Character& c) { return sieve::edit_remove_joint(c, s); });
+    else if (keys.is(ck::kNudgeUp, e) || keys.is(ck::kNudgeDown, e) || keys.is(ck::kNudgeLeft, e) || keys.is(ck::kNudgeRight, e))
+    {
+        // A step as seen: a 24th of the character's height (at least 16 units) up, down, left or right on
+        // the drawing, the view's turn and tilt undone.
+        int32_t low = 0, high = 0;
+        char_.vertical(low, high);
+        const float step = float(std::max(16, (high - low) / 24)) * char_view_scale_;
+        const float sx = keys.is(ck::kNudgeLeft, e) ? -step : keys.is(ck::kNudgeRight, e) ? step : 0;
+        const float sy = keys.is(ck::kNudgeUp, e) ? -step : keys.is(ck::kNudgeDown, e) ? step : 0;
+        double by[3];
+        char_view_vector(sx, sy, by);
+        const bool stretch = char_stretch_;
+        char_edit("creator.edit.moved", [s, by, stretch](sieve::Character& c) { return sieve::edit_nudge(c, s, by, stretch); });
+    }
+    else return false;
+    return true;
+}
+
+// A click on the drawing: of the spheres under it, the one whose middle it is nearest (as a share of its
+// radius as seen, so a small joint against the body is picked by a click on it; the nearer on a tie)
+// chosen and a drag begun that moves it (the character as it was kept for undo); none under it, and the
+// drag turns the character as before.
+bool Menu::creator_pick(float x, float y)
+{
+    int best = -1;
+    float best_share = 0;
+    for (size_t i = 0; i < char_pick_.size(); ++i)
+    {
+        const CharPick& p = char_pick_[i];
+        const float r = std::max(6.0f, p.r), d2 = (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y);
+        if (d2 > r * r) continue;
+        const float share = d2 / (r * r);
+        if (best < 0 || share < best_share - 1e-6f || (share < best_share + 1e-6f && p.near > char_pick_[size_t(best)].near)) best = int(i), best_share = share;
+    }
+    if (best < 0 || size_t(best) >= char_.spheres.size()) return false;
+    char_sphere_ = uint32_t(best);
+    char_editing_ = true;
+    char_note_ = trf("creator.edit.chosen", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())});
+    if (best == 0) return true; // (the body is chosen, but stays where it is)
+    char_moving_ = true;
+    char_move_from_ = char_;
+    const sieve::Sphere& p = char_.spheres[char_sphere_];
+    char_move_start_[0] = p.x, char_move_start_[1] = p.y, char_move_start_[2] = p.z;
+    char_drag_x_ = x;
+    char_drag_y_ = y;
+    return true;
+}
+
+void Menu::drag_chosen(float dx, float dy)
+{
+    render(); // (the drawing made, so its spheres are where they are seen)
+    if (char_sphere_ >= char_pick_.size()) return;
+    const CharPick p = char_pick_[char_sphere_];
+    bool done = false;
+    Result r = Result::Enter;
+    SDL_Event e{};
+    e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    e.button.button = SDL_BUTTON_LEFT;
+    e.button.x = p.x, e.button.y = p.y;
+    handle(e, done, r);
+    e = SDL_Event{};
+    e.type = SDL_EVENT_MOUSE_MOTION;
+    e.motion.x = p.x + dx, e.motion.y = p.y + dy;
+    handle(e, done, r);
+    e = SDL_Event{};
+    e.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    e.button.button = SDL_BUTTON_LEFT;
+    e.button.x = p.x + dx, e.button.y = p.y + dy;
+    handle(e, done, r);
+}
+
+std::string Menu::edit_line() const
+{
+    if (!char_editing_ || char_.spheres.empty()) return std::string();
+    const std::string t = char_.text();
+    return t.substr(0, t.find('\n')) + "; sphere " + std::to_string(char_sphere_) + " chosen, its images: " + std::to_string(char_images_.empty() ? 0 : char_images_.size() - 1) +
+           "; edits to undo: " + std::to_string(char_undo_.size()) + "; stretch " + (char_stretch_ ? "on" : "off");
 }
 
 void Menu::render_creator(float W, float H)
@@ -2818,7 +3046,24 @@ void Menu::render_creator(float W, float H)
     for (const auto& a : creator_anims_) fitting += sieve::animation_fits(char_, a) ? 1 : 0;
     text(r_, x + 14, y + 6, trf("creator.store", {std::to_string(creator_anims_.size()), std::to_string(fitting)}), 1, grey);
     render_char_drawing(x + colw + 20, 70, W - (x + colw + 20) - 20, H - 70 - 40);
-    text(r_, 20, H - 24, tr("creator.footer"), 1, grey);
+    {
+        namespace ck = creator_keys;
+        const Keys& keys = Keys::get();
+        text(r_, 20, H - 24, trf("creator.footer", {keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kSave), keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)}), 1, grey);
+    }
+    // Editing by its joints (IDEAS 19.203): once a sphere is picked or an editing key pressed, what is
+    // chosen and the editing keys as set (Settings > Controls > Keys), above the footer.
+    if (char_editing_)
+    {
+        namespace ck = creator_keys;
+        const Keys& keys = Keys::get();
+        const std::string line = trf("creator.edit.status", {std::to_string(char_sphere_), std::to_string(char_.spheres.size()), std::to_string(char_images_.empty() ? 0 : char_images_.size() - 1),
+                                                              tr(char_stretch_ ? "creator.edit.stretching" : "creator.edit.keeping"), std::to_string(char_undo_.size())});
+        const std::string keys_line = trf("creator.edit.keys", {keys.first(ck::kNextSphere) + "/" + keys.first(ck::kPreviousSphere), keys.first(ck::kGrow), keys.first(ck::kRemoveLimb),
+                                                                keys.first(ck::kAddJoint) + "/" + keys.first(ck::kRemoveJoint), keys.first(ck::kStretch), keys.first(ck::kNudgeUp), keys.first(ck::kUndo)});
+        text(r_, 20, H - 52, fit_cells(line, size_t((W - 40) / 8)), 1, SDL_Color{230, 200, 120, 255});
+        text(r_, 20, H - 38, fit_cells(keys_line, size_t((W - 40) / 8)), 1, grey);
+    }
 }
 
 void Menu::open_viewer(const std::string& id)
@@ -3026,6 +3271,7 @@ void Menu::load_character(const std::string& path)
     {
         char_ = sieve::read_character(text);
         char_settings_ = char_.settings;
+        char_hand_edited_ = false;
         char_store();
         char_note_ = trf("side.char.opened", {utf8_path(path_utf8(path).filename())});
     }
@@ -3036,43 +3282,54 @@ void Menu::load_character(const std::string& path)
 }
 
 // CHARACTER's rows: the seed, limbs, joints, branches, symmetry and head (sieve/character.hpp).
-void Menu::char_key(SDL_Keycode key, bool shift)
+void Menu::char_key(const SDL_Event& e)
 {
+    namespace ck = creator_keys;
+    const Keys& keys = Keys::get();
+    const SDL_Keycode key = e.key.key;
+    const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
     constexpr int kRows = 9;
     auto& s = char_settings_;
     const int dir = key == SDLK_RIGHT ? 1 : key == SDLK_LEFT ? -1 : 0;
     auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
-    switch (key)
+    // The keys on the registry (Settings > Controls > Keys, "The Character Creator"), as they are set.
+    if (keys.is(ck::kTakeOff, e)) // the animation taken off the character
     {
-    case SDLK_A: // play or pause the animation (IDEAS 19.170); Shift+A takes it off the character
-        if (char_anim_ && shift)
-        {
-            char_anim_.reset();
-            char_anim_id_.reset();
-            char_store();
-            return;
-        }
+        if (!char_anim_) return;
+        char_anim_.reset();
+        char_anim_id_.reset();
+        char_store();
+        return;
+    }
+    if (keys.is(ck::kPlay, e)) // play or pause the animation (IDEAS 19.170)
+    {
         if (char_anim_)
         {
             if (char_anim_playing_) char_anim_paused_ = uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);
             char_anim_playing_ = !char_anim_playing_;
         }
         return;
-    case SDLK_LEFTBRACKET: // 15 degrees; with Shift, tilted
-        if (shift) char_tilt_by(-0.2617994f);
-        else char_turn_ -= 0.2617994f;
-        return;
-    case SDLK_RIGHTBRACKET:
-        if (shift) char_tilt_by(0.2617994f);
-        else char_turn_ += 0.2617994f;
-        return;
-    case SDLK_HOME: // the view as it opens: turned as at first, not tilted
+    }
+    if (keys.is(ck::kTurnLeft, e)) { char_turn_ -= 0.2617994f; return; } // 15 degrees
+    if (keys.is(ck::kTurnRight, e)) { char_turn_ += 0.2617994f; return; }
+    if (keys.is(ck::kTiltUp, e)) { char_tilt_by(-0.2617994f); return; }
+    if (keys.is(ck::kTiltDown, e)) { char_tilt_by(0.2617994f); return; }
+    if (keys.is(ck::kViewHome, e)) // the view as it opens: turned as at first, not tilted
+    {
         char_turn_ = kCharTurn0;
         char_tilt_ = 0;
         return;
-    case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
-    case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
-    case SDLK_R:
+    }
+    if (keys.is(ck::kEmptySphere, e))
+    {
+        if (char_row_ != 8) return;
+        char_.hold(char_sphere_, ""); // the sphere empty again
+        char_store();
+        return;
+    }
+    bool remake = false; // (a new character from the settings, below)
+    if (keys.is(ck::kRandom, e))
+    {
         if (char_row_ == 8)
         {
             // A model at random in the chosen sphere (any model of the held models' line).
@@ -3082,14 +3339,17 @@ void Menu::char_key(SDL_Keycode key, bool shift)
             return;
         }
         s.seed = (uint64_t(SDL_GetPerformanceCounter()) * 0x9E3779B97F4A7C15ull) >> 16; // any seed: the seed is the character's name
-        break;
-    case SDLK_G: s = sieve::walk_character(s, shift ? 10 : 1); break; // the seed walk: the next character (Shift: ten on)
-    case SDLK_DELETE:
-    case SDLK_BACKSPACE:
-        if (char_row_ != 8) return;
-        char_.hold(char_sphere_, ""); // the sphere empty again
-        char_store();
-        return;
+        remake = true;
+    }
+    else if (keys.is(ck::kNext, e) || keys.is(ck::kNextTen, e))
+    {
+        s = sieve::walk_character(s, keys.is(ck::kNextTen, e) ? 10 : 1); // the seed walk: the next character (or ten on)
+        remake = true;
+    }
+    if (!remake) switch (key)
+    {
+    case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
+    case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
     case SDLK_LEFT:
     case SDLK_RIGHT:
         switch (char_row_)
@@ -3101,7 +3361,10 @@ void Menu::char_key(SDL_Keycode key, bool shift)
         case 4: s.symmetry = sieve::Symmetry((int(s.symmetry) + 3 + dir) % 3); break;
         case 5: s.head = !s.head; break;
         case 6:
-            char_draw_ = (char_draw_ + 4 + dir) % 4; // how it is drawn: no new character
+            // How it is drawn, the one setting every space draws characters by (IDEAS 19.214; Settings >
+            // Graphics changes the same one): no new character.
+            char_draw_ = (char_draw() + kDrawCount + dir) % kDrawCount;
+            if (app_) app_->character_drawing = char_draw_;
             char_store();
             return;
         case 7: // which sphere the model row works on
@@ -3119,7 +3382,10 @@ void Menu::char_key(SDL_Keycode key, bool shift)
         break;
     default: return;
     }
-    // A new character from the settings, keeping the models held in spheres it still has.
+    // A new character from the settings, keeping the models held in spheres it still has. One edited by
+    // hand in the creator can be had back (undo, IDEAS 19.203).
+    if (creator_ && char_hand_edited_) char_undo_.push_back(char_);
+    char_hand_edited_ = false;
     const auto holds = char_.holds;
     char_ = sieve::unfold_character(s);
     for (const auto& [i, hex] : holds)
@@ -3620,7 +3886,12 @@ void Menu::render_side(float W, float H)
     }
     const float yy = render_char_rows(x, top, kSideW);
     render_char_drawing(x + 14, yy, kSideW - 28, (bottom - 34) - yy);
-    text(r_, x + 14, bottom - 22, tr("side.footer"), 1, grey);
+    {
+        namespace ck = creator_keys;
+        const Keys& keys = Keys::get();
+        text(r_, x + 14, bottom - 22, trf("side.footer", {keys.first(ck::kNext), keys.first(ck::kRandom), keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kPlay), keys.first(ck::kSave),
+                                                         keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)}), 1, grey);
+    }
 }
 
 // The CHARACTER page's rows, and the lines under them (what it is, what it plays, the last note):
@@ -3689,10 +3960,12 @@ float Menu::render_char_rows(float x, float top, float width)
     char_init();
     const auto& cs = char_settings_;
     const std::string given = tr("side.char.given"); // a character of given spheres has no settings
-    const std::string values[] = {char_.given ? tr("side.char.from_skeleton") : std::to_string(cs.seed), char_.given ? given : std::to_string(cs.limbs), char_.given ? given : std::to_string(cs.joints),
+    // (edited by hand, IDEAS 19.203, or kept with its symmetry as sieve-character-v4: no seed, so "-")
+    const bool edited = char_hand_edited_ || (char_.given && char_.given_symmetry != sieve::Symmetry::None);
+    const std::string values[] = {edited ? given : char_.given ? tr("side.char.from_skeleton") : std::to_string(cs.seed), char_.given ? given : std::to_string(cs.limbs), char_.given ? given : std::to_string(cs.joints),
                                   char_.given ? given : std::to_string(cs.branches), char_.given ? given : std::string(sieve::symmetry_name(cs.symmetry)),
                                   char_.given ? given : cs.head ? tr("side.yes") : tr("side.no"),
-                                  char_draw_forced() ? tr("side.char.draw.forced") : tr(std::string("side.char.draw.") + std::to_string(char_draw_)),
+                                  char_draw_forced() ? tr("side.char.draw.forced") : tr(std::string("side.char.draw.") + std::to_string(char_draw())),
                                   trf("side.char.sphere_of", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())}),
                                   char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : tr("side.char.none")};
     static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing", "side.char.sphere", "side.char.model"};
@@ -3731,7 +4004,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
 {
     // How it is drawn: as the drawing row says (shaded unless changed), but always the wireframe while
     // Real Graphics is off, as everything else then is (Edward, 13 November 2026).
-    const int draw = char_draw_forced() ? 1 : char_draw_;
+    const int draw = char_draw_forced() ? 1 : char_draw();
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
     {
@@ -3756,6 +4029,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         char_.extent(ex, ey, ez); // (at rest, so the scale holds still while it moves)
         const float reach = float(std::max({ex, ez, 1})), tall = float(std::max(ey, 1));
         const float scale = std::min(bw / (2.4f * reach), bh / (2.6f * tall));
+        char_view_scale_ = scale; // (for a drag on it to be turned into a move: IDEAS 19.203)
         const float cx = bx + bw / 2, cy = by + bh / 2 - bh * 0.04f;
         const float turn = char_turn_, ca = std::cos(turn), sa = std::sin(turn);
         int32_t low, high;
@@ -3828,91 +4102,89 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         // One cell size for every character, so the pixels' squares and the voxels' cubes are alike from one
         // character to the next (Edward, 14 November 2026: "square sizes need normalising"): its height in
         // 16 cells (before, a quarter of its body's radius, which differed from one character to another).
-        const float cell_u = std::max(1.0f, tall / 16.0f);
-        // Voxels: true voxels, cubes on a grid fixed to the character (it turns with it): every cell whose middle lies in a sphere is filled, so the spheres run together
-        // into one blocky body; each face between a filled cell and an empty one drawn, lit by the way it
-        // faces, its edges darker (Edward, 14 November 2026: "do the voxels not look like actual voxels and
-        // instead are just squares?" They were squares fixed to the screen).
+        // How big a voxel is and whether the faces are joined (IDEAS 19.216, 19.215): today's rule and each
+        // face on its own unless chosen on Settings > Graphics > Character Voxels.
+        const VoxelChoice vox = app_ ? voxel_choice_of(*app_) : VoxelChoice{};
+        const float cell_u = vox.cell(char_);
+        vox_cell_line_ = voxel_cell_report(char_, vox);
+        vox_faces_ = vox_drawn_ = 0;
+        // Voxels: true voxels, cubes on a grid fixed to the character (it turns with it): every cell whose
+        // middle lies in a sphere is filled, so the spheres run together into one blocky body; each face
+        // between a filled cell and an empty one drawn, lit by the way it faces, its edges darker (Edward,
+        // 14 November 2026: "do the voxels not look like actual voxels and instead are just squares?" They
+        // were squares fixed to the screen). The cubes are every space's (sieve::voxel_faces, IDEAS 19.214).
         if (draw == 2)
         {
-            const float cellu = cell_u; // (in the character's units)
-            float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
-            for (const sieve::Sphere& p : shown.spheres)
-            {
-                const float c[3] = {float(p.x), float(p.y), float(p.z)};
-                for (int k = 0; k < 3; ++k) lo[k] = std::min(lo[k], c[k] - float(p.r)), hi[k] = std::max(hi[k], c[k] + float(p.r));
-            }
-            const int nx = int(std::ceil((hi[0] - lo[0]) / cellu)) + 1, ny = int(std::ceil((hi[1] - lo[1]) / cellu)) + 1, nz = int(std::ceil((hi[2] - lo[2]) / cellu)) + 1;
-            // Each cell: the sphere it lies deepest in, or -1 where it lies in none.
-            std::vector<int> owner(size_t(nx) * size_t(ny) * size_t(nz), -1);
-            auto idx = [&](int x, int y, int z) { return (size_t(z) * size_t(ny) + size_t(y)) * size_t(nx) + size_t(x); };
-            for (size_t si = 0; si < shown.spheres.size(); ++si)
-            {
-                const sieve::Sphere& p = shown.spheres[si];
-                const float r = float(p.r);
-                const int x0 = std::max(0, int((float(p.x) - r - lo[0]) / cellu)), x1 = std::min(nx - 1, int((float(p.x) + r - lo[0]) / cellu));
-                const int y0 = std::max(0, int((float(p.y) - r - lo[1]) / cellu)), y1 = std::min(ny - 1, int((float(p.y) + r - lo[1]) / cellu));
-                const int z0 = std::max(0, int((float(p.z) - r - lo[2]) / cellu)), z1 = std::min(nz - 1, int((float(p.z) + r - lo[2]) / cellu));
-                for (int z = z0; z <= z1; ++z)
-                    for (int y = y0; y <= y1; ++y)
-                        for (int x = x0; x <= x1; ++x)
-                        {
-                            const float cx3 = lo[0] + (float(x) + 0.5f) * cellu - float(p.x), cy3 = lo[1] + (float(y) + 0.5f) * cellu - float(p.y),
-                                        cz3 = lo[2] + (float(z) + 0.5f) * cellu - float(p.z);
-                            const float in = r * r - (cx3 * cx3 + cy3 * cy3 + cz3 * cz3);
-                            if (in < 0) continue;
-                            int& o = owner[idx(x, y, z)];
-                            if (o < 0) o = int(si);
-                            else
-                            {
-                                const sieve::Sphere& q = shown.spheres[size_t(o)];
-                                const float qx = lo[0] + (float(x) + 0.5f) * cellu - float(q.x), qy = lo[1] + (float(y) + 0.5f) * cellu - float(q.y), qz = lo[2] + (float(z) + 0.5f) * cellu - float(q.z);
-                                if (in > float(q.r) * float(q.r) - (qx * qx + qy * qy + qz * qz)) o = int(si);
-                            }
-                        }
-            }
-            auto filled = [&](int x, int y, int z) { return x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz && owner[idx(x, y, z)] >= 0; };
-            // A character-space point to camera space (turned as the spheres are).
-            auto camp = [&](float px, float py, float pz) { return view(px, py, pz); };
             const Vec3 light = normalize(Vec3{-0.45f, 0.55f, -0.70f}); // (from the upper left, towards you)
-            static const int kDir[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
-            for (int z = 0; z < nz; ++z)
-                for (int y = 0; y < ny; ++y)
-                    for (int x = 0; x < nx; ++x)
-                    {
-                        const int o = owner[idx(x, y, z)];
-                        if (o < 0) continue;
-                        const sieve::Sphere& p = shown.spheres[size_t(o)];
-                        const float bx = lo[0] + float(x) * cellu, by = lo[1] + float(y) * cellu, bz = lo[2] + float(z) * cellu;
-                        const Vec3 mid = camp(bx + cellu / 2, by + cellu / 2, bz + cellu / 2);
-                        for (const auto& dv : kDir)
-                        {
-                            if (filled(x + dv[0], y + dv[1], z + dv[2])) continue; // (inside: hidden)
-                            const Vec3 n = view_dir(float(dv[0]), float(dv[1]), float(dv[2]));
-                            if (n.z >= 0) continue; // (turned away)
-                            // The face's four corners: on the side dv points to.
-                            Vec3 q[4];
-                            const int ax = dv[0] ? 0 : dv[1] ? 1 : 2, u = (ax + 1) % 3, v = (ax + 2) % 3;
-                            for (int k = 0; k < 4; ++k)
-                            {
-                                float w[3] = {bx, by, bz};
-                                w[ax] += dv[ax] > 0 ? cellu : 0;
-                                w[u] += (k == 1 || k == 2) ? cellu : 0;
-                                w[v] += (k >= 2) ? cellu : 0;
-                                q[k] = camp(w[0], w[1], w[2]);
-                            }
-                            const float lit = 0.6f + 0.4f * std::max(0.0f, dot(n, light)); // (the sides away from the light still read)
-                            const uint32_t fc = argb_of(colour(p, -mid.z, lit)), ec = argb_of(colour(p, -mid.z, lit * 0.55f));
-                            const Vec3 t1[3] = {q[0], q[1], q[2]}, t2[3] = {q[0], q[2], q[3]};
-                            char_batch_.add_face_cam(t1, fc);
-                            char_batch_.add_face_cam(t2, fc);
-                            for (int k = 0; k < 4; ++k) char_batch_.add_edge_cam(q[k], q[(k + 1) % 4], ec);
-                        }
-                    }
+            // Joined (greedy meshing, IDEAS 19.215): the faces seen kept with their colours (here each cell's
+            // own, nearer brighter, so only cells of one colour join), then drawn as the fewest rectangles of
+            // one colour that cover them; every cell's edges drawn as before, so the picture is the same.
+            std::vector<sieve::VoxelFace> seen;
+            std::vector<uint32_t> seen_colour;
+            for (const sieve::VoxelFace& f : sieve::voxel_faces(shown.spheres, cell_u, vox.anchored()))
+            {
+                const int* dv = sieve::kVoxelDirs[f.dir];
+                const Vec3 n = view_dir(float(dv[0]), float(dv[1]), float(dv[2]));
+                if (n.z >= 0) continue; // (turned away)
+                const sieve::Sphere& p = shown.spheres[f.sphere];
+                const Vec3 mid = view(f.mid[0], f.mid[1], f.mid[2]);
+                Vec3 q[4];
+                for (int k = 0; k < 4; ++k) q[k] = view(f.corner[k][0], f.corner[k][1], f.corner[k][2]);
+                const float lit = 0.6f + 0.4f * std::max(0.0f, dot(n, light)); // (the sides away from the light still read)
+                const uint32_t fc = argb_of(colour(p, -mid.z, lit)), ec = argb_of(colour(p, -mid.z, lit * 0.55f));
+                ++vox_faces_;
+                if (vox.joined)
+                {
+                    seen.push_back(f);
+                    seen_colour.push_back(fc);
+                }
+                else
+                {
+                    const Vec3 t1[3] = {q[0], q[1], q[2]}, t2[3] = {q[0], q[2], q[3]};
+                    char_batch_.add_face_cam(t1, fc);
+                    char_batch_.add_face_cam(t2, fc);
+                    ++vox_drawn_;
+                }
+                for (int k = 0; k < 4; ++k) char_batch_.add_edge_cam(q[k], q[(k + 1) % 4], ec);
+            }
+            for (const sieve::VoxelQuad& r : sieve::join_voxel_faces(seen, seen_colour))
+            {
+                Vec3 q[4];
+                for (int k = 0; k < 4; ++k) q[k] = view(r.corner[k][0], r.corner[k][1], r.corner[k][2]);
+                const Vec3 t1[3] = {q[0], q[1], q[2]}, t2[3] = {q[0], q[2], q[3]};
+                char_batch_.add_face_cam(t1, seen_colour[r.face]);
+                char_batch_.add_face_cam(t2, seen_colour[r.face]);
+                ++vox_drawn_;
+            }
+        }
+        // The skin (IDEAS 19.225): one surface over the spheres as they stand in this frame (so it follows
+        // the joints as an action moves them), its grid the voxels' cell halved, each triangle turned
+        // towards you drawn, lit as the shaded spheres are (Lambert's cosine from the upper left over a
+        // quarter's ambient light) and coloured as its nearest sphere is there, nearer brighter.
+        // Its quads and its smooth drawing (IDEAS 19.214) are the same skin drawn as its four-sided faces
+        // with their sides darker, and with each vertex lit by its normal averaged across the faces round it
+        // (add_skin_drawing, the one way every space draws the three).
+        skin_report_ = SkinReport{};
+        if (skin_drawing(draw))
+        {
+            const std::shared_ptr<const sieve::SkinMesh> kept = make_skin(shown.spheres, cell_u, vox, &skin_report_);
+            if (draw == kDrawQuads) skin_report_.made = kept->quad_count();
+            SkinPlacing place;
+            place.world = false;
+            place.point = view;
+            place.direction = view_dir;
+            place.turned_away = [](Vec3 g, Vec3) { return g.z >= 0; };
+            place.cam_normal = [](Vec3, Vec3 n) { return n; };
+            place.colour = [&](uint32_t sphere, float lambert, const Vec3* q, int count) {
+                float z = 0;
+                for (int k = 0; k < count; ++k) z += q[k].z;
+                return argb_of(colour(shown.spheres[sphere], -z / float(count), 0.25f + 0.75f * lambert));
+            };
+            skin_report_.drawn = add_skin_drawing(char_batch_, draw, *kept, place, &skin_report_.smooth_ms);
         }
         for (const sieve::Sphere& p : shown.spheres)
         {
-            if (draw == 2) break; // (voxels: the cubes above)
+            if (draw == 2 || skin_drawing(draw)) break; // (voxels and the skin: drawn above)
             const Vec3 c = cam_of(p);
             const float d = -c.z;
             MeshBatch::SphereLook look;
@@ -3964,7 +4236,43 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
                 SDL_RenderLine(r_, x1, y1, x2, y2);
             }
         }
-        if ((char_row_ == 7 || char_row_ == 8) && char_sphere_ < shown.spheres.size())
+        // Where each sphere is on the screen, for a click to pick it (IDEAS 19.203).
+        char_pick_.clear();
+        for (const sieve::Sphere& p : shown.spheres)
+        {
+            float sx, sy, d;
+            at(p, sx, sy, d);
+            char_pick_.push_back({sx, sy, float(p.r) * scale, d});
+        }
+        // Editing (IDEAS 19.203): the chosen sphere ringed as the sphere row rings it, and each of its images
+        // (the spheres an edit to it changes too, as its symmetry says) ringed more faintly.
+        const bool editing = creator_ && char_editing_;
+        if (editing)
+        {
+            const std::string key = char_text_seen_ + "/" + std::to_string(char_sphere_);
+            if (key != char_images_key_)
+            {
+                char_images_key_ = key;
+                try
+                {
+                    char_images_ = sieve::sphere_images(char_, char_sphere_);
+                }
+                catch (const std::exception&)
+                {
+                    char_images_.clear();
+                }
+            }
+            SDL_SetRenderDrawColor(r_, 200, 170, 60, 255);
+            for (size_t k = 1; k < char_images_.size(); ++k)
+            {
+                if (char_images_[k] >= shown.spheres.size()) continue;
+                float sx, sy, d;
+                at(shown.spheres[char_images_[k]], sx, sy, d);
+                const float rad = std::max(4.0f, float(shown.spheres[char_images_[k]].r) * scale) + 3;
+                outline_ellipse(r_, sx, sy, rad, rad, 32);
+            }
+        }
+        if ((char_row_ == 7 || char_row_ == 8 || editing) && char_sphere_ < shown.spheres.size())
         {
             float sx, sy, d;
             at(shown.spheres[char_sphere_], sx, sy, d);

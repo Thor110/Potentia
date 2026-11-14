@@ -5,6 +5,7 @@
 #include "gpu_memory.hpp"
 #include "keys.hpp"
 #include "mesh.hpp"
+#include "character_look.hpp"
 #include "pause_rows.hpp"
 #include "music.hpp"
 #include "strings.hpp"
@@ -12,6 +13,7 @@
 #include "cli/sieve_cache.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/image_io.hpp"
+#include "sieve/character_voxels.hpp"
 #include "sieve/diffusion.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/paths.hpp"
@@ -107,6 +109,44 @@ const std::string& kImport = declare("personal.objects", "import", "I");
 const std::string& kWorldsAddress = declare("personal.worlds", "address", "N");
 const std::string& kWorldsGo = declare("personal.worlds", "go", "Return,Keypad Enter");
 } // namespace pk
+
+// The Character Creator's editing keys (IDEAS 19.203; keys.hpp names them). Declared here, after the
+// personal dimension's, because the registry lists its rows in the order they are declared and the order
+// in which the program's files declare theirs is not fixed: declared in the same file, after the others,
+// they come as a section of their own at the end, and no row already on Settings > Controls > Keys moves.
+namespace creator_keys {
+const std::string& kNextSphere = pk::declare("creator.edit", "next_sphere", ".");
+const std::string& kPreviousSphere = pk::declare("creator.edit", "previous_sphere", "Comma");
+const std::string& kGrow = pk::declare("creator.edit", "grow", "N");
+const std::string& kRemoveLimb = pk::declare("creator.edit", "remove_limb", "X");
+const std::string& kAddJoint = pk::declare("creator.edit", "add_joint", "J");
+const std::string& kRemoveJoint = pk::declare("creator.edit", "remove_joint", "Shift+J");
+const std::string& kStretch = pk::declare("creator.edit", "stretch", "T");
+const std::string& kNudgeUp = pk::declare("creator.edit", "nudge_up", "Ctrl+Up");
+const std::string& kNudgeDown = pk::declare("creator.edit", "nudge_down", "Ctrl+Down");
+const std::string& kNudgeLeft = pk::declare("creator.edit", "nudge_left", "Ctrl+Left");
+const std::string& kNudgeRight = pk::declare("creator.edit", "nudge_right", "Ctrl+Right");
+const std::string& kUndo = pk::declare("creator.edit", "undo", "Ctrl+Z");
+// (the Creator's fixed keys, put on the registry on 14 November 2026 when its editing keys came: a section
+// of their own after the editing keys', so no row before them moves; their defaults the keys they were)
+const std::string& kPlay = pk::declare("creator", "play", "A");
+const std::string& kTakeOff = pk::declare("creator", "take_off", "Shift+A");
+const std::string& kTurnLeft = pk::declare("creator", "turn_left", "[");
+const std::string& kTurnRight = pk::declare("creator", "turn_right", "]");
+const std::string& kTiltUp = pk::declare("creator", "tilt_up", "Shift+[");
+const std::string& kTiltDown = pk::declare("creator", "tilt_down", "Shift+]");
+const std::string& kViewHome = pk::declare("creator", "view_home", "Home");
+const std::string& kRandom = pk::declare("creator", "random", "R");
+const std::string& kNext = pk::declare("creator", "next", "G");
+const std::string& kNextTen = pk::declare("creator", "next_ten", "Shift+G");
+const std::string& kEmptySphere = pk::declare("creator", "empty_sphere", "Delete,Backspace");
+const std::string& kSave = pk::declare("creator", "save", "Ctrl+S");
+const std::string& kImportModel = pk::declare("creator", "import_model", "Ctrl+I");
+const std::string& kSkeleton = pk::declare("creator", "skeleton", "Ctrl+K");
+const std::string& kOpen = pk::declare("creator", "open", "Ctrl+O");
+// (both read in the Creator: a key given to one of them is a clash with the other)
+[[maybe_unused]] const bool kCreatorTogether = (Keys::get().together("creator", "creator.edit"), true);
+} // namespace creator_keys
 
 namespace {
 
@@ -499,6 +539,8 @@ void PersonalWorld::shape(int mode, float dt, float cx, float cz)
             placed_[i].resting = false;
     shaped_unsaved_ = true;
 }
+
+std::string PersonalWorld::drawing_report() const { return character_drawing_report(char_drawing_, !wireframe_, char_tris_, voxels_, char_unjoined_); }
 
 std::string PersonalWorld::shaper_report() const
 {
@@ -991,8 +1033,13 @@ void PersonalWorld::render()
         // Your characters, where they are placed (as objects, above): at their own size (4096 units a
         // metre), turned as they are placed. Their spheres and bones go to the same renderer as the
         // objects, so a bookcase between you and a character hides what it covers, pixel by pixel, and
-        // spheres cut into one another where they meet (IDEAS 19.207). Drawn as the Character Creator
-        // draws them: lit from the upper left, or as rings in the wireframe.
+        // spheres cut into one another where they meet (IDEAS 19.207). Drawn as [character] drawing says,
+        // every space's one setting (IDEAS 19.214: shaded, lit from the upper left, by default; pixels,
+        // the cubes or rings), and as rings in the wireframe.
+        const int drawing = wireframe_ ? int(kDrawWireframe) : char_drawing_;
+        char_tris_ = 0;
+        char_unjoined_ = 0;
+        skins_kept_for(chars_seen.size());
         for (const size_t i : chars_seen)
         {
             const Placed& p = placed_[i];
@@ -1005,7 +1052,7 @@ void PersonalWorld::render()
             for (size_t k = 0; k < c->spheres.size(); ++k)
                 if (c->spheres[k].parent >= 0) batch_.add_edge(pos[k], pos[size_t(c->spheres[k].parent)], 0xFF3C3C46u);
             MeshBatch::SphereLook look;
-            look.style = wireframe_ ? MeshBatch::SphereLook::Style::Ring : MeshBatch::SphereLook::Style::Shaded;
+            look.style = MeshBatch::SphereLook::Style::Shaded;
             look.argb = p.kind == "char:you" ? 0xFFF2EBD9u : 0xFFCCD1E6u;
             if (day_on_ && !wireframe_)
             {
@@ -1016,7 +1063,24 @@ void PersonalWorld::render()
             }
             look.ambient = 0.35f;
             look.min_radius = 1.5f;
-            for (size_t k = 0; k < c->spheres.size(); ++k) batch_.add_sphere(pos[k], float(c->spheres[k].r) / float(sieve::kCharacterUnitsPerMetre), look);
+            // A point of the character's own to the world, as each_sphere places its centres (its foot at
+            // the place, turned with it), and a direction of its own turned alike.
+            int32_t low, high;
+            c->vertical(low, high);
+            const float m = 1.0f / float(sieve::kCharacterUnitsPerMetre);
+            CharacterPlacing at;
+            at.metres = m;
+            at.point = [&](float x, float y, float z) {
+                const float q[3] = {x * m, (y - float(low)) * m, z * m};
+                const auto w = turned(q, p.yaw, p.pitch, p.roll);
+                return Vec3{p.x + w[0], p.y + w[1], p.z + w[2]};
+            };
+            at.direction = [&](float x, float y, float z) {
+                const float q[3] = {x, y, z};
+                const auto w = turned(q, p.yaw, p.pitch, p.roll);
+                return Vec3{w[0], w[1], w[2]};
+            };
+            char_tris_ += add_character_drawing(batch_, eye_cam, drawing, c->spheres, voxels_.cell(*c), at, [&](const sieve::Sphere&) { return look; }, voxels_, &char_unjoined_);
         }
         if (held_ >= 0 && turn_rings_) add_rings();
         batch_.draw(r_);

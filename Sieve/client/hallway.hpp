@@ -33,6 +33,7 @@
 #include "main_menu.hpp"
 #include "menu.hpp"
 #include "mesh.hpp"
+#include "character_look.hpp"
 #include "strings.hpp"
 #include "music.hpp"
 #include "synth.hpp"
@@ -1136,6 +1137,13 @@ public:
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
     void set_fps_counter(bool on) { fps_counter_ = on; }
+    // How characters standing in the hallway are drawn with Real Graphics on (IDEAS 19.214): [character]
+    // drawing, every space's one setting (character_look.hpp); shaded by default, as they always were.
+    void set_character_drawing(int drawing) { char_drawing_ = drawing; }
+    // How big their voxels are and whether the voxels' faces are joined (IDEAS 19.216, 19.215).
+    void set_voxels(const VoxelChoice& v) { voxels_ = v; }
+    // (for pictures and tests) what the readout says of it: empty for shaded (as before the choice came).
+    std::string drawing_report() const;
     // Your character (IDEAS 19.148), walking beside you: a little ahead and to the right, on the
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
@@ -1947,6 +1955,10 @@ private:
     uint32_t portal_frame_ = 0;
     // FPS counter: frames and time since the shown figures were last updated (twice a second).
     bool fps_counter_ = false;
+    int char_drawing_ = 3;   // [character] drawing (character_look.hpp's kDrawShaded)
+    size_t figure_tris_ = 0; // the standing characters' cubes' triangles in the last frame drawn
+    size_t figure_unjoined_ = 0; // the same with each face on its own (for the readout, where joined)
+    VoxelChoice voxels_;      // [character] voxel_size and the rows beside it
     std::optional<sieve::Character> character_;
     std::optional<sieve::Animation> animation_;
     std::optional<sieve::ActionMap> actions_;

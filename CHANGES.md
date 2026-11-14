@@ -1,58 +1,60 @@
-# List P: your personal dimension (14 November 2026)
+# List R: characters and the renderer (14 November 2026)
 
-All eight tasks of list P in REVIEW-ROUND section 3, built one after another, then reviewed; the five
-problems the review found are fixed (below). Section 1 has a test item for each (27 to 34).
+Files to delete by hand: none.
 
-## What is new
-- **P1, the ground shaper** (IDEAS 19.209). In your dimension, **1** takes it out and **#** puts it away
-  (the backslash too: the key in #'s place on a US keyboard). The left button or **Z** raises the ground,
-  the right or **X** lowers it, the middle or **C** flattens it; the wheel or **[ ]** change the brush's
-  size. Shaped corners are kept in the world file as `ground X Z CHANGE` lines (SPECIFICATIONS 12.0r).
-  New settings: `[personal] shaper_radius`, `shaper_strength` (Features).
-- **P2, O opens a favourite in place** (19.208). Its line is built in the background ("calculating" by
-  the crosshair) and the hallway's viewer opens over your dimension; Esc or Z closes it. Falls back to
-  the old way, into the hallway, when it cannot. Setting `[personal] open_in_place` (on).
-- **P3, your own models** (19.187). **I** with the catalogue open imports an .obj (with its .mtl) or a
-  glTF/.glb; kept as `objects/SHA.sieve`, listed after the characters, placed as `model:SHA`.
-  `--pworld-import FILE` for scripted runs.
-- **P4, your world on the worlds line** (19.187). **N** shows its address; Return (now a key of its own,
-  `personal.worlds/go`) goes into the hallway on the worlds line with your world in hand.
-- **P5, music for your dimension** (19.220). The Media Player's Mode row has a third space, PERSONAL;
-  "Music here" gives the dimension music of its own, kept in its world file as a `music` line. A
-  dimension without one plays WORLD's music, as before.
-- **P6, favourites' covers** in the catalogue: a small picture left of each row, the chosen one larger
-  below. Setting `[personal] catalogue_covers` (on).
-- **P7, turning rings** (19.221). Three rings round what you hold, x red, y green, z blue; after R, T or G
-  the wheel turns it 15 degrees a notch. Settings `[graphics] axis_colours` (global: Settings > Graphics >
-  Axis Colours, with an Okabe and Ito preset), `[personal] turning_rings`, `wheel_step_degrees`.
-- **P8, day and night** (19.222), off by default (`[personal] day_night`). Sun, sky, light and stars follow
-  the time of day (UTC, so everyone sees the same). **L** sets the day's length, 1 to 2^64 - 1 seconds,
-  kept as a `day` line.
+## R2: one drawing everywhere (IDEAS 19.214)
+- How characters are drawn is now one setting, `[character] drawing`. You can change it on Settings > Graphics > **Character Drawing** (the last row before Back) or on the Character Creator's drawing row.
+- It applies in the Creator, on the CHARACTER page, in your personal dimension, and to your stored characters standing in the hallway.
+- The default is still shaded, so nothing changes until you choose another drawing.
+- With Real Graphics off, every space draws the wireframe and the readout says so.
 
-New key sections on Settings > Controls > Keys, each after the ones before so no row moved: the author's
-tools, your own objects, on the worlds line, day and night. `--press` takes WheelUp and WheelDown.
+## R3: voxel size and joined faces (IDEAS 19.215, 19.216)
+Settings > Graphics > **Character Voxels** has these rows:
+- **Voxel Size:** a character's height in 16 cells, as today and still the default, or one world lattice.
+- **Lattice Base:** 10 mm by default.
+- **Thinnest Part:** 2 cells by default.
+- **Join Voxel Faces** (greedy meshing, off by default): faces of one colour lying in one plane are drawn as one rectangle. The picture stays the same and the readout gives the face count.
+
+## R6: the skin (IDEAS 19.225)
+- A fifth drawing, **skin**: the spheres wrapped in one surface that is smooth where they meet (smooth minimum of their distances, then surface nets). It follows the joints as an action plays.
+- **Skin Blend** (0 to 200%) and **Skin Detail** are on Character Voxels.
+
+## R5: quads and smooth (IDEAS 19.214)
+- Two more drawings built on the skin:
+  - **quads:** four-sided faces with darker sides;
+  - **smooth:** normals averaged at each corner, with the light and colour shaded across each face (Gouraud).
+- MeshBatch gained faces with a colour at each corner.
+
+## R4: editing by the joints (IDEAS 19.203)
+- In the Creator, click a sphere to choose it, then drag it; the limb beyond it follows.
+- Keys:
+  - **.** / **Comma**: choose the next or previous sphere
+  - **N**: grow a limb
+  - **X**: take the limb away
+  - **J** / **Shift+J**: add or take out a joint
+  - **T**: stretching on or off
+  - **Ctrl+arrows**: nudge the chosen sphere
+  - **Ctrl+Z**: undo
+- Bilateral and radial characters change on every side at once.
+- An edited character is saved in the new format `sieve-character-v4`, specified in SPECIFICATIONS 12.0j.
 
 ## Fixed after the review
-- The Media Player's "Music here" read the world file and wrote it back, dropping without a word any
-  line its reading left out. It now refuses to write such a world and says why.
-- With the shaper out, Z closing the in-place viewer went on raising the ground while still held. The
-  shaper's keys now shape nothing until let go after the viewer opens.
-- `day 060`, `ground +10 0 1` and a music line's `volume=030` were read though the spec says they are not
-  as written; now left out and said.
-- The worlds panel's Return was fixed in the code; it is now the key `personal.worlds/go`.
-- The day readout said "0.0 degrees down" at dusk on the sign of a rounding error; it now says
-  "on the horizon" there.
+- **The hallway stopped on a very wide character drawn as voxels.** It asked for a grid too large to hold, and the Creator had always done the same. Under the height rule the cell now grows until the widest side fits in 256 cells, and the readout says "made coarser to fit". There is a unit test and a CI line for it.
+- **Skins of still characters could be remade every frame.** Only eight skins were kept, so with more characters in sight they kept pushing each other out. Each space now says how many characters it draws, and twice that many skins are kept (at least eight).
+- **The Creator's own keys are now on the key registry**, under Settings > Controls > Keys > "The Character Creator and the CHARACTER page":
+  - **A** and **Shift+A**: play and take off the animation
+  - **[** and **]**: turn
+  - **Shift+[** and **Shift+]**: tilt
+  - **Home**: the view as it opens
+  - **R**: a seed at random
+  - **G** and **Shift+G**: the seed walk
+  - **Delete** and **Backspace**: take the held model away
+  - **Ctrl+S**, **Ctrl+O**, **Ctrl+I**, **Ctrl+K**: the files
 
-## Ideas taken down (IDEAS, and tasks in REVIEW-ROUND section 3)
-- 19.223 "Real Graphics" renamed "Wireframe" (task M4).
-- 19.224 Every footer of keys wraps upwards, as the viewer's does (task M5).
-- 19.225 A skin over the spheres, a stage of the mesh scaling system (task R6, R5's first step).
-- 19.226 Import and export for a personal dimension, any object as its parts or the whole world (task P9).
+  The Creator's and CHARACTER page's footers read these keys as they are set. A key given to both a Creator key and an editing key is now named in red on the Keys screen; at the default keys nothing clashes. MANUAL notes that Ctrl+arrows now nudge in the Creator.
 
-## Checked
-- Every old world gives the same picture, output and file as before (compared byte for byte with the
-  build before list P, 19 command sets between the builders and the reviewer).
-- CI: all 12 steps passed (`ci/run.sh --changed`: the command-line options file reaches every step).
-
-## Files to delete by hand
-None.
+## Notes taken down
+- IDEAS 19.227: greedy meshing that keeps every voxel's colour (a texture, compiled and kept by the grid's SHA-256; breaking apart by chunks).
+- IDEAS 19.228: a face that shows feeling (waits on the DNA dimension).
+- IDEAS 19.216: the voxel size default decided. The height rule stays: it always fits, never breaks a character apart, and is cheapest. The lattice is to be looked at again for the story's human-like characters.
+- CI step 10: three checks that something is *not* printed (`grep -c` counting 0) stopped the step under `set -eo pipefail`, because grep fails when it counts nothing. They now read `test "$(grep -c PATTERN FILE || true)" = 0`, which still fails if the line appears.

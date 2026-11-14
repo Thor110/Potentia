@@ -17,6 +17,9 @@
 #include "sieve/modelsieve.hpp"
 #include "sieve/worldspace.hpp"
 #include "sieve/character.hpp"
+#include "sieve/character_voxels.hpp"
+#include "sieve/character_skin.hpp"
+#include "sieve/character_edit.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
 #include "sieve/animation.hpp"
@@ -7697,6 +7700,455 @@ bool wanted(const char* call)
         if (wanted(#call)) call; \
     } while (false)
 
+// A character's voxels (IDEAS 19.214, sieve/character_voxels.hpp), the cubes every space draws: none
+// for no spheres or no cell; one sphere's cubes alike every way; every face flat across the way it faces,
+// a cell wide, and between a filled cell and an empty one (so as many face each way as face back, the
+// surface being closed); a cell in two spheres belonging to the one it lies deeper in; and the cell
+// from the character's height. One character's face count is pinned, so any change to the cubes shows.
+void test_character_voxels()
+{
+    CHECK(voxel_faces({}, 4.0f).empty());
+    Sphere a;
+    a.r = 40;
+    CHECK(voxel_faces({a}, 0.0f).empty());
+    {
+        const auto faces = voxel_faces({a}, 10.0f);
+        size_t by_dir[6] = {};
+        for (const VoxelFace& f : faces)
+        {
+            ++by_dir[f.dir];
+            CHECK(f.sphere == 0);
+            const int* dv = kVoxelDirs[f.dir];
+            const int ax = dv[0] ? 0 : dv[1] ? 1 : 2;
+            for (int k = 1; k < 4; ++k) CHECK(f.corner[k][ax] == f.corner[0][ax]);
+            // (the face a cell's side: half a cell from its middle, the way it faces)
+            CHECK(std::fabs((f.corner[0][ax] - f.mid[ax]) - float(dv[ax]) * 5.0f) < 1e-4f);
+            float span[3] = {};
+            for (int j = 0; j < 3; ++j)
+                for (int k = 0; k < 4; ++k) span[j] = std::max(span[j], std::fabs(f.corner[k][j] - f.corner[0][j]));
+            CHECK(span[ax] == 0 && span[(ax + 1) % 3] == 10.0f && span[(ax + 2) % 3] == 10.0f);
+        }
+        CHECK(!faces.empty());
+        for (int d = 1; d < 6; ++d) CHECK(by_dir[d] == by_dir[0]);
+    }
+    {
+        // Two spheres that overlap: the surface closed, and the far ends each its own sphere's.
+        Sphere b = a;
+        b.x = 50;
+        b.r = 30;
+        const auto faces = voxel_faces({a, b}, 8.0f);
+        size_t by_dir[6] = {};
+        float least_x = 1e9f, most_x = -1e9f;
+        uint32_t least_owner = 9, most_owner = 9;
+        for (const VoxelFace& f : faces)
+        {
+            ++by_dir[f.dir];
+            if (f.mid[0] < least_x) least_x = f.mid[0], least_owner = f.sphere;
+            if (f.mid[0] > most_x) most_x = f.mid[0], most_owner = f.sphere;
+        }
+        CHECK(by_dir[0] == by_dir[1] && by_dir[2] == by_dir[3] && by_dir[4] == by_dir[5]);
+        CHECK(least_owner == 0 && most_owner == 1);
+    }
+    CharacterSettings t;
+    t.seed = 99;
+    t.limbs = 5;
+    t.branches = 1;
+    const Character c = unfold_character(t);
+    int32_t ex, ey, ez;
+    c.extent(ex, ey, ez);
+    CHECK(voxel_cell(c) == std::max(1.0f, float(ey) / 16.0f));
+    const auto faces = voxel_faces(c.spheres, voxel_cell(c));
+    size_t by_dir[6] = {};
+    for (const VoxelFace& f : faces)
+    {
+        ++by_dir[f.dir];
+        CHECK(f.sphere < c.spheres.size());
+    }
+    CHECK(by_dir[0] == by_dir[1] && by_dir[2] == by_dir[3] && by_dir[4] == by_dir[5]);
+    std::printf("  the character of seed 99 (5 limbs, 1 branch): %zu voxel faces at a cell of %.3f units\n", faces.size(), double(voxel_cell(c)));
+    CHECK(faces.size() == 2896);
+    // A character far wider than it is tall (two spheres of radius 40, one set 100,000,000 units out, as
+    // a store's v3 file can say): under the height rule its cells grow until its widest side is within
+    // kVoxelLatticeMostCells, so its grid stays small, rather than asking for one too large to hold.
+    {
+        Character wide;
+        Sphere a, b;
+        a.r = b.r = 40;
+        a.kind = Sphere::Body;
+        b.parent = 0;
+        b.x = 100000000;
+        wide.spheres = {a, b};
+        const VoxelCell vc = voxel_cell_of(wide, VoxelSizing{});
+        int32_t wx, wy, wz;
+        wide.extent(wx, wy, wz);
+        CHECK(vc.coarser);
+        CHECK(2.0 * double(wx) / double(vc.cell) <= double(kVoxelLatticeMostCells) + 1e-3);
+        CHECK(voxel_cell(wide) == vc.cell);
+        const auto wf = voxel_faces(wide.spheres, vc.cell);
+        CHECK(wf.size() < 100000);
+        CHECK(!voxel_cell_of(c, VoxelSizing{}).coarser);
+    }
+}
+
+// How big a voxel is (IDEAS 19.216): the height rule as voxel_cell; the lattice's cell a power of two of
+// its base, the coarsest at which the smallest sphere is still `across` cells wide (or the base itself),
+// coarser only to keep within kVoxelLatticeMostCells; its grid anchored at whole cells from the centre.
+// Greedy meshing (IDEAS 19.215): the rectangles cover exactly the faces they join (as many cells, the same
+// area each way), never join two colours, and are no more than the faces; one sphere in one colour joins
+// into far fewer.
+void test_voxel_lattice_and_joining()
+{
+    CharacterSettings t;
+    t.seed = 99;
+    t.limbs = 5;
+    t.branches = 1;
+    const Character c = unfold_character(t);
+    CHECK(voxel_cell(c, VoxelSizing{}) == voxel_cell(c));
+    int32_t least = 0;
+    for (const Sphere& p : c.spheres)
+        if (p.r > 0 && (least == 0 || p.r < least)) least = p.r;
+    for (uint32_t base : {1u, 5u, 10u, 40u})
+        for (uint32_t across : {1u, 2u, 4u})
+        {
+            VoxelSizing s;
+            s.rule = VoxelSizing::Lattice;
+            s.base_mm = base, s.across = across;
+            const VoxelCell vc = voxel_cell_of(c, s);
+            const float b = float(base) * float(kCharacterUnitsPerMetre) / 1000.0f;
+            CHECK(std::fabs(vc.cell - b * float(1 << vc.level)) < 1e-3f * vc.cell);
+            const float asks = 2.0f * float(least) / float(across);
+            if (!vc.coarser)
+            {
+                CHECK(vc.level == 0 || vc.cell <= asks * 1.0001f);
+                CHECK(vc.cell * 2.0f > asks * 0.9999f || vc.level == 24);
+            }
+            int32_t ex, ey, ez;
+            c.extent(ex, ey, ez);
+            CHECK(2.0f * float(std::max({ex, ey, ez})) / vc.cell <= float(kVoxelLatticeMostCells));
+        }
+    {
+        VoxelSizing s;
+        s.rule = VoxelSizing::Lattice;
+        const float cell = voxel_cell(c, s);
+        for (const VoxelFace& f : voxel_faces(c.spheres, cell, true))
+            for (int k = 0; k < 4; ++k)
+                for (int j = 0; j < 3; ++j)
+                {
+                    const float n = f.corner[k][j] / cell;
+                    CHECK(std::fabs(n - std::round(n)) < 1e-3f);
+                }
+    }
+    CHECK(join_voxel_faces({}, {}).empty());
+    auto check_join = [&](const std::vector<VoxelFace>& faces, const std::vector<uint32_t>& colours, float cell) {
+        const auto quads = join_voxel_faces(faces, colours);
+        CHECK(quads.size() <= faces.size());
+        size_t cells = 0;
+        double area[6] = {}, joined[6] = {};
+        for (const VoxelFace& f : faces) area[f.dir] += double(cell) * double(cell);
+        for (const VoxelQuad& q : quads)
+        {
+            cells += q.cells;
+            CHECK(q.dir == faces[q.face].dir);
+            const int* dv = kVoxelDirs[q.dir];
+            const int ax = dv[0] ? 0 : dv[1] ? 1 : 2;
+            for (int k = 1; k < 4; ++k) CHECK(q.corner[k][ax] == q.corner[0][ax]);
+            const double su = std::fabs(double(q.corner[1][(ax + 1) % 3]) - q.corner[0][(ax + 1) % 3]),
+                         sv = std::fabs(double(q.corner[2][(ax + 2) % 3]) - q.corner[1][(ax + 2) % 3]);
+            CHECK(std::fabs(su * sv - double(q.cells) * cell * cell) < 1e-2 * cell * cell);
+            joined[q.dir] += su * sv;
+        }
+        CHECK(cells == faces.size());
+        for (int d = 0; d < 6; ++d) CHECK(std::fabs(area[d] - joined[d]) < 1e-2 * double(cell) * double(cell) * (1.0 + area[d] / (double(cell) * cell)));
+        return quads.size();
+    };
+    {
+        Sphere a;
+        a.r = 400;
+        const auto faces = voxel_faces({a}, 10.0f);
+        const std::vector<uint32_t> one(faces.size(), 7u);
+        const size_t n = check_join(faces, one, 10.0f);
+        std::printf("  one sphere 80 cells across: %zu voxel faces joined into %zu rectangles\n", faces.size(), n);
+        CHECK(n * 2 < faces.size());
+        // Every face a colour of its own: nothing joins.
+        std::vector<uint32_t> own(faces.size());
+        for (size_t i = 0; i < own.size(); ++i) own[i] = uint32_t(i);
+        CHECK(check_join(faces, own, 10.0f) == faces.size());
+    }
+    {
+        const float cell = voxel_cell(c);
+        const auto faces = voxel_faces(c.spheres, cell);
+        std::vector<uint32_t> by_sphere(faces.size());
+        for (size_t i = 0; i < faces.size(); ++i) by_sphere[i] = faces[i].sphere;
+        const size_t n = check_join(faces, by_sphere, cell);
+        std::printf("  the character of seed 99: its %zu voxel faces joined, one colour a sphere, into %zu rectangles\n", faces.size(), n);
+        CHECK(n < faces.size());
+    }
+}
+
+// A character's skin (IDEAS 19.225, sieve/character_skin.hpp): nothing for no spheres or no cell; one
+// sphere's skin closed (every edge between exactly two triangles, and as many vertices less edges plus
+// triangles as a sphere has: two), lying on the sphere to within a cell, its normals outwards and its
+// triangles wound to face them; two overlapping spheres' neck where they meet as the plain union makes it
+// with no blend, and filled out as the smooth minimum says with one, the far ends each its own sphere's.
+// One character's triangles are pinned, so any change to the skin shows.
+void check_skin_quads(const SkinMesh& m, bool pieces_allowed);
+void test_character_skin()
+{
+    CHECK(skin_mesh({}, 4.0f, 0.0f).vertices.empty());
+    Sphere a;
+    a.r = 100;
+    CHECK(skin_mesh({a}, 0.0f, 0.0f).tris.empty());
+    // Closed: each edge (its two ends, either way round) between two triangles, and V - E + F = 2 (one
+    // piece, no handles). `pieces_allowed` for a character, whose limbs may stand apart and whose skin
+    // may touch itself in a cell: then only no edge left open (each between an even number of triangles).
+    auto closed = [](const SkinMesh& m, bool pieces_allowed = false) {
+        std::map<std::pair<uint32_t, uint32_t>, int> edges;
+        for (size_t t = 0; t < m.triangles(); ++t)
+            for (int k = 0; k < 3; ++k)
+            {
+                const uint32_t i = m.tris[t * 3 + size_t(k)], j = m.tris[t * 3 + size_t((k + 1) % 3)];
+                ++edges[{std::min(i, j), std::max(i, j)}];
+            }
+        for (const auto& e : edges)
+            if (pieces_allowed ? e.second % 2 != 0 : e.second != 2) return false;
+        return pieces_allowed || int64_t(m.vertices.size()) - int64_t(edges.size()) + int64_t(m.triangles()) == 2;
+    };
+    {
+        const SkinMesh m = skin_mesh({a}, 10.0f, 0.0f);
+        CHECK(m.triangles() > 0);
+        CHECK(closed(m));
+        for (const SkinVertex& v : m.vertices)
+        {
+            const float d = std::sqrt(v.p[0] * v.p[0] + v.p[1] * v.p[1] + v.p[2] * v.p[2]);
+            CHECK(std::fabs(d - 100.0f) < 10.0f);
+            CHECK(v.p[0] * v.n[0] + v.p[1] * v.n[1] + v.p[2] * v.n[2] > 0); // (outwards)
+            CHECK(v.sphere == 0);
+        }
+        for (size_t t = 0; t < m.triangles(); ++t)
+        {
+            const float* p0 = m.vertices[m.tris[t * 3]].p;
+            const float* p1 = m.vertices[m.tris[t * 3 + 1]].p;
+            const float* p2 = m.vertices[m.tris[t * 3 + 2]].p;
+            const float e1[3] = {p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]}, e2[3] = {p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2]};
+            const float n[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+            CHECK(n[0] * (p0[0] + p1[0] + p2[0]) + n[1] * (p0[1] + p1[1] + p2[1]) + n[2] * (p0[2] + p1[2] + p2[2]) > 0); // (wound to face out)
+        }
+        // A blend changes nothing for one sphere.
+        const SkinMesh b = skin_mesh({a}, 10.0f, 50.0f);
+        CHECK(b.vertices.size() == m.vertices.size() && b.tris == m.tris);
+    }
+    {
+        // Two spheres of radius 100, 160 apart: the plain union's neck is 60 wide at the middle (100^2 =
+        // 80^2 + 60^2); with a blend of 100, where both are 0 at the middle the smooth minimum is a quarter
+        // of the blend below them, so the neck reaches out to sqrt(125^2 - 80^2), about 96.
+        Sphere l = a, r = a;
+        l.x = -80, r.x = 80;
+        auto neck = [&](float blend) {
+            const SkinMesh m = skin_mesh({l, r}, 4.0f, blend);
+            CHECK(closed(m));
+            float most = 0;
+            for (const SkinVertex& v : m.vertices)
+                if (std::fabs(v.p[0]) < 2.0f) most = std::max(most, std::sqrt(v.p[1] * v.p[1] + v.p[2] * v.p[2]));
+            float least_x = 1e9f, most_x = -1e9f;
+            uint32_t least_owner = 9, most_owner = 9;
+            for (const SkinVertex& v : m.vertices)
+            {
+                if (v.p[0] < least_x) least_x = v.p[0], least_owner = v.sphere;
+                if (v.p[0] > most_x) most_x = v.p[0], most_owner = v.sphere;
+            }
+            CHECK(least_owner == 0 && most_owner == 1);
+            return most;
+        };
+        const float hard = neck(0.0f), soft = neck(100.0f);
+        std::printf("  two spheres' neck: %.1f units across with no blend, %.1f with a blend of 100\n", double(hard), double(soft));
+        CHECK(std::fabs(hard - 60.0f) < 4.0f);
+        CHECK(std::fabs(soft - 96.0f) < 4.0f);
+    }
+    // The blend a percentage of the spheres' mean radius; the cell the voxels' halved, doubled to fit.
+    {
+        Sphere s = a;
+        s.r = 300;
+        CHECK(skin_blend({a, s}, 50) == 100.0f);
+        CHECK(skin_blend({}, 50) == 0.0f);
+        CHECK(skin_cell({a}, 8.0f, 1).cell == 4.0f && !skin_cell({a}, 8.0f, 1).coarser);
+        const SkinCell big = skin_cell({a}, 1.0f, 3); // (200 across in eighths: 1,600 cells, doubled to fit)
+        CHECK(big.coarser && 200.0f / big.cell <= float(kSkinMostCells) && 200.0f / big.cell > float(kSkinMostCells) / 2);
+    }
+    CharacterSettings t;
+    t.seed = 99;
+    t.limbs = 5;
+    t.branches = 1;
+    const Character c = unfold_character(t);
+    const SkinCell sc = skin_cell(c.spheres, voxel_cell(c), 1);
+    const SkinMesh m = skin_mesh(c.spheres, sc.cell, skin_blend(c.spheres, 50));
+    CHECK(closed(m, true));
+    for (const SkinVertex& v : m.vertices) CHECK(v.sphere < c.spheres.size());
+    std::printf("  the character of seed 99 (5 limbs, 1 branch): %zu skin triangles, %zu vertices, at a cell of %.3f units\n", m.triangles(), m.vertices.size(), double(sc.cell));
+    CHECK(m.triangles() == 23180);
+    check_skin_quads(m, true);
+}
+
+// The skin's quads (IDEAS 19.214): one four-sided face for every two triangles, face q being triangles 2q
+// and 2q + 1 with the same corners and winding, so the quads are the same surface; one sphere's quads
+// closed as a surface of quads (each side between exactly two faces, V - E + F = 2), a character's with
+// no side left open. And the smooth drawing's normals, averaged across the faces: one a vertex, of length
+// one, outwards on a sphere and within a few degrees of its true normal (how near, and how near the
+// field's slope is, printed).
+void check_skin_quads(const SkinMesh& m, bool pieces_allowed)
+{
+    CHECK(m.quads.size() * 6 == m.tris.size() * 4);
+    for (size_t q = 0; q < m.quad_count(); ++q)
+    {
+        const uint32_t* c = &m.quads[q * 4];
+        const uint32_t* t = &m.tris[q * 6];
+        CHECK(t[0] == c[0] && t[1] == c[1] && t[2] == c[2] && t[3] == c[0] && t[4] == c[2] && t[5] == c[3]);
+    }
+    std::map<std::pair<uint32_t, uint32_t>, int> sides;
+    for (size_t q = 0; q < m.quad_count(); ++q)
+        for (int k = 0; k < 4; ++k)
+        {
+            const uint32_t i = m.quads[q * 4 + size_t(k)], j = m.quads[q * 4 + size_t((k + 1) % 4)];
+            ++sides[{std::min(i, j), std::max(i, j)}];
+        }
+    bool closed = true;
+    for (const auto& e : sides)
+        if (pieces_allowed ? e.second % 2 != 0 : e.second != 2) closed = false;
+    CHECK(closed);
+    if (!pieces_allowed) CHECK(int64_t(m.vertices.size()) - int64_t(sides.size()) + int64_t(m.quad_count()) == 2);
+}
+
+void test_skin_quads_and_smooth()
+{
+    Sphere a;
+    a.r = 100;
+    const SkinMesh m = skin_mesh({a}, 10.0f, 0.0f);
+    CHECK(m.quad_count() > 0);
+    check_skin_quads(m, false);
+    const std::vector<float> n = skin_smooth_normals(m);
+    CHECK(n.size() == m.vertices.size() * 3);
+    double off_smooth = 0, off_field = 0;
+    for (size_t v = 0; v < m.vertices.size(); ++v)
+    {
+        const float* p = m.vertices[v].p;
+        const float* s = &n[v * 3];
+        const float d = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+        CHECK(std::fabs(s[0] * s[0] + s[1] * s[1] + s[2] * s[2] - 1.0f) < 1e-4f);
+        const float along = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) / d;
+        CHECK(along > 0.95f); // (outwards, and near the sphere's own normal)
+        off_smooth += 1.0 - double(along);
+        off_field += 1.0 - double((m.vertices[v].n[0] * p[0] + m.vertices[v].n[1] * p[1] + m.vertices[v].n[2] * p[2]) / d);
+    }
+    std::printf("  one sphere's skin: %zu quads; its normals' mean distance from the true (1 - cosine): averaged %.5f, the field's %.5f\n", m.quad_count(),
+                off_smooth / double(m.vertices.size()), off_field / double(m.vertices.size()));
+    CHECK(skin_smooth_normals(SkinMesh{}).empty());
+}
+
+// Editing a character by its joints (IDEAS 19.203, sieve/character_edit.hpp): a seed-made character kept
+// as its spheres with its symmetry (sieve-character-v4), its mirrored spheres found and kept mirrored
+// through every edit, bones keeping their lengths, and each edit undone by its opposite to the same text.
+void test_character_edit()
+{
+    CharacterSettings st;
+    st.seed = 99;
+    st.limbs = 5;
+    st.joints = 3;
+    st.branches = 1;
+    const Character seed = unfold_character(st);
+    const std::string seed_text = seed.text();
+    const Character e = editable_character(seed);
+    CHECK(seed.text() == seed_text); // (the seed-made character itself is not changed)
+    CHECK(e.given && e.given_symmetry == Symmetry::Bilateral && e.text().rfind("sieve-character-v4 spheres=" + std::to_string(seed.spheres.size()) + " symmetry=bilateral\n", 0) == 0);
+    CHECK(read_character(e.text()).id() == e.id() && read_character(e.one_line()).id() == e.id());
+    // Every sphere off the centre plane is paired with its mirror.
+    auto mirrored = [](const Character& c) {
+        size_t pairs = 0;
+        for (size_t i = 0; i < c.spheres.size(); ++i)
+        {
+            if (c.images[i].of < 0) continue;
+            const Sphere &a = c.spheres[i], &b = c.spheres[size_t(c.images[i].of)];
+            if (a.x != -b.x || a.y != b.y || a.z != b.z || a.r != b.r) return size_t(0);
+            ++pairs;
+        }
+        return pairs;
+    };
+    size_t off_centre = 0;
+    for (const Sphere& p : seed.spheres) off_centre += p.x != 0 ? 1 : 0;
+    CHECK(mirrored(e) * 2 == off_centre && mirrored(e) > 0);
+    // A limb's first joint dragged: its mirror follows, both bones keep their lengths, the limbs beyond move.
+    uint32_t root = 0;
+    for (uint32_t i = 1; i < e.spheres.size(); ++i)
+        if (e.spheres[i].parent == 0 && e.spheres[i].x != 0 && e.images[i].of < 0) { root = i; break; }
+    CHECK(root > 0);
+    Character moved = e;
+    const double to[3] = {double(e.spheres[root].x) * 2, double(e.spheres[root].y) - 500, double(e.spheres[root].z) + 300};
+    CHECK(edit_move(moved, root, to, false) == root);
+    CHECK(moved.text() != e.text() && mirrored(moved) == mirrored(e) && moved.spheres.size() == e.spheres.size());
+    auto bone = [](const Character& c, size_t i) {
+        const Sphere &a = c.spheres[i], &p = c.spheres[size_t(a.parent)];
+        return std::sqrt(double(a.x - p.x) * (a.x - p.x) + double(a.y - p.y) * (a.y - p.y) + double(a.z - p.z) * (a.z - p.z));
+    };
+    for (size_t i = 1; i < e.spheres.size(); ++i) CHECK(std::fabs(bone(moved, i) - bone(e, i)) < 2.0);
+    // Stretched, the joint goes exactly where it is put.
+    Character stretched = e;
+    edit_move(stretched, root, to, true);
+    CHECK(stretched.spheres[root].x == int32_t(to[0]) && stretched.spheres[root].y == int32_t(to[1]) && mirrored(stretched) == mirrored(e));
+    // The body is never moved or taken away.
+    Character body = e;
+    CHECK(throws([&] { edit_move(body, 0, to, false); }) && throws([&] { edit_remove_limb(body, 0); }) && body.text() == e.text());
+    // A limb grown from the body: on the centre plane, one; off it, a pair. Taken away (with its mirror),
+    // the character is as it was.
+    Character grown = e;
+    const uint32_t g = edit_grow(grown, 0);
+    const bool centre = grown.spheres[g].x == 0;
+    CHECK(grown.spheres.size() == e.spheres.size() + (centre ? 1 : 2) && mirrored(grown) == mirrored(e) + (centre ? 0 : 1) && grown.spheres[g].parent == 0);
+    // From a limb's end, the new joints come in a pair, mirrored.
+    Character end = e;
+    uint32_t tip = root;
+    while (true)
+    {
+        uint32_t next = tip;
+        for (uint32_t i = tip + 1; i < e.spheres.size(); ++i)
+            if (e.spheres[i].parent == int32_t(tip)) { next = i; break; }
+        if (next == tip) break;
+        tip = next;
+    }
+    edit_grow(end, tip);
+    CHECK(end.spheres.size() == e.spheres.size() + 2 && mirrored(end) == mirrored(e) + 1);
+    edit_remove_limb(grown, g);
+    CHECK(grown.text() == e.text());
+    // A joint added along a limb and taken away again: the same character.
+    Character jointed = e;
+    const uint32_t j = edit_add_joint(jointed, root);
+    CHECK(jointed.spheres.size() == e.spheres.size() + 2 && jointed.spheres[j].parent == int32_t(root) && mirrored(jointed) == mirrored(e) + 1);
+    CHECK(edit_remove_joint(jointed, j) == root && jointed.text() == e.text());
+    // A whole limb taken away: it and all beyond it, on both sides.
+    Character cut = e;
+    edit_remove_limb(cut, root);
+    CHECK(cut.spheres.size() + 2 * (size_t(st.joints) + st.branches * ((st.joints + 1) / 2)) == e.spheres.size());
+    CHECK(read_character(cut.text()).id() == cut.id());
+    // Radial: each limb's spheres the first limb's turned; a limb grown from the body grows on every turn.
+    st.symmetry = Symmetry::Radial;
+    st.limbs = 4;
+    const Character r = editable_character(unfold_character(st));
+    size_t turned = 0;
+    for (const SphereImage& m : r.images) turned += m.of >= 0 ? 1 : 0;
+    CHECK(turned > 0 && read_character(r.text()).id() == r.id());
+    Character rg = r;
+    edit_grow(rg, 0);
+    CHECK(rg.spheres.size() == r.spheres.size() + 4);
+    // No symmetry: kept as v3, its spheres given.
+    st.symmetry = Symmetry::None;
+    Character n = unfold_character(st);
+    edit_add_joint(n, uint32_t(n.spheres.size() - 1));
+    CHECK(n.text().rfind("sieve-character-v3 ", 0) == 0 && n.spheres.size() == unfold_character(st).spheres.size() + 1);
+    // Refused: a v4 of no symmetry, an image of a later sphere, a bilateral image turned.
+    CHECK(throws([] { (void)read_character("sieve-character-v4 spheres=1 symmetry=none\ns 0 -1 0 0 0 5 body\n"); }));
+    CHECK(throws([] { (void)read_character("sieve-character-v4 spheres=3 symmetry=bilateral\ns 0 -1 0 0 0 5 body\ns 1 0 9 0 0 2 joint\ns 2 0 -9 0 0 2 joint\ni 1 2 1 0\n"); }));
+    CHECK(throws([] { (void)read_character("sieve-character-v4 spheres=3 symmetry=bilateral\ns 0 -1 0 0 0 5 body\ns 1 0 9 0 0 2 joint\ns 2 0 -9 0 0 2 joint\ni 2 1 1 2\n"); }));
+    CHECK(read_character("sieve-character-v4 spheres=3 symmetry=bilateral\ns 0 -1 0 0 0 5 body\ns 1 0 9 0 0 2 joint\ns 2 0 -9 0 0 2 joint\ni 2 1 1 0\n").images[2].of == 1);
+    std::printf("  an edited character: %zu spheres, %zu mirrored pairs found; %s\n", e.spheres.size(), mirrored(e), e.id().substr(0, 16).c_str());
+}
+
 void run_all(int argc, char** argv)
 {
     RUN(test_sha256());
@@ -7713,6 +8165,11 @@ void run_all(int argc, char** argv)
     RUN(test_audio());
     RUN(test_midi_read());
     RUN(test_character());
+    RUN(test_character_voxels());
+    RUN(test_voxel_lattice_and_joining());
+    RUN(test_character_skin());
+    RUN(test_skin_quads_and_smooth());
+    RUN(test_character_edit());
     RUN(test_raid());
     RUN(test_raid_net());
     RUN(test_format_stats());

@@ -151,7 +151,7 @@ struct AppSettings
     std::string locator_priority = "balanced";
     // [character] (IDEAS 19.148): your character as its settings line (v1), or its whole text on one
     // line with ';' between its lines (v2, v3: sieve/character.hpp); empty: the
-    // default character), how the CHARACTER page draws it (0 pixels to 3 shaded), and whether it
+    // default character), how characters are drawn everywhere (0 pixels to 3 shaded), and whether it
     // is in the hallway (as you: not drawn, its size the hallway's scale, its actions played).
     std::string character;
     // The animation it plays (IDEAS 19.170): its SHA-256, the file of that name in the animations
@@ -217,7 +217,24 @@ struct AppSettings
     int replays_max_minutes = 30, replays_min_free_mb = 256;
     // How many machines keep each piece of a shared save (Edward, 13 November 2026: 3 by default).
     int raid_copies = 3;
-    int character_drawing = 3; // shaded (Edward, 13 November 2026); the wireframe while Real Graphics is off
+    // How characters are drawn in every space (IDEAS 19.214): 0 pixels, 1 wireframe, 2 voxels, 3 shaded
+    // (Edward, 13 November 2026; the default, as every space drew them before the choice reached it), 4 the
+    // skin over the spheres (IDEAS 19.225); the wireframe while Real Graphics is off. One setting, on Settings > Graphics and in the Creator alike.
+    int character_drawing = 3;
+    // How big the voxels are and whether their faces are joined (IDEAS 19.216, 19.215), for every space that
+    // draws characters as voxels or pixels, on Settings > Graphics > Character Voxels: 0 the character's
+    // height in 16 cells (today's rule, the default), 1 the world lattice (powers of two of base_mm, the
+    // coarsest at which its smallest sphere is still `across` cells wide); and greedy meshing, off until
+    // turned on (the picture the same either way, the faces fewer).
+    int character_voxel_size = 0;
+    int character_voxel_base_mm = 10;
+    int character_voxel_across = 2;
+    bool character_voxel_joined = false;
+    // The skin's (IDEAS 19.225), on the same screen: how full it fills the creases between spheres (the
+    // smooth minimum's blend, as a percentage of the spheres' mean radius, 0 to 200: 0 the plain union),
+    // and how many times the voxels' cell is halved for its grid (0 to 3). Used only when it is drawn.
+    int character_skin_blend = 50;
+    int character_skin_detail = 1;
     bool character_beside = true;
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)

@@ -384,7 +384,7 @@ void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int he
     tris_.clear();
 }
 
-void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*uv)[2], const sieve::RgbaImage* picture)
+void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*uv)[2], const sieve::RgbaImage* picture, const Vec3* rgb)
 {
     Tri t;
     t.colour = colour;
@@ -420,32 +420,74 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*u
         plane(uv[0][0] * iz[0], uv[1][0] * iz[1], uv[2][0] * iz[2], t.Au, t.Bu, t.Cu);
         plane(uv[0][1] * iz[0], uv[1][1] * iz[1], uv[2][1] * iz[2], t.Av, t.Bv, t.Cv);
     }
+    if (rgb)
+    {
+        // Each of red, green and blue a plane over the screen through the corners' (taken straight across
+        // the screen, not with perspective: the faces it is used for are small, and a step in light across
+        // a face of a few pixels does not show).
+        t.shaded = true;
+        const float e1x = t.x[1] - t.x[0], e1y = t.y[1] - t.y[0], e2x = t.x[2] - t.x[0], e2y = t.y[2] - t.y[0];
+        for (int k = 0; k < 3; ++k)
+        {
+            const float q0 = k == 0 ? rgb[0].x : k == 1 ? rgb[0].y : rgb[0].z;
+            const float q1 = k == 0 ? rgb[1].x : k == 1 ? rgb[1].y : rgb[1].z;
+            const float q2 = k == 0 ? rgb[2].x : k == 1 ? rgb[2].y : rgb[2].z;
+            const float f1 = q1 - q0, f2 = q2 - q0;
+            t.Ac[k] = (f1 * e2y - f2 * e1y) / det;
+            t.Bc[k] = (f2 * e1x - f1 * e2x) / det;
+            t.Cc[k] = q0 - t.Ac[k] * t.x[0] - t.Bc[k] * t.y[0];
+        }
+    }
     tris_.push_back(t);
 }
 
 // A triangle in camera space, cut at the near plane (one or two triangles, or none: wholly behind
 // the eye, no corner is kept and nothing is pushed). `bias` is pushed with each piece.
-void MeshBatch::clip_push(const Vec3* in, uint32_t colour, float bias)
+void MeshBatch::clip_push(const Vec3* in, uint32_t colour, float bias, const Vec3* rgb)
 {
     const float nz = near_limit();
     if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
     {
-        push(in, colour, bias);
+        push(in, colour, bias, nullptr, nullptr, rgb);
         return;
     }
-    Vec3 out[4];
+    Vec3 out[4], out_rgb[4];
     int m = 0;
     for (int i = 0; i < 3; ++i)
     {
         const Vec3 p = in[i], q = in[(i + 1) % 3];
-        if (p.z >= nz) out[m++] = p;
-        if ((p.z >= nz) != (q.z >= nz)) out[m++] = p + (q - p) * ((nz - p.z) / (q.z - p.z));
+        const int j = (i + 1) % 3;
+        if (p.z >= nz)
+        {
+            if (rgb) out_rgb[m] = rgb[i];
+            out[m++] = p;
+        }
+        if ((p.z >= nz) != (q.z >= nz))
+        {
+            const float f = (nz - p.z) / (q.z - p.z);
+            if (rgb) out_rgb[m] = rgb[i] + (rgb[j] - rgb[i]) * f;
+            out[m++] = p + (q - p) * f;
+        }
     }
     for (int i = 1; i + 1 < m; ++i)
     {
         const Vec3 tri[3] = {out[0], out[i], out[i + 1]};
-        push(tri, colour, bias);
+        const Vec3 tri_rgb[3] = {out_rgb[0], out_rgb[i], out_rgb[i + 1]};
+        push(tri, colour, bias, nullptr, nullptr, rgb ? tri_rgb : nullptr);
     }
+}
+
+void MeshBatch::add_face_shaded(const Vec3 world[3], const uint32_t argb[3])
+{
+    const Vec3 in[3] = {cam_->to_camera(world[0]), cam_->to_camera(world[1]), cam_->to_camera(world[2])};
+    add_face_shaded_cam(in, argb);
+}
+
+void MeshBatch::add_face_shaded_cam(const Vec3 c[3], const uint32_t argb[3])
+{
+    Vec3 rgb[3];
+    for (int i = 0; i < 3; ++i) rgb[i] = Vec3{float((argb[i] >> 16) & 0xFFu), float((argb[i] >> 8) & 0xFFu), float(argb[i] & 0xFFu)};
+    clip_push(c, argb[0], 0, rgb);
 }
 
 void MeshBatch::add_face(const Vec3 world[3], uint32_t argb)
@@ -592,6 +634,15 @@ void MeshBatch::raster_band(int y0, int y1)
                         const uint32_t ty = std::min(img.height - 1, uint32_t(std::max(0.0f, v) * float(img.height)));
                         const uint8_t* q = img.rgba.data() + (size_t(ty) * img.width + tx) * 4;
                         cp[x] = 0xFF000000u | uint32_t(q[0]) << 16 | uint32_t(q[1]) << 8 | q[2];
+                    }
+                    else if (t.shaded)
+                    {
+                        // (each of red, green and blue from its plane, held to 0..255)
+                        const float xc = float(x) + 0.5f;
+                        uint32_t px = 0xFF000000u;
+                        for (int k = 0; k < 3; ++k)
+                            px |= uint32_t(std::clamp(t.Ac[k] * xc + t.Bc[k] * yc + t.Cc[k], 0.0f, 255.0f) + 0.5f) << (16 - 8 * k);
+                        cp[x] = px;
                     }
                     else cp[x] = t.colour;
                 }
