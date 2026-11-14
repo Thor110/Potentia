@@ -338,6 +338,10 @@ $H --menu --press "\`,Down,Right,Right,Down,Right" --screenshot char-6x4.png | t
 printf 'sieve-character-v1 seed=99 limbs=5 joints=3 branches=1 symmetry=bilateral head=yes\n' > c99.character
 $H --menu --character c99.character --press "\`" --screenshot char-file.png | tr -d '\r' | q "^character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
 $H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^character beside you: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
+# A path longer than a string keeps in itself (16 characters and more) read whole (14 November 2026: the
+# name was taken from two different copies of it, which a short one hid).
+mkdir -p cx
+$H --no-menu --character cx/../c99.character --screenshot char-long.png | tr -d '\r' | q "^character beside you: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
 # The hallway fits the character (IDEAS 19.153): this one fits as built; eight radial limbs of twelve
 # joints grow it 1.41 times.
 $H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^hallway scale: 1.00$"

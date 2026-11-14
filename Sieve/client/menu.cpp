@@ -3819,109 +3819,155 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             sy = cy - float(p.y) * scale;
             depth = px * sa + pz * ca;
         };
-        // Spheres drawn far to near, so the nearer cover the farther.
-        std::vector<std::pair<float, size_t>> order;
-        for (size_t i = 0; i < shown.spheres.size(); ++i)
-        {
-            float sx, sy, d;
-            at(shown.spheres[i], sx, sy, d);
-            order.push_back({d, i});
-        }
-        std::sort(order.begin(), order.end());
-        // A sphere's colour: nearer brighter (the depth, from -reach to reach, as 90 to 255), the
-        // head warmer, scaled by `light` (1 unlit).
+        // The spheres and bones in three dimensions, drawn square-on by the renderer every space shares
+        // (MeshBatch, IDEAS 19.207): each sphere's depth worked out at every pixel, so spheres cut into one
+        // another where they truly meet, and bones go behind the spheres they are behind (Edward, 14
+        // November 2026: "render them and have them interact with one another as true 3D but render to
+        // 2D"). In camera space x is across, y up, z away from you (the nearer, the smaller).
+        // A sphere's colour: nearer brighter (the depth, from -reach to reach, as 90 to 255), the head
+        // warmer, scaled by `light` (1 unlit).
         auto colour = [&](const sieve::Sphere& p, float d, float light) {
             const float v = std::clamp(172.0f + 83.0f * d / reach, 90.0f, 255.0f) * light;
             const bool head = p.kind == sieve::Sphere::Head;
             return SDL_FColor{v / 255.0f, (head ? v : v * 0.85f) / 255.0f, (head ? v * 0.7f : v) / 255.0f, 1.0f};
         };
-        if (draw <= 1)
+        auto argb = [](SDL_FColor c) {
+            auto u = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+            return 0xFF000000u | u(c.r) << 16 | u(c.g) << 8 | u(c.b);
+        };
+        auto cam_of = [&](const sieve::Sphere& p) {
+            const float px = float(p.x), pz = float(p.z);
+            return Vec3{px * ca - pz * sa, float(p.y), -(px * sa + pz * ca)};
+        };
         {
-            // The bones, under everything.
-            SDL_SetRenderDrawColor(r_, 120, 120, 120, 255);
-            for (const sieve::Sphere& p : shown.spheres)
-                if (p.parent >= 0)
-                {
-                    float x1, y1, d1, x2, y2, d2;
-                    at(p, x1, y1, d1);
-                    at(shown.spheres[size_t(p.parent)], x2, y2, d2);
-                    SDL_RenderLine(r_, x1, y1, x2, y2);
-                }
+            // (the size the menu is laid out at: larger than the window where it is scaled down to fit)
+            int ow = 0, oh = 0;
+            SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
+            SDL_GetRenderLogicalPresentation(r_, &ow, &oh, &mode);
+            if (mode == SDL_LOGICAL_PRESENTATION_DISABLED || ow <= 0 || oh <= 0) SDL_GetCurrentRenderOutputSize(r_, &ow, &oh);
+            char_batch_.begin_ortho(cx, cy, scale, ow, oh);
         }
-        // Voxels: one cell size for the whole character, an eighth of the body's radius on screen.
-        const float cell = std::max(2.0f, float(shown.spheres[0].r) * scale / 4.0f);
-        for (const auto& [d, i] : order)
+        if (draw == 1)
+            for (const sieve::Sphere& p : shown.spheres)
+                if (p.parent >= 0) char_batch_.add_edge_cam(cam_of(p), cam_of(shown.spheres[size_t(p.parent)]), 0xFF787878u);
+        // One cell size for every character, so the pixels' squares and the voxels' cubes are alike from one
+        // character to the next (Edward, 14 November 2026: "square sizes need normalising"): its height in
+        // 16 cells (before, a quarter of its body's radius, which differed from one character to another).
+        const float cell_u = std::max(1.0f, tall / 16.0f);
+        // Voxels: true voxels, cubes on a grid fixed to the character (it turns with it): every cell whose middle lies in a sphere is filled, so the spheres run together
+        // into one blocky body; each face between a filled cell and an empty one drawn, lit by the way it
+        // faces, its edges darker (Edward, 14 November 2026: "do the voxels not look like actual voxels and
+        // instead are just squares?" They were squares fixed to the screen).
+        if (draw == 2)
         {
-            const sieve::Sphere& p = shown.spheres[i];
-            float sx, sy, dd;
-            at(p, sx, sy, dd);
-            const float rad = std::max(1.5f, float(p.r) * scale);
-            const SDL_FColor c = colour(p, d, 1.0f);
-            SDL_SetRenderDrawColorFloat(r_, c.r, c.g, c.b, 1.0f);
+            const float cellu = cell_u; // (in the character's units)
+            float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+            for (const sieve::Sphere& p : shown.spheres)
+            {
+                const float c[3] = {float(p.x), float(p.y), float(p.z)};
+                for (int k = 0; k < 3; ++k) lo[k] = std::min(lo[k], c[k] - float(p.r)), hi[k] = std::max(hi[k], c[k] + float(p.r));
+            }
+            const int nx = int(std::ceil((hi[0] - lo[0]) / cellu)) + 1, ny = int(std::ceil((hi[1] - lo[1]) / cellu)) + 1, nz = int(std::ceil((hi[2] - lo[2]) / cellu)) + 1;
+            // Each cell: the sphere it lies deepest in, or -1 where it lies in none.
+            std::vector<int> owner(size_t(nx) * size_t(ny) * size_t(nz), -1);
+            auto idx = [&](int x, int y, int z) { return (size_t(z) * size_t(ny) + size_t(y)) * size_t(nx) + size_t(x); };
+            for (size_t si = 0; si < shown.spheres.size(); ++si)
+            {
+                const sieve::Sphere& p = shown.spheres[si];
+                const float r = float(p.r);
+                const int x0 = std::max(0, int((float(p.x) - r - lo[0]) / cellu)), x1 = std::min(nx - 1, int((float(p.x) + r - lo[0]) / cellu));
+                const int y0 = std::max(0, int((float(p.y) - r - lo[1]) / cellu)), y1 = std::min(ny - 1, int((float(p.y) + r - lo[1]) / cellu));
+                const int z0 = std::max(0, int((float(p.z) - r - lo[2]) / cellu)), z1 = std::min(nz - 1, int((float(p.z) + r - lo[2]) / cellu));
+                for (int z = z0; z <= z1; ++z)
+                    for (int y = y0; y <= y1; ++y)
+                        for (int x = x0; x <= x1; ++x)
+                        {
+                            const float cx3 = lo[0] + (float(x) + 0.5f) * cellu - float(p.x), cy3 = lo[1] + (float(y) + 0.5f) * cellu - float(p.y),
+                                        cz3 = lo[2] + (float(z) + 0.5f) * cellu - float(p.z);
+                            const float in = r * r - (cx3 * cx3 + cy3 * cy3 + cz3 * cz3);
+                            if (in < 0) continue;
+                            int& o = owner[idx(x, y, z)];
+                            if (o < 0) o = int(si);
+                            else
+                            {
+                                const sieve::Sphere& q = shown.spheres[size_t(o)];
+                                const float qx = lo[0] + (float(x) + 0.5f) * cellu - float(q.x), qy = lo[1] + (float(y) + 0.5f) * cellu - float(q.y), qz = lo[2] + (float(z) + 0.5f) * cellu - float(q.z);
+                                if (in > float(q.r) * float(q.r) - (qx * qx + qy * qy + qz * qz)) o = int(si);
+                            }
+                        }
+            }
+            auto filled = [&](int x, int y, int z) { return x >= 0 && y >= 0 && z >= 0 && x < nx && y < ny && z < nz && owner[idx(x, y, z)] >= 0; };
+            // A character-space point to camera space (turned as the spheres are).
+            auto camp = [&](float px, float py, float pz) { return Vec3{px * ca - pz * sa, py, -(px * sa + pz * ca)}; };
+            const Vec3 light = normalize(Vec3{-0.45f, 0.55f, -0.70f}); // (from the upper left, towards you)
+            static const int kDir[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+            for (int z = 0; z < nz; ++z)
+                for (int y = 0; y < ny; ++y)
+                    for (int x = 0; x < nx; ++x)
+                    {
+                        const int o = owner[idx(x, y, z)];
+                        if (o < 0) continue;
+                        const sieve::Sphere& p = shown.spheres[size_t(o)];
+                        const float bx = lo[0] + float(x) * cellu, by = lo[1] + float(y) * cellu, bz = lo[2] + float(z) * cellu;
+                        const Vec3 mid = camp(bx + cellu / 2, by + cellu / 2, bz + cellu / 2);
+                        for (const auto& dv : kDir)
+                        {
+                            if (filled(x + dv[0], y + dv[1], z + dv[2])) continue; // (inside: hidden)
+                            const Vec3 n = camp(float(dv[0]), float(dv[1]), float(dv[2]));
+                            if (n.z >= 0) continue; // (turned away)
+                            // The face's four corners: on the side dv points to.
+                            Vec3 q[4];
+                            const int ax = dv[0] ? 0 : dv[1] ? 1 : 2, u = (ax + 1) % 3, v = (ax + 2) % 3;
+                            for (int k = 0; k < 4; ++k)
+                            {
+                                float w[3] = {bx, by, bz};
+                                w[ax] += dv[ax] > 0 ? cellu : 0;
+                                w[u] += (k == 1 || k == 2) ? cellu : 0;
+                                w[v] += (k >= 2) ? cellu : 0;
+                                q[k] = camp(w[0], w[1], w[2]);
+                            }
+                            const float lit = 0.6f + 0.4f * std::max(0.0f, dot(n, light)); // (the sides away from the light still read)
+                            const uint32_t fc = argb(colour(p, -mid.z, lit)), ec = argb(colour(p, -mid.z, lit * 0.55f));
+                            const Vec3 t1[3] = {q[0], q[1], q[2]}, t2[3] = {q[0], q[2], q[3]};
+                            char_batch_.add_face_cam(t1, fc);
+                            char_batch_.add_face_cam(t2, fc);
+                            for (int k = 0; k < 4; ++k) char_batch_.add_edge_cam(q[k], q[(k + 1) % 4], ec);
+                        }
+                    }
+        }
+        for (const sieve::Sphere& p : shown.spheres)
+        {
+            if (draw == 2) break; // (voxels: the cubes above)
+            const Vec3 c = cam_of(p);
+            const float d = -c.z;
+            MeshBatch::SphereLook look;
+            look.argb = argb(colour(p, d, 1.0f));
+            float radius = float(p.r);
             if (draw == 0)
             {
-                // Pixels: the sphere as one point, its size what a pixel is.
-                const SDL_FRect px{std::floor(sx) - 1, std::floor(sy) - 1, 3, 3};
-                SDL_RenderFillRect(r_, &px);
+                // Pixels: squares of one size on a grid fixed to the screen, each the colour of the sphere
+                // nearest you at its middle (a pixel-art drawing of the true spheres; the cell normalised above).
+                look.style = MeshBatch::SphereLook::Style::Voxels;
+                look.cell = std::max(2.0f, cell_u * scale), look.grid_x = cx, look.grid_y = cy;
+                look.min_radius = 1.5f;
             }
             else if (draw == 1)
             {
-                constexpr int kSegs = 24;
-                for (int k = 0; k < kSegs; ++k)
-                {
-                    const float a0 = 6.2831853f * float(k) / kSegs, a1 = 6.2831853f * float(k + 1) / kSegs;
-                    SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
-                }
+                look.style = MeshBatch::SphereLook::Style::Ring;
+                look.min_radius = 1.5f;
             }
-            else if (draw == 2)
-            {
-                // Voxels: the cells of a grid fixed to the screen whose centres fall in the sphere's
-                // disc, each a filled square with a darker edge.
-                const int x0 = int(std::floor((sx - rad - cx) / cell)), x1 = int(std::ceil((sx + rad - cx) / cell));
-                const int y0 = int(std::floor((sy - rad - cy) / cell)), y1 = int(std::ceil((sy + rad - cy) / cell));
-                for (int gy = y0; gy <= y1; ++gy)
-                    for (int gx = x0; gx <= x1; ++gx)
-                    {
-                        const float qx = cx + (float(gx) + 0.5f) * cell, qy = cy + (float(gy) + 0.5f) * cell;
-                        if ((qx - sx) * (qx - sx) + (qy - sy) * (qy - sy) > rad * rad) continue;
-                        const SDL_FRect q{cx + float(gx) * cell, cy + float(gy) * cell, cell, cell};
-                        SDL_SetRenderDrawColorFloat(r_, c.r, c.g, c.b, 1.0f);
-                        SDL_RenderFillRect(r_, &q);
-                        SDL_SetRenderDrawColorFloat(r_, c.r * 0.55f, c.g * 0.55f, c.b * 0.55f, 1.0f);
-                        SDL_RenderRect(r_, &q);
-                    }
-            }
+            else if (draw == 2) continue; // (voxels: the cubes above)
             else
             {
-                // Shaded: a disc lit from the upper left (Lambert's cosine on the sphere's surface,
-                // over a little ambient light), as a fan of triangles whose rim and centre carry
-                // the light where they face.
-                constexpr int kSegs = 32;
-                std::vector<SDL_Vertex> v;
-                std::vector<int> idx;
-                const float lx = -0.45f, ly = -0.55f, lz = 0.70f; // towards the light, of length about 1
-                auto lit = [&](float nx, float ny, float nz) {
-                    const float lambert = std::max(0.0f, nx * lx + ny * ly + nz * lz);
-                    const SDL_FColor k = colour(p, d, 0.25f + 0.75f * lambert);
-                    return k;
-                };
-                // The centre, facing the viewer, and rings at 0.5 and 1 of the radius.
-                v.push_back({{sx, sy}, lit(0, 0, 1), {0, 0}});
-                for (const float ring : {0.5f, 0.97f})
-                    for (int k = 0; k < kSegs; ++k)
-                    {
-                        const float a = 6.2831853f * float(k) / kSegs, ux = std::cos(a), uy = std::sin(a);
-                        const float nz = std::sqrt(std::max(0.0f, 1.0f - ring * ring));
-                        v.push_back({{sx + rad * ring * ux, sy + rad * ring * uy}, lit(ring * ux, ring * uy, nz), {0, 0}});
-                    }
-                for (int k = 0; k < kSegs; ++k)
-                {
-                    const int a = 1 + k, b = 1 + (k + 1) % kSegs, a2 = 1 + kSegs + k, b2 = 1 + kSegs + (k + 1) % kSegs;
-                    idx.insert(idx.end(), {0, a, b, a, a2, b2, a, b2, b});
-                }
-                SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), idx.data(), int(idx.size()));
+                // Shaded: lit from the upper left (Lambert's cosine on the sphere's surface, over a little
+                // ambient light).
+                look.style = MeshBatch::SphereLook::Style::Shaded;
+                look.ambient = 0.25f;
+                look.min_radius = 1.5f;
             }
+            char_batch_.add_sphere_cam(c, radius, look);
         }
+        char_batch_.draw(r_);
         // The models held in spheres (sieve-character-v2): each a wireframe filling its sphere, its
         // coordinates times the radius, turned with its sphere as the animation turns it, and with
         // the character; the chosen sphere ringed.

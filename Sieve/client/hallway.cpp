@@ -2160,6 +2160,7 @@ void Hallway::render()
     const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
                real_marker = md && md->marker;
     bool models_drawn = false;
+    figures_in_batch_ = false; // (set where the models' image takes your characters)
     if (md && (real_hall || real_cases || real_books || real_marker))
     {
         draw_models(*md, visible, kBack, kAhead, w, h);
@@ -2395,6 +2396,9 @@ void Hallway::draw_models(const Models& md, const bool* visible, int back, int a
             models_batch_.add(book_mesh, {{sx * kCaseFront, y0, zc}, shelf_scale(), tall, right, dim});
         }
     }
+    // Your characters, in the same image (their spheres and bones depth-tested against everything here).
+    figures_in_batch_ = character_ || !personal_.empty();
+    if (figures_in_batch_) draw_character(th.edge, &models_batch_);
     models_batch_.draw(r_);
     fps_tris_ = models_batch_.drawn();
 }
@@ -2519,7 +2523,7 @@ std::string Hallway::action_line() const
     return std::string(sieve::action_name(a)) + ": none";
 }
 
-void Hallway::draw_character(SDL_Color edge)
+void Hallway::draw_character(SDL_Color edge, MeshBatch* into)
 {
     // The animation it plays: its action's, where it has a map of actions (IDEAS 19.186), else its one.
     const sieve::Animation* playing = actions_ ? action_animation() : animation_ ? &*animation_ : nullptr;
@@ -2537,18 +2541,18 @@ void Hallway::draw_character(SDL_Color edge)
             posed.spheres[i].z = int32_t(std::lround(at[i][2]));
         }
         const auto turns = sieve::pose_turns(*character_, *playing, animation_shown_);
-        draw_figure(posed, edge, 0, &*character_, &turns);
+        draw_figure(posed, edge, 0, &*character_, &turns, into);
     }
-    else if (character_) draw_figure(*character_, edge, 0);
+    else if (character_) draw_figure(*character_, edge, 0, nullptr, nullptr, into);
     // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
     // other side, a short line of their own, a little dimmer (at most eight drawn).
     const SDL_Color dim{Uint8(edge.r * 0.7f), Uint8(edge.g * 0.7f), Uint8(edge.b * 0.7f), 255};
-    for (size_t i = 0; i < personal_.size() && i < 8; ++i) draw_figure(personal_[i], dim, int(i) + 1);
+    for (size_t i = 0; i < personal_.size() && i < 8; ++i) draw_figure(personal_[i], dim, int(i) + 1, nullptr, nullptr, into);
 }
 
 // One character standing in the hallway: `place` 0 is yours (ahead and to your right); 1, 2, ... are
 // your personal dimension's, ahead and to your left, one after another along the corridor.
-void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest, const std::vector<std::array<double, 9>>* turns)
+void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest, const std::vector<std::array<double, 9>>* turns, MeshBatch* into)
 {
     if (c.spheres.empty()) return;
     // Where it stands and how far aside: from its rest pose (when it is moving), so its feet and its
@@ -2581,9 +2585,30 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
     auto line = [&](Vec3 a, Vec3 b) {
         if (const auto s = cam_.project_segment(a, b)) SDL_RenderLine(r_, s->first.first.x, s->first.first.y, s->first.second.x, s->first.second.y);
     };
+    if (into)
+    {
+        // Real Graphics: its bones and spheres given to the models' renderer, each sphere a sphere (its
+        // depth at every pixel), lit from the upper left as the Character Creator draws it, the head warmer.
+        auto argb = [](int r, int g, int b) { return 0xFF000000u | uint32_t(std::clamp(r, 0, 255)) << 16 | uint32_t(std::clamp(g, 0, 255)) << 8 | uint32_t(std::clamp(b, 0, 255)); };
+        for (const sieve::Sphere& p : c.spheres)
+            if (p.parent >= 0) into->add_edge(world(p), world(c.spheres[size_t(p.parent)]), argb(int(edge.r * 0.6f), int(edge.g * 0.6f), int(edge.b * 0.6f)));
+        for (const sieve::Sphere& p : c.spheres)
+        {
+            MeshBatch::SphereLook look;
+            look.style = MeshBatch::SphereLook::Style::Shaded;
+            look.ambient = 0.3f;
+            look.min_radius = 1.0f;
+            look.argb = p.kind == sieve::Sphere::Head ? argb(edge.r + 90, edge.g + 90, edge.b + 60) : argb(edge.r, edge.g, edge.b);
+            into->add_sphere(world(p), float(p.r) * scale, look);
+        }
+        return;
+    }
+    // (with Real Graphics, the bones and spheres are in the models' image already: only what it holds)
+    const bool in_batch = figures_in_batch_;
     SDL_SetRenderDrawColor(r_, Uint8(edge.r * 0.6f), Uint8(edge.g * 0.6f), Uint8(edge.b * 0.6f), 255);
-    for (const sieve::Sphere& p : c.spheres)
-        if (p.parent >= 0) line(world(p), world(c.spheres[size_t(p.parent)]));
+    if (!in_batch)
+        for (const sieve::Sphere& p : c.spheres)
+            if (p.parent >= 0) line(world(p), world(c.spheres[size_t(p.parent)]));
     // The models held in spheres (sieve-character-v2), each a wireframe filling its sphere.
     SDL_SetRenderDrawColor(r_, Uint8(std::min(255, edge.r / 2 + 120)), Uint8(std::min(255, edge.g / 2 + 128)), Uint8(std::min(255, edge.b / 2 + 80)), 255);
     for (const auto& [i, hex] : c.holds)
@@ -2598,6 +2623,7 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
             line(o + right * (a[0] * rad) + Vec3{0, a[1] * rad, 0} + f * (-a[2] * rad), o + right * (b[0] * rad) + Vec3{0, b[1] * rad, 0} + f * (-b[2] * rad));
         }
     }
+    if (in_batch) return;
     // Rings facing the camera: in the plane of its right and up.
     const Vec3 cf = cam_.forward(), cr = normalize(hallway::cross(cf, Vec3{0, 1, 0})), cu = hallway::cross(cr, cf); // (hallway::cross: the vector one, not walking through a door)
     constexpr int kSegs = 20;

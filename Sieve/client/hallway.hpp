@@ -1938,10 +1938,13 @@ private:
     std::vector<sieve::Character> personal_;
     std::filesystem::path favourites_base_; // your personal dimension (the store), drawn beside yours
     void draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest = nullptr,
-                     const std::vector<std::array<double, 9>>* turns = nullptr); // (each sphere's turn: its held model turns with it)
+                     const std::vector<std::array<double, 9>>* turns = nullptr, MeshBatch* into = nullptr); // (each sphere's turn: its held model turns with it)
     float hall_scale_ = 1, max_scale_ = 16;
     bool character_fits_ = true;
-    void draw_character(SDL_Color edge);
+    // `into`: Real Graphics on, the spheres and bones go to the models' renderer (depth-tested against
+    // the shelves and books, IDEAS 19.207); the pass after it then draws only the held models' lines.
+    void draw_character(SDL_Color edge, MeshBatch* into = nullptr);
+    bool figures_in_batch_ = false;
     int angle_decimals_ = 1; // Settings > Graphics: decimal places on the compass's degree readout
     Uint64 fps_since_ = 0, fps_last_ = 0;
     int fps_frames_ = 0;

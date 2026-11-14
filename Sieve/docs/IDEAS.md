@@ -8167,6 +8167,18 @@ renderers and systems between any of the 3D spaces", "which includes the charact
   shaded), far to near; as meshes in MeshBatch they would look faceted and in perspective. Kept as they
   look, they would need MeshBatch to take a sphere as a sphere (its depth worked out at each pixel, so it
   is exact against faces) and a square-on camera.
+- *The characters too (14 November 2026; Edward: "we should seek to render them and have them interact
+  with one another as true 3D but render to 2D"):* MeshBatch takes a sphere as a sphere (`add_sphere`:
+  at each pixel of its disc the depth of its surface there, so spheres cut into one another, into bones
+  and into faces where they truly meet), in the characters' four drawings (a flat disc, lit from the
+  upper left, a ring, voxels), and a square-on camera (`begin_ortho`). The Character Creator and the
+  setup menu's CHARACTER page draw by it (their pictures as before, but for the bones from the body to
+  the head, which now show where the menu is scaled down to fit: one-pixel lines were lost in the
+  scaling); your dimension's characters are in the same image as its objects (a bookcase in front of
+  one hides what it covers, pixel by pixel: the line-of-sight test for each sphere is gone), drawn lit
+  from the upper left as in the Character Creator (rings in the wireframe); and with Real Graphics on, the
+  hallway's characters are in its models' image, shaded spheres among the shelves (rings as before with
+  it off).
 
 **19.208 O in your dimension opens the hallway's own viewer, in place (Edward, 14 November 2026).** His
 words: "currently o opens an object and leads to the calculating / waiting screen", "this should seek to
@@ -8252,6 +8264,114 @@ authorship and prevent plaigarism".
   server's list), §19.204 (templates shared as files), Online (off by default, §19.189) and any finding of
   other machines (a list kept by each person, or found on the local network; never a central directory
   that all must use).
+
+**19.212 Catalogues of world systems for the personal dimensions: skies, stars, times of day, fog (Edward,
+14 November 2026). An idea for now.** His words: "we should also add catalogs for world systems such as
+templates for the sky, starry night, stars, milky way galaxy, various daytimes, fog systems and more to
+the personal dimensions system".
+- *What it would be:* a world's look made of parts chosen from catalogues, each part a small piece of
+  data with its own settings: a sky (the blue gradient and clouds as now; a starry night; stars with the
+  Milky Way across them; a dusk, a dawn, an overcast day), a time of day (the sun's height and colour,
+  moving or held still), a fog (how far, how thick, what colour), and more as they are made (rain,
+  snow, an aurora). A world file names the parts it uses; a template (§19.204) is a set of them.
+- *Fits with:* §19.204 (templates are sets of these parts), §19.196 (each part's state as data, its look
+  apart from what it does), and §19.207 (drawn by the one renderer: the stars and fog in the same image).
+  The sky, sun and haze now in client/personal_world.cpp are the first entries, taken out into parts.
+
+**19.213 Building in the personal dimensions: walls, doors, houses, in the third person; roads later
+(Edward, 14 November 2026). An idea for now.** His words: "a 3rd person system for building out houses
+and buildings from walls, through doors and more, similar or akin to the sims", "this would extend to
+roads and much more in the long run".
+- *What it would be:* a building mode with the view lifted behind and above you (a third-person camera,
+  turned and zoomed with the mouse), and a grid on the ground: walls drawn by dragging from point to
+  point, doors and windows set into them, floors and roofs filled in from the walls that close a room,
+  storeys stacked; each piece an object of the world (the same placing, turning and keeping as the
+  catalogue's objects), so a house is a set of placed pieces that can be saved as one and used again.
+  Roads, paths and fences in the long run, drawn along the ground the same way.
+- *Fits with:* the author's tools (§19.209: building is one of them, with the same rules for visitors),
+  the minimap's storeys (§19.197: a house's floors are what it shows one at a time), the maze door
+  (§19.198), the modelling tools (§19.194), and the one renderer (§19.207). Original in its own design:
+  a grid and pieces of Sieve's own, not another game's.
+
+**19.214 The drawing itself a choice under Real Graphics: pixels, voxels, triangles, quads, smooth
+surfaces (Edward, 14 November 2026). An idea for now.** His words: "under real graphics we can have the
+scalable graphics system itself as a choice for the user, pixels, voxels, tris, quads, nerbs etc", with
+a picture made from screenshots of the project showing one character at several of these.
+- *Where it stands:* the Character Creator already offers four drawings of a character (pixels,
+  wireframe, voxels, shaded spheres), and since 14 November all four are drawn by the one renderer
+  (§19.207) as true 3D, each sphere's depth worked out at every pixel. Objects are triangles (their
+  meshes), drawn solid or as a wireframe.
+- *What it would be:* Settings > Graphics > Real Graphics gains a drawing to choose, for everything at
+  once (or per space): points, voxels (a cell size), triangles as now, and in time quads and smooth
+  surfaces (subdivision or NURBS patches made from the triangles or the spheres), each a way the one
+  renderer draws the same shapes. It is also a scale of cost: points and voxels for slow machines and
+  far things, smooth surfaces for near ones; so it can be chosen by distance too (the far drawn coarser).
+- *Not yet built:* quads and smooth surfaces need a step from the meshes (or the spheres) to patches,
+  and the renderer to draw them; points, voxels and triangles are there today.
+- *Built on 14 November 2026 (Edward: "do the voxels not look like actual voxels and instead are just
+  squares?", then "that can be fine to remain as the pixel shader to some extent but square sizes need
+  normalising"):* the Character Creator's **voxels** are true voxels: cubes on a grid fixed to the
+  character (they turn with it), every cell whose middle lies in a sphere filled so the spheres run
+  together, and only the faces between a filled cell and an empty one drawn, lit by the way each faces,
+  their edges darker. Its **pixels** are the flat squares the voxels were (a pixel-art drawing, each
+  square the colour of the sphere nearest you at its middle). Both take one cell size for every
+  character: its height in 16 cells (before, a quarter of its body's radius, so it differed from one
+  character to another).
+- *What the spheres are, and what smooth surfaces wait on (Edward, 14 November 2026):* "the spheres
+  themselves represent a sphere of influence for the body piece itself which would be adjustable in the
+  long run", "overall it is a basic skeleton representation system at the moment and definitely needs
+  building out more in the future", and "nerbs may be difficult to show properly as we don't have an
+  adaptive or morphing shell for the models/points/geometry yet". So each sphere is the reach of one
+  body piece (its size to be set by hand in time, with §19.203's dragging), the bones join them, and a
+  skin is the next layer: a shell grown over the spheres of influence (a surface that blends where they
+  overlap, as metaballs or a convolution surface do), which voxels, triangles, quads and NURBS patches
+  would then each be drawings of. Until that shell exists, smooth surfaces have nothing of their own to
+  smooth.
+
+**19.215 Greedy meshing for the voxels (Edward, 14 November 2026). An idea for now, for later.** His
+words: "we should also seek to implement greedy meshing for the voxel system such that less faces are
+drawn at once in the long run".
+- *What it is:* the voxels' faces that lie in one plane, face the same way and share a colour are joined
+  into as few rectangles as cover them (each layer of the grid swept, a rectangle grown along a row as
+  far as it goes, then down as many rows as match), so a flat side of fifty cubes is one or two quads
+  instead of fifty. Fewer faces to draw; the picture the same.
+- *Where it bears:* the Character Creator's voxels now (every visible cell face is drawn on its own:
+  hundreds for one character), and the worlds' voxel drawing if §19.214's choice is built; with
+  lighting by face direction, the joined faces keep their shading. The edges between cells, drawn now to
+  show the cubes, would then be drawn as lines over the joined faces where wanted.
+
+**19.216 Voxels for everything, and how big a voxel is (Edward, 14 November 2026). An idea for now.** His
+words: "I wonder how the hallway would look rendered as voxels, does that function yet?", "I don't know
+exactly how we might normalise things yet as different shapes might demand different size voxels to
+properly fit their enclosures or models", "I think that would be fine overall and they could be scalable
+from there to add more detail/depth".
+- *Where it stands:* only characters can be drawn as voxels (the Character Creator; spheres are easy to
+  fill, a cell's middle either in one or not). The hallway's shelves, books and walls, and your
+  dimension's objects, are triangle meshes; nothing turns a mesh into voxels yet.
+- *What it needs:* a mesh voxelised: each triangle marks the cells it passes through (a surface shell),
+  and the cells inside a closed mesh filled (a ray along each row counting the crossings), each cell
+  taking the colour of the face nearest it. Done once per mesh and kept, as the shelf items' meshes are,
+  then drawn as the characters' cubes are (and joined by greedy meshing, §19.215).
+- *How big a voxel is (a proposal):* one lattice for the whole world, its cells powers of two of a base
+  size (a base of 1 cm, say: cells of 1, 2, 4, 8, 16 cm ... ), so every object's voxels line up with every
+  other's at any level. Each shape picks its level from what it must keep: the coarsest at which its
+  thinnest part is still two cells across (a shelf board 2 cm thick: 1 cm cells; a bookcase's sides 4 cm:
+  2 cm; a hill: 32 cm), so a thin thing is not lost and a large plain one is not wasteful. Distance then
+  steps a level coarser each time the cells grow smaller than a pixel or two on the screen, and nearer
+  steps finer: the same lattice as an octree, which is what makes it scalable for more detail and depth
+  without anything changing size by a stranger amount than a doubling. Characters would take a level too
+  (today: their height in 16 cells, an interim choice); a user could set a bias (always one level finer).
+- *Why not one size for all, or a size per object:* one size everywhere loses thin things or wastes cells
+  on large ones; a free size per object fits each but leaves neighbours' cubes misaligned (a book's cells
+  not meeting its shelf's). Powers of two of one lattice is the middle: each fitted, all aligned.
+- *Every part of it a setting the person can see and change (Edward, 14 November 2026: "make sure it is
+  kept as an idea and the normalisation itself can be turned on and off as per the dynamic/procedural/
+  modular nature of the system, ensuring no setting is hidden from the end user"):* the normalisation is
+  a switch, on by default (off: each shape keeps its own free size, or one size for all, chosen); the
+  base size, the rule for a shape's level (its thinnest part in N cells, N shown), the distance steps,
+  and the bias are each a row under Settings > Graphics > Real Graphics, written in the settings file,
+  listed in SETTINGS.md, and read aloud with the rest. Nothing chosen for the person in code that they
+  cannot change on a menu (§19.196). Kept as an idea until the voxel drawing reaches the meshes.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

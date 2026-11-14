@@ -23,6 +23,7 @@
 #include "character_store.hpp"
 #include "app_settings.hpp" // and setup.hpp: the setup menu's settings
 #include "dimensions.hpp"
+#include "mesh.hpp"
 #include "display.hpp"
 #include "cli/args.hpp"
 #include "cli/filter_config.hpp"
@@ -524,6 +525,7 @@ private:
     // The pedestal under the character (IDEAS §19.150): a click and drag on the drawing turns it, as
     // [ and ] do from the keys (15 degrees a press).
     float char_turn_ = 0.6f;     // radians about the upright
+    MeshBatch char_batch_;       // the character drawn by the renderer every space shares (square-on)
     bool char_dragging_ = false;
     float char_drag_x_ = 0;
     SDL_FRect char_drag_ = {};   // the drawing's box, where a drag turns it

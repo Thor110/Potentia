@@ -118,6 +118,30 @@ public:
     void add_picture(const Vec3 world[4], const sieve::RgbaImage& picture);
     // A line, drawn where nothing nearer covers it (a wireframe's edges over faces filled black).
     void add_edge(Vec3 a, Vec3 b, uint32_t argb);
+
+    // Seen square-on instead (no perspective): what is given in camera space (x right, y up, z away
+    // from the eye) lands at (centre_x + x * scale, centre_y - y * scale), nearer where z is smaller.
+    // The Character Creator's and the setup menu's characters. Always laid over what is there.
+    void begin_ortho(float centre_x, float centre_y, float scale, int width, int height);
+    // A sphere drawn as a sphere: at each pixel the depth of its surface there, so spheres cut into
+    // one another, into bones and into faces exactly where they meet (Edward, 14 November 2026: "render
+    // them and have them interact with one another as true 3D but render to 2D"). Its look is one of
+    // the characters' drawings: a flat disc, a disc lit from the upper left, a ring, or voxels (cells
+    // of a grid fixed to the screen, each the sphere's depth at its centre, with a darker edge).
+    struct SphereLook
+    {
+        enum class Style { Flat, Shaded, Ring, Voxels } style = Style::Flat;
+        uint32_t argb = 0xFFFFFFFFu; // its colour fully lit
+        float ambient = 0.25f;       // Shaded: the light where it faces away
+        float cell = 4;              // Voxels: the cells' size on the screen, and the grid's origin
+        float grid_x = 0, grid_y = 0;
+        float min_radius = 0;        // on the screen, at least this many pixels (a far sphere still seen)
+    };
+    void add_sphere(Vec3 world_centre, float radius, const SphereLook& look);
+    // The same in camera space (as the square-on characters give them), and a face and a line too.
+    void add_sphere_cam(Vec3 centre, float radius, const SphereLook& look);
+    void add_edge_cam(Vec3 a, Vec3 b, uint32_t argb);
+    void add_face_cam(const Vec3 cam3[3], uint32_t argb);
     // Rasterises everything added and draws it over the whole render target.
     void draw(SDL_Renderer* r);
     size_t drawn() const { return drawn_; } // triangles in the last draw
@@ -146,10 +170,25 @@ private:
         float n0, n1;         // 1 / camera depth at each end
         uint32_t colour;
     };
+    struct Ball
+    {
+        float sx, sy, rs;   // its centre and radius on the screen
+        float zc, r, k;     // its centre's depth and radius in camera space, and camera units a pixel
+        SphereLook look;
+    };
     void push(const Vec3* cam3, uint32_t colour, float bias, const float (*uv)[2] = nullptr, const sieve::RgbaImage* picture = nullptr);
     void clip_push(const Vec3* cam3, uint32_t colour);
+    // Where a camera-space point lands, and its nearness (larger nearer: 1 / depth with perspective,
+    // a large number less the depth square-on; either is planar on the screen).
+    Point2 project(Vec3 c) const;
+    float nearness(float z) const { return ortho_ ? kOrthoFar - z : 1.0f / z; }
+    float near_limit() const { return ortho_ ? -1e30f : cam_->near_z; }
+    void raster_balls(int y0, int y1);
+    static constexpr float kOrthoFar = 1e6f;
     std::vector<Edge> edges_;
-    bool overlay_ = false;
+    std::vector<Ball> balls_;
+    bool overlay_ = false, ortho_ = false;
+    float ocx_ = 0, ocy_ = 0, oscale_ = 1;
     void raster_band(int y0, int y1);
 
     const Camera* cam_ = nullptr;

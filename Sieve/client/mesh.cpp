@@ -355,6 +355,27 @@ void MeshBatch::release()
     tex_w_ = tex_h_ = 0;
 }
 
+void MeshBatch::begin_ortho(float centre_x, float centre_y, float scale, int width, int height)
+{
+    cam_ = nullptr;
+    ortho_ = true;
+    overlay_ = true;
+    ocx_ = centre_x, ocy_ = centre_y, oscale_ = std::max(1e-6f, scale);
+    bg_ = {0, 0, 0, 1};
+    bg_argb_ = 0;
+    w_ = std::max(1, width);
+    h_ = std::max(1, height);
+    tris_.clear();
+    edges_.clear();
+    balls_.clear();
+}
+
+Point2 MeshBatch::project(Vec3 c) const
+{
+    if (ortho_) return {ocx_ + c.x * oscale_, ocy_ - c.y * oscale_};
+    return cam_->project_camera(c);
+}
+
 void MeshBatch::begin_overlay(const Camera& cam, int width, int height)
 {
     begin(cam, SDL_Color{0, 0, 0, 255}, width, height);
@@ -366,7 +387,9 @@ void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int he
 {
     cam_ = &cam;
     overlay_ = false;
+    ortho_ = false;
     edges_.clear();
+    balls_.clear();
     bg_ = {background.r / 255.0f, background.g / 255.0f, background.b / 255.0f, 1.0f};
     bg_argb_ = 0xFF000000u | uint32_t(background.r) << 16 | uint32_t(background.g) << 8 | uint32_t(background.b);
     w_ = std::max(1, width);
@@ -382,10 +405,10 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*u
     float iz[3];
     for (int i = 0; i < 3; ++i)
     {
-        const Point2 p = cam_->project_camera(c[i]);
+        const Point2 p = project(c[i]);
         t.x[i] = p.x;
         t.y[i] = p.y;
-        iz[i] = (1.0f + bias) / c[i].z;
+        iz[i] = ortho_ ? nearness(c[i].z) : (1.0f + bias) / c[i].z;
     }
     t.ymin = std::min({t.y[0], t.y[1], t.y[2]});
     t.ymax = std::max({t.y[0], t.y[1], t.y[2]});
@@ -416,7 +439,7 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*u
 // A triangle in camera space, cut at the near plane (one or two triangles, or none).
 void MeshBatch::clip_push(const Vec3* in, uint32_t colour)
 {
-    const float nz = cam_->near_z;
+    const float nz = near_limit();
     if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
     {
         push(in, colour, 0);
@@ -461,17 +484,38 @@ void MeshBatch::add_picture(const Vec3 world[4], const sieve::RgbaImage& picture
     push(t2, 0xFF000000u, 0, uv2, &picture);
 }
 
-void MeshBatch::add_edge(Vec3 a, Vec3 b, uint32_t argb)
+void MeshBatch::add_edge(Vec3 a, Vec3 b, uint32_t argb) { add_edge_cam(cam_->to_camera(a), cam_->to_camera(b), argb); }
+
+void MeshBatch::add_edge_cam(Vec3 ca, Vec3 cb, uint32_t argb)
 {
-    Vec3 ca = cam_->to_camera(a), cb = cam_->to_camera(b);
-    const float nz = cam_->near_z;
+    const float nz = near_limit();
     if (ca.z < nz && cb.z < nz) return;
     if (ca.z < nz) ca = ca + (cb - ca) * ((nz - ca.z) / (cb.z - ca.z));
     else if (cb.z < nz) cb = cb + (ca - cb) * ((nz - cb.z) / (ca.z - cb.z));
-    const Point2 pa = cam_->project_camera(ca), pb = cam_->project_camera(cb);
-    edges_.push_back({pa.x, pa.y, pb.x, pb.y, 1.0f / ca.z, 1.0f / cb.z, argb});
+    const Point2 pa = project(ca), pb = project(cb);
+    edges_.push_back({pa.x, pa.y, pb.x, pb.y, nearness(ca.z), nearness(cb.z), argb});
 }
 
+void MeshBatch::add_face_cam(const Vec3 c[3], uint32_t argb)
+{
+    const float nz = near_limit();
+    if (c[0].z < nz && c[1].z < nz && c[2].z < nz) return;
+    clip_push(c, argb);
+}
+
+void MeshBatch::add_sphere(Vec3 world_centre, float radius, const SphereLook& look) { add_sphere_cam(cam_->to_camera(world_centre), radius, look); }
+
+void MeshBatch::add_sphere_cam(Vec3 c, float radius, const SphereLook& look)
+{
+    if (radius <= 0) return;
+    if (!ortho_ && c.z - radius < cam_->near_z) return; // (reaching behind the eye: not drawn)
+    const Point2 p = project(c);
+    // Camera units a pixel at its centre's depth (square-on: everywhere the same).
+    const float k = ortho_ ? 1.0f / oscale_ : c.z / cam_->focal();
+    const float rs = std::max(radius / k, look.min_radius);
+    if (p.x + rs < 0 || p.x - rs > float(w_) || p.y + rs < 0 || p.y - rs > float(h_)) return;
+    balls_.push_back({p.x, p.y, rs, c.z, radius, k, look});
+}
 void MeshBatch::add(const Mesh& mesh, const Placement& at)
 {
     const Camera& cam = *cam_;
@@ -588,6 +632,7 @@ void MeshBatch::raster_band(int y0, int y1)
             }
         }
     }
+    raster_balls(y0, y1);
     // The edges, over the faces, each pixel where nothing nearer is (with a little leeway, so a face's
     // own edge shows on it).
     for (const Edge& e : edges_)
@@ -601,8 +646,88 @@ void MeshBatch::raster_band(int y0, int y1)
             if (x < 0 || x >= W || y < y0 || y >= y1) continue;
             const float n = e.n0 + (e.n1 - e.n0) * u;
             float& d = depth_[size_t(y) * size_t(W) + size_t(x)];
-            if (n < d * 0.995f) continue;
+            // (the leeway: half a percent of the nearness with perspective; two pixels' depth square-on)
+            if (n < (ortho_ ? d - 2.0f / oscale_ : d * 0.995f)) continue;
             pixels_[size_t(y) * size_t(P) + size_t(x)] = e.colour;
+        }
+    }
+}
+
+// The spheres in rows y0 .. y1-1: each pixel of its disc given the depth of its surface there (its
+// centre's depth less the height of the sphere above that point), so where two spheres meet, or a sphere
+// meets a face, the nearer surface wins pixel by pixel.
+void MeshBatch::raster_balls(int y0, int y1)
+{
+    const int W = w_, P = pitch_;
+    using Style = SphereLook::Style;
+    for (const Ball& b : balls_)
+    {
+        const SphereLook& L = b.look;
+        const float rs = b.rs;
+        const int ya = std::max(y0, int(std::floor(b.sy - rs - 1))), yb = std::min(y1 - 1, int(std::ceil(b.sy + rs + 1)));
+        const int xa = std::max(0, int(std::floor(b.sx - rs - 1))), xb = std::min(W - 1, int(std::ceil(b.sx + rs + 1)));
+        const uint32_t base = L.argb;
+        const float br = float((base >> 16) & 255), bg = float((base >> 8) & 255), bb = float(base & 255);
+        auto scaled = [&](float light) {
+            auto c = [&](float v) { return uint32_t(std::clamp(v * light, 0.0f, 255.0f) + 0.5f); };
+            return 0xFF000000u | c(br) << 16 | c(bg) << 8 | c(bb);
+        };
+        // The depth of its surface at a point (dx, dy) pixels from its centre on the screen.
+        auto near_at = [&](float dx, float dy) {
+            const float d = std::sqrt(dx * dx + dy * dy) * b.k;
+            const float lift = b.r * b.r > d * d ? std::sqrt(b.r * b.r - d * d) : 0.0f;
+            return nearness(b.zc - lift);
+        };
+        for (int y = ya; y <= yb; ++y)
+        {
+            const float yc = float(y) + 0.5f;
+            uint32_t* cp = pixels_ + size_t(y) * size_t(P);
+            float* dp = depth_.data() + size_t(y) * size_t(W);
+            for (int x = xa; x <= xb; ++x)
+            {
+                const float xc = float(x) + 0.5f, dx = xc - b.sx, dy = yc - b.sy, d2 = dx * dx + dy * dy;
+                float n;
+                uint32_t colour;
+                if (L.style == Style::Ring)
+                {
+                    // (a ring a pixel and a half wide, at the depth of the sphere's outline)
+                    const float d = std::sqrt(d2);
+                    if (std::fabs(d - rs) > 0.75f) continue;
+                    n = nearness(b.zc);
+                    colour = base;
+                }
+                else if (L.style == Style::Voxels)
+                {
+                    // (this pixel's cell, in the disc where its centre is; its edge darker)
+                    const float cell = std::max(1.0f, L.cell);
+                    const float gx = std::floor((xc - L.grid_x) / cell), gy = std::floor((yc - L.grid_y) / cell);
+                    const float qx = L.grid_x + (gx + 0.5f) * cell, qy = L.grid_y + (gy + 0.5f) * cell;
+                    const float ex = qx - b.sx, ey = qy - b.sy;
+                    if (ex * ex + ey * ey > rs * rs) continue;
+                    n = near_at(ex, ey);
+                    const float lx = xc - L.grid_x - gx * cell, ly = yc - L.grid_y - gy * cell;
+                    const bool edge = lx < 1.0f || ly < 1.0f || lx > cell - 1.0f || ly > cell - 1.0f;
+                    colour = edge ? scaled(0.55f) : base;
+                }
+                else
+                {
+                    if (d2 > rs * rs) continue;
+                    n = near_at(dx, dy);
+                    if (L.style == Style::Shaded)
+                    {
+                        // Lit from the upper left, towards the eye (Lambert's cosine over some ambient light).
+                        const float nx = dx / rs, ny = dy / rs, nzz = std::sqrt(std::max(0.0f, 1.0f - nx * nx - ny * ny));
+                        const float lambert = std::max(0.0f, nx * -0.45f + ny * -0.55f + nzz * 0.70f);
+                        colour = scaled(L.ambient + (1.0f - L.ambient) * lambert);
+                    }
+                    else colour = base;
+                }
+                if (n > dp[x])
+                {
+                    dp[x] = n;
+                    cp[x] = colour;
+                }
+            }
         }
     }
 }

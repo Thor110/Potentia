@@ -57,6 +57,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 19. **Personal Dimensions on the hallway's pause menu** opens the Personal Dimensions screen over the hallway (not the setup menu); Esc there, or leaving your dimension entered from there, comes back to the paused hallway.
 - [ ] 20. **Esc in your dimension** opens its pause menu, without the hallway's tools; Personal Dimensions > Features > *The hallway's tools in its pause menu* adds them. Try a few rows: Settings and the Filter Designer come back to your dimension; the File Locator, the Harness and the Encryption Engine come back to it after; the Media Player goes into the hallway.
 - [ ] 21. **A favourite placed in your dimension shows its picture** on its front (keep a page with H, place it, look at it). Item 7 is unticked as its drawing changed (a depth test at every pixel: watch the frame rate), item 10 as favourites now carry their pictures.
+- [ ] 22. **Characters as true 3D spheres**: in the Character Creator (all four drawings), spheres cut into one another where they meet, **pixels** are flat squares of one size and **voxels** are real cubes that turn with the character (try [ and ]), the same cell size for every character; in your dimension, walk so a bookcase stands between you and your character: it hides exactly what it covers; in the hallway with Real Graphics on, your character is shaded spheres among the shelves. Watch the frame rate in each.
 
 ---
 

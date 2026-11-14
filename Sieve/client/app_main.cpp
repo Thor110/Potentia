@@ -667,7 +667,7 @@ std::optional<sieve::Character> character_of(const AppSettings& app, const Args&
     if (a.has("no-character")) return std::nullopt;
     if (a.has("character"))
     {
-        std::ifstream in(std::filesystem::path(std::u8string(a.get("character").begin(), a.get("character").end())), std::ios::binary);
+        std::ifstream in(sieve::from_u8(a.get("character")), std::ios::binary); // (one string: get() gives a new one each call)
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         return sieve::read_character(text); // a bad file stops the run: it was asked for by name
     }
@@ -692,7 +692,7 @@ std::optional<sieve::Animation> animation_of(const AppSettings& app, const std::
     if (a.has("no-character")) return std::nullopt;
     if (a.has("animation"))
     {
-        std::ifstream in(std::filesystem::path(std::u8string(a.get("animation").begin(), a.get("animation").end())), std::ios::binary);
+        std::ifstream in(sieve::from_u8(a.get("animation")), std::ios::binary); // (one string: get() gives a new one each call)
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         return sieve::read_animation(text);
     }

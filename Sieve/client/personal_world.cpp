@@ -333,11 +333,16 @@ void PersonalWorld::render()
             const float eye_y = height(px_, pz_) + kEye;
             for (const Placed& p : placed_)
             {
-                const float g = p.y;
+                // (to its top: an object whose top can be seen over the hill is drawn, even where its base sits
+                // below the grass, as a bookcase set down on a slope does; before 14 November 2026 the line went
+                // to half a metre above its base, and such a one was left out in plain sight)
+                float low = 0, high = 0.4f, across = 0;
+                extent_of(p, low, high, across);
+                const float g = p.y + std::max(high, 0.1f);
                 bool seen = true;
                 const float dx = p.x - px_, dz = p.z - pz_, d = std::sqrt(dx * dx + dz * dz);
                 for (float u = 2.0f / std::max(d, 2.0f); u < 1.0f && seen; u += 2.0f / std::max(d, 2.0f))
-                    seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g + 0.5f - eye_y) * u;
+                    seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g - eye_y) * u;
                 if (!seen) continue;
                 faces.clear();
                 faces_of(p, faces);
@@ -490,74 +495,38 @@ void PersonalWorld::render()
             for (int k = 0; k < 4; ++k) q[k] = {pic.w[size_t(k)][0], pic.w[size_t(k)][1], pic.w[size_t(k)][2]};
             batch_.add_picture(q, *pic.img);
         }
-        batch_.draw(r_);
-    }
-    // Your characters on the hill: yours a few steps ahead of where you began, those in your store in
-    // a ring round the top; each sphere a disc, each bone a line, at its own size (4096 units a metre).
-    {
-        const Swell& top = swells_.front();
-        for (size_t ci = 0; ci < characters_.size(); ++ci)
+        // Your characters on the hill: yours a few steps ahead of where you began, those in your store in
+        // a ring round the top; at their own size (4096 units a metre). Their spheres and bones go to the
+        // same renderer as the objects, so a bookcase between you and a character hides what it covers,
+        // pixel by pixel, and spheres cut into one another where they meet (IDEAS 19.207). Drawn as the
+        // Character Creator draws them: lit from the upper left, or as rings in the wireframe.
         {
-            const sieve::Character& c = characters_[ci];
-            float bx, bz;
-            if (ci == 0) bx = 0, bz = -52;
-            else
+            const Swell& top = swells_.front();
+            for (size_t ci = 0; ci < characters_.size(); ++ci)
             {
-                const float a = 2 * kPi * float(ci - 1) / float(std::max<size_t>(1, characters_.size() - 1));
-                bx = top.x + 14 * std::cos(a), bz = top.z + 14 * std::sin(a);
-            }
-            int32_t low = 0;
-            for (const auto& s : c.spheres) low = std::min(low, s.y - s.r);
-            const float ground = height(bx, bz), unitm = 1.0f / float(sieve::kCharacterUnitsPerMetre);
-            auto at = [&](const sieve::Sphere& s, float& sx, float& sy, float& d) {
-                return project(bx + float(s.x) * unitm, ground + float(s.y - low) * unitm, bz + float(s.z) * unitm, sx, sy, d);
-            };
-            // (a sphere hidden behind something placed, a bookcase between you and it, is not drawn, nor
-            // its bones)
-            auto hidden = [&](const sieve::Sphere& s) {
-                if (placed_.empty()) return false;
-                const float wx = bx + float(s.x) * unitm, wy = ground + float(s.y - low) * unitm, wz = bz + float(s.z) * unitm;
-                const float ey = height(px_, pz_) + kEye, vx = wx - px_, vy = wy - ey, vz = wz - pz_, len = std::sqrt(vx * vx + vy * vy + vz * vz);
-                const float o[3] = {px_, ey, pz_}, dir[3] = {vx / len, vy / len, vz / len};
-                return ray_objects(o, dir, len, held_, nullptr) < len - 0.05f;
-            };
-            SDL_SetRenderDrawColor(r_, 60, 60, 70, 255);
-            for (const auto& s : c.spheres)
-                if (s.parent >= 0 && !hidden(s) && !hidden(c.spheres[size_t(s.parent)]))
+                const sieve::Character& c = characters_[ci];
+                float bx, bz;
+                if (ci == 0) bx = 0, bz = -52;
+                else
                 {
-                    float x1, y1, d1, x2, y2, d2;
-                    if (at(s, x1, y1, d1) && at(c.spheres[size_t(s.parent)], x2, y2, d2)) SDL_RenderLine(r_, x1, y1, x2, y2);
+                    const float a = 2 * kPi * float(ci - 1) / float(std::max<size_t>(1, characters_.size() - 1));
+                    bx = top.x + 14 * std::cos(a), bz = top.z + 14 * std::sin(a);
                 }
-            for (const auto& s : c.spheres)
-            {
-                float sx, sy, d;
-                if (!at(s, sx, sy, d)) continue;
-                if (hidden(s)) continue;
-                const float rad = std::max(1.5f, float(s.r) * unitm * f / d);
-                const SDL_FColor col = ci == 0 ? SDL_FColor{0.95f, 0.92f, 0.85f, 1} : SDL_FColor{0.80f, 0.82f, 0.90f, 1};
-                if (wireframe_)
-                {
-                    SDL_SetRenderDrawColorFloat(r_, col.r, col.g, col.b, 1);
-                    constexpr int kRing = 20;
-                    for (int k = 0; k < kRing; ++k)
-                    {
-                        const float a0 = 2 * kPi * float(k) / kRing, a1 = 2 * kPi * float(k + 1) / kRing;
-                        SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
-                    }
-                    continue;
-                }
-                std::vector<SDL_Vertex> v;
-                constexpr int kSides = 20;
-                for (int k = 0; k < kSides; ++k)
-                {
-                    const float a0 = 2 * kPi * float(k) / kSides, a1 = 2 * kPi * float(k + 1) / kSides;
-                    v.push_back({{sx, sy}, col, {}});
-                    v.push_back({{sx + rad * std::cos(a0), sy + rad * std::sin(a0)}, mix(col, SDL_FColor{0.4f, 0.4f, 0.5f, 1}, 0.5f), {}});
-                    v.push_back({{sx + rad * std::cos(a1), sy + rad * std::sin(a1)}, mix(col, SDL_FColor{0.4f, 0.4f, 0.5f, 1}, 0.5f), {}});
-                }
-                SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), nullptr, 0);
+                int32_t low = 0;
+                for (const auto& s : c.spheres) low = std::min(low, s.y - s.r);
+                const float ground = height(bx, bz), unitm = 1.0f / float(sieve::kCharacterUnitsPerMetre);
+                auto at = [&](const sieve::Sphere& s) { return Vec3{bx + float(s.x) * unitm, ground + float(s.y - low) * unitm, bz + float(s.z) * unitm}; };
+                for (const auto& s : c.spheres)
+                    if (s.parent >= 0) batch_.add_edge(at(s), at(c.spheres[size_t(s.parent)]), 0xFF3C3C46u);
+                MeshBatch::SphereLook look;
+                look.style = wireframe_ ? MeshBatch::SphereLook::Style::Ring : MeshBatch::SphereLook::Style::Shaded;
+                look.argb = ci == 0 ? 0xFFF2EBD9u : 0xFFCCD1E6u;
+                look.ambient = 0.35f;
+                look.min_radius = 1.5f;
+                for (const auto& s : c.spheres) batch_.add_sphere(at(s), float(s.r) * unitm, look);
             }
         }
+        batch_.draw(r_);
     }
     const SDL_Color white{255, 255, 255, 255}, grey{200, 200, 210, 255};
     if (show_map_) draw_map();
