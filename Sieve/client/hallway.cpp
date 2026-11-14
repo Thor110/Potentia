@@ -2494,7 +2494,7 @@ void Hallway::set_character(std::optional<sieve::Character> c)
     character_fits_ = need <= max_scale_;
 }
 
-// Your character beside you: a little ahead along the corridor and to the right, its lowest sphere on
+// A character standing in the hallway (your personal dimension's; yours is where you are, not drawn): its lowest sphere on
 // the floor, at its own size (4096 units a metre) seen through the hallway's scale, facing along the
 // corridor; its bones as
 // lines and each sphere as a ring facing you, in the line's edge colour (the head lighter).
@@ -2527,23 +2527,17 @@ void Hallway::draw_character(SDL_Color edge, MeshBatch* into)
 {
     // The animation it plays: its action's, where it has a map of actions (IDEAS 19.186), else its one.
     const sieve::Animation* playing = actions_ ? action_animation() : animation_ ? &*animation_ : nullptr;
+    // Your character is you (Edward, 14 November 2026: "it shouldn't be visible at all as it is me or
+    // rather that is to say it shouldn't be visible to me, perhaps its arms might under certain
+    // conditions"): it stands where you stand, so it is not drawn; it still plays its actions (the frame
+    // kept, for when the camera is at its head and its arms can show) and still sets the hallway's scale.
+    // (Until 14 November it walked a little ahead and to the right, IDEAS 19.148.)
     if (character_ && playing)
     {
-        // In this frame of its animation (IDEAS 19.170): each sphere moved with its parent's turn.
+        // In this frame of its animation (IDEAS 19.170).
         animation_shown_ = animation_frame_ >= 0 ? uint32_t(animation_frame_) : uint32_t(SDL_GetTicks() * sieve::kAnimationRate / 1000);
         animation_shown_ %= std::max<uint32_t>(1, playing->frames);
-        sieve::Character posed = *character_;
-        const auto at = sieve::pose(*character_, *playing, animation_shown_);
-        for (size_t i = 0; i < posed.spheres.size(); ++i)
-        {
-            posed.spheres[i].x = int32_t(std::lround(at[i][0]));
-            posed.spheres[i].y = int32_t(std::lround(at[i][1]));
-            posed.spheres[i].z = int32_t(std::lround(at[i][2]));
-        }
-        const auto turns = sieve::pose_turns(*character_, *playing, animation_shown_);
-        draw_figure(posed, edge, 0, &*character_, &turns, into);
     }
-    else if (character_) draw_figure(*character_, edge, 0, nullptr, nullptr, into);
     // Your personal dimension (IDEAS 19.152): your stored characters ahead along the corridor on the
     // other side, a short line of their own, a little dimmer (at most eight drawn).
     const SDL_Color dim{Uint8(edge.r * 0.7f), Uint8(edge.g * 0.7f), Uint8(edge.b * 0.7f), 255};

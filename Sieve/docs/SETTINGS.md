@@ -81,7 +81,7 @@ file for the run they are given in. An empty default is written empty.
 | `actions` | (empty) | your character's actions (IDEAS 19.186): the SHA-256 of its map of each action (idle, walk, run, ...) to the animation that plays it, read from the actions folder beside this file; empty: none, and its one animation plays whatever it does |
 | `animation` | (empty) | the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none |
 | `drawing` | `3` | how the CHARACTER page draws it: 0 pixels, 1 wireframe, 2 voxels, 3 shaded |
-| `beside_you` | `on` | on: your character walks beside you in the hallway (the default); off: not drawn there |
+| `beside_you` | `on` | on: your character is you in the hallway, not drawn, its size setting the hallway's scale and its actions played (the default); off: left out there |
 | `max_hall_scale` | `16` | how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit) |
 
 ## [raid]

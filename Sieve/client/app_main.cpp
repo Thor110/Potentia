@@ -176,7 +176,7 @@ const char* kUsage =
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
     "  --character FILE    your character from a .character file (any version): beside you in the\n"
     "                      hallway, and on the setup menu's CHARACTER page\n"
-    "  --no-character      no character beside you in the hallway for this run\n"
+    "  --no-character      no character of yours in the hallway for this run (its size, its actions)\n"
     "  --import-model FILE with --menu: a model (.obj, .gltf, .glb) into your character's first sphere, as\n"
     "                      the CHARACTER page's Ctrl+I does (brought under the held models' roof of 8\n"
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
@@ -1677,10 +1677,10 @@ int run(const Args& a)
                 }
                 if (named)
                 {
-                    std::cout << "character beside you: " << id << "\n";
+                    std::cout << "your character: " << id << "\n";
                     std::cout << "hallway scale: " << hallway::hall::fixed(hall->hall_scale(), 2) << (hall->character_fits() ? "" : " (the most it may grow: the character does not fit)") << "\n";
                 }
-                if (a.has("animation")) std::cout << "animation beside you: " << animation_of(app, app_path, a)->id() << "\n";
+                if (a.has("animation")) std::cout << "your animation: " << animation_of(app, app_path, a)->id() << "\n";
             }
             if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
@@ -1874,6 +1874,7 @@ int run(const Args& a)
     bool open_yours = false; // Personal Dimensions chosen: the setup menu opens with YOURS on the right
     std::string open_system; // the System Viewer chosen: it opens on that system, the whole window (Esc: the main menu)
     bool open_creator = false; // the Character Creator chosen: the whole window, Esc back to the main menu
+    bool viewer_from_world = false; // the System Viewer opened from your dimension's pause menu: Esc goes back there
     bool first = true;
     bool first_hallway_of_run = true; // (--record and --replay: the run's first hallway)
     std::string pending_replay;       // a recording chosen in the replay viewer, played in the next hallway
@@ -2016,7 +2017,11 @@ int run(const Args& a)
                         settings_chosen = true;
                         skip_setup = true;
                     }
-                    else if (sys == "systems") open_system = "information";
+                    else if (sys == "systems")
+                    {
+                        open_system = "information";
+                        viewer_from_world = true;
+                    }
                     // ("restart": the setup menu, as Start Sieve)
                     show_main = false;
                     back_to_world = false;
@@ -2081,9 +2086,12 @@ int run(const Args& a)
             went_in_thin = menu.went_in_thin();
             settings = menu.settings();
             filters = menu.filters();
+            const bool to_world = viewer_from_world;
+            viewer_from_world = false;
             if (r == Menu::Result::Back)
             {
                 show_main = true;
+                back_to_world = to_world; // (the System Viewer from your dimension: back to it)
                 continue;
             }
         }

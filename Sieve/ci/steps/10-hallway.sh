@@ -337,11 +337,11 @@ $H --menu --press "\`,Down,Right,Right,Down,Right" --screenshot char-6x4.png | t
 # you in the hallway as the same character; a file missing a setting is refused, and the run stops.
 printf 'sieve-character-v1 seed=99 limbs=5 joints=3 branches=1 symmetry=bilateral head=yes\n' > c99.character
 $H --menu --character c99.character --press "\`" --screenshot char-file.png | tr -d '\r' | q "^character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
-$H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^character beside you: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
+$H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^your character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
 # A path longer than a string keeps in itself (16 characters and more) read whole (14 November 2026: the
 # name was taken from two different copies of it, which a short one hid).
 mkdir -p cx
-$H --no-menu --character cx/../c99.character --screenshot char-long.png | tr -d '\r' | q "^character beside you: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
+$H --no-menu --character cx/../c99.character --screenshot char-long.png | tr -d '\r' | q "^your character: cb53aba8a6f47e41e897571882c364c61fb34a14375379026c6bc042f21af0a2"
 # The hallway fits the character (IDEAS 19.153): this one fits as built; eight radial limbs of twelve
 # joints grow it 1.41 times.
 $H --no-menu --character c99.character --screenshot char-hall.png | tr -d '\r' | q "^hallway scale: 1.00$"
@@ -351,10 +351,10 @@ printf 'sieve-character-v1 seed=99 limbs=5\n' > bad.character
 if $H --no-menu --character bad.character --screenshot char-bad.png > char-bad.txt 2>&1; then exit 1; fi
 q "missing: joints" char-bad.txt
 # A character holding models (sieve-character-v2): read from its file, the same on the page and
-# beside you, and its models drawn in their spheres.
+# in the hallway, and its models drawn in their spheres.
 printf 'sieve-character-v2 seed=0 limbs=6 joints=4 branches=0 symmetry=bilateral head=yes\nh 0 230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b\nh 1 9f2e6d33a3717ee826353a404ba4618d1aeeb6879ad7936bce8\n' > held.character
 $H --menu --character held.character --press "\`" --screenshot char-held.png | tr -d '\r' | q "^character: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
-$H --no-menu --character held.character --screenshot char-held-hall.png | tr -d '\r' | q "^character beside you: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
+$H --no-menu --character held.character --screenshot char-held-hall.png | tr -d '\r' | q "^your character: e4ba9371be670f52ca007fd12da9178b396c89e47a0ce317cbb7021ccecc828e"
 # Personal Dimensions (IDEAS 19.157): the main menu's screen; YOURS listing a store of three characters
 # (beside the settings file); and the same store standing in the hallway.
 $H --main-menu --press "Item:personal,Return" --screenshot main-personal.png | q "saved main-personal.png"
@@ -521,11 +521,11 @@ $H --menu --press "Tab,\`,Escape" --screenshot one-out.png | tr -d '\r' | q "^se
 # a tab clicked), in the order they stand: CHARACTER, LANGUAGE, YOURS, SYSTEMS, and round again.
 $H --menu --press "\`,Ctrl+Right" --screenshot tabs-right.png | tr -d '\r' | q "^right-hand panel: open (LANGUAGE)$"
 $H --menu --press "\`,Ctrl+Left" --screenshot tabs-left.png | tr -d '\r' | q "^right-hand panel: open (CATALOGUE)$"
-# In the hallway: the arm walks beside you playing it, held at its last frame for the picture.
+# In the hallway: the arm (you, not drawn) plays it, held at its last frame for the picture.
 $exe import tests/arm.gltf --character-out arm.character --animation-out arm.animation > /dev/null
 $H --no-menu --character arm.character --animation arm.animation --animation-frame 30 --pose 0,0,0,-5 --screenshot hall-arm.png | tr -d '\r' > hall-arm.txt
-q "^character beside you: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7" hall-arm.txt
-q "^animation beside you: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" hall-arm.txt
+q "^your character: 22807d23fa4d9b7abfb2895e2e97448ad179cd0f0740b5effa13594dc87b78a7" hall-arm.txt
+q "^your animation: 2a5cb1d00e4ace0f373757b7d29ef342a157d8d27a19bd7fafccaef5a5b54be8" hall-arm.txt
 test -s hall-arm.png
 # The seed walk (IDEAS 19.148 step 7): Shift+G, ten steps from the default character, lands where the
 # unit tests pin it.

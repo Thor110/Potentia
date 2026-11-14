@@ -6601,6 +6601,13 @@ nature systems that capture the essence of existence".
   model rows; drawn on the page and in the hallway; a v1 character's identity unchanged); (7) generation by a seed walk or an AI model (*built 12 November 2026:* the seed walk,
   `sieve-character-walk-v1`, G and Shift+G on the page; generation by an AI model to come).
 
+- *Your character is you (Edward, 14 November 2026: "the "character" or me appears ahead of me and to the
+  right, then moves as I move, it shouldn't be visible at all as it is me", "perhaps its arms might under
+  certain conditions", "I will forego having our camera spawn at its head position for now, but note that
+  in future that will be relevant"):* in the hallway it now stands where you stand and is not drawn (it
+  still sets the hallway's scale and plays its actions). *To come:* the camera at its head (its eyes'
+  height from its spheres, not the fixed 1.6 m), and its arms drawn where they reach into view (reading,
+  holding, waving), as a first-person body is.
 **19.149 A scalable galactic vector information engine (Edward, 12 November 2026).** His words:
 "exactly so everything will be procedural and dynamic, so that this system can scale up to be plugged
 in to any procedural system that exists, from no mans sky to elite dangerous, all the way back to the
@@ -6839,7 +6846,7 @@ trilogy engine reimplementation of mine altengine previously discussed".
   §19.144, kept off the shelves and out of chat where hidden). Saved under `[game]`, and a world may
   lock either (as the scale switch, §19.153). It belongs with ALTEngine's "disable AI spawn" testing
   option: the same switch, named the same, so a test in one is a test in the other.
-- *Built so far:* nothing spawns yet (the character beside you is yours, not an AI), so the switch
+- *Built so far:* nothing spawns yet (your own character is you, not an AI), so the switch
   waits for the first spawned characters; it is to be built with them, not before, so it is never a
   setting that does nothing. (*Settled 13 November 2026, with §19.189:* both live on Settings > Game
   Systems under `[game]`. **AI in the hallway** is the AI Explorers toggle already there
@@ -8479,6 +8486,19 @@ be able to track it down like this depending on the file size".
   first and it is found sooner on average. The same division would spread across machines that opt in
   (each a share, as the RAID's machines are named: §19.210, §19.211), each told its share and reporting
   only "found" or "not in mine".
+
+**19.220 Music for your personal dimension: a third space in the Media Player (Edward, 14 November
+2026).** His words: "we should also add a personal dimension to the media player alongside worlds/menu",
+"that would also get stored as part of the dimension itself, so the media player needs to load one per
+dimension accordingly as a new media space option for where music plays and what music plays".
+- *Today:* the Media Player has two spaces, WORLD (the hallway: each line its own mode) and MENU (the
+  menus), `MusicMode` in client/music.hpp. Your dimension plays the menus' music.
+- *What it would be:* a third space, PERSONAL, set in the Media Player as the other two are: whether
+  music plays there and what plays (a mode, a melody, a favourite of the Media Player's). Kept in the
+  dimension's own file, not in the settings, so a dimension carries its music with it when it is shared
+  or another one is opened, and the Media Player loads the space of the dimension that is open.
+- *Needs:* a line in sieve-personal-world-v2 for it (an optional line, so worlds without it read as they
+  do now, with the menus' music); the Media Player told which dimension's file it is editing.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
