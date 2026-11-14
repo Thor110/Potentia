@@ -8437,6 +8437,22 @@ arrangement and combination of systems or materials used to make them".
 - *Why a plugin:* it is a field of its own, with its own data and experts to keep it; a plugin dimension
   (§19.217) lets it be made and kept by people who know batteries, outside Sieve's own code.
 
+**19.219 Finding a small item again from its hash: a search by hashing (Edward, 14 November 2026). An idea
+for now.** His words: "that inverse hashing check could perhaps be implemented as a speed assist or
+location addressing tool for small files", "it would be semi-wasteful in terms of compute, but it could
+prove useful somewhere along the lines, say theoretically a hash gets found but the file is lost, one might
+be able to track it down like this depending on the file size".
+- *What it would be:* given a SHA-256 (and, where known, a line, a length and part of the address), go
+  through every address the rest allows, hash each item, and stop at the one whose hash matches. A tool on
+  the command line and in the File Locator: before it starts it says how many items that is and how long
+  at this machine's measured hashing speed, and it can be stopped and resumed, its place kept.
+- *Where it is tractable:* only where what is unknown is small: a few dozen bits of address (a short
+  page with most of its letters known, a melody of a few notes, a small file whose start is known).
+  Every bit unknown doubles the work, so it is offered with the count shown, never as a promise.
+- *Uses:* a lost small item found from its hash alone (a favourite whose file is gone, §19.190; a hash
+  quoted somewhere without the file); and, as a speed assist, a known item's place on its line checked or
+  completed from a partial address. Run on the threads, as the packer's searches are.
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non

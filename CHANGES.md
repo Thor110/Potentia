@@ -1,6 +1,6 @@
-# Idea: large items as favourites by hash and local link
+# Idea: finding a small item again from its hash
 
-- IDEAS 19.190 gains: large files and AI weights kept as favourites by their SHA-256 and where they are on this machine (checked when opened; moved or changed, said, and looked for by hash). Finding one again from part of its address is tractable only for small items: the search must hash every address in the range, and a large item's address is as long as the item.
+- IDEAS 19.219: given a SHA-256 (and where known a line, a length, part of the address), hash every item the rest allows until one matches. Shown first: how many items and how long at this machine's speed; stoppable and resumable. Tractable only where a few dozen bits are unknown; for a lost small item, or as a speed assist completing a partial address.
 
 Docs only.
 
