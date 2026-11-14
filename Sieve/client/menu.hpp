@@ -515,6 +515,7 @@ private:
     uint32_t char_sphere_ = 0;   // the sphere the model row works on (sieve-character-v2's holds)
     // YOURS (the panel's second page): your personal dimension, the store read back (IDEAS 19.152).
     PersonalDimension yours_;
+    std::vector<std::string> yours_ids_, yours_species_; // (each listed character's SHA-256 and species, as read)
     // The playground (IDEAS 19.152): characters made for trying, kept nowhere until K keeps one in
     // the store. P fills it with the next eight along the seed walk from the character you are.
     std::vector<sieve::Character> playground_;
@@ -537,6 +538,8 @@ private:
     std::mutex char_mx_;
     std::optional<std::string> char_save_to_, char_load_from_, char_import_from_, char_skeleton_from_;
     std::optional<sieve::Animation> char_anim_; // the animation playing on the character (IDEAS 19.170)
+    std::optional<std::string> char_anim_id_;   // (its SHA-256, worked out when first shown after it changes)
+    std::string char_text_seen_, char_id_seen_; // (the character's text as last shown, and its SHA-256)
     bool char_anim_playing_ = true;
     int char_anim_fixed_ = -1;                  // a frame to hold at, or -1 to play by the clock
     uint32_t char_anim_paused_ = 0;             // the frame it stopped at
@@ -555,6 +558,15 @@ private:
     int creator_focus_ = 0;          // 0 the character's rows, 1 the actions
     int creator_action_ = 0;         // the action chosen
     std::vector<sieve::Animation> creator_anims_; // the store's animations, read as the creator opens
+    std::vector<std::string> creator_anim_ids_;   // (their SHA-256s, worked out as they are read)
+    // The stored animation of that id, or end() (none, or the id empty).
+    std::vector<sieve::Animation>::const_iterator creator_anim(const std::string& id) const
+    {
+        if (!id.empty())
+            for (size_t k = 0; k < creator_anims_.size(); ++k)
+                if (creator_anim_ids_[k] == id) return creator_anims_.begin() + long(k);
+        return creator_anims_.end();
+    }
     std::vector<std::string> creator_said_;       // (the actions told missing, so each is said once)
     void render_creator(float W, float H);
     bool creator_key(const SDL_Event& e, bool& done, Result& result);

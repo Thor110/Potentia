@@ -263,7 +263,7 @@ public:
                     data = std::move(*got);
                 }
             }
-            else if (i == 0 && bin) data = *bin;
+            else if (i == 0 && bin) data = std::move(*bin); // (not copied again: review 1)
             else refuse("buffer " + std::to_string(i) + " has no data");
             if (data.size() < length) refuse("buffer " + std::to_string(i) + " is shorter than its byteLength");
             buffers_.push_back(std::move(data));

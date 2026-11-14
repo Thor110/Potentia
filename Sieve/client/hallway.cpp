@@ -2502,8 +2502,8 @@ const sieve::Animation* Hallway::action_animation()
 {
     const sieve::Action a = action_forced_ >= 0 ? sieve::Action(action_forced_) : action_now_;
     const std::string& id = actions_->of(a);
-    for (const auto& an : action_anims_)
-        if (an.id() == id && character_ && sieve::animation_fits(*character_, an)) return &an;
+    for (size_t k = 0; k < action_anims_.size(); ++k)
+        if (action_ids_[k] == id && character_ && sieve::animation_fits(*character_, action_anims_[k])) return &action_anims_[k];
     // None for it: it stands at rest, and you are told once (with how to give it one).
     if (!(action_said_ & (1u << unsigned(a))))
     {
@@ -2518,8 +2518,8 @@ std::string Hallway::action_line() const
     const sieve::Action a = action_forced_ >= 0 ? sieve::Action(action_forced_) : action_now_;
     if (!actions_) return std::string(sieve::action_name(a)) + ": (no map: its one animation)";
     const std::string& id = actions_->of(a);
-    for (const auto& an : action_anims_)
-        if (an.id() == id && character_ && sieve::animation_fits(*character_, an)) return std::string(sieve::action_name(a)) + ": " + id;
+    for (size_t k = 0; k < action_anims_.size(); ++k)
+        if (action_ids_[k] == id && character_ && sieve::animation_fits(*character_, action_anims_[k])) return std::string(sieve::action_name(a)) + ": " + id;
     return std::string(sieve::action_name(a)) + ": none";
 }
 

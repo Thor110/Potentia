@@ -378,6 +378,9 @@ void Hallway::view_show(size_t at)
     if (view_job_.valid()) view_job_.wait(); // a picture still being drawn for the last view
     view_job_ = {};
     view_at_ = at % view_kinds_.size();
+    // (an opened file's pixels are moved into the view, not copied, and moved back here: they were kept
+    // twice while the viewer was open; review 1)
+    if (view_.px_opened) view_opened_.px = std::move(view_.px);
     view_ = ViewDoc{};
     const Book& bk = *in_hand_;
     const std::string title = title_text(bk);
@@ -424,7 +427,7 @@ void Hallway::view_show(size_t at)
     }
     case ViewKind::Opened:
     {
-        const OpenedFile& o = view_opened_;
+        OpenedFile& o = view_opened_;
         if (o.viewer == "text")
         {
             view_.rows = page_rows(utf8_decode(o.text), view_aspect_, view_.cols);
@@ -433,7 +436,8 @@ void Hallway::view_show(size_t at)
         else
         {
             view_.picture = true;
-            view_.px = o.px;
+            view_.px = std::move(o.px);
+            view_.px_opened = true;
             view_.pw = o.w;
             view_.ph = o.h;
             view_.frames = o.frames;
@@ -487,6 +491,7 @@ void Hallway::open_viewer()
     // The views it has: itself, and what was made of it for the shelf.
     view_kinds_ = {ViewKind::Raw};
     view_opened_ = OpenedFile{};
+    view_.px_opened = false; // (what the view holds is not this file's)
     // A file opens first in the viewer made for its kind, where there is one; its bytes come next.
     if (bk.is_file && open_file_by_kind(file_of(bk))) view_kinds_.insert(view_kinds_.begin(), ViewKind::Opened);
     // A model or a world opens on itself in three dimensions, turned as on its page; its .obj text next.

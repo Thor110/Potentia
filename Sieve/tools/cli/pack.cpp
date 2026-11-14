@@ -6584,7 +6584,13 @@ void add_packed_made(Manifest& m, const fs::path& root_in, PackReport* report, c
                         const uint64_t e1_floor = floor_here * 3 / 2;
                         std::string plain_way;
                         std::vector<uint8_t> plain;
-                        for_each_index(2, 2, [&](size_t k) {
+                        // (Side by side only where memory allows a second mixer beside this worker's
+                        // own: the workers were counted at one mixer each, and two at once on every
+                        // worker could run the machine short; else one after the other, as before 12
+                        // November. The same two codes either way; review 1, 14 November 2026.)
+                        const uint64_t free_now = memory_free();
+                        const bool side_by_side = workers == 1 || (free_now && free_now / 2 >= mixer + uint64_t(bytes[i].size()) * 2);
+                        for_each_index(2, side_by_side ? 2 : 1, [&](size_t k) {
                             if (k == 0) mc = code_of(bytes[i], mix_way, pw, pc, words, primed, true);
                             else plain = code_of(bytes[i], plain_way, pw, pc, words, primed, false);
                         });

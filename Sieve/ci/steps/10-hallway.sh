@@ -462,7 +462,9 @@ for _ in range(100):
     time.sleep(0.1)
 else:
     raise SystemExit('the RAID server did not start (port 47133 taken?)')"
-$H --menu --settings raidn/raidn.ini --save-character raidn/me.character --press "\`" --screenshot raid-share.png | tr -d '\r' | q "^note: .*sending it, sealed, to the machines named"
+# (the note as the picture is taken: still sending, or, since the share's one-write fix made it quick
+# (review 1, 14 November 2026), already shared)
+$H --menu --settings raidn/raidn.ini --save-character raidn/me.character --press "\`" --screenshot raid-share.png | tr -d '\r' | q "^note: .*\(sending it, sealed, to the machines named\|shared with 1 of 1 machines\)"
 test "$(wc -l < raidn/raid-shared.txt)" -eq 2
 $exe raid fetch "$(sed -n 1p raidn/raid-shared.txt | cut -d' ' -f2)" --key raidn/raid.key --peers 127.0.0.1:47133 --out raidn/back.character > /dev/null
 cmp raidn/me.character raidn/back.character

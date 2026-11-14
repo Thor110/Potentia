@@ -2101,6 +2101,7 @@ void Menu::char_init()
                 speaks_from_settings();
                 if (!app_->character_animation.empty())
                     char_anim_ = stored_animation(animation_store_dir(app_path_), app_->character_animation);
+                char_anim_id_.reset();
                 if (!app_->character_actions.empty())
                     if (auto m = stored_actions(actions_store_dir(app_path_), app_->character_actions)) char_actions_ = *m;
                 return;
@@ -2219,6 +2220,7 @@ void Menu::import_skeleton(const std::string& path)
         keep_import_stat(sieve::held_import_of(m));
         char_sphere_ = 0;
         char_anim_.reset();
+        char_anim_id_.reset();
         if (!m.sampled.empty()) char_anim_ = sieve::imported_animation(m, 0);
         char_anim_playing_ = true;
         char_store();
@@ -2687,6 +2689,9 @@ void Menu::open_creator(bool from_main)
     // The animations it may choose from: the store's, the one playing kept there first.
     if (char_anim_) store_animation(animation_store_dir(app_path_), *char_anim_);
     creator_anims_ = stored_animations(animation_store_dir(app_path_));
+    // (each one's SHA-256 once: worked out from its whole text, it was asked for every frame; review 1)
+    creator_anim_ids_.clear();
+    for (const auto& a : creator_anims_) creator_anim_ids_.push_back(a.id());
     if (from_main)
     {
         side_open_ = false;
@@ -2744,8 +2749,8 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
     {
         // The choices: none, then each stored animation that fits this character.
         std::vector<std::string> choices{""};
-        for (const auto& a : creator_anims_)
-            if (sieve::animation_fits(char_, a)) choices.push_back(a.id());
+        for (size_t k = 0; k < creator_anims_.size(); ++k)
+            if (sieve::animation_fits(char_, creator_anims_[k])) choices.push_back(creator_anim_ids_[k]);
         const sieve::Action act = sieve::Action(creator_action_);
         auto at = std::find(choices.begin(), choices.end(), char_actions_.of(act));
         int i = at == choices.end() ? 0 : int(at - choices.begin());
@@ -2760,11 +2765,12 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         // Played on the character: the action's animation, or said that it has none.
         const sieve::Action act = sieve::Action(creator_action_);
         const std::string& id = char_actions_.of(act);
-        const auto it = std::find_if(creator_anims_.begin(), creator_anims_.end(), [&](const sieve::Animation& a) { return a.id() == id; });
+        const auto it = creator_anim(id);
         if (id.empty() || it == creator_anims_.end()) char_note_ = trf("creator.missing", {sieve::action_name(act)});
         else
         {
             char_anim_ = *it;
+            char_anim_id_.reset();
             char_anim_playing_ = true;
             char_note_ = trf("creator.playing", {sieve::action_name(act), id.substr(0, 12)});
         }
@@ -2793,7 +2799,7 @@ void Menu::render_creator(float W, float H)
             SDL_RenderFillRect(r_, &sel);
         }
         const std::string& id = char_actions_.animation[size_t(i)];
-        const auto it = std::find_if(creator_anims_.begin(), creator_anims_.end(), [&](const sieve::Animation& a) { return a.id() == id; });
+        const auto it = creator_anim(id);
         std::string v;
         SDL_Color c = on ? white : grey;
         if (id.empty()) v = tr("creator.none");
@@ -2860,6 +2866,13 @@ void Menu::yours_read()
     // Grouped by species (the same settings, any seed), in the order of their names within each.
     std::stable_sort(yours_.characters.begin(), yours_.characters.end(),
                      [](const sieve::Character& a, const sieve::Character& b) { return sieve::species_id(a.settings) < sieve::species_id(b.settings); });
+    // (each one's SHA-256 and species once, not every frame as they were listed; review 1)
+    yours_ids_.clear(), yours_species_.clear();
+    for (const auto& c : yours_.characters)
+    {
+        yours_ids_.push_back(c.id());
+        yours_species_.push_back(c.given ? std::string("given") : sieve::species_id(c.settings));
+    }
     yours_row_ = std::clamp(yours_row_, 0, std::max(0, int(playground_.size() + yours_.characters.size()) - 1));
 }
 
@@ -2917,9 +2930,9 @@ void Menu::render_yours(float x, float top, float bottom)
     y += 14;
     if (yours_.left_out) text(r_, x + 14, y, trf("side.yours.left_out", {std::to_string(yours_.left_out)}), 1, grey);
     y += 22;
-    auto line_of = [&](const sieve::Character& c, bool on) {
+    auto line_of = [&](const sieve::Character& c, bool on, const std::string& id) {
         const auto& s = c.settings;
-        return (on ? "> " : "  ") + c.id().substr(0, 12) + "  " + std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " " + sieve::symmetry_name(s.symmetry) +
+        return (on ? "> " : "  ") + id.substr(0, 12) + "  " + std::to_string(s.limbs) + "x" + std::to_string(s.joints) + " " + sieve::symmetry_name(s.symmetry) +
                (c.holds.empty() ? "" : "  " + std::to_string(c.holds.size()) + " held");
     };
     // The list as lines (text, colour, the row it is, or -1 for a heading), laid out from its top,
@@ -2937,7 +2950,7 @@ void Menu::render_yours(float x, float top, float bottom)
     if (np)
     {
         lines.push_back({fit_cells(trf("side.yours.playground", {std::to_string(np)}), cols), white, -1, 16});
-        for (int i = 0; i < np; ++i) lines.push_back({line_of(playground_[size_t(i)], i == yours_row_), i == yours_row_ ? white : grey, i, 14});
+        for (int i = 0; i < np; ++i) lines.push_back({line_of(playground_[size_t(i)], i == yours_row_, playground_[size_t(i)].id()), i == yours_row_ ? white : grey, i, 14});
         lines.back().h += 10;
     }
     if (yours_.characters.empty()) lines.push_back({tr("side.yours.empty"), grey, -1, 14});
@@ -2945,7 +2958,7 @@ void Menu::render_yours(float x, float top, float bottom)
     for (size_t i = 0; i < yours_.characters.size(); ++i)
     {
         const sieve::Character& c = yours_.characters[i];
-        const std::string sp = c.given ? std::string("given") : sieve::species_id(c.settings);
+        const std::string& sp = yours_species_[i];
         if (sp != last_species)
         {
             // A heading for each species: its name, and the settings its members share.
@@ -2956,7 +2969,7 @@ void Menu::render_yours(float x, float top, float bottom)
             last_species = sp;
         }
         const bool on = np + int(i) == yours_row_;
-        lines.push_back({line_of(c, on), on ? white : grey, np + int(i), 14});
+        lines.push_back({line_of(c, on, yours_ids_[i]), on ? white : grey, np + int(i), 14});
     }
     const float room = std::max(14.0f, (bottom - 40) - y);
     float content = 0, chosen_top = 0, chosen_h = 0;
@@ -3042,6 +3055,7 @@ void Menu::char_key(SDL_Keycode key, bool shift)
         if (char_anim_ && shift)
         {
             char_anim_.reset();
+            char_anim_id_.reset();
             char_store();
             return;
         }
@@ -3748,10 +3762,14 @@ float Menu::render_char_rows(float x, float top, float width)
         text(r_, x + 190, y, values[i], 1, on ? white : grey);
         y += 16;
     }
+    // (its SHA-256 worked out again only when its text changes, the animation's only when another is
+    // put on: both were worked out every frame before; review 1)
     const std::string ctext = char_.text();
-    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_.id().substr(0, 16), ctext.substr(0, ctext.find(' '))}), 1, grey);
+    if (ctext != char_text_seen_) char_text_seen_ = ctext, char_id_seen_ = char_.id();
+    text(r_, x + 14, y + 4, trf("side.char.count", {std::to_string(char_.spheres.size()), char_id_seen_.substr(0, 16), ctext.substr(0, ctext.find(' '))}), 1, grey);
+    if (char_anim_ && !char_anim_id_) char_anim_id_ = char_anim_->id();
     if (char_anim_)
-        text(r_, x + 14, y + 18, fit_cells(trf("side.char.playing", {char_anim_->id().substr(0, 12), std::to_string(char_anim_->frames), char_anim_playing_ ? tr("side.char.anim_on") : tr("side.char.anim_off")}), size_t((width - 28) / 8)), 1, grey);
+        text(r_, x + 14, y + 18, fit_cells(trf("side.char.playing", {char_anim_id_->substr(0, 12), std::to_string(char_anim_->frames), char_anim_playing_ ? tr("side.char.anim_on") : tr("side.char.anim_off")}), size_t((width - 28) / 8)), 1, grey);
     else if (char_.given) text(r_, x + 14, y + 18, tr("side.char.no_species"), 1, grey);
     else text(r_, x + 14, y + 18, trf("side.char.species", {sieve::species_id(char_.settings).substr(0, 12)}), 1, grey);
     if (!char_note_.empty()) text(r_, x + 14, y + 32, fit_cells(char_note_, size_t((width - 28) / 8)), 1, white);

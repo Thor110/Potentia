@@ -30,6 +30,7 @@ constexpr socket_t kNoSocket = INVALID_SOCKET;
 #else
 #include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -68,6 +69,13 @@ void start_sockets()
 
 void set_timeouts(socket_t s, int timeout_s)
 {
+    // Each request and answer goes at once, not held back to be joined with what follows (Nagle's
+    // rule against a peer that delays its acknowledgement cost a put about 9 ms; review 1, 14 November
+    // 2026). The bytes sent are the same.
+    {
+        const int on = 1;
+        setsockopt(s, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&on), sizeof on);
+    }
 #ifdef _WIN32
     const DWORD ms = DWORD(timeout_s) * 1000;
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&ms), sizeof ms);

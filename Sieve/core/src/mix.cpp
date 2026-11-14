@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <optional>
 #include <memory>
@@ -562,7 +563,7 @@ public:
     // `sse`: sse-v1's two stages (mix-v2 and mix-v3); without (mix-v4), the mixers' average is coded.
     Model2(const Mix2Params& p, uint64_t size, const MixDictionary* words = nullptr, bool sse = true, MatchWays mw = {})
         : words_(words), sse_(sse), picture_(p.width > 0), bits_(p.table_bits), mask_((uint32_t(1) << p.table_bits) - 1), bpp_(p.channels),
-          row_(size_t(p.width) * p.channels), buf_(static_cast<size_t>(size)), ht_(size_t(1) << kMatchBits, 0), a1_(sse ? 65536 : 0), a2_(sse ? 65536 : 0)
+          row_(size_t(p.width) * p.channels), buf_(zeroed(static_cast<size_t>(size))), ht_(size_t(1) << kMatchBits, 0), a1_(sse ? 65536 : 0), a2_(sse ? 65536 : 0)
     {
         // The contexts: order 0, orders 1 to 6 (a picture: 1 to 3), the word, then the column and
         // sparse contexts (a picture: the triangle's six), then the byte the match expects.
@@ -918,7 +919,21 @@ private:
     size_t bpp_, row_;
     int orders_ = 6;
     size_t nctx_ = 0, ninputs_ = 0, padded_ = 0; // (padded_: ninputs_ rounded up to eight)
-    std::vector<uint8_t> buf_;
+    // What has been coded, room for the whole input. Zeros from calloc, not a vector's value-initialised
+    // bytes: the system hands over fresh zero pages untouched, so room never written to costs no memory
+    // (two trial runs are each made the whole file's size and fed only its first 4 MiB; review 1,
+    // 14 November 2026). The same zeros, so the same codes.
+    struct FreeBytes
+    {
+        void operator()(uint8_t* b) const { std::free(b); }
+    };
+    static std::unique_ptr<uint8_t[], FreeBytes> zeroed(size_t n)
+    {
+        void* b = std::calloc(std::max<size_t>(n, 1), 1);
+        if (!b) throw std::bad_alloc();
+        return std::unique_ptr<uint8_t[], FreeBytes>(static_cast<uint8_t*>(b));
+    }
+    std::unique_ptr<uint8_t[], FreeBytes> buf_;
     size_t pos_ = 0, linestart_ = 0, prevline_ = 0;
     uint32_t field_ = 0, word_ = 0;
     std::vector<Counter2, BigTableAllocator<Counter2>> store_;
@@ -1572,7 +1587,7 @@ struct Mix4Run::Impl
     Impl(const Mix4Params& p, uint64_t cap, const MixDictionary* words)
         : model(shape_of(p), cap, p.dictionary ? words : nullptr, false, ways_of(p)), capacity(cap)
     {
-        coder.out.reserve(size_t(cap / 3 + 16));
+        coder.out.reserve(size_t(std::min<uint64_t>(cap, uint64_t(4) << 20) / 3 + 16)); // (it grows past that as it is fed)
     }
 };
 

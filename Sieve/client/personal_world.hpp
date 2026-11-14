@@ -40,6 +40,7 @@
 #include "favourites.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <map>
@@ -104,6 +105,13 @@ private:
         bool physics = false;                // dropped: falls, rests and can be knocked; else placed
         float vx = 0, vy = 0, vz = 0;        // (physics: its velocity, metres a second)
         bool resting = true;
+        // (worked out from its kind and turns, kept until they change: extent_of; and its faces in the
+        // world, kept until its place changes too: faces_of. The physics and the crosshair ask for them
+        // many times a frame; review 1, 14 November 2026.)
+        mutable std::string ext_kind, face_kind;
+        mutable float ext_turns[3] = {NAN, NAN, NAN}, ext[3] = {0, 0, 0};
+        mutable float face_at[6] = {NAN, NAN, NAN, NAN, NAN, NAN};
+        mutable std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>> faces;
     };
     std::vector<Placed> placed_;
     std::vector<std::string> kept_lines_; // a v2 file's lines this build does not know, written back unchanged
@@ -122,6 +130,7 @@ private:
     // An object's shape as its turns make it: the drop from its origin to its lowest point, and how
     // far it reaches across (for knocks and aiming).
     void extent_of(const Placed& p, float& low, float& high, float& across) const;
+    void extent_fresh(const Placed& p, float& low, float& high, float& across) const;
     std::filesystem::path file_;
     // The panels slide in from the left as the setup menu's do (slide_panel.hpp), one at a time: the
     // catalogue, and while something is in your hand, Place (its exact place and turns).
@@ -155,7 +164,8 @@ public:
     float map_across() const { return 2 * 320.0f / float(1 << map_zoom_); } // (metres the map shows across)
 private:
     // An object's faces, in the world: triangles (three points each) and their colour.
-    void faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out) const;
+    using Face = std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>;
+    const std::vector<Face>& faces_of(const Placed& p) const; // (kept on p until it moves or turns)
     // Favourites (IDEAS 19.190): this dimension's, read beside its world file, in the catalogue after
     // Sieve's shelf items as "fav:SHA" and drawn as their line's shelf item.
     std::vector<Favourite> favourites_;
@@ -175,6 +185,7 @@ private:
     // line) stands them where they always stood: yours ahead of where you begin, the store's round the
     // hilltop; while they stay there, nothing of them is written, so such a world is still v1.
     std::vector<sieve::Character> characters_;
+    std::vector<std::string> char_ids_; // (each one's SHA-256, worked out once)
     bool first_is_yours_ = false;
     bool characters_placed_ = false;     // the file said where they are ("characters placed")
     std::vector<Placed> default_chars_;  // where they stand when it does not
@@ -184,6 +195,9 @@ private:
     float char_hit(const Placed& p, const float o[3], const float d[3]) const; // a ray's distance to its spheres, or -1
     uint64_t seed_;
     std::vector<Swell> swells_;
+    // The hill's height at every cell corner, and each cell's shade of grass, worked out once from the
+    // swells (they never change): the ground is drawn and stood on from these.
+    std::vector<float> corner_h_, cell_vary_;
     std::vector<Cloud> clouds_;
     float px_ = 0, pz_ = -60, yaw_ = 0, pitch_ = -0.05f; // where you stand, and which way you look
     bool wireframe_ = false;
@@ -204,6 +218,7 @@ private:
     std::shared_ptr<const sieve::RgbaImage> picture_of(const std::string& sha) const;
     bool picture_quad(const Placed& p, std::array<std::array<float, 3>, 4>& w, std::array<float, 3>& n) const;
     mutable std::map<std::string, std::shared_ptr<const sieve::RgbaImage>> pictures_;
+    mutable std::map<std::string, FaceRect> face_rects_; // (faces.ini read once a medium)
 
 public:
     ~PersonalWorld();

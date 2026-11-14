@@ -142,9 +142,10 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
     first_is_yours_ = first_is_yours && !characters.empty();
     for (auto& c : characters)
     {
-        bool again = false;
-        for (const auto& d : characters_) again = again || d.id() == c.id();
-        if (!again) characters_.push_back(std::move(c));
+        std::string id = c.id();
+        if (std::find(char_ids_.begin(), char_ids_.end(), id) != char_ids_.end()) continue;
+        characters_.push_back(std::move(c));
+        char_ids_.push_back(std::move(id));
     }
     rows_ = catalogue();
     if (!file_.empty())
@@ -155,7 +156,7 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
                 rows_.push_back("fav:" + sha);
             }
     // Your characters after them: yours, then your store's.
-    for (size_t ci = 0; ci < characters_.size(); ++ci) rows_.push_back(ci == 0 && first_is_yours_ ? "char:you" : "char:" + characters_[ci].id());
+    for (size_t ci = 0; ci < characters_.size(); ++ci) rows_.push_back(ci == 0 && first_is_yours_ ? "char:you" : "char:" + char_ids_[ci]);
     load(); // (what was placed before, and the world's seed)
     // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed (the
     // world file's, where it has one).
@@ -170,6 +171,21 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
         const int puffs = 4 + int(unit(s) * 4);
         for (int k = 0; k < puffs; ++k) c.puffs.push_back({(unit(s) - 0.5f) * 2.2f * c.size, (unit(s) - 0.3f) * 0.5f * c.size, (0.45f + unit(s) * 0.4f) * c.size});
         clouds_.push_back(std::move(c));
+    }
+    // The hill at every cell corner, and each cell's shade, once (the same expressions render() and
+    // ground() used each time before).
+    {
+        const int n = int(2 * kHalf / kCell);
+        corner_h_.resize(size_t(n + 1) * size_t(n + 1));
+        for (int i = 0; i <= n; ++i)
+            for (int j = 0; j <= n; ++j) corner_h_[size_t(i) * size_t(n + 1) + size_t(j)] = height(-kHalf + float(i) * kCell, -kHalf + float(j) * kCell);
+        cell_vary_.resize(size_t(n) * size_t(n));
+        for (int i = 0; i < n; ++i)
+            for (int j = 0; j < n; ++j)
+            {
+                uint64_t s = seed_ ^ (uint64_t(uint32_t(i)) << 32 | uint32_t(j));
+                cell_vary_[size_t(i) * size_t(n) + size_t(j)] = 1.0f + (unit(s) - 0.5f) * 0.10f;
+            }
     }
     // Your characters where they have always stood, until the world says where they are: yours a few
     // steps ahead of where you begin, those in your store in a ring round the top of the hill.
@@ -199,7 +215,15 @@ float PersonalWorld::ground(float x, float z) const
 {
     const float fi = std::floor((x + kHalf) / kCell), fj = std::floor((z + kHalf) / kCell);
     const float x0 = -kHalf + fi * kCell, z0 = -kHalf + fj * kCell, u = (x - x0) / kCell, v = (z - z0) / kCell;
-    const float h00 = height(x0, z0), h10 = height(x0 + kCell, z0), h01 = height(x0, z0 + kCell), h11 = height(x0 + kCell, z0 + kCell);
+    const int n = int(2 * kHalf / kCell);
+    float h00, h10, h01, h11;
+    if (fi >= 0 && fj >= 0 && fi < float(n) && fj < float(n) && !corner_h_.empty())
+    {
+        // (the corners worked out once; the same values height() gives there)
+        const size_t i = size_t(fi), j = size_t(fj), w = size_t(n + 1);
+        h00 = corner_h_[i * w + j], h10 = corner_h_[(i + 1) * w + j], h01 = corner_h_[i * w + j + 1], h11 = corner_h_[(i + 1) * w + j + 1];
+    }
+    else h00 = height(x0, z0), h10 = height(x0 + kCell, z0), h01 = height(x0, z0 + kCell), h11 = height(x0 + kCell, z0 + kCell);
     // (split from (x0, z0) to (x1, z1): below the diagonal, the triangle 00-10-11; above it 00-11-01)
     return u >= v ? h00 + (h10 - h00) * u + (h11 - h10) * v : h00 + (h11 - h01) * u + (h01 - h00) * v;
 }
@@ -367,10 +391,11 @@ void PersonalWorld::render()
             for (int j = 0; j < n; ++j)
             {
                 const float x0 = -kHalf + float(i) * kCell, z0 = -kHalf + float(j) * kCell, x1 = x0 + kCell, z1 = z0 + kCell;
-                const float h00 = height(x0, z0), h10 = height(x1, z0), h01 = height(x0, z1), h11 = height(x1, z1);
+                const size_t w = size_t(n + 1);
+                const float h00 = corner_h_[size_t(i) * w + size_t(j)], h10 = corner_h_[size_t(i + 1) * w + size_t(j)], h01 = corner_h_[size_t(i) * w + size_t(j + 1)],
+                            h11 = corner_h_[size_t(i + 1) * w + size_t(j + 1)];
                 // (a faint variation of the cell's own, from the seed)
-                uint64_t s = seed_ ^ (uint64_t(uint32_t(i)) << 32 | uint32_t(j));
-                const float vary = 1.0f + (unit(s) - 0.5f) * 0.10f;
+                const float vary = cell_vary_[size_t(i) * size_t(n) + size_t(j)];
                 const SDL_FColor g{kGrass.r * vary, kGrass.g * vary, kGrass.b * vary, 1};
                 world.push_back({{Pt{x0, h00, z0}, Pt{x1, h10, z0}, Pt{x1, h11, z1}}, g, 0.10f / 30.0f, 3}); // (not the diagonal)
                 world.push_back({{Pt{x0, h00, z0}, Pt{x1, h11, z1}, Pt{x0, h01, z1}}, g, 0.10f / 30.0f, 6});
@@ -387,7 +412,6 @@ void PersonalWorld::render()
         std::vector<Picture> pics;
         std::vector<size_t> chars_seen; // (the characters placed that are in sight, drawn below as spheres)
         {
-            std::vector<std::pair<std::array<Pt, 3>, SDL_FColor>> faces;
             const float eye_y = height(px_, pz_) + kEye;
             for (const Placed& p : placed_)
             {
@@ -407,9 +431,7 @@ void PersonalWorld::render()
                     chars_seen.push_back(size_t(&p - placed_.data()));
                     continue;
                 }
-                faces.clear();
-                faces_of(p, faces);
-                for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7, true});
+                for (const auto& [t, c] : faces_of(p)) world.push_back({t, c, 0, 7, true});
                 // A favourite's picture on its front, where the hallway put it on its shelf (its line's
                 // face rectangle), a few millimetres proud of the face. (Not in the wireframe.)
                 if (!wireframe_ && p.kind.rfind("fav:", 0) == 0)
@@ -919,7 +941,7 @@ const sieve::Character* PersonalWorld::character(const std::string& kind) const
     if (!is_char(kind)) return nullptr;
     if (kind == "char:you") return first_is_yours_ ? &characters_.front() : nullptr;
     for (size_t ci = first_is_yours_ ? 1 : 0; ci < characters_.size(); ++ci)
-        if (kind.compare(5, std::string::npos, characters_[ci].id()) == 0) return &characters_[ci];
+        if (kind.compare(5, std::string::npos, char_ids_[ci]) == 0) return &characters_[ci];
     return nullptr;
 }
 
@@ -934,6 +956,18 @@ std::string PersonalWorld::label_of(const std::string& kind) const
 }
 
 void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across) const
+{
+    if (p.ext_turns[0] == p.yaw && p.ext_turns[1] == p.pitch && p.ext_turns[2] == p.roll && p.ext_kind == p.kind)
+    {
+        low = p.ext[0], high = p.ext[1], across = p.ext[2];
+        return;
+    }
+    extent_fresh(p, low, high, across);
+    p.ext_kind = p.kind, p.ext_turns[0] = p.yaw, p.ext_turns[1] = p.pitch, p.ext_turns[2] = p.roll;
+    p.ext[0] = low, p.ext[1] = high, p.ext[2] = across;
+}
+
+void PersonalWorld::extent_fresh(const Placed& p, float& low, float& high, float& across) const
 {
     low = 0, high = 0.4f, across = 0.2f;
     if (const sieve::Character* c = character(p.kind))
@@ -960,10 +994,16 @@ void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& a
 }
 
 // An object's faces in the world: its shelf item's triangles, turned and placed.
-void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>>& out) const
+const std::vector<PersonalWorld::Face>& PersonalWorld::faces_of(const Placed& p) const
 {
+    const float at[6] = {p.x, p.y, p.z, p.yaw, p.pitch, p.roll};
+    if (std::equal(at, at + 6, p.face_at) && p.face_kind == p.kind) return p.faces;
+    std::copy(at, at + 6, p.face_at);
+    p.face_kind = p.kind;
+    std::vector<Face>& out = p.faces;
+    out.clear();
     const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
-    if (it == shelf_items().mesh.end()) return;
+    if (it == shelf_items().mesh.end()) return out;
     for (const MeshTri& t : it->second->tris)
     {
         std::array<std::array<float, 3>, 3> w{};
@@ -981,6 +1021,7 @@ void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<s
         if ((ay * bz - az * by) * n[0] + (az * bx - ax * bz) * n[1] + (ax * by - ay * bx) * n[2] < 0) std::swap(w[1], w[2]);
         out.push_back({w, t.kd});
     }
+    return out;
 }
 
 // Where a favourite's picture goes on it, in the world: on its front (+X), its line's face rectangle
@@ -991,7 +1032,10 @@ bool PersonalWorld::picture_quad(const Placed& p, std::array<std::array<float, 3
 {
     const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
     if (it == shelf_items().mesh.end()) return false;
-    const FaceRect fr = load_face_rect(mesh_kind(p.kind));
+    const std::string medium = mesh_kind(p.kind);
+    auto fit = face_rects_.find(medium);
+    if (fit == face_rects_.end()) fit = face_rects_.emplace(medium, load_face_rect(medium)).first;
+    const FaceRect& fr = fit->second;
     const float hx = it->second->hi.x + 0.004f;
     const float corner[4][3] = {{hx, fr.top, fr.half_width}, {hx, fr.top, -fr.half_width}, {hx, fr.bottom, -fr.half_width}, {hx, fr.bottom, fr.half_width}};
     for (int k = 0; k < 4; ++k)
@@ -1011,7 +1055,6 @@ bool PersonalWorld::picture_quad(const Placed& p, std::array<std::array<float, 3
 float PersonalWorld::surface_below(float x, float top, float z, int skip) const
 {
     float best = ground(x, z);
-    std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>> faces;
     for (size_t i = 0; i < placed_.size(); ++i)
     {
         if (int(i) == skip) continue;
@@ -1019,9 +1062,7 @@ float PersonalWorld::surface_below(float x, float top, float z, int skip) const
         float low, high, across;
         extent_of(o, low, high, across);
         if ((o.x - x) * (o.x - x) + (o.z - z) * (o.z - z) > across * across + 0.01f || o.y + low > top) continue;
-        faces.clear();
-        faces_of(o, faces);
-        for (const auto& [t, c] : faces)
+        for (const auto& [t, c] : faces_of(o))
         {
             const float ax = t[1][0] - t[0][0], ay = t[1][1] - t[0][1], az = t[1][2] - t[0][2];
             const float bx = t[2][0] - t[0][0], by = t[2][1] - t[0][1], bz = t[2][2] - t[0][2];
@@ -1065,7 +1106,6 @@ float PersonalWorld::ray_objects(const float o[3], const float d[3], float reach
 {
     float bt = reach;
     if (which) *which = -1;
-    std::vector<std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>> faces;
     for (size_t i = 0; i < placed_.size(); ++i)
     {
         if (int(i) == skip) continue;
@@ -1079,9 +1119,14 @@ float PersonalWorld::ray_objects(const float o[3], const float d[3], float reach
             }
             continue;
         }
-        faces.clear();
-        faces_of(placed_[i], faces);
-        for (const auto& [t, c] : faces)
+        {
+            // (nothing farther across than the reach and its own size can be met within the reach)
+            float low, high, across;
+            extent_of(placed_[i], low, high, across);
+            const float hx = placed_[i].x - o[0], hz = placed_[i].z - o[2], r = reach + across + 0.01f;
+            if (hx * hx + hz * hz > r * r) continue;
+        }
+        for (const auto& [t, c] : faces_of(placed_[i]))
         {
             // (Moller and Trumbore's test, either side of the face)
             const float e1[3] = {t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]}, e2[3] = {t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]};

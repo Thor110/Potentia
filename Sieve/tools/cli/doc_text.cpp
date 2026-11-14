@@ -277,14 +277,21 @@ std::string html_text(std::string_view input)
     std::string kept;
     {
         const std::string low = lower(html);
+        static const char* const kSkip[] = {"script", "style", "noscript", "template"};
+        const std::string open[4] = {"<script", "<style", "<noscript", "<template"};
+        // Each tag's first place at or after i, found again only once i has passed it: searched afresh
+        // from i on every pass, a page of many scripts was gone over once a script (16 MB: 4.5 s; review
+        // 1, 14 November 2026). The same places, so the same text.
+        size_t first[4];
+        bool known[4] = {false, false, false, false};
         size_t i = 0;
         while (i < html.size())
         {
             size_t next = std::string::npos, which = 0;
-            static const char* const kSkip[] = {"script", "style", "noscript", "template"};
             for (size_t k = 0; k < 4; ++k)
             {
-                const size_t at = low.find(std::string("<") + kSkip[k], i);
+                if (!known[k] || (first[k] != std::string::npos && first[k] < i)) first[k] = low.find(open[k], i), known[k] = true;
+                const size_t at = first[k];
                 if (at < next)
                 {
                     const char after = at + 1 + std::strlen(kSkip[k]) < low.size() ? low[at + 1 + std::strlen(kSkip[k])] : '>';

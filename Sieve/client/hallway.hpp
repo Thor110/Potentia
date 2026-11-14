@@ -1166,6 +1166,9 @@ public:
     {
         actions_ = std::move(m);
         action_anims_ = std::move(anims);
+        // (each one's SHA-256 once: it was worked out from its whole text every frame; review 1)
+        action_ids_.clear();
+        for (const auto& an : action_anims_) action_ids_.push_back(an.id());
         action_said_ = 0;
     }
     void set_action(int a) { action_forced_ = a; } // --action NAME: held at that action (for a picture)
@@ -1599,6 +1602,7 @@ private:
         size_t cols = 0, row_count = 0;    // the text's size in characters
         bool picture = false;              // a picture, in pixels
         std::vector<uint32_t> px;          // ARGB, frame after frame (empty while it is being drawn)
+        bool px_opened = false;            // px is the opened file's, moved here (and back when another view shows)
         uint32_t pw = 0, ph = 0, frames = 1;
         int frame = 0;
         bool playing = true;
@@ -1929,6 +1933,7 @@ private:
     std::optional<sieve::Animation> animation_;
     std::optional<sieve::ActionMap> actions_;
     std::vector<sieve::Animation> action_anims_;
+    std::vector<std::string> action_ids_; // (their SHA-256s, as action_anims_)
     sieve::Action action_now_ = sieve::Action::Idle;
     int action_forced_ = -1;
     uint32_t action_said_ = 0; // a bit an action: told already that it has no animation

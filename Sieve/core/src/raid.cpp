@@ -286,8 +286,12 @@ std::vector<RaidManifest> Raid::list() const
             while (all.count(id) && !all.at(id).previous.empty() && d <= all.size()) id = all.at(id).previous, ++d;
             return d;
         };
+        // (each id's depth walked once, not twice in every comparison: a store of 684 versions took
+        // 1.6 s to list and 3 s to put into; review 1, 14 November 2026)
+        std::map<std::string, size_t> depths;
+        for (const auto& id : ids) depths[id] = depth(id);
         std::sort(ids.begin(), ids.end(), [&](const std::string& a, const std::string& b) {
-            const size_t da = depth(a), db = depth(b);
+            const size_t da = depths.at(a), db = depths.at(b);
             return da != db ? da < db : a < b;
         });
         for (const auto& id : ids) out.push_back(all.at(id));
@@ -300,15 +304,20 @@ std::optional<std::string> Raid::latest(const std::string& name) const
     std::optional<std::string> best;
     size_t best_depth = 0;
     const auto all = list();
+    // (each manifest's id worked out once: it is its whole text hashed)
+    std::vector<std::string> ids;
+    ids.reserve(all.size());
+    for (const auto& m : all) ids.push_back(m.id());
     std::map<std::string, const RaidManifest*> by_id;
-    for (const auto& m : all) by_id[m.id()] = &m;
-    for (const auto& m : all)
+    for (size_t k = 0; k < all.size(); ++k) by_id[ids[k]] = &all[k];
+    for (size_t k = 0; k < all.size(); ++k)
     {
+        const RaidManifest& m = all[k];
         if (m.name != name) continue;
         size_t d = 0;
         std::string at = m.previous;
         while (!at.empty() && by_id.count(at) && d <= all.size()) at = by_id.at(at)->previous, ++d;
-        const std::string id = m.id();
+        const std::string& id = ids[k];
         if (!best || d > best_depth || (d == best_depth && id > *best)) best = id, best_depth = d;
     }
     return best;

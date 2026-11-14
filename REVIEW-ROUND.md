@@ -21,9 +21,9 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] **Recheck everything.** Tick this, and the next zip unticks every box below for a fresh round (and this one).
 
 ### Personal dimension (main menu > Personal Dimensions > Personal Dimension)
-- [x] 1. **Walking and looking.** WASD/arrows, mouse, Shift to run, PgUp/PgDn to look up and down. Does it feel right? Is the hill, the sky and the clouds drawn well at your window size?
-- [x] 2. **The catalogue (Tab).** Up/Down, Enter places the item in front of you, facing you. Backspace takes away the nearest one. The **bookcase** is at the end of the list.
-- [x] 3. **Holding (look at a thing, E or click).**
+- [ ] 1. **Walking and looking.** WASD/arrows, mouse, Shift to run, PgUp/PgDn to look up and down. Does it feel right? Is the hill, the sky and the clouds drawn well at your window size?
+- [ ] 2. **The catalogue (Tab).** Up/Down, Enter places the item in front of you, facing you. Backspace takes away the nearest one. The **bookcase** is at the end of the list.
+- [ ] 3. **Holding (look at a thing, E or click).**
    - R / T / G turn it (Shift: the other way). Does the turning feel natural?
    - Return or a click places it exactly where it is, even floating in the air.
    - Q drops it: it should fall, bounce a little and come to rest. Walk into it and it is knocked along.
@@ -35,7 +35,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 7. **Drawing order.** Walk round the bookcase with things on it: nothing should show through what is in front of it; characters behind objects should be hidden.
 
 ### Keys (Settings > Controls > Keys)
-- [x] 8. Every key of your dimension is listed by section (moving, catalogue, holding, map). Enter on one, press a new key (try Shift+something), check the footers in the dimension show the new key and that it works. Backspace restores the default. Is the screen readable, and does it scroll well?
+- [ ] 8. Every key of your dimension is listed by section (moving, catalogue, holding, map). Enter on one, press a new key (try Shift+something), check the footers in the dimension show the new key and that it works. Backspace restores the default. Is the screen readable, and does it scroll well?
 
 ### Favourites
 - [x] 9. In the hallway, take an item and press **H**: "Kept as a favourite". H again removes it. Try a page, a picture, a model (also with the models line compacted), a world, a book.
@@ -126,6 +126,14 @@ run before a release package, and after each of the three reviews. Each batch is
 - T1. Screenshots made by a tool, and the CI runner running only the steps a change reaches (19.202).
   This is what makes batches cheap without picking the steps by hand, so it could go into the first batch.
 
+### List O: optimisations left by the reviews (Sieve/docs/OPTIMISATIONS.md), each with its own CI
+- O1. RAID reads buffered `[04, 10]`; O2. sharing's questions sent together `[01, 04, 10]`; O3. the Creator's
+  picture the size of its box `[04, 10]`; O4. recordings kept as text `[10]`; O5. edges walked only in
+  their band `[04, 10]`; O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
+  on a large file (a measurement, no CI).
+  Each sits well with others of the same steps: O1, O2 and O6 together are one RAID batch; O3 and O5 go
+  with list R.
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119).
 
@@ -135,7 +143,32 @@ run before a release package, and after each of the three reviews. Each batch is
 
 - [x] 1. A list of the new features for Edward to test as a user (section 1 above).
 - [ ] 2. Edward tests them; the fixes that follow are made (each fix zipped, its box ticked when retested).
-- [ ] 3. Multi-agent code review 1: optimisations and performance, to speed things up.
+- [x] 3. Multi-agent code review 1: optimisations and performance, to speed things up. *Run 14 November 2026
+  over everything changed since 939666d (127 files): six finders, each checked by a skeptic; 26 findings,
+  19 kept (confirmed, or plausible and worth their code), 7 set aside (not worth the code they would add,
+  or refuted). Fixes in three batches by CI step, below.*
+- [x] 3a. Batch A, the hallway program (step 10): the Replays screen hashes every recording every frame;
+  the Character Creator and the hallway hash every animation every frame to find the one playing; your
+  dimension's character lookup hashes each stored character each time (my own, from the last zip); the
+  CHARACTER page and YOURS list re-hash every frame; physics works out every pair's size 120 times a second;
+  holding something tests every object 75 times a frame; aiming turns every triangle of every object; the
+  hill's heights every frame; faces.ini read per favourite per frame; a picture's pixels kept twice in the
+  viewer; the Keys screen's listing rebuilt per row. Every one keeps every output the same.
+- [x] 3b. Batch B, the RAID and the rest (steps 01, 04, 10): the RAID's list re-walks every chain in each
+  comparison (a save took 3 s at 684 versions, and grows); a piece sent as two writes waits on the network
+  (4 times slower, measured); sharing asks each peer in turn; a .glb's data copied twice; a steered chain
+  stage on one thread.
+- [x] 3c. Batch C, making (steps 01, 02, 11): two trial mixers each zero-fill a buffer the whole file's size;
+  under Balanced a program is mixed with and without E1 side by side, doubling the mixer's memory;
+  html_text's script/style skip is quadratic (16 MB page: 4.5 s, measured). The bytes made stay the same.
+- [x] 3d. All three batches made (14 November 2026), each output compared with the build before it (pictures,
+  saved worlds, RAID lists and reports, .sieve bytes, HTML text): the same. Measured: 200 dropped objects for
+  20 s 20.9 s to 0.8 s; the RAID list at 301 versions 0.195 s to 0.024 s, a put 0.372 s to 0.047 s; an 8 MiB
+  share 2.12 s to 0.14 s (which also answers "sharing asks each peer in turn"); a 16 MB HTML page 4.59 s to
+  0.14 s. The set-aside findings checked again by fresh agents: two fixed by these changes, six left (each
+  measured or traced: a menu page's idle cost, an opt-in recording's, a hundredth of a millisecond), and
+  the three fixes' reviewers found three points, all fixed. Items 1, 2, 3 and 8 above unticked (the physics,
+  the catalogue, holding and the Keys screen were touched); 7, 10, 12, 13, 17, 22 and 25 were already open.
 - [ ] 4. Multi-agent code review 2: duplicate code, brought to one copy.
 - [ ] 5. Multi-agent code review 3: the code compared with the documentation, each made to agree.
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "favourites.hpp"
+#include "keys.hpp"
 
 #include "app_settings.hpp"
 #include "strings.hpp"
@@ -96,6 +97,12 @@ private:
     int key_capture_ = -1;
     std::filesystem::path replay_chosen_;
     void read_replays();
+    mutable std::vector<std::string> replay_sha_; // (each packed recording's SHA-256, once asked for)
+    const std::string& replay_sha(size_t i) const;
+    mutable std::vector<hallway::Keys::Row> key_rows_; // (the keys' listing for the frame being drawn)
+    bool key_rows_frame_ = false;
+    mutable bool key_rows_taken_ = false; // (taken for this frame already)
+    const std::vector<hallway::Keys::Row>& key_rows() const;
     bool replay_cached(size_t i) const;
     void toggle_replay_cache(size_t i);
     DisplayInfo display_;

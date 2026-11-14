@@ -249,7 +249,11 @@ std::optional<std::string> RaidNetPeer::get(const std::string& name)
 
 std::string RaidNetPeer::put(const std::string& name, const std::string& bytes)
 {
-    if (!s_->write("put " + name + " " + std::to_string(bytes.size()) + "\n") || !s_->write(bytes)) throw std::runtime_error(address_ + " closed");
+    // (the request and its bytes in one write: two writes then a wait for the answer stalled on the
+    // network's acknowledgements; review 1)
+    std::string msg = "put " + name + " " + std::to_string(bytes.size()) + "\n";
+    msg += bytes;
+    if (!s_->write(msg)) throw std::runtime_error(address_ + " closed");
     const std::string a = line();
     if (a == "kept" || a == "had") return "";
     if (a.rfind("refused ", 0) == 0) return a.substr(8);

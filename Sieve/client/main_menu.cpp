@@ -106,7 +106,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Keys:
     {
         std::vector<Item> out;
-        const auto rows = hallway::Keys::get().listing();
+        const auto& rows = key_rows();
         for (size_t i = 0; i < rows.size(); ++i) out.push_back({Kind::Info, "keyrow:" + std::to_string(i)});
         out.push_back({Kind::Action, "back"});
         return out;
@@ -171,7 +171,7 @@ std::string MainMenu::value_of(const Item& it) const
     {
         const size_t i = size_t(std::stoul(it.id.substr(7)));
         if (int(i) == key_capture_ && screen_ == Screen::Keys) return tr("value.key_press");
-        const auto rows = hallway::Keys::get().listing();
+        const auto& rows = key_rows();
         return i < rows.size() ? rows[i].keys + (rows[i].changed ? "  *" : "") : std::string();
     }
     if (it.id.rfind("favrow:", 0) == 0)
@@ -209,12 +209,22 @@ void MainMenu::read_replays()
         if (e.is_regular_file() && (e.path().extension() == ".replay" || e.path().extension() == ".sieve")) replays_.push_back(e.path());
     std::sort(replays_.begin(), replays_.end());
     if (replays_.size() > 200) replays_.resize(200);
+    replay_sha_.assign(replays_.size(), std::string());
+}
+
+// A packed recording's SHA-256, read and worked out the first time it is asked for, then kept while the
+// screen is open (it was worked out for every row every frame; review 1).
+const std::string& MainMenu::replay_sha(size_t i) const
+{
+    if (replay_sha_.size() != replays_.size()) replay_sha_.assign(replays_.size(), std::string());
+    if (replay_sha_[i].empty()) replay_sha_[i] = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(replays_[i]));
+    return replay_sha_[i];
 }
 
 bool MainMenu::replay_cached(size_t i) const
 {
     if (i >= replays_.size() || replays_[i].extension() != ".sieve" || s_.replays_cached.empty()) return false;
-    const std::string sha = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(replays_[i]));
+    const std::string& sha = replay_sha(i);
     return s_.replays_cached.find(sha) != std::string::npos;
 }
 
@@ -222,7 +232,7 @@ bool MainMenu::replay_cached(size_t i) const
 void MainMenu::toggle_replay_cache(size_t i)
 {
     if (i >= replays_.size() || replays_[i].extension() != ".sieve") return;
-    const std::string sha = sieve::cli::sha256_hex(sieve::cli::read_file_bytes(replays_[i]));
+    const std::string sha = replay_sha(i);
     std::vector<std::string> list;
     for (size_t at = 0; at <= s_.replays_cached.size();)
     {
@@ -329,9 +339,17 @@ void MainMenu::choose_from_list(int index)
     save();
 }
 
+// The keys' listing: the one render() took for this frame, else a fresh one (it was taken two or three
+// times a row each frame; review 1).
+const std::vector<hallway::Keys::Row>& MainMenu::key_rows() const
+{
+    if (!key_rows_frame_ || !key_rows_taken_) key_rows_ = hallway::Keys::get().listing(), key_rows_taken_ = key_rows_frame_;
+    return key_rows_;
+}
+
 std::string MainMenu::key_row_label(size_t i) const
 {
-    const auto rows = hallway::Keys::get().listing();
+    const auto& rows = key_rows();
     if (i >= rows.size()) return std::string();
     return tr("keys.section." + rows[i].section) + ": " + tr(rows[i].name_key);
 }
@@ -693,6 +711,15 @@ MainMenu::Result MainMenu::run()
 
 void MainMenu::render()
 {
+    // (one listing of the keys for the whole frame, taken when first asked for, so a screen that shows
+    // no keys takes none; put back to "take a fresh one" when the frame is drawn)
+    key_rows_frame_ = true;
+    key_rows_taken_ = false;
+    struct EndFrame
+    {
+        bool& f;
+        ~EndFrame() { f = false; }
+    } end_frame{key_rows_frame_};
     if (int(screen_) != spoken_screen_)
     {
         forget_announced();

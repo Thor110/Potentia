@@ -26,6 +26,10 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <exception>
+#include <system_error>
+#include <thread>
+#include <vector>
 
 namespace hallway::hall {
 
@@ -250,13 +254,48 @@ void Hallway::chain_run(const std::string& input)
                             steer_failed = true;
                             return;
                         }
-                        for (uint32_t k = 0; k < kSteerTries; ++k)
+                        // The tries made a batch at a time on the threads (each depends only on its own
+                        // seed), then judged one by one in order, so the first that passes is kept, as
+                        // when they were made one after another (review 1, 14 November 2026).
+                        const uint32_t batch = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
+                        for (uint32_t k0 = 0; k0 < kSteerTries; k0 += batch)
                         {
-                            std::vector<uint32_t> cells = make(seed + k);
-                            if (!fs.passes(cells)) continue;
-                            e.cells = std::move(cells);
-                            steer_note = trf("chain.steer.kept", {std::to_string(k + 1)});
-                            return;
+                            const uint32_t nb = std::min(batch, kSteerTries - k0);
+                            std::vector<std::vector<uint32_t>> made(nb);
+                            std::vector<std::exception_ptr> failed(nb);
+                            auto attempt = [&](uint32_t j) {
+                                try
+                                {
+                                    made[j] = make(seed + k0 + j);
+                                }
+                                catch (...)
+                                {
+                                    failed[j] = std::current_exception();
+                                }
+                            };
+                            std::vector<std::thread> workers;
+                            uint32_t started = 1;
+                            try
+                            {
+                                for (; started < nb; ++started) workers.emplace_back(attempt, started);
+                            }
+                            catch (const std::system_error&)
+                            {
+                                // (no more threads to be had: the rest of the batch made here, one by one)
+                            }
+                            attempt(0);
+                            for (uint32_t j = started; j < nb; ++j) attempt(j);
+                            for (auto& w : workers) w.join();
+                            for (uint32_t j = 0; j < nb; ++j)
+                            {
+                                // (judged in order: a try that failed is reported only where the tries
+                                // before it all failed the filters, as when they were made one by one)
+                                if (failed[j]) std::rethrow_exception(failed[j]);
+                                if (!fs.passes(made[j])) continue;
+                                e.cells = std::move(made[j]);
+                                steer_note = trf("chain.steer.kept", {std::to_string(k0 + j + 1)});
+                                return;
+                            }
                         }
                         steer_note = trf("chain.steer.none", {std::to_string(kSteerTries)});
                         steer_failed = true;
