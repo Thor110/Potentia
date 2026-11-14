@@ -9,8 +9,9 @@
 // settled by open, democratic debate; IDEAS 19.177.)
 //
 // "sieve-raid-v1". A RAID is a set of folders (drives) the person chooses; each holds a file
-// `sieve-raid` naming the folder ("sieve-raid-v1 id=HEX": 32 random hex digits, made once when the
-// folder joins), a folder `chunks`, and a folder `manifests`.
+// `sieve-raid` naming the folder ("sieve-raid-v1 id=HEX": 32 hex digits, made once when the folder
+// joins: the start of a SHA-256 of the system's random bytes, this machine, the folder's drive, number
+// and path, and the time; see new_folder_id in raid.cpp), a folder `chunks`, and a folder `manifests`.
 //
 // A save (any file: a game's save, a character, a whole dimension's file) is cut into chunks where
 // its content says (stage 2, below; 1 MiB pieces in stage 1), each named by its SHA-256 and kept as chunks/AB/<SHA-256> (AB its first

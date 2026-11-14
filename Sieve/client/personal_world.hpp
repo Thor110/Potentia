@@ -14,7 +14,7 @@
 //   - The clouds: soft white shapes, each a few overlapping discs, at heights and places from the
 //     seed, drifting slowly with the wind.
 // You walk it with WASD and the mouse (or the arrows), Shift to run, your eyes 1.7 m above the grass.
-// Esc goes back to the main menu.
+// Esc opens its pause menu (pause_rows.hpp), whose Leave row goes back.
 //
 // It is a space to make your own (Edward: "the personal dimension should have the ability to place
 // objects from a catalog in the world space"): Tab opens the catalogue, Up/Down choose, Enter places
@@ -24,10 +24,14 @@
 // read from data/objects/shelf-items.sieve: preserved there, apart from the meshes folder that Real
 // Graphics lets anyone change ("they also need sieving and preserving somewhere aside from the
 // overridable ones"). Every object is drawn in the world's 3D space with the hill, the nearer before
-// the farther. What is placed is kept as "sieve-personal-world-v1" text beside the settings
-// (worlds/personal.world): its first line, then "seed N", then one line an object, "place KIND X Z
-// YAW" (KIND a catalogue id, metres and radians, %.9g), in the order they were placed; it is read
-// back when the world opens (a line not so written is left out, and said).
+// the farther. What is placed is kept as text beside the settings (worlds/personal.world;
+// SPECIFICATIONS 12.0r): "sieve-personal-world-v1" while everything stands on the ground, its first
+// line, then "seed N", then one line an object, "place KIND X Z YAW" (KIND a catalogue id, metres and
+// radians, %.9g), in the order they were placed; "sieve-personal-world-v2" as soon as anything is more,
+// "place KIND X Y Z YAW PITCH ROLL fixed|physics" (KIND also fav:SHA, char:you or char:SHA), with
+// "characters placed" once your characters are moved, and every line it does not read (a place
+// model:SHA among them) kept and written back. It is read back when the world opens (a line it knows
+// but cannot read is left out, and said).
 #pragma once
 
 #include "sieve/image.hpp" // RgbaImage
@@ -70,6 +74,8 @@ public:
     const std::vector<std::string>& pause_list() const { return pause_rows_; } // (its rows while it is in)
     bool pause_select(const std::string& id); // its row of that name chosen (Item:ID presses); false if none
     const Favourite* opened() const { return opened_.empty() ? nullptr : favourite(opened_); }
+    // What it last said at the foot of the screen (O on something that does not open, a line left out, ...).
+    const std::string& note() const { return note_; }
     Result run();
     // For pictures and tests: a key as if pressed and held for `seconds`, the frame drawn, and where
     // you stand.

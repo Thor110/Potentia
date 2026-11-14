@@ -425,6 +425,14 @@ $H --no-menu --replay rpl/replays/walk.sieve --screenshot rpl-packed.png | tr -d
 $H --no-menu --replay rpl/replays/walk.sieve --replay-cache --screenshot rpl-cached.png | tr -d '\r' | grep -A1 "^replay: " | tail -1 | cmp - <(printf '%s\n' "$where")
 if $H --no-menu --line image --replay rpl/walk.replay --screenshot rpl-elsewhere.png > rpl-elsewhere.txt 2>&1; then exit 1; fi
 q "the recording began on the text line" rpl-elsewhere.txt
+# Text typed is read back at any length its writer writes: twelve characters at once (36 bytes of
+# UTF-8, as an input method may commit them; the reader once refused more than 32), played while
+# recording, are written again the same.
+python -c "
+t = open('rpl/start.replay').read()
+open('rpl/long.replay', 'w', newline='\n').write(t + 'f 16667 - tx:e4b880e4ba8ce4b889e59b9be4ba94e585ade4b883e585abe4b99de58d81e799bee58d83\nf 16667 -\n')"
+$H --no-menu --replay rpl/long.replay --record rpl/long-again.replay --screenshot rpl-long.png | tr -d '\r' | q "^replay: 2 frames, 0.033 s$"
+cmp rpl/long.replay rpl/long-again.replay
 # The replay viewer (the main menu's Replays): each recording a row, a packed one with its box to be
 # decoded once into the cache, ticked with Space and kept by its SHA-256 in [replays] cached.
 $H --main-menu --settings rpl/v.ini --read-aloud --press "Item:replays,Return,Space" --screenshot rpl-viewer.png | tr -d '\r' | q "^read aloud: walk.sieve, [0-9]* bytes  \[x\] cache$"
@@ -444,7 +452,7 @@ $H --menu --settings raid.ini --save-character raid-me.character --press "\`,G" 
 $exe raid list --drives raidc1,raidc2 | tr -d '\r' | q "  your character  (after "
 $exe raid verify --drives raidc1,raidc2 | tr -d '\r' | q "^whole$"
 # Between machines from the menus (IDEAS 19.176, 19.150), both opt in only behind red boxes in
-# Settings > RAID. Turning sharing on makes the key beside the settings; then Ctrl+S (as
+# Settings > Infinite RAID. Turning sharing on makes the key beside the settings; then Ctrl+S (as
 # --save-character does) also sends your save, sealed, to the machine named, and each version's
 # remote id is kept beside the key, so the character comes back byte for byte from that machine.
 rm -rf raidn raidn-held raidn.ini
@@ -470,9 +478,10 @@ $exe raid fetch "$(sed -n 1p raidn/raid-shared.txt | cut -d' ' -f2)" --key raidn
 cmp raidn/me.character raidn/back.character
 kill $raidn_serve
 # Keeping others' saves, from the menu: ticked, this machine answers at once on [raid] listen.
-# Online off (the default) keeps it from answering, however it is set; on, it answers.
+# Online off (the default) keeps it from answering, however it is set, and its Answering on row says
+# so, and why (since 14 November 2026, as sharing and checking say so); on, it answers.
 printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\nserve = on\n' > raidn/offline.ini
-$H --main-menu --settings raidn/offline.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_listen" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134$"
+$H --main-menu --settings raidn/offline.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_listen" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134: not answering, as Online is off (Settings > Online)$"
 test ! -e raidn-held2
 printf '[online]\nenabled = on\n[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
 $H --main-menu --settings raidn/serve.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_serve,Return,Item:raid_listen" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
@@ -1588,6 +1597,17 @@ grep -c "^place pages 1.5 25 [-0-9.]* 0.785398185 0.17453292 0 fixed$" pw/x.worl
 printf 'sieve-personal-world-v2\nseed 0\nfuture-thing 1 2 3\nplace pages 0 30 -55 0 0 0 fixed\n' > pw/k.world
 $H --personal-world --world-file pw/k.world --press "Backspace" --screenshot pworld-kept.png | tr -d '\r' | q "; 0 objects placed$"
 grep -c "^future-thing 1 2 3$" pw/k.world | q "^1$"
+# An own object (place model:SHA) is not drawn yet, but it is kept and written back as such a line is,
+# not lost when the world is saved.
+printf 'sieve-personal-world-v2\nseed 0\nplace model:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef 0 30 -55 0 0 0 fixed\nplace pages 0 30 -55 0 0 0 fixed\n' > pw/m.world
+$H --personal-world --world-file pw/m.world --press "Backspace" --screenshot pworld-model.png | tr -d '\r' | q "; 0 objects placed$"
+grep -c "^place model:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef 0 30 -55 0 0 0 fixed$" pw/m.world | q "^1$"
+# O on what does not open says why: a character is not an item of a line, and a favourite no longer
+# kept (here one never kept) has nothing to open.
+printf 'sieve-personal-world-v1\nseed 0\n' > pw/co.world
+$H --personal-world --world-file pw/co.world --character c99.character --character-store pw/nostore --pworld-walk 1.0 --pworld-look -12 --press "o" --screenshot pworld-char-o.png | tr -d '\r' | q "^note: your character does not open: a character is not an item of a line\.$"
+printf 'sieve-personal-world-v2\nseed 0\nplace fav:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 0 22.66 -58.5 0 0 0 fixed\n' > pw/fg.world
+$H --personal-world --world-file pw/fg.world --no-character --character-store pw/nostore --pworld-look -45 --press "o" --screenshot pworld-fav-gone.png | tr -d '\r' | q "^note: a favourite no longer kept (fedcba987654\.\.\.) has nothing to open: "
 printf 'sieve-personal-world-v1\nseed 0\nplace nothing-such 0 0 0\nplace pages 1 2 3\n' > pw/bad.world
 $H --personal-world --world-file pw/bad.world --screenshot pworld4.png | tr -d '\r' | q "; 1 objects placed$"
 out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)

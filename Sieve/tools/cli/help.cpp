@@ -299,9 +299,10 @@ const std::vector<Page>& pages()
          "\n"
          "A glTF's first skin is read as a skeleton: a character of given spheres\n"
          "(sieve-character-v3), each joint a sphere at its rest position, 4096 units a metre. Each\n"
-         "animation is sampled at 30 frames a second into each joint's turn from rest\n"
-         "(sieve-animation-v1): every animation is an address on that line. Turns only: a joint's\n"
-         "movement and growth are named as left out. The roof: 64 joints, 300 frames.",
+         "animation is sampled at 30 frames a second into each joint's turn from rest, and its place\n"
+         "where a channel moves it (sieve-animation-v1, or -v2 where joints move as well as turn):\n"
+         "every animation is an address on its line. A joint's growth (scale) is named as left out.\n"
+         "The roof: 64 joints, 300 frames.",
          {{"FILE", "The model to read."}, {"--formats", "List the formats read, what each carries and what each leaves out."},
           {"--character-out FILE", "Write the skeleton as a .character file (sieve-character-v3)."},
           {"--animation-out FILE", "Write an animation as a .animation file (sieve-animation-v1, or -v2 where it moves joints as well as turning them)."},
@@ -322,8 +323,9 @@ const std::vector<Page>& pages()
          "(text, image, sound, writing, compression...). Every entry leads by its part-of links up to\n"
          "one root, information; --check says so for each (the wiki principle). With an ID, one entry\n"
          "as text (sieve-format-v1), its version (the SHA-256 of that text), its lineage and the\n"
-         "entries beneath it. Entries written by hand join them from data/catalogue (one\n"
-         "<ID>.format file each, as SPECIFICATIONS 12.0m writes the format out).\n"
+         "entries beneath it. Entries written by hand join them from data/catalogue and\n"
+         "data/languages (here, else beside the program; one <ID>.format file each, as SPECIFICATIONS\n"
+         "12.0m writes the format out, or packed as a .sieve: --pack).\n"
          "\n"
          "Stage 4: figures measured, never claimed. --measure packs each file alone as Sieve does, against\n"
          "LZMA2 (7z's method) and deflate, installs it back and checks it, and adds the figures to its\n"
@@ -340,11 +342,11 @@ const std::vector<Page>& pages()
           {"--no-stats", "Measure, but keep nothing."},
           {"--pack FOLDER", "Pack a folder of entries (.format files) as one .sieve, to --out FILE; every entry checked first (IDEAS 19.185)."},
           {"--out FILE", "Where --pack writes the .sieve."},
-          {"--kind KIND", "List only one kind: general, file, importer, alphabet, script or sieve."},
+          {"--kind KIND", "List only one kind: general, file, importer, alphabet, script, sieve, or a kind the hand-written entries give (language, family, encoding, notation...)."},
           {"--path A,B", "The shortest chain of links between two entries."},
           {"--check", "Check that every entry reads back from its text and reaches information; exit 1 if one does not."},
           {"--search TEXT", "List the entries with TEXT in any field (any case)."},
-          {"--folder DIR", "Where the hand-written entries are (default data/catalogue)."}},
+          {"--folder DIR", "Read the hand-written entries from DIR alone (and the .sieve files in it), in place of data/catalogue and data/languages."}},
          {{"sieve catalogue --kind file", "the file kinds and what each is part of"},
           {"sieve catalogue --measure D:/pictures --machine desk", "measure every file in a folder"},
           {"sieve catalogue file-flac", "one entry, its signature and lineage"},
@@ -394,8 +396,8 @@ const std::vector<Page>& pages()
           {"--copies N", "How many folders each chunk goes on (default 2)."},
           {"--name NAME", "The save's name, for put."},
           {"--out FILE", "Where get, fetch and key write."},
-          {"--key KEY", "The key file, for share and fetch."},
-          {"--peers HOST:PORT,...", "The machines to share with or fetch from."},
+          {"--key KEY", "The key file, for share, fetch and check."},
+          {"--peers HOST:PORT,...", "The machines to share with, fetch from or check."},
           {"--peer-copies N", "How many peers each piece goes to, and check keeps it on (default 3)."},
           {"--held DIR", "Where serve keeps others' chunks."},
           {"--listen HOST:PORT", "Where serve answers (127.0.0.1 for this machine alone)."},
@@ -1264,7 +1266,7 @@ const std::vector<Page>& pages()
                                      "make it again. Only where given by name; packing warns, naming each file installed so.\n"
                                      "A PNG or JPEG is installed as the same picture, smaller (v32): a PNG re-saved at its\n"
                                      "smallest, a JPEG with tables made for its values (else made again exactly)."},
-          {"--sound-temporary", "Sound as FLAC, temporary (v34, with --v34-draft; the default): only what Sieve makes\n"
+          {"--sound-temporary", "Sound as FLAC, temporary (v34; the default): only what Sieve makes\n"
                                 "again byte for byte on installing. A WAV, AIFF, RF64, Wave64, .au or CAF carried as its\n"
                                 "samples coded by FLAC and the rest of the file; an MP3 (MPEG-1 Layer III) as packMP3 codes\n"
                                 "it. Inside an archive opened too (--compressed-temporary or -permanent). Any other sound\n"
@@ -1335,12 +1337,11 @@ const std::vector<Page>& pages()
                                 "that is smaller (with --prioritise-decoding, what it holds is not mixed; never\n"
                                 "--compressed-permanent)."},
           {"--v32-draft", "(v32 was frozen 31 October 2026; kept so older command lines work: it changes nothing.)"},
-          {"--v33-draft", "(v33 is the newest now, frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
+          {"--v33-draft", "(v33 was frozen 3 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--v34-draft", "(v34 is the newest now, frozen 12 November 2026; kept so older command lines work: it changes nothing.)"},
           {"--" + draft_flag(), "Make the " + draft_name() + " draft where it is smaller (" + draft_manifest() + ", not frozen: what it makes may\n"
                           "not be read by a later Sieve; the File Locator's [locator] " + draft_ini_key() + "): its ways are in docs/NEXT-VERSION.md\n"
-                          "(so far: GIFs, x86 instructions in mixing, sound through FLAC and packMP3, compressed TIFFs,\n"
-                          "PCX, PDFs and zlib streams)."},
+                          "(so far none: v34's ways are made without it)."},
           {"SIEVE_PACK_THREADS=N", "(Not an option: in the environment.) The packer uses every core (cutting into pieces, LZMA2's passes), and the\n"
                                                "instructions are the same at any count; the environment variable\n"
                                                "SIEVE_PACK_THREADS sets how many (1: one)."},

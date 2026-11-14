@@ -97,7 +97,7 @@ against 13,376,180 (`results/mixing-match-ways-2026-11-02.md`).
 - **Optimise Search** (on unless unticked): Try every way chosen file by file, from what was
   measured on each kind of file.
 - **A search time a file, and for the run**, or none.
-- **Older versions:** `--v32`, `--v31` and older make a `.sieve` an older Sieve reads.
+- **Older versions:** `--v33`, `--v32` and older make a `.sieve` an older Sieve reads.
 - Searches that cannot win are cut short: a 16 MiB map packed in 42 s instead of 166 s, the same
   bytes (`results/rope-probe-2026-11-02.md`).
 

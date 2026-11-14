@@ -55,8 +55,6 @@ inline bool is_hallway_tool(const std::string& id)
     return false;
 }
 
-// The row under the pointer, for a mouse motion or button press, among the rows as last drawn
-// (which do not overlap); -1 where it is over none.
 // The row of that name in a pause menu's rows, or -1: the first, as both menus' pause_select take it
 // (Item:ID presses).
 inline int pause_row_named(const std::vector<std::string>& rows, const std::string& id)
@@ -66,6 +64,8 @@ inline int pause_row_named(const std::vector<std::string>& rows, const std::stri
     return -1;
 }
 
+// The row under the pointer, for a mouse motion or button press, among the rows as last drawn
+// (which do not overlap); -1 where it is over none.
 inline int pause_row_at(SDL_Renderer* r, const SDL_Event& e, const std::vector<SDL_FRect>& rows)
 {
     float x = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x;

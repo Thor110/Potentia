@@ -7352,7 +7352,7 @@ stages, each usable alone:
    default); machines found by **the addresses the person gives** (`--peers`), no starting nodes run yet;
    the limit by **IP address first**, as Edward chose (§19.179), kept as a salted hash. Not yet: the
    menu (behind the red warning boxes), peers passing on other peers, the step to verified identity, and
-   who runs the first known nodes.)* *(13 November 2026: the menu built, Settings > RAID, its two halves each behind a red box, off until
+   who runs the first known nodes.)* *(13 November 2026: the menu built, Settings > Infinite RAID, its two halves each behind a red box, off until
    ticked; Ctrl+S shares, and the hallway serves while it runs, up to 32 connections at once.)* *(13 November 2026, placement decided with Edward: "agreed, 3 copies
    default, write it into IDEAS then build", and "these can also become a new settings option under
    Settings -> Infinite RAID". (a) **Copies:** each piece shared goes to 3 machines by default (2 before),
@@ -7576,7 +7576,7 @@ language language tab for character creation".
   other. (*12 November 2026:* a view of its own since, the whole window, not the setup menu's panel.) The language catalogue's first entries are in data/languages: thirteen languages (English,
   Welsh, French, German, Spanish, Greek, Russian, Hindi, Arabic, Hebrew, Chinese, Japanese, Korean) in
   five families, each with its ISO 639 codes and linked to the scripts it is written in; the two
-  catalogues are one web of 187 entries.
+  catalogues are one web of 187 entries (on 12 November 2026; `sieve catalogue --check` gives the count now: 203 on 14 November 2026).
 - *The LANGUAGE page, built the same day (Edward: "spoken language selection as with any other number
   of systems like this that get tacked onto character creation become a part of the save data and thus
   the infinite raid format"):* beside CHARACTER, the languages by family, ticked with Space; kept in
@@ -7743,7 +7743,8 @@ sky and clouds, something akin to the windows xp background".
   hill of a few broad swells from the world's seed (0 by default), shaded by the sun and hazed into the
   sky with distance, clouds of soft discs drifting, your character before you and the store's round the
   top; WASD and the mouse to walk, Esc back to the main menu. The setup menu's YOURS page is still there
-  from the setup menu.)
+  from the setup menu. Since 14 November 2026, Esc opens your dimension's pause menu (§19.196), whose
+  Leave row goes back.)
 - *Objects placed from a catalogue (Edward, the same day):* "that should be a 3D space of course, the
   personal dimension should have the ability to place objects from a catalog in the world space", and
   "the default placeable objects can just be the sieve books for shelves, that makes sense, however that

@@ -147,7 +147,7 @@ struct AppSettings
     // Ctrl+S is also kept in the infinite RAID as a new version; empty: not kept there.
     std::string raid_drives;
     // The RAID between machines (IDEAS 19.176 stage 3, SPECIFICATIONS 12.0o), opt in only, each behind
-    // a red box in Settings > RAID. raid_share: each Ctrl+S also sends your save, sealed under your
+    // a red box in Settings > Infinite RAID. raid_share: each Ctrl+S also sends your save, sealed under your
     // key, to raid_peers (HOST:PORT, separated by commas). raid_serve: while Sieve runs, this machine
     // keeps others' sealed saves, answering on raid_listen, in raid_held (empty: "raid-held" beside
     // the settings), up to raid_space_mb in all and raid_per_peer_mb for any one address. raid_key:

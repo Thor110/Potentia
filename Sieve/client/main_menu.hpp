@@ -86,7 +86,7 @@ private:
     SDL_Renderer* r_;
     AppSettings& s_;
     std::filesystem::path path_;
-    std::string raid_note_; // Settings > RAID: the key made, or why not
+    std::string raid_note_; // Settings > Infinite RAID: the key made, or why not
     // The replay viewer (IDEAS 19.184): the recordings in `replays` beside the settings, read as the
     // screen opens; the one chosen to play; whether each is ticked to be cached.
     std::vector<std::filesystem::path> replays_;

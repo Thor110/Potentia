@@ -1257,7 +1257,7 @@ int raid_between_machines(const Args& a, const std::string& what)
 
 int cmd_raid(const Args& a)
 {
-    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share or fetch");
+    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share, fetch or check");
     const std::string what = a.positional[0];
     if (const int r = raid_between_machines(a, what); r >= 0) return r;
     if (!a.has("drives")) throw std::invalid_argument("give the folders with --drives A,B,...");

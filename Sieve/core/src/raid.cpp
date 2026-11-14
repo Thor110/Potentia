@@ -56,9 +56,10 @@ fs::path manifest_path(const fs::path& folder, const std::string& id) { return f
 // "could you not combine it with the system id? ... yes, hash them"). Some MinGW builds'
 // std::random_device gives a fixed sequence (seal.cpp), which alone would give every new folder the
 // same id and have the RAID refuse the second as "a folder given twice". Mixed in: the system's
-// random bytes (as a key is made, where it answers), this machine's id where the system keeps one,
-// the drive the folder is on and the folder's own number on it (two folders never share both), and
-// the time to the clock's finest step. Hashed, so nothing of the machine can be read from the id,
+// random bytes (as a key is made, where it answers) and std::random_device's; on systems other than
+// Windows, the machine id file (/etc/machine-id, else /var/lib/dbus/machine-id) and the host name
+// (Windows' own machine id is not read); the drive the folder is on and the folder's own number on it
+// (two folders never share both), its path, and the time to the clock's finest step. Hashed, so nothing of the machine can be read from the id,
 // which travels with the folder; and still 32 hex digits, as every folder made before has.
 std::string new_folder_id(const fs::path& folder)
 {

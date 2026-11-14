@@ -466,7 +466,8 @@ private:
     bool panel_before_side_ = false;
     SDL_FRect side_tabs_[4] = {}; // its pages' tabs along its top, by page, to be clicked
     void side_page_to(int page); // to that page (PgUp/PgDn, Ctrl+Left/Right, or its tab clicked)
-    int side_page_ = 0;          // the page shown (0: CHARACTER, 1: YOURS, 2: CATALOGUE)
+    // The page shown (0: CHARACTER, 1: YOURS, 2: SYSTEMS, the catalogue, 3: LANGUAGE); the tabs stand 0, 3, 1, 2.
+    int side_page_ = 0;
     // CATALOGUE: every entry (the code's and data/catalogue's), where you stand, the door chosen, and
     // the way back.
     std::vector<sieve::FormatEntry> cat_;

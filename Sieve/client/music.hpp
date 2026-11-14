@@ -96,8 +96,8 @@ struct MusicSettings
     int echo = 25;         // percent fed back
     int gap = 5;           // seconds of quiet between melodies
     sieve::cli::LineFilters filters;
-    // WORLD only: each line's mode (an index into music_modes(), brightest first), and whether the
-    // key follows the line round the circle of fifths.
+    // WORLD only: each line's mode (an index into the seven modes, music_mode_name(i), brightest
+    // first), and whether the key follows the line round the circle of fifths.
     // (By medium, not door: modes[size_t(Media::Pages)] is the pages line's, wherever its door is.)
     std::array<int, kMedia> modes = default_music_modes();
     bool fifths = false;

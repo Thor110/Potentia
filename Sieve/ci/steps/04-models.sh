@@ -153,6 +153,9 @@ n=$(sed -n 's/^short     \([0-9]*\), put back \([0-9]*\) .*/\1 \2/p' check-repai
 test "${n% *}" = "${n#* }"
 $exe raid check $remote --key raid.key --peers $P | tr -d '\r' | q "^short     0, put back 0 (0 bytes sent)$"
 kill $serve1 $serve2 $serve3
+# With nothing to do, it names everything it does, check among them.
+if $exe raid > raid-none.txt 2>&1; then exit 1; fi
+tr -d '\r' < raid-none.txt | q "^error: give what to do: put, get, list, verify, repair, key, serve, share, fetch or check$"
 # The catalogue of formats (IDEAS 19.165): every entry reaches information, and FLAC's entry is what
 # its signature and lineage say.
 $exe catalogue --check | tr -d '\r' | q " entries read back and reach information$"
@@ -160,6 +163,10 @@ $exe catalogue encoding | tr -d '\r' | q "^beneath    2 entries: encoding-base64
 $exe catalogue --search base64 | tr -d '\r' | q "^encoding-base64 "
 $exe catalogue file-flac | tr -d '\r' | q "^lineage    file-flac sound data information$"
 $exe catalogue file-flac | tr -d '\r' | q "^recognised first bytes 66 4C 61 43$"
+# A save and a character's actions are specified in SPECIFICATIONS 12.0n, and their entries say so.
+$exe catalogue sieve-save-v1 | tr -d '\r' | q "(SPECIFICATIONS 12.0n)$"
+$exe catalogue sieve-save-v2 | tr -d '\r' | q "(SPECIFICATIONS 12.0n; IDEAS 19.186)$"
+$exe catalogue sieve-actions-v1 | tr -d '\r' | q "(SPECIFICATIONS 12.0n; IDEAS 19.186)$"
 # Catalogue entries kept as .sieve (IDEAS 19.185): packed, then read from the folder as loose ones are,
 # decoded once into the cache; the same entries, the same versions.
 rm -rf packed-catalogue

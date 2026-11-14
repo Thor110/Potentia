@@ -89,11 +89,11 @@ file for the run they are given in. An empty default is written empty.
 | Setting | Default | What it is |
 | :--- | :--- | :--- |
 | `drives` | (empty) | the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there |
-| `share` | `off` | OPT IN ONLY (Settings > RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine |
+| `share` | `off` | OPT IN ONLY (Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine |
 | `copies` | `3` | with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer |
 | `peers` | (empty) | the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none |
 | `key` | (empty) | your key's file (sieve-raid-key-v1); keep it safe and keep a copy, as without it what others keep for you cannot be read by anyone; empty: raid.key beside these settings, made when share is first turned on |
-| `serve` | `off` | OPT IN ONLY (Settings > RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none |
+| `serve` | `off` | OPT IN ONLY (Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none |
 | `listen` | `0.0.0.0:47100` | with serve on: the address answered on, HOST:PORT (0.0.0.0: every network this machine is on; 127.0.0.1: this machine alone) |
 | `held` | (empty) | with serve on: the folder others' saves are kept in; empty: raid-held beside these settings |
 | `space_mb` | `1024` | with serve on: the most kept for others in all, in MiB (1024 by default) |

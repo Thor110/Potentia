@@ -25,8 +25,8 @@ const std::vector<ImportFormat>& import_formats()
          "texture coordinates, normals, materials, groups"},
         {"gltf", "glTF 2.0 (JSON)", "gltf",
          "every triangle mesh of the default scene, placed as its nodes place it; buffers embedded or beside it; "
-         "the first skin's joints as a skeleton (sieve-character-v3); animations sampled as turns (sieve-animation-v1)",
-         "skins after the first; joints' movement and growth in animations; materials, textures; points and lines; Draco and meshopt compression"},
+         "the first skin's joints as a skeleton (sieve-character-v3); animations sampled as turns and moves (sieve-animation-v1, or -v2 where joints move)",
+         "skins after the first; joints' growth (scale) in animations; materials, textures; points and lines; Draco and meshopt compression"},
         {"glb", "glTF 2.0 (binary)", "glb", "as glTF: the JSON and its buffer in one file",
          "as glTF"},
     };

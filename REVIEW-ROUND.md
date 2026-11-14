@@ -22,7 +22,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 
 ### Personal dimension (main menu > Personal Dimensions > Personal Dimension)
 - [ ] 1. **Walking and looking.** WASD/arrows, mouse, Shift to run, PgUp/PgDn to look up and down. Does it feel right? Is the hill, the sky and the clouds drawn well at your window size?
-- [ ] 2. **The catalogue (Tab).** Up/Down, Enter places the item in front of you, facing you. Backspace takes away the nearest one. The **bookcase** is at the end of the list.
+- [ ] 2. **The catalogue (Tab).** Up/Down, Enter places the item in front of you, facing you. Backspace takes away the nearest one. The **bookcase** is the last of Sieve's own objects, before your favourites and your characters.
 - [ ] 3. **Holding (look at a thing, E or click).**
    - R / T / G turn it (Shift: the other way). Does the turning feel natural?
    - Return or a click places it exactly where it is, even floating in the air.
@@ -57,7 +57,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [x] 19. **Personal Dimensions on the hallway's pause menu** opens the Personal Dimensions screen over the hallway (not the setup menu); Esc there, or leaving your dimension entered from there, comes back to the paused hallway.
 - [ ] 20. **Esc in your dimension** opens its pause menu, without the hallway's tools; Personal Dimensions > Features > *The hallway's tools in its pause menu* adds them. Try a few rows: Settings and the Filter Designer come back to your dimension; the File Locator, the Harness and the Encryption Engine come back to it after; the Media Player goes into the hallway.
 - [ ] 21. **A favourite placed in your dimension shows its picture** on its front (keep a page with H, place it, look at it). Item 7 is unticked as its drawing changed (a depth test at every pixel: watch the frame rate), item 10 as favourites now carry their pictures.
-- [ ] 22. **Characters as true 3D spheres**: in the Character Creator (all four drawings), spheres cut into one another where they meet, **pixels** are flat squares of one size and **voxels** are real cubes that turn with the character (try [ and ]), the same cell size for every character; in your dimension, walk so a bookcase stands between you and your character: it hides exactly what it covers; in the hallway with Real Graphics on, your character is shaded spheres among the shelves. Watch the frame rate in each.
+- [ ] 22. **Characters as true 3D spheres**: in the Character Creator (all four drawings), spheres cut into one another where they meet, **pixels** are flat squares of one size and **voxels** are real cubes that turn with the character (try [ and ]), the same cell size for every character; in your dimension, walk so a bookcase stands between you and your character: it hides exactly what it covers; in the hallway with Real Graphics on, your store's characters are shaded spheres among the shelves (yours is you, not drawn, since item 23). Watch the frame rate in each.
 - [ ] 23. **Your character is you** in the hallway: not drawn (no figure ahead and to your right); the hallway's scale still follows its size, and its actions still play (the output says `your character:`).
 - [ ] 24. **The System Viewer from your dimension's pause menu** comes back to your dimension on Esc (it went to the main menu). Not checked by CI: the return is beyond what a screenshot run reaches.
 - [ ] 25. **Your characters are objects in your dimension**: yours stands ahead of where you begin, as before. Look at it, E picks it up, R/T/G turn it, Return places it, Q drops it, Backspace takes it away (and it stays away next time); the catalogue (Tab) ends with "your character" and your store's, to place them again. Change your character on the CHARACTER page and the one in your world changes with it.
@@ -193,7 +193,18 @@ run before a release package, and after each of the three reviews. Each batch is
   output, or need so many switches that one copy is no simpler). One bug found by a batch's reviewer and
   fixed (--pworld-look past 90 degrees). Asked: a new RAID folder's id from the system's generator
   (MinGW's std::random_device can repeat).
-- [ ] 5. Multi-agent code review 3: the code compared with the documentation, each made to agree.
+- [x] 5. Multi-agent code review 3: the code compared with the documentation, each made to agree. *Run 14
+  November 2026: seven finders (the manual twice, the specifications, the RAID's documents, the help, the
+  ideas and roadmap, the comments), each checked by a skeptic; 57 findings, none refuted: 44 where the
+  documentation (or a comment) is wrong or missing, 13 where the code is.*
+- [x] 5a. Batch E1, the documentation (no CI but the help and settings checks): the manual's personal
+  dimension, menus, Settings, drawings, panels and keys; the specifications' world, favourite, replay and
+  RAID lines; the RAID documents; the help's catalogue, import, locate and hallway options; IDEAS 19.187,
+  FEATURES, this file's items 22 and 25; stale comments.
+- [x] 5b. Batch E2, the code (steps 01, 04, 10): the dimension's footer (Esc) and O on a character; a world's
+  `place model:` lines kept rather than lost on saving; a replay of long typed text read back; Keep others'
+  saves saying when Online is off; "Settings > Infinite RAID" in the notes; `sieve raid` naming check; the
+  catalogue entries' section numbers; the draft switches' help.
 
 The three reviews run one after another, each looking at a different side of the project, and only once
 step 2 is done. Each review's findings are checked before anything is changed, its fixes go through

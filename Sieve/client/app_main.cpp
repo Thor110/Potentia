@@ -177,15 +177,15 @@ const char* kUsage =
     "  --locate-log        the File Locator's Keep a log ticked, for this run: each reading and saving\n"
     "                      writes its reports and times to logs/ beside the settings ([locator] keep_log)\n"
     "  --menu              with --screenshot: a picture of the setup menu (--press keys go to it)\n"
-    "  --character FILE    your character from a .character file (any version): beside you in the\n"
-    "                      hallway, and on the setup menu's CHARACTER page\n"
+    "  --character FILE    your character from a .character file (any version): you in the hallway (not\n"
+    "                      drawn; its size sets the scale, its actions play), and on the CHARACTER page\n"
     "  --no-character      no character of yours in the hallway for this run (its size, its actions)\n"
     "  --import-model FILE with --menu: a model (.obj, .gltf, .glb) into your character's first sphere, as\n"
     "                      the CHARACTER page's Ctrl+I does (brought under the held models' roof of 8\n"
     "                      vertices, 12 faces; what it leaves out is said). --import-obj FILE: the same\n"
     "  --import-skeleton FILE  with --menu: a glTF's skeleton as your character (sieve-character-v3), its\n"
     "                      first animation playing on it, as the CHARACTER page's Ctrl+K does\n"
-    "  --catalogue-entry ID  with --menu: the right-hand panel open on CATALOGUE, standing at entry ID (IDEAS\n"
+    "  --catalogue-entry ID  with --menu: the right-hand panel open on SYSTEMS, standing at entry ID (IDEAS\n"
     "                      19.165): the catalogue of formats as a ring of doors\n"
     "  --rings NOTES       with --screenshot: the Media Player's rings (R there), those MIDI notes (by\n"
     "                      commas, 60 the middle C) held sounding; --rings-zoom N steps in (0 to 2)\n"
@@ -211,8 +211,9 @@ const char* kUsage =
     "                      System Viewer opens it), standing at entry ID\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
     "                      (also into the store, and into the infinite RAID where [raid] drives is set)\n"
-    "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1),\n"
-    "                      for this run: in the hallway as it walks beside you (with --character: only so)\n"
+    "  --animation FILE    the animation your character plays, from a .animation file (sieve-animation-v1\n"
+    "                      or -v2), for this run: played in the hallway, where it is you (with --character:\n"
+    "                      only so)\n"
     "  --animation-frame N hold the animation at frame N (for a picture), on the CHARACTER page and in the hallway\n"
     "  --character-store DIR  your personal dimension from DIR (the store: <SHA-256>.character files) for\n"
     "                      this run, in place of the characters folder beside the settings file\n"
@@ -659,9 +660,9 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
     return out;
 }
 
-// Your character (IDEAS 19.148): from --character FILE, or the settings file's [character] where it
-// walks beside you (the default character when it has none), or none with --no-character or
-// beside_you off. A file or setting that is refused is said on stderr and leaves the default.
+// Your character (IDEAS 19.148): from --character FILE, or the settings file's [character], which is
+// you in the hallway (not drawn; the default character when it has none), or none with --no-character
+// or beside_you off. A file or setting that is refused is said on stderr and leaves the default.
 // Your personal dimension's world (sieve-personal-world-v1): worlds/personal.world beside the settings.
 std::filesystem::path personal_world_file(const std::filesystem::path& app_path) { return app_path.parent_path() / "worlds" / "personal.world"; }
 // Your personal dimension's character store: --character-store DIR, else the store beside the settings.
@@ -1278,7 +1279,7 @@ int run(const Args& a)
         player = std::make_unique<MusicPlayer>(folder, !shot && !a.has("no-music"));
         set_music(player.get());
     }
-    // The RAID between machines, where its serving is ticked (Settings > RAID, opt in only): this machine
+    // The RAID between machines, where its serving is ticked (Settings > Infinite RAID, opt in only): this machine
     // keeps others' sealed saves while Sieve runs (never for a picture).
     if (!shot) raid_service::apply(app, app_path);
     auto finish = [&] {
@@ -1563,6 +1564,7 @@ int run(const Args& a)
         shoot();
         std::cout << "personal world: " << world.report() << "\n";
         if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
+        if (!world.note().empty()) std::cout << "note: " << world.note() << "\n";
         if (world.pause_open())
         {
             std::string rows;

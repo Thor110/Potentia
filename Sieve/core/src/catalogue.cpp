@@ -203,7 +203,7 @@ std::vector<FormatEntry> gather()
         "the CHARACTER page and the hallway (SPECIFICATIONS 12.0k)");
     own(kActionsVersion, "A character's actions, each to the animation that plays it", "animation",
         std::string("first line \"") + kActionsVersion + "\", then \"action NAME SHA-256|none\" for each of the seven",
-        "the character creator and the hallway (SPECIFICATIONS 12.0k; IDEAS 19.186)");
+        "the character creator and the hallway (SPECIFICATIONS 12.0n; IDEAS 19.186)");
     own(kAnimationVersion2, "An animation: turns and moves per bone per frame (glTF translation channels)", "animation",
         std::string("first line \"") + kAnimationVersion2 + " bones=...\"", "sieve import, Ctrl+K, the CHARACTER page and the hallway (SPECIFICATIONS 12.0k)");
     own(kRaidManifestVersion, "A version of a save in the infinite RAID", "container", std::string("first line \"") + kRaidManifestVersion + "\"",
@@ -217,9 +217,9 @@ std::vector<FormatEntry> gather()
     own(kRaidHeldVersion, "A folder keeping others' sealed chunks", "container", std::string("a file sieve-raid-held: \"") + kRaidHeldVersion + " salt=...\"",
         "sieve raid serve (SPECIFICATIONS 12.0o)");
     own(kSaveVersion, "A save: your character, its animation and its languages, named together", "container",
-        std::string("first line \"") + kSaveVersion + "\"", "Ctrl+S on the CHARACTER page; the infinite RAID (SPECIFICATIONS 12.0j)");
+        std::string("first line \"") + kSaveVersion + "\"", "Ctrl+S on the CHARACTER page; the infinite RAID (SPECIFICATIONS 12.0n)");
     own(kSaveVersion2, "A save that also names its character's actions", "container", std::string("first line \"") + kSaveVersion2 + "\"",
-        "Ctrl+S on the CHARACTER page and in the Character Creator (SPECIFICATIONS 12.0k; IDEAS 19.186)");
+        "Ctrl+S on the CHARACTER page and in the Character Creator (SPECIFICATIONS 12.0n; IDEAS 19.186)");
     own("sieve-replay-v1", "A recording of the hallway: where it began and every input with its time", "document",
         "first line \"sieve-replay-v1\", then \"start line=...\"; often packed as a .sieve", "F12 in the hallway, --record and --replay, the Replays viewer (SPECIFICATIONS 12.0q; IDEAS 19.184)");
     own("sieve-personal-world-v1", "A personal dimension's world: its seed and what is placed in it", "model-3d",

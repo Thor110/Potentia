@@ -75,7 +75,9 @@ std::vector<MainMenu::Item> MainMenu::items() const
     // The same systems as the pause menu, in the same order (IDEAS §19.18), less what needs a
     // hallway already walked (the node graph, the navigator).
     case Screen::Main:
-        // (Manual Navigation after the rest, before Exit: the CI's walks through this menu count rows.)
+        // (Manual Navigation after the pause menu's systems, then Personal Dimensions, the System Viewer,
+        // the Character Creator and Replays, before Exit: the CI's walks through this menu pick most rows
+        // by name, Item:ID, and some still count rows.)
         return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
                 {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "replays"}, {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
@@ -181,7 +183,12 @@ std::string MainMenu::value_of(const Item& it) const
         return trf(f.where == "media" ? "value.fav_media" : "value.fav_in", {f.line, f.where});
     }
     if (it.id == "raid_peers") return s_.raid_peers.empty() ? tr("value.raid_peers.none") : s_.raid_peers;
-    if (it.id == "raid_listen") return s_.raid_serve && s_.online ? hallway::raid_service::serving_status() : s_.raid_listen;
+    if (it.id == "raid_listen")
+    {
+        // (keeping others' saves ticked with Online off says why nothing answers, as sharing and checking do)
+        if (s_.raid_serve && !s_.online) return trf("value.raid_listen.offline", {s_.raid_listen});
+        return s_.raid_serve ? hallway::raid_service::serving_status() : s_.raid_listen;
+    }
     if (it.id == "ffmpeg") return ffmpeg_version_.empty() ? tr("value.ffmpeg.none") : ffmpeg_version_;
     if (it.id == "language_choice")
     {

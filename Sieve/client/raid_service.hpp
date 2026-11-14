@@ -3,7 +3,7 @@
 // The infinite RAID save and data preservation system was designed by Edward James Gordon (Potentia)
 // (additional term under section 7(b) of the GNU AGPL v3, docs/RAID-NOTICE.md).
 //
-// Both halves are opt in only, each behind a red box in Settings > RAID ([raid] share and serve):
+// Both halves are opt in only, each behind a red box in Settings > Infinite RAID ([raid] share and serve):
 // sharing sends your save, sealed under a key only you hold, to the machines you name each time
 // Ctrl+S keeps it; serving keeps others' sealed saves on this machine while Sieve runs, as
 // `sieve raid serve` does, answering several at once and within the limits set.
@@ -31,7 +31,7 @@ std::string ensure_key(const AppSettings& s, const std::filesystem::path& settin
 // limits changed). Never throws: what went wrong is in serving_status().
 void apply(const AppSettings& s, const std::filesystem::path& settings_path);
 void stop(); // as Sieve closes: no more accepted, and those answering finished
-std::string serving_status(); // for Settings > RAID: "on 0.0.0.0:47100, 1,234 bytes kept", "off", or why not
+std::string serving_status(); // for Settings > Infinite RAID: "on 0.0.0.0:47100, 1,234 bytes kept", "off", or why not
 
 // Sharing: these versions of the RAID on `drives` (your character, its animation, your save) sent to
 // [raid] peers, sealed, on a thread of its own; what came of it is taken once by take_share_note().

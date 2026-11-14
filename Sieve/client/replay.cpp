@@ -150,8 +150,10 @@ Replay read_replay(const std::string& text)
             {
                 // Its bytes kept with the recording (SDL's own text events point at text it keeps).
                 static thread_local std::deque<std::string> kept; // (a deque: what it holds never moves)
+                // Any length its writer wrote (an input method may commit many characters at once):
+                // the text is no larger than the line it is read from, which is in memory already.
                 std::string t;
-                if (p[1].empty() || p[1].size() % 2 || p[1].size() > 64) throw bad();
+                if (p[1].empty() || p[1].size() % 2) throw bad();
                 for (size_t i = 0; i < p[1].size(); i += 2)
                 {
                     const int hi = sieve::lower_hex_digit_value(p[1][i]), lo = sieve::lower_hex_digit_value(p[1][i + 1]);

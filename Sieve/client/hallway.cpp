@@ -2540,8 +2540,9 @@ void Hallway::draw_character(SDL_Color edge, MeshBatch* into)
     for (size_t i = 0; i < personal_.size() && i < 8; ++i) draw_figure(personal_[i], dim, int(i) + 1, nullptr, nullptr, into);
 }
 
-// One character standing in the hallway: `place` 0 is yours (ahead and to your right); 1, 2, ... are
-// your personal dimension's, ahead and to your left, one after another along the corridor.
+// One character standing in the hallway: `place` 1, 2, ... are your personal dimension's, ahead and to
+// your left, one after another along the corridor. (Place 0, ahead and to your right, was your own
+// until 14 November 2026; yours is no longer drawn, so nothing passes 0 now.)
 void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, const sieve::Character* rest, const std::vector<std::array<double, 9>>* turns, MeshBatch* into)
 {
     if (c.spheres.empty()) return;
@@ -2553,8 +2554,8 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
     r.extent(ex, ey, ez);
     // Its own size, in the hallway as you see it (the hallway grown by hall_scale_ is you made smaller).
     const float scale = 1.0f / (float(sieve::kCharacterUnitsPerMetre) * hall_scale_);
-    // Along the corridor, whichever way along it you face: 2.2 m ahead of you and 0.9 m to that
-    // way's right, kept off the shelves, so it walks with you down the hall whatever you look at.
+    // Along the corridor, whichever way along it you face, ahead of you and aside (place 1 on: to that
+    // way's left), kept off the shelves, so it walks with you down the hall whatever you look at.
     const float fz = cam_.forward().z >= 0 ? 1.0f : -1.0f;
     const Vec3 f{0, 0, fz}, right{fz, 0, 0}; // (looking along +z, your right is +x)
     // Far enough ahead and aside that it never stands where you do: its own half-size plus a margin.

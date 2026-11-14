@@ -52,9 +52,10 @@ inline bool write_file(const fs::path& p, const std::string& bytes)
 // A folder made one if it is not yet, and the 32 hex digits of its tag file: the file `file`, reading
 // "VERSION WORD=HEX". A RAID's folder is tagged so (sieve-raid, its id) and so is a held folder
 // (sieve-raid-held, its salt). A folder without the file has it written once, the digits from
-// `fresh`: each caller keeps the random source it has always had. Throws std::invalid_argument for a
-// folder that cannot be made, a tag file of another version, or digits that are not hex (`what` names
-// them in that message, as each caller always has).
+// `fresh`: a held folder's salt from the system's random source (as a key is made), a RAID folder's
+// id from new_folder_id (raid.cpp). Throws std::invalid_argument for a folder that cannot be made, a
+// tag file of another version, or digits that are not hex (`what` names them in that message, as each
+// caller always has).
 inline std::string folder_tag(const fs::path& folder, const char* file, const char* version, const char* word, const char* what,
                               const std::function<std::string()>& fresh)
 {

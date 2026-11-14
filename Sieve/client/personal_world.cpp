@@ -1478,7 +1478,12 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
         }
         else if (placed_[size_t(a)].kind.rfind("fav:", 0) == 0 && favourite(placed_[size_t(a)].kind.substr(4)))
             opened_ = placed_[size_t(a)].kind.substr(4); // (read on its own line: run() goes there)
-        else note_ = trf("pworld.open", {label_of(placed_[size_t(a)].kind)}); // (a visitor's E too)
+        else
+        {
+            // (a visitor's E too) A character, and a favourite no longer kept, each say why they do not open.
+            const std::string& kind = placed_[size_t(a)].kind;
+            note_ = trf(is_char(kind) ? "pworld.open.char" : kind.rfind("fav:", 0) == 0 ? "pworld.open.gone" : "pworld.open", {label_of(kind)});
+        }
         return;
     }
     if (cat_panel_.open && K.is(pk::kChooseUp, k, mod)) catalogue_row_ = (catalogue_row_ + n - 1) % n;
@@ -1576,7 +1581,11 @@ void PersonalWorld::load()
             characters_placed_ = true;
             continue;
         }
-        if (word != "place")
+        // A v2 `place model:SHA` (an own object) is kept as an unread line is: this build does not
+        // draw own objects yet, but saving must not lose what was placed.
+        std::string what;
+        const bool model = version == 2 && word == "place" && (std::istringstream(l) >> word >> what) && what.rfind("model:", 0) == 0;
+        if (word != "place" || model)
         {
             // v2: kept as it is and written back, so a later build's lines are never lost here.
             if (version == 2) kept_lines_.push_back(l);

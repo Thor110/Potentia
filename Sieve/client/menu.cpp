@@ -2144,8 +2144,9 @@ void Menu::char_store()
     // whole, on one line with ';' between its lines, so it reads back as it was.
     const std::string t = char_.text();
     app_->character = !char_.given && char_.holds.empty() ? t.substr(0, t.find('\n')) : char_.one_line();
-    // The animation it plays, kept in the store and named by its SHA-256.
+    // The languages it speaks, by commas.
     app_->character_speaks = sieve::join_fields(speaks_, ',');
+    // The animation it plays, kept in the store and named by its SHA-256.
     app_->character_animation.clear();
     if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
     app_->character_actions.clear();
@@ -3564,7 +3565,7 @@ void Menu::render_side(float W, float H)
     const SDL_FRect box{x, top, kSideW, H - top};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderFillRect(r_, &box);
-    // The pages' names: one now, more as the systems come.
+    // The pages' names, by page number; their tabs stand CHARACTER, LANGUAGE, YOURS, SYSTEMS (below).
     static const char* const kPages[] = {"side.page.character", "side.page.yours", "side.page.catalogue", "side.page.speaks"};
     float px = x + 14;
     for (const int i : {0, 3, 1, 2}) // (the order the tabs stand in)
@@ -3613,7 +3614,7 @@ void Menu::render_side(float W, float H)
 float Menu::render_char_rows(float x, float top, float width)
 {
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    // What came of a share sent with Ctrl+S (Settings > RAID), said once it is known.
+    // What came of a share sent with Ctrl+S (Settings > Infinite RAID), said once it is known.
     if (auto n = raid_service::take_share_note()) char_note_ = *n;
     // A file chosen in a dialog since the last frame: saved or opened now.
     {
@@ -3653,7 +3654,7 @@ float Menu::render_char_rows(float x, float top, float width)
                         if (!char_actions_.empty()) versions.push_back(raid.put("your character's actions", char_actions_.text()));
                         versions.push_back(raid.put("your save", character_save().text())); // everything chosen, named together
                         char_note_ += "; " + trf("side.char.raid", {v.substr(0, 12)});
-                        // Between machines, where sharing is ticked (opt in, Settings > RAID): sent,
+                        // Between machines, where sharing is ticked (opt in, Settings > Infinite RAID): sent,
                         // sealed, to the machines named, on a thread of its own; said when done.
                         if (app_->raid_share)
                         {

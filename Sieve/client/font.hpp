@@ -32,11 +32,11 @@ void draw_text(SDL_Renderer* r, float x, float y, const std::string& utf8, float
 // `rx` across and `ry` down, as `sides` straight lines in the renderer's draw colour (a circle
 // where the two are equal). Here because, like draw_text, it is drawn straight onto the screen.
 void outline_ellipse(SDL_Renderer* r, float cx, float cy, float rx, float ry, int sides);
-// Width in pixels at `scale`, and in 8-pixel cells (rounded up).
 // True if the current font (or its fallback) can actually draw this code point. The Binary
 // Edge asks before it rains a character, so the rain never falls as rows of question marks.
 bool font_has(char32_t cp);
 
+// Width in pixels at `scale`, and in 8-pixel cells (rounded up).
 float text_width(const std::string& utf8, float scale);
 size_t text_cells(const std::string& utf8);
 // The longest prefix of `utf8` that fits in `cells` cells (never splits a character).
