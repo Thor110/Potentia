@@ -6,6 +6,7 @@
 
 #include "sieve/audio.hpp"
 #include "sieve/image.hpp"
+#include "sieve/text.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
@@ -23,14 +24,6 @@ namespace fs = std::filesystem;
 namespace {
 
 const char* kSections[4] = {"text", "image", "audio", "video"};
-
-std::string trim(std::string s)
-{
-    const auto a = s.find_first_not_of(" \t\r");
-    if (a == std::string::npos) return "";
-    const auto b = s.find_last_not_of(" \t\r");
-    return s.substr(a, b - a + 1);
-}
 
 const char* kBookParts[3] = {"cover", "title", "pages"};
 const char* kCompositionParts[CompositionFilters::kParts] = {"cover", "title", "units", "joined"};

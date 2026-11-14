@@ -1,6 +1,8 @@
 // Sieve hallway — every key in one registry (see keys.hpp).
 #include "keys.hpp"
 
+#include "sieve/text.hpp"
+
 #include <algorithm>
 
 namespace hallway {
@@ -16,19 +18,12 @@ SDL_Keymod plain(SDL_Keymod m)
     return out;
 }
 
-std::string trim(std::string s)
-{
-    while (!s.empty() && s.front() == ' ') s.erase(s.begin());
-    while (!s.empty() && s.back() == ' ') s.pop_back();
-    return s;
-}
-
 } // namespace
 
 KeyChord parse_chord(const std::string& text)
 {
     KeyChord c;
-    std::string t = trim(text);
+    std::string t = sieve::trim(text, " "); // (spaces only, as a chord has always been read)
     for (;;)
     {
         if (t.rfind("Shift+", 0) == 0) c.mod = SDL_Keymod(c.mod | SDL_KMOD_SHIFT), t = t.substr(6);

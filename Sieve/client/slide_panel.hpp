@@ -30,10 +30,11 @@ struct SlidePanel
     SDL_FRect tab{};   // its tab, while it is out (to be clicked)
 
     void toggle() { open = !open; }
-    // Each frame: a step of the slide, by the time since the last.
-    void step()
+    // Each frame: a step of the slide, by the time since the last. Two panels stepped together can
+    // be given the one clock reading `now`, so that they move by exactly the same amount.
+    void step() { step(SDL_GetTicksNS()); }
+    void step(Uint64 now)
     {
-        const Uint64 now = SDL_GetTicksNS();
         const float d = tick ? float(double(now - tick) / 1e6) / kSlideMs : 0.0f;
         tick = now;
         shown = open ? std::min(1.0f, shown + d) : std::max(0.0f, shown - d);
@@ -43,8 +44,9 @@ struct SlidePanel
     // Its left edge, for a panel `width` wide sliding in from the left.
     float left(float width) const { return -(1 - shown) * width; }
     bool clicked(float x, float y) const { return tab.w > 0 && x >= tab.x && x < tab.x + tab.w && y >= tab.y && y < tab.y + tab.h; }
-    // Its tab at the left edge, `y` down, while it is mostly out: its name, one letter under another.
-    void draw_tab(SDL_Renderer* r, float y, const std::string& word)
+    // Its tab, while it is mostly out: its name, one letter under another, `x` across (2 at the left
+    // edge; a panel at the right edge puts it kSlideTabW - 2 in from there) and `y` down.
+    void draw_tab(SDL_Renderer* r, float x, float y, const std::string& word)
     {
         tab = {};
         if (shown >= 0.5f) return;
@@ -56,7 +58,7 @@ struct SlidePanel
             letters.push_back(word.substr(i, j - i));
             i = j;
         }
-        tab = {2, y, kSlideTabW - 4, float(letters.size()) * 12 + 8};
+        tab = {x, y, kSlideTabW - 4, float(letters.size()) * 12 + 8};
         SDL_SetRenderDrawColor(r, 255, 255, 255, 30);
         SDL_RenderFillRect(r, &tab);
         SDL_SetRenderDrawColor(r, 150, 150, 150, 255);

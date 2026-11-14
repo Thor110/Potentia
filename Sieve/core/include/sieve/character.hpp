@@ -121,6 +121,9 @@ struct Character
     std::string id() const;       // SHA-256 of the text, in hex
     // The half-widths of the box holding every sphere, centred on the body (for the hallway to fit it).
     void extent(int32_t& x, int32_t& y, int32_t& z) const;
+    // The lowest and highest points of the spheres, each starting at the body's centre (0): the foot
+    // a character stands on, and with it its height, worked out the one way everywhere it is drawn.
+    void vertical(int32_t& low, int32_t& high) const;
 };
 
 // Unfolds the character of these settings (checked first).

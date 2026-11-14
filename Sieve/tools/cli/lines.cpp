@@ -10,6 +10,7 @@
 #include "sieve/audio.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/sound.hpp"
+#include "sieve/text.hpp"
 #include "sieve/utf8.hpp"
 #include "sieve/whole_file.hpp"
 
@@ -596,12 +597,6 @@ const std::vector<Candidate>& candidates(const Line& line)
     return none;
 }
 
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
 void write_bytes(const std::filesystem::path& p, const void* data, size_t n)
 {
     std::ofstream out(p, std::ios::binary);
@@ -642,7 +637,7 @@ std::vector<ExportFormat> export_formats(const Line& line)
 
 std::vector<uint8_t> export_unit(const Line& line, const std::vector<uint32_t>& digits, const std::string& ext_in, uint32_t scale, uint32_t fps)
 {
-    const std::string ext = lower(ext_in);
+    const std::string ext = ascii_lower(ext_in);
     const std::vector<ExportFormat> formats = export_formats(line);
     if (formats.empty() || ext.empty() || ext == formats.front().ext) return unit_file(line, digits, scale);
     const auto f = std::find_if(formats.begin(), formats.end(), [&](const ExportFormat& x) { return x.ext == ext; });

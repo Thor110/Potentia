@@ -59,6 +59,11 @@ inline constexpr uint64_t kRaidCutMask = 0xFFFF;
 // The cuts of a save, as (offset, length) in order.
 std::vector<std::pair<size_t, size_t>> raid_cut(const std::string& bytes);
 
+// The rendezvous ranking both stages place by: the keys (folder ids here, peers' addresses between
+// machines) ranked by SHA-256(name | key), highest first, as indices into `keys`. One copy, so a
+// folder and a peer are chosen by the same rule.
+std::vector<size_t> raid_rank(const std::string& name, const std::vector<std::string>& keys);
+
 struct RaidManifest
 {
     std::string name;
@@ -100,6 +105,10 @@ public:
     std::vector<RaidManifest> list() const;
     // The latest version of a name, if there is one.
     std::optional<std::string> latest(const std::string& name) const;
+    // A version's manifest, read from the first folder whose copy is its id's bytes; nothing if no
+    // folder has such a copy (or the id is not 64 hex digits). Throws std::invalid_argument, as
+    // read_raid_manifest does, if that copy is not a manifest.
+    std::optional<RaidManifest> manifest(const std::string& version) const;
 
     RaidReport verify() const;
     RaidReport repair();

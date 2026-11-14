@@ -2,6 +2,7 @@
 #include "favourites.hpp"
 
 #include "cli/sieve_cache.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
 
@@ -126,7 +127,7 @@ std::vector<std::string> dimension_favourites(const fs::path& list_file)
     std::vector<std::string> out;
     if (ls.empty() || ls[0] != "sieve-favourites-v1") return out;
     for (size_t i = 1; i < ls.size(); ++i)
-        if (ls[i].size() == 64 && ls[i].find_first_not_of("0123456789abcdef") == std::string::npos) out.push_back(ls[i]);
+        if (sieve::is_sha256_hex(ls[i])) out.push_back(ls[i]);
     return out;
 }
 

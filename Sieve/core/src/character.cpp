@@ -1,6 +1,7 @@
 // Sieve — characters: a seed unfolding a tree of spheres (sieve/character.hpp; IDEAS §19.148).
 #include "sieve/character.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 #include "sieve/modelspace.hpp"
 #include "sieve/importers.hpp"
 
@@ -323,13 +324,22 @@ std::string held_model_from(uint64_t r)
     return m.hex_of(BigUint::mod(i, m.size()));
 }
 
-std::string species_text(const CharacterSettings& s)
+namespace {
+
+// The settings' words after the seed, each with its leading space: a species is these words alone and
+// a character's first line is its seed and then these, so both are written here, in one order and
+// one spelling. Both strings are hashed into ids, so a change here would change every id.
+std::string settings_words(const CharacterSettings& s)
 {
-    return "sieve-species-v1 limbs=" + std::to_string(s.limbs) + " joints=" + std::to_string(s.joints) + " branches=" + std::to_string(s.branches) +
+    return " limbs=" + std::to_string(s.limbs) + " joints=" + std::to_string(s.joints) + " branches=" + std::to_string(s.branches) +
            " symmetry=" + symmetry_name(s.symmetry) + " head=" + (s.head ? "yes" : "no");
 }
 
-std::string species_id(const CharacterSettings& s) { return Sha256::hex(Sha256::hash(species_text(s))); }
+} // namespace
+
+std::string species_text(const CharacterSettings& s) { return "sieve-species-v1" + settings_words(s); }
+
+std::string species_id(const CharacterSettings& s) { return Sha256::hex_hash(species_text(s)); }
 
 CharacterSettings walk_character(const CharacterSettings& from, uint32_t steps)
 {
@@ -469,6 +479,19 @@ HeldImport import_mesh_for_hold(const ModelSpace::AnyMesh& any)
 
 namespace {
 
+// One "h SPHERE HEX" line, checked and held: a v2 character's trailing lines and a v3's lines after
+// its spheres are read by this one function, so both refuse the same lines with the same words. The
+// prefix test is already the v2 loop's own condition, so it can only fire for a v3 line.
+void read_held_line(Character& c, const std::string& h)
+{
+    const size_t sp = h.find(' ', 2);
+    if (h.rfind("h ", 0) != 0 || sp == std::string::npos) throw std::invalid_argument("not a held model's line: " + h);
+    const std::string idx = h.substr(2, sp - 2);
+    if (idx.empty() || idx.size() > 6 || idx.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a sphere's number: " + h);
+    if (c.held(uint32_t(std::stoul(idx)))) throw std::invalid_argument("two models in one sphere: " + h);
+    c.hold(uint32_t(std::stoul(idx)), h.substr(sp + 1));
+}
+
 // The given spheres of a v3 character, checked.
 void check_given(const std::vector<Sphere>& sp)
 {
@@ -517,16 +540,7 @@ Character read_given(const std::vector<std::string>& lines)
         sp.push_back(s);
     }
     Character c = given_character(std::move(sp));
-    for (size_t i = count + 1; i < lines.size(); ++i)
-    {
-        const std::string& h = lines[i];
-        const size_t sp2 = h.find(' ', 2);
-        if (h.rfind("h ", 0) != 0 || sp2 == std::string::npos) throw std::invalid_argument("not a held model's line: " + h);
-        const std::string idx = h.substr(2, sp2 - 2);
-        if (idx.empty() || idx.size() > 6 || idx.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a sphere's number: " + h);
-        if (c.held(uint32_t(std::stoul(idx)))) throw std::invalid_argument("two models in one sphere: " + h);
-        c.hold(uint32_t(std::stoul(idx)), h.substr(sp2 + 1));
-    }
+    for (size_t i = count + 1; i < lines.size(); ++i) read_held_line(c, lines[i]);
     if (c.text() != [&] { std::string t; for (const auto& l : lines) t += l + "\n"; return t; }())
         throw std::invalid_argument("not in its canonical form (spheres or held models out of order, or numbers written otherwise)");
     return c;
@@ -561,28 +575,12 @@ Character read_character(const std::string& text_in)
             if (ch == ';') ch = '\n';
     if (text.rfind(std::string(kCharacterVersion3) + " ", 0) == 0)
     {
-        std::vector<std::string> lines;
-        for (size_t i = 0; i < text.size();)
-        {
-            size_t e = text.find('\n', i);
-            if (e == std::string::npos) e = text.size();
-            std::string l = text.substr(i, e - i);
-            if (!l.empty() && l.back() == '\r') l.pop_back();
-            if (!l.empty()) lines.push_back(l);
-            i = e + 1;
-        }
-        return read_given(lines);
+        return read_given(text_lines(text));
     }
     const size_t nl = text.find('\n');
     std::string first = text.substr(0, nl);
     if (!first.empty() && first.back() == '\r') first.pop_back();
-    std::vector<std::string> words;
-    for (size_t i = 0; i <= first.size();)
-    {
-        const size_t sp = std::min(first.find(' ', i), first.size());
-        if (sp > i) words.push_back(first.substr(i, sp - i));
-        i = sp + 1;
-    }
+    const std::vector<std::string> words = split_nonempty(first, ' ');
     if (words.empty() || (words[0] != kCharacterVersion && words[0] != kCharacterVersion2))
         throw std::invalid_argument(std::string("not a character: it does not start with ") + kCharacterVersion + ", " + kCharacterVersion2 + " or " + kCharacterVersion3);
     const bool v2 = words[0] == kCharacterVersion2;
@@ -634,13 +632,7 @@ Character read_character(const std::string& text_in)
         }
         while (!lines.empty() && lines.back().rfind("h ", 0) == 0)
         {
-            const std::string& h = lines.back();
-            const size_t sp = h.find(' ', 2);
-            if (sp == std::string::npos) throw std::invalid_argument("not a held model's line: " + h);
-            const std::string idx = h.substr(2, sp - 2);
-            if (idx.empty() || idx.size() > 6 || idx.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a sphere's number: " + h);
-            if (c.held(uint32_t(std::stoul(idx)))) throw std::invalid_argument("two models in one sphere: " + h);
-            c.hold(uint32_t(std::stoul(idx)), h.substr(sp + 1));
+            read_held_line(c, lines.back());
             lines.pop_back();
         }
         if (c.holds.empty()) throw std::invalid_argument("a sieve-character-v2 holds at least one model (one that holds none is v1)");
@@ -662,9 +654,7 @@ Character read_character(const std::string& text_in)
 std::string Character::text() const
 {
     std::string t = given ? std::string(kCharacterVersion3) + " spheres=" + std::to_string(spheres.size()) + "\n"
-                          : std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + " limbs=" + std::to_string(settings.limbs) +
-                                " joints=" + std::to_string(settings.joints) + " branches=" + std::to_string(settings.branches) +
-                                " symmetry=" + symmetry_name(settings.symmetry) + " head=" + (settings.head ? "yes" : "no") + "\n";
+                          : std::string(holds.empty() ? kCharacterVersion : kCharacterVersion2) + " seed=" + std::to_string(settings.seed) + settings_words(settings) + "\n";
     static const char* const kKinds[] = {"body", "head", "joint"};
     for (size_t i = 0; i < spheres.size(); ++i)
     {
@@ -676,7 +666,7 @@ std::string Character::text() const
     return t;
 }
 
-std::string Character::id() const { return Sha256::hex(Sha256::hash(text())); }
+std::string Character::id() const { return Sha256::hex_hash(text()); }
 
 void Character::extent(int32_t& x, int32_t& y, int32_t& z) const
 {
@@ -686,6 +676,16 @@ void Character::extent(int32_t& x, int32_t& y, int32_t& z) const
         x = std::max(x, std::abs(p.x) + p.r);
         y = std::max(y, std::abs(p.y) + p.r);
         z = std::max(z, std::abs(p.z) + p.r);
+    }
+}
+
+void Character::vertical(int32_t& low, int32_t& high) const
+{
+    low = high = 0;
+    for (const Sphere& p : spheres)
+    {
+        low = std::min(low, p.y - p.r);
+        high = std::max(high, p.y + p.r);
     }
 }
 

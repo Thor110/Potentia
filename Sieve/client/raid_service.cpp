@@ -6,9 +6,11 @@
 
 #include "cli/raid_socket.hpp"
 #include "sieve/paths.hpp"
+#include "sieve/format_stats.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/seal.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -17,9 +19,11 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <vector>
 #include <thread>
 
 namespace hallway {
@@ -41,30 +45,47 @@ std::thread g_checker;
 std::atomic<bool> g_checking{false};
 std::optional<std::string> g_check_note;
 
+// The settings' peers, each with the spaces at its ends taken off (a hand-written "a:1, b:2" names
+// b:2), and those that were only spaces left out.
 std::vector<std::string> comma_list(const std::string& s)
 {
     std::vector<std::string> out;
-    for (size_t i = 0; i <= s.size();)
-    {
-        const size_t c = std::min(s.find(',', i), s.size());
-        std::string one = s.substr(i, c - i);
-        while (!one.empty() && one.front() == ' ') one.erase(one.begin());
-        while (!one.empty() && one.back() == ' ') one.pop_back();
-        if (!one.empty()) out.push_back(one);
-        i = c + 1;
-    }
+    for (const std::string& one : sieve::split_nonempty(s, ','))
+        if (std::string t = sieve::trim(one, " "); !t.empty()) out.push_back(std::move(t));
     return out;
 }
 
-std::string grouped(uint64_t v)
+using sieve::grouped;
+
+// A share's or a check's note, left for the menus to take (one at a time with the server's status).
+void put_note(std::optional<std::string>& note, std::string text)
 {
-    std::string d = std::to_string(v), out;
-    for (size_t i = 0; i < d.size(); ++i)
-    {
-        if (i && (d.size() - i) % 3 == 0) out += ',';
-        out += d[i];
-    }
-    return out;
+    std::lock_guard<std::mutex> lock(g_mx);
+    note = std::move(text);
+}
+
+std::optional<std::string> take_note(std::optional<std::string>& note)
+{
+    std::lock_guard<std::mutex> lock(g_mx);
+    std::optional<std::string> n;
+    n.swap(note);
+    return n;
+}
+
+// The RAID key, read from its file; "no key at FILE" and the hint if there is none to read.
+sieve::SealKey read_key(const fs::path& p, const std::string& hint)
+{
+    std::ifstream in(p, std::ios::binary);
+    if (!in) throw std::runtime_error("no key at " + sieve::u8(p) + hint);
+    return sieve::read_seal_key(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+}
+
+// Every machine named that answers, given 10 seconds each; a machine away is passed over quietly.
+sieve_cli::RaidPeers connect_peers(const std::vector<std::string>& peers)
+{
+    sieve_cli::RaidPeers c = sieve_cli::raid_connect_all(peers, 10);
+    if (c.owned.empty()) throw std::runtime_error("none of the " + std::to_string(peers.size()) + " machines answered");
+    return c;
 }
 
 void set_status(std::string s)
@@ -161,10 +182,7 @@ std::string serving_status()
 
 void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::path> drives, std::vector<std::string> versions)
 {
-    auto note = [](std::string n) {
-        std::lock_guard<std::mutex> lock(g_mx);
-        g_share_note = std::move(n);
-    };
+    auto note = [](std::string n) { put_note(g_share_note, std::move(n)); };
     if (!s.raid_share) return;
     if (!s.online)
     {
@@ -186,9 +204,7 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     sieve::SealKey key;
     try
     {
-        std::ifstream in(key_path(s, settings_path), std::ios::binary);
-        if (!in) throw std::runtime_error("no key at " + sieve::u8(key_path(s, settings_path)) + " (turning sharing on in Settings > RAID makes one)");
-        key = sieve::read_seal_key(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+        key = read_key(key_path(s, settings_path), " (turning sharing on in Settings > RAID makes one)");
     }
     catch (const std::exception& e)
     {
@@ -203,32 +219,20 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     g_sharer = std::thread([peers, key, drives = std::move(drives), versions = std::move(versions), note, log, copies] {
         try
         {
-            std::vector<std::unique_ptr<sieve::RaidPeer>> owned;
-            for (const auto& p : peers)
-                try
-                {
-                    owned.push_back(std::make_unique<sieve::RaidNetPeer>(sieve_cli::raid_connect(p, 10), p));
-                }
-                catch (const std::exception&)
-                {
-                    // (a peer away: the others are used)
-                }
-            if (owned.empty()) throw std::runtime_error("none of the " + std::to_string(peers.size()) + " machines answered");
-            std::vector<sieve::RaidPeer*> ptrs;
-            for (auto& p : owned) ptrs.push_back(p.get());
+            const sieve_cli::RaidPeers c = connect_peers(peers);
             const sieve::Raid raid(drives);
             uint64_t bytes = 0;
             size_t short_of = 0;
             std::string remote;
             for (const auto& v : versions)
             {
-                const sieve::RaidShareReport r = sieve::raid_share(raid, v, key, ptrs, copies);
+                const sieve::RaidShareReport r = sieve::raid_share(raid, v, key, c.peers, copies);
                 bytes += r.bytes_sent;
                 short_of += r.short_of;
                 remote = r.remote; // (the last: your save, which names the rest)
                 std::ofstream(log, std::ios::binary | std::ios::app) << v << " " << r.remote << "\n";
             }
-            note("shared with " + std::to_string(owned.size()) + " of " + std::to_string(peers.size()) + " machines, " + grouped(bytes) + " bytes sent" +
+            note("shared with " + std::to_string(c.owned.size()) + " of " + std::to_string(peers.size()) + " machines, " + grouped(bytes) + " bytes sent" +
                  (short_of ? ", " + std::to_string(short_of) + " pieces short of their copies" : "") + "; remote id " + remote.substr(0, 12) +
                  "... (each in " + sieve::u8(log.filename()) + " beside your key)");
         }
@@ -240,22 +244,13 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     });
 }
 
-std::optional<std::string> take_share_note()
-{
-    std::lock_guard<std::mutex> lock(g_mx);
-    std::optional<std::string> n;
-    n.swap(g_share_note);
-    return n;
-}
+std::optional<std::string> take_share_note() { return take_note(g_share_note); }
 
 bool sharing() { return g_sharing; }
 
 void check(const AppSettings& s, const fs::path& settings_path)
 {
-    auto note = [](std::string n) {
-        std::lock_guard<std::mutex> lock(g_mx);
-        g_check_note = std::move(n);
-    };
+    auto note = [](std::string n) { put_note(g_check_note, std::move(n)); };
     if (g_checking) return;
     if (g_checker.joinable()) g_checker.join();
     if (!s.online)
@@ -291,9 +286,7 @@ void check(const AppSettings& s, const fs::path& settings_path)
     sieve::SealKey key;
     try
     {
-        std::ifstream in(key_path(s, settings_path), std::ios::binary);
-        if (!in) throw std::runtime_error("no key at " + sieve::u8(key_path(s, settings_path)));
-        key = sieve::read_seal_key(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
+        key = read_key(key_path(s, settings_path), "");
     }
     catch (const std::exception& e)
     {
@@ -306,23 +299,12 @@ void check(const AppSettings& s, const fs::path& settings_path)
     g_checker = std::thread([peers, key, remotes, copies, note] {
         try
         {
-            std::vector<std::unique_ptr<sieve::RaidPeer>> owned;
-            for (const auto& p : peers)
-                try
-                {
-                    owned.push_back(std::make_unique<sieve::RaidNetPeer>(sieve_cli::raid_connect(p, 10), p));
-                }
-                catch (const std::exception&)
-                {
-                }
-            if (owned.empty()) throw std::runtime_error("none of the " + std::to_string(peers.size()) + " machines answered");
-            std::vector<sieve::RaidPeer*> ptrs;
-            for (auto& p : owned) ptrs.push_back(p.get());
+            const sieve_cli::RaidPeers on = connect_peers(peers);
             size_t pieces = 0, short_of = 0, repaired = 0, lost = 0, unreadable = 0;
             for (const auto& r : remotes)
                 try
                 {
-                    const sieve::RaidCheckReport c = sieve::raid_check(r, key, ptrs, copies, true);
+                    const sieve::RaidCheckReport c = sieve::raid_check(r, key, on.peers, copies, true);
                     pieces += c.pieces;
                     short_of += c.short_of;
                     repaired += c.repaired;
@@ -332,7 +314,7 @@ void check(const AppSettings& s, const fs::path& settings_path)
                 {
                     ++unreadable; // (its index had by none of them)
                 }
-            note("checked " + std::to_string(remotes.size()) + " versions, " + std::to_string(pieces) + " pieces on " + std::to_string(owned.size()) + " of " +
+            note("checked " + std::to_string(remotes.size()) + " versions, " + std::to_string(pieces) + " pieces on " + std::to_string(on.owned.size()) + " of " +
                  std::to_string(peers.size()) + " machines: " + std::to_string(short_of) + " short, " + std::to_string(repaired) + " put back, " +
                  std::to_string(lost) + " lost" + (unreadable ? ", " + std::to_string(unreadable) + " versions not found" : ""));
         }
@@ -344,13 +326,7 @@ void check(const AppSettings& s, const fs::path& settings_path)
     });
 }
 
-std::optional<std::string> take_check_note()
-{
-    std::lock_guard<std::mutex> lock(g_mx);
-    std::optional<std::string> n;
-    n.swap(g_check_note);
-    return n;
-}
+std::optional<std::string> take_check_note() { return take_note(g_check_note); }
 
 bool checking() { return g_checking; }
 

@@ -1,6 +1,7 @@
 // Sieve — importers (see importers.hpp).
 #include "sieve/importers.hpp"
 
+#include "sieve/hex.hpp"
 #include "sieve/json.hpp"
 
 #include <algorithm>
@@ -50,18 +51,12 @@ bool import_uri_is_local(std::string_view uri)
 
 std::string import_uri_decoded(std::string_view uri)
 {
-    auto hex = [](char c) -> int {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-        return -1;
-    };
     std::string out;
     for (size_t i = 0; i < uri.size(); ++i)
     {
-        if (uri[i] == '%' && i + 2 < uri.size() && hex(uri[i + 1]) >= 0 && hex(uri[i + 2]) >= 0)
+        if (uri[i] == '%' && i + 2 < uri.size() && hex_digit_value(uri[i + 1]) >= 0 && hex_digit_value(uri[i + 2]) >= 0)
         {
-            out.push_back(char(hex(uri[i + 1]) * 16 + hex(uri[i + 2])));
+            out.push_back(char(hex_digit_value(uri[i + 1]) * 16 + hex_digit_value(uri[i + 2])));
             i += 2;
         }
         else out.push_back(uri[i]);
@@ -72,6 +67,9 @@ std::string import_uri_decoded(std::string_view uri)
 namespace {
 
 [[noreturn]] void refuse(const std::string& why) { throw std::invalid_argument("glTF: " + why); }
+
+// "1 joint", "3 joints": how the notes of what was left out count things.
+std::string plural(size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); }
 
 std::string base64_decode(std::string_view s)
 {
@@ -169,32 +167,45 @@ std::vector<double> numbers(const json::Value& v, size_t n, const char* what)
 
 Mat trs_matrix(const double t[3], const double q[4], const double s[3]);
 
-Mat local_matrix(const json::Value& node)
+// A node's rest: its matrix as given, or its translation, rotation and scale (which animations
+// replace one at a time). The meshes, the skeleton and the animations all read a node through this
+// one reader, so they agree on its defaults and refuse the same nodes with the same words.
+struct Rest
 {
+    bool has_matrix = false;
+    Mat m{};
+    double t[3] = {0, 0, 0}, r[4] = {0, 0, 0, 1}, s[3] = {1, 1, 1};
+    // The local matrix: the given one, or T * R * S. An animation never moves a node with a matrix,
+    // so its m stays the one given.
+    Mat matrix() const { return has_matrix ? m : trs_matrix(t, r, s); }
+};
+
+Rest rest_of(const json::Value& node)
+{
+    Rest k;
     if (const json::Value* m = node.find("matrix"))
     {
         const auto v = numbers(*m, 16, "a node's matrix");
-        Mat r{};
-        std::copy(v.begin(), v.end(), r.begin());
-        return r;
+        k.has_matrix = true;
+        std::copy(v.begin(), v.end(), k.m.begin());
+        return k;
     }
-    double t[3] = {0, 0, 0}, q[4] = {0, 0, 0, 1}, s[3] = {1, 1, 1};
     if (const json::Value* v = node.find("translation"))
     {
         const auto n = numbers(*v, 3, "a node's translation");
-        std::copy(n.begin(), n.end(), t);
+        std::copy(n.begin(), n.end(), k.t);
     }
     if (const json::Value* v = node.find("rotation"))
     {
         const auto n = numbers(*v, 4, "a node's rotation");
-        std::copy(n.begin(), n.end(), q);
+        std::copy(n.begin(), n.end(), k.r);
     }
     if (const json::Value* v = node.find("scale"))
     {
         const auto n = numbers(*v, 3, "a node's scale");
-        std::copy(n.begin(), n.end(), s);
+        std::copy(n.begin(), n.end(), k.s);
     }
-    return trs_matrix(t, q, s);
+    return k;
 }
 
 // T * R * S, column-major; the quaternion (x, y, z, w) normalised first.
@@ -409,7 +420,7 @@ public:
         if (seen_[node_index]) refuse("node " + std::to_string(node_index) + " is used twice (its nodes are not a tree)");
         seen_[node_index] = true;
         const json::Value& node = nodes[node_index];
-        const Mat m = mul(parent, local_matrix(node));
+        const Mat m = mul(parent, rest_of(node).matrix());
         if (node.find("mesh")) add_mesh(uint_of(node, "mesh", 0), m);
         for (const auto& c : array_of(node, "children"))
         {
@@ -481,42 +492,6 @@ private:
     std::vector<std::string> buffers_;
     std::vector<bool> seen_;
 };
-
-// A node's rest: its matrix as given, or its translation, rotation and scale (which animations
-// replace one at a time).
-struct Rest
-{
-    bool has_matrix = false;
-    Mat m{};
-    double t[3] = {0, 0, 0}, r[4] = {0, 0, 0, 1}, s[3] = {1, 1, 1};
-};
-
-Rest rest_of(const json::Value& node)
-{
-    Rest k;
-    if (node.find("matrix"))
-    {
-        k.has_matrix = true;
-        k.m = local_matrix(node);
-        return k;
-    }
-    if (const json::Value* v = node.find("translation"))
-    {
-        const auto n = numbers(*v, 3, "a node's translation");
-        std::copy(n.begin(), n.end(), k.t);
-    }
-    if (const json::Value* v = node.find("rotation"))
-    {
-        const auto n = numbers(*v, 4, "a node's rotation");
-        std::copy(n.begin(), n.end(), k.r);
-    }
-    if (const json::Value* v = node.find("scale"))
-    {
-        const auto n = numbers(*v, 3, "a node's scale");
-        std::copy(n.begin(), n.end(), k.s);
-    }
-    return k;
-}
 
 // Every node's matrix in the world, from each node's local one and its parent (-1: none).
 std::vector<Mat> world_matrices(const std::vector<Mat>& local, const std::vector<int64_t>& parent)
@@ -604,7 +579,7 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
     for (const auto& n : nodes)
     {
         rest.push_back(rest_of(n));
-        local.push_back(rest.back().has_matrix ? rest.back().m : trs_matrix(rest.back().t, rest.back().r, rest.back().s));
+        local.push_back(rest.back().matrix());
     }
     const std::vector<Mat> world0 = world_matrices(local, parent);
 
@@ -651,7 +626,6 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
         j.x = w[12], j.y = w[13], j.z = w[14];
         out.skeleton.push_back(std::move(j));
     }
-    auto plural = [](size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); };
     if (kept < order.size())
         out.left_out.push_back(plural(order.size() - kept, "joint", "joints") + " past the roof of " + std::to_string(kAnimationMaxBones) + ", not carried");
 
@@ -755,7 +729,7 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
                 else std::copy(v, v + 3, r.s);
             }
             std::vector<Mat> loc(nodes.size());
-            for (size_t i = 0; i < nodes.size(); ++i) loc[i] = now[i].has_matrix ? now[i].m : trs_matrix(now[i].t, now[i].r, now[i].s);
+            for (size_t i = 0; i < nodes.size(); ++i) loc[i] = now[i].matrix();
             const std::vector<Mat> w = world_matrices(loc, parent);
             for (size_t i = 0; i < kept; ++i)
             {
@@ -837,7 +811,6 @@ ImportedModel read_gltf_json(std::string_view json_text, std::optional<std::stri
         for (const auto& s : array_of(a, "samplers"))
             if (s.find("input")) out.keyframes = std::max<size_t>(out.keyframes, size_t(g.count_of(uint_of(s, "input", 0))));
     }
-    auto plural = [](size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n == 1 ? one : many); };
     if (!skins.empty()) read_skeleton(root, g, out);
     if (out.skins > 1) out.left_out.push_back(plural(out.skins - 1, "skin", "skins") + " after the first, not carried: a character has one skeleton");
     if (!anims.empty() && out.skeleton.empty())

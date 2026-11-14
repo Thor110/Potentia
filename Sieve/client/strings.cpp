@@ -10,6 +10,7 @@
 #include "font.hpp"
 
 #include "cli/dictionaries.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -27,12 +28,7 @@ using Table = std::map<std::string, std::string, std::less<>>;
 Table g_english, g_current;
 std::string g_code = "en";
 
-std::string trim(const std::string& s)
-{
-    const auto a = s.find_first_not_of(" \t\r");
-    if (a == std::string::npos) return "";
-    return s.substr(a, s.find_last_not_of(" \t\r") - a + 1);
-}
+using sieve::trim;
 
 Table load_file(const fs::path& path)
 {
@@ -85,21 +81,7 @@ void apply_font()
 
 } // namespace
 
-fs::path language_folder()
-{
-    std::vector<fs::path> folders = {fs::path("data") / "lang"};
-    if (const fs::path exe = sieve::cli::executable_dir(); !exe.empty())
-    {
-        folders.push_back(exe / "lang");
-        folders.push_back(exe / ".." / "data" / "lang");
-    }
-    for (const auto& f : folders)
-    {
-        std::error_code ec;
-        if (fs::is_directory(f, ec)) return f;
-    }
-    return folders.front();
-}
+fs::path language_folder() { return sieve::cli::find_data_folder("lang"); }
 
 std::vector<LanguageInfo> available_languages()
 {

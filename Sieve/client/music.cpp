@@ -19,6 +19,7 @@
 #include "sieve/audio.hpp"
 #include "sieve/composition.hpp"
 #include "sieve/space.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -107,12 +108,8 @@ std::string clock_now()
     return buf;
 }
 
-std::string trim(const std::string& s)
-{
-    const size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return "";
-    return s.substr(a, s.find_last_not_of(" \t\r\n") - a + 1);
-}
+// (the line feed too: a value can end one)
+std::string trim(const std::string& s) { return sieve::trim(s, " \t\r\n"); }
 
 MusicSettings defaults(MusicMode m)
 {

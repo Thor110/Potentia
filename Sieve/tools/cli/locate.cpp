@@ -3402,6 +3402,36 @@ static void finish_archives(const Manifest& m, const fs::path& dest, bool force,
     }
 }
 
+// One file of a manifest, placed: its bytes where they lie in the contents (v3), the place moved on
+// past them, or read back from its address (v2) into held. Shared by install_tree and
+// files_of_manifest, which say "ends before" in their own words (the installer's, the instructions').
+static std::span<const uint8_t> place_file(const Manifest& m, const ManifestEntry& e, size_t& at, std::vector<uint8_t>& held,
+                                           const char* ends_before)
+{
+    if (m.with_contents)
+    {
+        if (m.contents.size() - at < e.size) throw std::runtime_error(ends_before + e.path);
+        const std::span<const uint8_t> view(m.contents.data() + at, size_t(e.size));
+        at += size_t(e.size);
+        return view;
+    }
+    held = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
+    return held;
+}
+
+// One placed file checked: its size and SHA-256, then the vault's check (nothing it withholds is
+// ever written or read out). An item's own SHA-256 is "-": the tree's, checked when the manifest was
+// read, covers it. does_not_give is the caller's own wording, as with place_file.
+static void check_placed(const Manifest& m, const ManifestEntry& e, std::span<const uint8_t> bytes, const char* does_not_give)
+{
+    Sha256 hasher;
+    hasher.update(bytes);
+    const std::string sha = Sha256::hex(hasher.finish());
+    if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
+        throw std::runtime_error(does_not_give + e.path + " (its size or SHA-256 is wrong)");
+    vault::check_known(bytes, sha, e.path);
+}
+
 std::vector<std::pair<std::string, std::vector<uint8_t>>> files_of_manifest(const Manifest& m)
 {
     std::vector<std::pair<std::string, std::vector<uint8_t>>> out;
@@ -3412,20 +3442,11 @@ std::vector<std::pair<std::string, std::vector<uint8_t>>> files_of_manifest(cons
         if (e.path.empty() || e.path[0] == '/' || e.path.find('\\') != std::string::npos || e.path.find(':') != std::string::npos ||
             ("/" + e.path + "/").find("/../") != std::string::npos)
             throw std::runtime_error("the instructions name a file outside their folder: " + e.path);
-        std::vector<uint8_t> bytes;
-        if (m.with_contents)
-        {
-            if (m.contents.size() - at < e.size) throw std::runtime_error("the instructions end before " + e.path);
-            bytes.assign(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + size_t(e.size)));
-            at += size_t(e.size);
-        }
-        else
-            bytes = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
-        const std::string sha = sha256_hex(bytes);
-        if (bytes.size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
-            throw std::runtime_error("the instructions do not give " + e.path + " (its size or SHA-256 is wrong)");
-        vault::check_known(bytes, sha, e.path); // the vault: nothing it withholds is ever read out
-        out.emplace_back(e.path, std::move(bytes));
+        // (Placed and checked one at a time, so a file's own fault is said before a later file's.)
+        std::vector<uint8_t> held;
+        const std::span<const uint8_t> bytes = place_file(m, e, at, held, "the instructions end before ");
+        check_placed(m, e, bytes, "the instructions do not give ");
+        out.emplace_back(e.path, held.empty() ? std::vector<uint8_t>(bytes.begin(), bytes.end()) : std::move(held));
     }
     return out;
 }
@@ -3465,18 +3486,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
     for (size_t i = 0; i < files.size(); ++i)
     {
         if (cancelled()) return false;
-        const ManifestEntry& e = *files[i].first;
-        if (m.with_contents)
-        {
-            if (m.contents.size() - at < e.size) throw std::runtime_error("the installer ends before " + e.path);
-            view[i] = std::span<const uint8_t>(m.contents.data() + at, size_t(e.size));
-            at += size_t(e.size);
-        }
-        else
-        {
-            files[i].second = file_at(e.address == "0" ? BigUint() : BigUint::from_hex(e.address));
-            view[i] = files[i].second;
-        }
+        view[i] = place_file(m, *files[i].first, at, files[i].second, "the installer ends before ");
     }
     // Then each file checked, its size and SHA-256 and the vault's check, on up to 4 threads at
     // once (the vault may decode a picture on each); what fails said as the first file's in order,
@@ -3490,13 +3500,7 @@ bool install_tree(const Manifest& m, const fs::path& dest, bool force, const Ins
             const ManifestEntry& e = *files[i].first;
             try
             {
-                // (An item's own SHA-256 is "-": the tree's, checked when the manifest was read, covers it.)
-                Sha256 hasher;
-                hasher.update(view[i]);
-                const std::string sha = Sha256::hex(hasher.finish());
-                if (view[i].size() != e.size || (sha != e.sha256 && !(m.items && e.sha256 == "-")))
-                    throw std::runtime_error("the installer does not give " + e.path + " (its size or SHA-256 is wrong)");
-                vault::check_known(view[i], sha, e.path); // the vault: nothing it withholds is ever written
+                check_placed(m, e, view[i], "the installer does not give ");
             }
             catch (...)
             {

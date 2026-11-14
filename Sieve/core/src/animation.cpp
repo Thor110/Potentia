@@ -1,9 +1,12 @@
 // Sieve — the animation line (see animation.hpp).
 #include "sieve/animation.hpp"
 
+#include "sieve/hex.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -22,13 +25,6 @@ uint8_t step_of(double c)
 }
 
 double angle_of(uint8_t d) { return (double(d) - 128.0) * kPi / 128.0; }
-
-int hexval(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return -1;
-}
 
 } // namespace
 
@@ -67,10 +63,15 @@ bool Animation::moving() const
 }
 
 namespace {
-void put_move(std::string& t, const BoneMove& m)
+// One bone as the text and the address both write it: its turn's three bytes in hex, then, when the
+// animation moves, its move's three numbers in six digits each. Writing it in one place keeps the
+// text (whose hash is the id) and the address digit for digit the same.
+void put_bone(std::string& t, const BoneTurn& u, const BoneMove* m)
 {
+    t += hex_of(std::array<uint8_t, 3>{u.x, u.y, u.z});
+    if (!m) return;
     static const char* kHex = "0123456789abcdef";
-    for (const int32_t c : {m.x, m.y, m.z})
+    for (const int32_t c : {m->x, m->y, m->z})
     {
         const uint32_t d = uint32_t(std::clamp(c, kAnimationMoveLeast, kAnimationMoveMost) - kAnimationMoveLeast);
         for (int sh = 20; sh >= 0; sh -= 4) t += kHex[(d >> sh) & 15];
@@ -83,51 +84,34 @@ std::string Animation::text() const
     const bool v2 = moving();
     std::string t = std::string(v2 ? kAnimationVersion2 : kAnimationVersion) + " bones=" + std::to_string(bones) + " frames=" + std::to_string(frames) + " rate=" +
                     std::to_string(kAnimationRate) + "\n";
-    static const char* kHex = "0123456789abcdef";
     for (uint32_t f = 0; f < frames; ++f)
     {
         t += "f " + std::to_string(f);
         for (uint32_t b = 0; b < bones; ++b)
         {
-            const BoneTurn& u = at(f, b);
             t += ' ';
-            for (const uint8_t d : {u.x, u.y, u.z}) t += kHex[d >> 4], t += kHex[d & 15];
-            if (v2) put_move(t, move(f, b));
+            const BoneMove m = v2 ? move(f, b) : BoneMove{};
+            put_bone(t, at(f, b), v2 ? &m : nullptr);
         }
         t += '\n';
     }
     return t;
 }
 
-std::string Animation::id() const { return Sha256::hex(Sha256::hash(text())); }
+std::string Animation::id() const { return Sha256::hex_hash(text()); }
 
 std::string Animation::address() const
 {
-    static const char* kHex = "0123456789abcdef";
     const bool v2 = moving();
     std::string a;
     a.reserve(turns.size() * (v2 ? 24 : 6));
-    for (size_t i = 0; i < turns.size(); ++i)
-    {
-        const BoneTurn& u = turns[i];
-        for (const uint8_t d : {u.x, u.y, u.z}) a += kHex[d >> 4], a += kHex[d & 15];
-        if (v2) put_move(a, moves[i]);
-    }
+    for (size_t i = 0; i < turns.size(); ++i) put_bone(a, turns[i], v2 ? &moves[i] : nullptr);
     return a;
 }
 
 Animation read_animation(const std::string& text)
 {
-    std::vector<std::string> lines;
-    for (size_t i = 0; i < text.size();)
-    {
-        size_t e = text.find('\n', i);
-        if (e == std::string::npos) e = text.size();
-        std::string l = text.substr(i, e - i);
-        if (!l.empty() && l.back() == '\r') l.pop_back();
-        if (!l.empty()) lines.push_back(l);
-        i = e + 1;
-    }
+    const std::vector<std::string> lines = text_lines(text);
     const bool v2 = !lines.empty() && lines[0].rfind(std::string(kAnimationVersion2) + " ", 0) == 0;
     if (lines.empty() || (!v2 && lines[0].rfind(std::string(kAnimationVersion) + " ", 0) != 0))
         throw std::invalid_argument(std::string("not an animation: it does not start with ") + kAnimationVersion + " or " + kAnimationVersion2);
@@ -181,7 +165,7 @@ Animation read_animation(const std::string& text)
             uint8_t d[3];
             for (int k = 0; k < 3; ++k)
             {
-                const int hi = hexval(groups[at + 1 + 2 * size_t(k)]), lo = hexval(groups[at + 2 + 2 * size_t(k)]);
+                const int hi = lower_hex_digit_value(groups[at + 1 + 2 * size_t(k)]), lo = lower_hex_digit_value(groups[at + 2 + 2 * size_t(k)]);
                 if (hi < 0 || lo < 0) throw std::invalid_argument("frame " + std::to_string(f) + ": a turn is not six lower-case hex digits");
                 d[k] = uint8_t(hi * 16 + lo);
             }
@@ -193,7 +177,7 @@ Animation read_animation(const std::string& text)
                 uint32_t v = 0;
                 for (int h = 0; h < 6; ++h)
                 {
-                    const int x = hexval(groups[at + 7 + 6 * size_t(k) + size_t(h)]);
+                    const int x = lower_hex_digit_value(groups[at + 7 + 6 * size_t(k) + size_t(h)]);
                     if (x < 0) throw std::invalid_argument("frame " + std::to_string(f) + ": a move is not eighteen lower-case hex digits");
                     v = v * 16 + uint32_t(x);
                 }
@@ -211,17 +195,13 @@ std::vector<std::array<double, 3>> pose(const Character& c, const Animation& a, 
 {
     std::vector<std::array<double, 3>> p(c.spheres.size());
     if (c.spheres.empty()) return p;
-    std::vector<std::array<double, 9>> turn(c.spheres.size());
+    // Each sphere's turn comes from pose_turns, the one place that works them out, so a pose and the
+    // turns a renderer draws its held models with cannot drift apart.
+    const std::vector<std::array<double, 9>> turn = pose_turns(c, a, frame);
     const uint32_t f = a.frames ? frame % a.frames : 0;
     for (size_t i = 0; i < c.spheres.size(); ++i)
     {
         const Sphere& s = c.spheres[i];
-        if (i < a.bones && a.frames) turn_matrix(a.at(f, uint32_t(i)), turn[i].data());
-        else if (s.parent >= 0) turn[i] = turn[size_t(s.parent)];
-        else
-        {
-            turn[i] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-        }
         const BoneMove mv = i < a.bones && a.frames ? a.move(f, uint32_t(i)) : BoneMove{};
         if (s.parent < 0 || size_t(s.parent) >= i)
         {

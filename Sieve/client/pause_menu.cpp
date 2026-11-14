@@ -47,13 +47,10 @@ void Hallway::open_pause()
 bool Hallway::pause_select(const std::string& id)
 {
     if (!pause_open_) return false;
-    for (int i = 0; i < int(hall_rows().size()); ++i)
-        if (id == hall_rows()[size_t(i)])
-        {
-            pause_row_ = i;
-            return true;
-        }
-    return false;
+    const int i = pause_row_named(hall_rows(), id);
+    if (i < 0) return false;
+    pause_row_ = i;
+    return true;
 }
 
 void Hallway::pause_choose_named(const std::string& id, bool& quit)
@@ -137,33 +134,22 @@ void Hallway::pause_event(const SDL_Event& e, bool& quit)
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
-        float x = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x;
-        float y = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y;
-        SDL_RenderCoordinatesFromWindow(r_, x, y, &x, &y);
-        for (int i = 0; i < int(pause_rects_.size()); ++i)
+        if (const int i = pause_row_at(r_, e, pause_rects_); i >= 0)
         {
-            const SDL_FRect& r = pause_rects_[size_t(i)];
-            if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
-            {
-                pause_row_ = i;
-                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) pause_choose(i, quit);
-            }
+            pause_row_ = i;
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) pause_choose(i, quit);
         }
         return;
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return;
-    switch (e.key.key)
+    if (e.key.key == SDLK_ESCAPE)
     {
-    case SDLK_ESCAPE: close_pause(); break;
-    case SDLK_UP:
-    case SDLK_W: pause_row_ = (pause_row_ + int(hall_rows().size()) - 1) % int(hall_rows().size()); break;
-    case SDLK_DOWN:
-    case SDLK_S: pause_row_ = (pause_row_ + 1) % int(hall_rows().size()); break;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-    case SDLK_SPACE: pause_choose(pause_row_, quit); break;
-    default: break;
+        close_pause();
+        return;
     }
+    bool choose = false;
+    pause_row_ = pause_row_step(e.key.key, pause_row_, int(hall_rows().size()), choose);
+    if (choose) pause_choose(pause_row_, quit);
 }
 
 void Hallway::draw_pause(float W, float H)

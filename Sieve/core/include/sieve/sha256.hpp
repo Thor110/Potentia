@@ -26,6 +26,8 @@ public:
 
     static Digest hash(std::string_view data);
     static std::string hex(const Digest& d);
+    // The digest of the data in lower-case hex: how every id in Sieve's text formats is made.
+    static std::string hex_hash(std::string_view data) { return hex(hash(data)); }
 
     // True if this CPU has the SHA instructions.
     static bool hardware_available();

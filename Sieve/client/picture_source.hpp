@@ -4,6 +4,7 @@
 
 #include "sieve/image.hpp" // RgbaImage
 #include "sieve/paths.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -36,7 +37,7 @@ struct Picture
 
 using sieve::u8;      // a path as UTF-8 (sieve/paths.hpp)
 using sieve::from_u8; // and back
-std::string lower(std::string s);
+using sieve::ascii_lower; // A-Z lowered, every other byte kept (sieve/text.hpp)
 std::string human_bytes(uint64_t n);
 bool picture_name(const std::string& name); // a picture by its extension
 bool sieve_name(const std::string& name);   // a .simage or .sieve by its extension

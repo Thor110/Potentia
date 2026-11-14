@@ -7,9 +7,11 @@
 // actually uses. The atlases belong to the renderer that made them and are thrown away if the
 // renderer changes, which is what happens when the window is rebuilt for a new resolution.
 #include "font.hpp"
+
 #include "gpu_memory.hpp"
 
 #include "cli/dictionaries.hpp"
+#include "sieve/hex.hpp"
 
 #include <algorithm>
 #include <array>
@@ -88,29 +90,7 @@ struct Font
 std::unique_ptr<Font> g_font, g_fallback;
 std::string g_name = "debug";
 
-fs::path font_folder()
-{
-    std::vector<fs::path> folders = {fs::path("data") / "fonts"};
-    if (const fs::path exe = sieve::cli::executable_dir(); !exe.empty())
-    {
-        folders.push_back(exe / "fonts");
-        folders.push_back(exe / ".." / "data" / "fonts");
-    }
-    for (const auto& f : folders)
-    {
-        std::error_code ec;
-        if (fs::is_directory(f, ec)) return f;
-    }
-    return folders.front();
-}
-
-int hex_digit(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return -1;
-}
+fs::path font_folder() { return sieve::cli::find_data_folder("fonts"); }
 
 std::unique_ptr<Font> load(const std::string& name)
 {
@@ -139,7 +119,7 @@ std::unique_ptr<Font> load(const std::string& name)
         bool ok = colon > 0 && colon <= 6;
         for (size_t i = 0; ok && i < colon; ++i)
         {
-            const int d = hex_digit(line[i]);
+            const int d = sieve::hex_digit_value(line[i]);
             ok = d >= 0;
             cp = cp * 16 + char32_t(d);
         }
@@ -156,7 +136,7 @@ std::unique_ptr<Font> load(const std::string& name)
             uint16_t row = 0;
             for (size_t k = 0; k < per_row; ++k)
             {
-                const int d = hex_digit(hex[size_t(y) * per_row + k]);
+                const int d = sieve::hex_digit_value(hex[size_t(y) * per_row + k]);
                 ok = ok && d >= 0;
                 row = uint16_t(row * 16 + (d < 0 ? 0 : d));
             }
@@ -297,6 +277,15 @@ void draw_text(SDL_Renderer* r, float x, float y, const std::string& s, float sc
             }
         }
         cx += cell;
+    }
+}
+
+void outline_ellipse(SDL_Renderer* r, float cx, float cy, float rx, float ry, int sides)
+{
+    for (int k = 0; k < sides; ++k)
+    {
+        const float a0 = 6.2831853f * float(k) / float(sides), a1 = 6.2831853f * float(k + 1) / float(sides);
+        SDL_RenderLine(r, cx + rx * std::cos(a0), cy + ry * std::sin(a0), cx + rx * std::cos(a1), cy + ry * std::sin(a1));
     }
 }
 

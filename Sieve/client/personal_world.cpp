@@ -11,7 +11,9 @@
 #include "cli/sieve_cache.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/image_io.hpp"
+#include "sieve/diffusion.hpp"
 #include "sieve/paths.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <array>
@@ -74,14 +76,8 @@ const std::string& kZoomOut = declare("personal.minimap", "zoom_out", "-,Keypad 
 
 namespace {
 
-uint64_t splitmix(uint64_t& s)
-{
-    uint64_t z = (s += 0x9E3779B97F4A7C15ull);
-    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-    return z ^ (z >> 31);
-}
-float unit(uint64_t& s) { return float(splitmix(s) >> 40) / float(1ull << 24); } // [0, 1)
+// A draw in [0, 1) from the world's stream (splitmix64, the one copy diffusion keeps).
+float unit(sieve::diffusion::SplitMix& g) { return float(g.next() >> 40) / float(1ull << 24); }
 
 SDL_FColor mix(SDL_FColor a, SDL_FColor b, float t)
 {
@@ -114,8 +110,8 @@ static std::array<float, 3> turned(const float m[3], float yaw, float pitch, flo
 template <class F>
 static void each_sphere(const sieve::Character& c, float yaw, float pitch, float roll, F&& f)
 {
-    int32_t low = 0;
-    for (const auto& s : c.spheres) low = std::min(low, s.y - s.r);
+    int32_t low, high;
+    c.vertical(low, high);
     const float m = 1.0f / float(sieve::kCharacterUnitsPerMetre);
     for (const auto& s : c.spheres)
     {
@@ -123,17 +119,6 @@ static void each_sphere(const sieve::Character& c, float yaw, float pitch, float
         f(s, turned(q, yaw, pitch, roll), float(s.r) * m);
     }
 }
-
-
-namespace {
-
-uint32_t argb_of(SDL_FColor c)
-{
-    auto u = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
-    return 0xFF000000u | u(c.r) << 16 | u(c.g) << 8 | u(c.b);
-}
-
-} // namespace
 
 PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, bool first_is_yours, std::filesystem::path world_file, uint64_t seed)
     : file_(std::move(world_file)), window_(window), r_(renderer), seed_(seed)
@@ -160,7 +145,7 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
     load(); // (what was placed before, and the world's seed)
     // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed (the
     // world file's, where it has one).
-    uint64_t s = seed_ ^ 0x5049455253ull; // ("PIERS": the world's own stream)
+    sieve::diffusion::SplitMix s(seed_ ^ 0x5049455253ull); // ("PIERS": the world's own stream)
     swells_.push_back({(unit(s) - 0.5f) * 40.0f, 40.0f + (unit(s) - 0.5f) * 40.0f, 150.0f + unit(s) * 40.0f, 26.0f + unit(s) * 8.0f});
     for (int i = 0; i < 6; ++i)
         swells_.push_back({(unit(s) - 0.5f) * 500.0f, (unit(s) - 0.5f) * 500.0f, 40.0f + unit(s) * 60.0f, 3.0f + unit(s) * 10.0f});
@@ -183,7 +168,7 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
         for (int i = 0; i < n; ++i)
             for (int j = 0; j < n; ++j)
             {
-                uint64_t s = seed_ ^ (uint64_t(uint32_t(i)) << 32 | uint32_t(j));
+                sieve::diffusion::SplitMix s(seed_ ^ (uint64_t(uint32_t(i)) << 32 | uint32_t(j)));
                 cell_vary_[size_t(i) * size_t(n) + size_t(j)] = 1.0f + (unit(s) - 0.5f) * 0.10f;
             }
     }
@@ -242,16 +227,36 @@ float PersonalWorld::height(float x, float z) const
 // A point of the world on the screen: false where it is behind you (nearer than kNear).
 bool PersonalWorld::project(float x, float y, float z, float& sx, float& sy, float& depth) const
 {
-    const float dx = x - px_, dy = y - (height(px_, pz_) + kEye), dz = z - pz_;
-    const float cy = std::cos(yaw_), sy0 = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
-    const float x1 = dx * cy - dz * sy0, z1 = dx * sy0 + dz * cy;
-    const float y2 = dy * cp - z1 * sp, z2 = dy * sp + z1 * cp;
-    depth = z2;
-    if (z2 < kNear) return false;
-    const float f = (H_ / 2) / std::tan(kFov / 2);
-    sx = W_ / 2 + x1 / z2 * f;
-    sy = H_ / 2 - y2 / z2 * f;
+    const Vec3 c = eye_space(x, y, z);
+    depth = c.z;
+    if (c.z < kNear) return false;
+    const Point2 p = eye_camera().project_camera(c);
+    sx = p.x, sy = p.y;
     return true;
+}
+
+// A point of the world as your eye sees it (x right, y up, z ahead), turned by your yaw then your
+// pitch. Written out here rather than taken from Camera::to_camera: the same for every look up to
+// straight up or down, but past them (--pworld-look 90 and more) Camera's right and up change sign
+// and the ground and the clouds would be drawn turned over (review 2, 14 November 2026).
+Vec3 PersonalWorld::eye_space(float x, float y, float z) const
+{
+    const float cy = std::cos(yaw_), sy0 = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
+    const float dx = x - px_, dy = y - (height(px_, pz_) + kEye), dz = z - pz_;
+    const float x1 = dx * cy - dz * sy0, z1 = dx * sy0 + dz * cy;
+    return {x1, dy * cp - z1 * sp, dy * sp + z1 * cp};
+}
+
+Camera PersonalWorld::eye_camera() const
+{
+    Camera c;
+    c.pos = {px_, height(px_, pz_) + kEye, pz_};
+    c.yaw = yaw_;
+    c.pitch = pitch_;
+    c.fov_y = kFov;
+    c.near_z = kNear;
+    c.update(int(W_), int(H_));
+    return c;
 }
 
 void PersonalWorld::step(float dt, const bool* keys)
@@ -286,7 +291,8 @@ void PersonalWorld::step(float dt, const bool* keys)
         // its numbers put it instead).
         Placed& p = placed_[size_t(held_)];
         const float ey = height(px_, pz_) + kEye;
-        const float dx = std::sin(yaw_) * std::cos(pitch_), dy = std::sin(pitch_), dz = std::cos(yaw_) * std::cos(pitch_);
+        const Vec3 look = eye_camera().forward();
+        const float dx = look.x, dy = look.y, dz = look.z;
         float low, high, across;
         extent_of(p, low, high, across);
         // Where the crosshair meets a surface facing up within reach (a shelf board, a table top, the
@@ -352,11 +358,7 @@ void PersonalWorld::render()
             if (wireframe_)
             {
                 SDL_SetRenderDrawColorFloat(r_, 0.55f * c[3], 0.55f * c[3], 0.60f * c[3], 1);
-                for (int k = 0; k < kSides; ++k)
-                {
-                    const float a0 = 2 * kPi * float(k) / kSides, a1 = 2 * kPi * float(k + 1) / kSides;
-                    SDL_RenderLine(r_, c[0] + c[2] * std::cos(a0), c[1] + c[2] * 0.6f * std::sin(a0), c[0] + c[2] * std::cos(a1), c[1] + c[2] * 0.6f * std::sin(a1));
-                }
+                outline_ellipse(r_, c[0], c[1], c[2], c[2] * 0.6f, kSides);
                 continue;
             }
             std::vector<SDL_Vertex> v;
@@ -454,21 +456,17 @@ void PersonalWorld::render()
         };
         std::vector<Tri> tris;
         tris.reserve(world.size());
-        const float cy = std::cos(yaw_), sy0 = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_), eye = height(px_, pz_) + kEye;
+        // The objects go to the hallway's renderer (MeshBatch: a depth test at every pixel, laid over the
+        // ground), seen by the same camera as the ground.
+        const Camera eye_cam = eye_camera();
+        const float eye = eye_cam.pos.y;
+        // (eye_space's turn, its sines and the eye's height worked out once for the whole ground)
+        const float cy = std::cos(yaw_), sy0 = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_);
         auto cam = [&](const Pt& w) {
             const float dx = w[0] - px_, dy = w[1] - eye, dz = w[2] - pz_;
             const float x1 = dx * cy - dz * sy0, z1 = dx * sy0 + dz * cy;
             return Pt{x1, dy * cp - z1 * sp, dy * sp + z1 * cp};
         };
-        // The objects go to the hallway's renderer (MeshBatch: a depth test at every pixel, laid over the
-        // ground), seen by a camera that is this world's eye (the same turns and projection).
-        Camera eye_cam;
-        eye_cam.pos = {px_, eye, pz_};
-        eye_cam.yaw = yaw_;
-        eye_cam.pitch = pitch_;
-        eye_cam.fov_y = kFov;
-        eye_cam.near_z = kNear;
-        eye_cam.update(int(W_), int(H_));
         batch_.begin_overlay(eye_cam, int(W_), int(H_));
         for (const World& w : world)
         {
@@ -533,7 +531,8 @@ void PersonalWorld::render()
             for (int k = 0; k < no; ++k)
             {
                 const Pt& q = outp[size_t(k)];
-                tr.p[size_t(k)] = {W_ / 2 + q[0] / q[2] * f, H_ / 2 - q[1] / q[2] * f};
+                const Point2 s = eye_cam.project_camera({q[0], q[1], q[2]});
+                tr.p[size_t(k)] = {s.x, s.y};
                 tr.nz[size_t(k)] = 1.0f / q[2];
                 sum += q[2];
             }
@@ -661,8 +660,8 @@ void PersonalWorld::render()
         }
     }
     // Their tabs at the left edge while they are out: Place while something is held, else the catalogue.
-    if (held_ >= 0) place_panel_.draw_tab(r_, 80, tr("pworld.place.tab"));
-    else cat_panel_.draw_tab(r_, 80, tr("pworld.catalogue.tab"));
+    if (held_ >= 0) place_panel_.draw_tab(r_, 2, 80, tr("pworld.place.tab"));
+    else cat_panel_.draw_tab(r_, 2, 80, tr("pworld.catalogue.tab"));
     if (!note_.empty()) draw_text(r_, 20, H_ - 42, note_, 1, white);
     {
         // The footer: the keys as they are set (Settings > Controls > Keys), each by what it does.
@@ -778,11 +777,7 @@ void PersonalWorld::draw_map()
     {
         const SDL_FPoint q = at(p.x, p.z);
         if (!is_char(p.kind) || !inside(q)) continue;
-        for (int k = 0; k < 8; ++k)
-        {
-            const float a0 = 2 * kPi * float(k) / 8, a1 = 2 * kPi * float(k + 1) / 8;
-            SDL_RenderLine(r_, q.x + 3 * std::cos(a0), q.y + 3 * std::sin(a0), q.x + 3 * std::cos(a1), q.y + 3 * std::sin(a1));
-        }
+        outline_ellipse(r_, q.x, q.y, 3, 3, 8);
     }
     // You: an arrow pointing the way you face.
     const SDL_FPoint me = at(px_, pz_);
@@ -832,22 +827,7 @@ struct ShelfItems
     std::string note;                                        // why some or all could not be read
 };
 
-std::filesystem::path shelf_items_file()
-{
-    namespace fs = std::filesystem;
-    std::vector<fs::path> where = {fs::path("data") / "objects"};
-    if (const fs::path exe = sieve::cli::executable_dir(); !exe.empty())
-    {
-        where.push_back(exe / "objects");
-        where.push_back(exe / ".." / "data" / "objects");
-    }
-    for (const fs::path& f : where)
-    {
-        std::error_code ec;
-        if (fs::is_regular_file(f / "shelf-items.sieve", ec)) return f / "shelf-items.sieve";
-    }
-    return where.front() / "shelf-items.sieve";
-}
+std::filesystem::path shelf_items_file() { return sieve::cli::find_data_folder("objects", "shelf-items.sieve") / "shelf-items.sieve"; }
 
 const ShelfItems& shelf_items()
 {
@@ -883,14 +863,9 @@ const ShelfItems& shelf_items()
                 // The corridor's left-wall case (its front at x = -1.65, along z 0 to 6), moved to stand as
                 // every object does: its front at x = 0, facing +X, centred across z.
                 auto moved = std::make_shared<Mesh>(*m);
-                moved->lo = {1e9f, 1e9f, 1e9f}, moved->hi = {-1e9f, -1e9f, -1e9f};
                 for (MeshTri& t : moved->tris)
-                    for (Vec3& v : t.p)
-                    {
-                        v.x += 1.65f, v.z -= 3.0f;
-                        moved->lo = {std::min(moved->lo.x, v.x), std::min(moved->lo.y, v.y), std::min(moved->lo.z, v.z)};
-                        moved->hi = {std::max(moved->hi.x, v.x), std::max(moved->hi.y, v.y), std::max(moved->hi.z, v.z)};
-                    }
+                    for (Vec3& v : t.p) v.x += 1.65f, v.z -= 3.0f;
+                fit_bounds(*moved);
                 m = moved;
             }
             if (m) out.mesh[id] = m;
@@ -1188,7 +1163,8 @@ int PersonalWorld::aimed() const
     // Along the crosshair from your eye: the nearest face of anything placed, within 6 m (each object's
     // own triangles, so a large thing does not hide a small one before it).
     const float o[3] = {px_, height(px_, pz_) + kEye, pz_};
-    const float d[3] = {std::sin(yaw_) * std::cos(pitch_), std::sin(pitch_), std::cos(yaw_) * std::cos(pitch_)};
+    const Vec3 look = eye_camera().forward();
+    const float d[3] = {look.x, look.y, look.z};
     int which = -1;
     ray_objects(o, d, 6.0f, held_, &which);
     return which;
@@ -1346,22 +1322,17 @@ void PersonalWorld::escape()
 bool PersonalWorld::pause_select(const std::string& id)
 {
     if (!pause_open_) return false;
-    for (size_t i = 0; i < pause_rows_.size(); ++i)
-        if (pause_rows_[i] == id)
-        {
-            pause_row_ = int(i);
-            return true;
-        }
-    return false;
+    const int i = pause_row_named(pause_rows_, id);
+    if (i < 0) return false;
+    pause_row_ = i;
+    return true;
 }
 
 void PersonalWorld::pause_key(SDL_Keycode k)
 {
-    const int n = int(pause_rows_.size());
-    if (n == 0) return;
-    if (k == SDLK_UP || k == SDLK_W) pause_row_ = (pause_row_ + n - 1) % n;
-    else if (k == SDLK_DOWN || k == SDLK_S) pause_row_ = (pause_row_ + 1) % n;
-    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) pause_choose(pause_row_);
+    bool choose = false;
+    pause_row_ = pause_row_step(k, pause_row_, int(pause_rows_.size()), choose);
+    if (choose) pause_choose(pause_row_);
 }
 
 void PersonalWorld::pause_choose(int row)
@@ -1544,15 +1515,6 @@ void PersonalWorld::key(SDL_Keycode k, SDL_Keymod mod)
     }
 }
 
-namespace {
-std::string g9(double v)
-{
-    char b[40];
-    std::snprintf(b, sizeof b, "%.9g", v);
-    return b;
-}
-} // namespace
-
 void PersonalWorld::save()
 {
     if (file_.empty()) return;
@@ -1574,9 +1536,9 @@ void PersonalWorld::save()
     for (const Placed& p : placed_)
         if (is_char(p.kind) && !chars) continue;
         else if (v2)
-            out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.y) << " " << g9(p.z) << " " << g9(p.yaw) << " " << g9(p.pitch) << " " << g9(p.roll) << " "
+            out << "place " << p.kind << " " << sieve::nine_digits(p.x) << " " << sieve::nine_digits(p.y) << " " << sieve::nine_digits(p.z) << " " << sieve::nine_digits(p.yaw) << " " << sieve::nine_digits(p.pitch) << " " << sieve::nine_digits(p.roll) << " "
                 << (p.physics ? "physics" : "fixed") << "\n";
-        else out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.z) << " " << g9(p.yaw) << "\n";
+        else out << "place " << p.kind << " " << sieve::nine_digits(p.x) << " " << sieve::nine_digits(p.z) << " " << sieve::nine_digits(p.yaw) << "\n";
     if (!out) note_ = trf("pworld.unwritable", {file_.string()});
 }
 
@@ -1689,19 +1651,11 @@ PersonalWorld::Result PersonalWorld::run()
                 // (the pause menu takes the keys and the mouse while it is in)
                 if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) pause_key(e.key.key);
                 if (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
-                {
-                    float x = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x, y = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y;
-                    SDL_RenderCoordinatesFromWindow(r_, x, y, &x, &y);
-                    for (size_t i = 0; i < pause_rects_.size(); ++i)
+                    if (const int i = pause_row_at(r_, e, pause_rects_); i >= 0)
                     {
-                        const SDL_FRect& r = pause_rects_[i];
-                        if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
-                        {
-                            pause_row_ = int(i);
-                            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) pause_choose(int(i));
-                        }
+                        pause_row_ = i;
+                        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) pause_choose(i);
                     }
-                }
                 if (leave_ || quit_ || !system_.empty())
                 {
                     save();

@@ -1,6 +1,9 @@
 // Sieve — the catalogue of formats, stage 4: figures measured as formats are used (see format_stats.hpp).
 #include "sieve/format_stats.hpp"
 
+#include "sieve/paths.hpp"
+#include "sieve/text.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -9,23 +12,33 @@
 #include <ctime>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <set>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace sieve {
 
 namespace fs = std::filesystem;
 
+std::string grouped(uint64_t v)
+{
+    std::string d = std::to_string(v), out;
+    for (size_t i = 0; i < d.size(); ++i)
+    {
+        if (i && (d.size() - i) % 3 == 0) out += ',';
+        out += d[i];
+    }
+    return out;
+}
+
 namespace {
 
-bool is_word(const std::string& s)
-{
-    if (s.empty() || s.size() > 64) return false;
-    for (const char c : s)
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-')) return false;
-    return true;
-}
+// A LABEL, WHAT, RESULT or KEY: an id of at most 64 characters.
+bool is_word(std::string_view s) { return is_plain_id(s, 64); }
 
 bool is_date(const std::string& s)
 {
@@ -39,20 +52,6 @@ std::string env(const char* name)
 {
     const char* v = std::getenv(name);
     return v ? std::string(v) : std::string();
-}
-
-fs::path from_u8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
-
-// A number with its thousands apart by commas, as Sieve writes figures.
-std::string grouped(uint64_t v)
-{
-    std::string d = std::to_string(v), out;
-    for (size_t i = 0; i < d.size(); ++i)
-    {
-        if (i && (d.size() - i) % 3 == 0) out += ',';
-        out += d[i];
-    }
-    return out;
 }
 
 std::string percent(uint64_t part, uint64_t whole)
@@ -69,6 +68,28 @@ uint64_t median(std::vector<uint64_t> v)
     std::sort(v.begin(), v.end());
     return v.size() % 2 ? v[v.size() / 2] : (v[v.size() / 2 - 1] + v[v.size() / 2]) / 2;
 }
+
+// A record's time (make-us, install-us) per MiB, so files of any size can be put together. Only for a
+// record whose bytes are not 0: the caller checks, and leaves the rest out rather than counting 0.
+uint64_t per_mib(const FormatStat& s, const char* key) { return uint64_t(double(s.get(key)) * 1048576.0 / double(s.get("bytes"))); }
+
+// The machines and the dates a summary's records came from, said as "3 times on 2 machines, A to B".
+struct Seen
+{
+    std::set<std::string> machines;
+    std::string first, last;
+    void add(const FormatStat& s)
+    {
+        machines.insert(s.machine);
+        if (first.empty() || s.date < first) first = s.date;
+        if (last.empty() || s.date > last) last = s.date;
+    }
+    std::string times(size_t n) const
+    {
+        return std::to_string(n) + (n == 1 ? " time" : " times") + " on " + std::to_string(machines.size()) + (machines.size() == 1 ? " machine" : " machines") + ", " +
+               (first == last ? first : first + " to " + last);
+    }
+};
 
 } // namespace
 
@@ -95,13 +116,7 @@ std::string FormatStat::text() const
 
 FormatStat read_format_stat(const std::string& line)
 {
-    std::vector<std::string> f;
-    for (size_t i = 0; i <= line.size();)
-    {
-        const size_t e = std::min(line.find(' ', i), line.size());
-        f.push_back(line.substr(i, e - i));
-        i = e + 1;
-    }
+    const std::vector<std::string> f = split_fields(line, ' ');
     if (f.size() < 5 || f[0] != kFormatStatVersion) throw std::invalid_argument(std::string("not a record: it starts ") + kFormatStatVersion + " and date, machine, what and result");
     auto value = [&](size_t i, const char* key) {
         const std::string want = std::string(key) + "=";
@@ -120,10 +135,10 @@ FormatStat read_format_stat(const std::string& line)
         const size_t eq = f[i].find('=');
         if (eq == std::string::npos) throw std::invalid_argument("field " + std::to_string(i + 1) + " is not KEY=N");
         const std::string k = f[i].substr(0, eq), n = f[i].substr(eq + 1);
-        if (!is_word(k) || n.empty() || n.size() > 19 || n.find_first_not_of("0123456789") != std::string::npos)
-            throw std::invalid_argument("field " + std::to_string(i + 1) + " is not KEY=N");
+        const std::optional<uint64_t> v = decimal_u64(n);
+        if (!is_word(k) || !v) throw std::invalid_argument("field " + std::to_string(i + 1) + " is not KEY=N");
         if (!s.figures.empty() && !(s.figures.back().first < k)) throw std::invalid_argument("its keys are not in order, each once");
-        s.figures.push_back({k, std::stoull(n)});
+        s.figures.push_back({k, *v});
     }
     return s;
 }
@@ -215,16 +230,11 @@ std::vector<std::string> measured_entries(const fs::path& folder)
 std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& stats)
 {
     std::vector<std::string> lines;
-    auto from = [](size_t n, const std::set<std::string>& machines, const std::string& first, const std::string& last) {
-        return std::to_string(n) + (n == 1 ? " time" : " times") + " on " + std::to_string(machines.size()) + (machines.size() == 1 ? " machine" : " machines") + ", " +
-               (first == last ? first : first + " to " + last);
-    };
     {
         size_t n = 0, lossless = 0;
         uint64_t bytes = 0, sv = 0, lz = 0, df = 0;
         std::vector<uint64_t> make, install;
-        std::set<std::string> machines;
-        std::string first, last;
+        Seen seen;
         for (const auto& s : stats)
         {
             if (s.what != "pack") continue;
@@ -236,17 +246,14 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
             df += s.get("deflate");
             if (s.get("bytes"))
             {
-                // per MiB, so files of any size can be put together
-                make.push_back(uint64_t(double(s.get("make-us")) * 1048576.0 / double(s.get("bytes"))));
-                install.push_back(uint64_t(double(s.get("install-us")) * 1048576.0 / double(s.get("bytes"))));
+                make.push_back(per_mib(s, "make-us"));
+                install.push_back(per_mib(s, "install-us"));
             }
-            machines.insert(s.machine);
-            if (first.empty() || s.date < first) first = s.date;
-            if (last.empty() || s.date > last) last = s.date;
+            seen.add(s);
         }
         if (n)
         {
-            lines.push_back("measured   packed " + from(n, machines, first, last) + ": " + grouped(bytes) + " bytes to " + grouped(sv) + " (" + percent(sv, bytes) +
+            lines.push_back("measured   packed " + seen.times(n) + ": " + grouped(bytes) + " bytes to " + grouped(sv) + " (" + percent(sv, bytes) +
                             "); LZMA2 alone " + grouped(lz) + " (" + percent(lz, bytes) + "), deflate " + grouped(df) + " (" + percent(df, bytes) + ")");
             lines.push_back("           made in " + grouped(median(make) / 1000) + " ms a MiB, installed in " + grouped(median(install) / 1000) +
                             " ms a MiB (medians); round trips " + std::to_string(lossless) + " of " + std::to_string(n) + " lossless");
@@ -258,8 +265,7 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
         size_t n = 0, compared = 0;
         uint64_t bytes = 0, sv = 0, cbytes = 0, lz = 0, df = 0;
         std::vector<uint64_t> make;
-        std::set<std::string> machines;
-        std::string first, last;
+        Seen seen;
         for (const auto& s : stats)
         {
             if (s.what != "read") continue;
@@ -273,14 +279,12 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
                 lz += s.get("lzma2");
                 df += s.get("deflate");
             }
-            if (s.get("bytes")) make.push_back(uint64_t(double(s.get("make-us")) * 1048576.0 / double(s.get("bytes"))));
-            machines.insert(s.machine);
-            if (first.empty() || s.date < first) first = s.date;
-            if (last.empty() || s.date > last) last = s.date;
+            if (s.get("bytes")) make.push_back(per_mib(s, "make-us"));
+            seen.add(s);
         }
         if (n)
         {
-            lines.push_back("read       in the File Locator " + from(n, machines, first, last) + ": " + grouped(bytes) + " bytes to " + grouped(sv) + " (" +
+            lines.push_back("read       in the File Locator " + seen.times(n) + ": " + grouped(bytes) + " bytes to " + grouped(sv) + " (" +
                             percent(sv, bytes) + "), made in " + grouped(median(make) / 1000) + " ms a MiB (median)");
             if (compared)
                 lines.push_back("           of the " + std::to_string(compared) + " compared: LZMA2 alone " + percent(lz, cbytes) + ", deflate " + percent(df, cbytes));
@@ -289,8 +293,7 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
     {
         size_t n = 0, whole = 0;
         uint64_t vi = 0, vk = 0, fi = 0, fk = 0, joints = 0, anims = 0, left = 0;
-        std::set<std::string> machines;
-        std::string first, last;
+        Seen seen;
         for (const auto& s : stats)
         {
             if (s.what != "import") continue;
@@ -303,13 +306,11 @@ std::vector<std::string> format_stats_summary(const std::vector<FormatStat>& sta
             joints += s.get("joints");
             anims += s.get("animations");
             left += s.get("left-out");
-            machines.insert(s.machine);
-            if (first.empty() || s.date < first) first = s.date;
-            if (last.empty() || s.date > last) last = s.date;
+            seen.add(s);
         }
         if (n)
         {
-            lines.push_back("imported   " + from(n, machines, first, last) + ": " + grouped(vk) + " of " + grouped(vi) + " vertices kept, " + grouped(fk) + " of " +
+            lines.push_back("imported   " + seen.times(n) + ": " + grouped(vk) + " of " + grouped(vi) + " vertices kept, " + grouped(fk) + " of " +
                             grouped(fi) + " faces; " + grouped(joints) + " joints, " + grouped(anims) + " animations");
             lines.push_back("           " + std::to_string(whole) + " of " + std::to_string(n) + " whole; " + grouped(left) + " things left out in all");
         }
@@ -332,7 +333,7 @@ std::vector<std::string> format_stats_short(const std::vector<FormatStat>& stats
             bytes += s.get("bytes");
             sv += s.get("sieve");
             lz += s.get("lzma2");
-            if (s.get("bytes")) make.push_back(uint64_t(double(s.get("make-us")) * 1048576.0 / double(s.get("bytes"))));
+            if (s.get("bytes")) make.push_back(per_mib(s, "make-us"));
         }
         else if (s.what == "read")
         {

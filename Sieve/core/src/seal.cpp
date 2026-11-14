@@ -4,6 +4,7 @@
 // (additional term under section 7(b) of the GNU AGPL v3, docs/RAID-NOTICE.md).
 #include "sieve/seal.hpp"
 
+#include "sieve/hex.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -11,6 +12,7 @@
 #include <span>
 #include <random>
 #include <stdexcept>
+#include <string>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -181,14 +183,7 @@ SealKey new_seal_key()
 
 std::string seal_key_text(const SealKey& key)
 {
-    static const char* kHex = "0123456789abcdef";
-    std::string t = "sieve-raid-key-v1 ";
-    for (const uint8_t b : key)
-    {
-        t += kHex[b >> 4];
-        t += kHex[b & 15];
-    }
-    return t + "\n";
+    return "sieve-raid-key-v1 " + hex_of(key) + "\n";
 }
 
 SealKey read_seal_key(std::string_view text)
@@ -203,7 +198,7 @@ SealKey read_seal_key(std::string_view text)
         for (size_t j = 0; j < 2; ++j)
         {
             const char c = text[want.size() + 2 * i + j];
-            const int d = c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+            const int d = lower_hex_digit_value(c);
             if (d < 0) throw std::invalid_argument("not a RAID key: its digits are not lower-case hex");
             v = v * 16 + d;
         }

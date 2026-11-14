@@ -10,12 +10,25 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace sieve_cli {
 
 // A connection to HOST:PORT; reads and writes give up after `timeout_s` seconds of silence. Throws
 // std::runtime_error if it cannot be made.
 std::unique_ptr<sieve::RaidStream> raid_connect(const std::string& address, int timeout_s = 30);
+
+// Every peer that answers, connected (sieve raid share, fetch and check, and the hallway's sharing
+// and checking): `owned` keeps the connections, `peers` hands them to the RAID's functions. A peer
+// that does not answer is told to `no_answer` (its address and why), where given, and left out. Each
+// caller says for itself what it means when none answered.
+struct RaidPeers
+{
+    std::vector<std::unique_ptr<sieve::RaidPeer>> owned;
+    std::vector<sieve::RaidPeer*> peers;
+};
+RaidPeers raid_connect_all(const std::vector<std::string>& addresses, int timeout_s,
+                           const std::function<void(const std::string&, const std::string&)>& no_answer = {});
 
 // Listens on HOST:PORT and hands each connection to `on` with the address it came from (the IP
 // address alone, as text). Connections are answered at once, each on a thread of its own (32 at

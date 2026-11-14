@@ -11,6 +11,8 @@
 #include "sieve/image.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/sound.hpp"
+#include "sieve/text.hpp"
 #include "sieve/utf8.hpp"
 #include "sieve/paths.hpp"
 
@@ -42,11 +44,7 @@ std::string clean(std::string s)
     return s;
 }
 
-std::string trim(const std::string& s)
-{
-    const size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r"); // (\r: a file saved with CRLF)
-    return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
-}
+using sieve::trim;
 
 // The line without its comment: from a `;` outside "quotes".
 std::string strip_comment(const std::string& s)
@@ -376,11 +374,12 @@ std::string unit_text(const sieve::FilterLine& l, const std::vector<uint32_t>& u
         for (uint32_t c : u) s += l.alphabet->symbol(c);
         return "\"" + sieve::utf8_encode(s) + "\"";
     }
-    // Sound's samples as their values (two's complement), other digits as they are.
-    const bool pcm = l.symbols_id.rfind("pcm/", 0) == 0;
+    // Sound's samples as their values (two's complement, as sieve/sound.hpp reads them), other digits
+    // as they are.
+    const bool pcm = sieve::is_pcm_symbols(l.symbols_id);
+    const sieve::PcmFormat f = pcm ? sieve::pcm_format_of(l.symbols_id) : sieve::PcmFormat{};
     std::string s;
-    for (uint32_t c : u)
-        s += (s.empty() ? "" : ",") + std::to_string(pcm && c >= l.base / 2 ? int64_t(c) - int64_t(l.base) : int64_t(c));
+    for (uint32_t c : u) s += (s.empty() ? "" : ",") + std::to_string(pcm ? int64_t(sieve::pcm_sample(f, c)) : int64_t(c));
     return s;
 }
 

@@ -12,10 +12,12 @@
 #include "cli/dictionaries.hpp"
 #include "cli/draft.hpp"
 #include "sieve/llm.hpp"
+#include "sieve/text.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -29,12 +31,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string trim(const std::string& s)
-{
-    const auto a = s.find_first_not_of(" \t\r");
-    if (a == std::string::npos) return "";
-    return s.substr(a, s.find_last_not_of(" \t\r") - a + 1);
-}
+using sieve::trim;
 
 bool on_off(const std::string& v, bool def)
 {
@@ -44,6 +41,33 @@ bool on_off(const std::string& v, bool def)
 }
 
 const char* on_off(bool b) { return b ? "on" : "off"; }
+
+// A whole-number setting held to lo..hi; one that is not a number leaves the setting as it was.
+template <class T>
+void read_int(const std::string& v, int lo, int hi, T& out)
+{
+    try
+    {
+        out = std::clamp(std::stoi(v), lo, hi);
+    }
+    catch (...)
+    {
+    }
+}
+
+// The same for a setting that is refused (left as it was) when out of range, rather than held to it.
+template <class T>
+void read_int_in(const std::string& v, int lo, int hi, T& out)
+{
+    try
+    {
+        const int n = std::stoi(v);
+        if (n >= lo && n <= hi) out = n;
+    }
+    catch (...)
+    {
+    }
+}
 
 // Common window sizes, offered when they fit the display.
 constexpr Resolution kCommon[] = {{3840, 2160}, {2560, 1600}, {2560, 1440}, {1920, 1200}, {1920, 1080}, {1680, 1050}, {1600, 900},
@@ -148,58 +172,25 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
             else if (key == "door_portals") s.door_portals = on_off(value, false);
-            else if (key == "graphics_memory_gb")
-            {
-                try { s.graphics_memory_gb = std::clamp(std::stoi(value), 1, 128); } catch (...) {}
-            }
-            else if (key == "view_rooms")
-            {
-                try { s.view_rooms = std::clamp(std::stoi(value), 2, 64); } catch (...) {}
-            }
-            else if (key == "picture_rooms")
-            {
-                try { s.picture_rooms = std::clamp(std::stoi(value), 0, 8); } catch (...) {}
-            }
+            else if (key == "graphics_memory_gb") read_int(value, 1, 128, s.graphics_memory_gb);
+            else if (key == "view_rooms") read_int(value, 2, 64, s.view_rooms);
+            else if (key == "picture_rooms") read_int(value, 0, 8, s.picture_rooms);
             else if (key == "fps_counter") s.fps_counter = on_off(value, false);
         }
         // [world], and [graphics] too, where files written before the two moved kept them.
         if (section == "world" || section == "graphics")
         {
-            if (key == "angle_decimals")
-            {
-                try { s.angle_decimals = std::clamp(std::stoi(value), 0, kMaxAngleDecimals); } catch (...) {}
-            }
-            else if (key == "filter_memory_mb")
-            {
-                try { s.filter_memory_mb = std::clamp(std::stoi(value), 64, 1048576); } catch (...) {}
-            }
-            else if (key == "counting_memory_pct")
-            {
-                try { s.counting_memory_pct = std::clamp(std::stoi(value), 5, 100); } catch (...) {}
-            }
-            else if (key == "merge_cache_pct")
-            {
-                try { s.merge_cache_pct = std::clamp(std::stoi(value), 0, 100); } catch (...) {}
-            }
-            else if (key == "unit_time_ms")
-            {
-                try { s.unit_time_ms = std::clamp(std::stoi(value), 5, 60000); } catch (...) {}
-            }
-            else if (key == "item_memory_pct")
-            {
-                try { s.item_memory_pct = std::clamp(std::stoi(value), 5, 90); } catch (...) {}
-            }
-            else if (key == "model_cache_mb")
-            {
-                try { s.model_cache_mb = std::max(std::stoi(value), 8); } catch (...) {}
-            }
+            if (key == "angle_decimals") read_int(value, 0, kMaxAngleDecimals, s.angle_decimals);
+            else if (key == "filter_memory_mb") read_int(value, 64, 1048576, s.filter_memory_mb);
+            else if (key == "counting_memory_pct") read_int(value, 5, 100, s.counting_memory_pct);
+            else if (key == "merge_cache_pct") read_int(value, 0, 100, s.merge_cache_pct);
+            else if (key == "unit_time_ms") read_int(value, 5, 60000, s.unit_time_ms);
+            else if (key == "item_memory_pct") read_int(value, 5, 90, s.item_memory_pct);
+            else if (key == "model_cache_mb") read_int(value, 8, INT_MAX, s.model_cache_mb); // (no roof but the int's)
         }
         else if (section == "controls")
         {
-            if (key == "mouse_sensitivity")
-            {
-                try { s.mouse_sensitivity = std::clamp(std::stoi(value), 10, 400); } catch (...) {}
-            }
+            if (key == "mouse_sensitivity") read_int(value, 10, 400, s.mouse_sensitivity);
             else if (key == "invert_mouse_y") s.invert_mouse_y = on_off(value, false);
             else if (key == "read_aloud") s.read_aloud = on_off(value, false);
             else if (key == "text_to_voice") s.text_to_voice = on_off(value, false);
@@ -212,28 +203,13 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "speaks") s.character_speaks = value;
             else if (key == "drawing" && value.size() == 1 && value[0] >= '0' && value[0] <= '3') s.character_drawing = value[0] - '0';
             else if (key == "beside_you") s.character_beside = on_off(value, true);
-            else if (key == "max_hall_scale")
-                try
-                {
-                    const int v = std::stoi(value);
-                    if (v >= 1 && v <= 64) s.character_max_scale = v;
-                }
-                catch (...)
-                {
-                }
+            else if (key == "max_hall_scale") read_int_in(value, 1, 64, s.character_max_scale);
         }
         else if (section == "replays")
         {
             if (key == "cached") s.replays_cached = value;
             else if (key == "max_minutes" || key == "min_free_mb")
-                try
-                {
-                    const int n = std::clamp(std::stoi(value), 1, 1 << 20);
-                    (key == "max_minutes" ? s.replays_max_minutes : s.replays_min_free_mb) = n;
-                }
-                catch (...)
-                {
-                }
+                read_int(value, 1, 1 << 20, key == "max_minutes" ? s.replays_max_minutes : s.replays_min_free_mb);
         }
         else if (section == "online")
         {
@@ -262,23 +238,9 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "key") s.raid_key = value;
             else if (key == "listen" && !value.empty()) s.raid_listen = value;
             else if (key == "held") s.raid_held = value;
-            else if (key == "copies")
-                try
-                {
-                    s.raid_copies = std::clamp(std::stoi(value), 1, 16);
-                }
-                catch (...)
-                {
-                }
+            else if (key == "copies") read_int(value, 1, 16, s.raid_copies);
             else if (key == "space_mb" || key == "per_peer_mb")
-                try
-                {
-                    const int n = std::clamp(std::stoi(value), 1, 1 << 20);
-                    (key == "space_mb" ? s.raid_space_mb : s.raid_per_peer_mb) = n;
-                }
-                catch (...)
-                {
-                }
+                read_int(value, 1, 1 << 20, key == "space_mb" ? s.raid_space_mb : s.raid_per_peer_mb);
         }
         else if (section == "models")
         {

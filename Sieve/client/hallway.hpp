@@ -233,9 +233,6 @@ inline std::vector<std::string> wrap(const std::string& s, size_t width)
 
 // Greedy word wrap: lines of at most `width` characters, broken at spaces where possible;
 // trailing spaces (a page's padding) are dropped.
-// An opaque colour as ARGB, as the item pictures are kept.
-inline uint32_t argb(SDL_Color c) { return 0xFF000000u | uint32_t(c.r) << 16 | uint32_t(c.g) << 8 | uint32_t(c.b); }
-
 inline std::vector<std::string> wrap_words(std::string s, size_t width)
 {
     while (!s.empty() && s.back() == ' ') s.pop_back();
@@ -1757,6 +1754,9 @@ private:
     std::optional<std::string> file_reply(const std::string& message, const std::string& seed);
     // A picture's rows (a character a cell) or a melody's notation: what a model is given of it.
     std::string unit_rows(const ChatEntry& e) const;
+    // A drawn picture's (or melody's) card filled in from the model that drew its cells (DRAW and a
+    // chain's draw stage): its size, palette, a melody's symbols, and the cells' address.
+    static void fill_picture_entry(ChatEntry& e, const sieve::cli::PictureModel& m);
     void chat_send();
     // A picture or melody card made (by DRAW or a command): shown, given to the model, and noted
     // in the transcript (the vault looking at a picture first).

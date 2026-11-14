@@ -29,6 +29,7 @@
 #include "cli/filter_config.hpp"
 #include "cli/lines.hpp" // kDefaultExportFps
 #include "dialogs.hpp"     // DialogOwner
+#include "slide_panel.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -450,23 +451,19 @@ private:
     // left edge) opens and closes it. It slides out by itself while the dimensions are being
     // calculated, so the map's bars can be watched changing, and back in when they are done, unless
     // it was closed by hand. The keys work on the settings either way.
-    float panel_ = 1;            // as drawn: 0 out of sight, 1 in its place
-    bool panel_open_ = true;     // where it is sliding to
+    // (slide_panel.hpp: as drawn, where it is sliding to, and the SETTINGS tab while it is out; in at first)
+    SlidePanel panel_{1, true};
     bool panel_auto_ = false;    // slid out by the calculating, to come back after it
-    Uint64 panel_tick_ = 0;      // the last frame's time (ns), for the slide
     Uint64 calc_since_ = 0;      // when the calculating began (ns); 0: not calculating
     bool calc_acted_ = false;    // this calculating has slid it out once already (Tab may bring it back)
-    SDL_FRect panel_tab_ = {};   // the SETTINGS tab, while the panel is out
     // The right-hand panel (IDEAS §19.148): opposite SETTINGS, it slides in from the right edge,
     // brought by the key left of 1 (read by its place, SDL's GRAVE scancode: ` alone, ¬ with Shift
     // on a UK keyboard) or by its tab. It is a stack of pages, one a system, CHARACTER first; the
     // systems to come find their place in it. While it is in, the map gives it the room.
-    float side_ = 0;             // as drawn: 0 out of sight, 1 in its place
-    bool side_open_ = false;     // where it is sliding to
+    SlidePanel side_;            // (its tab at the right edge, while it is out; out at first)
     // Only one of the two panels is in at a time (Edward, 12 November 2026): the right-hand one
     // coming in sends the settings out, and they come back when it goes, if they were in before it.
     bool panel_before_side_ = false;
-    SDL_FRect side_tab_ = {};    // its tab at the right edge, while it is out
     SDL_FRect side_tabs_[4] = {}; // its pages' tabs along its top, by page, to be clicked
     void side_page_to(int page); // to that page (PgUp/PgDn, Ctrl+Left/Right, or its tab clicked)
     int side_page_ = 0;          // the page shown (0: CHARACTER, 1: YOURS, 2: CATALOGUE)
@@ -604,8 +601,8 @@ private:
     bool viewer_ = false;
     void render_side(float W, float H);
 public:
-    bool side_open() const { return side_open_; } // (for a picture's report: CI checks the key)
-    bool panel_open() const { return panel_open_ || panel_auto_; } // (the same: the settings panel in, or out only while counting)
+    bool side_open() const { return side_.open; } // (for a picture's report: CI checks the key)
+    bool panel_open() const { return panel_.open || panel_auto_; } // (the same: the settings panel in, or out only while counting)
     // (for a picture's report) the right-hand panel's page, and how many characters YOURS lists
     int side_page() const { return side_page_; }
     size_t yours_count() const { return yours_.characters.size(); }

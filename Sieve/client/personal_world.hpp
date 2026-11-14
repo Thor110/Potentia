@@ -175,6 +175,10 @@ private:
     std::string mesh_kind(const std::string& kind) const; // the shelf item a kind is drawn as
     std::string label_of(const std::string& kind) const;  // what it is called on the screen
     bool project(float x, float y, float z, float& sx, float& sy, float& depth) const;
+    // Your eye as the hallway's Camera (where you stand, your turns, this world's field of view and
+    // near plane): the ground, the clouds and the objects are all seen through it.
+    Camera eye_camera() const;
+    Vec3 eye_space(float x, float y, float z) const; // (the ground's and the clouds' turn into your eye)
     SDL_Window* window_;
     SDL_Renderer* r_;
     // Your characters are objects of the world like any other (Edward, 14 November 2026: "the fixed spot is

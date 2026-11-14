@@ -8,11 +8,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 #define SIEVE_SHA_X86 1
 #include <immintrin.h>
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <cpuid.h>
-#endif
+#include "cpu_x86.hpp"
 #endif
 
 namespace sieve {
@@ -65,22 +61,10 @@ void blocks_portable(uint32_t* h, const uint8_t* p, size_t blocks)
 
 bool cpu_has_sha()
 {
-#if defined(_MSC_VER)
-    int r[4];
-    __cpuid(r, 0);
-    if (r[0] < 7) return false;
-    __cpuid(r, 1);
-    const bool sse41 = ((r[2] >> 19) & 1) != 0, ssse3 = ((r[2] >> 9) & 1) != 0;
-    __cpuidex(r, 7, 0);
-    return sse41 && ssse3 && ((r[1] >> 29) & 1) != 0;
-#else
-    unsigned a = 0, b = 0, c = 0, d = 0;
-    if (__get_cpuid_max(0, nullptr) < 7) return false;
-    __get_cpuid(1, &a, &b, &c, &d);
+    if (cpu_x86::cpuid_max() < 7) return false;
+    const uint32_t c = cpu_x86::cpuid(1).c;
     const bool sse41 = ((c >> 19) & 1) != 0, ssse3 = ((c >> 9) & 1) != 0;
-    __get_cpuid_count(7, 0, &a, &b, &c, &d);
-    return sse41 && ssse3 && ((b >> 29) & 1) != 0;
-#endif
+    return sse41 && ssse3 && ((cpu_x86::cpuid(7).b >> 29) & 1) != 0;
 }
 
 // SHA-NI compression. Each loop step does four rounds; the message schedule for steps 4..15 is

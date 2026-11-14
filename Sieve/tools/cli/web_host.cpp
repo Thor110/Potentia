@@ -5,6 +5,7 @@
 #include "cli/map_sieve.hpp"
 #include "cli/vault.hpp"
 #include "sieve/json.hpp"
+#include "sieve/text.hpp"
 
 #include <mutex>
 #include <memory>
@@ -26,12 +27,6 @@ namespace {
 
 constexpr char kB64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
 // The hash a link states, as hex: 64 hex digits, or an integrity attribute's "sha256-<base64>".
 std::string expected_hex(const std::string& expected)
 {
@@ -48,7 +43,7 @@ std::string expected_hex(const std::string& expected)
     }
     if (e.size() != 64 || !std::all_of(e.begin(), e.end(), [](char c) { return std::isxdigit(static_cast<unsigned char>(c)); }))
         throw std::runtime_error("the link states no SHA-256 (64 hex digits, or sha256- and base64), so the file is refused");
-    return lower(e);
+    return ascii_lower(e);
 }
 
 } // namespace
@@ -120,7 +115,7 @@ std::string media_type_of(const std::string& name)
     };
     const size_t dot = name.rfind('.');
     if (dot == std::string::npos || name.find('/', dot) != std::string::npos) return "application/octet-stream";
-    const auto it = kTypes.find(lower(name.substr(dot + 1)));
+    const auto it = kTypes.find(ascii_lower(name.substr(dot + 1)));
     return it == kTypes.end() ? "application/octet-stream" : it->second;
 }
 
@@ -186,7 +181,7 @@ WebOpened web_open(const std::vector<uint8_t>& sieve, const std::string& expecte
         std::vector<uint8_t> b(m.contents.begin() + std::ptrdiff_t(at), m.contents.begin() + std::ptrdiff_t(at + files[k]->size));
         const std::string sha = sha256_hex(b);
         const std::string& named = files[k]->sha256;
-        if (!m.items && (named.empty() || named == "-" || lower(named) != sha))
+        if (!m.items && (named.empty() || named == "-" || ascii_lower(named) != sha))
             throw std::runtime_error("its file " + files[k]->path + " is not the one its listing names: refused");
         return std::make_pair(std::move(b), sha);
     };
@@ -233,7 +228,7 @@ std::vector<WebFile> web_table(const std::vector<uint8_t>& sieve, const std::str
     const Map map = map_of_instructions(m, "table");
     std::vector<WebFile> files;
     for (const MapNode& n : map.nodes)
-        if (!n.folder() && n.kind != MapNode::Held) files.push_back({n.path, lower(n.sha256), n.size});
+        if (!n.folder() && n.kind != MapNode::Held) files.push_back({n.path, ascii_lower(n.sha256), n.size});
     return files;
 }
 

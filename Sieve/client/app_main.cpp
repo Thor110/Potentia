@@ -8,6 +8,7 @@
 #include "replay.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
 #include "cli/media_decode.hpp"
@@ -23,7 +24,7 @@
 #include "speech.hpp"
 #include "cli/draft.hpp"
 #include "cli/pack.hpp"
-#include "cli/dictionaries.hpp" // executable_dir (--metrics-text)
+#include "cli/dictionaries.hpp" // executable_dir, find_data_folder (--metrics-text)
 #include "sieve/mix.hpp"       // Prioritise Decoding Speed
 #include "sieve/rope_wave.hpp" // the rope's search through every wave
 #include "cli/locate.hpp" // read_file_bytes (--cipher-in)
@@ -45,11 +46,13 @@
 #include <ctime>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <map>
 #include <optional>
 #include <random>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -661,6 +664,11 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 // beside_you off. A file or setting that is refused is said on stderr and leaves the default.
 // Your personal dimension's world (sieve-personal-world-v1): worlds/personal.world beside the settings.
 std::filesystem::path personal_world_file(const std::filesystem::path& app_path) { return app_path.parent_path() / "worlds" / "personal.world"; }
+// Your personal dimension's character store: --character-store DIR, else the store beside the settings.
+std::filesystem::path character_store_of(const Args& a, const std::filesystem::path& app_path)
+{
+    return a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path);
+}
 
 std::optional<sieve::Character> character_of(const AppSettings& app, const Args& a)
 {
@@ -1155,19 +1163,13 @@ int run(const Args& a)
         std::string reference = a.get("metrics-text", "");
         if (reference.empty())
         {
-            std::vector<std::filesystem::path> where = {std::filesystem::path("data") / "metrics"};
-            if (const std::filesystem::path exe = sieve::cli::executable_dir(); !exe.empty())
+            // (Where none holds it, the folder found is the first looked in, which does not hold it either.)
+            const std::filesystem::path w = sieve::cli::find_data_folder("metrics", "reference-text.txt") / "reference-text.txt";
+            if (std::error_code ec; std::filesystem::is_regular_file(w, ec))
             {
-                where.push_back(exe / "metrics");
-                where.push_back(exe / ".." / "data" / "metrics");
+                const std::u8string u = w.u8string();
+                reference.assign(u.begin(), u.end());
             }
-            for (const auto& w : where)
-                if (std::error_code ec; std::filesystem::is_regular_file(w / "reference-text.txt", ec))
-                {
-                    const std::u8string u = (w / "reference-text.txt").u8string();
-                    reference.assign(u.begin(), u.end());
-                    break;
-                }
         }
         std::string text = menu.metrics_text(reference);
         std::ifstream fin(filters_path, std::ios::binary);
@@ -1289,6 +1291,17 @@ int run(const Args& a)
         SDL_Quit();
         return 0;
     };
+    // A picture (--screenshot) saved, or the reason it could not be; and the end of most pictures'
+    // reports, after their own lines: where it was saved and what was last read aloud (the checks
+    // read both), then everything closed.
+    auto shoot = [&] {
+        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+    };
+    auto shot_done = [&] {
+        std::cout << "saved " << a.get("screenshot") << "\n";
+        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
+        return finish();
+    };
 
     // The setup menu's settings: sieve-hallway.ini's [setup], and the options over it. The ffmpeg
     // is --ffmpeg's, else [paths]'s.
@@ -1341,13 +1354,11 @@ int run(const Args& a)
         // --cipher-out FILE: the output saved, as Ctrl+S saves it.
         if (a.has("cipher-out") && !c.save_output(a.get("cipher-out"))) throw std::runtime_error(c.status());
         c.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "cipher: " << c.status() << "\n";
         for (const std::string& l : c.output_lines()) std::cout << "  " << l << "\n";
         if (!c.output_hex().empty()) std::cout << "output: " << c.output_hex() << "\n";
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && (a.has("manual-nav") || a.has("manual-log") || a.has("manual-pick") || a.has("manual-example")))
     {
@@ -1393,16 +1404,14 @@ int run(const Args& a)
         if (a.has("manual-steps") && !nav.save_steps(a.get("manual-steps"))) throw std::runtime_error(nav.status());
         nav.wait_exact(); // (the exact check, where it was asked for or is made by itself, done before the picture)
         nav.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "manual navigation: " << nav.status() << "\n";
         std::cout << "  " << nav.readout() << "\n";
         if (!nav.log_path().empty()) std::cout << "  log: " << nav.log_path() << "\n";
         std::cout << "  marks: " << nav.marks_text() << "\n";
         std::cout << "  " << nav.steering() << "\n";
         std::cout << "  " << nav.exact_text() << "\n";
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && a.has("designer"))
     {
@@ -1435,7 +1444,7 @@ int run(const Args& a)
         }
         else d.settle();
         d.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         if (busy) d.settle(); // never leave the worker running as the program ends
         std::cout << "designer: " << d.doc().name() << "\n";
         if (d.played()) std::cout << "designer played: " << d.played() << " (" << d.status() << ")\n";
@@ -1445,9 +1454,7 @@ int run(const Args& a)
             std::ofstream out(std::filesystem::path(a.get("design-out")), std::ios::binary);
             out << d.doc().to_text();
         }
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && a.has("harness"))
     {
@@ -1486,19 +1493,15 @@ int run(const Args& a)
             auto hall = make_hallway(window, renderer, ga, true, filters, app.angle_decimals);
             hall->go_to_ai(harness.go_digits);
             hall->render();
-            if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+            shoot();
             std::cout << "went to the model on the AI line: " << hall->status() << "\n";
-            std::cout << "saved " << a.get("screenshot") << "\n";
-            if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-            return finish();
+            return shot_done();
         }
         harness.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "harness: " << (harness.verdict().empty() ? "-" : harness.verdict()) << "\n";
         if (!harness.status().empty()) std::cout << "status: " << harness.status() << "\n";
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && a.has("main-menu") && a.has("locate"))
     {
@@ -1508,9 +1511,7 @@ int run(const Args& a)
         // and its filters tailored): no world, so no Go to it.
         std::optional<LocatedGo> go; // offered as from the main menu (the screenshot does not go)
         run_locator(window, renderer, settings, filters, filters_path, a.get("locate"), a.has("tailored"), a.get("screenshot"), a.get("press", ""), &go, locator_search_of(a));
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && a.has("main-menu"))
     {
@@ -1519,11 +1520,9 @@ int run(const Args& a)
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press"))) mm.press(key, mod);
         mm.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "main menu: language " << language_code() << ", font " << font_name() << "\n";
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot && a.has("personal-world"))
     {
@@ -1535,7 +1534,7 @@ int run(const Args& a)
         if (auto ch = character_of(app, a)) chars.push_back(*ch);
         const bool yours = !chars.empty();
         if (!a.has("no-character"))
-            for (auto& c : read_personal_dimension(a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path)).characters) chars.push_back(std::move(c));
+            for (auto& c : read_personal_dimension(character_store_of(a, app_path)).characters) chars.push_back(std::move(c));
         const std::filesystem::path wf = a.has("world-file") ? sieve::from_u8(a.get("world-file"))
                                          : a.has("settings")  ? personal_world_file(app_path)
                                                               : std::filesystem::path();
@@ -1561,7 +1560,7 @@ int run(const Args& a)
         world.settle_panels(); // (a picture shows the panels where they are going, as the setup menu's do)
         if (a.has("pworld-back")) world.hold(SDL_SCANCODE_S, std::stof(a.get("pworld-back"))); // (to see what was placed)
         world.render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "personal world: " << world.report() << "\n";
         if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
         if (world.pause_open())
@@ -1603,7 +1602,7 @@ int run(const Args& a)
             finish_filter_warmup();
             menu.render();
         }
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         // Only one of the two panels is in at a time (and neither in the System Viewer).
         if (menu.viewer()) std::cout << "system viewer: open\ncatalogue: " << menu.catalogue_line() << "\n";
         else if (menu.creator())
@@ -1612,8 +1611,7 @@ int run(const Args& a)
         else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
-            std::string sp;
-            for (const auto& id : menu.speaks()) sp += (sp.empty() ? "" : ",") + id;
+            const std::string sp = sieve::join_fields(menu.speaks(), ',');
             std::cout << "right-hand panel: open (LANGUAGE)\nspeaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";
         }
         else if (menu.side_open() && menu.side_page() == 2) std::cout << "right-hand panel: open (CATALOGUE)\ncatalogue: " << menu.catalogue_line() << "\n";
@@ -1622,17 +1620,14 @@ int run(const Args& a)
         {
             std::cout << "right-hand panel: open (CHARACTER)\n" << "character: " << menu.character_id() << "\n";
             if (!menu.animation_line().empty()) std::cout << "animation: " << menu.animation_line() << "\n";
-            std::string sp;
-            for (const auto& id : menu.speaks()) sp += (sp.empty() ? "" : ",") + id;
+            const std::string sp = sieve::join_fields(menu.speaks(), ',');
             std::cout << "speaks: " << (sp.empty() ? "none" : sp) << "\nsave: " << menu.save_line() << "\n";
             if (!menu.character_note().empty()) std::cout << "note: " << menu.character_note() << "\n";
         }
         if (a.has("busy")) finish_filter_warmup(); // never leave the workers counting as the program ends
         for (const auto& [line, text] : walk_estimate_lines(menu.settings())) std::cout << "estimate: " << text << "\n";
         for (const auto& [kind, text] : menu.details_lines()) std::cout << "details: " << text << "\n"; // (I, or the dots: a line's details)
-        std::cout << "saved " << a.get("screenshot") << "\n";
-        if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
-        return finish();
+        return shot_done();
     }
     if (shot)
     {
@@ -1672,7 +1667,7 @@ int run(const Args& a)
                 // Your personal dimension: the store beside the settings file (or --character-store DIR).
                 if (!a.has("no-character"))
                 {
-                    const auto pd = read_personal_dimension(a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path));
+                    const auto pd = read_personal_dimension(character_store_of(a, app_path));
                     hall->set_personal(pd.characters);
                     if (a.has("character-store")) std::cout << "personal dimension: " << pd.characters.size() << " characters, " << pd.left_out << " left out\n";
                 }
@@ -1795,13 +1790,7 @@ int run(const Args& a)
         if (a.has("rings"))
         {
             std::vector<float> notes;
-            const std::string list = a.get("rings");
-            for (size_t i = 0; i <= list.size();)
-            {
-                const size_t c = std::min(list.find(',', i), list.size());
-                if (c > i) notes.push_back(float(std::stod(list.substr(i, c - i))));
-                i = c + 1;
-            }
+            for (const std::string& n : sieve::split_nonempty(a.get("rings"), ',')) notes.push_back(float(std::stod(n)));
             hall->show_rings(notes, int(a.get_u32("rings-zoom", 0)));
         }
         // A recording played through (IDEAS 19.184), every frame as it was, then the picture of where it
@@ -1822,7 +1811,7 @@ int run(const Args& a)
         }
         else if (a.has("record")) save_replay_file(a.get("record"), replay_start_of(*hall)); // (where it begins, no frames: a start to build on)
         hall->render();
-        if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
+        shoot();
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
         if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
@@ -2158,7 +2147,7 @@ int run(const Args& a)
             auto [map, anims] = actions_of(app, app_path, ha);
             hall->set_actions(std::move(map), std::move(anims));
         }
-        if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(ha.has("character-store") ? std::filesystem::path(ha.get("character-store")) : character_store_dir(app_path)).characters);
+        if (!ha.has("no-character")) hall->set_personal(read_personal_dimension(character_store_of(ha, app_path)).characters);
         hall->set_favourites_base(app_path.parent_path()); // (favourites/ and worlds/ beside the settings: IDEAS 19.190)
         hall->set_thin(went_in_thin || ha.has("thin"));
         first = false;

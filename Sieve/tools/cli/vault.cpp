@@ -14,6 +14,7 @@
 #include "cli/timings.hpp"
 #include "cli/pdq_hash.hpp"
 #include "sieve/chunks.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -62,16 +63,10 @@ constexpr uint64_t kMaxPicturePixels = uint64_t(8192) * 8192;
 // to its own once, for both).
 fs::path program_folder() { return executable_dir(); }
 
-bool is_hex64(const std::string& s)
-{
-    return s.size() == 64 && std::all_of(s.begin(), s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
-}
-
 bool parse_hex64(const std::string& s, Sha256::Digest& d)
 {
-    if (!is_hex64(s)) return false;
-    auto nib = [](char c) { return c <= '9' ? c - '0' : c - 'a' + 10; };
-    for (size_t i = 0; i < 32; ++i) d[i] = uint8_t(nib(s[2 * i]) << 4 | nib(s[2 * i + 1]));
+    if (!is_sha256_hex(s)) return false;
+    for (size_t i = 0; i < 32; ++i) d[i] = uint8_t(lower_hex_digit_value(s[2 * i]) << 4 | lower_hex_digit_value(s[2 * i + 1]));
     return true;
 }
 
@@ -210,7 +205,7 @@ Entries parse(const std::string& text)
             {
                 const size_t comma = rest.find(',', at);
                 hs.push_back(rest.substr(at, comma == std::string::npos ? std::string::npos : comma - at));
-                if (!is_hex64(hs.back())) throw std::runtime_error("entry " + std::to_string(i + 1) + ": each chunk is 64 lower-case hex digits, with commas between");
+                if (!is_sha256_hex(hs.back())) throw std::runtime_error("entry " + std::to_string(i + 1) + ": each chunk is 64 lower-case hex digits, with commas between");
                 if (comma == std::string::npos) break;
                 at = comma + 1;
             }
@@ -225,7 +220,7 @@ Entries parse(const std::string& text)
                                       : v3 ? " is not: v<TAB>sha256<TAB>hash, v<TAB>pdq<TAB>hash or v<TAB>chunks<TAB>hash,hash,..."
                                            : " is not: v<TAB>sha256<TAB>hash or v<TAB>pdq<TAB>hash"));
         const std::string h = l.substr(is_pdq ? pdq_kind.size() : sha.size());
-        if (!is_hex64(h)) throw std::runtime_error("entry " + std::to_string(i + 1) + " is not 64 lower-case hex digits");
+        if (!is_sha256_hex(h)) throw std::runtime_error("entry " + std::to_string(i + 1) + " is not 64 lower-case hex digits");
         (is_pdq ? out.pdq : out.sha256).push_back(h);
     }
     return out;

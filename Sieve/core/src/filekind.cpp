@@ -6,6 +6,7 @@
 #include "sieve/plugin.hpp"
 
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -66,13 +67,6 @@ size_t kind_index(std::string_view kind)
     for (size_t i = 0; i < all.size(); ++i)
         if (all[i] == kind) return i;
     throw std::logic_error("unknown file kind");
-}
-
-std::string lower(std::string s)
-{
-    for (char& c : s)
-        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
-    return s;
 }
 
 // "01" written n times, then shifted up a byte: 256 + 256^2 + ... + 256^n.
@@ -153,7 +147,7 @@ const std::vector<std::string>& kind_set_names()
     static const std::vector<std::string> names = [] {
         std::vector<std::string> n{"signed", "text", "signed-or-text", "unknown", "empty", "any"};
         for (const std::string& k : file_kinds())
-            if (is_signed_kind(k)) n.push_back(lower(k));
+            if (is_signed_kind(k)) n.push_back(ascii_lower(k));
         return n;
     }();
     return names;
@@ -187,7 +181,7 @@ KindSet kind_set_of(const std::string& name)
         else if (name == "unknown") in = k == "?";
         else if (name == "empty") in = k == "EMPTY";
         else if (name == "any") in = true;
-        else in = is_signed_kind(k) && lower(k) == name;
+        else in = is_signed_kind(k) && ascii_lower(k) == name;
         s[i] = in ? 1 : 0;
     }
     if (std::find(kind_set_names().begin(), kind_set_names().end(), name) == kind_set_names().end())

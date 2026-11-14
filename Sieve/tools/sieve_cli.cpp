@@ -89,6 +89,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/utf8.hpp"
+#include "sieve/text.hpp"
 #include "sieve/whole_file.hpp"
 
 #include <algorithm>
@@ -1104,13 +1105,20 @@ sieve::ImportLoader beside(const std::string& path)
     };
 }
 
+// A file given on the command line, read whole. Not read_whole_file: these commands have always said
+// "cannot read" (an invalid argument, as the file was the person's to give), and still do.
+std::string read_given_file(const std::string& path)
+{
+    std::ifstream in(path, std::ios::binary);
+    if (!in) throw std::invalid_argument("cannot read " + path);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
 // Any model the importers read (.obj, .gltf, .glb; sieve/importers.hpp), as the CHARACTER page's
 // importer reads it.
 ObjMesh read_obj(const std::string& path)
 {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) throw std::invalid_argument("cannot read " + path);
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string text = read_given_file(path);
     try
     {
         const sieve::ImportedModel m = sieve::read_model(text, beside(path));
@@ -1128,43 +1136,38 @@ ObjMesh read_obj(const std::string& path)
 // runs; `share` sends a version out sealed under the owner's key; `fetch` brings it back by its remote id.
 namespace {
 
-std::vector<std::string> comma_list(const std::string& d)
-{
-    std::vector<std::string> out;
-    for (size_t i = 0; i <= d.size();)
-    {
-        const size_t c = std::min(d.find(',', i), d.size());
-        if (c > i) out.push_back(d.substr(i, c - i));
-        i = c + 1;
-    }
-    return out;
-}
-
 sieve::SealKey raid_key(const Args& a)
 {
     if (!a.has("key")) throw std::invalid_argument("give the key file with --key FILE (made by: sieve raid key --out FILE)");
-    std::ifstream in(a.get("key"), std::ios::binary);
-    if (!in) throw std::invalid_argument("cannot read " + a.get("key"));
-    const std::string t((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return sieve::read_seal_key(t);
+    return sieve::read_seal_key(read_given_file(a.get("key")));
 }
 
 // Connects to every peer that answers; says which do not.
-std::vector<std::unique_ptr<sieve::RaidPeer>> raid_peers(const Args& a)
+sieve_cli::RaidPeers raid_peers(const Args& a)
 {
     if (!a.has("peers")) throw std::invalid_argument("give the machines with --peers HOST:PORT,...");
-    std::vector<std::unique_ptr<sieve::RaidPeer>> out;
-    for (const auto& p : comma_list(a.get("peers")))
-        try
-        {
-            out.push_back(std::make_unique<sieve::RaidNetPeer>(sieve_cli::raid_connect(p), p));
-        }
-        catch (const std::exception& e)
-        {
-            std::cout << "no answer from " << p << ": " << e.what() << "\n";
-        }
-    if (out.empty()) throw std::runtime_error("none of the peers answered");
+    sieve_cli::RaidPeers out = sieve_cli::raid_connect_all(split_nonempty(a.get("peers"), ','), 30, [](const std::string& p, const std::string& why) {
+        std::cout << "no answer from " << p << ": " << why << "\n";
+    });
+    if (out.owned.empty()) throw std::runtime_error("none of the peers answered");
     return out;
+}
+
+// The RAID on the folders of --drives (given: the callers have asked for it).
+sieve::Raid raid_of(const Args& a)
+{
+    std::vector<std::filesystem::path> drives;
+    for (const auto& d : split_nonempty(a.get("drives"), ',')) drives.emplace_back(d);
+    return sieve::Raid(drives, a.get_u32("copies", 2));
+}
+
+// A version id as given, or a name for its latest version.
+std::string version_of(const sieve::Raid& raid, const std::string& id_or_name)
+{
+    if (id_or_name.size() == 64) return id_or_name;
+    const auto l = raid.latest(id_or_name);
+    if (!l) throw std::invalid_argument("no save named " + id_or_name);
+    return *l;
 }
 
 const char* kRaidWarning =
@@ -1218,10 +1221,9 @@ int raid_between_machines(const Args& a, const std::string& what)
         // holds; a piece on too few put back on the next of its homes, unless --no-repair.
         if (a.positional.size() < 2) throw std::invalid_argument("give the remote id to check");
         const auto key = raid_key(a);
-        auto owned = raid_peers(a);
-        std::vector<sieve::RaidPeer*> peers;
-        for (auto& p : owned) peers.push_back(p.get());
-        const uint32_t copies = a.has("peer-copies") ? a.get_u32("peer-copies", sieve::kRaidPeerCopies) : sieve::kRaidPeerCopies;
+        const auto connected = raid_peers(a);
+        const std::vector<sieve::RaidPeer*>& peers = connected.peers;
+        const uint32_t copies = a.get_u32("peer-copies", sieve::kRaidPeerCopies);
         const auto c = sieve::raid_check(a.positional[1], key, peers, copies, !a.has("no-repair"));
         std::cout << "checked   " << c.pieces << " pieces on " << peers.size() << " peers, asking for " << std::min<size_t>(copies, peers.size()) << " copies each\n"
                   << "whole     " << c.whole << "\n"
@@ -1235,19 +1237,15 @@ int raid_between_machines(const Args& a, const std::string& what)
     {
         if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give the remote id and --out FILE");
         const auto key = raid_key(a);
-        auto owned = raid_peers(a);
-        std::vector<sieve::RaidPeer*> peers;
-        for (auto& p : owned) peers.push_back(p.get());
-        const auto f = sieve::raid_fetch(a.positional[1], key, peers);
+        const auto connected = raid_peers(a); // (held to the end, as the connections always were)
+        const auto f = sieve::raid_fetch(a.positional[1], key, connected.peers);
         std::ofstream out(a.get("out"), std::ios::binary);
         out.write(f.bytes.data(), std::streamsize(f.bytes.size()));
         if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
         std::cout << "wrote     " << a.get("out") << " (" << f.bytes.size() << " bytes: " << f.manifest.name << ", version " << f.manifest.id() << ")\n";
         if (a.has("drives"))
         {
-            std::vector<std::filesystem::path> drives;
-            for (const auto& d : comma_list(a.get("drives"))) drives.emplace_back(d);
-            sieve::Raid raid(drives, a.has("copies") ? a.get_u32("copies", 2) : 2);
+            sieve::Raid raid = raid_of(a); // (made before the line starts: a folder refused prints nothing)
             std::cout << "kept      in the RAID as " << raid.put(f.manifest.name, f.bytes) << "\n";
         }
         return 0;
@@ -1263,9 +1261,7 @@ int cmd_raid(const Args& a)
     const std::string what = a.positional[0];
     if (const int r = raid_between_machines(a, what); r >= 0) return r;
     if (!a.has("drives")) throw std::invalid_argument("give the folders with --drives A,B,...");
-    std::vector<std::filesystem::path> drives;
-    for (const auto& d : comma_list(a.get("drives"))) drives.emplace_back(d);
-    sieve::Raid raid(drives, a.has("copies") ? a.get_u32("copies", 2) : 2);
+    sieve::Raid raid = raid_of(a);
     auto report = [](const sieve::RaidReport& r, const char* found = "") {
         std::cout << "folders   " << r.folders << "\n"
                   << "saves     " << r.manifests << " versions, " << r.chunks << " chunks, " << r.good_copies << " good copies\n"
@@ -1280,9 +1276,7 @@ int cmd_raid(const Args& a)
     {
         if (a.positional.size() < 2) throw std::invalid_argument("give the file to keep");
         const std::string path = a.positional[1];
-        std::ifstream in(path, std::ios::binary);
-        if (!in) throw std::invalid_argument("cannot read " + path);
-        const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        const std::string bytes = read_given_file(path);
         const std::string name = a.has("name") ? a.get("name") : std::filesystem::path(path).filename().string();
         const auto before = raid.latest(name);
         const std::string id = raid.put(name, bytes);
@@ -1292,13 +1286,7 @@ int cmd_raid(const Args& a)
     if (what == "get")
     {
         if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give a version id (or a name, for its latest) and --out FILE");
-        std::string v = a.positional[1];
-        if (v.size() != 64)
-        {
-            const auto l = raid.latest(v);
-            if (!l) throw std::invalid_argument("no save named " + v);
-            v = *l;
-        }
+        const std::string v = version_of(raid, a.positional[1]);
         const std::string bytes = raid.get(v);
         std::ofstream out(a.get("out"), std::ios::binary);
         out.write(bytes.data(), std::streamsize(bytes.size()));
@@ -1328,18 +1316,11 @@ int cmd_raid(const Args& a)
     if (what == "share")
     {
         if (a.positional.size() < 2) throw std::invalid_argument("give a version id (or a name, for its latest) to share");
-        std::string v = a.positional[1];
-        if (v.size() != 64)
-        {
-            const auto l = raid.latest(v);
-            if (!l) throw std::invalid_argument("no save named " + v);
-            v = *l;
-        }
+        const std::string v = version_of(raid, a.positional[1]);
         const auto key = raid_key(a);
-        auto owned = raid_peers(a);
-        std::vector<sieve::RaidPeer*> peers;
-        for (auto& p : owned) peers.push_back(p.get());
-        const auto r = sieve::raid_share(raid, v, key, peers, a.has("peer-copies") ? a.get_u32("peer-copies", sieve::kRaidPeerCopies) : sieve::kRaidPeerCopies);
+        const auto connected = raid_peers(a);
+        const std::vector<sieve::RaidPeer*>& peers = connected.peers;
+        const auto r = sieve::raid_share(raid, v, key, peers, a.get_u32("peer-copies", sieve::kRaidPeerCopies));
         std::cout << "shared    version " << v << " (" << r.chunks << " chunks) with " << peers.size() << " peers\n"
                   << "sent      " << r.sent << " pieces, " << r.bytes_sent << " bytes; " << r.had << " already there\n";
         for (const auto& n : r.notes) std::cout << "  " << n << "\n";
@@ -1457,11 +1438,6 @@ int cmd_catalogue(const Args& a)
         return 0;
     }
     const std::vector<sieve::FormatEntry> all = sieve::format_catalogue_with(folders);
-    auto find = [&](const std::string& id) -> const sieve::FormatEntry* {
-        for (const auto& e : all)
-            if (e.id == id) return &e;
-        return nullptr;
-    };
     const std::filesystem::path stats = sieve::format_stats_folder(a.get("stats-folder", ""));
     if (a.has("measure"))
     {
@@ -1553,7 +1529,7 @@ int cmd_catalogue(const Args& a)
     }
     if (!a.positional.empty())
     {
-        const sieve::FormatEntry* e = find(a.positional[0]);
+        const sieve::FormatEntry* e = sieve::format_in(all, a.positional[0]);
         if (!e) throw std::invalid_argument("no entry " + a.positional[0] + " (sieve catalogue lists them)");
         std::cout << e->text();
         std::cout << "version    " << e->version() << "\n";
@@ -1579,8 +1555,7 @@ int cmd_catalogue(const Args& a)
     std::map<std::string, size_t> kinds;
     for (const auto& e : all) ++kinds[e.kind];
     const std::string only = a.get("kind", "");
-    std::string needle = a.get("search", "");
-    for (char& c : needle) c = char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string needle = ascii_lower(a.get("search", ""));
     if (needle.empty())
     {
         std::cout << all.size() << " entries:";
@@ -1593,9 +1568,7 @@ int cmd_catalogue(const Args& a)
         if (!only.empty() && e.kind != only) continue;
         if (!needle.empty())
         {
-            std::string t = e.text();
-            for (char& c : t) c = char(std::tolower(static_cast<unsigned char>(c)));
-            if (t.find(needle) == std::string::npos) continue;
+            if (ascii_lower(e.text()).find(needle) == std::string::npos) continue;
         }
         std::string id = e.id, kind = e.kind;
         id.resize(std::max<size_t>(id.size(), 30), ' ');
@@ -1658,9 +1631,7 @@ int cmd_import(const Args& a)
     }
     if (a.positional.empty()) throw std::invalid_argument("give a model file (or --formats)");
     const std::string path = a.positional[0];
-    std::ifstream in(path, std::ios::binary);
-    if (!in) throw std::invalid_argument("cannot read " + path);
-    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string bytes = read_given_file(path);
     const sieve::ImportedModel m = sieve::read_model(bytes, beside(path));
     std::string name = m.format;
     for (const auto& f : sieve::import_formats())
@@ -3417,28 +3388,17 @@ int cmd_site(const Args& a)
 {
     namespace fs = std::filesystem;
     auto path_of = [](const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); };
-    auto list_of = [](const std::string& s) {
-        std::vector<std::string> out;
-        size_t at = 0;
-        while (at <= s.size())
-        {
-            const size_t end = std::min(s.find(',', at), s.size());
-            if (end > at) out.push_back(s.substr(at, end - at));
-            at = end + 1;
-        }
-        return out;
-    };
     const std::string what = a.positional.empty() ? "" : a.positional[0];
     if (what == "build")
     {
         if (a.positional.size() != 2 || !a.has("out")) throw std::invalid_argument("site build needs a SRC folder and --out OUT");
         SiteOptions o;
         o.pages = a.has("sieve-pages");
-        if (a.has("plain")) o.plain = list_of(a.get("plain"));
+        if (a.has("plain")) o.plain = split_nonempty(a.get("plain"), ',');
         if (a.has("sieve"))
         {
             o.sieve_kinds.clear();
-            for (std::string e : list_of(a.get("sieve")))
+            for (std::string e : split_nonempty(a.get("sieve"), ','))
             {
                 if (!e.empty() && e[0] == '.') e = e.substr(1);
                 for (char& c : e) c = char(std::tolower(static_cast<unsigned char>(c)));

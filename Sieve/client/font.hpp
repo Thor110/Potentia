@@ -28,6 +28,10 @@ const std::string& font_name();
 
 // Draws UTF-8 text with its top-left corner at (x, y), at `scale` (1 = 8-pixel cells).
 void draw_text(SDL_Renderer* r, float x, float y, const std::string& utf8, float scale, SDL_Color c);
+// The other shape drawn the same way on many screens: an ellipse's outline centred on (cx, cy),
+// `rx` across and `ry` down, as `sides` straight lines in the renderer's draw colour (a circle
+// where the two are equal). Here because, like draw_text, it is drawn straight onto the screen.
+void outline_ellipse(SDL_Renderer* r, float cx, float cy, float rx, float ry, int sides);
 // Width in pixels at `scale`, and in 8-pixel cells (rounded up).
 // True if the current font (or its fallback) can actually draw this code point. The Binary
 // Edge asks before it rains a character, so the rain never falls as rows of question marks.

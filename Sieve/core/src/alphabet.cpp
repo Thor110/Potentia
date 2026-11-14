@@ -1,5 +1,7 @@
 #include "sieve/alphabet.hpp"
 
+#include "sieve/hex.hpp"
+
 #include <algorithm>
 #include <deque>
 #include <mutex>
@@ -125,10 +127,7 @@ char32_t parse_code_point(std::string_view s, std::string_view whole)
     char32_t cp = 0;
     for (const char c : s)
     {
-        const int d = c >= '0' && c <= '9'   ? c - '0'
-                      : c >= 'a' && c <= 'f' ? c - 'a' + 10
-                      : c >= 'A' && c <= 'F' ? c - 'A' + 10
-                                             : -1;
+        const int d = hex_digit_value(c);
         if (d < 0) throw std::invalid_argument("'" + std::string(whole) + "' is not a code point or a block name");
         cp = cp * 16 + char32_t(d);
     }

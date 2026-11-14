@@ -11,6 +11,7 @@
 #include "sieve/character.hpp"
 #include "sieve/actions.hpp"
 #include "sieve/animation.hpp"
+#include "sieve/hex.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -23,48 +24,63 @@
 
 namespace hallway {
 
-inline std::filesystem::path character_store_dir(const std::filesystem::path& app_path)
+// A store's folder: `name` beside the settings file. Characters, animations and action maps each
+// have one, found the same way.
+inline std::filesystem::path store_dir(const std::filesystem::path& app_path, const char* name)
 {
-    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "characters";
+    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / name;
 }
 
-// The animations' store (IDEAS 19.170): `animations` beside the settings file, each animation kept
-// as <SHA-256>.animation, as characters are.
-inline std::filesystem::path animation_store_dir(const std::filesystem::path& app_path)
-{
-    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "animations";
-}
-
-// Keeps an animation in the store (once: the same animation is one file); false if it cannot.
-inline bool store_animation(const std::filesystem::path& dir, const sieve::Animation& a)
+// Keeps one thing in a store as <its id><ext>, its text as the file's bytes; false if it cannot. As
+// the name is the SHA-256 of the text, a file already there is normally left alone (the same thing
+// is one file); `rewrite` writes it again all the same, which mends a copy that no longer matches
+// its name.
+template <class T>
+bool store_by_id(const std::filesystem::path& dir, const T& x, const char* ext, bool rewrite = false)
 {
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
-    const std::filesystem::path f = dir / (a.id() + ".animation");
-    if (std::filesystem::exists(f, ec)) return true;
+    const std::filesystem::path f = dir / (x.id() + ext);
+    if (!rewrite && std::filesystem::exists(f, ec)) return true;
     std::ofstream out(f, std::ios::binary);
-    out << a.text();
+    out << x.text();
     return bool(out);
 }
 
-// The stored animation of this SHA-256, read and checked against its name; nothing if it is not
-// there, is refused, or is not what its name says.
-inline std::optional<sieve::Animation> stored_animation(const std::filesystem::path& dir, const std::string& id)
+// The stored thing of this SHA-256, read with `read` and checked against its name; nothing if it is
+// not there, is refused, or is not what its name says.
+template <class T, class Read>
+std::optional<T> stored_by_id(const std::filesystem::path& dir, const std::string& id, const char* ext, Read read)
 {
-    if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos) return std::nullopt;
-    std::ifstream in(dir / (id + ".animation"), std::ios::binary);
+    if (!sieve::is_sha256_hex(id)) return std::nullopt;
+    std::ifstream in(dir / (id + ext), std::ios::binary);
     if (!in) return std::nullopt;
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     try
     {
-        sieve::Animation a = sieve::read_animation(text);
-        if (a.id() != id) return std::nullopt;
-        return a;
+        T x = read(text);
+        if (x.id() != id) return std::nullopt;
+        return x;
     }
     catch (const std::exception&)
     {
         return std::nullopt;
     }
+}
+
+inline std::filesystem::path character_store_dir(const std::filesystem::path& app_path) { return store_dir(app_path, "characters"); }
+
+// The animations' store (IDEAS 19.170): `animations` beside the settings file, each animation kept
+// as <SHA-256>.animation, as characters are.
+inline std::filesystem::path animation_store_dir(const std::filesystem::path& app_path) { return store_dir(app_path, "animations"); }
+
+// Keeps an animation in the store (once: the same animation is one file); false if it cannot.
+inline bool store_animation(const std::filesystem::path& dir, const sieve::Animation& a) { return store_by_id(dir, a, ".animation"); }
+
+// The stored animation of this SHA-256, read and checked against its name.
+inline std::optional<sieve::Animation> stored_animation(const std::filesystem::path& dir, const std::string& id)
+{
+    return stored_by_id<sieve::Animation>(dir, id, ".animation", sieve::read_animation);
 }
 
 // Every animation in the store, read and checked against its name (at most `limit`, by name): the
@@ -87,38 +103,13 @@ inline std::vector<sieve::Animation> stored_animations(const std::filesystem::pa
 
 // The action maps' store (IDEAS 19.186): `actions` beside the settings file, each map kept as
 // <SHA-256>.actions (sieve-actions-v1), as animations are.
-inline std::filesystem::path actions_store_dir(const std::filesystem::path& app_path)
-{
-    return (app_path.empty() ? AppSettings::default_path() : app_path).parent_path() / "actions";
-}
+inline std::filesystem::path actions_store_dir(const std::filesystem::path& app_path) { return store_dir(app_path, "actions"); }
 
-inline bool store_actions(const std::filesystem::path& dir, const sieve::ActionMap& m)
-{
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
-    const std::filesystem::path f = dir / (m.id() + ".actions");
-    if (std::filesystem::exists(f, ec)) return true;
-    std::ofstream out(f, std::ios::binary);
-    out << m.text();
-    return bool(out);
-}
+inline bool store_actions(const std::filesystem::path& dir, const sieve::ActionMap& m) { return store_by_id(dir, m, ".actions"); }
 
 inline std::optional<sieve::ActionMap> stored_actions(const std::filesystem::path& dir, const std::string& id)
 {
-    if (id.size() != 64 || id.find_first_not_of("0123456789abcdef") != std::string::npos) return std::nullopt;
-    std::ifstream in(dir / (id + ".actions"), std::ios::binary);
-    if (!in) return std::nullopt;
-    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    try
-    {
-        sieve::ActionMap m = sieve::read_actions(text);
-        if (m.id() != id) return std::nullopt;
-        return m;
-    }
-    catch (const std::exception&)
-    {
-        return std::nullopt;
-    }
+    return stored_by_id<sieve::ActionMap>(dir, id, ".actions", sieve::read_actions);
 }
 
 struct PersonalDimension

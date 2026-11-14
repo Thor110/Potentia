@@ -6,12 +6,14 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -130,9 +132,24 @@ private:
     socket_t s_;
 };
 
+// HOST:PORT looked up, for connecting to it or (`passive`) listening on it. Throws
+// std::runtime_error if it cannot be found; listening also needs one address at least, where
+// connecting has always gone on to say it cannot connect.
 struct Addresses
 {
     addrinfo* list = nullptr;
+    Addresses(const std::string& address, bool passive)
+    {
+        start_sockets();
+        const auto [host, port] = sieve::raid_split_address(address);
+        addrinfo hints{};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        if (passive) hints.ai_flags = AI_PASSIVE;
+        if (getaddrinfo(host.c_str(), port.c_str(), &hints, &list) != 0 || (passive && !list)) throw std::runtime_error("cannot find " + address);
+    }
+    Addresses(const Addresses&) = delete;
+    Addresses& operator=(const Addresses&) = delete;
     ~Addresses()
     {
         if (list) freeaddrinfo(list);
@@ -143,13 +160,7 @@ struct Addresses
 
 std::unique_ptr<sieve::RaidStream> raid_connect(const std::string& address, int timeout_s)
 {
-    start_sockets();
-    const auto [host, port] = sieve::raid_split_address(address);
-    addrinfo hints{};
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    Addresses a;
-    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &a.list) != 0) throw std::runtime_error("cannot find " + address);
+    const Addresses a(address, false);
     for (addrinfo* i = a.list; i; i = i->ai_next)
     {
         const socket_t s = socket(i->ai_family, i->ai_socktype, i->ai_protocol);
@@ -161,17 +172,26 @@ std::unique_ptr<sieve::RaidStream> raid_connect(const std::string& address, int 
     throw std::runtime_error("cannot connect to " + address);
 }
 
+RaidPeers raid_connect_all(const std::vector<std::string>& addresses, int timeout_s, const std::function<void(const std::string&, const std::string&)>& no_answer)
+{
+    RaidPeers out;
+    for (const auto& p : addresses)
+        try
+        {
+            out.owned.push_back(std::make_unique<sieve::RaidNetPeer>(raid_connect(p, timeout_s), p));
+        }
+        catch (const std::exception& e)
+        {
+            if (no_answer) no_answer(p, e.what()); // (otherwise a peer away is simply not used)
+        }
+    for (auto& p : out.owned) out.peers.push_back(p.get());
+    return out;
+}
+
 void raid_listen(const std::string& address, size_t connections, int timeout_s, const std::function<void()>& ready,
                  const std::function<void(sieve::RaidStream&, const std::string&)>& on, const std::atomic<bool>* stop)
 {
-    start_sockets();
-    const auto [host, port] = sieve::raid_split_address(address);
-    addrinfo hints{};
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-    Addresses a;
-    if (getaddrinfo(host.c_str(), port.c_str(), &hints, &a.list) != 0 || !a.list) throw std::runtime_error("cannot find " + address);
+    const Addresses a(address, true);
     const socket_t l = socket(a.list->ai_family, a.list->ai_socktype, a.list->ai_protocol);
     if (l == kNoSocket) throw std::runtime_error("cannot make a socket for " + address);
     const int one = 1;

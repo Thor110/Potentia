@@ -96,13 +96,13 @@ std::vector<Place> places_beside(const fs::path& opened)
     {
         if (!it->is_regular_file(ec)) continue;
         const std::string name = u8(it->path().filename());
-        const std::string e = lower(it->path().extension().string());
+        const std::string e = ascii_lower(it->path().extension().string());
         // (a plain .sieve may hold anything: only the one opened is taken, and each .simage)
         if (picture_name(name) || e == ".simage") out.push_back({it->path(), sieve_name(name)});
     }
     if (std::none_of(out.begin(), out.end(), [&](const Place& p) { return fs::equivalent(p.path, opened, ec); }))
         out.push_back({opened, sieve_name(u8(opened.filename()))});
-    std::sort(out.begin(), out.end(), [](const Place& a, const Place& b) { return lower(u8(a.path.filename())) < lower(u8(b.path.filename())); });
+    std::sort(out.begin(), out.end(), [](const Place& a, const Place& b) { return ascii_lower(u8(a.path.filename())) < ascii_lower(u8(b.path.filename())); });
     return out;
 }
 

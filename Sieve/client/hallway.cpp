@@ -2480,12 +2480,8 @@ void Hallway::set_character(std::optional<sieve::Character> c)
     hall_scale_ = 1;
     character_fits_ = true;
     if (!character_ || character_->spheres.empty()) return;
-    int32_t low = 0, high = 0, ex, ey, ez;
-    for (const sieve::Sphere& p : character_->spheres)
-    {
-        low = std::min(low, p.y - p.r);
-        high = std::max(high, p.y + p.r);
-    }
+    int32_t low, high, ex, ey, ez;
+    character_->vertical(low, high);
     character_->extent(ex, ey, ez);
     const float metre = float(sieve::kCharacterUnitsPerMetre);
     const float tall = float(high - low) / metre, wide = 2.0f * float(std::max(ex, ez)) / metre;
@@ -2552,13 +2548,8 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
     // Where it stands and how far aside: from its rest pose (when it is moving), so its feet and its
     // place in the corridor hold still while it moves.
     const sieve::Character& r = rest ? *rest : c;
-    int32_t low = 0, high = 0;
-    for (const sieve::Sphere& p : r.spheres)
-    {
-        low = std::min(low, p.y - p.r);
-        high = std::max(high, p.y + p.r);
-    }
-    int32_t ex, ey, ez;
+    int32_t low, high, ex, ey, ez;
+    r.vertical(low, high);
     r.extent(ex, ey, ez);
     // Its own size, in the hallway as you see it (the hallway grown by hall_scale_ is you made smaller).
     const float scale = 1.0f / (float(sieve::kCharacterUnitsPerMetre) * hall_scale_);

@@ -43,6 +43,13 @@ ResolvedDictionary resolve_dictionary(const std::string& value);
 std::filesystem::path executable_dir();
 void set_executable_dir(const std::filesystem::path& folder);
 
+// One of the programs' data folders, by its name `sub` (meshes, lang, fonts...): data/<sub> under
+// where the program was started (a run from the repository), else <sub> beside the program (a
+// release), else data/<sub> in the folder above it (a build inside the repository), the first
+// that is a folder or, when `must_hold` is given, the first that holds a file of that name. None
+// is data/<sub>, so what is then not found there is reported where it was looked for first.
+std::filesystem::path find_data_folder(const std::string& sub, const std::string& must_hold = {});
+
 // The dictionaries an installer program carries (unpacked by use_carried_dictionaries into a
 // folder of their own): looked for there first, before data/dictionaries and the installation's.
 void set_dictionaries_folder(const std::filesystem::path& folder);

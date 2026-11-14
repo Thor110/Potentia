@@ -1,9 +1,14 @@
 // Sieve hallway — recording and replay (see replay.hpp).
 #include "replay.hpp"
 
-#include <cstdio>
+#include "sieve/hex.hpp"
+#include "sieve/text.hpp"
+
+#include <cstdint>
+#include <cstring>
 #include <deque>
 #include <cstdlib>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -12,25 +17,9 @@ namespace hallway {
 
 namespace {
 
-std::string g(double v)
-{
-    char b[40];
-    std::snprintf(b, sizeof b, "%.9g", v);
-    return b;
-}
+using sieve::split_fields;
 
-std::vector<std::string> split(const std::string& s, char by)
-{
-    std::vector<std::string> out;
-    size_t i = 0;
-    for (;;)
-    {
-        const size_t e = s.find(by, i);
-        out.push_back(s.substr(i, e == std::string::npos ? std::string::npos : e - i));
-        if (e == std::string::npos) return out;
-        i = e + 1;
-    }
-}
+std::string g(double v) { return sieve::nine_digits(v); }
 
 // A whole number of at most `most`, written as it is (no sign, no leading zero but 0 itself).
 bool whole(const std::string& s, uint64_t most, uint64_t& v)
@@ -48,8 +37,6 @@ bool number(const std::string& s, float& v)
     return end && *end == '\0';
 }
 
-int hexval(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1; }
-
 } // namespace
 
 std::string replay_token(const SDL_Event& e)
@@ -62,10 +49,9 @@ std::string replay_token(const SDL_Event& e)
                std::to_string(unsigned(e.key.mod)) + ":" + (e.key.repeat ? "1" : "0");
     case SDL_EVENT_TEXT_INPUT:
     {
-        static const char* kHex = "0123456789abcdef";
-        std::string t = "tx:";
-        for (const char* p = e.text.text; p && *p; ++p) t += kHex[(uint8_t(*p) >> 4) & 15], t += kHex[uint8_t(*p) & 15];
-        return t == "tx:" ? std::string() : t;
+        // (no token for no text: SDL may give none at all)
+        if (!e.text.text || !*e.text.text) return std::string();
+        return "tx:" + sieve::hex_of(std::span(reinterpret_cast<const uint8_t*>(e.text.text), std::strlen(e.text.text)));
     }
     case SDL_EVENT_MOUSE_MOTION: return "mm:" + g(e.motion.x) + ":" + g(e.motion.y) + ":" + g(e.motion.xrel) + ":" + g(e.motion.yrel);
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -117,7 +103,7 @@ Replay read_replay(const std::string& text)
     if (lines.size() < 2 || lines[0] != kReplayVersion) throw std::invalid_argument(std::string("not a recording: it does not start with ") + kReplayVersion);
     Replay r;
     {
-        const auto f = split(lines[1], ' ');
+        const auto f = split_fields(lines[1], ' ');
         const char* keys[] = {"start", "line=", "tile=", "x=", "y=", "z=", "yaw=", "pitch="};
         if (f.size() != 8 || f[0] != keys[0]) throw std::invalid_argument("line 2 is not its start (start line= tile= x= y= z= yaw= pitch=)");
         for (size_t k = 1; k < 8; ++k)
@@ -131,21 +117,21 @@ Replay read_replay(const std::string& text)
     for (size_t li = 2; li < lines.size(); ++li)
     {
         const std::string where = "line " + std::to_string(li + 1) + ": ";
-        const auto f = split(lines[li], ' ');
+        const auto f = split_fields(lines[li], ' ');
         if (f.size() < 3 || f[0] != "f") throw std::invalid_argument(where + "not a frame (f DT HELD ...)");
         ReplayFrame fr;
         uint64_t n = 0;
         if (!whole(f[1], kReplayMaxDtUs, n) || n == 0) throw std::invalid_argument(where + "its time is not 1 to 100000 microseconds");
         fr.dt_us = uint32_t(n);
         if (f[2] != "-")
-            for (const auto& h : split(f[2], ','))
+            for (const auto& h : split_fields(f[2], ','))
             {
                 if (!whole(h, SDL_SCANCODE_COUNT - 1, n) || (!fr.held.empty() && n <= fr.held.back())) throw std::invalid_argument(where + "its keys held are not scancodes in increasing order");
                 fr.held.push_back(uint16_t(n));
             }
         for (size_t k = 3; k < f.size(); ++k)
         {
-            const auto p = split(f[k], ':');
+            const auto p = split_fields(f[k], ':');
             SDL_Event e{};
             const std::string& kind = p[0];
             auto bad = [&] { return std::invalid_argument(where + "event " + std::to_string(k - 2) + " is not one of kd ku tx mm bd bu mw, written as they are"); };
@@ -168,7 +154,7 @@ Replay read_replay(const std::string& text)
                 if (p[1].empty() || p[1].size() % 2 || p[1].size() > 64) throw bad();
                 for (size_t i = 0; i < p[1].size(); i += 2)
                 {
-                    const int hi = hexval(p[1][i]), lo = hexval(p[1][i + 1]);
+                    const int hi = sieve::lower_hex_digit_value(p[1][i]), lo = sieve::lower_hex_digit_value(p[1][i + 1]);
                     if (hi < 0 || lo < 0) throw bad();
                     t += char(hi * 16 + lo);
                 }

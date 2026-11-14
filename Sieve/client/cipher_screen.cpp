@@ -57,14 +57,6 @@ bool inside(const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x +
 
 using sieve::hex_of;
 
-int hex_digit(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
 // Hex as bytes; spaces are skipped, so hex can be pasted in groups.
 std::vector<uint8_t> bytes_of_hex(const std::string& h)
 {
@@ -75,7 +67,7 @@ std::vector<uint8_t> bytes_of_hex(const std::string& h)
     std::vector<uint8_t> b;
     for (size_t i = 0; i < d.size(); i += 2)
     {
-        const int hi = hex_digit(d[i]), lo = hex_digit(d[i + 1]);
+        const int hi = sieve::hex_digit_value(d[i]), lo = sieve::hex_digit_value(d[i + 1]);
         if (hi < 0 || lo < 0) throw std::invalid_argument(tr("cipher.bad_hex"));
         b.push_back(uint8_t(hi * 16 + lo));
     }

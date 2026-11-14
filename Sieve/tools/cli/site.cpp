@@ -6,6 +6,8 @@
 #include "cli/items.hpp"
 #include "cli/pack.hpp"
 #include "cli/web_host.hpp"
+#include "sieve/importers.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -24,12 +26,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
 fs::path path_of(const std::string& rel) { return fs::path(std::u8string(rel.begin(), rel.end())); }
 
 std::string rel_of(const fs::path& p)
@@ -42,7 +38,7 @@ std::string ext_of(const std::string& rel)
 {
     const size_t slash = rel.rfind('/'), dot = rel.rfind('.');
     if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return "";
-    return lower(rel.substr(dot + 1));
+    return ascii_lower(rel.substr(dot + 1));
 }
 
 bool is_html(const std::string& rel) { return ext_of(rel) == "html" || ext_of(rel) == "htm"; }
@@ -130,7 +126,7 @@ std::vector<Tag> tags_of(const std::string& h, std::vector<std::string_view>* ra
         Tag t;
         size_t j = i + 1;
         while (j < h.size() && std::isalnum(static_cast<unsigned char>(h[j]))) ++j;
-        t.name = lower(h.substr(i + 1, j - i - 1));
+        t.name = ascii_lower(h.substr(i + 1, j - i - 1));
         while (j < h.size())
         {
             while (j < h.size() && std::isspace(static_cast<unsigned char>(h[j]))) ++j;
@@ -151,7 +147,7 @@ std::vector<Tag> tags_of(const std::string& h, std::vector<std::string_view>* ra
                 ++j;
                 continue;
             }
-            a.name = lower(h.substr(n0, j - n0));
+            a.name = ascii_lower(h.substr(n0, j - n0));
             size_t k = j;
             while (k < h.size() && std::isspace(static_cast<unsigned char>(h[k]))) ++k;
             if (k < h.size() && h[k] == '=')
@@ -217,7 +213,7 @@ const Attr* resource_of(const Tag& t, const std::string& h)
     if (t.name != "link") return nullptr;
     const Attr* rel = t.attr("rel");
     if (!rel || !rel->has_value) return nullptr;
-    const std::string r = " " + lower(h.substr(rel->value_begin, rel->value_end - rel->value_begin)) + " ";
+    const std::string r = " " + ascii_lower(h.substr(rel->value_begin, rel->value_end - rel->value_begin)) + " ";
     if (r.find(" stylesheet ") == std::string::npos && r.find(" modulepreload ") == std::string::npos && r.find(" preload ") == std::string::npos)
         return nullptr;
     return t.attr("href");
@@ -228,19 +224,6 @@ const Attr* resource_of(const Tag& t, const std::string& h)
 // before, which check still reads).
 constexpr const char* kTable = "index.sieve";
 constexpr const char* kOldTable = "site.sieve";
-
-std::string url_decode(const std::string& s)
-{
-    std::string out;
-    for (size_t i = 0; i < s.size(); ++i)
-        if (s[i] == '%' && i + 2 < s.size() && std::isxdigit(static_cast<unsigned char>(s[i + 1])) && std::isxdigit(static_cast<unsigned char>(s[i + 2])))
-        {
-            out += char(std::stoi(s.substr(i + 1, 2), nullptr, 16));
-            i += 2;
-        }
-        else out += s[i];
-    return out;
-}
 
 // Where the site is served from ("/", or "/Potentia/"), with a "/" at each end; empty: not given.
 std::string served_path(std::string p)
@@ -263,7 +246,7 @@ std::optional<std::string> target_of(const std::string& page, const std::string&
     if (rooted && (served.empty() || value.rfind(served, 0) != 0)) return std::nullopt;
     const size_t colon = value.find(':'), slash = value.find('/');
     if (!rooted && colon != std::string::npos && (slash == std::string::npos || colon < slash)) return std::nullopt; // a scheme
-    const std::string path = url_decode(value.substr(rooted ? served.size() : 0, value.find_first_of("?#") - (rooted ? served.size() : 0)));
+    const std::string path = import_uri_decoded(value.substr(rooted ? served.size() : 0, value.find_first_of("?#") - (rooted ? served.size() : 0)));
     std::vector<std::string> parts;
     const std::string whole = rooted ? path : dir_of(page) + path;
     size_t at = 0;

@@ -50,6 +50,7 @@
 #include "sieve/canon.hpp"
 #include "sieve/guided.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
 
@@ -97,10 +98,10 @@ std::vector<std::string> focuses()
 const std::vector<std::string> kFocuses = focuses();
 // Where the map starts: the settings' labels and values take the screen's left to here.
 constexpr float kMapX = 620;
-// The settings panel (Menu::panel_): how long it takes to slide in or out, how long the dimensions
-// must be calculating before it slides out (a fifth of a second, as CALCULATING waits before it
-// shows, so a quick count does not flick it), and the SETTINGS tab at the left edge while it is out.
-constexpr float kPanelSlideMs = kSlideMs; // (slide_panel.hpp: every sliding panel the same)
+// The settings panel (Menu::panel_, a SlidePanel: it slides in or out over kSlideMs, as every
+// sliding panel does): how long the dimensions must be calculating before it slides out (a fifth
+// of a second, as CALCULATING waits before it shows, so a quick count does not flick it), and the
+// SETTINGS tab at the left edge while it is out.
 constexpr Uint64 kPanelCalcNs = 200'000'000;
 constexpr float kPanelTabW = kSlideTabW;
 // The right-hand panel's width (Menu::side_), and its tab's.
@@ -1607,8 +1608,8 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
         poll_toggle();
     }
     handle(e, done, r);
-    panel_ = panel_open_ ? 1.0f : 0.0f; // a picture after a scripted Tab shows where the panel went
-    side_ = side_open_ ? 1.0f : 0.0f;
+    panel_.settle(); // a picture after a scripted Tab shows where the panel went
+    side_.settle();
     // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
     if (toggling_)
     {
@@ -1649,7 +1650,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     }
     auto inside = [](const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; };
     // The character on its pedestal, turned by a drag across it (the right-hand panel's CHARACTER).
-    if ((side_open_ || creator_) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
+    if ((side_.open || creator_) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && inside(char_drag_, e.button.x, e.button.y))
     {
         char_dragging_ = true;
         char_drag_x_ = e.button.x;
@@ -1716,18 +1717,18 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
             return;
         }
-        if (panel_ < 1 && inside(panel_tab_, mx, my))
+        if (panel_.shown < 1 && inside(panel_.tab, mx, my))
         {
             toggle_panel();
             return;
         }
-        if (side_ < 1 && inside(side_tab_, mx, my))
+        if (side_.shown < 1 && inside(side_.tab, mx, my))
         {
             toggle_side();
             return;
         }
         // The right-hand panel's tabs, clicked: that page.
-        if (side_open_)
+        if (side_.open)
             for (int i = 0; i < 4; ++i)
                 if (inside(side_tabs_[i], mx, my))
                 {
@@ -1745,11 +1746,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     // panel, its page's list.
     if (e.type == SDL_EVENT_MOUSE_WHEEL)
     {
-        if (panel_ > 0 && e.wheel.mouse_x < panel_ * kMapX)
+        if (panel_.shown > 0 && e.wheel.mouse_x < panel_.shown * kMapX)
             list_scroll_ = std::clamp(list_scroll_ - e.wheel.y * 3 * kRowH, 0.0f, list_scroll_max_);
-        else if (side_open_ && side_page_ == 2)
+        else if (side_.open && side_page_ == 2)
             cat_key(e.wheel.y > 0 ? SDLK_LEFT : SDLK_RIGHT); // the catalogue's ring turns a door a notch
-        else if (side_open_)
+        else if (side_.open)
             side_scroll_ = std::clamp(side_scroll_ - e.wheel.y * 3 * 14.0f, 0.0f, side_scroll_max_);
         return;
     }
@@ -1790,7 +1791,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         return;
     }
     // While it is in, the right-hand panel takes the keys (its page's settings); Esc closes it.
-    if (side_open_)
+    if (side_.open)
     {
         if (e.key.key == SDLK_ESCAPE) set_side(false);
         else if (e.key.key == SDLK_TAB) toggle_panel(); // the settings instead (only one panel is in at a time)
@@ -1827,7 +1828,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     case SDLK_PAGEDOWN:
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
-        if (!panel_open_ && !panel_auto_) toggle_panel();
+        if (!panel_.open && !panel_auto_) toggle_panel();
         break;
     default: break;
     }
@@ -2018,9 +2019,9 @@ void Menu::step_panel()
         if (!calc_acted_ && now - calc_since_ >= kPanelCalcNs)
         {
             calc_acted_ = true;
-            if (panel_open_)
+            if (panel_.open)
             {
-                panel_open_ = false;
+                panel_.open = false;
                 panel_auto_ = true;
             }
         }
@@ -2031,25 +2032,24 @@ void Menu::step_panel()
         calc_acted_ = false;
         if (panel_auto_)
         {
-            panel_open_ = true;
+            panel_.open = true;
             panel_auto_ = false;
         }
     }
-    const float step = panel_tick_ ? float(double(now - panel_tick_) / 1e6) / kPanelSlideMs : 0.0f;
-    panel_tick_ = now;
-    panel_ = panel_open_ ? std::min(1.0f, panel_ + step) : std::max(0.0f, panel_ - step);
-    side_ = side_open_ ? std::min(1.0f, side_ + step) : std::max(0.0f, side_ - step);
+    // (one clock reading for both, so they keep step with each other)
+    panel_.step(now);
+    side_.step(now);
 }
 
 void Menu::toggle_panel()
 {
-    panel_open_ = !panel_open_;
+    panel_.open = !panel_.open;
     panel_auto_ = false;
     // Only one panel is in at a time: the settings coming in send the right-hand panel out, and
     // its going then brings nothing back (they are in already).
-    if (panel_open_ && side_open_)
+    if (panel_.open && side_.open)
     {
-        side_open_ = false;
+        side_.open = false;
         panel_before_side_ = false;
     }
 }
@@ -2063,24 +2063,24 @@ void Menu::side_page_to(int page)
 
 void Menu::toggle_side()
 {
-    set_side(!side_open_);
+    set_side(!side_.open);
     char_init();
 }
 
 void Menu::set_side(bool open)
 {
-    if (open == side_open_) return;
-    side_open_ = open;
+    if (open == side_.open) return;
+    side_.open = open;
     if (open)
     {
         // The settings go out, remembered as in if they were (or were out only for the calculating).
-        panel_before_side_ = panel_open_ || panel_auto_;
-        panel_open_ = false;
+        panel_before_side_ = panel_.open || panel_auto_;
+        panel_.open = false;
         panel_auto_ = false;
     }
     else if (panel_before_side_)
     {
-        panel_open_ = true;
+        panel_.open = true;
         panel_before_side_ = false;
     }
 }
@@ -2120,13 +2120,7 @@ void Menu::speaks_from_settings()
 {
     speaks_.clear();
     if (!app_) return;
-    const std::string& v = app_->character_speaks;
-    for (size_t i = 0; i <= v.size();)
-    {
-        const size_t c = std::min(v.find(',', i), v.size());
-        if (c > i) speaks_.push_back(v.substr(i, c - i));
-        i = c + 1;
-    }
+    speaks_ = sieve::split_nonempty(app_->character_speaks, ',');
     std::sort(speaks_.begin(), speaks_.end());
     speaks_.erase(std::unique(speaks_.begin(), speaks_.end()), speaks_.end());
 }
@@ -2151,11 +2145,7 @@ void Menu::char_store()
     const std::string t = char_.text();
     app_->character = !char_.given && char_.holds.empty() ? t.substr(0, t.find('\n')) : char_.one_line();
     // The animation it plays, kept in the store and named by its SHA-256.
-    {
-        std::string v;
-        for (const auto& id : speaks_) v += (v.empty() ? "" : ",") + id;
-        app_->character_speaks = v;
-    }
+    app_->character_speaks = sieve::join_fields(speaks_, ',');
     app_->character_animation.clear();
     if (char_anim_ && store_animation(animation_store_dir(app_path_), *char_anim_)) app_->character_animation = char_anim_->id();
     app_->character_actions.clear();
@@ -2192,6 +2182,25 @@ void Menu::skeleton_chosen(const std::string& path)
     char_skeleton_from_ = path;
 }
 
+// Reads files beside a model the character creator imports (a glTF's buffers), never outside its
+// folder and never more than a gigabyte, more than a held model could use. The skeleton's import has
+// always handed an unopenable file to the importer as empty, which then names it too short; the held
+// model's import refuses it as unreadable. `unopened_refused` keeps each one's words.
+static sieve::ImportLoader creator_loader_beside(const std::filesystem::path& folder, bool unopened_refused)
+{
+    return [folder, unopened_refused](const std::string& uri) -> std::optional<std::string> {
+        if (!sieve::import_uri_is_local(uri)) return std::nullopt;
+        std::error_code ec;
+        const std::filesystem::path beside = folder / path_utf8(uri);
+        const auto size = std::filesystem::file_size(beside, ec);
+        if (ec || size > (uint64_t(1) << 30)) return std::nullopt;
+        std::ifstream b(beside, std::ios::binary);
+        std::string data((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
+        if (unopened_refused && !b && data.empty()) return std::nullopt;
+        return data;
+    };
+}
+
 // A glTF's skeleton as your character (IDEAS 19.170): its first skin's joints as given spheres
 // (sieve-character-v3), at their true size, and its first animation, if it has one, playing on it.
 void Menu::import_skeleton(const std::string& path)
@@ -2207,15 +2216,7 @@ void Menu::import_skeleton(const std::string& path)
     try
     {
         const std::filesystem::path folder = path_utf8(path).parent_path();
-        const sieve::ImportedModel m = sieve::read_model(bytes, [&](const std::string& uri) -> std::optional<std::string> {
-            if (!sieve::import_uri_is_local(uri)) return std::nullopt;
-            std::error_code ec;
-            const std::filesystem::path beside = folder / path_utf8(uri);
-            const auto size = std::filesystem::file_size(beside, ec);
-            if (ec || size > (uint64_t(1) << 30)) return std::nullopt;
-            std::ifstream b(beside, std::ios::binary);
-            return std::string((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
-        });
+        const sieve::ImportedModel m = sieve::read_model(bytes, creator_loader_beside(folder, false));
         char_ = sieve::skeleton_character(m);
         keep_import_stat(sieve::held_import_of(m));
         char_sphere_ = 0;
@@ -2277,17 +2278,7 @@ void Menu::import_model(const std::string& path)
     try
     {
         const std::filesystem::path folder = path_utf8(path).parent_path();
-        const sieve::HeldImport h = sieve::import_model_for_hold(text, [&](const std::string& uri) -> std::optional<std::string> {
-            if (!sieve::import_uri_is_local(uri)) return std::nullopt;
-            std::error_code ec;
-            const std::filesystem::path beside = folder / path_utf8(uri);
-            const auto size = std::filesystem::file_size(beside, ec);
-            if (ec || size > (uint64_t(1) << 30)) return std::nullopt; // a gigabyte: more than a held model could use
-            std::ifstream b(beside, std::ios::binary);
-            std::string data((std::istreambuf_iterator<char>(b)), std::istreambuf_iterator<char>());
-            if (!b && data.empty()) return std::nullopt;
-            return data;
-        });
+        const sieve::HeldImport h = sieve::import_model_for_hold(text, creator_loader_beside(folder, true));
         char_.hold(char_sphere_, h.hex);
         char_store();
         keep_import_stat(h);
@@ -2333,8 +2324,8 @@ void Menu::open_catalogue(const std::string& id)
 {
     cat_init();
     set_side(true);
-    side_ = 1;
-    panel_ = 0; // (in at once, so the settings out at once)
+    side_.shown = 1;
+    panel_.shown = 0; // (in at once, so the settings out at once)
     side_page_ = 2;
     cat_system_ = id == "language" || id.rfind("language-", 0) == 0 || id.rfind("family-", 0) == 0 ? 1 : 0;
     for (const auto& e : cat_)
@@ -2694,10 +2685,10 @@ void Menu::open_creator(bool from_main)
     for (const auto& a : creator_anims_) creator_anim_ids_.push_back(a.id());
     if (from_main)
     {
-        side_open_ = false;
-        side_ = 0;
-        panel_open_ = false;
-        panel_ = 0;
+        side_.open = false;
+        side_.shown = 0;
+        panel_.open = false;
+        panel_.shown = 0;
     }
 }
 
@@ -2829,10 +2820,10 @@ void Menu::open_viewer(const std::string& id)
 {
     open_catalogue(id);
     viewer_ = true;
-    side_open_ = false; // (not the panel: the viewer has the window)
-    side_ = 0;
-    panel_open_ = false;
-    panel_ = 0;
+    side_.open = false; // (not the panel: the viewer has the window)
+    side_.shown = 0;
+    panel_.open = false;
+    panel_.shown = 0;
     panel_before_side_ = false;
 }
 
@@ -2854,8 +2845,8 @@ void Menu::open_yours()
 {
     char_init();
     set_side(true);
-    side_ = 1;
-    panel_ = 0;
+    side_.shown = 1;
+    panel_.shown = 0;
     side_page_ = 1;
     yours_read();
 }
@@ -2900,13 +2891,10 @@ void Menu::yours_key(SDL_Keycode key)
     else if (key == SDLK_DOWN) yours_row_ = (yours_row_ + 1) % n;
     else if (key == SDLK_K && yours_row_ < np)
     {
-        // Kept: written to the store by its SHA-256, and the store read again.
-        std::error_code ec;
-        const std::filesystem::path dir = character_store_dir(app_path_);
-        std::filesystem::create_directories(dir, ec);
-        std::ofstream k(dir / (chosen.id() + ".character"), std::ios::binary);
-        k << chosen.text();
-        k.close();
+        // Kept: written to the store by its SHA-256, and the store read again. It is written even
+        // when the file is there, so a damaged copy is mended rather than left out of both lists
+        // once the character has left the playground.
+        store_by_id(character_store_dir(app_path_), chosen, ".character", true);
         playground_.erase(playground_.begin() + yours_row_);
         yours_read();
     }
@@ -3318,7 +3306,7 @@ void Menu::render()
     const size_t value_cells = size_t(std::max(8.0f, kMapX - value_x - 8) / 8);
     // The panel's slide: the rows drawn this far to the left of their place (all of the panel's
     // width when it is out).
-    const float ox = -(1 - panel_) * kMapX;
+    const float ox = -(1 - panel_.shown) * kMapX;
     // Each setting's place in the list (its text's top, from the list's top), its section's heading
     // above it where it starts one. The three actions stand below the list, as low as the line of
     // status lets them; a list taller than the room above them scrolls.
@@ -3389,25 +3377,7 @@ void Menu::render()
     }
     for (int i = kLimitsRow; i < int(rows.size()); ++i) draw_row(i, actions_y + float(i - kLimitsRow) * kRowH);
     // The SETTINGS tab at the left edge, while the panel is (mostly) out: a click, or Tab, brings it in.
-    panel_tab_ = {};
-    if (panel_ < 0.5f)
-    {
-        const std::string word = tr("setup.panel_tab");
-        std::vector<std::string> letters;
-        for (size_t i = 0; i < word.size();)
-        {
-            size_t j = i + 1;
-            while (j < word.size() && (uint8_t(word[j]) & 0xC0) == 0x80) ++j; // one UTF-8 character
-            letters.push_back(word.substr(i, j - i));
-            i = j;
-        }
-        panel_tab_ = {2, 80, kPanelTabW - 4, float(letters.size()) * 12 + 8};
-        SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
-        SDL_RenderFillRect(r_, &panel_tab_);
-        SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
-        SDL_RenderRect(r_, &panel_tab_);
-        for (size_t k = 0; k < letters.size(); ++k) text(r_, panel_tab_.x + (panel_tab_.w - 8) / 2, panel_tab_.y + 4 + float(k) * 12, letters[k], 1, grey);
-    }
+    panel_.draw_tab(r_, 2, 80, tr("setup.panel_tab"));
     text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
     // (typing edits the key only while its row is chosen: the hint is shown only then)
     text(r_, 20, H - 26, (row_ == 2 ? tr("setup.footer2.key") + "   " : std::string()) + tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
@@ -3453,7 +3423,7 @@ void Menu::render()
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
     // Beside the settings panel, or across the room it leaves (past the SETTINGS tab) while it is out.
-    const float x0 = kPanelTabW + 8 + panel_ * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_ * kSideW) / float(kLines + 1));
+    const float x0 = kPanelTabW + 8 + panel_.shown * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_.shown * kSideW) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 148, bottom = H - 60, span = bottom - top, min_bar = 12;
@@ -3480,12 +3450,7 @@ void Menu::render()
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
-            for (int k = 0; k < 16; ++k)
-            {
-                const float a0 = float(k) / 16 * 6.2831853f, a1 = float(k + 1) / 16 * 6.2831853f;
-                SDL_RenderLine(r_, x + 6 + 5 * std::cos(a0), label + 6 + 5 * std::sin(a0), x + 6 + 5 * std::cos(a1),
-                               label + 6 + 5 * std::sin(a1));
-            }
+            outline_ellipse(r_, x + 6, label + 6, 5, 5, 16);
             SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
             SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
         }
@@ -3590,27 +3555,9 @@ void Menu::render()
 void Menu::render_side(float W, float H)
 {
     const SDL_Color white{255, 255, 255, 255}, grey{150, 150, 150, 255};
-    side_tab_ = {};
-    if (side_ < 0.5f)
-    {
-        const std::string word = tr("side.tab");
-        std::vector<std::string> letters;
-        for (size_t i = 0; i < word.size();)
-        {
-            size_t j = i + 1;
-            while (j < word.size() && (uint8_t(word[j]) & 0xC0) == 0x80) ++j; // one UTF-8 character
-            letters.push_back(word.substr(i, j - i));
-            i = j;
-        }
-        side_tab_ = {W - kPanelTabW + 2, 80, kPanelTabW - 4, float(letters.size()) * 12 + 8};
-        SDL_SetRenderDrawColor(r_, 255, 255, 255, 30);
-        SDL_RenderFillRect(r_, &side_tab_);
-        SDL_SetRenderDrawColor(r_, 150, 150, 150, 255);
-        SDL_RenderRect(r_, &side_tab_);
-        for (size_t k = 0; k < letters.size(); ++k) text(r_, side_tab_.x + (side_tab_.w - 8) / 2, side_tab_.y + 4 + float(k) * 12, letters[k], 1, grey);
-    }
-    if (side_ <= 0) return;
-    const float x = W - side_ * kSideW, top = 70, bottom = H - 70;
+    side_.draw_tab(r_, W - kPanelTabW + 2, 80, tr("side.tab"));
+    if (side_.shown <= 0) return;
+    const float x = W - side_.shown * kSideW, top = 70, bottom = H - 70;
     // A mirror of the settings panel: no frame and no edge line, only black under it so the map
     // it slides over is not seen through it (the map has given it the room once it is in), and its
     // scroll bars on its inner, left edge where the settings have theirs on their right.
@@ -3690,15 +3637,7 @@ float Menu::render_char_rows(float x, float top, float width)
             // one file and any copy can be checked against its name.
             if (out)
             {
-                std::error_code ec;
-                const std::filesystem::path dir = character_store_dir(app_path_);
-                std::filesystem::create_directories(dir, ec);
-                const std::filesystem::path kept = dir / (char_.id() + ".character");
-                if (!std::filesystem::exists(kept, ec))
-                {
-                    std::ofstream k(kept, std::ios::binary);
-                    k << char_.text();
-                }
+                store_by_id(character_store_dir(app_path_), char_, ".character");
                 char_note_ += "; " + trf("side.char.stored", {char_.id().substr(0, 12)});
                 // The infinite RAID (IDEAS 19.176), where its drives are set: your character as a new
                 // version of "your character", every piece on two of the drives, so its history is kept.
@@ -3706,13 +3645,7 @@ float Menu::render_char_rows(float x, float top, float width)
                     try
                     {
                         std::vector<std::filesystem::path> drives;
-                        const std::string& d = app_->raid_drives;
-                        for (size_t i = 0; i <= d.size();)
-                        {
-                            const size_t c = std::min(d.find(',', i), d.size());
-                            if (c > i) drives.push_back(path_utf8(d.substr(i, c - i)));
-                            i = c + 1;
-                        }
+                        for (const std::string& d : sieve::split_nonempty(app_->raid_drives, ',')) drives.push_back(path_utf8(d));
                         sieve::Raid raid(drives);
                         const std::string v = raid.put("your character", char_.text());
                         std::vector<std::string> versions{v};
@@ -3812,17 +3745,14 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         const float turn = char_turn_, ca = std::cos(turn), sa = std::sin(turn);
         // The pedestal: a disc under the lowest sphere, seen a little from above (its depth a
         // quarter of its width), with eight spokes that turn with the character.
-        int32_t low = 0;
-        for (const sieve::Sphere& p : char_.spheres) low = std::min(low, p.y - p.r);
+        int32_t low, high;
+        char_.vertical(low, high);
         const float py = cy - float(low) * scale + 6, prx = reach * 1.15f * scale, pry = prx * 0.25f;
         SDL_SetRenderDrawColor(r_, 110, 110, 110, 255);
+        // Its top rim and its bottom rim (one colour, so it does not matter which is drawn first).
         constexpr int kRim = 48;
-        for (int k = 0; k < kRim; ++k)
-        {
-            const float a0 = 6.2831853f * float(k) / kRim, a1 = 6.2831853f * float(k + 1) / kRim;
-            SDL_RenderLine(r_, cx + prx * std::cos(a0), py + pry * std::sin(a0), cx + prx * std::cos(a1), py + pry * std::sin(a1));
-            SDL_RenderLine(r_, cx + prx * std::cos(a0), py + 8 + pry * std::sin(a0), cx + prx * std::cos(a1), py + 8 + pry * std::sin(a1));
-        }
+        outline_ellipse(r_, cx, py, prx, pry, kRim);
+        outline_ellipse(r_, cx, py + 8, prx, pry, kRim);
         SDL_RenderLine(r_, cx - prx, py, cx - prx, py + 8);
         SDL_RenderLine(r_, cx + prx, py, cx + prx, py + 8);
         SDL_SetRenderDrawColor(r_, 70, 70, 70, 255);
@@ -3848,10 +3778,6 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             const float v = std::clamp(172.0f + 83.0f * d / reach, 90.0f, 255.0f) * light;
             const bool head = p.kind == sieve::Sphere::Head;
             return SDL_FColor{v / 255.0f, (head ? v : v * 0.85f) / 255.0f, (head ? v * 0.7f : v) / 255.0f, 1.0f};
-        };
-        auto argb = [](SDL_FColor c) {
-            auto u = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
-            return 0xFF000000u | u(c.r) << 16 | u(c.g) << 8 | u(c.b);
         };
         auto cam_of = [&](const sieve::Sphere& p) {
             const float px = float(p.x), pz = float(p.z);
@@ -3945,7 +3871,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
                                 q[k] = camp(w[0], w[1], w[2]);
                             }
                             const float lit = 0.6f + 0.4f * std::max(0.0f, dot(n, light)); // (the sides away from the light still read)
-                            const uint32_t fc = argb(colour(p, -mid.z, lit)), ec = argb(colour(p, -mid.z, lit * 0.55f));
+                            const uint32_t fc = argb_of(colour(p, -mid.z, lit)), ec = argb_of(colour(p, -mid.z, lit * 0.55f));
                             const Vec3 t1[3] = {q[0], q[1], q[2]}, t2[3] = {q[0], q[2], q[3]};
                             char_batch_.add_face_cam(t1, fc);
                             char_batch_.add_face_cam(t2, fc);
@@ -3959,7 +3885,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             const Vec3 c = cam_of(p);
             const float d = -c.z;
             MeshBatch::SphereLook look;
-            look.argb = argb(colour(p, d, 1.0f));
+            look.argb = argb_of(colour(p, d, 1.0f));
             float radius = float(p.r);
             if (draw == 0)
             {
@@ -4012,11 +3938,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
             at(shown.spheres[char_sphere_], sx, sy, d);
             const float rad = std::max(4.0f, float(shown.spheres[char_sphere_].r) * scale) + 4;
             SDL_SetRenderDrawColor(r_, 255, 220, 80, 255);
-            for (int k = 0; k < 32; ++k)
-            {
-                const float a0 = 6.2831853f * float(k) / 32, a1 = 6.2831853f * float(k + 1) / 32;
-                SDL_RenderLine(r_, sx + rad * std::cos(a0), sy + rad * std::sin(a0), sx + rad * std::cos(a1), sy + rad * std::sin(a1));
-            }
+            outline_ellipse(r_, sx, sy, rad, rad, 32);
         }
     }
 }
@@ -4469,12 +4391,7 @@ std::string Menu::metrics_text(const std::string& reference_text)
 namespace {
 
 // A count of bits with thousands marked: 272,576.
-std::string grouped(uint64_t v)
-{
-    std::string s = std::to_string(v);
-    for (int i = int(s.size()) - 3; i > 0; i -= 3) s.insert(size_t(i), ",");
-    return s;
-}
+using sieve::grouped; // (a number with its thousands apart: 12,345)
 
 } // namespace
 

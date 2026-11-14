@@ -169,7 +169,30 @@ run before a release package, and after each of the three reviews. Each batch is
   measured or traced: a menu page's idle cost, an opt-in recording's, a hundredth of a millisecond), and
   the three fixes' reviewers found three points, all fixed. Items 1, 2, 3 and 8 above unticked (the physics,
   the catalogue, holding and the Keys screen were touched); 7, 10, 12, 13, 17, 22 and 25 were already open.
-- [ ] 4. Multi-agent code review 2: duplicate code, brought to one copy.
+- [x] 4. Multi-agent code review 2: duplicate code, brought to one copy. *Run 14 November 2026 over the same
+  code as review 1: seven finders (six areas and one across them), each checked by a skeptic; 90 findings,
+  about 60 distinct once the areas' overlaps are joined (the same is_hex64, comma list, thousands grouping
+  and hex digit found from several sides); 79 kept, 11 set aside (5 refuted, among them the harness's key
+  wrapping, which differs on purpose; 6 not worth the code). Fixes in batches below.*
+- [x] 4a. Batch D1, small helpers to one copy each (steps 01, 02, 04, 10, 11): SHA-256 hex checks and text ids,
+  hex digits and hex writing, line splitting (strict and lenient), comma lists, thousands grouping,
+  lower-casing and trimming, UTF-8 writing, percent-decoding, whole-file reads, write-then-rename.
+- [x] 4b. Batch D2, characters, animations and importers (steps 01, 10): held-model lines, settings words,
+  bone hex groups, pose turns, glTF node transforms, files beside a model, the stores named by SHA-256.
+- [x] 4c. Batch D3, the RAID (steps 01, 04, 10): the peer ranking, connecting to peers, the key file, the
+  folder tag, a manifest by id, the share and check notes, address resolution, the command's options.
+- [x] 4d. Batch D4, the hallway program (step 10): one near-plane clip, your dimension through the Camera it
+  already builds, the data-folder search, mesh bounds, colours, a character's foot, the pause menu's keys,
+  note names, outlines, the setup menu's panels through SlidePanel, the side lists, settings numbers,
+  screenshot lines, the drawn picture's chat entry.
+- [x] 4e. Batch D5, the command line, catalogue, documents and training (steps 01, 04, 11): manifests and
+  install trees, sieve_cache's helpers, the catalogue's searches and lookups, format statistics, doc_text's
+  zip members, digit values in training, mix-v1's coder, mix-v4's setup, CPU feature probing.
+- [x] 4f. Made (14 November 2026): 54 merges, 69 files, about 520 lines fewer, each batch's outputs compared
+  with the build before review 2 byte for byte; the rest left with their reasons (each would change an
+  output, or need so many switches that one copy is no simpler). One bug found by a batch's reviewer and
+  fixed (--pworld-look past 90 degrees). Asked: a new RAID folder's id from the system's generator
+  (MinGW's std::random_device can repeat).
 - [ ] 5. Multi-agent code review 3: the code compared with the documentation, each made to agree.
 
 The three reviews run one after another, each looking at a different side of the project, and only once

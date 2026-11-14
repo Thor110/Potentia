@@ -151,34 +151,28 @@ std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source
                 if (ni[0] >= 0 && size_t(ni[0]) < vn.size() && dot(n, vn[size_t(ni[0])]) < 0) n = n * -1.0f;
                 t.n = n;
                 t.kd = kd;
-                for (const Vec3& p : t.p)
-                {
-                    mesh->lo = {std::min(mesh->lo.x, p.x), std::min(mesh->lo.y, p.y), std::min(mesh->lo.z, p.z)};
-                    mesh->hi = {std::max(mesh->hi.x, p.x), std::max(mesh->hi.y, p.y), std::max(mesh->hi.z, p.z)};
-                }
                 mesh->tris.push_back(t);
             }
         }
     }
     if (mesh->tris.empty()) return nullptr;
+    fit_bounds(*mesh);
     return mesh;
 }
 
-fs::path mesh_folder()
+void fit_bounds(Mesh& mesh)
 {
-    std::vector<fs::path> folders = {fs::path("data") / "meshes"};
-    if (const fs::path exe = sieve::cli::executable_dir(); !exe.empty())
-    {
-        folders.push_back(exe / "meshes");
-        folders.push_back(exe / ".." / "data" / "meshes");
-    }
-    for (const auto& f : folders)
-    {
-        std::error_code ec;
-        if (fs::is_directory(f, ec)) return f;
-    }
-    return folders.front();
+    mesh.lo = {1e9f, 1e9f, 1e9f};
+    mesh.hi = {-1e9f, -1e9f, -1e9f};
+    for (const MeshTri& t : mesh.tris)
+        for (const Vec3& v : t.p)
+        {
+            mesh.lo = {std::min(mesh.lo.x, v.x), std::min(mesh.lo.y, v.y), std::min(mesh.lo.z, v.z)};
+            mesh.hi = {std::max(mesh.hi.x, v.x), std::max(mesh.hi.y, v.y), std::max(mesh.hi.z, v.z)};
+        }
 }
+
+fs::path mesh_folder() { return sieve::cli::find_data_folder("meshes"); }
 
 FaceRect load_face_rect(const std::string& medium)
 {
@@ -246,14 +240,7 @@ std::shared_ptr<const Mesh> half_x(const Mesh& mesh, float sign, float at)
         if (!in_wall) out->tris.push_back(t);
     }
     if (out->tris.empty()) out->tris = mesh.tris;
-    out->lo = {1e9f, 1e9f, 1e9f};
-    out->hi = {-1e9f, -1e9f, -1e9f};
-    for (const MeshTri& t : out->tris)
-        for (const Vec3& v : t.p)
-        {
-            out->lo = {std::min(out->lo.x, v.x), std::min(out->lo.y, v.y), std::min(out->lo.z, v.z)};
-            out->hi = {std::max(out->hi.x, v.x), std::max(out->hi.y, v.y), std::max(out->hi.z, v.z)};
-        }
+    fit_bounds(*out);
     return out;
 }
 
@@ -391,7 +378,7 @@ void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int he
     edges_.clear();
     balls_.clear();
     bg_ = {background.r / 255.0f, background.g / 255.0f, background.b / 255.0f, 1.0f};
-    bg_argb_ = 0xFF000000u | uint32_t(background.r) << 16 | uint32_t(background.g) << 8 | uint32_t(background.b);
+    bg_argb_ = argb(background);
     w_ = std::max(1, width);
     h_ = std::max(1, height);
     tris_.clear();
@@ -436,13 +423,14 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*u
     tris_.push_back(t);
 }
 
-// A triangle in camera space, cut at the near plane (one or two triangles, or none).
-void MeshBatch::clip_push(const Vec3* in, uint32_t colour)
+// A triangle in camera space, cut at the near plane (one or two triangles, or none: wholly behind
+// the eye, no corner is kept and nothing is pushed). `bias` is pushed with each piece.
+void MeshBatch::clip_push(const Vec3* in, uint32_t colour, float bias)
 {
     const float nz = near_limit();
     if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
     {
-        push(in, colour, 0);
+        push(in, colour, bias);
         return;
     }
     Vec3 out[4];
@@ -456,15 +444,14 @@ void MeshBatch::clip_push(const Vec3* in, uint32_t colour)
     for (int i = 1; i + 1 < m; ++i)
     {
         const Vec3 tri[3] = {out[0], out[i], out[i + 1]};
-        push(tri, colour, 0);
+        push(tri, colour, bias);
     }
 }
 
 void MeshBatch::add_face(const Vec3 world[3], uint32_t argb)
 {
     const Vec3 in[3] = {cam_->to_camera(world[0]), cam_->to_camera(world[1]), cam_->to_camera(world[2])};
-    if (in[0].z < cam_->near_z && in[1].z < cam_->near_z && in[2].z < cam_->near_z) return;
-    clip_push(in, argb);
+    add_face_cam(in, argb);
 }
 
 void MeshBatch::add_picture(const Vec3 world[4], const sieve::RgbaImage& picture)
@@ -496,12 +483,7 @@ void MeshBatch::add_edge_cam(Vec3 ca, Vec3 cb, uint32_t argb)
     edges_.push_back({pa.x, pa.y, pb.x, pb.y, nearness(ca.z), nearness(cb.z), argb});
 }
 
-void MeshBatch::add_face_cam(const Vec3 c[3], uint32_t argb)
-{
-    const float nz = near_limit();
-    if (c[0].z < nz && c[1].z < nz && c[2].z < nz) return;
-    clip_push(c, argb);
-}
+void MeshBatch::add_face_cam(const Vec3 c[3], uint32_t argb) { clip_push(c, argb, 0); }
 
 void MeshBatch::add_sphere(Vec3 world_centre, float radius, const SphereLook& look) { add_sphere_cam(cam_->to_camera(world_centre), radius, look); }
 
@@ -525,7 +507,7 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
         if (at.mirror_x) p.x = -p.x;
         return p + at.offset;
     };
-    Vec3 in[4], out[4];
+    Vec3 in[3];
     for (const MeshTri& t : mesh.tris)
     {
         const Vec3 a = place(t.p[0]), b = place(t.p[1]), c = place(t.p[2]);
@@ -550,24 +532,8 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
         const float fog = std::clamp(std::max((dist - 10.0f) / 45.0f, at.dim), 0.0f, 1.0f);
         auto channel = [&](float k, float bg) { return uint32_t(std::clamp(k * shade * (1 - fog) + bg * fog, 0.0f, 1.0f) * 255.0f + 0.5f); };
         const uint32_t colour = 0xFF000000u | channel(t.kd.r, bg_.r) << 16 | channel(t.kd.g, bg_.g) << 8 | channel(t.kd.b, bg_.b);
-        if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
-        {
-            push(in, colour, at.depth_bias);
-            continue;
-        }
-        // Crossing the near plane: clip to z >= near (a triangle becomes one or two).
-        int m = 0;
-        for (int i = 0; i < 3; ++i)
-        {
-            const Vec3 p = in[i], q = in[(i + 1) % 3];
-            if (p.z >= nz) out[m++] = p;
-            if ((p.z >= nz) != (q.z >= nz)) out[m++] = p + (q - p) * ((nz - p.z) / (q.z - p.z));
-        }
-        for (int i = 1; i + 1 < m; ++i)
-        {
-            const Vec3 tri[3] = {out[0], out[i], out[i + 1]};
-            push(tri, colour, at.depth_bias);
-        }
+        // (add runs only with perspective, where clip_push's near limit is this camera's near_z.)
+        clip_push(in, colour, at.depth_bias);
     }
 }
 

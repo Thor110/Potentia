@@ -53,12 +53,6 @@ uint64_t memory_budget()
     return free_now ? free_now / 2 : uint64_t(2) << 30;
 }
 
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
 std::string human_bytes(uint64_t n)
 {
     char b[48];
@@ -71,13 +65,13 @@ std::string human_bytes(uint64_t n)
 
 bool picture_name(const std::string& name)
 {
-    const std::string e = lower(fs::path(from_u8(name)).extension().string());
+    const std::string e = ascii_lower(fs::path(from_u8(name)).extension().string());
     return e == ".png" || e == ".jpg" || e == ".jpeg" || e == ".jpe" || e == ".jfif" || e == ".bmp" || e == ".gif" || e == ".tga";
 }
 
 bool sieve_name(const std::string& name)
 {
-    const std::string e = lower(fs::path(from_u8(name)).extension().string());
+    const std::string e = ascii_lower(fs::path(from_u8(name)).extension().string());
     return e == ".simage" || e == ".sieve";
 }
 

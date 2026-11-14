@@ -215,31 +215,22 @@ MixParams MixParams::for_size(uint64_t bytes)
     return p;
 }
 
+namespace {
+
+// The binary arithmetic coder every mixing shares, one copy for all (BitCoder, below): the file to
+// its code, and the code back to the file, with each version's own bad() for what it refuses.
+template <class Model>
+std::vector<uint8_t> code_with(Model& m, std::span<const uint8_t> file);
+template <class Model>
+std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t size, void (*bad)(const std::string&));
+
+} // namespace
+
 std::vector<uint8_t> mix_code(std::span<const uint8_t> file, const MixParams& p)
 {
     p.check();
     Model m(p.table_bits);
-    std::vector<uint8_t> out;
-    out.reserve(file.size() / 3 + 16);
-    uint32_t x1 = 0, x2 = 0xFFFFFFFFu;
-    for (const uint8_t b : file)
-        for (int j = 7; j >= 0; --j)
-        {
-            const int bit = (b >> j) & 1;
-            const uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * uint32_t(m.p())) >> 12);
-            bit ? (x2 = xmid) : (x1 = xmid + 1);
-            m.update(bit);
-            while (((x1 ^ x2) & 0xFF000000u) == 0)
-            {
-                out.push_back(uint8_t(x2 >> 24));
-                x1 <<= 8;
-                x2 = (x2 << 8) | 255;
-            }
-        }
-    // The end: one byte, the least whose value (followed by zeros, as a reader reads past the
-    // code) lies within the range left.
-    out.push_back(uint8_t((x1 >> 24) + 1));
-    return out;
+    return code_with(m, file);
 }
 
 std::vector<uint8_t> mix_file(std::span<const uint8_t> code, const MixParams& p, uint64_t size)
@@ -247,40 +238,7 @@ std::vector<uint8_t> mix_file(std::span<const uint8_t> code, const MixParams& p,
     p.check();
     if (size >= (uint64_t(1) << 32)) bad("a file of 4 GB or more");
     Model m(p.table_bits);
-    size_t at = 0;
-    auto next = [&]() -> uint32_t { return at < code.size() ? code[at++] : (++at, 0u); };
-    uint32_t x1 = 0, x2 = 0xFFFFFFFFu, x = 0;
-    for (int i = 0; i < 4; ++i) x = (x << 8) | next();
-    // What the code can make at most, checked before the file is made: every bit's probability is held
-    // within 1/4096 of certain, so each bit costs at least log2(4096/4095) bits of code, and a byte of
-    // code makes at most about 2,840 bytes; 65,536 a byte is the margin (a damaged or hostile file must
-    // not claim gigabytes in a few bytes).
-    if (size > (uint64_t(code.size()) + 16) << 16) bad("a file larger than its code can make");
-    std::vector<uint8_t> out(static_cast<size_t>(size));
-    for (size_t i = 0; i < out.size(); ++i)
-    {
-        int c = 0;
-        for (int j = 0; j < 8; ++j)
-        {
-            const uint32_t xmid = x1 + uint32_t((uint64_t(x2 - x1) * uint32_t(m.p())) >> 12);
-            const int bit = x <= xmid;
-            bit ? (x2 = xmid) : (x1 = xmid + 1);
-            m.update(bit);
-            c = c * 2 + bit;
-            while (((x1 ^ x2) & 0xFF000000u) == 0)
-            {
-                x1 <<= 8;
-                x2 = (x2 << 8) | 255;
-                x = (x << 8) | next();
-            }
-        }
-        out[i] = uint8_t(c);
-        if (at > code.size() + 4) bad("a code that ends before the file does");
-        if ((i & 0xFFFF) == 0xFFFF && decoding_cancelled()) throw DecodeCancelled(); // (an install's Cancel)
-    }
-    // Every byte of the code read: the reader takes four ahead, so it has gone at most four past it.
-    if (at < code.size()) bad("a code with bytes past the file's end");
-    return out;
+    return file_with(m, code, size, bad);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -998,15 +956,6 @@ Mix2Params Mix2Params::for_size(uint64_t bytes, uint32_t width, uint32_t channel
     return p;
 }
 
-namespace {
-
-template <class Model>
-std::vector<uint8_t> code_with(Model& m, std::span<const uint8_t> file);
-template <class Model>
-std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t size, void (*bad)(const std::string&));
-
-} // namespace
-
 std::vector<uint8_t> mix2_code(std::span<const uint8_t> file, const Mix2Params& p)
 {
     p.check();
@@ -1044,6 +993,8 @@ struct BitCoder
     size_t size_if_ended() const { return out.size() + 1; }
     std::vector<uint8_t> end()
     {
+        // The end: one byte, the least whose value (followed by zeros, as a reader reads past the
+        // code) lies within the range left.
         out.push_back(uint8_t((x1 >> 24) + 1));
         return std::move(out);
     }
@@ -1092,6 +1043,7 @@ std::vector<uint8_t> file_with(Model& m, std::span<const uint8_t> code, uint64_t
         if (at > code.size() + 4) bad("a code that ends before the file does");
         if ((i & 0xFFFF) == 0xFFFF && decoding_cancelled()) throw DecodeCancelled(); // (an install's Cancel)
     }
+    // Every byte of the code read: the reader takes four ahead, so it has gone at most four past it.
     if (at < code.size()) bad("a code with bytes past the file's end");
     return out;
 }
@@ -1377,6 +1329,21 @@ Mix2Params shape_of(const Mix4Params& p)
     s.channels = p.palette ? 1 : p.channels; // (a palette's indices: one byte a pixel)
     return s;
 }
+
+// What coding, decoding and a run carried on all refuse first, in this order: parameters out of
+// their range, a file (or a run's room) of 4 GB or more, and a word list named but not given.
+void check4(const Mix4Params& p, uint64_t size, const MixDictionary* words)
+{
+    p.check();
+    if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
+    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+}
+
+// The model for n bytes under these parameters (a palette's indices take words as nullptr: no text).
+Model2 model4(const Mix4Params& p, uint64_t n, const MixDictionary* words)
+{
+    return Model2(shape_of(p), n, p.dictionary ? words : nullptr, false, ways_of(p));
+}
 } // namespace
 
 namespace {
@@ -1550,14 +1517,12 @@ std::span<const uint8_t> mix_primer(uint32_t n)
 
 std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& p, const MixDictionary* words)
 {
-    p.check();
-    if (file.size() >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
-    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    check4(p, file.size(), words);
     if (p.palette)
     {
         const auto split = palette_split(file, p.channels, p.palette);
         if (!split) bad4("a picture with more colours than its palette (P), or not whole pixels");
-        Model2 m(shape_of(p), split->size(), nullptr, false, ways_of(p));
+        Model2 m = model4(p, split->size(), nullptr);
         return code_with(m, *split);
     }
     if (p.primer)
@@ -1565,11 +1530,11 @@ std::vector<uint8_t> mix4_code(std::span<const uint8_t> file, const Mix4Params& 
         // (The primer's bytes read through the model first, nothing coded: its history and its
         // tables then hold them, as if they had come before the file.)
         const std::span<const uint8_t> primer = mix_primer(p.primer);
-        Model2 m(shape_of(p), primer.size() + file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
+        Model2 m = model4(p, primer.size() + file.size(), words);
         prime(m, primer);
         return code_with(m, file);
     }
-    Model2 m(shape_of(p), file.size(), p.dictionary ? words : nullptr, false, ways_of(p));
+    Model2 m = model4(p, file.size(), words);
     if (p.x86)
     {
         std::vector<uint8_t> filtered(file.begin(), file.end());
@@ -1585,7 +1550,7 @@ struct Mix4Run::Impl
     BitCoder coder;
     uint64_t capacity, fed = 0;
     Impl(const Mix4Params& p, uint64_t cap, const MixDictionary* words)
-        : model(shape_of(p), cap, p.dictionary ? words : nullptr, false, ways_of(p)), capacity(cap)
+        : model(model4(p, cap, words)), capacity(cap)
     {
         coder.out.reserve(size_t(std::min<uint64_t>(cap, uint64_t(4) << 20) / 3 + 16)); // (it grows past that as it is fed)
     }
@@ -1593,9 +1558,7 @@ struct Mix4Run::Impl
 
 Mix4Run::Mix4Run(const Mix4Params& p, uint64_t capacity, const MixDictionary* words)
 {
-    p.check();
-    if (capacity >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
-    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    check4(p, capacity, words);
     if (p.palette || p.primer) bad4("a run carried on is of bytes alone: no palette (P) or primer (W)");
     impl_ = std::make_unique<Impl>(p, capacity, words);
 }
@@ -1621,27 +1584,25 @@ std::vector<uint8_t> Mix4Run::end()
 
 std::vector<uint8_t> mix4_file(std::span<const uint8_t> code, const Mix4Params& p, const MixDictionary* words, uint64_t size)
 {
-    p.check();
-    if (size >= (uint64_t(1) << 32)) bad4("a file of 4 GB or more");
-    if (p.dictionary && !words) bad4("parameters naming a word list, and none given");
+    check4(p, size, words);
     if (p.palette)
     {
         // (Its indices, one a pixel, then the palette: the file's pixels, whole, give their count.)
         if (size % p.channels) bad4("a picture under a palette (P) that is not whole pixels");
         const uint64_t split = size / p.channels + uint64_t(p.palette) * p.channels;
         if (!code_can_make(code, split)) bad4("a file larger than its code can make");
-        Model2 m(shape_of(p), split, nullptr, false, ways_of(p));
+        Model2 m = model4(p, split, nullptr);
         return palette_join(file_with(m, code, split, bad4), p.channels, p.palette);
     }
     if (!code_can_make(code, size)) bad4("a file larger than its code can make");
     if (p.primer)
     {
         const std::span<const uint8_t> primer = mix_primer(p.primer);
-        Model2 m(shape_of(p), primer.size() + size, p.dictionary ? words : nullptr, false, ways_of(p));
+        Model2 m = model4(p, primer.size() + size, words);
         prime(m, primer);
         return file_with(m, code, size, bad4);
     }
-    Model2 m(shape_of(p), size, p.dictionary ? words : nullptr, false, ways_of(p));
+    Model2 m = model4(p, size, words);
     std::vector<uint8_t> out = file_with(m, code, size, bad4);
     if (p.x86) x86_filter(out, false);
     return out;

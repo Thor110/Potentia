@@ -10,6 +10,7 @@
 
 #include "cli/locate.hpp" // binary_address, read_file_bytes
 #include "cli/vault.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/binaryspace.hpp"
 #include "sieve/corridor.hpp" // bearing_of, unit_at_bearing, shortest_path
 #include "sieve/sha256.hpp"
@@ -56,14 +57,6 @@ std::string hex2(uint8_t b)
 {
     static const char k[] = "0123456789ABCDEF";
     return {k[b >> 4], k[b & 15]};
-}
-
-int hex_digit(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
 }
 
 std::string fixed(double v, int places)
@@ -823,7 +816,7 @@ bool ManualNav::load_log(const std::string& path)
         std::vector<uint8_t> b;
         for (size_t i = 0; i + 1 < example.size(); i += 2)
         {
-            const int hi = hex_digit(example[i]), lo = hex_digit(example[i + 1]);
+            const int hi = sieve::hex_digit_value(example[i]), lo = sieve::hex_digit_value(example[i + 1]);
             if (hi < 0 || lo < 0) break;
             b.push_back(uint8_t(hi << 4 | lo));
         }
@@ -942,7 +935,7 @@ void ManualNav::type(const std::string& utf8)
     // a byte typed is one step), then the low, then on to the next byte.
     for (const char c : utf8)
     {
-        const int d = hex_digit(c);
+        const int d = sieve::hex_digit_value(c);
         if (d < 0 || sel_ >= bytes_.size()) continue;
         if (pending_hi_ < 0)
         {

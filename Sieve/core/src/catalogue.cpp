@@ -12,6 +12,7 @@
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -241,9 +242,7 @@ std::vector<FormatEntry> gather()
 
 std::string format_id_of_file_kind(std::string_view kind)
 {
-    std::string id;
-    for (const char c : kind) id += char(std::tolower(static_cast<unsigned char>(c)));
-    return "file-" + (kind == "?" ? std::string("unknown-bytes") : id);
+    return "file-" + (kind == "?" ? std::string("unknown-bytes") : ascii_lower(kind));
 }
 
 const std::vector<FormatEntry>& format_catalogue()
@@ -264,79 +263,69 @@ const FormatEntry* format_by_id(std::string_view id)
     return it == index.end() ? nullptr : &format_catalogue()[it->second];
 }
 
-namespace {
-
-const FormatEntry* find_in(const std::vector<FormatEntry>& all, std::string_view id)
+const FormatEntry* format_in(const std::vector<FormatEntry>& all, std::string_view id)
 {
     for (const auto& e : all)
         if (e.id == id) return &e;
     return nullptr;
 }
 
-bool is_id(const std::string& s)
+namespace {
+
+// The shortest chain from start to goal (both ends in it), breadth first over each id's next ids, or
+// empty. With chains of one length the first found wins, so each caller's order of next ids is kept
+// as it gives it (a vector in link order, a set sorted).
+template <class Next>
+std::vector<std::string> shortest_chain(std::string_view start, std::string_view goal, const std::map<std::string, Next>& next)
 {
-    if (s.empty() || s.size() > 128) return false;
-    for (const char c : s)
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_')) return false;
-    return true;
+    std::map<std::string, std::string> from;
+    std::deque<std::string> todo{std::string(start)};
+    from[std::string(start)] = "";
+    while (!todo.empty())
+    {
+        const std::string at = todo.front();
+        todo.pop_front();
+        if (at == goal)
+        {
+            std::vector<std::string> chain;
+            for (std::string x = at; !x.empty(); x = from[x]) chain.push_back(x);
+            std::reverse(chain.begin(), chain.end());
+            return chain;
+        }
+        const auto it = next.find(at);
+        if (it == next.end()) continue;
+        for (const auto& n : it->second)
+            if (!from.count(n)) from[n] = at, todo.push_back(n);
+    }
+    return {};
 }
 
 } // namespace
 
 std::vector<std::string> format_lineage(const std::vector<FormatEntry>& all, std::string_view id)
 {
-    // The shortest chain upward by part-of links.
-    std::map<std::string, const FormatEntry*> by;
-    for (const auto& e : all) by[e.id] = &e;
-    std::map<std::string, std::string> from;
-    std::deque<std::string> todo{std::string(id)};
-    from[std::string(id)] = "";
-    while (!todo.empty())
+    // The shortest chain upward by part-of links, in link order (an id given twice: the last entry's).
+    std::map<std::string, std::vector<std::string>> up;
+    for (const auto& e : all)
     {
-        const std::string at = todo.front();
-        todo.pop_front();
-        if (at == "information")
-        {
-            std::vector<std::string> chain;
-            for (std::string x = at; !x.empty(); x = from[x]) chain.push_back(x);
-            std::reverse(chain.begin(), chain.end());
-            return chain;
-        }
-        const auto it = by.find(at);
-        if (it == by.end()) continue;
-        for (const auto& l : it->second->links)
-            if (l.type == "part-of" && !from.count(l.to)) from[l.to] = at, todo.push_back(l.to);
+        std::vector<std::string>& to = up[e.id];
+        to.clear();
+        for (const auto& l : e.links)
+            if (l.type == "part-of") to.push_back(l.to);
     }
-    return {};
+    return shortest_chain(id, "information", up);
 }
 
 std::vector<std::string> format_lineage(std::string_view id) { return format_lineage(format_catalogue(), id); }
 
 std::vector<std::string> format_path(const std::vector<FormatEntry>& all, std::string_view a, std::string_view b)
 {
-    if (!find_in(all, a) || !find_in(all, b)) return {};
+    if (!format_in(all, a) || !format_in(all, b)) return {};
     // Links followed either way.
     std::map<std::string, std::set<std::string>> next;
     for (const auto& e : all)
         for (const auto& l : e.links) next[e.id].insert(l.to), next[l.to].insert(e.id);
-    std::map<std::string, std::string> from;
-    std::deque<std::string> todo{std::string(a)};
-    from[std::string(a)] = "";
-    while (!todo.empty())
-    {
-        const std::string at = todo.front();
-        todo.pop_front();
-        if (at == b)
-        {
-            std::vector<std::string> chain;
-            for (std::string x = at; !x.empty(); x = from[x]) chain.push_back(x);
-            std::reverse(chain.begin(), chain.end());
-            return chain;
-        }
-        for (const auto& n : next[at])
-            if (!from.count(n)) from[n] = at, todo.push_back(n);
-    }
-    return {};
+    return shortest_chain(a, b, next);
 }
 
 std::vector<std::string> format_path(std::string_view a, std::string_view b) { return format_path(format_catalogue(), a, b); }
@@ -344,13 +333,7 @@ std::vector<std::string> format_path(std::string_view a, std::string_view b) { r
 FormatEntry read_format_entry(const std::string& text)
 {
     std::vector<std::string> lines;
-    for (size_t i = 0; i < text.size();)
-    {
-        const size_t e = text.find('\n', i);
-        if (e == std::string::npos) throw std::invalid_argument("its last line has no line feed");
-        lines.push_back(text.substr(i, e - i));
-        i = e + 1;
-    }
+    if (!lf_lines(text, lines)) throw std::invalid_argument("its last line has no line feed");
     if (lines.size() < 4 || lines[0] != kFormatVersion) throw std::invalid_argument(std::string("not a format entry: it does not start with ") + kFormatVersion);
     FormatEntry f;
     auto field = [&](size_t i, const char* name) {
@@ -361,7 +344,7 @@ FormatEntry read_format_entry(const std::string& text)
         return v;
     };
     f.id = field(1, "id");
-    if (!is_id(f.id)) throw std::invalid_argument("not an id (lower-case letters, digits, '-', '.', '_'): " + f.id);
+    if (!is_plain_id(f.id)) throw std::invalid_argument("not an id (lower-case letters, digits, '-', '.', '_'): " + f.id);
     f.kind = field(2, "kind");
     f.name = field(3, "name");
     size_t i = 4;
@@ -373,7 +356,7 @@ FormatEntry read_format_entry(const std::string& text)
         FormatLink l{rest.substr(0, sp), rest.substr(sp + 1)};
         for (const char c : l.type)
             if (!(c >= 'a' && c <= 'z') && c != '-') throw std::invalid_argument("a link's type is a lower-case word: " + l.type);
-        if (!is_id(l.to)) throw std::invalid_argument("a link's target is not an id: " + l.to);
+        if (!is_plain_id(l.to)) throw std::invalid_argument("a link's target is not an id: " + l.to);
         f.links.push_back(std::move(l));
     }
     if (i < lines.size() && lines[i].rfind("recognised ", 0) == 0) f.recognised = field(i++, "recognised");
@@ -422,12 +405,12 @@ std::vector<FormatEntry> format_catalogue_with(const std::vector<std::string>& d
     for (const std::string& dir : dirs)
         for (auto& f : read_format_folder(dir))
         {
-            if (find_in(all, f.id)) throw std::invalid_argument(f.id + ".format: the id " + f.id + " is already in the catalogue");
+            if (format_in(all, f.id)) throw std::invalid_argument(f.id + ".format: the id " + f.id + " is already in the catalogue");
             all.push_back(std::move(f));
         }
     for (const auto& e : all)
         for (const auto& l : e.links)
-            if (!find_in(all, l.to)) throw std::invalid_argument(e.id + " links to " + l.to + ", which is not in the catalogue");
+            if (!format_in(all, l.to)) throw std::invalid_argument(e.id + " links to " + l.to + ", which is not in the catalogue");
     return all;
 }
 

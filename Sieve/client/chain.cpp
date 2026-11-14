@@ -306,12 +306,7 @@ void Hallway::chain_run(const std::string& input)
                     chat_.push_back(entry_of<ChatEntry>(ChatEntry::Kind::Note, trf("chain.failed", {tag, steer_note})));
                     return;
                 }
-                {
-                    std::shared_ptr<cli::PictureModel>& m = chain_picture_models_[st.name];
-                    e.width = m->recipe.setup.width, e.height = m->recipe.setup.height, e.palette = m->recipe.palette;
-                    if (m->recipe.audio()) e.symbols = m->recipe.symbols;
-                    e.address = cli::unit_space_of(m->recipe).address_of(e.cells, AddressMode::Positional);
-                }
+                fill_picture_entry(e, *chain_picture_models_[st.name]); // (after the busy, as a failed steer never fills it)
                 e.title = steer_note.empty() ? tag : tag + " (" + steer_note + ")";
                 const std::string rows = unit_rows(e);
                 if (!chat_show_unit(std::move(e))) return; // the vault withheld it: the chain stops there

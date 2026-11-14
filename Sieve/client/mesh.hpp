@@ -18,6 +18,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -72,6 +73,11 @@ std::shared_ptr<const Mesh> half_x(const Mesh& mesh, float sign, float at);
 
 // A solid box (the short wall on the binary line's open edge).
 std::shared_ptr<const Mesh> box_mesh(Vec3 lo, Vec3 hi, SDL_FColor kd);
+
+// Sets a mesh's bounds afresh from its triangles' corners, for a mesh read, cut down or moved.
+// Minimum and maximum do not depend on the order the corners come in, so this gives exactly what
+// growing the bounds triangle by triangle would.
+void fit_bounds(Mesh& mesh);
 std::filesystem::path mesh_folder();
 
 // Where and how one copy of a mesh is drawn: scaled all over, then in Y, mirrored in X or not,
@@ -87,6 +93,18 @@ struct Placement
     float dim = 0;        // 0 = full colour, 1 = the background (like the wireframe's mark mode)
     float depth_bias = 0; // pulls it this fraction nearer, so a decal on a surface wins (the marker)
 };
+
+// An opaque colour as ARGB, as the item pictures and the batch's pixels are kept.
+inline uint32_t argb(SDL_Color c) { return 0xFF000000u | uint32_t(c.r) << 16 | uint32_t(c.g) << 8 | uint32_t(c.b); }
+
+// The same of a colour in floats (a material's, a lit sphere's), each part held to 0..1 and rounded
+// to the nearest of 0..255. Not an overload of argb: a braced colour such as {150, 26, 26, 255}
+// would then fit both.
+inline uint32_t argb_of(SDL_FColor c)
+{
+    auto u = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    return 0xFF000000u | u(c.r) << 16 | u(c.g) << 8 | u(c.b);
+}
 
 // A depth-buffered rasteriser for the models. SDL's renderer draws triangles but keeps no depth,
 // so sorting them far to near can go wrong where parts are close (a book and the board it stands
@@ -177,7 +195,7 @@ private:
         SphereLook look;
     };
     void push(const Vec3* cam3, uint32_t colour, float bias, const float (*uv)[2] = nullptr, const sieve::RgbaImage* picture = nullptr);
-    void clip_push(const Vec3* cam3, uint32_t colour);
+    void clip_push(const Vec3* cam3, uint32_t colour, float bias);
     // Where a camera-space point lands, and its nearness (larger nearer: 1 / depth with perspective,
     // a large number less the depth square-on; either is planar on the screen).
     Point2 project(Vec3 c) const;

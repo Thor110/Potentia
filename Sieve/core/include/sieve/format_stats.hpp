@@ -32,6 +32,10 @@ namespace sieve {
 
 inline constexpr const char* kFormatStatVersion = "sieve-format-stat-v1";
 
+// A number with its thousands apart by commas, as Sieve writes figures: 272576 is "272,576". Every
+// program that shows a count to a person uses this one.
+std::string grouped(uint64_t v);
+
 struct FormatStat
 {
     std::string date, machine, what, result;

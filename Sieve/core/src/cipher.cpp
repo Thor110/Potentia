@@ -1,7 +1,9 @@
 #include "sieve/cipher.hpp"
 
 #include "sieve/biguint.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/space.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <array>
@@ -12,22 +14,6 @@ namespace sieve::cipher {
 namespace {
 
 [[noreturn]] void bad(const std::string& what) { throw std::invalid_argument("cipher-v1: " + what); }
-
-std::string trim(std::string_view s)
-{
-    size_t a = 0, b = s.size();
-    while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r')) ++a;
-    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r')) --b;
-    return std::string(s.substr(a, b - a));
-}
-
-int hex_value(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
 
 Layer parse_layer(const std::string& line)
 {
@@ -52,7 +38,7 @@ Layer parse_layer(const std::string& line)
         l.kind = Layer::Kind::Xor;
         for (size_t i = 0; i < arg.size(); i += 2)
         {
-            const int hi = hex_value(arg[i]), lo = hex_value(arg[i + 1]);
+            const int hi = hex_digit_value(arg[i]), lo = hex_digit_value(arg[i + 1]);
             if (hi < 0 || lo < 0) bad("xor needs a key in hex, not \"" + arg + "\"");
             l.key.push_back(uint8_t(hi * 16 + lo));
         }
@@ -63,7 +49,7 @@ Layer parse_layer(const std::string& line)
         l.kind = word == "vigenere-hex" ? Layer::Kind::Vigenere : Layer::Kind::Feistel;
         for (size_t i = 0; i < arg.size(); i += 2)
         {
-            const int hi = hex_value(arg[i]), lo = hex_value(arg[i + 1]);
+            const int hi = hex_digit_value(arg[i]), lo = hex_digit_value(arg[i + 1]);
             if (hi < 0 || lo < 0) bad(word + " needs a key in hex, not \"" + arg + "\"");
             l.key.push_back(uint8_t(hi * 16 + lo));
         }

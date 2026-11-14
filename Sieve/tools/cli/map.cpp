@@ -4,6 +4,7 @@
 
 #include "cli/map.hpp"
 #include "cli/vault.hpp"
+#include "sieve/hex.hpp"
 
 #include <algorithm>
 #include <map>
@@ -40,14 +41,6 @@ bool is_word(const std::string& r)
     if (r.empty()) return false;
     for (char c : r)
         if (!((c >= 'a' && c <= 'z') || c == '-')) return false;
-    return true;
-}
-
-bool is_hex64(const std::string& s)
-{
-    if (s.size() != 64) return false;
-    for (char c : s)
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
     return true;
 }
 
@@ -218,7 +211,7 @@ Map Map::parse(std::string_view whole, bool held_bytes_follow)
             node.size = std::stoull(f[3]);
             node.sha256 = f[4];
             node.path = f[5];
-            if (!is_hex64(node.sha256)) throw std::runtime_error(where + " has no SHA-256");
+            if (!is_sha256_hex(node.sha256)) throw std::runtime_error(where + " has no SHA-256");
             if (node.kind == MapNode::File ? (!safe_path(node.path) || node.path.back() == '/') : !is_held_name(node.path))
                 throw std::runtime_error("map: refused path " + node.path);
         }

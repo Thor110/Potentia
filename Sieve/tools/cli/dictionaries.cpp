@@ -1,9 +1,13 @@
 #include "dictionaries.hpp"
 
 #include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <system_error>
+#include <vector>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -61,6 +65,22 @@ fs::path executable_dir()
     const fs::path p = fs::read_symlink("/proc/self/exe", ec);
     return ec ? fs::path() : p.parent_path();
 #endif
+}
+
+fs::path find_data_folder(const std::string& sub, const std::string& must_hold)
+{
+    std::vector<fs::path> folders = {fs::path("data") / sub};
+    if (const fs::path exe = executable_dir(); !exe.empty())
+    {
+        folders.push_back(exe / sub);
+        folders.push_back(exe / ".." / "data" / sub);
+    }
+    for (const fs::path& f : folders)
+    {
+        std::error_code ec;
+        if (must_hold.empty() ? fs::is_directory(f, ec) : fs::is_regular_file(f / must_hold, ec)) return f;
+    }
+    return folders.front();
 }
 
 fs::path install_dir()

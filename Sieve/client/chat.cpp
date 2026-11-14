@@ -32,7 +32,9 @@
 #include "cli/media_decode.hpp"
 #include "cli/train.hpp"
 #include "cli/vault.hpp"
+#include "sieve/hex.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/format_stats.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/paths.hpp"
@@ -157,13 +159,7 @@ std::string text_line(const std::string& bytes)
     }
 }
 
-// A number with its thousands apart: 12,345.
-std::string grouped(uint64_t n)
-{
-    std::string s = std::to_string(n);
-    for (int i = int(s.size()) - 3; i > 0; i -= 3) s.insert(size_t(i), ",");
-    return s;
-}
+using sieve::grouped; // (a number with its thousands apart: 12,345)
 
 } // namespace
 
@@ -439,23 +435,15 @@ std::string escape_bytes(const std::string& b)
     return out;
 }
 
-int hex_value(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
 // The reverse: \xNN as that byte; anything else (typed text, UTF-8 and all) as its own bytes.
 std::string unescape_bytes(const std::string& s)
 {
     std::string out;
     for (size_t i = 0; i < s.size(); ++i)
     {
-        if (s[i] == '\\' && i + 3 < s.size() && s[i + 1] == 'x' && hex_value(s[i + 2]) >= 0 && hex_value(s[i + 3]) >= 0)
+        if (s[i] == '\\' && i + 3 < s.size() && s[i + 1] == 'x' && sieve::hex_digit_value(s[i + 2]) >= 0 && sieve::hex_digit_value(s[i + 3]) >= 0)
         {
-            out += char(hex_value(s[i + 2]) * 16 + hex_value(s[i + 3]));
+            out += char(sieve::hex_digit_value(s[i + 2]) * 16 + sieve::hex_digit_value(s[i + 3]));
             i += 3;
         }
         else out += s[i];
@@ -738,9 +726,7 @@ void Hallway::chat_draw()
             e.model = m.name;
             e.number = chat_drawn_[m.name] + 1;
             e.cells = m.picture(e.number);
-            e.width = m.recipe.setup.width, e.height = m.recipe.setup.height, e.palette = m.recipe.palette;
-            if (m.recipe.audio()) e.symbols = m.recipe.symbols; // a melody model's
-            e.address = cli::unit_space_of(m.recipe).address_of(e.cells, AddressMode::Positional);
+            fill_picture_entry(e, m);
         });
     }
     catch (const std::exception& ex)
@@ -750,6 +736,13 @@ void Hallway::chat_draw()
     }
     chat_drawn_[e.model] = e.number;
     chat_show_unit(std::move(e));
+}
+
+void Hallway::fill_picture_entry(ChatEntry& e, const cli::PictureModel& m)
+{
+    e.width = m.recipe.setup.width, e.height = m.recipe.setup.height, e.palette = m.recipe.palette;
+    if (m.recipe.audio()) e.symbols = m.recipe.symbols; // a melody model's
+    e.address = cli::unit_space_of(m.recipe).address_of(e.cells, AddressMode::Positional);
 }
 
 std::string Hallway::ChatEntry::heading() const

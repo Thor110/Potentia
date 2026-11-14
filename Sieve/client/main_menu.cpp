@@ -21,6 +21,7 @@
 #include "music.hpp"
 #include "raid_service.hpp"
 #include "sieve/paths.hpp"
+#include "sieve/text.hpp"
 #include "strings.hpp"
 
 #include <algorithm>
@@ -233,19 +234,11 @@ void MainMenu::toggle_replay_cache(size_t i)
 {
     if (i >= replays_.size() || replays_[i].extension() != ".sieve") return;
     const std::string sha = replay_sha(i);
-    std::vector<std::string> list;
-    for (size_t at = 0; at <= s_.replays_cached.size();)
-    {
-        const size_t c = std::min(s_.replays_cached.find(',', at), s_.replays_cached.size());
-        if (c > at) list.push_back(s_.replays_cached.substr(at, c - at));
-        at = c + 1;
-    }
+    std::vector<std::string> list = sieve::split_nonempty(s_.replays_cached, ',');
     const auto f = std::find(list.begin(), list.end(), sha);
     if (f == list.end()) list.push_back(sha);
     else list.erase(f);
-    std::string v;
-    for (const auto& x : list) v += (v.empty() ? "" : ",") + x;
-    s_.replays_cached = v;
+    s_.replays_cached = sieve::join_fields(list, ',');
     save();
 }
 

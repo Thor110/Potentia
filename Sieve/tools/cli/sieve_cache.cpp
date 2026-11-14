@@ -6,7 +6,6 @@
 #include "cli/locate.hpp"
 #include "cli/plugins.hpp"
 #include "sieve/paths.hpp"
-#include "sieve/sha256.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -47,7 +46,7 @@ std::vector<std::pair<std::string, std::vector<uint8_t>>> members_of(const std::
 fs::path decoded_sieve(const fs::path& sieve_file, const std::string& kind, uint64_t most)
 {
     const std::vector<uint8_t> raw = read_all(sieve_file);
-    const std::string sha = Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(raw.data()), raw.size())));
+    const std::string sha = sha256_hex(raw);
     const fs::path dir = plugin_cache_dir() / from_u8(kind) / sha;
     std::error_code ec;
     // Decoded before: every member as the index says (its SHA-256 and size), or decoded again.
@@ -64,8 +63,7 @@ fs::path decoded_sieve(const fs::path& sieve_file, const std::string& kind, uint
             try
             {
                 const auto bytes = read_all(dir / from_u8(path));
-                good = std::to_string(bytes.size()) == line.substr(a + 1, b - a - 1) &&
-                       Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) == want;
+                good = std::to_string(bytes.size()) == line.substr(a + 1, b - a - 1) && sha256_hex(bytes) == want;
             }
             catch (const std::exception&)
             {
@@ -89,7 +87,7 @@ fs::path decoded_sieve(const fs::path& sieve_file, const std::string& kind, uint
         out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
         out.close();
         if (!out) throw std::runtime_error("cannot write its decoded copy in " + u8(part));
-        index += Sha256::hex(Sha256::hash(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()))) + " " + std::to_string(bytes.size()) + " " + path + "\n";
+        index += sha256_hex(bytes) + " " + std::to_string(bytes.size()) + " " + path + "\n";
     }
     {
         std::ofstream out(part / "index", std::ios::binary);

@@ -3,6 +3,7 @@
 
 #include "dialogs.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/format_stats.hpp"
 
 #include "font.hpp"
 #include "music.hpp"
@@ -47,12 +48,7 @@ bool inside(const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x +
 using sieve::from_u8;
 using sieve::u8;
 
-std::string grouped(uint64_t n)
-{
-    std::string s = std::to_string(n);
-    for (int i = int(s.size()) - 3; i > 0; i -= 3) s.insert(size_t(i), ",");
-    return s;
-}
+using sieve::grouped; // (a number with its thousands apart: 12,345)
 
 // What a model says, as the shelves show it: printable ASCII and whole UTF-8 characters, any other
 // byte a middle dot, a newline as a space.

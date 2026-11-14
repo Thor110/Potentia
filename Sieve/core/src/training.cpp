@@ -1,5 +1,6 @@
 // Sieve — training a model of the AI line in pinned integer arithmetic (see training.hpp).
 #include "sieve/training.hpp"
+#include "sieve/text.hpp"
 
 #include <utility>
 #include <exception>
@@ -13,17 +14,15 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #define SIEVE_TRAIN_X86 1
 #include <immintrin.h>
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <cpuid.h>
-#endif
+#include "cpu_x86.hpp"
 #endif
 
 namespace sieve::training {
@@ -249,14 +248,6 @@ Reading reading_from_string(std::string_view s)
 
 namespace {
 
-std::string trim(std::string_view s)
-{
-    size_t a = 0, b = s.size();
-    while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r')) ++a;
-    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r')) --b;
-    return std::string(s.substr(a, b - a));
-}
-
 uint64_t number(const std::string& s, const char* what)
 {
     if (s.empty() || s.size() > 18 || s.find_first_not_of("0123456789") != std::string::npos)
@@ -276,19 +267,6 @@ std::vector<std::string_view> lines_of(std::string_view text)
         at = nl + 1;
     }
     return out;
-}
-
-std::vector<std::string> split(std::string_view line, char sep)
-{
-    std::vector<std::string> out;
-    size_t at = 0;
-    for (;;)
-    {
-        const size_t p = line.find(sep, at);
-        out.emplace_back(line.substr(at, p == std::string_view::npos ? std::string_view::npos : p - at));
-        if (p == std::string_view::npos) return out;
-        at = p + 1;
-    }
 }
 
 } // namespace
@@ -374,7 +352,7 @@ std::vector<Window> parse_order(std::string_view text)
     {
         const std::string line = trim(lines[i]);
         if (line.empty()) continue;
-        const std::vector<std::string> f = split(line, '\t');
+        const std::vector<std::string> f = split_fields(line, '\t');
         if (f.size() != 3) bad("an order line is path, offset and length, separated by tabs");
         Window w{f[0], number(f[1], "an offset"), uint32_t(number(f[2], "a length"))};
         if (w.length < 2 || w.length > 513) bad("a window of 2 to 513 bytes");
@@ -453,7 +431,7 @@ Result Result::parse(std::string_view text)
     {
         const std::string line = trim(lines[i]);
         if (line.empty()) continue;
-        const std::vector<std::string> f = split(line, ' ');
+        const std::vector<std::string> f = split_fields(line, ' ');
         if (f[0] == "version" && f.size() == 2)
         {
             if (f[1] != kTrainingVersion && f[1] != kTrainingVersion2 && f[1] != kTrainingVersion3) bad("this result is of " + f[1]);
@@ -566,27 +544,11 @@ void gemm_plain(const Gemm& g, size_t i0, size_t i1)
 
 bool cpu_has_avx2()
 {
-#if defined(_MSC_VER)
-    int r[4];
-    __cpuid(r, 0);
-    if (r[0] < 7) return false;
-    __cpuid(r, 1);
-    const bool osxsave = ((r[2] >> 27) & 1) != 0, avx = ((r[2] >> 28) & 1) != 0;
-    if (!osxsave || !avx || (_xgetbv(0) & 6) != 6) return false; // the system saves the wide registers
-    __cpuidex(r, 7, 0);
-    return ((r[1] >> 5) & 1) != 0;
-#else
-    unsigned a = 0, b = 0, c = 0, d = 0;
-    if (__get_cpuid_max(0, nullptr) < 7) return false;
-    __get_cpuid(1, &a, &b, &c, &d);
+    if (cpu_x86::cpuid_max() < 7) return false;
+    const uint32_t c = cpu_x86::cpuid(1).c;
     const bool osxsave = ((c >> 27) & 1) != 0, avx = ((c >> 28) & 1) != 0;
-    if (!osxsave || !avx) return false;
-    unsigned lo = 0, hi = 0;
-    __asm__ volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0)); // the system saves the wide registers
-    if ((lo & 6) != 6) return false;
-    __get_cpuid_count(7, 0, &a, &b, &c, &d);
-    return ((b >> 5) & 1) != 0;
-#endif
+    if (!osxsave || !avx || (cpu_x86::xcr0() & 6) != 6) return false; // the system saves the wide registers
+    return ((cpu_x86::cpuid(7).b >> 5) & 1) != 0;
 }
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -765,20 +727,9 @@ void gemm_avx512(const Gemm& g, size_t i0, size_t i1)
 // opmask and both halves of the wide ones, XCR0 bits 5 to 7, besides AVX's).
 bool cpu_has_avx512()
 {
-    if (!cpu_has_avx2()) return false;
-#if defined(_MSC_VER)
-    int r[4];
-    __cpuidex(r, 7, 0);
-    if (((r[1] >> 16) & 1) == 0) return false;
-    return (_xgetbv(0) & 0xE6) == 0xE6;
-#else
-    unsigned a = 0, b = 0, c = 0, d = 0;
-    __get_cpuid_count(7, 0, &a, &b, &c, &d);
-    if (((b >> 16) & 1) == 0) return false;
-    unsigned lo = 0, hi = 0;
-    __asm__ volatile("xgetbv" : "=a"(lo), "=d"(hi) : "c"(0));
-    return (lo & 0xE6) == 0xE6;
-#endif
+    if (!cpu_has_avx2()) return false; // (which has checked that leaf 7 is there, and OSXSAVE)
+    if (((cpu_x86::cpuid(7).b >> 16) & 1) == 0) return false;
+    return (cpu_x86::xcr0() & 0xE6) == 0xE6;
 }
 
 const bool kHasAvx2 = cpu_has_avx2();
@@ -1397,6 +1348,29 @@ void run_window(const Trainer::Net& net, const I32* w, const I32* turned, const 
         for (uint32_t i = 0; i < H; ++i) grad[net.embed.first + size_t(tok[p]) * H + i] += int64_t(dx[p * H + i]) << 16;
 }
 
+// The weight a digit stands for (Q16), and the digit a master weight (Q32) rounds to, with m the
+// largest digit and S the tensor's scale (scale_q32): one formula each, for the trainer and for the
+// free functions that only read a model, so the two can never round apart.
+inline int32_t value_of(int64_t digit, int64_t m, int64_t S) { return int32_t(fdiv((2 * digit - m) * S, m << 16)); }
+inline uint8_t digit_of(int64_t master, int64_t m, int64_t S) { return uint8_t(std::clamp<int64_t>(fdiv((master + S) * m + S, 2 * S), 0, m)); }
+
+// Every weight's value of a model given as its digits.
+std::vector<int32_t> values_of(const AiSpace& space, const AiSpace::Digits& digits)
+{
+    const int64_t m = (int64_t(1) << space.shape().bits) - 1;
+    std::vector<int32_t> values(digits.size());
+    for (const AiSpace::Tensor& t : space.tensors())
+    {
+        const int64_t S = scale_q32(t.cols, t.name == "model.embed_tokens.weight");
+        for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
+        {
+            const size_t at = size_t(t.first + i);
+            values[at] = value_of(digits[at], m, S);
+        }
+    }
+    return values;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------- the trainer
@@ -1437,7 +1411,7 @@ void Trainer::refresh_values()
         for (uint64_t i = 0; i < uint64_t(ts[ti].rows) * ts[ti].cols; ++i)
         {
             const size_t at = size_t(ts[ti].first + i);
-            values_[at] = int32_t(fdiv((2 * int64_t(digits_[at]) - m) * S, m << 16));
+            values_[at] = value_of(digits_[at], m, S);
         }
     }
 }
@@ -1567,8 +1541,8 @@ void Trainer::apply(const std::vector<int64_t>& grad)
                 // The rate is held to 16 + k bits and the gradient carries 2^k: both come off here.
                 const int64_t moved = master_[at] - mul_shift(velocity_[at], lr_, 16 + 2 * shift_);
                 master_[at] = std::clamp(moved, -S, S);
-                digits_[at] = uint8_t(std::clamp<int64_t>(fdiv((master_[at] + S) * m + S, 2 * S), 0, m));
-                values_[at] = int32_t(fdiv((2 * int64_t(digits_[at]) - m) * S, m << 16));
+                digits_[at] = digit_of(master_[at], m, S);
+                values_[at] = value_of(digits_[at], m, S);
                 // (counted only: LimitCounts)
                 part.zero += grad[at] == 0;
                 part.gc += g != grad[at];
@@ -1608,7 +1582,7 @@ void Trainer::restore(const std::vector<int64_t>& masters, const std::vector<int
             if (masters[at] < -S || masters[at] > S) bad("a saved state whose weights are off the line");
             master_[at] = masters[at];
             velocity_[at] = velocities[at];
-            digits_[at] = uint8_t(std::clamp<int64_t>(fdiv((master_[at] + S) * m + S, 2 * S), 0, m));
+            digits_[at] = digit_of(master_[at], m, S);
         }
     }
     refresh_values();
@@ -1617,17 +1591,7 @@ void Trainer::restore(const std::vector<int64_t>& masters, const std::vector<int
 Score evaluate_model(const AiSpace& space, const AiSpace::Digits& digits, const std::vector<std::span<const uint8_t>>& windows)
 {
     if (digits.size() != space.weights()) bad("a model of " + std::to_string(space.weights()) + " digits");
-    const int64_t m = (int64_t(1) << space.shape().bits) - 1;
-    std::vector<int32_t> values(digits.size());
-    for (const AiSpace::Tensor& t : space.tensors())
-    {
-        const int64_t S = scale_q32(t.cols, t.name == "model.embed_tokens.weight");
-        for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
-        {
-            const size_t at = size_t(t.first + i);
-            values[at] = int32_t(fdiv((2 * int64_t(digits[at]) - m) * S, m << 16));
-        }
-    }
+    const std::vector<int32_t> values = values_of(space, digits);
     Trainer::Net net(space);
     Pool pool(1);
     return run_batch(net, values.data(), values.size(), windows, nullptr, pool);
@@ -1654,17 +1618,7 @@ std::vector<int32_t> model_logits(const AiSpace& space, const AiSpace::Digits& d
 {
     check_examples({ex});
     if (digits.size() != space.weights()) bad("a model of " + std::to_string(space.weights()) + " digits");
-    const int64_t m = (int64_t(1) << space.shape().bits) - 1;
-    std::vector<int32_t> values(digits.size());
-    for (const AiSpace::Tensor& t : space.tensors())
-    {
-        const int64_t S = scale_q32(t.cols, t.name == "model.embed_tokens.weight");
-        for (uint64_t i = 0; i < uint64_t(t.rows) * t.cols; ++i)
-        {
-            const size_t at = size_t(t.first + i);
-            values[at] = int32_t(fdiv((2 * int64_t(digits[at]) - m) * S, m << 16));
-        }
-    }
+    const std::vector<int32_t> values = values_of(space, digits);
     Trainer::Net net(space);
     Score score;
     std::vector<int32_t> logits;

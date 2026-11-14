@@ -9,7 +9,12 @@
 // hallway tools out unless Personal Dimensions > Features asks for them; chosen there, they go into
 // the hallway and open there. A row's name is "pause.<id>" in the language files, and the line under
 // the list "pause.help.<id>".
+//
+// Both menus are worked the same way, so how a row is pointed at and how the keys move the choice
+// are here too.
 #pragma once
+
+#include <SDL3/SDL.h>
 
 #include <string>
 #include <vector>
@@ -48,6 +53,43 @@ inline bool is_hallway_tool(const std::string& id)
     for (const PauseRow& r : kPauseRows)
         if (id == r.id) return r.hallway_tool;
     return false;
+}
+
+// The row under the pointer, for a mouse motion or button press, among the rows as last drawn
+// (which do not overlap); -1 where it is over none.
+// The row of that name in a pause menu's rows, or -1: the first, as both menus' pause_select take it
+// (Item:ID presses).
+inline int pause_row_named(const std::vector<std::string>& rows, const std::string& id)
+{
+    for (size_t i = 0; i < rows.size(); ++i)
+        if (rows[i] == id) return int(i);
+    return -1;
+}
+
+inline int pause_row_at(SDL_Renderer* r, const SDL_Event& e, const std::vector<SDL_FRect>& rows)
+{
+    float x = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x;
+    float y = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y;
+    SDL_RenderCoordinatesFromWindow(r, x, y, &x, &y);
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+        const SDL_FRect& f = rows[i];
+        if (x >= f.x && x < f.x + f.w && y >= f.y && y < f.y + f.h) return int(i);
+    }
+    return -1;
+}
+
+// The row a key moves the choice to among `n` rows: Up or W back one, Down or S on one, both
+// wrapping round; any other key (or no rows) leaves it. `choose` is set for the keys that choose the
+// row (Return, keypad Enter and Space). Escape is each menu's own.
+inline int pause_row_step(SDL_Keycode k, int row, int n, bool& choose)
+{
+    choose = false;
+    if (n == 0) return row;
+    if (k == SDLK_UP || k == SDLK_W) return (row + n - 1) % n;
+    if (k == SDLK_DOWN || k == SDLK_S) return (row + 1) % n;
+    choose = k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE;
+    return row;
 }
 
 } // namespace hallway

@@ -3,6 +3,10 @@
 
 #include "cli/compress.hpp"
 
+#include "sieve/importers.hpp"
+#include "sieve/text.hpp"
+#include "sieve/utf8.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -10,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -17,16 +22,9 @@ namespace sieve::cli {
 
 namespace {
 
-void put_utf8(std::string& out, uint32_t c)
-{
-    if (c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF)) c = 0xFFFD;
-    if (c < 0x80) out += char(c);
-    else if (c < 0x800) out += char(0xC0 | (c >> 6)), out += char(0x80 | (c & 0x3F));
-    else if (c < 0x10000) out += char(0xE0 | (c >> 12)), out += char(0x80 | ((c >> 6) & 0x3F)), out += char(0x80 | (c & 0x3F));
-    else
-        out += char(0xF0 | (c >> 18)), out += char(0x80 | ((c >> 12) & 0x3F)), out += char(0x80 | ((c >> 6) & 0x3F)),
-            out += char(0x80 | (c & 0x3F));
-}
+// A code point as UTF-8, where one that UTF-8 cannot hold (a surrogate, or past U+10FFFF) becomes
+// U+FFFD rather than ending the document's reading.
+void put_utf8(std::string& out, uint32_t c) { out += utf8_encode(c > 0x10FFFF || (c >= 0xD800 && c <= 0xDFFF) ? U'\uFFFD' : char32_t(c)); }
 
 // Windows-1252's 0x80 to 0x9F (the rest is Latin-1); those it leaves undefined kept as they are.
 constexpr uint16_t kCp1252[32] = {0x20AC, 0x81,   0x201A, 0x192,  0x201E, 0x2026, 0x2020, 0x2021, 0x2C6,  0x2030, 0x160,
@@ -191,13 +189,6 @@ std::string_view local(std::string_view name)
     return c == std::string_view::npos ? name : name.substr(c + 1);
 }
 
-std::string lower(std::string_view s)
-{
-    std::string t(s);
-    for (char& c : t) c = char(std::tolower(uint8_t(c)));
-    return t;
-}
-
 // An attribute's value (entities read), by its name as written; nothing where it is not there.
 std::optional<std::string> attr(std::string_view attrs, std::string_view name)
 {
@@ -276,7 +267,7 @@ std::string html_text(std::string_view input)
     // Script, style and the like hold no text to read, and may hold '<' that is not a tag: cut out.
     std::string kept;
     {
-        const std::string low = lower(html);
+        const std::string low = ascii_lower(html);
         static const char* const kSkip[] = {"script", "style", "noscript", "template"};
         const std::string open[4] = {"<script", "<style", "<noscript", "<template"};
         // Each tag's first place at or after i, found again only once i has passed it: searched afresh
@@ -324,7 +315,7 @@ std::string html_text(std::string_view input)
             w.text(e.cdata ? std::string(e.text) : decode_entities(e.text), pre > 0);
             return;
         }
-        const std::string name = lower(local(e.name));
+        const std::string name = ascii_lower(local(e.name));
         if (name == "pre") pre = std::max(0, pre + (e.kind == Event::Start ? 1 : e.kind == Event::End ? -1 : 0));
         if (name == "td" || name == "th")
         {
@@ -338,11 +329,18 @@ std::string html_text(std::string_view input)
 
 namespace {
 
+// A member of a zip seen as text, where it lies in the zip's map; missing is what is said when it is
+// not there (each kind of document says it in its own words).
+std::string_view member(const std::map<std::string, std::vector<uint8_t>>& zip, const std::string& name, const std::string& missing)
+{
+    const auto it = zip.find(name);
+    if (it == zip.end()) throw std::runtime_error(missing);
+    return {reinterpret_cast<const char*>(it->second.data()), it->second.size()};
+}
+
 std::string word_text(const std::map<std::string, std::vector<uint8_t>>& zip)
 {
-    const auto it = zip.find("word/document.xml");
-    if (it == zip.end()) throw std::runtime_error("no word/document.xml: not a Word document");
-    const std::string_view x(reinterpret_cast<const char*>(it->second.data()), it->second.size());
+    const std::string_view x = member(zip, "word/document.xml", "no word/document.xml: not a Word document");
     Writer w;
     int run_text = 0, para_props = 0;
     walk(x, [&](const Event& e) {
@@ -365,9 +363,7 @@ std::string word_text(const std::map<std::string, std::vector<uint8_t>>& zip)
 
 std::string open_document_text(const std::map<std::string, std::vector<uint8_t>>& zip)
 {
-    const auto it = zip.find("content.xml");
-    if (it == zip.end()) throw std::runtime_error("no content.xml: not an OpenDocument");
-    const std::string_view x(reinterpret_cast<const char*>(it->second.data()), it->second.size());
+    const std::string_view x = member(zip, "content.xml", "no content.xml: not an OpenDocument");
     Writer w;
     int para = 0;
     walk(x, [&](const Event& e) {
@@ -405,16 +401,7 @@ std::string open_document_text(const std::map<std::string, std::vector<uint8_t>>
 std::string resolve(const std::string& base, std::string href)
 {
     if (const size_t h = href.find('#'); h != std::string::npos) href.resize(h);
-    std::string decoded;
-    for (size_t i = 0; i < href.size(); ++i)
-    {
-        if (href[i] == '%' && i + 2 < href.size() && std::isxdigit(uint8_t(href[i + 1])) && std::isxdigit(uint8_t(href[i + 2])))
-        {
-            decoded += char(std::stoi(href.substr(i + 1, 2), nullptr, 16));
-            i += 2;
-        }
-        else decoded += href[i];
-    }
+    const std::string decoded = import_uri_decoded(href);
     std::vector<std::string> parts;
     std::string piece;
     for (const char c : base + decoded + "/")
@@ -438,11 +425,7 @@ std::string resolve(const std::string& base, std::string href)
 
 std::string epub_text(const std::map<std::string, std::vector<uint8_t>>& zip)
 {
-    auto file = [&](const std::string& name) -> std::string_view {
-        const auto it = zip.find(name);
-        if (it == zip.end()) throw std::runtime_error("no " + name + " in the book");
-        return {reinterpret_cast<const char*>(it->second.data()), it->second.size()};
-    };
+    auto file = [&](const std::string& name) { return member(zip, name, "no " + name + " in the book"); };
     std::string opf_path;
     walk(file("META-INF/container.xml"), [&](const Event& e) {
         if (opf_path.empty() && e.kind != Event::End && local(e.name) == "rootfile")
@@ -589,7 +572,7 @@ std::optional<std::string> document_kind(const std::string& name)
 {
     const size_t dot = name.rfind('.');
     if (dot == std::string::npos) return std::nullopt;
-    const std::string ext = lower(name.substr(dot + 1));
+    const std::string ext = ascii_lower(name.substr(dot + 1));
     if (ext == "html" || ext == "htm" || ext == "xhtml") return "HTML";
     if (ext == "docx") return "Word";
     if (ext == "odt") return "OpenDocument";
