@@ -690,6 +690,10 @@ public:
     bool go_to(std::string input);
     // On the AI line: the model with these digits (the AI Training Harness's GO TO IT), taken in hand.
     void go_to_ai(const sieve::AiSpace::Digits& d);
+    // On the worlds line: the world of these parts (your personal dimension's Go to it, IDEAS 19.187), at
+    // its address in this hallway's ordering (compact where the [worlds] filters are, if it passes them),
+    // taken in hand; refused, and said, where it is not of this line's shape or does not pass.
+    void go_to_world(const WorldSpace::Parts& p);
     // The File Locator's Go to it from the main menu: the file walked to once this hallway is built.
     void go_to_located(const std::vector<uint8_t>& bytes, const std::string& name, bool past) { walk_to_file(bytes, name, past); }
     // The Media Player, opened from the main menu: Esc there goes back to the main menu (Request::MainMenu).
@@ -1147,6 +1151,12 @@ public:
     bool holding() const { return in_hand_.has_value(); } // (an item in hand)
     // The viewer's open tab ("3D", "TEXT" ...), or "" with the viewer closed.
     std::string viewer_tab() const { return view_open_ && view_at_ < view_kinds_.size() ? view_label(view_kinds_[view_at_]) : std::string(); }
+    // The viewer lent to another space (IDEAS 19.208): your dimension opens a favourite in this
+    // hallway's viewer over itself, so the viewer is the hallway's own, its keys and its views the
+    // same, while the corridor is never walked or drawn. Esc or Z closes it as it does here.
+    bool viewer_open() const { return view_open_; }
+    void lent_viewer_event(const SDL_Event& e, bool& quit) { viewer_event(e, quit); }
+    void draw_lent_viewer(float W, float H) { draw_viewer(W, H); }
     // The animation your character plays as it walks beside you (IDEAS 19.170), by the clock, or held
     // at `frame` (0 or more: for a picture); none: it stands at rest.
     void set_animation(std::optional<sieve::Animation> a, int frame = -1)
@@ -1543,11 +1553,16 @@ public:
     // in hand. Scripted runs (--route-places).
     std::string route_now(int places);
     void media_saved(const std::string& path); // the save dialog's choice (any thread)
+    // For the readout: while the Media Player shows PERSONAL (IDEAS 19.220), the dimension it edits and
+    // its music; else "".
+    std::string media_report() const;
 
 private:
     struct MediaRow
     {
-        enum class Kind { Mode, On, Volume, Source, Units, Length, NoteSet, Low, High, Durations, Voices, Tempo, Voice, Echo, Gap, Character, Fifths, LineMode, Next, Filters, Filter, Param, Play, GoTo, Save, Favourite };
+        // (Own, DimMode, Kept and Keep: PERSONAL's, IDEAS 19.220: whether the dimension has music of its
+        // own, its mode, the melody it keeps, and keeping the highlighted one there)
+        enum class Kind { Mode, On, Volume, Source, Units, Length, NoteSet, Low, High, Durations, Voices, Tempo, Voice, Echo, Gap, Character, Fifths, LineMode, Next, Filters, Filter, Param, Play, GoTo, Save, Favourite, Own, DimMode, Kept, Keep };
         Kind kind;
         std::string filter, key; // Filter and Param rows
         int line = -1;           // LineMode rows
@@ -1556,6 +1571,9 @@ private:
     std::optional<MusicMelody> media_selected() const; // the highlighted entry of the list last used
     void media_change(int dir, bool big, bool& quit);
     void media_act(MediaRow::Kind k, bool& quit);
+    // PERSONAL's music as the player now holds it, written into the dimension's world file (IDEAS 19.220);
+    // the status line says where, or why not.
+    void media_write_personal();
     void close_media_player();
     void media_event(const SDL_Event& e, bool& quit);
     void draw_media_player(float W, float H);
@@ -1652,7 +1670,7 @@ private:
     int media_row_ = 0, media_sel_[3] = {0, 0, 0}, media_top_ = 0;
     MusicMode media_mode_ = MusicMode::World;
     std::vector<std::pair<SDL_FRect, std::pair<int, int>>> media_rects_; // area, row
-    std::mutex media_mx_;
+    mutable std::mutex media_mx_; // (mutable: the readout reads the status too)
     std::string media_status_;
     std::vector<uint32_t> media_saving_;
     sieve::NoteSet media_saving_set_;

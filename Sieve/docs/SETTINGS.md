@@ -22,6 +22,7 @@ file for the run they are given in. An empty default is written empty.
 | `view_rooms` | `7` | View Distance: rooms drawn and kept either side of yours, 2 to 64 |
 | `picture_rooms` | `1` | Picture Distance: rooms either side of yours with item pictures of their own, 0 to 8 |
 | `fps_counter` | `off` | frames per second, top right of the hallway |
+| `axis_colours` | `#FF4040,#40D040,#4080FF` | the colours of the axes x, y and z wherever they are drawn (the rings round what you hold in your personal dimension, IDEAS 19.221): three #RRGGBB apart by commas; red, green and blue (#FF4040,#40D040,#4080FF) by default |
 
 ## [world]
 
@@ -119,6 +120,13 @@ file for the run they are given in. An empty default is written empty.
 | :--- | :--- | :--- |
 | `map` | `on` | your personal dimension's map, top right: the hill from above, you and what is placed (IDEAS 19.197); on by default |
 | `compass` | `on` | your personal dimension's compass, along the top: which way you face, north being +z (IDEAS 19.197); on by default |
+| `turning_rings` | `on` | rings round what you hold in your personal dimension, one for each way it turns (R, T, G), coloured by its axis (axis_colours), the turn last chosen bright (IDEAS 19.221); on by default |
+| `wheel_step_degrees` | `15` | once R, T or G has chosen a turn, how far each notch of the mouse wheel turns what you hold about it, in degrees, 1 to 90 (15 by default) |
+| `day_night` | `off` | day and night in your personal dimension (IDEAS 19.222): on, the sun crosses the sky once a day, the sky, the light and the stars at night following it, the time of day from the clock and the day's length kept in the dimension's world file (L there sets it, 1 to 18446744073709551615 seconds; 1440 without one); off (the default): always day, as before |
+| `catalogue_covers` | `on` | favourites' covers in your personal dimension's catalogue (Tab there; IDEAS 19.190): each favourite's own picture (favourites/SHA.png, the one its front shows once placed) small beside its row, and the chosen one's larger just below the list, so they can be told apart before placing; on by default |
+| `open_in_place` | `on` | O on a placed favourite in your personal dimension (IDEAS 19.208): on (the default), it opens in the hallway's own viewer over the dimension, a small "calculating..." by the crosshair while its line is made in the background (kept while you stay in the dimension), Esc closing it back to the dimension; where it cannot open so, or off, O goes into the hallway on the favourite's line, as before |
+| `shaper_radius` | `20` | the ground shaper's brush in your personal dimension (IDEAS 19.209; 1 takes it out there): how far round the crosshair's point it shapes the ground, in metres, 10 to 80 (20 by default); the wheel changes it there for the visit |
+| `shaper_strength` | `4` | how fast the ground shaper raises, lowers or flattens the ground at its brush's middle, in metres a second, 1 to 20 (4 by default), less towards its edge |
 | `hallway_tools` | `off` | the hallway's own tools (Restart Sieve, the node graph, the navigator) in your dimension's pause menu too; off by default |
 
 ## [game]

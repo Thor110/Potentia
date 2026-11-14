@@ -752,6 +752,7 @@ if(SIEVE_BUILD_CLIENT)
         client/replay.cpp
         client/rings.cpp
         client/personal_world.cpp
+        client/personal_worlds.cpp
         client/favourites.cpp
         client/keys.cpp
         client/speech.cpp

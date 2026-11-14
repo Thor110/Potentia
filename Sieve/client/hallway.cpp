@@ -1440,6 +1440,28 @@ bool Hallway::go_to(std::string input)
     }
 }
 
+void Hallway::go_to_world(const WorldSpace::Parts& p)
+{
+    try
+    {
+        if (!on_worlds()) throw std::invalid_argument("not on the worlds line");
+        world_space_->check(p);
+        const bool compact = effective_mode() == FilterMode::Compact;
+        if (compact)
+            if (const std::string fail = world_sieve_->first_failure(p); !fail.empty())
+                throw std::invalid_argument("it does not pass the worlds line's filters (" + fail + ")");
+        const BigUint index = compact ? world_sieve_->index_of(p, mode_) : world_space_->index_of(p, mode_);
+        trail_.clear();
+        refused_ = false;
+        place(index, true);
+        if (!refused_) message(trf("msg.goto.done", {compact ? world_sieve_->hex_of(index) : world_space_->hex_of(index)}));
+    }
+    catch (const std::exception& e)
+    {
+        warn(trf("msg.goto.failed", {e.what()}));
+    }
+}
+
 void Hallway::step_trail(int dir)
 {
     if (trail_.size() < 2) return;

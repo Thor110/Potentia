@@ -4,7 +4,7 @@
 // Three columns, as the filter designer has: on the left the last ten melodies the player chose,
 // each with the mode it played in (MENUS or WORLD) and when; in the middle the controls; on the
 // right the favourites. The controls show one mode's settings at a time (MODE at the top switches
-// between MENUS and WORLD, which have one form and two sets of values): the music on or off, its
+// between MENUS, WORLD and PERSONAL, which have one form and three sets of values): the music on or off, its
 // volume, where its melodies come from (the audio line, or tracks of the tracks line and how many
 // units), their length, tempo, voice, echo and the quiet between them, a new melody now, and the
 // mode's own stack of audio filters with their settings, apart from the setup menu's. Below them
@@ -12,6 +12,14 @@
 // it (on the audio line, or the tracks line for a track, in hand; one this hallway does not have
 // builds the hallway again with it), save it as MIDI, and add it to the favourites or take it off
 // them.
+//
+// PERSONAL (IDEAS 19.220) is your personal dimension's music, kept in its world file rather than the
+// player's settings: the dimension open, or the one last opened (worlds/personal.world beside the
+// settings until one is). Until it is given music of its own (Music here, at the top) it plays WORLD's,
+// and nothing more is shown; given its own, it starts as a copy of WORLD's in the mode of the line you
+// are on, and has the same form less each line's mode, with the dimension's one mode in their place and
+// a melody it can keep (the highlighted one, by "Keep it here") played every time in place of one drawn.
+// Every change is written into the world file at once.
 //
 // Keys: Tab moves between the columns, Up and Down along one, Left and Right change a setting
 // (Shift: ten steps), ENTER plays a melody or presses a button, G goes to the melody, F saves it,
@@ -21,7 +29,13 @@
 #include "hallway.hpp"
 
 #include "dialogs.hpp"
+#include "personal_world.hpp"
+
 #include <algorithm>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace hallway::hall {
 
@@ -35,7 +49,15 @@ void SDLCALL media_save_chosen(void* user, const char* const* files, int)
     static_cast<Hallway*>(user)->media_saved(files[0]);
 }
 
-std::string mode_name(MusicMode m) { return tr(m == MusicMode::Menus ? "music.mode.menus" : "music.mode.world"); }
+std::string mode_name(MusicMode m) { return tr(m == MusicMode::Menus ? "music.mode.menus" : m == MusicMode::Personal ? "music.mode.personal" : "music.mode.world"); }
+
+// The dimension's world file as the Media Player names it: its folder's name and its own.
+std::string world_name(const std::filesystem::path& w)
+{
+    if (w.empty()) return "";
+    const std::u8string s = (w.parent_path().filename() / w.filename()).generic_u8string();
+    return std::string(s.begin(), s.end());
+}
 
 std::string melody_line(const MusicMelody& t)
 {
@@ -70,8 +92,19 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
 {
     using K = MediaRow::Kind;
     std::vector<MediaRow> rows;
+    if (media_mode_ == MusicMode::Personal)
+    {
+        // A dimension without music of its own: only whether it has some, and the actions.
+        rows.push_back({K::Mode, {}, {}, -1});
+        rows.push_back({K::Own, {}, {}, -1});
+        if (!music() || !music()->personal())
+        {
+            for (K k : {K::Play, K::GoTo, K::Save, K::Favourite}) rows.push_back({k, {}, {}, -1});
+            return rows;
+        }
+    }
     for (K k : {K::Mode, K::On, K::Volume, K::Source, K::Units, K::Length, K::NoteSet, K::Low, K::High, K::Durations, K::Voices, K::Tempo, K::Voice, K::Echo, K::Gap})
-        rows.push_back({k, {}, {}, -1});
+        if (!(k == K::Mode && media_mode_ == MusicMode::Personal)) rows.push_back({k, {}, {}, -1});
     // WORLD's character: a mode for each line, and the key round the circle of fifths.
     if (media_mode_ == MusicMode::World)
     {
@@ -79,6 +112,9 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
         for (int li = 0; li < kLines; ++li) rows.push_back({K::LineMode, {}, {}, li}); // in door order
         rows.push_back({K::Fifths, {}, {}, -1});
     }
+    // PERSONAL's: the dimension's one mode, and the melody it keeps.
+    if (media_mode_ == MusicMode::Personal)
+        for (K k : {K::DimMode, K::Kept}) rows.push_back({k, {}, {}, -1});
     for (K k : {K::Next, K::Filters}) rows.push_back({k, {}, {}, -1});
     if (MusicPlayer* p = music())
     {
@@ -94,7 +130,33 @@ std::vector<Hallway::MediaRow> Hallway::media_rows() const
         }
     }
     for (K k : {K::Play, K::GoTo, K::Save, K::Favourite}) rows.push_back({k, {}, {}, -1});
+    if (media_mode_ == MusicMode::Personal) rows.push_back({K::Keep, {}, {}, -1});
     return rows;
+}
+
+void Hallway::media_write_personal()
+{
+    MusicPlayer* p = music();
+    if (!p) return;
+    const auto own = p->personal();
+    const std::filesystem::path w = p->personal_world();
+    const std::string err = PersonalWorld::write_music(w, own ? personal_music_line(*own) : std::string());
+    std::lock_guard<std::mutex> lock(media_mx_);
+    media_status_ = !err.empty() ? err : trf(own ? "media.personal.kept" : "media.personal.removed", {world_name(w)});
+}
+
+std::string Hallway::media_report() const
+{
+    MusicPlayer* p = music();
+    if (!media_open_ || media_mode_ != MusicMode::Personal || !p) return "";
+    const auto own = p->personal();
+    std::string status;
+    {
+        std::lock_guard<std::mutex> lock(media_mx_);
+        status = media_status_;
+    }
+    return "PERSONAL (" + world_name(p->personal_world()) + "): " + (own ? "its own: " + personal_music_summary(*own) : std::string("none of its own (WORLD's music)")) +
+           (status.empty() ? "" : "; " + status);
 }
 
 std::optional<MusicMelody> Hallway::media_selected() const
@@ -167,6 +229,24 @@ void Hallway::media_act(MediaRow::Kind k, bool& quit)
         std::lock_guard<std::mutex> lock(media_mx_);
         media_status_ = s;
     };
+    if (k == K::Keep)
+    {
+        // The highlighted melody kept by the dimension, played every time in place of one drawn.
+        auto own = p->personal();
+        const auto t = media_selected();
+        if (!own) say(tr("media.personal.own_first"));
+        else if (!t) say(tr("media.nothing_selected"));
+        else
+        {
+            own->melody_set = t->set.id();
+            own->melody_units = t->units;
+            own->melody = t->notes;
+            p->set_settings(MusicMode::Personal, *own);
+            p->next(MusicMode::Personal);
+            media_write_personal();
+        }
+        return;
+    }
     if (k == K::Next)
     {
         p->next(media_mode_);
@@ -233,10 +313,31 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     using K = MediaRow::Kind;
     if (row.kind == K::Mode)
     {
-        media_mode_ = media_mode_ == MusicMode::Menus ? MusicMode::World : MusicMode::Menus;
+        // MENUS, WORLD, PERSONAL and round again (Left the other way).
+        media_mode_ = MusicMode(((int(media_mode_) + (dir < 0 ? -1 : 1)) % kMusicSpaces + kMusicSpaces) % kMusicSpaces);
         return;
     }
-    if (row.kind == K::Next || row.kind == K::Play || row.kind == K::GoTo || row.kind == K::Save || row.kind == K::Favourite)
+    if (row.kind == K::Own)
+    {
+        // Music of its own, starting from WORLD's as it sounds on this line, or none again (WORLD's).
+        if (p->personal_world().empty())
+        {
+            std::lock_guard<std::mutex> lock(media_mx_);
+            media_status_ = tr("pworld.music.no_world");
+            return;
+        }
+        std::optional<MusicSettings> own;
+        if (!p->personal())
+        {
+            own = p->settings(MusicMode::World);
+            own->character = own->modes[size_t(kDimensions[li_].media)];
+            own->melody.clear(), own->melody_set.clear(), own->melody_units = 0, own->unknown.clear();
+        }
+        p->set_personal(p->personal_world(), own);
+        media_write_personal();
+        return;
+    }
+    if (row.kind == K::Next || row.kind == K::Play || row.kind == K::GoTo || row.kind == K::Save || row.kind == K::Favourite || row.kind == K::Keep)
     {
         media_act(row.kind, quit);
         return;
@@ -285,6 +386,16 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     case K::Echo: s.echo = std::clamp(s.echo + by * 5, 0, 80); break;
     case K::Gap: s.gap = std::clamp(s.gap + by, 0, 600); break;
     case K::Fifths: s.fifths = !s.fifths; break;
+    case K::DimMode: s.character = ((s.character + 1 + dir) % (kMusicModes + 1) + kMusicModes + 1) % (kMusicModes + 1) - 1; break; // (none, then the seven)
+    case K::Kept:
+        if (s.melody.empty())
+        {
+            std::lock_guard<std::mutex> lock(media_mx_);
+            media_status_ = tr("media.personal.keep_how");
+            return;
+        }
+        s.melody.clear(), s.melody_set.clear(), s.melody_units = 0; // (drawn by the filters again)
+        break;
     case K::LineMode:
     {
         int& mode = s.modes[size_t(kDimensions[row.line].media)];
@@ -319,6 +430,7 @@ void Hallway::media_change(int dir, bool big, bool& quit)
     default: return;
     }
     p->set_settings(media_mode_, s);
+    if (media_mode_ == MusicMode::Personal) media_write_personal();
 }
 
 // ---- the rings (IDEAS 19.175)
@@ -551,6 +663,19 @@ void Hallway::draw_media_player(float W, float H)
         case K::GoTo: label = tr("media.goto"); break;
         case K::Save: label = tr("media.save"); break;
         case K::Favourite: label = tr(from_favs ? "media.fav_remove" : "media.fav_add"); break;
+        case K::Own:
+            label = tr("media.personal.own");
+            value = p->personal() ? trf("media.personal.own.yes", {world_name(p->personal_world())}) : tr("media.personal.own.no");
+            break;
+        case K::DimMode:
+            label = tr(s.filters.is_enabled("key-data-v2") || s.filters.is_enabled("key-v1") ? "media.personal.mode" : "media.personal.mode.no_key");
+            value = s.character < 0 ? tr("media.personal.mode.none") : tr(std::string("media.mode.") + music_mode_name(s.character));
+            break;
+        case K::Kept:
+            label = tr("media.personal.melody");
+            value = s.melody.empty() ? tr("media.personal.melody.drawn") : trf("media.personal.melody.kept", {std::to_string(s.melody.size())});
+            break;
+        case K::Keep: label = tr("media.personal.keep"); break;
         }
         if (i == media_row_) highlight(cx, y, cw, media_area_ == 1);
         const SDL_Color c = header ? grey : i == media_row_ && media_area_ == 1 ? white : ink;
@@ -561,7 +686,10 @@ void Hallway::draw_media_player(float W, float H)
 
     // Underneath: what is playing in each mode, what the actions would act on, and how it went.
     float y = bottom + 10;
-    for (MusicMode m : {MusicMode::Menus, MusicMode::World})
+    // (PERSONAL's line only while it is shown: the screen as it was otherwise)
+    std::vector<MusicMode> spaces{MusicMode::Menus, MusicMode::World};
+    if (media_mode_ == MusicMode::Personal) spaces.push_back(MusicMode::Personal);
+    for (MusicMode m : spaces)
     {
         const auto now = p->now_playing(m);
         const std::string on = now ? now->short_address(18) + "  " + now->notation() : tr("media.nothing_yet");

@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace hallway {
 
@@ -93,7 +94,10 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return out;
     }
     // A dimension's features (IDEAS 19.197): each to be turned on or off by whoever walks it.
-    case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Toggle, "personal_hallway_tools"}, {Kind::Action, "back"}};
+    case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Toggle, "personal_hallway_tools"},
+                                         {Kind::Toggle, "personal_turning_rings"}, {Kind::Number, "personal_wheel_step"}, {Kind::Toggle, "personal_day_night"},
+                                         {Kind::Toggle, "personal_catalogue_covers"}, {Kind::Toggle, "personal_open_in_place"},
+                                         {Kind::Number, "personal_shaper_radius"}, {Kind::Number, "personal_shaper_strength"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
     case Screen::Systems: return {{Kind::Action, "systems_formats"}, {Kind::Action, "systems_language"}, {Kind::Action, "back"}};
     case Screen::Settings:
@@ -101,7 +105,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
                 {Kind::Action, "raid"}, {Kind::Action, "game_systems"}, {Kind::Toggle, "online"}, {Kind::Action, "back"}};
     case Screen::Graphics:
         return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
-                {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"},
+                {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"}, {Kind::Number, "axis_colours"},
                 {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "keys"}, {Kind::Action, "back"}};
     // Every key of every system that has moved onto the registry (keys.hpp), by section: Enter, then the
@@ -166,6 +170,21 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "personal_map") return onoff(s_.personal_map);
     if (it.id == "personal_compass") return onoff(s_.personal_compass);
     if (it.id == "personal_hallway_tools") return onoff(s_.personal_hallway_tools);
+    if (it.id == "personal_turning_rings") return onoff(s_.personal_turning_rings);
+    if (it.id == "personal_day_night") return onoff(s_.personal_day_night);
+    if (it.id == "personal_catalogue_covers") return onoff(s_.personal_catalogue_covers);
+    if (it.id == "personal_open_in_place") return onoff(s_.personal_open_in_place);
+    if (it.id == "personal_wheel_step") return trf("value.personal_wheel_step", {std::to_string(s_.personal_wheel_step)});
+    if (it.id == "personal_shaper_radius") return trf("value.personal_shaper_radius", {std::to_string(s_.personal_shaper_radius)});
+    if (it.id == "personal_shaper_strength") return trf("value.personal_shaper_strength", {std::to_string(s_.personal_shaper_strength)});
+    if (it.id == "axis_colours")
+    {
+        // A preset by its name; colours written into the settings file by hand as they are.
+        const auto& presets = axis_colour_presets();
+        for (size_t i = 0; i < presets.size(); ++i)
+            if (presets[i] == s_.axis_colours) return tr("value.axis_colours." + std::to_string(i));
+        return s_.axis_colours;
+    }
     if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
@@ -483,6 +502,10 @@ void MainMenu::change(int dir)
         else if (it.id == "personal_map") s_.personal_map = !s_.personal_map;
         else if (it.id == "personal_compass") s_.personal_compass = !s_.personal_compass;
         else if (it.id == "personal_hallway_tools") s_.personal_hallway_tools = !s_.personal_hallway_tools;
+        else if (it.id == "personal_turning_rings") s_.personal_turning_rings = !s_.personal_turning_rings;
+        else if (it.id == "personal_day_night") s_.personal_day_night = !s_.personal_day_night;
+        else if (it.id == "personal_catalogue_covers") s_.personal_catalogue_covers = !s_.personal_catalogue_covers;
+        else if (it.id == "personal_open_in_place") s_.personal_open_in_place = !s_.personal_open_in_place;
         else if (it.id == "raid_share")
         {
             // Opt in: turned on, your key is made if there is none (said, with where), so what is sent
@@ -514,6 +537,37 @@ void MainMenu::change(int dir)
         else if (it.id == "view_rooms") s_.view_rooms = std::clamp(s_.view_rooms + dir, 2, 64);
         else if (it.id == "picture_rooms") s_.picture_rooms = std::clamp(s_.picture_rooms + dir, 0, 8);
         else if (it.id == "raid_copies") s_.raid_copies = std::clamp(s_.raid_copies + dir, 1, 16);
+        else if (it.id == "axis_colours")
+        {
+            // The presets in turn (from colours of one's own, Right goes to the first, Left to the last).
+            const auto& presets = axis_colour_presets();
+            const int n = int(presets.size());
+            int at = -1;
+            for (int i = 0; i < n; ++i)
+                if (presets[size_t(i)] == s_.axis_colours) at = i;
+            at = at < 0 ? (dir > 0 ? 0 : n - 1) : (at + dir + n) % n;
+            s_.axis_colours = presets[size_t(at)];
+        }
+        // The ground shaper (IDEAS 19.209): its radius two metres a step (as a notch of the wheel changes it
+        // in the dimension), its strength a metre a second a step.
+        else if (it.id == "personal_shaper_radius") s_.personal_shaper_radius = std::clamp(s_.personal_shaper_radius + 2 * dir, 10, 80);
+        else if (it.id == "personal_shaper_strength") s_.personal_shaper_strength = std::clamp(s_.personal_shaper_strength + dir, 1, 20);
+        else if (it.id == "personal_wheel_step")
+        {
+            // The steps a hand usually wants, rather than every degree one at a time; any of 1 to 90 can be
+            // written in the settings file, and stepping from one between them goes to the next.
+            static const int kSteps[] = {1, 2, 5, 10, 15, 30, 45, 90};
+            int v = s_.personal_wheel_step;
+            if (dir > 0)
+            {
+                for (const int k : kSteps)
+                    if (k > v) { v = k; break; }
+            }
+            else
+                for (auto i = std::size(kSteps); i-- > 0;)
+                    if (kSteps[i] < v) { v = kSteps[i]; break; }
+            s_.personal_wheel_step = v;
+        }
         else s_.mouse_sensitivity = std::clamp(s_.mouse_sensitivity + dir * 10, 10, 400);
         save();
         return;

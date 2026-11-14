@@ -42,6 +42,8 @@ bool on_off(const std::string& v, bool def)
 
 const char* on_off(bool b) { return b ? "on" : "off"; }
 
+int hex_digit(char c) { return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1; }
+
 // A whole-number setting held to lo..hi; one that is not a number leaves the setting as it was.
 template <class T>
 void read_int(const std::string& v, int lo, int hi, T& out)
@@ -74,6 +76,31 @@ constexpr Resolution kCommon[] = {{3840, 2160}, {2560, 1600}, {2560, 1440}, {192
                                   {1440, 900},  {1366, 768},  {1280, 800},  {1280, 720},  {1024, 768}};
 
 } // namespace
+
+bool parse_axis_colours(const std::string& text, uint32_t out[3])
+{
+    uint32_t c[3] = {};
+    size_t at = 0;
+    for (int k = 0; k < 3; ++k)
+    {
+        while (at < text.size() && text[at] == ' ') ++at;
+        if (at + 7 > text.size() || text[at] != '#') return false;
+        uint32_t v = 0;
+        for (size_t i = 1; i <= 6; ++i)
+        {
+            const int d = hex_digit(text[at + i]);
+            if (d < 0) return false;
+            v = v << 4 | uint32_t(d);
+        }
+        c[k] = 0xFF000000u | v;
+        at += 7;
+        while (at < text.size() && text[at] == ' ') ++at;
+        if (k < 2 && (at >= text.size() || text[at++] != ',')) return false;
+    }
+    if (at != text.size()) return false;
+    for (int k = 0; k < 3; ++k) out[k] = c[k];
+    return true;
+}
 
 DisplayInfo detect_display()
 {
@@ -176,6 +203,11 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "view_rooms") read_int(value, 2, 64, s.view_rooms);
             else if (key == "picture_rooms") read_int(value, 0, 8, s.picture_rooms);
             else if (key == "fps_counter") s.fps_counter = on_off(value, false);
+            else if (key == "axis_colours")
+            {
+                uint32_t c[3];
+                if (parse_axis_colours(value, c)) s.axis_colours = value; // (else the default stays)
+            }
         }
         // [world], and [graphics] too, where files written before the two moved kept them.
         if (section == "world" || section == "graphics")
@@ -224,6 +256,13 @@ AppSettings AppSettings::load(const fs::path& path)
             if (key == "map") s.personal_map = on_off(value, true);
             else if (key == "compass") s.personal_compass = on_off(value, true);
             else if (key == "hallway_tools") s.personal_hallway_tools = on_off(value, false);
+            else if (key == "turning_rings") s.personal_turning_rings = on_off(value, true);
+            else if (key == "wheel_step_degrees") read_int(value, 1, 90, s.personal_wheel_step);
+            else if (key == "day_night") s.personal_day_night = on_off(value, false);
+            else if (key == "catalogue_covers") s.personal_catalogue_covers = on_off(value, true);
+            else if (key == "open_in_place") s.personal_open_in_place = on_off(value, true);
+            else if (key == "shaper_radius") read_int(value, 10, 80, s.personal_shaper_radius);
+            else if (key == "shaper_strength") read_int(value, 1, 20, s.personal_shaper_strength);
         }
         else if (section == "game")
         {
@@ -350,6 +389,7 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"graphics", "view_rooms", std::to_string(view_rooms), "View Distance: rooms drawn and kept either side of yours, 2 to 64"},
         {"graphics", "picture_rooms", std::to_string(picture_rooms), "Picture Distance: rooms either side of yours with item pictures of their own, 0 to 8"},
         {"graphics", "fps_counter", on_off(fps_counter), "frames per second, top right of the hallway"},
+        {"graphics", "axis_colours", axis_colours, "the colours of the axes x, y and z wherever they are drawn (the rings round what you hold in your personal dimension, IDEAS 19.221): three #RRGGBB apart by commas; red, green and blue (" + std::string(kAxisColoursDefault) + ") by default"},
         {"world", "model_cache_mb", std::to_string(model_cache_mb), "the display cache: memory for the pictures on items, 8 MB up"},
         {"world", "angle_decimals", std::to_string(angle_decimals), "decimal places on the compass's degree readout, 0 to " + std::to_string(kMaxAngleDecimals)},
         {"world", "filter_memory_mb", std::to_string(filter_memory_mb), "the most one count of the filters' survivors may take for its tables, 64 MB up"},
@@ -386,6 +426,13 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"online", "enabled", on_off(online), "off (the default): nothing in Sieve reaches another machine, whatever else is set (Sieve needs no network); on: the online systems may run where their own settings are on too (the infinite RAID's share and serve)"},
         {"personal", "map", on_off(personal_map), "your personal dimension's map, top right: the hill from above, you and what is placed (IDEAS 19.197); on by default"},
         {"personal", "compass", on_off(personal_compass), "your personal dimension's compass, along the top: which way you face, north being +z (IDEAS 19.197); on by default"},
+        {"personal", "turning_rings", on_off(personal_turning_rings), "rings round what you hold in your personal dimension, one for each way it turns (R, T, G), coloured by its axis (axis_colours), the turn last chosen bright (IDEAS 19.221); on by default"},
+        {"personal", "wheel_step_degrees", std::to_string(personal_wheel_step), "once R, T or G has chosen a turn, how far each notch of the mouse wheel turns what you hold about it, in degrees, 1 to 90 (15 by default)"},
+        {"personal", "day_night", on_off(personal_day_night), "day and night in your personal dimension (IDEAS 19.222): on, the sun crosses the sky once a day, the sky, the light and the stars at night following it, the time of day from the clock and the day's length kept in the dimension's world file (L there sets it, 1 to 18446744073709551615 seconds; 1440 without one); off (the default): always day, as before"},
+        {"personal", "catalogue_covers", on_off(personal_catalogue_covers), "favourites' covers in your personal dimension's catalogue (Tab there; IDEAS 19.190): each favourite's own picture (favourites/SHA.png, the one its front shows once placed) small beside its row, and the chosen one's larger just below the list, so they can be told apart before placing; on by default"},
+        {"personal", "open_in_place", on_off(personal_open_in_place), "O on a placed favourite in your personal dimension (IDEAS 19.208): on (the default), it opens in the hallway's own viewer over the dimension, a small \"calculating...\" by the crosshair while its line is made in the background (kept while you stay in the dimension), Esc closing it back to the dimension; where it cannot open so, or off, O goes into the hallway on the favourite's line, as before"},
+        {"personal", "shaper_radius", std::to_string(personal_shaper_radius), "the ground shaper's brush in your personal dimension (IDEAS 19.209; 1 takes it out there): how far round the crosshair's point it shapes the ground, in metres, 10 to 80 (20 by default); the wheel changes it there for the visit"},
+        {"personal", "shaper_strength", std::to_string(personal_shaper_strength), "how fast the ground shaper raises, lowers or flattens the ground at its brush's middle, in metres a second, 1 to 20 (4 by default), less towards its edge"},
         {"personal", "hallway_tools", on_off(personal_hallway_tools), "the hallway's own tools (Restart Sieve, the node graph, the navigator) in your dimension's pause menu too; off by default"},
         {"game", "ai_explorers", on_off(ai_explorers), "AI Explorers in the state space (IDEAS 19.189): off (the default) or on; not built yet, so nothing reads it until they are"},
         {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},

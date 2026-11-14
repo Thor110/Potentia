@@ -8,7 +8,7 @@
 // the run they are given in. save() writes the file in this order:
 //
 //   [graphics]   resolution, fullscreen, vsync, edge_glow, real_graphics, door_portals,
-//                graphics_memory_gb, view_rooms, picture_rooms, fps_counter
+//                graphics_memory_gb, view_rooms, picture_rooms, fps_counter, axis_colours
 //   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
 //                merge_cache_pct, unit_time_ms, item_memory_pct
 //   [controls]   mouse_sensitivity, invert_mouse_y, read_aloud, text_to_voice
@@ -23,6 +23,7 @@
 #include <SDL3/SDL.h>
 
 #include <charconv>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -86,6 +87,19 @@ Resolution default_resolution(const DisplayInfo& d);
 // division), so every one of them is right, and 20 still fits under the compass (359.999...°).
 inline constexpr int kMaxAngleDecimals = 20;
 
+// The axes' colours (AppSettings::axis_colours): the default, and the presets Settings > Graphics steps
+// through (any other three colours can be written in the settings file).
+inline constexpr const char* kAxisColoursDefault = "#FF4040,#40D040,#4080FF";
+inline const std::vector<std::string>& axis_colour_presets()
+{
+    // red, green, blue; then Okabe and Ito's vermilion, bluish green and blue, a set chosen to stay
+    // apart for most kinds of colour blindness.
+    static const std::vector<std::string> presets = {kAxisColoursDefault, "#D55E00,#009E73,#0072B2"};
+    return presets;
+}
+// "#RRGGBB,#RRGGBB,#RRGGBB" as three opaque ARGB colours; false (out untouched) if it is not that.
+bool parse_axis_colours(const std::string& text, uint32_t out[3]);
+
 struct AppSettings
 {
     Resolution resolution;       // {0, 0}: not chosen yet
@@ -109,6 +123,11 @@ struct AppSettings
     int unit_time_ms = 50;       // the time budget: the longest one unit may take to open (plugin.hpp), 5..60000
     int item_memory_pct = 25;    // installed memory the hallway's items around you may take (menu.cpp), 5..90
     bool fps_counter = false;    // show frames per second in the hallway
+    // The colours axes are drawn in, x then y then z, wherever Sieve draws them (IDEAS 19.221: the rings
+    // round what you hold in your dimension first): one setting for every place, never one per tool, so
+    // x is the same colour everywhere. Written as three #RRGGBB apart by commas; red, green and blue by
+    // default, the common convention of 3D tools. Settings > Graphics offers the presets below.
+    std::string axis_colours = kAxisColoursDefault;
     int mouse_sensitivity = 100; // percent, 10..400
     bool invert_mouse_y = false;
     bool read_aloud = false; // the menus' chosen item spoken (speech.hpp; Windows)
@@ -165,6 +184,26 @@ struct AppSettings
     // each to be turned off (Personal Dimensions > Features).
     bool personal_map = true, personal_compass = true;
     bool personal_hallway_tools = false; // the hallway's tools in your dimension's pause menu too (pause_rows.hpp)
+    // Turning what you hold (IDEAS 19.221): the coloured rings round it, one a turn (on by default), and
+    // how far one notch of the mouse wheel turns it about the turn last chosen, in degrees (1 to 90; 15,
+    // as a press of R, T or G turns it, by default).
+    bool personal_turning_rings = true;
+    int personal_wheel_step = 15;
+    // Day and night in your dimension (IDEAS 19.222): off (the default), the sky always day as it was;
+    // on, the sun crosses it once a day of the dimension's own length (its world file's, not a setting:
+    // the length travels with the dimension).
+    bool personal_day_night = false;
+    // Favourites' covers in your dimension's catalogue (IDEAS 19.190): each favourite's picture beside its
+    // row and the chosen one's larger just below the list; on by default, as a placed favourite's front is.
+    bool personal_catalogue_covers = true;
+    // O on a placed favourite in your dimension (IDEAS 19.208): on (the default, as Edward asked), it opens
+    // in the hallway's own viewer over the dimension, its line made in the background; off, it goes into
+    // the hallway on its line, as it did before.
+    bool personal_open_in_place = true;
+    // The ground shaper (IDEAS 19.209), the first of the author's tools: its brush's radius in metres (10 to
+    // 80; 20 by default: two cells of the ground's 10 m grid either way) and how fast it shapes at the
+    // brush's middle, in metres a second (1 to 20; 4 by default). The wheel changes the radius for a visit.
+    int personal_shaper_radius = 20, personal_shaper_strength = 4;
     // Keys changed from their defaults (IDEAS 19.199; keys.hpp): "SECTION/ID" to its keys, as [keys] keeps
     // them. Only what differs is kept, so a new default reaches everyone who has not changed it.
     std::map<std::string, std::string> keys;

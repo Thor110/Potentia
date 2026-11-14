@@ -29,8 +29,10 @@
 // line, then "seed N", then one line an object, "place KIND X Z YAW" (KIND a catalogue id, metres and
 // radians, %.9g), in the order they were placed; "sieve-personal-world-v2" as soon as anything is more,
 // "place KIND X Y Z YAW PITCH ROLL fixed|physics" (KIND also fav:SHA, char:you or char:SHA), with
-// "characters placed" once your characters are moved, and every line it does not read (a place
-// model:SHA among them) kept and written back. It is read back when the world opens (a line it knows
+// "characters placed" once your characters are moved, "day SECONDS" once the day's length is set
+// (IDEAS 19.222), "ground X Z DH" for each cell corner the ground shaper has moved (IDEAS 19.209: the
+// change, not the whole grid), "model SHA" for each model of your own in its catalogue (placed as
+// model:SHA), "music ..." for music of its own (IDEAS 19.220, set in the Media Player), and every line it does not read kept and written back. It is read back when the world opens (a line it knows
 // but cannot read is left out, and said).
 #pragma once
 
@@ -39,16 +41,22 @@
 #include <SDL3/SDL.h>
 
 #include "sieve/character.hpp"
+#include "sieve/worldspace.hpp"
 #include "mesh.hpp"
 #include "slide_panel.hpp"
 #include "favourites.hpp"
+#include "dialogs.hpp"
 
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -65,7 +73,8 @@ public:
     static std::string catalogue_note();
     // Open: a favourite opened (O), to be read on its own line (opened()). System: a row of the pause menu
     // chosen that is another system's (system(): its id, pause_rows.hpp), to be opened by whoever ran this.
-    enum class Result { Back, Quit, Open, System };
+    // GoToWorld: the worlds line's Go to it chosen (below), to be gone to in the hallway (worlds_parts()).
+    enum class Result { Back, Quit, Open, System, GoToWorld };
     const std::string& system() const { return system_; }
     // The pause menu (Esc): its rows as pause_rows.hpp gives them for your dimension, the hallway's tools
     // too where Personal Dimensions > Features asks (IDEAS 19.196).
@@ -83,13 +92,159 @@ public:
     void press(SDL_Keycode key, SDL_Keymod mod = SDL_KMOD_NONE); // the world's keys, as if typed
     void look(float pitch_degrees) { pitch_ = pitch_degrees * 3.14159265f / 180.0f; } // (for pictures and tests)
     void render();
-    void settle_panels() { cat_panel_.settle(), place_panel_.settle(); } // (a picture: the panels where they are going)
+    void settle_panels() { cat_panel_.settle(), place_panel_.settle(), day_panel_.settle(), worlds_panel_.settle(); } // (a picture: the panels where they are going)
     // Real Graphics off: the characters drawn as the wireframe (rings and bones), as everywhere else.
     void set_wireframe(bool on) { wireframe_ = on; }
     // Its features (IDEAS 19.197), as Personal Dimensions > Features has them: the map and the compass.
     void set_features(bool map, bool compass) { show_map_ = map, show_compass_ = compass; }
+    // Turning what you hold (IDEAS 19.221), as Personal Dimensions > Features and Settings > Graphics have
+    // it: the rings round it on or off, how far a notch of the wheel turns it (degrees), and the axes'
+    // colours, x, y and z (opaque ARGB; AppSettings::axis_colours).
+    void set_turning(bool rings, int wheel_step_degrees, const uint32_t axis_argb[3]);
+    // The mouse wheel, `notches` of it (forward positive; a touchpad's fractions add up): what you hold
+    // turned about the turn last chosen (R, T or G), a step a notch. Nothing while no turn is chosen.
+    void wheel(float notches);
+    // For the readout: while something is held, the turn chosen, its three turns and its rings; else "".
+    std::string turning_report() const;
+    // Day and night (IDEAS 19.222), as Personal Dimensions > Features has it: off, the sky as it always
+    // was (one sun, fixed, always day); on, the sun crosses the sky once a day of this dimension's own
+    // length (its world file's `day` line, kDefaultDayLength seconds without one), and the sky's colours,
+    // the light on everything and the stars at night follow it. The time of day is worked out each frame
+    // from the clock (seconds since 1 January 1970, UTC) and the length, never added up, so two people in
+    // the same dimension see the same sky and nothing runs over however long it is left open.
+    static constexpr uint64_t kDefaultDayLength = 1440; // (24 minutes: an hour of the day a minute)
+    void set_day_night(bool on) { day_on_ = on; }
+    bool day_night() const { return day_on_; }
+    // For pictures and tests: the time of day held at `hours` (0 to 24 on the dimension's own clock,
+    // 0 midnight, 12 noon, whatever the day's length), not the clock's; below 0, the clock's again.
+    void set_time_of_day(double hours) { fixed_phase_ = hours < 0 ? -1.0 : hours / 24.0; }
+    uint64_t day_length() const { return day_length_; }
+    // A day's length as typed: whole seconds, 1 to 2^64 - 1, digits only. False (and `out` untouched)
+    // for anything else, a number past the largest an unsigned 64-bit count holds among them: refused,
+    // never wrapped round.
+    static bool parse_day_length(const std::string& digits, uint64_t& out);
+    // For the readout: while day and night is on, the day's length, the time of day and the sun; else "".
+    std::string day_report() const;
+    // The author's tools (IDEAS 19.209), the first the ground shaper: its key takes it out, another puts it
+    // away; while it is out, the ground where the crosshair meets it is raised, lowered or flattened in a
+    // soft round brush of this radius (metres), at most this many metres a second at its middle, less
+    // towards its edge. Both start from the settings ([personal] shaper_radius, shaper_strength); the
+    // wheel and the keys change the radius for the visit.
+    static constexpr int kShaperRadiusMin = 10, kShaperRadiusMax = 80, kShaperStrengthMin = 1, kShaperStrengthMax = 20;
+    void set_shaper(int radius_m, int strength_m_s);
+    bool shaper_out() const { return tool_out_; }
+    // For the readout: while the shaper is out, its radius and strength and where it is aimed; else "".
+    std::string shaper_report() const;
+    // Favourites' covers in the catalogue (IDEAS 19.190): each favourite's own picture (favourites/SHA.png,
+    // the one its front shows once placed) small beside its row, and the chosen one's larger beside the
+    // list, so they can be told apart before placing. On by default ([personal] catalogue_covers).
+    void set_catalogue_covers(bool on) { covers_on_ = on; }
+    // For the readout: while the catalogue is out with a favourite in it, the covers' setting, how many
+    // of its favourites have a cover and the chosen row's; else "".
+    std::string covers_report() const;
+    // Your own objects (IDEAS 19.187's next step): a model (.obj with its .mtl, or a glTF, .gltf or .glb)
+    // brought in from a file, kept in the store beside the settings as objects/SHA.sieve (SHA the SHA-256
+    // of the .obj it is kept as; SPECIFICATIONS 12.0r), named by a `model SHA` line of the world and
+    // listed in the catalogue after your characters as "model:SHA", drawn from its own mesh. The
+    // catalogue's import key opens the system's file dialog; --pworld-import FILE brings one in for a run.
+    // True where it is now in the catalogue (kept now, or already); note() says what came in or why not.
+    bool import_model(const std::string& path);
+    // For the readout: your own models in the catalogue, how many could be drawn, and each by its SHA's
+    // first twelve digits, its name and its triangles (or why not); "" while there are none.
+    std::string models_report() const;
+    // Its music (IDEAS 19.220): the world file's `music` line (SPECIFICATIONS 12.0r), set in the Media
+    // Player's PERSONAL space, which plays it while the dimension is open; "" where it has none (it then
+    // plays WORLD's music, as every dimension did before). Given to the music player as you arrive.
+    const std::string& music_line() const { return music_line_; }
+    // The line written into a world file as the Media Player changes it ("" takes it away), the rest of
+    // the world read and written back as the world itself would write it: "" or why it was not.
+    static std::string write_music(const std::filesystem::path& world, const std::string& line);
+    // A world file's `music` line, read without opening the world (the Media Player's PERSONAL as the
+    // application starts); "" where it has none or it cannot be read.
+    static std::string music_line_of(const std::filesystem::path& world);
+    // For the readout: what its music is, where it has some; else "".
+    std::string music_report() const;
+    // The hallway's own viewer, opened in place over this world (IDEAS 19.208). The viewer belongs to a
+    // built hallway (client/viewer.cpp reads a line's items through it), and this world builds none, so
+    // whoever runs it lends one: O on a placed favourite asks it to make that favourite's line (in the
+    // background, as the hallway's calculating screen does, kept once made), a small "calculating..."
+    // stands by the crosshair while it is made and the world goes on, and then the viewer opens over
+    // the world; Esc or Z closes it back to the world. Where it cannot be opened so (the line made
+    // under other settings than the favourite was kept with, or the making failed), O goes the old way,
+    // into the hallway on its line (Result::Open), and the note and the readout say why. With none
+    // lent ([personal] open_in_place off), O goes the old way at once.
+    class InPlace
+    {
+    public:
+        enum class State { Idle, Making, Open, Failed };
+        virtual ~InPlace() = default;
+        virtual void begin(const Favourite& f) = 0; // the line made (or the one kept), then the favourite opened
+        virtual State poll() = 0;                   // each frame: how it stands (Failed once, then Idle)
+        virtual void cancel() = 0;                  // Esc while it is made: not opened when it is (still kept)
+        virtual const std::string& why() const = 0; // why it failed
+        virtual void event(const SDL_Event& e) = 0; // while Open: the viewer's keys and mouse
+        virtual void draw(float W, float H) = 0;    // while Open: the viewer, over the world
+        virtual std::string report() const = 0;     // for the readout: the viewer's tab, and whether the line was kept
+    };
+    void set_in_place(InPlace* v) { in_place_ = v; }
+    // For the readout: while a favourite is made or open in place, or after it fell back; else "".
+    std::string in_place_report() const;
+    bool in_place_making() const { return in_place_state_ == InPlace::State::Making; }
+    void in_place_frame(); // its state taken from what was lent (run() each frame; a picture between keys)
+    // Your world as one item of the worlds line (IDEAS 19.187's "the world itself as an address on the
+    // WORLDS line"; sieve/worldspace.hpp, worldspace-v1). A world of that line is a cover, a title and N
+    // slots, each a model of the models line (V vertices on a grid of C steps, F triangles) in one cell of
+    // a G x G x G grid, turned by one of the 24 turns that take a cube onto itself. What is placed here
+    // is freer than that, so the unit is worked out as the importers work out theirs, saying what is
+    // carried and what is left out:
+    //   - each object (a shelf item, a favourite, a model of your own) is carried as its box: the eight
+    //     corners of its mesh's bounds, in its own turns, on the models line's grid, and its twelve faces
+    //     (a models line of fewer than 8 vertices or 12 faces cannot hold a box: then only its place);
+    //     more vertices repeat the last corner, more faces are left empty (all three at vertex 0);
+    //   - its place is the cell its box's middle falls in, the grid laid over everything carried with
+    //     cells as wide as the largest box or the arrangement over G, whichever is wider;
+    //   - its turn is the nearest of the 24 to its yaw, pitch and roll;
+    //   - in the order placed, the first N; slots left over are model 0 in cell 0, unturned, as
+    //     `sieve world --compose` fills them; the cover and the title are left at 0.
+    // Left out, and said: your characters (the line holds models, not people), each object's own mesh and
+    // colours, which item a favourite is, the objects past the N slots, dropped or placed, the hill, the
+    // sky and the day, the music. The hallway's worlds line is lent as a WorldSpace made from the settings
+    // (whoever runs this world makes it; without one the key says there is none).
+    struct WorldsLine
+    {
+        std::shared_ptr<const sieve::WorldSpace> space; // null where it could not be made
+        sieve::AddressMode mode = sieve::AddressMode::Positional; // the ordering the hallway shows it in
+        std::string why;                                          // (why not, where it could not)
+    };
+    void set_worlds_line(std::function<WorldsLine()> f) { worlds_line_of_ = std::move(f); }
+    struct WorldsUnit
+    {
+        sieve::WorldSpace::Parts parts;
+        size_t objects = 0;    // objects placed (not counting your characters)
+        size_t carried = 0;    // of them, in the slots
+        size_t characters = 0; // your characters standing in the world, left out
+        size_t favourites = 0, own = 0, dropped = 0; // of those carried: favourites, models of your own, dropped
+        bool boxes = true;     // the models line holds a box (else only the places are carried)
+        float cell = 0;        // a cell's width, metres
+        float off = 0;         // the farthest a carried box's middle is from its cell's middle, metres
+        float turn_off = 0;    // the most a carried turn is from the nearest of the 24, degrees
+    };
+    // One object as the worlds line sees it: its box's middle in the world, its half-widths in its own
+    // frame (metres) and its turn (columns: where its own x, y and z go in the world).
+    struct WorldsBox
+    {
+        float centre[3] = {0, 0, 0}, half[3] = {0, 0, 0};
+        float turn[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    };
+    // The unit of those boxes, in that order (the counts of what they are left for the caller).
+    static WorldsUnit worlds_unit(const sieve::WorldSpace& ws, const std::vector<WorldsBox>& boxes);
+    WorldsUnit worlds_unit(const sieve::WorldSpace& ws) const;
+    // The worlds line's Go to it chosen (Enter in its panel): its parts, for the hallway to go to.
+    const std::optional<sieve::WorldSpace::Parts>& worlds_parts() const { return worlds_go_; }
+    // For the readout: once the panel has been opened, the address and what was carried; else "".
+    std::string worlds_report() const;
     std::string report() const;
-    float height(float x, float z) const; // the ground's height there, in metres
+    float height(float x, float z) const; // the ground's height there, in metres (the seed's, and what is shaped)
     float ground(float x, float z) const; // the same as drawn (the cells' flat triangles)
 
 private:
@@ -121,6 +276,7 @@ private:
     };
     std::vector<Placed> placed_;
     std::vector<std::string> kept_lines_; // a v2 file's lines this build does not know, written back unchanged
+    std::string music_line_;              // its `music` line (IDEAS 19.220), or "" for none
     int held_ = -1;                       // the object in your hand (picked up to the cursor), or none
     Placed held_from_;                    // where it was, for Esc (put back)
     float physics_left_ = 0;              // time not yet stepped by the fixed physics step
@@ -163,6 +319,41 @@ private:
     void place_held();
     void drop_held();
     void put_back_held();
+    void pick_up(int which); // into your hand, no turn chosen yet
+    // Turning what you hold (IDEAS 19.221): the turn last chosen, 0 the yaw (R, about the vertical: y),
+    // 1 the pitch (T, about its side: z), 2 the roll (G, about its front: x), or -1 none since it was
+    // picked up; the wheel's step (radians) and its part-notches not yet turned; the rings and colours.
+    int turn_ = -1;
+    float wheel_step_ = 15.0f * 3.14159265f / 180.0f, wheel_left_ = 0;
+    bool turn_rings_ = true;
+    uint32_t axis_argb_[3] = {0xFFFF4040u, 0xFF40D040u, 0xFF4080FFu};
+    // Where the rings go: the middle of what is held (its box's centre, in the world) and the farthest of
+    // its points from there, in metres; false while nothing is held.
+    bool held_bounds(float centre[3], float& reach) const;
+    void add_rings(); // the rings, given to the renderer with the objects (so the thing held hides their far side)
+    // Day and night (IDEAS 19.222): on or off, the day's length (seconds) and whether the file said it
+    // (or it was typed here: then it is written back, as a v2 line), the time of day held for a picture
+    // (a fraction of the day, or below 0 for the clock's), and the panel where the length is typed.
+    bool day_on_ = false, day_written_ = false;
+    uint64_t day_length_ = kDefaultDayLength;
+    double fixed_phase_ = -1.0;
+    SlidePanel day_panel_;
+    std::string day_edit_;
+    void day_key(SDL_Keycode k, SDL_Keymod mod);
+    // The time of day now, as a fraction of the day (0 midnight, 0.25 sunrise, 0.5 noon, 0.75 sunset).
+    double day_phase() const;
+    // The sky at a time of day: where the sun is (a unit vector, y up), the sky's colours overhead and at
+    // the horizon, the colour of the light on things, how much of the day's light there is (0 night, 1
+    // day) and how bright the stars are (0 to 1).
+    struct Sky
+    {
+        float sun[3];
+        SDL_FColor top, low, light;
+        float day, stars;
+    };
+    Sky sky_at(double phase) const;
+    // The stars: directions on the sky (unit vectors, as at midnight's turn of it), from the seed.
+    std::vector<std::array<float, 3>> stars_;
     // The map's zoom (IDEAS 19.199's first keys): 0 the whole world, each step in halves what it shows.
     static constexpr int kMapZooms = 5;
     int map_zoom_ = 0;
@@ -172,11 +363,44 @@ private:
     // An object's faces, in the world: triangles (three points each) and their colour.
     using Face = std::pair<std::array<std::array<float, 3>, 3>, SDL_FColor>;
     const std::vector<Face>& faces_of(const Placed& p) const; // (kept on p until it moves or turns)
+    // Your own objects: their SHAs in the order the world names them (its `model` lines, then those
+    // brought in since), each one's mesh read from the store the first time it is asked for (null where it
+    // cannot be: not there, not as named, no faces), stood as every object is (its foot at y = 0, its
+    // middle over the place), with the name of the .obj it is kept as, or why not.
+    struct OwnModel
+    {
+        std::shared_ptr<const Mesh> mesh;
+        std::string name, why;
+    };
+    std::vector<std::string> models_;
+    mutable std::map<std::string, OwnModel> model_meshes_;
+    static bool is_model(const std::string& kind) { return kind.rfind("model:", 0) == 0; }
+    const OwnModel& own_model(const std::string& sha) const;
+    std::filesystem::path store() const { return file_.parent_path().parent_path(); } // (beside the settings)
+    // The mesh any kind is drawn from: a shelf item's, a favourite's line's, your own model's; null for
+    // none (a character, a model not in the store).
+    const Mesh* mesh_of(const std::string& kind) const;
+    // The import key's file dialog: it answers on a thread of its own, so the file chosen waits here
+    // until run() takes it; the mouse is given back to the dialog while it is open.
+    DialogOwner dialog_owner_{this};
+    std::mutex import_mx_;
+    std::string import_from_;
+    std::atomic<bool> import_open_{false};
+    bool import_waiting_ = false; // (the dialog opened and not yet seen to answer: run()'s, on its own thread)
+    void import_dialog();
+    static void SDLCALL import_chosen(void* self, const char* const* files, int);
     // Favourites (IDEAS 19.190): this dimension's, read beside its world file, in the catalogue after
     // Sieve's shelf items as "fav:SHA" and drawn as their line's shelf item.
     std::vector<Favourite> favourites_;
-    std::vector<std::string> rows_;  // the catalogue as shown: the shelf items' ids, then "fav:SHA" each
+    std::vector<std::string> rows_;  // the catalogue as shown: the shelf items' ids, "fav:SHA" each, your characters, "model:SHA" each
     std::string opened_;             // the favourite O opened, by its SHA
+    // In place (IDEAS 19.208): what lends the viewer (none: the old way), how it stands, the favourite
+    // asked for, when it was asked (for the dots by the crosshair) and, for the readout, how the last
+    // one ended (closed, not opened, or the old way taken and why).
+    InPlace* in_place_ = nullptr;
+    InPlace::State in_place_state_ = InPlace::State::Idle;
+    std::string in_place_sha_, in_place_last_;
+    uint64_t in_place_since_ = 0;
     const Favourite* favourite(const std::string& sha) const;
     std::string mesh_kind(const std::string& kind) const; // the shelf item a kind is drawn as
     std::string label_of(const std::string& kind) const;  // what it is called on the screen
@@ -208,6 +432,39 @@ private:
     // The hill's height at every cell corner, and each cell's shade of grass, worked out once from the
     // swells (they never change): the ground is drawn and stood on from these.
     std::vector<float> corner_h_, cell_vary_;
+    // The ground shaper (IDEAS 19.209). What is shaped is kept as a change to the height at each cell
+    // corner (metres, added to the seed's; the world file's `ground` lines), empty until anything is: so
+    // a world never shaped has the seed's ground exactly, worked out as it always was.
+    std::vector<float> shaped_;
+    float seed_height(float x, float z) const; // the swells' alone
+    float shaped_at(float x, float z) const;   // the change there, between the corners as the ground is drawn
+    size_t shaped_corners() const;             // corners changed
+    bool tool_out_ = false;
+    bool shape_keys_wait_ = false; // the shaper's keys shape nothing until let go (one closed the viewer)
+    float shaper_radius_ = 20, shaper_strength_ = 4;
+    int mouse_shape_ = 0;          // a mouse button held while the shaper is out: 1 raise, 2 lower, 3 flatten
+    bool shaped_unsaved_ = false;  // shaped since the last save (saved when the button or key is let go)
+    // The stroke under way: where it shapes, and where you stood and looked when it was aimed there.
+    bool stroke_on_ = false;
+    float stroke_x_ = 0, stroke_z_ = 0;
+    std::array<float, 4> stroke_view_{};
+    // Where the crosshair meets the ground, within reach; false where it meets only sky.
+    bool aim_ground(float& x, float& z) const;
+    void shape(int mode, float dt, float cx, float cz);
+    void draw_shaper();
+    // The worlds line (IDEAS 19.187): what lends it, its panel, what it last worked out (or why not)
+    // and its address in the hallway's ordering and the other, and the Go to it chosen.
+    std::function<WorldsLine()> worlds_line_of_;
+    SlidePanel worlds_panel_;
+    bool worlds_asked_ = false;
+    std::optional<WorldsUnit> worlds_;
+    std::string worlds_why_, worlds_hex_, worlds_other_hex_;
+    sieve::AddressMode worlds_mode_ = sieve::AddressMode::Positional;
+    uint32_t worlds_grid_ = 0, worlds_slots_ = 0; // (the line's G and N, for the panel and the readout)
+    std::optional<sieve::WorldSpace::Parts> worlds_go_;
+    void open_worlds();
+    void worlds_key(SDL_Keycode k, SDL_Keymod mod);
+    void draw_worlds();
     std::vector<Cloud> clouds_;
     float px_ = 0, pz_ = -60, yaw_ = 0, pitch_ = -0.05f; // where you stand, and which way you look
     bool wireframe_ = false;
@@ -229,6 +486,11 @@ private:
     bool picture_quad(const Placed& p, std::array<std::array<float, 3>, 4>& w, std::array<float, 3>& n) const;
     mutable std::map<std::string, std::shared_ptr<const sieve::RgbaImage>> pictures_;
     mutable std::map<std::string, FaceRect> face_rects_; // (faces.ini read once a medium)
+    // The catalogue's covers: a texture a favourite, made from its picture the first time its row is
+    // drawn (null where it has none) and kept until the dimension is left.
+    bool covers_on_ = true;
+    SDL_Texture* cover_of(const std::string& sha);
+    std::map<std::string, SDL_Texture*> covers_;
 
 public:
     ~PersonalWorld();

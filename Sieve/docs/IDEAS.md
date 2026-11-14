@@ -7766,6 +7766,52 @@ sky and clouds, something akin to the windows xp background".
   its board; a board thinner than one step's fall still stops what falls (each step looks for surfaces
   from where it began). Drawing: objects' faces turned away are left out and the rest sorted far first, and
   a character behind something placed is hidden, sphere by sphere.)
+- *Own objects in the catalogue (the next step's "items of your own beside Sieve's"). Built 14 November
+  2026* (client/personal_world.cpp; SPECIFICATIONS §12.0r's `model SHA` and `place model:SHA`): a model
+  of your own, an `.obj` (with the `.mtl` its first `mtllib` names, from beside it) or a glTF (`.gltf`,
+  `.glb`, brought in as its triangles, grey), comes into your dimension with **I** while the catalogue
+  is out (`personal.objects/import` on the key registry; the system's file dialog) or with
+  `--pworld-import FILE` for a run. It is kept in the store beside the settings as `objects/SHA.sieve`,
+  SHA the SHA-256 of the `.obj` kept (a glTF kept as the `.obj` of its triangles, so a `.gltf` and a
+  `.glb` of one mesh are one model), packed as Sieve packs a folder and read back before it is kept;
+  the world names it with a `model SHA` line. It is listed in the catalogue after the characters,
+  chosen there as it comes in, placed, picked up, turned, dropped, taken away and saved as
+  `model:SHA`, and drawn from its own mesh (stood on its lowest point, its middle over the place, at
+  its file's size in metres). A file with no faces or over 100,000 triangles is refused and the note
+  says why; a model whose `.sieve` is gone or does not match its name stays in the world, written back
+  and not drawn. The readout has a `models:` line; a world that has none is written, drawn and read out
+  as before. *Left:* a glTF's own colours and textures (its materials are not read: it comes in grey);
+  its scale (an `.obj` in centimetres comes in a hundred times too large) and a way to resize; a
+  picture of each model beside its row, as favourites' covers have; taking a model out of the
+  catalogue (and its `.sieve` from the store) once nothing uses it; models shared between dimensions
+  and between people (the store is local; nothing needs a server, but sharing is not built); and the
+  importer's figures kept in the catalogue's stats, as the Character Creator's imports are.
+- *The world itself as an address on the WORLDS line (the "Next" above). Built 14 November 2026*
+  (client/personal_worlds.cpp; SPECIFICATIONS §12.0r, "The world as a world of the worlds line"): **N**
+  in your dimension (`personal.worlds/address` on the key registry, its own section "Your personal
+  dimension: on the worlds line", listed last on Settings > Controls > Keys) opens a panel with the
+  world's address on the worlds line as the hallway's settings shape that line (worldspace-v1: a cover,
+  a title and N slots, each a model of the models line in a cell of a G-grid with one of 24 turns), in
+  the ordering the hallway starts in; Return there goes into the hallway on the worlds line with this
+  world in hand (the main menu's way, as the File Locator's Go to it; from the hallway's pause menu, the
+  same hallway where it is on the worlds line, else one built on it), and `--pworld-follow OUT` takes
+  that picture. The unit is worked out as the importers work theirs out: each object placed (a shelf
+  item, a favourite, a model of your own) is carried as its box (8 corners, 12 faces on the models
+  line's grid), in the cell its middle falls in (the grid laid over what is carried, its cells as wide
+  as the widest box or the arrangement over G), turned by the nearest of the 24; the first N in the
+  order placed fill the slots, the rest model 0 in cell 0. The panel and the readout's `worlds:` line
+  say what is carried and how far it moved (the largest distance from a cell's middle and the largest
+  turn moved), and what is left out: the characters, the objects past the slots, each object's own
+  shape and colours, which item each favourite is, which were dropped, the hill, the sky, the day, the
+  music, and the cover and title (left blank). Checked in CI: the address read back by `sieve world
+  --read`, its slots composed again by `sieve world --compose` to the same address, and the hallway
+  gone to it. Nothing of the world file changes, and a world where N is not pressed is drawn and read
+  out as before. *Left:* the address is shown unfiltered (positional or scrambled), not the compact
+  one where the [worlds] filters are ticked (the hallway goes to the compact one, or says the world
+  does not pass); objects nearer their own shape than a box (a models line of more vertices could carry
+  a coarse copy of each mesh, as `sieve mesh` does); the world's name or picture as its title and
+  cover; the way back, a world of the worlds line opened as a personal dimension (its slots as placed
+  objects); and a row for it on the Personal Dimensions screen beside the key.
 - *What it is for (Edward, the same day):* "the main goal of the personal dimensions is to provide a
   lens for users in which they could create their own interpretation of the sieve space, they could
   also be used to make games and or just fun spaces to hang out in". So each step here is weighed by
@@ -7814,7 +7860,15 @@ list for example".
   and O on it opens the hallway on its line with the item in your hand, when the line is shaped as it
   was; Main menu > Personal Dimensions > Favourites lists every one, the Media Player's melodies among
   them. *Left:* each favourite's own cover on its shelf item, files and models' weights as favourites,
-  and favourites of other dimensions as they come.)
+  and favourites of other dimensions as they come.) (*Built 14 November 2026:* each favourite's cover in the catalogue: Tab in your dimension shows
+  each favourite's own picture (`favourites/SHA.png`, the one its front shows once placed) small in the
+  margin beside its row and the chosen one's larger just below the list, so they can be told apart
+  before placing; a row with no picture is left as it was. On by default, `[personal] catalogue_covers`
+  (Personal Dimensions > Features > Favourites' covers in the catalogue) turns it off, and the catalogue
+  is then drawn as before, compared byte for byte with the build before list P; the readout's `covers:`
+  line gives what is shown. No file changes. *Left:* the covers in the main menu's Favourites list and the
+  Media Player's, a cover for a favourite kept before its picture was (it has none until it is kept
+  again), and the covers kept by the category choice above once it exists.)
 - *Favourites of any kind, sorted by category (Edward, 14 November 2026: "favourites should be able to
   store anything, any type of data and as such favourites should have a category dropdown to accomodate
   that"):* a favourite is a reference to anything Sieve can name: an item of any line (files and AI
@@ -8241,6 +8295,22 @@ content should have been loaded and cached by distance accordingly in the person
   a small "calculating..." by the crosshair while the item is made. The items near you made ahead of
   time, nearest first, as the hallway makes the books it shows; a line's space (its shape, from the
   favourite's line settings) kept once made.
+- *Built (14 November 2026), a first working version:* the viewer still belongs to a built hallway, so
+  your dimension borrows one. O on a placed favourite builds the favourite's line as the settings stand,
+  on a worker thread as going into the hallway does, while the dimension goes on with a small red
+  "calculating" and its dots by the crosshair; once made, the favourite is gone to on that hallway and
+  opened in its viewer, drawn over the dimension (the corridor never walked or drawn), and Esc or Z
+  closes it back to where you stood. Esc while it is made leaves it unopened. The line's hallway is kept
+  while you stay in the dimension, so the next favourite of the same line and settings opens at once.
+  Where it cannot open so (the line set otherwise than when the favourite was kept, or the making
+  failed) O goes the old way, into the hallway on its line, and the foot of the screen says why. On by
+  default; Personal Dimensions > Features > "O opens a favourite in place" (`[personal] open_in_place`)
+  turns it off. The readout's `in place:` line (with --pworld-in-place; --pworld-making pictures the
+  calculating) names what happened, the old way included. *Left:* the viewer as a part of its own,
+  apart from the hallway, that any space opens over itself; the items near you made ahead of time,
+  nearest first; the line's hallway kept across visits (it goes when you leave the dimension), and
+  the hallway already open (when the dimension is reached from its pause menu) lent rather than a
+  second one built; the viewer drawn over a dimmed dimension rather than the hallway's opaque page.
 
 **19.209 The author's tools, the first a ground shaper; who may use them (Edward, 14 November 2026).** His
 words: "we need a weapon or tool for adjusting the ground, we can start with just a simple highlighter
@@ -8258,6 +8328,24 @@ pipes going into a barrel that use the same noise pattern used for the doors in 
   kept in the world file (a v3, or heights beside it), not only made from the seed.
 - *Who may use them:* every tool is the author's; a world's rules (a panel) say which tools visitors and
   friends may use, if any. Friends, groups and moderation wait on identity (§19.178).
+- *Built (14 November 2026), the ground shaper, a first working version:* in your dimension 1 takes it
+  out and # puts it away (the backslash too: the key in #'s place on a US keyboard), on the key registry
+  under `personal.tools` with raise (Z), lower (X), flatten (C) and the brush's size ([ and ]). While it
+  is out an amber ring on the grass marks the brush where the crosshair meets the ground; the left,
+  right and middle buttons (or those keys) held raise, lower or flatten the ground there, most at the
+  middle and none at the edge ((1 - (d/r)^2)^2 of the strength), the stroke staying where it began while
+  you stand and look still. The wheel sizes the brush for the visit; its radius (10 to 80 m, 20) and
+  strength (1 to 20 m a second, 4) are `[personal] shaper_radius` and `shaper_strength`, on Personal
+  Dimensions > Features. The changes are the corners of the ground's 10 m grid that moved, kept in the
+  world file as v2 `ground X Z DH` lines (SPECIFICATIONS §12.0r), so a world never shaped reads, looks
+  and is written as before; what stood on the ground moves with it. Only an author may use it
+  (`author_`, always true until identity). `--press 1`, `--pworld-hold KEY:S` and the readout's
+  `shaper:` line show it; CI step 10 checks it.
+- *Left for later:* the tool drawn in the hand (the cylinder, pipes and barrel in the door portals'
+  noise) and a lit sphere rather than a ring; ground finer than the 10 m grid (the brush moves corners
+  10 m apart, so it makes hills and hollows, not steps or paths), and an undo; + and - for the size
+  (they zoom the map); the mouse buttons on the key registry (it holds keys only); the rules panel
+  saying which tools visitors and friends may use, and the other tools (building among them).
 
 **19.210 Saves kept across the RAID: sieved, split and shared in small parts, with limits (Edward, 14
 November 2026). Before the RAID between machines is ever switched on for people.** His words: "currently
@@ -8514,6 +8602,27 @@ dimension accordingly as a new media space option for where music plays and what
   or another one is opened, and the Media Player loads the space of the dimension that is open.
 - *Needs:* a line in sieve-personal-world-v2 for it (an optional line, so worlds without it read as they
   do now, with the menus' music); the Media Player told which dimension's file it is editing.
+- *Built (14 November 2026):* PERSONAL, the Media Player's third space (`MusicMode::Personal`, its own
+  channel in the mixer), after MENUS and WORLD on the Mode row. The *Today* above was not quite so: the
+  dimension played WORLD's music (the hallway's, in the mode of the line last walked), not the menus',
+  so a dimension without music of its own still plays WORLD's, unchanged. On PERSONAL, *Music here*
+  gives the dimension its own, starting as a copy of WORLD's in the mode of the line you are on, and
+  takes it away again; with its own, the same form as the other two spaces less each line's mode, with
+  the dimension's one mode (or none) in its place, and *Plays*: melodies drawn by its filters, or a melody
+  it keeps (*Keep the highlighted melody here*, a recent melody or a favourite), played every time. It is
+  kept as one optional v2 line, `music KEY=VALUE ...` (SPECIFICATIONS 12.0r), written into the world file
+  at each change (the world read and written back as it writes itself, so a v1 world becomes v2 with it
+  and v1 again without it, byte for byte); a key it does not know is kept and written back, a line not so
+  written left out and said. The player is told the dimension open (and, as the application starts, the
+  one beside the settings), so the Media Player edits that one's file, named on the row; the dimension
+  plays its space while you are in it. Readouts: `music:` in `--personal-world` for a world with music
+  of its own, `media:` while the Media Player shows PERSONAL. *Left:* only one dimension's file can be
+  edited, the one open or last opened (there is one dimension, `worlds/personal.world`, until there are
+  more: choosing among several waits for them); the Media Player is still opened from the dimension by
+  way of the main menu and the hallway, so it is not open over the dimension itself; a kept melody's
+  notes are written as digits, not as a favourite by its SHA, so it does not follow a favourite changed
+  later; the recent list and favourites stay the player's, not the dimension's; nothing yet plays a
+  dimension's music to a visitor (§19.211), though it travels with the file.
 
 **19.221 Turning what you hold: coloured rings, and the wheel (Edward, 14 November 2026). An idea for
 now.** His words: "rotation should be colour sorted so it is easy to determine which way the rotation is
@@ -8536,6 +8645,23 @@ bigger then the items bounding vertices".
   that axis, a step a notch (the step a setting), until another is chosen or the object is placed.
 - *Where else:* the same rings wherever a thing is turned by hand: the Character Creator's view
   (R4 in REVIEW-ROUND), the 3D viewer, models held in the hallway.
+- *Built (14 November 2026), in your dimension:* the three rings round what you hold, each in the plane
+  its turn moves it in (R's level, about y; T's about its side as the yaw has turned it, z; G's about its
+  front as the yaw and pitch have turned it, x: the axes `turned()` turns it about, so a ring shows
+  exactly the way its key moves it), coloured by its axis, the same radius for all three (the farthest of
+  its points, or of a character's spheres, from the middle of its box, and a little more), the turn last
+  chosen bright and doubled and the others faint, drawn by the objects' renderer so the thing hides the
+  far side of a ring. A line under *holding* names the turn the wheel has, in its colour. The wheel turns
+  it about the turn chosen, whole notches (a touchpad's fractions add up), until another is chosen or the
+  thing is placed, dropped or put back. Settings: `[graphics] axis_colours` (Settings > Graphics > Axis
+  Colours: red, green, blue, or Okabe and Ito's vermilion, bluish green and blue; any three #RRGGBB in
+  the file), `[personal] turning_rings` (on) and `wheel_step_degrees` (15, 1 to 90; both on Personal
+  Dimensions > Features). `WheelUp`/`WheelDown` in `--press`, and a `turning:` line in the
+  `--personal-world` readout while something is held. Nothing in the world file changes (the turns were
+  already kept). *Left:* the rings elsewhere (the Character Creator, the 3D viewer, models held in the
+  hallway: the colours setting is ready for them); the wheel as an entry of the key registry (it is a
+  mouse event, which the registry, keys only, cannot hold yet, so it cannot be moved to another input);
+  dragging a ring with the mouse to turn by it; a turn's angle written beside its ring.
 
 **19.222 Day and night in your dimension (Edward, 14 November 2026). An idea for now.** His words: "we
 should also implement a day and night system which can be turned on or off as well as the day length
@@ -8551,6 +8677,96 @@ adjusted to whatever within a strict limit of the upper bounds of storing that v
   The time of day is worked out from the clock and the length each frame (no running total to overflow).
 - *Shared or not:* a visitor sees the dimension's own day, at the time of day its clock gives, so two
   people in it see the same sky without a server (§19.211).
+- *Built (14 November 2026):* `[personal] day_night` (off; Personal Dimensions > Features > Day and
+  night). On, the sun goes round the sky's axis (up and north) once a day: due east at a quarter of the
+  day, due south and about 53 degrees up at noon, due west at three quarters. The sky's colours (night,
+  dawn and dusk, day), the light on the ground, the clouds, what is placed and the characters (white
+  by day, warm low, dim and blue at night) and the haze follow it; the sun's disc is drawn while it is
+  up, and 400 stars from the seed turn with the sky at night. In the wireframe (Real Graphics off) the
+  sun is outlined, the stars shown and the lines dimmer at night. The day's length is a v2 line, `day
+  SECONDS` (SPECIFICATIONS 12.0r), 1440 without one; L in the dimension (`personal.day/length` on the
+  key registry) opens a panel where it is typed, 1 to 2^64 - 1, anything larger (or 0) refused and
+  said. The time of day is (seconds since 1970 UTC modulo the length, plus the part of a second) over
+  the length, each frame. `--pworld-time HOURS` holds the time of day for a picture (and turns it on),
+  and the readout has a `day:` line while it is on. A world, picture or readout without it is as before
+  (compared byte for byte with the build before list P). *Left:* a moon and its phases; the time of day
+  to be set or offset from the menu (a dimension's own noon, rather than UTC's); the favourites'
+  pictures on placed things are not darkened at night; the sun casts no shadows; the sky's colours are
+  fixed in the code, not chosen per dimension; the footer, already wider than a 1280-wide window, does
+  not show the L key at that width.
+
+**19.223 "Real Graphics" called "Wireframe" (Edward, 14 November 2026). An idea for now.** His words:
+"we might want to switch "Real Graphics" to be called "Wireframe"".
+- *Today:* Settings > Graphics has *Real Graphics*, off by default; off, everything is drawn as lines
+  (the wireframe), on, as shaded surfaces. The name says what is added, not what is seen by default.
+- *What it would be:* the row named for what it shows, *Wireframe*, on by default, its sense turned
+  round (Wireframe on is Real Graphics off). Every place the words appear changes with it: the row and
+  its help, the other rows' help that names it (edge glow, door portals, the frame counter), the
+  Character Creator's "wireframe (Real Graphics is off)", MANUAL and SETTINGS, the `--real-graphics`
+  option, the readouts (`real graphics off`) and the CI lines that match them.
+- *Kept working:* a settings file with `real_graphics = on` still read (as `wireframe = off`), and
+  `--real-graphics` kept as another name for `--wireframe off`, so no one's file or script breaks.
+  Planned only.
+
+**19.224 Every footer of keys wraps upwards (Edward, 14 November 2026). An idea for now.** His words:
+"could you also make sure that all windows and menus that have button text and descriptions at the
+bottom of their bounding box, use the wrap around feature for new keys that are added so that they wrap
+around above them".
+- *Today:* only the viewer's footer wraps (`wrap_keys` in client/hallway.hpp, since F3: broken only
+  between keys, the extra lines going upwards). Others run off the right edge when keys are added: your
+  dimension's footer is already wider than a 1280-wide window (§19.222 notes its L key cut off).
+- *What it would be:* every screen with keys or descriptions along its foot (your dimension and its
+  panels, the hallway, the menus and setup menu, the Character Creator, the Media Player, the File
+  Locator, the Harness, the Filter Designer, the System Viewer, the Encryption Engine, the pause menus)
+  drawn through the one wrapping footer, so a key added later wraps onto a line above rather than off
+  the screen, and nothing has to be shortened to fit.
+- *Checked by:* a CI picture of each at a narrow window, and a check that no footer line is wider than
+  its window. Planned only.
+
+**19.225 A skin over the simple shapes: the mesh scaling system's next stage (Edward, 14 November
+2026). An idea for now.** His words: "for the mesh scaling system we also need a morphing shape bounds
+that bounds the simple geometry in a 'skin' to make the shapes more seamless or natural looking rather
+than just a bunch of spheres", and "this should be another one of the many stages in the mesh scaling
+system".
+- *Today:* a character is its spheres, drawn four ways (pixels, wireframe, voxels, shaded), the voxels'
+  cell size to be made one for everything (§19.215, R3) and their faces joined by greedy meshing.
+- *What it would be:* one more stage, a surface that wraps the spheres (and later any simple shapes)
+  as one skin, smooth where they meet and following them as the joints move: the spheres as a field
+  (each adds a smooth bump that falls to nothing at a reach beyond its radius; metaballs, or a smooth
+  minimum of their distances so the skin can be made to hug them more or less tightly), and the skin
+  the surface where the field crosses a level, made into triangles by marching over a grid (marching
+  cubes, or dual contouring to keep sharper edges) at the stage's cell size.
+- *A stage among the others:* spheres, then pixels or voxels, then the skin, each a choice of the
+  drawing and each measured (triangles, time a frame, memory), so the skin's cost is known before it
+  becomes a default; how tight it hugs (its blend) a setting. The skin as a mesh can be written out as
+  .obj like any other (§19.226). It is the first step §19.214's smooth surfaces need (a surface from the
+  spheres, which quads and patches can then be fitted to). Planned only.
+
+**19.226 Import and export for a personal dimension (Edward, 14 November 2026). An idea for now.** His
+words: "we should add an import and export feature for personal dimensions such that we can import or
+export any object in the world to its constituent parts such as a page being a texture and a text
+document or the entire environment as a 3D model with sub objects for each object in the world space",
+"this would go through .obj as most other meshes do", "so it would provide multiple options that match
+the potential respectively and export the relevant files", and "for example if you exported
+'everything' it would export a .safetensors file if it is on your shelf, along with individual 3D
+models for every object and a scene collection of all objects textures, text files, audio, anything
+that is relevant to what exists in the world space".
+- *Today:* a model can be brought in (I, an .obj or glTF, since P3), and the world itself is kept as its
+  world file; nothing is written out from it.
+- *One object:* looked at or held, exported as its parts, the choices offered being only those it has:
+  a page as its picture (.png) and its text (.txt); a picture as a .png; a model as its .obj and .mtl;
+  a character as its spheres' mesh (.obj) and its .character file; a piece of music as its notes and
+  audio; any object also as its own mesh (.obj).
+- *The whole world:* the ground as a mesh, each placed object as a named sub-object (`o` groups in one
+  .obj, every one at its place and turn), with each object's own files beside it in a folder of the
+  same shape: textures, texts, audio, and the models' weights (.safetensors) of what is on your shelf.
+  A manifest lists every file with its SHA-256, so what was exported can be checked and brought back.
+- *Importing:* the same folder, or one object's parts, brought back into a dimension: a scene .obj's
+  sub-objects as models placed where they stood, and the files they name taken into the store, each
+  by its SHA-256 as the store already keeps things.
+- *As everything else:* the formats it writes (.obj, .png, .txt, .safetensors) are the ones Sieve
+  already reads and writes; the choices are settings shown to the person, the paths those they pick.
+  Planned only.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

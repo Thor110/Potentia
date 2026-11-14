@@ -1538,6 +1538,33 @@ grep -c "^title it was the best of times$" "fv/favourites/$SHA.item" | q "^1$"
 python3 -I -c "import sys; d=open(sys.argv[1],'rb').read(24); print(d[:8]==b'\x89PNG\r\n\x1a\n', int.from_bytes(d[16:20],'big'))" "fv/favourites/$SHA.png" | tr -d '\r' | q "^True 128$"
 $H --personal-world --settings fv/s.ini --pworld-look -45 --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Tab,o" --screenshot fav-open.png | tr -d '\r' | q "^opened: pages $SHA$"
 grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
+# O opens it in place (IDEAS 19.208): the hallway's own viewer over your dimension, its line made in
+# the background (a small calculating by the crosshair meanwhile) and kept, Esc back to the dimension;
+# made under other settings of its line, or with [personal] open_in_place off, the hallway as before.
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-look -45 --press "o" --screenshot fav-inplace.png | tr -d '\r' | q "^in place: open, pages $SHA; the hallway's viewer, TEXT; its line made for it$"
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-look -45 --press "o,Tab" --screenshot fav-inplace-tab.png | tr -d '\r' | q "^in place: open, pages $SHA; the hallway's viewer, PICTURE; "
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-look -45 --press "o,Escape" --screenshot fav-inplace-shut.png | tr -d '\r' | q "^in place: pages $SHA: closed, back in your dimension$"
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-look -45 --press "o,Escape,o" --screenshot fav-inplace-kept.png | tr -d '\r' | q "^in place: open, pages $SHA; .*its line kept from before$"
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-making --pworld-look -45 --press "o" --screenshot fav-inplace-making.png | tr -d '\r' | q "^in place: calculating pages $SHA$"
+$H --personal-world --settings fv/s.ini --pworld-in-place --pworld-making --pworld-look -45 --press "o,Escape" --screenshot fav-inplace-left.png | tr -d '\r' | q "^in place: pages $SHA: not opened: Esc while it was made$"
+printf '[setup]\nlength = 40\n' > fv/len.ini
+$H --personal-world --settings fv/len.ini --pworld-in-place --pworld-look -45 --press "o" --screenshot fav-inplace-fell.png | tr -d '\r' > fv/fell.txt
+q "^in place: pages $SHA: the hallway instead: its line is set otherwise now than when it was kept$" fv/fell.txt
+q "^opened: pages $SHA$" fv/fell.txt
+printf '[personal]\nopen_in_place = off\n' > fv/ip.ini
+$H --personal-world --settings fv/ip.ini --pworld-in-place --pworld-look -45 --press "o" --screenshot fav-inplace-off.png | tr -d '\r' | q "^in place: off (\[personal\] open_in_place): the hallway instead, as before$"
+$H --main-menu --settings fv/ti.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_open_in_place,Return" --screenshot features-inplace.png > /dev/null
+grep -c "^open_in_place = off " fv/ti.ini | q "^1$"
+# Favourites' covers in the catalogue (IDEAS 19.190): each favourite's picture beside its row and the
+# chosen one's larger below the list (on by default); [personal] catalogue_covers off leaves the
+# catalogue as it was, and Personal Dimensions > Features turns it off.
+$H --personal-world --settings fv/s.ini --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down" --screenshot fav-covers.png | tr -d '\r' | q "^covers: on, 1 of 1 favourites with one; the chosen row's 128x[0-9]*, shown$"
+printf '[personal]\ncatalogue_covers = off\n' > fv/nc.ini
+$H --personal-world --settings fv/nc.ini --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down" --screenshot fav-covers-off.png | tr -d '\r' | q "^covers: off, 1 of 1 favourites with one; the chosen row's 128x[0-9]*, not shown$"
+$H --personal-world --settings fv/s.ini --press "Tab,Down" --screenshot fav-covers-shelf.png | tr -d '\r' | q "^covers: on, 1 of 1 favourites with one$"
+$H --personal-world --settings fv/s.ini --screenshot fav-covers-shut.png | tr -d '\r' | { grep -c "^covers:" || true; } | q "^0$"
+$H --main-menu --settings fv/tc.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_catalogue_covers,Return" --screenshot features-covers.png > /dev/null
+grep -c "^catalogue_covers = off " fv/tc.ini | q "^1$"
 $H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"
 $H --no-menu --settings fv/s.ini --line text --open-favourite "$SHA" --screenshot fav-hand.png | tr -d '\r' | q "^favourite: in hand$"
 $H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-off.png | tr -d '\r' | q "No longer a favourite"
@@ -1597,6 +1624,70 @@ grep -c " fixed$" pw/h.world | q "^1$"
 $H --personal-world --world-file pw/d.world --pworld-look -45 --press "Tab,Return,Tab,e,Q" --pworld-wait 3 --screenshot pworld-drop.png | tr -d '\r' | q "; pages dropped at [-0-9.]*, 0\.00, "
 grep -c " physics$" pw/d.world | q "^1$"
 $H --personal-world --world-file pw/d.world --screenshot pworld-drop2.png | tr -d '\r' | q "; pages dropped at [-0-9.]*, 0\.00, "
+# Turning what you hold (IDEAS 19.221): a ring round it for each turn, coloured by its axis (x red, y
+# green, z blue by default), no turn chosen until R, T or G is pressed; then the wheel (WheelUp and
+# WheelDown in --press, a notch each) turns it about that turn, 15 degrees a notch. The rings can be
+# turned off, the step and the axes' colours set; what is placed is written as before.
+$H --personal-world --world-file pw/tr1.world --pworld-look -45 --press "Tab,Return,Tab,e" --screenshot pworld-rings.png | tr -d '\r' | q "^turning: none chosen, wheel 15 degrees a notch; yaw 180\.00, pitch 0\.00, roll 0\.00 degrees; rings 0\.[0-9]* m about "
+$H --personal-world --world-file pw/tr2.world --pworld-look -45 --press "Tab,Return,Tab,e,t,WheelUp,WheelUp" --screenshot pworld-wheel.png | tr -d '\r' | q "^turning: pitch (z) chosen, wheel 15 degrees a notch; yaw 180\.00, pitch 45\.00, roll 0\.00 degrees; rings .*, x #FF4040, y #40D040, z #4080FF$"
+$H --personal-world --world-file pw/tr3.world --pworld-look -45 --press "Tab,Return,Tab,e,r,WheelDown,g,WheelDown,WheelDown,Return" --screenshot pworld-wheel2.png | tr -d '\r' | q "; pages placed at "
+grep -c "^place pages .* 3\.14159274 0 -0\.26179939[0-9]* fixed$" pw/tr3.world | q "^1$"
+$H --personal-world --world-file pw/tr4.world --pworld-look -45 --press "Tab,Return,Tab,e,WheelUp" --screenshot pworld-wheel3.png | tr -d '\r' | q "^turning: none chosen, .*yaw 180\.00, pitch 0\.00, roll 0\.00 degrees"
+printf '[graphics]\naxis_colours = #112233,#445566,#778899\n[personal]\nturning_rings = off\nwheel_step_degrees = 45\n' > pw/tr.ini
+$H --personal-world --settings pw/tr.ini --world-file pw/tr5.world --pworld-look -45 --press "Tab,Return,Tab,e,r,WheelUp" --screenshot pworld-wheel4.png | tr -d '\r' | q "^turning: yaw (y) chosen, wheel 45 degrees a notch; yaw 240\.00, pitch 0\.00, roll 0\.00 degrees; rings off$"
+printf '[graphics]\naxis_colours = #112233,#445566,#778899\n' > pw/tr2.ini
+$H --personal-world --settings pw/tr2.ini --world-file pw/tr6.world --pworld-look -45 --press "Tab,Return,Tab,e" --screenshot pworld-wheel5.png | tr -d '\r' | q ", x #112233, y #445566, z #778899$"
+$H --personal-world --world-file pw/tr1.world --screenshot pworld-wheel6.png | tr -d '\r' | { grep -c "^turning:" || true; } | q "^0$"
+$H --main-menu --settings pw/tr.ini --press "Item:settings,Return,Item:graphics,Return,Item:axis_colours,Right" --screenshot axis-colours.png > /dev/null
+grep -c "^axis_colours = #FF4040,#40D040,#4080FF " pw/tr.ini | q "^1$"
+$H --main-menu --settings pw/tr.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_turning_rings,Return,Item:personal_wheel_step,Left" --screenshot features-turning.png > /dev/null
+grep -c "^turning_rings = on " pw/tr.ini | q "^1$"
+grep -c "^wheel_step_degrees = 30 " pw/tr.ini | q "^1$"
+# Day and night (IDEAS 19.222): off by default (no day: line, the sky as before); --pworld-time HOURS
+# turns it on with the time of day held there, so midnight is dark with stars and noon is day with the
+# sun high in the south. L opens the panel where the day's length is typed: 2^64 is refused (nothing
+# written), 2^64 - 1 is kept as the world file's v2 line, read back, and a bad one is left out and said.
+$H --personal-world --world-file pw/dn0.world --screenshot pworld-day-off.png | tr -d '\r' | { grep -c "^day:" || true; } | q "^0$"
+$H --personal-world --real-graphics --world-file pw/dn0.world --pworld-time 0 --screenshot pworld-night.png | tr -d '\r' | q "^day: on, 1440 seconds a day (the default); time 00:00 (set); sun 53\.1 degrees down; daylight 0\.00; stars 1\.00$"
+$H --personal-world --real-graphics --world-file pw/dn0.world --pworld-time 12 --screenshot pworld-noon.png | tr -d '\r' | q "^day: on, .*; time 12:00 (set); sun 53\.1 degrees up; daylight 1\.00; stars 0\.00$"
+$H --personal-world --real-graphics --world-file pw/dn0.world --pworld-time 18 --screenshot pworld-dusk.png | tr -d '\r' | q "; time 18:00 (set); sun on the horizon; daylight 0\.[0-9]*; "
+$H --personal-world --world-file pw/dn1.world --pworld-time 20 --press "l,1,8,4,4,6,7,4,4,0,7,3,7,0,9,5,5,1,6,1,6,Return" --screenshot pworld-day-big.png | tr -d '\r' | q "^note: 18446744073709551616 is not a day's length here"
+test ! -e pw/dn1.world
+$H --personal-world --world-file pw/dn1.world --pworld-time 20 --press "l,1,8,4,4,6,7,4,4,0,7,3,7,0,9,5,5,1,6,1,5,Return" --screenshot pworld-day-max.png | tr -d '\r' | q "^day: on, 18446744073709551615 seconds a day; "
+head -3 pw/dn1.world | tr -d '\r' | tr '\n' '|' | q "^sieve-personal-world-v2|seed 0|day 18446744073709551615|$"
+printf '[personal]\nday_night = on\n' > pw/dn.ini
+$H --personal-world --settings pw/dn.ini --world-file pw/dn1.world --screenshot pworld-day-clock.png | tr -d '\r' | q "^day: on, 18446744073709551615 seconds a day; time [0-9][0-9]:[0-9][0-9] (the clock's); "
+printf 'sieve-personal-world-v2\nseed 0\nday 0\n' > pw/dn2.world
+$H --personal-world --settings pw/dn.ini --world-file pw/dn2.world --screenshot pworld-day-bad.png | tr -d '\r' | q "^note: Lines of the world file not as written, left out: 1\.$"
+$H --main-menu --settings pw/tr.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_day_night,Return" --screenshot features-day.png > /dev/null
+grep -c "^day_night = on " pw/tr.ini | q "^1$"
+# The ground shaper (IDEAS 19.209): put away until 1 takes it out (no shaper: line, nothing shaped);
+# # or the key in its place (\) puts it away; ] and the wheel widen its brush. Z held raises the ground
+# where the crosshair met it, kept as v2 `ground` lines (only the corners moved) and read back; X lowers
+# and C flattens; what stood on the ground stays on it; lines not as written are left out and said;
+# the radius and strength come from [personal], the keys from [keys].
+$H --personal-world --world-file pw/gs0.world --press "1" --screenshot pworld-shaper.png | tr -d '\r' | q "^shaper: out, radius 20 m, strength 4 m a second; aimed at 0\.00, "
+$H --personal-world --world-file pw/gs0.world --press "1,#" --screenshot pworld-shaper-away.png | tr -d '\r' | { grep -c "^shaper:" || true; } | q "^0$"
+$H --personal-world --world-file pw/gs0.world --press "1,\\" --screenshot pworld-shaper-away2.png | tr -d '\r' | { grep -c "^shaper:" || true; } | q "^0$"
+$H --personal-world --world-file pw/gs0.world --press "1,],WheelUp" --screenshot pworld-shaper-size.png | tr -d '\r' | q "^shaper: out, radius 24 m, "
+test ! -e pw/gs0.world
+$H --personal-world --real-graphics --world-file pw/gs1.world --pworld-look 2 --press "1" --pworld-hold Z:3 --screenshot pworld-raised.png | tr -d '\r' | q "; ground shaped at 10 corners$"
+head -3 pw/gs1.world | tr -d '\r' | tr '\n' '|' | q "^sieve-personal-world-v2|seed 0|ground -10 -50 [0-9.]*|$"
+grep -c "^ground 0 -40 1[0-9]\.[0-9]*$" pw/gs1.world | q "^1$"
+$H --personal-world --world-file pw/gs1.world --pworld-walk 4 --screenshot pworld-raised2.png | tr -d '\r' | q "ground 3[0-9]\.[0-9][0-9] m; .*; ground shaped at 10 corners$"
+$H --personal-world --real-graphics --world-file pw/gs2.world --pworld-look 2 --press "1" --pworld-hold X:3 --screenshot pworld-lowered.png | tr -d '\r' | q "; ground shaped at 10 corners$"
+grep -c "^ground 0 -40 -1[0-9]\.[0-9]*$" pw/gs2.world | q "^1$"
+cp pw/gs1.world pw/gs3.world
+$H --personal-world --real-graphics --world-file pw/gs3.world --pworld-look 2 --press "1" --pworld-hold C:8 --screenshot pworld-flattened.png | tr -d '\r' | q "; ground shaped at 1[0-9] corners$"
+$H --personal-world --world-file pw/gs4.world --pworld-look -20 --press "Tab,Return,Tab,1" --pworld-hold Z:2 --screenshot pworld-shaped-on.png | tr -d '\r' | q "; 1 objects placed; ground shaped at [0-9]* corners$"
+printf 'sieve-personal-world-v2\nseed 0\nground 5 0 1\nground 0 0 1\nground 0 0 2\nground 0 10 x\nground 330 0 1\nground 0 20 0\nground 0 30 1 extra\nground 0 40 600\n' > pw/gs5.world
+$H --personal-world --world-file pw/gs5.world --screenshot pworld-ground-bad.png | tr -d '\r' | q "^note: Lines of the world file not as written, left out: 7\.$"
+$H --personal-world --world-file pw/gs5.world --screenshot pworld-ground-bad2.png | tr -d '\r' | q "; ground shaped at 1 corners$"
+printf '[personal]\nshaper_radius = 30\nshaper_strength = 9\n[keys]\npersonal.tools/shaper = 2\n' > pw/gs.ini
+$H --personal-world --settings pw/gs.ini --world-file pw/gs0.world --press "2" --screenshot pworld-shaper-set.png | tr -d '\r' | q "^shaper: out, radius 30 m, strength 9 m a second; "
+$H --main-menu --settings pw/gs.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_shaper_radius,Right,Item:personal_shaper_strength,Left" --screenshot features-shaper.png > /dev/null
+grep -c "^shaper_radius = 32 " pw/gs.ini | q "^1$"
+grep -c "^shaper_strength = 8 " pw/gs.ini | q "^1$"
 # Place (Tab while holding, a panel sliding in as the setup menu's do): exact numbers typed into its
 # rows, then placed there: x 1.5, y 25 m, a 45 degree turn, tipped 10 by two steps of 5.
 $H --personal-world --world-file pw/x.world --pworld-look -45 --press "Tab,Return,Tab,e,Tab,1,.,5,Return,Down,2,5,Return,Down,Down,4,5,Return,Down,Right,Right,Down,Down,Return" --screenshot pworld-place.png | tr -d '\r' | q "; pages placed at 1\.50, "
@@ -1604,11 +1695,57 @@ grep -c "^place pages 1.5 25 [-0-9.]* 0.785398185 0.17453292 0 fixed$" pw/x.worl
 printf 'sieve-personal-world-v2\nseed 0\nfuture-thing 1 2 3\nplace pages 0 30 -55 0 0 0 fixed\n' > pw/k.world
 $H --personal-world --world-file pw/k.world --press "Backspace" --screenshot pworld-kept.png | tr -d '\r' | q "; 0 objects placed$"
 grep -c "^future-thing 1 2 3$" pw/k.world | q "^1$"
-# An own object (place model:SHA) is not drawn yet, but it is kept and written back as such a line is,
-# not lost when the world is saved.
+# An own object (place model:SHA) whose model is not in the store is kept and written back (with its
+# model line), not drawn and not taken away unseen; the readout says why it is not drawn.
 printf 'sieve-personal-world-v2\nseed 0\nplace model:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef 0 30 -55 0 0 0 fixed\nplace pages 0 30 -55 0 0 0 fixed\n' > pw/m.world
-$H --personal-world --world-file pw/m.world --press "Backspace" --screenshot pworld-model.png | tr -d '\r' | q "; 0 objects placed$"
+$H --personal-world --world-file pw/m.world --press "Backspace" --screenshot pworld-model.png | tr -d '\r' > pw/m.txt
+q "; 1 objects placed; model:0123456789abcdef" pw/m.txt
+q "^models: 1 in the catalogue, 0 drawn; 0123456789ab not drawn: not in the store$" pw/m.txt
 grep -c "^place model:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef 0 30 -55 0 0 0 fixed$" pw/m.world | q "^1$"
+grep -c "^model 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef$" pw/m.world | q "^1$"
+# Your own objects (IDEAS 19.187's next step): a model brought in with --pworld-import (the catalogue's
+# I), kept as objects/SHA.sieve beside the world's folder, listed after the characters, placed, picked
+# up, turned and placed again as model:SHA, and drawn from its own mesh. The same file brought in again
+# is the same model; a file with no faces (a glTF of a skeleton alone) is refused.
+mkdir -p pw/own/worlds
+printf 'mtllib cube.mtl\nv 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nv 0 0 1\nv 1 0 1\nv 1 1 1\nv 0 1 1\nusemtl red\nf 1 4 3 2\nf 5 6 7 8\nf 1 2 6 5\nf 2 3 7 6\nf 3 4 8 7\nf 4 1 5 8\n' > pw/cube.obj
+printf 'newmtl red\nKd 0.8 0.1 0.1\n' > pw/cube.mtl
+$H --personal-world --real-graphics --world-file pw/own/worlds/p.world --pworld-import pw/cube.obj --press "Tab,Return" --screenshot pworld-own.png | tr -d '\r' > pw/own.txt
+q "^models: 1 in the catalogue, 1 drawn; [0-9a-f]* cube.obj, 12 triangles$" pw/own.txt
+q "^note: Placed cube.obj (your own model, 12 triangles); " pw/own.txt
+sha=$(sha256sum pw/cube.obj | cut -c1-64)
+test -s "pw/own/objects/$sha.sieve"
+grep -c "^model $sha$" pw/own/worlds/p.world | q "^1$"
+grep -c "^place model:$sha " pw/own/worlds/p.world | q "^1$"
+$H --personal-world --world-file pw/own/worlds/p.world --pworld-look -30 --press "e,r,t,Return" --screenshot pworld-own2.png | tr -d '\r' | q "; model:$sha placed at "
+grep -c "^place model:$sha [-0-9.]* [-0-9.]* [-0-9.]* 3.40339208 0.261799395 0 fixed$" pw/own/worlds/p.world | q "^1$"
+$H --personal-world --world-file pw/own/worlds/p.world --pworld-import pw/cube.obj --screenshot pworld-own3.png | tr -d '\r' | q "^note: cube.obj is in the catalogue already "
+$H --personal-world --world-file pw/own/worlds/p.world --pworld-import tests/arm.gltf --screenshot pworld-own4.png | tr -d '\r' | q "^note: arm.gltf was not brought in: no faces\.$"
+$H --personal-world --world-file pw/own/worlds/p.world --pworld-look -30 --press "Backspace" --screenshot pworld-own5.png | tr -d '\r' | q "^note: Took away cube.obj (your own model, 12 triangles)\.$"
+grep -c "^model $sha$" pw/own/worlds/p.world | q "^1$"
+{ grep -c "^place model:" pw/own/worlds/p.world || true; } | q "^0$"
+# Your world on the worlds line (IDEAS 19.187): N opens the panel of its address there, worked out as the
+# importers work theirs out. An empty world is the worlds line's world 0 (every slot model 0 in cell 0,
+# unturned); nothing is said until N is pressed. Five objects: the first four carried, each as its box in
+# the cell its middle is in and turned by the nearest of the 24 (the pitch of 0.3 radians is 17.2 degrees
+# off), the fifth left out; the address is a world of the worlds line, its slots the same address again
+# through sieve world --compose. Return there and --pworld-follow: the hallway on the worlds line, at it.
+printf 'sieve-personal-world-v1\nseed 0\n' > pw/wl0.world
+$H --personal-world --world-file pw/wl0.world --no-character --character-store pw/nostore --screenshot pworld-worlds-none.png | tr -d '\r' | { grep -c "^worlds:" || true; } | q "^0$"
+$H --personal-world --world-file pw/wl0.world --no-character --character-store pw/nostore --press "n" --screenshot pworld-worlds0.png | tr -d '\r' | q "^worlds: positional 0*; scrambled [0-9a-f]*; carried 0 of 0 objects in 4 slots "
+printf 'sieve-personal-world-v2\nseed 0\nplace pages 0 22.66 -58 0 0 0 fixed\nplace audio 2 22.66 -58 0 0.3 0 fixed\nplace books 4 22.66 -58 1.5707963 0 0 fixed\nplace binary 6 22.66 -58 0 0 0 fixed\nplace video 8 22.66 -58 0 0 0 physics\n' > pw/wl.world
+$H --personal-world --world-file pw/wl.world --no-character --character-store pw/nostore --press "n" --screenshot pworld-worlds.png | tr -d '\r' > pw/wl.txt
+q "; carried 4 of 5 objects in 4 slots (0 favourites, 0 of your own, 0 dropped), each as its box; grid 8, a cell 0\.750 m, " pw/wl.txt
+q "; turns at most 17\.2 degrees off; left out: 0 characters, 1 objects past the slots; slot 1 cell 0\.4\.4 turn 22; slot 2 cell 2\.3\.4 turn 22; slot 3 cell 5\.4\.4 turn 0; slot 4 cell 7\.4\.3 turn 22$" pw/wl.txt
+wl=$(grep "^worlds: " pw/wl.txt | sed 's/^worlds: positional \([0-9a-f]*\);.*/\1/')
+$exe world --read "$wl" | grep -c "^v " | q "^32$"
+slots=$($exe world --read "$wl" | tr -d '\r' | grep "^slots " | sed 's/^slots *//')
+$exe world --compose "$slots" | tr -d '\r' | q "^  positional $wl$"
+$H --personal-world --world-file pw/wl.world --no-character --character-store pw/nostore --press "n,Return" --pworld-follow pworld-worlds-hall.png --screenshot pworld-worlds-go.png | tr -d '\r' > pw/wlgo.txt
+q "^note: To the worlds line, in the hallway, at this world\.$" pw/wlgo.txt
+q "; go to it chosen$" pw/wlgo.txt
+q "^hallway: WORLDS line, positional, .*went to $wl" pw/wlgo.txt
+q "^saved pworld-worlds-hall.png$" pw/wlgo.txt
 # O on what does not open says why: a character is not an item of a line, and a favourite no longer
 # kept (here one never kept) has nothing to open.
 printf 'sieve-personal-world-v1\nseed 0\n' > pw/co.world
@@ -1617,6 +1754,30 @@ printf 'sieve-personal-world-v2\nseed 0\nplace fav:fedcba9876543210fedcba9876543
 $H --personal-world --world-file pw/fg.world --no-character --character-store pw/nostore --pworld-look -45 --press "o" --screenshot pworld-fav-gone.png | tr -d '\r' | q "^note: a favourite no longer kept (fedcba987654\.\.\.) has nothing to open: "
 printf 'sieve-personal-world-v1\nseed 0\nplace nothing-such 0 0 0\nplace pages 1 2 3\n' > pw/bad.world
 $H --personal-world --world-file pw/bad.world --screenshot pworld4.png | tr -d '\r' | q "; 1 objects placed$"
+# Music for your dimension (IDEAS 19.220): the Media Player's third space, PERSONAL (Right on its Mode
+# row from WORLD), kept in the dimension's own world file. Until it has music of its own it plays WORLD's
+# and the file is left as it is; Music here gives it its own (WORLD's settings in the mode of the line
+# you are on), written as a `music` line and read back by the world; changed there, written again; given
+# again, taken out, and the v1 world is v1 once more, byte for byte.
+mkdir -p pw/pm/worlds
+printf 'sieve-personal-world-v1\nseed 0\nplace pages 1 2 3\n' > pw/pm/worlds/personal.world
+$H --no-menu --media-player --settings pw/pm/hallway.ini --press "Escape,Item:media,Return,Right" --screenshot media-personal.png | tr -d '\r' | q "^media: PERSONAL (worlds/personal.world): none of its own (WORLD's music)$"
+head -1 pw/pm/worlds/personal.world | tr -d '\r' | q "^sieve-personal-world-v1$"
+$H --no-menu --media-player --settings pw/pm/hallway.ini --press "Escape,Item:media,Return,Right,Down,Right" --screenshot media-personal2.png | tr -d '\r' | q "^media: PERSONAL (worlds/personal.world): its own: on, volume 30%, tempo 72 bpm, soft, mode ionian, [0-9]* filters; written into worlds/personal.world$"
+head -3 pw/pm/worlds/personal.world | tr -d '\r' | tr '\n' '|' | q "^sieve-personal-world-v2|seed 0|music on=on volume=30 length=32 source=audio units=4 notes=notes104 tempo=72 voice=soft echo=35 gap=8 character=ionian filters="
+$H --personal-world --settings pw/pm/hallway.ini --screenshot pworld-music.png | tr -d '\r' | q "^music: its own: on, volume 30%, tempo 72 bpm, soft, mode ionian, "
+$H --no-menu --media-player --settings pw/pm/hallway.ini --press "Escape,Item:media,Return,Right,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Right,Right,Down,Down,Down,Down,Right,Right" --screenshot media-personal3.png | tr -d '\r' | q "^media: PERSONAL (worlds/personal.world): its own: on, volume 30%, tempo 76 bpm, soft, mode dorian, "
+$H --personal-world --settings pw/pm/hallway.ini --screenshot pworld-music2.png | tr -d '\r' | q "^music: its own: on, volume 30%, tempo 76 bpm, soft, mode dorian, "
+$H --no-menu --media-player --settings pw/pm/hallway.ini --press "Escape,Item:media,Return,Right,Down,Right" --screenshot media-personal4.png | tr -d '\r' | q "^media: PERSONAL (worlds/personal.world): none of its own (WORLD's music); taken out of worlds/personal.world: "
+tr -d '\r' < pw/pm/worlds/personal.world | tr '\n' '|' | q "^sieve-personal-world-v1|seed 0|place pages 1 2 3|$"
+$H --personal-world --settings pw/pm/hallway.ini --screenshot pworld-music3.png | tr -d '\r' | { grep -c "^music:" || true; } | q "^0$"
+# A `music` line written by hand: a kept melody played every time, a key this build does not know kept
+# and written back; a second line, and a tempo past the Media Player's bounds, left out and said.
+printf 'sieve-personal-world-v2\nseed 0\nmusic tempo=90 voice=sine character=dorian melody=notes104:0:5,9,13,17 later=1\nmusic volume=10\nmusic tempo=900\n' > pw/mu.world
+$H --personal-world --world-file pw/mu.world --screenshot pworld-music4.png | tr -d '\r' | q "^music: its own: on, volume 30%, tempo 90 bpm, sine, mode dorian, kept melody of 4 notes$"
+$H --personal-world --world-file pw/mu.world --screenshot pworld-music5.png | tr -d '\r' | q "^note: Lines of the world file not as written, left out: 2\.$"
+$H --personal-world --world-file pw/mu.world --pworld-look -45 --press "Tab,Return" --screenshot pworld-music6.png | tr -d '\r' | q "; 1 objects placed$"
+grep -c "^music tempo=90 voice=sine character=dorian melody=notes104:0:5,9,13,17 later=1$" pw/mu.world | q "^1$"
 out=$($H --warp "$W" --press "X,Home,Up,Return" --screenshot nav.png)
 echo "$out" | tail -2 | sed -n 1p | q "went to 1"
 if [ "$(echo "$out" | tail -2 | book)" = "$here" ]; then exit 1; fi

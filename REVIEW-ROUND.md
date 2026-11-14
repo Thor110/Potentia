@@ -62,6 +62,14 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 24. **The System Viewer from your dimension's pause menu** comes back to your dimension on Esc (it went to the main menu). Not checked by CI: the return is beyond what a screenshot run reaches.
 - [ ] 25. **Your characters are objects in your dimension**: yours stands ahead of where you begin, as before. Look at it, E picks it up, R/T/G turn it, Return places it, Q drops it, Backspace takes it away (and it stays away next time); the catalogue (Tab) ends with "your character" and your store's, to place them again. Change your character on the CHARACTER page and the one in your world changes with it.
 - [ ] 26. **The Character Creator tilts** (and the CHARACTER page): drag up and down, Shift+[ and Shift+], or Shift with the wheel, 15 degrees a press up to 85 either way; **Home** puts the view back as it opens. Try each drawing tilted; the voxels and the pedestal should look right from above and below.
+- [ ] 27. **The ground shaper** (P1) in your dimension: **1** takes it out, **#** (or the backslash) puts it away. An amber ring on the grass marks the brush; the left button or Z raises, the right or X lowers, the middle or C flattens; the wheel or [ and ] change its size. Walk away and back, leave and come in again: the shape stays. Size and strength are on Personal Dimensions > Features. Then take it out, aim at a placed favourite, press O, and close the viewer with Z: the ground should not rise.
+- [ ] 28. **O opens a favourite in place** (P2): a red "calculating" with dots by the crosshair, then the viewer over your dimension; Esc or Z closes it and you are where you stood. A second favourite on the same line opens at once. Item 10 changes with it: Personal Dimensions > Features > *O opens a favourite in place* off goes into the hallway as before.
+- [ ] 29. **Your own models** (P3): with the catalogue open, **I** opens the file dialog (the dialog is not tested by CI); pick an .obj (with its .mtl beside it) or a glTF. It is listed after the characters, chosen at once, and Return places it. Is the size right? (An .obj's units are taken as metres.)
+- [ ] 30. **Your world on the worlds line** (P4): **N** shows its address; Return goes into the hallway on the worlds line with your world in hand, from the main menu and from the hallway's pause menu (neither is tested by CI, only the scripted way).
+- [ ] 31. **Music for your dimension** (P5): Media Player, Mode Right past WORLD to **PERSONAL**; "Music here" gives the dimension music of its own, written into its file. Go into the dimension: does it play that music, and WORLD's again once "Music here" is pressed off? (Not heard by CI: its player is silent.)
+- [ ] 32. **Favourites' covers** (P6): Tab in your dimension, each favourite with a picture shows a small copy left of its row and the chosen one larger below the list. Off on Features.
+- [ ] 33. **Turning rings** (P7): hold something; three rings round it (x red, y green, z blue). After R, T or G that ring is bright and the wheel turns it 15 degrees a notch. Settings > Graphics > Axis Colours steps to Okabe and Ito's; Features has the rings on/off and the wheel's step.
+- [ ] 34. **Day and night** (P8): Features > Day and night on; the sun, sky, light and stars follow the time of day (UTC). **L** sets the day's length in seconds (try 60 to watch a whole day). Is the night too dark or too light? Off, the dimension looks as before.
 
 ---
 
@@ -89,14 +97,15 @@ together, not the full CI: tasks that all say `[10]` cost one run of step 10 bet
 run before a release package, and after each of the three reviews. Each batch is still one zip.
 
 ### List P: your personal dimension `[10]` + you, one sitting in the dimension
-- P1 (R2). The ground shaper: key 1 takes it out, # puts it away (IDEAS 19.209).
-- P2 (R3). O opens the hallway's viewer in place, "calculating..." by the crosshair (19.208).
-- P3. Own objects in the catalogue (your models from the models line, a glTF imported).
-- P4. The WORLDS address: your world as an item of the worlds line, openable from the hallway.
-- P5. Music for your dimension: a third space in the Media Player, kept in the dimension's file (19.220). Also `[07]`.
-- P6. Favourites' covers in the catalogue (their pictures are on their fronts once placed, since F7).
-- P7. Coloured rings round what you hold, one a turn, and the mouse wheel turning along the one chosen (19.221).
-- P8. Day and night, on or off, the day's length set and kept in the dimension's file (19.222).
+- [x] P1 (R2). The ground shaper: key 1 takes it out, # puts it away (IDEAS 19.209). *Made 14 November 2026.*
+- [x] P2 (R3). O opens the hallway's viewer in place, "calculating..." by the crosshair (19.208). *Made 14 November 2026.*
+- [x] P3. Own objects in the catalogue (your models from the models line, a glTF imported). *Made 14 November 2026.*
+- [x] P4. The WORLDS address: your world as an item of the worlds line, openable from the hallway. *Made 14 November 2026.*
+- [x] P5. Music for your dimension: a third space in the Media Player, kept in the dimension's file (19.220). Also `[07]`. *Made 14 November 2026.*
+- [x] P6. Favourites' covers in the catalogue (their pictures are on their fronts once placed, since F7). *Made 14 November 2026.*
+- [x] P7. Coloured rings round what you hold, one a turn, and the mouse wheel turning along the one chosen (19.221). *Made 14 November 2026.*
+- [x] P8. Day and night, on or off, the day's length set and kept in the dimension's file (19.222). *Made 14 November 2026.*
+- P9. Import and export: any object as its parts (a page as .png and .txt, a model as .obj), the whole world as one .obj with a sub-object each and their files beside it (textures, texts, audio, shelf weights as .safetensors), a manifest of SHA-256s; brought back the same way (19.226). Also `[01]`.
 
 ### List R: characters and the renderer `[10]` + you, one sitting in the Character Creator
 - [x] R1 (R4). The Character Creator's view tilted as well as turned (diagonal rotation), and Home to reset it. *Made 14 November 2026.*
@@ -104,12 +113,15 @@ run before a release package, and after each of the three reviews. Each batch is
 - R3. The voxels' cell size made the same for everything, with that switchable (19.215), then greedy meshing.
 - R4. Add/remove limbs and drag joints (19.203).
 - R5. A shell grown over the spheres, for quads and smooth surfaces (19.214).
+- R6. The skin: a stage of the mesh scaling system wrapping the spheres in one smooth surface (a field, marching cubes), its blend a setting, measured against the other drawings (19.225). R5's first step.
 
 ### List M: menus and keys `[04]` + `[10]` + you, one sitting in Settings > Keys
 - M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so
   later changes to them need `[01]` rather than `[10]`.
 - M2. The setup menu's, the Media Player's and each other system's keys, one commit each.
 - M3. The main menu reordered and Settings renamed (19.188).
+- M4. "Real Graphics" renamed "Wireframe", its sense turned round, old files and `--real-graphics` still read (19.223). Also `[03]`, `[11]` where their lines name it.
+- M5. Every footer of keys wraps upwards as the viewer's does, on every screen, with a CI check that no footer line is wider than its window (19.224).
 
 ### List V: viewers `[10]` + you, one sitting with files of each kind
 - V1. Sound files to the audio player, .obj/glTF files to the 3D view (the rest of 19.200).

@@ -46,9 +46,11 @@
 #include <ctime>
 #include <filesystem>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
 #include <optional>
 #include <random>
 #include <set>
@@ -192,10 +194,26 @@ const char* kUsage =
     "  --personal-world    with --screenshot: your personal dimension's world (a grassy hill, your characters),\n"
     "                      --pworld-walk S walked first, --press to its catalogue (Tab, Up, Down, Return,\n"
     "                      Backspace; E picks up what the crosshair is on, R/T/G turn it, Return places it, Q\n"
-    "                      drops it; Tab while holding opens Place: exact numbers), --pworld-look DEG looks up or\n"
+    "                      drops it; Tab while holding opens Place: exact numbers; WheelUp/WheelDown a notch of the\n"
+    "                      wheel, turning it about the turn R/T/G chose), --pworld-look DEG looks up or\n"
     "                      down first, --pworld-wait S lets what was dropped fall, --no-map and --no-compass\n"
     "                      leave those out (as Personal Dimensions > Features can), --pworld-back S walked\n"
-    "                      back after; --world-file FILE what is placed\n"
+    "                      back after; --world-file FILE what is placed; --pworld-time HOURS day and night on\n"
+    "                      (IDEAS 19.222), the time of day held at HOURS (0 to 24: 0 midnight, 12 noon), and L\n"
+    "                      in --press opens the panel where the day's length is typed (digits, Return)\n"
+    "                      The ground shaper (IDEAS 19.209): 1 in --press takes it out, # puts it away, ] and [ or\n"
+    "                      WheelUp/WheelDown size its brush; --pworld-hold KEY:S,... holds each key (Z raises, X\n"
+    "                      lowers, C flattens, as the registry has them) S seconds in turn, after --press\n"
+    "  --pworld-import FILE  with --personal-world: a model of your own (.obj with its .mtl, .gltf, .glb) brought\n"
+    "                      into your dimension's catalogue first, kept as objects/SHA.sieve beside the world's\n"
+    "                      folder (as the catalogue's I does), chosen there for Return to place\n"
+    "  --pworld-in-place   with --personal-world: O on a favourite opens it in the hallway's own viewer over\n"
+    "                      your dimension (IDEAS 19.208; [personal] open_in_place), its line made and waited\n"
+    "                      for before the next key, which is then the viewer's (Tab, Escape, ...); --pworld-making\n"
+    "                      takes the picture while it is still being made (the small calculating by the crosshair)\n"
+    "  --pworld-follow OUT  with --personal-world: N in --press opens the panel of your world's address on the\n"
+    "                      worlds line (IDEAS 19.187) and Return there chooses Go to it; then the hallway is built\n"
+    "                      as the settings stand, on the worlds line at your world, and its picture saved to OUT\n"
     "  --open-favourite SHA  a favourite (kept beside --settings) opened as your dimension's O opens it: gone\n"
     "                      to on its line and taken into your hand (give --line its line)\n"
     "  --record FILE       record what you do in the hallway (sieve-replay-v1: where you began, then every\n"
@@ -387,10 +405,9 @@ PictureSource picture_source(const Settings& s, const std::filesystem::path& fil
     return p;
 }
 
-std::vector<Line> make_lines(const Args& a)
+// One line's options, from the hallway's: the line's own shape as the setup menu has it.
+Args line_args(const Args& a, LineKind k)
 {
-    std::vector<Line> lines;
-    for (LineKind k : kLineOrder)
     {
         Args la;
         la.opts["line"] = to_string(k);
@@ -448,8 +465,14 @@ std::vector<Line> make_lines(const Args& a)
             la.opts["fit"] = a.get("video-fit", "levels"); // canon-image-v2; "average" for v1
             break;
         }
-        lines.push_back(make_line(la));
+        return la;
     }
+}
+
+std::vector<Line> make_lines(const Args& a)
+{
+    std::vector<Line> lines;
+    for (LineKind k : kLineOrder) lines.push_back(make_line(line_args(a, k)));
     return lines;
 }
 
@@ -635,6 +658,9 @@ bool run_locator(SDL_Window* window, SDL_Renderer* renderer, const Settings& set
 // "Click" in --press: a left click in the middle of the window, where the crosshair is (the hallway
 // only; a menu takes it as a key it does not know).
 constexpr SDL_Keycode kClickPress = SDLK_SCANCODE_MASK | 0xFFFF;
+// "WheelUp" and "WheelDown" in --press: a notch of the mouse wheel forward or back (your dimension only,
+// where it turns what you hold: IDEAS 19.221; elsewhere a key nothing knows). Below Item:ID's codes.
+constexpr SDL_Keycode kWheelUpPress = SDLK_SCANCODE_MASK | 0xEFFE, kWheelDownPress = SDLK_SCANCODE_MASK | 0xEFFF;
 
 std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string& spec)
 {
@@ -652,7 +678,7 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
             start = end + 1;
             continue;
         }
-        const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : name == "Click" ? kClickPress : SDL_GetKeyFromName(name.c_str());
+        const SDL_Keycode key = name == "-" ? SDLK_MINUS : name == "=" ? SDLK_EQUALS : name == "Click" ? kClickPress : name == "WheelUp" ? kWheelUpPress : name == "WheelDown" ? kWheelDownPress : SDL_GetKeyFromName(name.c_str());
         if (key == SDLK_UNKNOWN) throw std::invalid_argument("--press: unknown key '" + name + "'");
         out.emplace_back(key, mod);
         start = end + 1;
@@ -663,6 +689,15 @@ std::vector<std::pair<SDL_Keycode, SDL_Keymod>> parse_presses(const std::string&
 // Your character (IDEAS 19.148): from --character FILE, or the settings file's [character], which is
 // you in the hallway (not drawn; the default character when it has none), or none with --no-character
 // or beside_you off. A file or setting that is refused is said on stderr and leaves the default.
+// Turning what you hold in your dimension (IDEAS 19.221) as the settings have it: its rings, the wheel's
+// step and the axes' colours (the default's where the setting cannot be read, which load() never keeps).
+void set_turning(hallway::PersonalWorld& world, const hallway::AppSettings& app)
+{
+    uint32_t axes[3] = {};
+    if (!hallway::parse_axis_colours(app.axis_colours, axes)) hallway::parse_axis_colours(hallway::kAxisColoursDefault, axes);
+    world.set_turning(app.personal_turning_rings, app.personal_wheel_step, axes);
+}
+
 // Your personal dimension's world (sieve-personal-world-v1): worlds/personal.world beside the settings.
 std::filesystem::path personal_world_file(const std::filesystem::path& app_path) { return app_path.parent_path() / "worlds" / "personal.world"; }
 // Your personal dimension's character store: --character-store DIR, else the store beside the settings.
@@ -1014,6 +1049,195 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     return hall;
 }
 
+// The hallway's own viewer lent to your dimension (IDEAS 19.208). The viewer reads a line's items
+// through a built hallway, so O on a placed favourite builds one on the favourite's line, as the
+// settings stand, on a worker thread as going into the hallway does (none of the building touches the
+// renderer), while the dimension goes on with a small "calculating..." by its crosshair. Once made, the
+// favourite is gone to on it and opened in its viewer, which is drawn over the dimension; the corridor
+// itself is never walked or drawn. The line's hallway is kept once made, so the next favourite of the
+// same line and settings opens at once; another line's replaces it. Where it cannot open so, the
+// dimension goes the old way, into the hallway on the line, and says why.
+class LentViewer : public hallway::PersonalWorld::InPlace
+{
+public:
+    using Build = std::function<std::unique_ptr<Hallway>(const Args&)>;
+    using Ready = std::function<void(Hallway&)>;
+    // `base`: the options the hallway is built from (the setup applied over them for each line);
+    // `settings`: the setup as it stands; `ready`: what the hallway's loop sets on a hallway once built.
+    LentViewer(Args base, Settings settings, Build build, Ready ready)
+        : base_(std::move(base)), settings_(std::move(settings)), build_(std::move(build)), ready_(std::move(ready))
+    {
+        // (a first hallway's own start-up options are not this one's: it starts where the line starts)
+        for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press", "open-favourite"}) base_.opts.erase(k);
+    }
+    ~LentViewer() override
+    {
+        if (building_.valid()) building_.wait(); // (a line still being made is let finish: it holds the window's pointers)
+    }
+    // For pictures: the line made but not yet opened, so a picture of the calculating can be taken.
+    void hold_back(bool on) { hold_back_ = on; }
+
+    void begin(const hallway::Favourite& f) override
+    {
+        Args ha = base_;
+        Settings s = settings_;
+        for (const auto& d : hallway::kDimensions)
+            if (f.line == d.id) s.start_line = d.line;
+        s.apply(ha);
+        want_ = f;
+        if (building_.valid()) collect(); // (one being made already, asked for and then left: kept first)
+        if (kept_ && kept_opts_ == ha.opts)
+        {
+            made_now_ = false; // (its line's hallway kept from before: opened at once)
+            return;
+        }
+        kept_.reset();
+        building_opts_ = ha.opts;
+        made_now_ = true;
+        building_ = std::async(std::launch::async, [this, ha] {
+            sieve::cli::timings::Scope timed("hallway.build");
+            return build_(ha);
+        });
+    }
+    State poll() override
+    {
+        if (building_.valid())
+        {
+            if (building_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return want_ ? State::Making : State::Idle;
+            if (!collect() && want_)
+            {
+                want_.reset();
+                return State::Failed;
+            }
+        }
+        if (!want_) return kept_ && kept_->viewer_open() ? State::Open : State::Idle;
+        if (hold_back_) return State::Making;
+        const hallway::Favourite f = *want_;
+        want_.reset();
+        if (!kept_)
+        {
+            why_ = "its line could not be made";
+            return State::Failed;
+        }
+        if (kept_->space_id() != f.space)
+        {
+            // (kept under other settings of its line: the hallway says what it does with that)
+            why_ = "its line is set otherwise now than when it was kept";
+            return State::Failed;
+        }
+        kept_->put_back(); // (what the last one left in its hand)
+        kept_->open_favourite(f);
+        if (!kept_->viewer_open())
+        {
+            why_ = "its viewer did not open";
+            return State::Failed;
+        }
+        return State::Open;
+    }
+    void cancel() override { want_.reset(); }
+    const std::string& why() const override { return why_; }
+    void event(const SDL_Event& e) override
+    {
+        bool quit = false; // (the window closed is the dimension's to see, before the viewer)
+        if (kept_) kept_->lent_viewer_event(e, quit);
+    }
+    void draw(float W, float H) override
+    {
+        if (kept_) kept_->draw_lent_viewer(W, H);
+    }
+    std::string report() const override
+    {
+        if (!kept_) return "";
+        return "the hallway's viewer, " + kept_->viewer_tab() + "; its line " + (made_now_ ? "made for it" : "kept from before");
+    }
+
+private:
+    // The hallway being made, taken in: kept, set as the hallway's loop sets it; false (why_) if it failed.
+    bool collect()
+    {
+        try
+        {
+            kept_ = building_.get();
+            kept_opts_ = building_opts_;
+            if (kept_) ready_(*kept_);
+            return kept_ != nullptr;
+        }
+        catch (const std::exception& ex)
+        {
+            kept_.reset();
+            why_ = ex.what();
+            return false;
+        }
+    }
+    Args base_;
+    Settings settings_;
+    Build build_;
+    Ready ready_;
+    std::future<std::unique_ptr<Hallway>> building_;
+    std::map<std::string, std::string> building_opts_, kept_opts_;
+    std::unique_ptr<Hallway> kept_;
+    std::optional<hallway::Favourite> want_;
+    std::string why_;
+    bool made_now_ = false, hold_back_ = false;
+};
+
+// The viewer lent to your dimension, its hallways built as the hallway's loop builds one and set as
+// that loop sets one (the parts the viewer uses), favourites' pictures kept beside `favourites_base`
+// (empty: none kept, as a picture without --settings keeps none).
+std::unique_ptr<LentViewer> lend_viewer(SDL_Window* window, SDL_Renderer* renderer, const Args& a, const Settings& settings, const FilterConfig& filters,
+                                        const AppSettings& app, std::filesystem::path favourites_base)
+{
+    LentViewer::Build build = [window, renderer, &filters, &app](const Args& ha) {
+        sieve::set_filter_memory(double(app.filter_memory_mb) * 1024 * 1024);
+        sieve::set_unit_time_ms(app.unit_time_ms);
+        return make_hallway(window, renderer, ha, false, filters, app.angle_decimals);
+    };
+    LentViewer::Ready ready = [&app, a, favourites_base](Hallway& h) {
+        h.set_controls(app.mouse_sensitivity, app.invert_mouse_y);
+        h.set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
+        h.set_model_files(app.text_model, app.picture_model);
+        h.set_model_cache(app.model_cache_mb);
+        h.set_angle_decimals(app.angle_decimals);
+        h.set_face_px(a.get_u32("model-tile", 64));
+        h.set_letters_px(a.has("item-letters") ? a.get_u32("item-letters", 8) : 8);
+        h.set_export_fps(a.has("video-fps") ? a.get_u32("video-fps", sieve::cli::kDefaultExportFps) : sieve::cli::kDefaultExportFps);
+        h.set_closeup_px(closeup_setting(a.get("close-up", "screen"), kCloseUpScreen));
+        h.set_graphics_memory(app.graphics_memory_gb);
+        if (!favourites_base.empty()) h.set_favourites_base(favourites_base);
+    };
+    return std::make_unique<LentViewer>(a, settings, std::move(build), std::move(ready));
+}
+
+// The worlds line as the settings make it (sieve/worldspace.hpp), lent to your personal dimension so it
+// can work out its address there (IDEAS 19.187): the same cover, title and models line the hallway builds
+// its worlds line from (Hallway's constructor), and the ordering it starts in. Only the pages and image
+// lines are made for it, not every line, so it is quick enough to make each time the panel opens.
+hallway::PersonalWorld::WorldsLine worlds_line_of(const Args& a, const Settings& settings)
+{
+    hallway::PersonalWorld::WorldsLine out;
+    try
+    {
+        Args ha = a;
+        settings.apply(ha);
+        const Line text = make_line(line_args(ha, LineKind::Text)), image = make_line(line_args(ha, LineKind::Image));
+        const uint32_t title_length = ha.has("title-length") ? ha.get_u32("title-length", 32) : 32u;
+        std::optional<sieve::Space> title; // (a title length of 0 is no title)
+        if (title_length > 0)
+            title = text.alphabet ? sieve::Space(*text.alphabet, title_length, text.space.key())
+                                  : sieve::Space(text.space.symbols_id(), text.space.base(), title_length, text.space.key());
+        const sieve::ModelSpace models(ha.get_positive("vertices", 8), ha.get_positive("faces", 12), ha.get_positive("coords", 16), text.space.key());
+        out.space = std::make_shared<const sieve::WorldSpace>(image.space, title, models, std::max<uint32_t>(1, ha.has("world-models") ? ha.get_positive("world-models", 4) : 4u),
+                                                              std::clamp<uint32_t>(ha.has("world-grid") ? ha.get_positive("world-grid", 8) : 8u, 1, 1024));
+        out.mode = ha.get("mode", "positional") == "scrambled" ? sieve::AddressMode::Scrambled : sieve::AddressMode::Positional;
+    }
+    catch (const std::exception& e)
+    {
+        out.space.reset();
+        out.why = e.what();
+    }
+    return out;
+}
+
 int run(const Args& a)
 {
     int w = 1280, h = 720;
@@ -1278,6 +1502,11 @@ int run(const Args& a)
         const std::filesystem::path folder = app_path.parent_path().empty() ? std::filesystem::path(".") : app_path.parent_path();
         player = std::make_unique<MusicPlayer>(folder, !shot && !a.has("no-music"));
         set_music(player.get());
+        // PERSONAL (IDEAS 19.220): your dimension beside the settings, its music read from its world file,
+        // until a dimension is opened (which tells the player its own).
+        const std::filesystem::path pw = personal_world_file(app_path);
+        const std::string ml = hallway::PersonalWorld::music_line_of(pw);
+        player->set_personal(pw, ml.empty() ? std::nullopt : hallway::personal_music_of(ml));
     }
     // The RAID between machines, where its serving is ticked (Settings > Infinite RAID, opt in only): this machine
     // keeps others' sealed saves while Sieve runs (never for a picture).
@@ -1543,6 +1772,42 @@ int run(const Args& a)
         world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
         world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
         world.set_hallway_tools(app.personal_hallway_tools);
+        set_turning(world, app);
+        // Day and night (IDEAS 19.222) as the settings have it; --pworld-time HOURS turns it on for the
+        // picture, the time of day held there (0 to 24, 0 midnight and 12 noon on the dimension's clock),
+        // so a picture of night or day comes out the same whenever it is taken.
+        world.set_day_night(app.personal_day_night || a.has("pworld-time"));
+        world.set_shaper(app.personal_shaper_radius, app.personal_shaper_strength);
+        world.set_catalogue_covers(app.personal_catalogue_covers);
+        world.set_worlds_line([&] { return worlds_line_of(a, settings); }); // (its address on the worlds line: IDEAS 19.187)
+        if (a.has("pworld-time"))
+        {
+            const double hours = std::stod(a.get("pworld-time"));
+            if (!(hours >= 0 && hours <= 24)) throw std::invalid_argument("--pworld-time: hours from 0 to 24, not '" + a.get("pworld-time") + "'");
+            world.set_time_of_day(hours);
+        }
+        // A model of your own brought in first (IDEAS 19.187's next step), as the catalogue's import key
+        // does, so the presses can place it; what came in, or why not, is the note.
+        if (a.has("pworld-import")) world.import_model(a.get("pworld-import"));
+        // O opening a favourite in place (IDEAS 19.208), for a picture only with --pworld-in-place (and the
+        // setting on), so pictures of O before it are as they were: its line built as O asks, and waited
+        // for after each key unless --pworld-making takes the picture while it is still being made.
+        std::unique_ptr<LentViewer> lent;
+        if (a.has("pworld-in-place") && app.personal_open_in_place)
+        {
+            lent = lend_viewer(window, renderer, a, settings, filters, app, a.has("settings") ? app_path.parent_path() : std::filesystem::path());
+            lent->hold_back(a.has("pworld-making"));
+            world.set_in_place(lent.get());
+        }
+        auto wait_in_place = [&] {
+            const Uint64 since = SDL_GetTicks();
+            while (world.in_place_making() && !a.has("pworld-making"))
+            {
+                if (SDL_GetTicks() - since > 600000) throw std::runtime_error("--pworld-in-place: its line was not made in ten minutes");
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                world.in_place_frame();
+            }
+        };
         if (a.has("pworld-walk")) world.hold(SDL_SCANCODE_W, std::stof(a.get("pworld-walk")));
         if (a.has("pworld-look")) world.look(std::stof(a.get("pworld-look")));
         if (a.has("press"))
@@ -1554,16 +1819,50 @@ int run(const Args& a)
                     if (!world.pause_select(*id)) throw std::invalid_argument("--press: no row '" + *id + "' in your dimension's pause menu (is it open?)");
                     continue;
                 }
+                if (key == kWheelUpPress || key == kWheelDownPress)
+                {
+                    world.wheel(key == kWheelUpPress ? 1.0f : -1.0f); // (a notch of the mouse wheel: IDEAS 19.221)
+                    continue;
+                }
                 world.press(key, mod);
+                wait_in_place(); // (a favourite opened in place: made before the next key, which is then the viewer's)
                 world.hold(SDL_SCANCODE_UNKNOWN, 1.0f / 60); // (a frame between keys: what is held follows the crosshair)
             }
+        if (a.has("pworld-hold"))
+        {
+            // Keys held, each for its seconds in turn (the ground shaper's raise, lower and flatten: IDEAS
+            // 19.209), by the key's name as --press names them; the stroke saved as each is let go.
+            const std::string list = a.get("pworld-hold");
+            size_t start = 0;
+            while (start <= list.size())
+            {
+                const size_t end = std::min(list.find(',', start), list.size());
+                const std::string item = list.substr(start, end - start);
+                const size_t colon = item.rfind(':');
+                const SDL_Keycode k = colon == std::string::npos ? SDLK_UNKNOWN : SDL_GetKeyFromName(item.substr(0, colon).c_str());
+                const SDL_Scancode sc = k == SDLK_UNKNOWN ? SDL_SCANCODE_UNKNOWN : SDL_GetScancodeFromKey(k, nullptr);
+                if (sc == SDL_SCANCODE_UNKNOWN) throw std::invalid_argument("--pworld-hold: KEY:SECONDS, not '" + item + "'");
+                world.hold(sc, std::stof(item.substr(colon + 1)));
+                start = end + 1;
+            }
+        }
         if (a.has("pworld-wait")) world.hold(SDL_SCANCODE_UNKNOWN, std::stof(a.get("pworld-wait"))); // (what was dropped falls and rests)
         world.settle_panels(); // (a picture shows the panels where they are going, as the setup menu's do)
         if (a.has("pworld-back")) world.hold(SDL_SCANCODE_S, std::stof(a.get("pworld-back"))); // (to see what was placed)
         world.render();
         shoot();
         std::cout << "personal world: " << world.report() << "\n";
+        if (const std::string t = world.turning_report(); !t.empty()) std::cout << "turning: " << t << "\n"; // (only while something is held)
+        if (const std::string t = world.day_report(); !t.empty()) std::cout << "day: " << t << "\n"; // (only while day and night is on)
+        if (const std::string t = world.shaper_report(); !t.empty()) std::cout << "shaper: " << t << "\n"; // (only while the ground shaper is out)
+        if (const std::string t = world.covers_report(); !t.empty()) std::cout << "covers: " << t << "\n"; // (only while the catalogue is out with a favourite in it)
+        if (const std::string t = world.models_report(); !t.empty()) std::cout << "models: " << t << "\n"; // (only while there is a model of your own)
+        if (const std::string t = world.music_report(); !t.empty()) std::cout << "music: " << t << "\n"; // (only where the world has music of its own)
         if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
+        // (in place, IDEAS 19.208: only with --pworld-in-place; the old way named where it was taken)
+        if (const std::string t = world.in_place_report(); !t.empty()) std::cout << "in place: " << t << "\n";
+        else if (a.has("pworld-in-place") && !app.personal_open_in_place && world.opened())
+            std::cout << "in place: off ([personal] open_in_place): the hallway instead, as before\n";
         if (!world.note().empty()) std::cout << "note: " << world.note() << "\n";
         if (world.pause_open())
         {
@@ -1572,10 +1871,29 @@ int run(const Args& a)
             std::cout << "pause menu: " << rows << "\n";
         }
         if (!world.system().empty()) std::cout << "goes to: " << world.system() << "\n";
+        if (const std::string t = world.worlds_report(); !t.empty()) std::cout << "worlds: " << t << "\n"; // (only once its panel has been opened)
         std::cout << "features: map " << (app.personal_map && !a.has("no-map") ? "on" : "off") << ", compass " << (app.personal_compass && !a.has("no-compass") ? "on" : "off") << "\n";
         std::cout << "map: " << world.map_across() << " m across\n";
         if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
         std::cout << "saved " << a.get("screenshot") << "\n";
+        world.set_in_place(nullptr);
+        lent.reset(); // (its hallway's textures before the renderer goes)
+        if (a.has("pworld-follow") && world.worlds_parts())
+        {
+            // The worlds line's Go to it followed (IDEAS 19.187): the hallway built as the settings stand,
+            // on the worlds line, gone to this world, and its picture taken to the file named.
+            Args ha = a;
+            Settings s = settings;
+            s.start_line = "worlds";
+            s.apply(ha);
+            for (const char* k : {"warp", "goto", "zoom", "tile", "pose", "walk", "press"}) ha.opts.erase(k);
+            auto hall = make_hallway(window, renderer, ha, false, filters, app.angle_decimals);
+            hall->go_to_world(*world.worlds_parts());
+            hall->render();
+            if (!save_render(renderer, a.get("pworld-follow"))) throw std::runtime_error(std::string("--pworld-follow: picture failed: ") + SDL_GetError());
+            std::cout << "hallway: " << hall->status() << "\n";
+            std::cout << "saved " << a.get("pworld-follow") << "\n";
+        }
         return finish();
     }
     if (shot && a.has("menu"))
@@ -1817,6 +2135,7 @@ int run(const Args& a)
         shoot();
         std::cout << "saved " << a.get("screenshot") << "\n";
         if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
+        if (const std::string t = hall->media_report(); !t.empty()) std::cout << "media: " << t << "\n"; // (only while the Media Player shows PERSONAL)
         if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";
         if (!last_voiced().empty()) std::cout << "voice: " << last_voiced() << "\n"; // (Text to Voice's reply, or CHAT's /say)
@@ -1880,22 +2199,38 @@ int run(const Args& a)
     // Its pause menu (pause_rows.hpp): Settings, its Personal Dimensions screen and the Filter Designer
     // open over it and come back to it; any other system's row is given back in `system`, for the
     // caller to open (the main menu's way, or the paused hallway's).
+    // Its address on the worlds line (IDEAS 19.187): the worlds line as the settings make it lent to it, and
+    // the world it chose to go to there (Go to it, Result::GoToWorld) given back in `world_to_go`.
+    std::optional<sieve::WorldSpace::Parts> world_to_go;
     auto run_personal_world = [&](std::optional<hallway::Favourite>& opened, std::string& system) {
         std::vector<sieve::Character> chars;
         if (auto ch = character_of(app, a)) chars.push_back(*ch);
         const bool yours = !chars.empty();
         for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
+        // O on a favourite opens it in the hallway's own viewer over the dimension (IDEAS 19.208), its line's
+        // hallway kept for the visit once made; with [personal] open_in_place off, none is lent.
+        std::unique_ptr<LentViewer> lent;
         hallway::PersonalWorld world(window, renderer, std::move(chars), yours, personal_world_file(app_path));
+        if (a.has("pworld-import")) world.import_model(a.get("pworld-import")); // (into its catalogue as you arrive; the note says how it went)
+        world.set_worlds_line([&] { return worlds_line_of(a, settings); });
         auto apply = [&] {
+            if (app.personal_open_in_place && !lent) lent = lend_viewer(window, renderer, a, settings, filters, app, app_path.parent_path());
+            world.set_in_place(app.personal_open_in_place ? lent.get() : nullptr);
             world.set_wireframe(!app.real_graphics);
             world.set_features(app.personal_map, app.personal_compass);
             world.set_hallway_tools(app.personal_hallway_tools);
+            set_turning(world, app);
+            world.set_day_night(app.personal_day_night);
+            world.set_shaper(app.personal_shaper_radius, app.personal_shaper_strength);
+            world.set_catalogue_covers(app.personal_catalogue_covers);
         };
         apply();
         for (;;)
         {
             const auto res = world.run();
             if (world.opened()) opened = *world.opened();
+            world_to_go.reset();
+            if (res == hallway::PersonalWorld::Result::GoToWorld) world_to_go = world.worlds_parts();
             if (res != hallway::PersonalWorld::Result::System) return res;
             const std::string id = world.system();
             if (id == "settings" || id == "personal")
@@ -1924,6 +2259,7 @@ int run(const Args& a)
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
     std::optional<LocatedGo> pending_file;            // a file to walk to there (the File Locator's Go to it)
     std::optional<std::vector<uint32_t>> pending_picture; // a picture to go to there (the chat window's Go to it)
+    std::optional<sieve::WorldSpace::Parts> pending_world; // your dimension on the worlds line, to go to there (IDEAS 19.187)
     bool pending_media = false;                       // the Media Player opened there (from the main menu)
     bool skip_setup = false;                         // straight into the hallway, once
     while (true)
@@ -2021,14 +2357,26 @@ int run(const Args& a)
                     back_to_world = false;
                     continue;
                 }
-                if (res != hallway::PersonalWorld::Result::Open || !opened) continue;
-                // A favourite opened there (O): into the hallway on its line, as the settings stand, and
-                // into your hand (IDEAS 19.190).
-                pending_favourite = *opened;
-                for (const auto& d : hallway::kDimensions)
-                    if (pending_favourite->line == d.id) settings.start_line = d.line;
-                settings_chosen = true;
-                skip_setup = true;
+                if (res == hallway::PersonalWorld::Result::GoToWorld && world_to_go)
+                {
+                    // Your world's Go to it on the worlds line: into the hallway on that line, as the settings
+                    // stand, and to your world there (as the File Locator's Go to it goes to a file).
+                    pending_world = std::move(world_to_go);
+                    settings.start_line = "worlds";
+                    settings_chosen = true;
+                    skip_setup = true;
+                }
+                else
+                {
+                    if (res != hallway::PersonalWorld::Result::Open || !opened) continue;
+                    // A favourite opened there (O): into the hallway on its line, as the settings stand, and
+                    // into your hand (IDEAS 19.190).
+                    pending_favourite = *opened;
+                    for (const auto& d : hallway::kDimensions)
+                        if (pending_favourite->line == d.id) settings.start_line = d.line;
+                    settings_chosen = true;
+                    skip_setup = true;
+                }
             }
             if (r == MainMenu::Result::Systems) open_system = mm.system_root(); // the System Viewer on the system
             if (r == MainMenu::Result::Creator) open_creator = true;
@@ -2184,6 +2532,11 @@ int run(const Args& a)
             hall->go_to_picture(*pending_picture);
             pending_picture.reset();
         }
+        if (pending_world)
+        {
+            hall->go_to_world(*pending_world);
+            pending_world.reset();
+        }
         if (pending_media)
         {
             hall->open_media_from_main();
@@ -2273,6 +2626,7 @@ int run(const Args& a)
         Menu::Result in_game_menu = Menu::Result::Back;
         bool harness_went = false; // the pause menu's harness went to its model: a hallway on the AI line
         std::optional<hallway::Favourite> favourite_elsewhere; // opened in your world from the pause menu, of another line
+        std::optional<sieve::WorldSpace::Parts> world_elsewhere; // your world's Go to it, from a hallway on another line
         bool requests_waiting = false; // a request made outside the hallway's loop (your dimension's pause menu)
         for (;;)
         {
@@ -2474,6 +2828,21 @@ int run(const Args& a)
                         SDL_SetWindowRelativeMouseMode(window, false);
                         continue;
                     }
+                    if (res == hallway::PersonalWorld::Result::GoToWorld && world_to_go)
+                    {
+                        // Your world's Go to it on the worlds line: this hallway goes there where it is on
+                        // that line, else it is built again on it, as from the main menu.
+                        if (hall->on_worlds())
+                        {
+                            hall->resume();
+                            hall->go_to_world(*world_to_go);
+                        }
+                        else
+                        {
+                            world_elsewhere = std::move(world_to_go);
+                            break;
+                        }
+                    }
                     if (res == hallway::PersonalWorld::Result::Open && opened)
                     {
                         if (opened->line == hall->line_id())
@@ -2505,6 +2874,16 @@ int run(const Args& a)
             hall->set_graphics_memory(app.graphics_memory_gb);
             hall->settings_changed();
             SDL_SetWindowRelativeMouseMode(window, false);
+        }
+        if (world_elsewhere)
+        {
+            // Your world's Go to it on the worlds line, chosen from the pause menu on another line: the
+            // hallway built again on the worlds line, as the settings stand, and gone to your world there.
+            pending_world = std::move(world_elsewhere);
+            settings.start_line = "worlds";
+            show_menu = false;
+            settings_chosen = true;
+            continue;
         }
         if (favourite_elsewhere)
         {

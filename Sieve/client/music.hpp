@@ -3,8 +3,12 @@
 //
 // There are two modes, each with its own settings and its own stack of audio filters: MENUS (every
 // menu and screen that is not the world: the main menu, the setup menu, the designer, the pause
-// menu and the tools opened from it) and WORLD (walking the hallway). Each draws its melodies from
-// one of two lines, its source:
+// menu and the tools opened from it) and WORLD (walking the hallway). A third space, PERSONAL
+// (IDEAS 19.220), is your personal dimension's: its settings are not the player's but the
+// dimension's own, kept in its world file (a `music` line, SPECIFICATIONS 12.0r), so they go with
+// the dimension wherever it goes; the player is told which dimension is open (set_personal) and
+// plays its music there. A dimension without a `music` line plays WORLD's music, as every dimension
+// did before the space existed. Each draws its melodies from one of two lines, its source:
 //   - the audio line: a melody is one unit of the audio line at the mode's own length and note set
 //     (notes104, or a notes2 set of 1-4 voices);
 //   - the tracks line: a melody is a track of N such units (the mode's own N), with a blank cover
@@ -67,7 +71,8 @@
 
 namespace hallway {
 
-enum class MusicMode { Menus = 0, World = 1 };
+enum class MusicMode { Menus = 0, World = 1, Personal = 2 };
+inline constexpr int kMusicSpaces = 3; // (MENUS, WORLD and PERSONAL: the channels the mixer has)
 enum class Voice { Soft = 0, Sine, Triangle, Square };
 const char* voice_id(Voice v); // "soft", "sine", "triangle", "square"
 
@@ -101,7 +106,23 @@ struct MusicSettings
     // (By medium, not door: modes[size_t(Media::Pages)] is the pages line's, wherever its door is.)
     std::array<int, kMedia> modes = default_music_modes();
     bool fifths = false;
+    // PERSONAL only (IDEAS 19.220): the dimension's own mode (an index into the seven, as a line's is in
+    // WORLD; -1 for none, the notes as drawn), and a melody it keeps, played every time in place of one
+    // drawn by the filters (its note set's id, its units, 0 for a unit of the audio line, and its digits;
+    // empty for none). Keys of its line this build does not know are kept, to be written back.
+    int character = -1;
+    std::string melody_set;
+    uint32_t melody_units = 0;
+    std::vector<uint32_t> melody;
+    std::vector<std::string> unknown;
 };
+
+// A dimension's music as its world file's line (SPECIFICATIONS 12.0r): "music KEY=VALUE ...", no line
+// feed. And back: nullopt for a line not so written (an unknown value, a number that is not one).
+std::string personal_music_line(const MusicSettings& s);
+std::optional<MusicSettings> personal_music_of(const std::string& line);
+// What a dimension's music is, in a few words, for the readouts ("on, volume 30%, ...").
+std::string personal_music_summary(const MusicSettings& s);
 
 // The seven modes, brightest first ("lydian" ... "locrian"), and a door's name ("line.pages"
 // ... "line.binary": language keys).
@@ -124,7 +145,7 @@ struct MusicMelody
     // At most n characters: the address whole, or its first and last digits either side of "..",
     // since a track's begins with the zeros of its blank cover and title.
     std::string short_address(size_t n) const;
-    std::string where() const;    // "WORLD [BINARY]", "MENUS"
+    std::string where() const;    // "WORLD [BINARY]", "MENUS", "PERSONAL"
 };
 
 // The shapes of a track's cover and title, which its address needs: the hallway's, set when one is
@@ -147,6 +168,13 @@ public:
     MusicMode mode() const;
     // The line you are on (the hallway, on entering it and at every door): WORLD's character.
     void set_line(int li);
+    // The personal dimension open (or the one last opened, which the Media Player's PERSONAL edits): its
+    // world file, and its music (nullopt where it has none, so it plays WORLD's). Takes effect at once.
+    void set_personal(const std::filesystem::path& world, const std::optional<MusicSettings>& s);
+    std::filesystem::path personal_world() const;
+    std::optional<MusicSettings> personal() const;
+    // The space heard where the application is: PERSONAL's own where the dimension has music, else WORLD's.
+    MusicMode heard() const;
 
     // The melody in hand: square tones at 120 bpm, over the music, which fades out under it.
     std::string play_item(const sieve::NoteSet& set, const std::vector<uint32_t>& notes);
@@ -158,7 +186,9 @@ public:
     void stop_item();
 
     MusicSettings settings(MusicMode m) const;
-    void set_settings(MusicMode m, const MusicSettings& s); // applied at once, saved
+    // Applied at once, saved: MENUS and WORLD in sieve-music.ini; PERSONAL only held here (the dimension
+    // has music from then on), its world file written by whoever changed it (PersonalWorld::write_music).
+    void set_settings(MusicMode m, const MusicSettings& s);
     void next(MusicMode m);                    // a new melody now
     void play(const MusicMelody& t);           // a listed melody, now, where you are (not listed again)
 
@@ -211,7 +241,8 @@ private:
     void start_note(Channel& c, Part& p);
     void load(Channel& c, const sieve::NoteSet& set, const std::vector<uint32_t>& notes, float bpm, Voice v, float echo, float level);
     void retarget();                              // under mx_
-    void recharacter();                           // under mx_: WORLD's shifts, for the line and settings
+    void recharacter();                           // under mx_: WORLD's and PERSONAL's shifts, for the line and settings
+    int heard_locked() const;                     // under mx_: heard()
     void worker();
     std::optional<std::vector<uint32_t>> pick(const MusicSettings& s, std::string& why) const;
     void save() const;                            // under mx_
@@ -227,18 +258,20 @@ private:
     bool quit_ = false;
     MusicMode mode_ = MusicMode::Menus;
     int line_ = 0;
-    MusicSettings settings_[2];
-    Channel music_[2], item_;
+    MusicSettings settings_[kMusicSpaces];
+    bool personal_own_ = false;            // the open dimension has music of its own (settings_[Personal])
+    std::filesystem::path personal_world_; // its world file
+    Channel music_[kMusicSpaces], item_;
     // The sound in hand: its samples as -1..1, where the mixer is in them, and how far it moves a
     // sample of the mixer's (its rate over the mixer's).
     std::vector<float> sound_;
     double sound_at_ = 0, sound_step_ = 1;
     bool in_hand() const { return (item_.active && !item_.done) || !sound_.empty(); } // under mx_
-    bool skip_[2] = {false, false};
-    std::optional<MusicMelody> playing_[2];
+    bool skip_[kMusicSpaces] = {false, false, false};
+    std::optional<MusicMelody> playing_[kMusicSpaces];
     std::vector<MusicMelody> recent_, favourites_;
     std::string status_, toast_;
-    Uint64 toast_until_ = 0, retry_at_[2] = {0, 0};
+    Uint64 toast_until_ = 0, retry_at_[kMusicSpaces] = {0, 0, 0};
 };
 
 // The audio line of a note set and length (in events per voice), as the hallway makes it.
