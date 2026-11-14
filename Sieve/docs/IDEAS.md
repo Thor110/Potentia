@@ -8156,6 +8156,17 @@ renderers and systems between any of the 3D spaces", "which includes the charact
   depth test; then your dimension's objects drawn by it and its own layer taken out; then the characters'
   spheres in the Character Creator, the setup menu and your dimension. One renderer: one place to speed
   up, and one place for two-sided faces (§19.205).
+- *Its first step built (14 November 2026):* MeshBatch can now lay what it draws over what is already on
+  the screen (`begin_overlay`), take faces already placed and lit by their owner (`add_face`), put a
+  picture on a face (`add_picture`, read with perspective) and draw a wireframe's edges where nothing
+  nearer covers them (`add_edge`); your dimension's objects, their pictures and their wireframe are drawn
+  by it, seen by a camera that is the world's own eye, and its own depth layer is gone. The pictures it
+  makes are the same, pixel for pixel, as before (the wireframe, the solid view and a favourite's
+  picture, each compared). *Next, a choice:* the characters' spheres. The Character Creator and the setup
+  menu draw them as discs seen square-on (no perspective), in four drawings (pixels, wireframe, voxels,
+  shaded), far to near; as meshes in MeshBatch they would look faceted and in perspective. Kept as they
+  look, they would need MeshBatch to take a sphere as a sphere (its depth worked out at each pixel, so it
+  is exact against faces) and a square-on camera.
 
 **19.208 O in your dimension opens the hallway's own viewer, in place (Edward, 14 November 2026).** His
 words: "currently o opens an object and leads to the calculating / waiting screen", "this should seek to

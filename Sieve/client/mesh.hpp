@@ -14,6 +14,7 @@
 #pragma once
 
 #include "camera.hpp"
+#include "sieve/image.hpp" // RgbaImage: a picture on a face
 
 #include <SDL3/SDL.h>
 
@@ -102,7 +103,21 @@ public:
     MeshBatch& operator=(const MeshBatch&) = delete;
 
     void begin(const Camera& cam, SDL_Color background, int width, int height);
+    // As begin, but what is drawn is laid over what is on the screen already (the ground and sky of
+    // your dimension): where nothing is drawn, the image is clear (IDEAS 19.207: one renderer for
+    // every space).
+    void begin_overlay(const Camera& cam, int width, int height);
     void add(const Mesh& mesh, const Placement& at);
+    // One face, already placed in the world and coloured by its owner (who lights it as it likes):
+    // clipped to the near plane, depth-tested at every pixel. Whether it faces the eye is the
+    // owner's to say (a two-sided face is simply always given).
+    void add_face(const Vec3 world[3], uint32_t argb);
+    // A picture on a flat four-cornered face (corners top left, top right, bottom right, bottom
+    // left as seen), its pixels read with perspective. Left out where any corner is behind the eye.
+    // The picture must outlive draw().
+    void add_picture(const Vec3 world[4], const sieve::RgbaImage& picture);
+    // A line, drawn where nothing nearer covers it (a wireframe's edges over faces filled black).
+    void add_edge(Vec3 a, Vec3 b, uint32_t argb);
     // Rasterises everything added and draws it over the whole render target.
     void draw(SDL_Renderer* r);
     size_t drawn() const { return drawn_; } // triangles in the last draw
@@ -122,8 +137,19 @@ private:
         float A, B, C;     // 1 / camera depth over the screen: A x + B y + C (it is planar there)
         uint32_t colour;   // ARGB
         float ymin, ymax;
+        const sieve::RgbaImage* picture = nullptr; // a picture's face: u/z and v/z planar too
+        float Au = 0, Bu = 0, Cu = 0, Av = 0, Bv = 0, Cv = 0;
     };
-    void push(const Vec3* cam3, uint32_t colour, float bias);
+    struct Edge
+    {
+        float x0, y0, x1, y1; // on the screen
+        float n0, n1;         // 1 / camera depth at each end
+        uint32_t colour;
+    };
+    void push(const Vec3* cam3, uint32_t colour, float bias, const float (*uv)[2] = nullptr, const sieve::RgbaImage* picture = nullptr);
+    void clip_push(const Vec3* cam3, uint32_t colour);
+    std::vector<Edge> edges_;
+    bool overlay_ = false;
     void raster_band(int y0, int y1);
 
     const Camera* cam_ = nullptr;

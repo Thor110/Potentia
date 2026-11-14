@@ -355,9 +355,18 @@ void MeshBatch::release()
     tex_w_ = tex_h_ = 0;
 }
 
+void MeshBatch::begin_overlay(const Camera& cam, int width, int height)
+{
+    begin(cam, SDL_Color{0, 0, 0, 255}, width, height);
+    overlay_ = true;
+    bg_argb_ = 0; // (clear where nothing is drawn)
+}
+
 void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int height)
 {
     cam_ = &cam;
+    overlay_ = false;
+    edges_.clear();
     bg_ = {background.r / 255.0f, background.g / 255.0f, background.b / 255.0f, 1.0f};
     bg_argb_ = 0xFF000000u | uint32_t(background.r) << 16 | uint32_t(background.g) << 8 | uint32_t(background.b);
     w_ = std::max(1, width);
@@ -365,10 +374,11 @@ void MeshBatch::begin(const Camera& cam, SDL_Color background, int width, int he
     tris_.clear();
 }
 
-void MeshBatch::push(const Vec3* c, uint32_t colour, float bias)
+void MeshBatch::push(const Vec3* c, uint32_t colour, float bias, const float (*uv)[2], const sieve::RgbaImage* picture)
 {
     Tri t;
     t.colour = colour;
+    t.picture = picture;
     float iz[3];
     for (int i = 0; i < 3; ++i)
     {
@@ -388,7 +398,78 @@ void MeshBatch::push(const Vec3* c, uint32_t colour, float bias)
     t.A = (d1 * (t.y[2] - t.y[0]) - d2 * (t.y[1] - t.y[0])) / det;
     t.B = (d2 * (t.x[1] - t.x[0]) - d1 * (t.x[2] - t.x[0])) / det;
     t.C = iz[0] - t.A * t.x[0] - t.B * t.y[0];
+    if (picture && uv)
+    {
+        // u/z and v/z are planar on the screen as 1/z is: the same plane fit for each.
+        auto plane = [&](float q0, float q1, float q2, float& A, float& B, float& C) {
+            const float e1 = q1 - q0, e2 = q2 - q0;
+            A = (e1 * (t.y[2] - t.y[0]) - e2 * (t.y[1] - t.y[0])) / det;
+            B = (e2 * (t.x[1] - t.x[0]) - e1 * (t.x[2] - t.x[0])) / det;
+            C = q0 - A * t.x[0] - B * t.y[0];
+        };
+        plane(uv[0][0] * iz[0], uv[1][0] * iz[1], uv[2][0] * iz[2], t.Au, t.Bu, t.Cu);
+        plane(uv[0][1] * iz[0], uv[1][1] * iz[1], uv[2][1] * iz[2], t.Av, t.Bv, t.Cv);
+    }
     tris_.push_back(t);
+}
+
+// A triangle in camera space, cut at the near plane (one or two triangles, or none).
+void MeshBatch::clip_push(const Vec3* in, uint32_t colour)
+{
+    const float nz = cam_->near_z;
+    if (in[0].z >= nz && in[1].z >= nz && in[2].z >= nz)
+    {
+        push(in, colour, 0);
+        return;
+    }
+    Vec3 out[4];
+    int m = 0;
+    for (int i = 0; i < 3; ++i)
+    {
+        const Vec3 p = in[i], q = in[(i + 1) % 3];
+        if (p.z >= nz) out[m++] = p;
+        if ((p.z >= nz) != (q.z >= nz)) out[m++] = p + (q - p) * ((nz - p.z) / (q.z - p.z));
+    }
+    for (int i = 1; i + 1 < m; ++i)
+    {
+        const Vec3 tri[3] = {out[0], out[i], out[i + 1]};
+        push(tri, colour, 0);
+    }
+}
+
+void MeshBatch::add_face(const Vec3 world[3], uint32_t argb)
+{
+    const Vec3 in[3] = {cam_->to_camera(world[0]), cam_->to_camera(world[1]), cam_->to_camera(world[2])};
+    if (in[0].z < cam_->near_z && in[1].z < cam_->near_z && in[2].z < cam_->near_z) return;
+    clip_push(in, argb);
+}
+
+void MeshBatch::add_picture(const Vec3 world[4], const sieve::RgbaImage& picture)
+{
+    if (picture.width == 0 || picture.height == 0) return;
+    Vec3 c[4];
+    for (int i = 0; i < 4; ++i)
+    {
+        c[i] = cam_->to_camera(world[i]);
+        if (c[i].z < cam_->near_z) return;
+    }
+    const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    const Vec3 t1[3] = {c[0], c[1], c[2]}, t2[3] = {c[0], c[2], c[3]};
+    const float uv1[3][2] = {{uv[0][0], uv[0][1]}, {uv[1][0], uv[1][1]}, {uv[2][0], uv[2][1]}};
+    const float uv2[3][2] = {{uv[0][0], uv[0][1]}, {uv[2][0], uv[2][1]}, {uv[3][0], uv[3][1]}};
+    push(t1, 0xFF000000u, 0, uv1, &picture);
+    push(t2, 0xFF000000u, 0, uv2, &picture);
+}
+
+void MeshBatch::add_edge(Vec3 a, Vec3 b, uint32_t argb)
+{
+    Vec3 ca = cam_->to_camera(a), cb = cam_->to_camera(b);
+    const float nz = cam_->near_z;
+    if (ca.z < nz && cb.z < nz) return;
+    if (ca.z < nz) ca = ca + (cb - ca) * ((nz - ca.z) / (cb.z - ca.z));
+    else if (cb.z < nz) cb = cb + (ca - cb) * ((nz - cb.z) / (ca.z - cb.z));
+    const Point2 pa = cam_->project_camera(ca), pb = cam_->project_camera(cb);
+    edges_.push_back({pa.x, pa.y, pb.x, pb.y, 1.0f / ca.z, 1.0f / cb.z, argb});
 }
 
 void MeshBatch::add(const Mesh& mesh, const Placement& at)
@@ -491,9 +572,37 @@ void MeshBatch::raster_band(int y0, int y1)
                 if (iz > dp[x])
                 {
                     dp[x] = iz;
-                    cp[x] = t.colour;
+                    if (t.picture)
+                    {
+                        // (the picture's pixel there: u/z and v/z over 1/z, nearest)
+                        const float xc = float(x) + 0.5f;
+                        const float u = (t.Au * xc + t.Bu * yc + t.Cu) / iz, v = (t.Av * xc + t.Bv * yc + t.Cv) / iz;
+                        const sieve::RgbaImage& img = *t.picture;
+                        const uint32_t tx = std::min(img.width - 1, uint32_t(std::max(0.0f, u) * float(img.width)));
+                        const uint32_t ty = std::min(img.height - 1, uint32_t(std::max(0.0f, v) * float(img.height)));
+                        const uint8_t* q = img.rgba.data() + (size_t(ty) * img.width + tx) * 4;
+                        cp[x] = 0xFF000000u | uint32_t(q[0]) << 16 | uint32_t(q[1]) << 8 | q[2];
+                    }
+                    else cp[x] = t.colour;
                 }
             }
+        }
+    }
+    // The edges, over the faces, each pixel where nothing nearer is (with a little leeway, so a face's
+    // own edge shows on it).
+    for (const Edge& e : edges_)
+    {
+        if (std::max(e.y0, e.y1) < float(y0) || std::min(e.y0, e.y1) >= float(y1)) continue;
+        const int steps = std::max(1, int(std::ceil(std::max(std::fabs(e.x1 - e.x0), std::fabs(e.y1 - e.y0)))));
+        for (int s = 0; s <= steps; ++s)
+        {
+            const float u = float(s) / float(steps);
+            const int x = int(e.x0 + (e.x1 - e.x0) * u), y = int(e.y0 + (e.y1 - e.y0) * u);
+            if (x < 0 || x >= W || y < y0 || y >= y1) continue;
+            const float n = e.n0 + (e.n1 - e.n0) * u;
+            float& d = depth_[size_t(y) * size_t(W) + size_t(x)];
+            if (n < d * 0.995f) continue;
+            pixels_[size_t(y) * size_t(P) + size_t(x)] = e.colour;
         }
     }
 }
@@ -507,7 +616,6 @@ void MeshBatch::draw(SDL_Renderer* r)
     {
         texture_ = gpu::create(r, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w_, h_);
         if (!texture_) return;
-        SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
         SDL_SetTextureScaleMode(texture_, SDL_SCALEMODE_NEAREST);
         texture_owner_ = r;
         tex_w_ = w_;
@@ -527,6 +635,7 @@ void MeshBatch::draw(SDL_Renderer* r)
     drawn_ = tris_.size();
     SDL_UpdateTexture(texture_, nullptr, colour_.data(), w_ * 4);
     pixels_ = nullptr;
+    SDL_SetTextureBlendMode(texture_, overlay_ ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE); // (laid over what is there, or the whole screen)
     SDL_RenderTexture(r, texture_, nullptr, nullptr);
 }
 

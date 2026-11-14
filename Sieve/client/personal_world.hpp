@@ -35,6 +35,7 @@
 #include <SDL3/SDL.h>
 
 #include "sieve/character.hpp"
+#include "mesh.hpp"
 #include "slide_panel.hpp"
 #include "favourites.hpp"
 
@@ -179,18 +180,10 @@ private:
     bool author_ = true;
     float wind_ = 0;                                     // how far the clouds have drifted
     float W_ = 1280, H_ = 720;
-    // The objects placed, drawn with a test of depth at every pixel (Edward's testing, 14 November
-    // 2026: faces sorted by their middles popped in and out, the bookcase's long boards worst): each
-    // face rasterised here with its nearness (1/depth) kept a pixel, over the ground as one texture.
-    struct DepthLayer
-    {
-        int w = 0, h = 0;
-        std::vector<uint32_t> px; // ARGB; 0 where nothing is drawn
-        std::vector<float> near;  // 1/depth of what is drawn; 0 where nothing is
-        int x0 = 0, y0 = 0, x1 = -1, y1 = -1; // the region drawn on this frame
-        SDL_Texture* tex = nullptr;
-    };
-    DepthLayer layer_;
+    // The objects placed, drawn by the hallway's renderer (MeshBatch, client/mesh.hpp: a test of depth
+    // at every pixel) over the ground (IDEAS 19.207; Edward's testing, 14 November 2026: faces sorted by
+    // their middles popped in and out).
+    MeshBatch batch_;
     // A favourite's picture (favourites/SHA.png, kept by the hallway as it draws it), read once; null
     // where it has none.
     std::shared_ptr<const sieve::RgbaImage> picture_of(const std::string& sha) const;
