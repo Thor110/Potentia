@@ -8452,6 +8452,15 @@ be able to track it down like this depending on the file size".
 - *Uses:* a lost small item found from its hash alone (a favourite whose file is gone, §19.190; a hash
   quoted somewhere without the file); and, as a speed assist, a known item's place on its line checked or
   completed from a partial address. Run on the threads, as the packer's searches are.
+- *Told before it starts, always (Edward, same day: "whenever implemented we should be sure to try and
+  calculate the tractibility and search time so that we can inform the user accordingly"):* the number
+  of candidates worked out exactly from what is unknown (2 to the power of the unknown bits, or the
+  product of the choices left at each unknown place), the hashing speed measured on this machine for
+  items of that size (a short timed run first), and from them the time to try them all, and on average
+  half that to find the one: shown as a count and a time ("2^36 items, about 3 hours on this machine;
+  half that on average"), with what would cut it (each further letter or byte known halves it, or
+  better). Where the time is beyond reason (years and up), it says so plainly and does not offer to
+  start, rather than starting and never finishing.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
