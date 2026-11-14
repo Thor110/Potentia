@@ -46,6 +46,7 @@
 #include <filesystem>
 #include <functional>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <random>
 #include <set>
@@ -995,6 +996,11 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
             hall->render(); // so the key sees what you are looking at
             hall->handle(e, quit);
             std::cout << hall->status() << "\n";
+            // Where a key asked to go (a screen opened over the hallway), said, as a picture is taken
+            // here rather than going there.
+            if (hall->request() == Hallway::Request::Personal) std::cout << "goes to: Personal Dimensions\n";
+            if (hall->request() == Hallway::Request::Settings) std::cout << "goes to: Settings\n";
+            if (hall->menu_requested()) std::cout << "goes to: the setup menu\n";
         }
     return hall;
 }
@@ -1535,11 +1541,18 @@ int run(const Args& a)
         hallway::PersonalWorld world(window, renderer, std::move(chars), wf);
         world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
         world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
+        world.set_hallway_tools(app.personal_hallway_tools);
         if (a.has("pworld-walk")) world.hold(SDL_SCANCODE_W, std::stof(a.get("pworld-walk")));
         if (a.has("pworld-look")) world.look(std::stof(a.get("pworld-look")));
         if (a.has("press"))
             for (const auto& [key, mod] : parse_presses(a.get("press")))
             {
+                if (const std::string* id = hallway::item_press_id(key))
+                {
+                    // Item:ID: the pause menu's row of that name (press_names.hpp).
+                    if (!world.pause_select(*id)) throw std::invalid_argument("--press: no row '" + *id + "' in your dimension's pause menu (is it open?)");
+                    continue;
+                }
                 world.press(key, mod);
                 world.hold(SDL_SCANCODE_UNKNOWN, 1.0f / 60); // (a frame between keys: what is held follows the crosshair)
             }
@@ -1550,6 +1563,13 @@ int run(const Args& a)
         if (!save_render(renderer, a.get("screenshot"))) throw std::runtime_error(std::string("screenshot failed: ") + SDL_GetError());
         std::cout << "personal world: " << world.report() << "\n";
         if (world.opened()) std::cout << "opened: " << world.opened()->line << " " << world.opened()->sha << "\n";
+        if (world.pause_open())
+        {
+            std::string rows;
+            for (const auto& r : world.pause_list()) rows += (rows.empty() ? "" : ", ") + r;
+            std::cout << "pause menu: " << rows << "\n";
+        }
+        if (!world.system().empty()) std::cout << "goes to: " << world.system() << "\n";
         std::cout << "features: map " << (app.personal_map && !a.has("no-map") ? "on" : "off") << ", compass " << (app.personal_compass && !a.has("no-compass") ? "on" : "off") << "\n";
         std::cout << "map: " << world.map_across() << " m across\n";
         if (!hallway::PersonalWorld::catalogue_note().empty()) std::cout << "catalogue: not read: " << hallway::PersonalWorld::catalogue_note() << "\n";
@@ -1860,6 +1880,52 @@ int run(const Args& a)
     std::optional<MusicMelody> pending_melody; // a melody of the music to go to in the next hallway built
     std::optional<Space::Digits> pending_unit; // an item to hold on its COST tab there (COST's tailoring)
     std::optional<hallway::Favourite> pending_favourite; // a favourite opened in your dimension, to hold there
+    // Your personal dimension: its own world (IDEAS 19.187), your character and the store's on the
+    // hill, what you place there kept beside the settings. The same from the main menu and from the
+    // hallway's pause menu; a favourite opened there with O is given back in `opened`.
+    // Its pause menu (pause_rows.hpp): Settings, its Personal Dimensions screen and the Filter Designer
+    // open over it and come back to it; any other system's row is given back in `system`, for the
+    // caller to open (the main menu's way, or the paused hallway's).
+    auto run_personal_world = [&](std::optional<hallway::Favourite>& opened, std::string& system) {
+        std::vector<sieve::Character> chars;
+        if (auto ch = character_of(app, a)) chars.push_back(*ch);
+        for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
+        hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
+        auto apply = [&] {
+            world.set_wireframe(!app.real_graphics);
+            world.set_features(app.personal_map, app.personal_compass);
+            world.set_hallway_tools(app.personal_hallway_tools);
+        };
+        apply();
+        for (;;)
+        {
+            const auto res = world.run();
+            if (world.opened()) opened = *world.opened();
+            if (res != hallway::PersonalWorld::Result::System) return res;
+            const std::string id = world.system();
+            if (id == "settings" || id == "personal")
+            {
+                // (Personal Dimension chosen there: this one, already open)
+                MainMenu mm(window, renderer, app, app_path, display);
+                if ((id == "settings" ? mm.run_settings() : mm.run_personal()) == MainMenu::Result::Quit) return hallway::PersonalWorld::Result::Quit;
+                apply();
+                continue;
+            }
+            if (id == "designer")
+            {
+                Designer designer(window, renderer);
+                if (designer.run() == Designer::Result::Quit) return hallway::PersonalWorld::Result::Quit;
+                continue;
+            }
+            system = id;
+            return res;
+        }
+    };
+    // A system chosen in your dimension's pause menu (from the main menu): opened as the main menu opens
+    // it, and back to your dimension after (back_to_world), unless it goes into the hallway.
+    std::optional<MainMenu::Result> forced_r;
+    bool back_to_world = false;
+    std::string pending_tool; // a hallway tool to open once the hallway is built (graph, navigator)
     std::optional<sieve::AiSpace::Digits> pending_ai; // a model to go to on the AI line there (the harness's GO TO IT)
     std::optional<LocatedGo> pending_file;            // a file to walk to there (the File Locator's Go to it)
     std::optional<std::vector<uint32_t>> pending_picture; // a picture to go to there (the chat window's Go to it)
@@ -1870,7 +1936,10 @@ int run(const Args& a)
         if (show_main)
         {
             MainMenu mm(window, renderer, app, app_path, display);
-            const MainMenu::Result r = mm.run();
+            MainMenu::Result r;
+            if (forced_r) r = *forced_r, forced_r.reset();
+            else if (back_to_world) r = MainMenu::Result::Personal, back_to_world = false;
+            else r = mm.run();
             if (r == MainMenu::Result::Quit) break;
             if (r == MainMenu::Result::Locator)
             {
@@ -1925,20 +1994,38 @@ int run(const Args& a)
             }
             if (r == MainMenu::Result::Personal)
             {
-                // Your personal dimension: its own world (IDEAS 19.187), your character and the store's
-                // on the hill, what you place there kept beside the settings; Esc back to the main menu.
-                std::vector<sieve::Character> chars;
-                if (auto ch = character_of(app, a)) chars.push_back(*ch);
-                for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
-                hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
-                world.set_wireframe(!app.real_graphics);
-                world.set_features(app.personal_map, app.personal_compass);
-                const auto res = world.run();
+                // Your personal dimension (IDEAS 19.187); Esc back to the main menu.
+                std::optional<hallway::Favourite> opened;
+                std::string sys;
+                const auto res = run_personal_world(opened, sys);
                 if (res == hallway::PersonalWorld::Result::Quit) break;
-                if (res != hallway::PersonalWorld::Result::Open || !world.opened()) continue;
+                if (res == hallway::PersonalWorld::Result::System)
+                {
+                    const std::map<std::string, MainMenu::Result> as_main = {{"locator", MainMenu::Result::Locator}, {"media", MainMenu::Result::Media},
+                                                                            {"harness", MainMenu::Result::Harness}, {"cipher", MainMenu::Result::Cipher}};
+                    if (const auto it = as_main.find(sys); it != as_main.end())
+                    {
+                        forced_r = it->second;
+                        back_to_world = true;
+                        continue;
+                    }
+                    if (sys == "graph" || sys == "navigator")
+                    {
+                        // A hallway tool: into the hallway as the settings stand, and the tool open there.
+                        pending_tool = sys;
+                        settings_chosen = true;
+                        skip_setup = true;
+                    }
+                    else if (sys == "systems") open_system = "information";
+                    // ("restart": the setup menu, as Start Sieve)
+                    show_main = false;
+                    back_to_world = false;
+                    continue;
+                }
+                if (res != hallway::PersonalWorld::Result::Open || !opened) continue;
                 // A favourite opened there (O): into the hallway on its line, as the settings stand, and
                 // into your hand (IDEAS 19.190).
-                pending_favourite = *world.opened();
+                pending_favourite = *opened;
                 for (const auto& d : hallway::kDimensions)
                     if (pending_favourite->line == d.id) settings.start_line = d.line;
                 settings_chosen = true;
@@ -2100,6 +2187,11 @@ int run(const Args& a)
             hall->open_media_from_main();
             pending_media = false;
         }
+        if (!pending_tool.empty())
+        {
+            hall->open_tool(pending_tool);
+            pending_tool.clear();
+        }
         skip_setup = false;
         SDL_SetWindowRelativeMouseMode(window, true);
         // Recording (--record FILE) and replay (--replay FILE), the first hallway of the run only
@@ -2178,10 +2270,13 @@ int run(const Args& a)
         };
         Menu::Result in_game_menu = Menu::Result::Back;
         bool harness_went = false; // the pause menu's harness went to its model: a hallway on the AI line
+        std::optional<hallway::Favourite> favourite_elsewhere; // opened in your world from the pause menu, of another line
+        bool requests_waiting = false; // a request made outside the hallway's loop (your dimension's pause menu)
         for (;;)
         {
             hall->music_line(); // back from a menu (or in for the first time): the line's colours and character
-            bool quit = false;
+            bool quit = requests_waiting; // (a request already made: handled below before the hallway runs again)
+            requests_waiting = false;
             Uint64 last = SDL_GetTicksNS();
             while (!quit)
             {
@@ -2285,7 +2380,6 @@ int run(const Args& a)
             {
                 Menu menu(window, renderer, settings, filters, filters_path, &app, app_path);
                 menu.set_in_game(true);
-                if (hall->take_personal_request()) menu.open_yours();
                 if (hall->take_systems_request()) menu.open_viewer("information"); // the System Viewer; Esc back to the hallway
                 in_game_menu = menu.run();
                 if (in_game_menu == Menu::Result::Back)
@@ -2349,6 +2443,52 @@ int run(const Args& a)
                 SDL_SetWindowRelativeMouseMode(window, false);
                 continue;
             }
+            // Personal Dimensions from the pause menu: the main menu's Personal Dimensions screen over the
+            // hallway; your world from there, and then the same hallway again, still paused. A favourite
+            // opened in the world (O) is taken into this hallway's hand where it is of this line, else
+            // the hallway is built again on its line, as from the main menu.
+            if (hall->request() == Hallway::Request::Personal)
+            {
+                hall->clear_request();
+                MainMenu mm(window, renderer, app, app_path, display);
+                const MainMenu::Result pr = mm.run_personal();
+                if (pr == MainMenu::Result::Quit) break;
+                if (pr == MainMenu::Result::Personal)
+                {
+                    std::optional<hallway::Favourite> opened;
+                    std::string sys;
+                    const auto res = run_personal_world(opened, sys);
+                    if (res == hallway::PersonalWorld::Result::Quit) break;
+                    // (Settings may have been changed there: applied to this hallway as its own Settings are)
+                    hall->set_controls(app.mouse_sensitivity, app.invert_mouse_y);
+                    hall->set_graphics(app.edge_glow, app.real_graphics, app.door_portals);
+                    hall->settings_changed();
+                    if (res == hallway::PersonalWorld::Result::System)
+                    {
+                        // Another system's row: chosen on this hallway's pause menu, as if chosen there.
+                        bool q = false;
+                        hall->pause_choose_named(sys, q);
+                        if (q) requests_waiting = true; // (the hallway's loop is skipped once: its request is handled next)
+                        SDL_SetWindowRelativeMouseMode(window, false);
+                        continue;
+                    }
+                    if (res == hallway::PersonalWorld::Result::Open && opened)
+                    {
+                        if (opened->line == hall->line_id())
+                        {
+                            hall->resume(); // (the pause menu closed: the favourite in hand, in its viewer)
+                            hall->open_favourite(*opened);
+                        }
+                        else
+                        {
+                            favourite_elsewhere = *opened; // (after this loop: a hallway on its line)
+                            break;
+                        }
+                    }
+                }
+                SDL_SetWindowRelativeMouseMode(window, false);
+                continue;
+            }
             // Settings from the pause menu: the main menu's screens over the hallway, and then
             // the same hallway again, still paused, with what was changed applied to it.
             if (hall->request() != Hallway::Request::Settings) break;
@@ -2363,6 +2503,17 @@ int run(const Args& a)
             hall->set_graphics_memory(app.graphics_memory_gb);
             hall->settings_changed();
             SDL_SetWindowRelativeMouseMode(window, false);
+        }
+        if (favourite_elsewhere)
+        {
+            // A favourite of another line opened in your world from the pause menu: the hallway built
+            // again on its line, as the settings stand, and it in your hand (as from the main menu).
+            pending_favourite = *favourite_elsewhere;
+            for (const auto& d : hallway::kDimensions)
+                if (pending_favourite->line == d.id) settings.start_line = d.line;
+            show_menu = false;
+            settings_chosen = true;
+            continue;
         }
         if (hall->request() == Hallway::Request::GoToMelody && hall->melody_to_go())
         {

@@ -18,24 +18,20 @@
 
 #include "hallway.hpp"
 #include "speech.hpp"
+#include "pause_rows.hpp"
 
 namespace hallway::hall {
 
 namespace {
 
-struct PauseItem
+// The hallway's rows (pause_rows.hpp, one list for every pause menu): the main menu's systems in the
+// same order (IDEAS §19.18), with what only a walked hallway has (the node graph, the navigator)
+// after Restart. "pause.<id>" is a row's name, "pause.help.<id>" the line under the list.
+const std::vector<std::string>& hall_rows()
 {
-    const char* id; // "pause.<id>" is its name, "pause.help.<id>" the line under the list
-    bool built;
-};
-
-constexpr PauseItem kPauseItems[] = {
-    // The main menu's systems in the same order (IDEAS §19.18), with what only a walked hallway has
-    // (the node graph, the navigator) after Restart.
-    {"resume", true}, {"restart", true}, {"graph", true}, {"navigator", true}, {"locator", true}, {"media", true},
-    {"designer", true}, {"harness", true}, {"settings", true}, {"cipher", true}, {"personal", true}, {"systems", true}, {"exit", true},
-};
-constexpr int kPauseCount = int(sizeof kPauseItems / sizeof kPauseItems[0]);
+    static const std::vector<std::string> rows = pause_rows(PausePlace::Hallway);
+    return rows;
+}
 
 } // namespace
 
@@ -51,13 +47,25 @@ void Hallway::open_pause()
 bool Hallway::pause_select(const std::string& id)
 {
     if (!pause_open_) return false;
-    for (int i = 0; i < kPauseCount; ++i)
-        if (id == kPauseItems[i].id)
+    for (int i = 0; i < int(hall_rows().size()); ++i)
+        if (id == hall_rows()[size_t(i)])
         {
             pause_row_ = i;
             return true;
         }
     return false;
+}
+
+void Hallway::pause_choose_named(const std::string& id, bool& quit)
+{
+    open_pause();
+    if (pause_select(id)) pause_choose(pause_row_, quit);
+}
+
+void Hallway::open_tool(const std::string& id)
+{
+    if (id == "graph") open_graph();
+    else if (id == "navigator") open_navigator();
 }
 
 void Hallway::close_pause()
@@ -69,14 +77,8 @@ void Hallway::close_pause()
 
 void Hallway::pause_choose(int row, bool& quit)
 {
-    if (row < 0 || row >= kPauseCount) return;
-    const PauseItem& it = kPauseItems[row];
-    if (!it.built)
-    {
-        message(tr("pause.not_built"));
-        return;
-    }
-    const std::string id = it.id;
+    if (row < 0 || row >= int(hall_rows().size())) return;
+    const std::string id = hall_rows()[size_t(row)];
     if (id == "resume") close_pause();
     else if (id == "restart")
     {
@@ -89,12 +91,9 @@ void Hallway::pause_choose(int row, bool& quit)
     }
     else if (id == "personal")
     {
-        // Personal Dimensions (IDEAS 19.152): the setup menu, as Restart opens it, with the right-hand
-        // panel open on YOURS, your personal dimension.
-        close_pause();
-        menu_requested_ = true;
-        restart_from_pause_ = true;
-        personal_requested_ = true;
+        // Personal Dimensions (IDEAS 19.152, 19.187): the main menu's Personal Dimensions screen over
+        // this hallway, as Settings opens; Esc there, or from your world, comes back to it, paused.
+        request_ = Request::Personal;
         quit = true;
     }
     else if (id == "systems")
@@ -157,9 +156,9 @@ void Hallway::pause_event(const SDL_Event& e, bool& quit)
     {
     case SDLK_ESCAPE: close_pause(); break;
     case SDLK_UP:
-    case SDLK_W: pause_row_ = (pause_row_ + kPauseCount - 1) % kPauseCount; break;
+    case SDLK_W: pause_row_ = (pause_row_ + int(hall_rows().size()) - 1) % int(hall_rows().size()); break;
     case SDLK_DOWN:
-    case SDLK_S: pause_row_ = (pause_row_ + 1) % kPauseCount; break;
+    case SDLK_S: pause_row_ = (pause_row_ + 1) % int(hall_rows().size()); break;
     case SDLK_RETURN:
     case SDLK_KP_ENTER:
     case SDLK_SPACE: pause_choose(pause_row_, quit); break;
@@ -174,7 +173,7 @@ void Hallway::draw_pause(float W, float H)
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
     // As tall as its rows: the title, a row each, and the line under the list.
-    const float bw = 460, bh = 70 + 36.0f * float(kPauseCount) + 36, bx = (W - bw) / 2, by = (H - bh) / 2;
+    const float bw = 460, bh = 70 + 36.0f * float(hall_rows().size()) + 36, bx = (W - bw) / 2, by = (H - bh) / 2;
     panel(bx, by, bw, bh, 240);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect border{bx, by, bw, bh};
@@ -190,10 +189,9 @@ void Hallway::draw_pause(float W, float H)
     }
     pause_rects_.clear();
     float y = by + 70;
-    for (int i = 0; i < kPauseCount; ++i)
+    for (int i = 0; i < int(hall_rows().size()); ++i)
     {
-        const PauseItem& it = kPauseItems[i];
-        const std::string label = tr(std::string("pause.") + it.id);
+        const std::string label = tr("pause." + hall_rows()[size_t(i)]);
         const SDL_FRect row{bx + 20, y - 4, bw - 40, 28};
         pause_rects_.push_back(row);
         if (i == pause_row_)
@@ -201,13 +199,13 @@ void Hallway::draw_pause(float W, float H)
             SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 60);
             SDL_RenderFillRect(r_, &row);
         }
-        const SDL_Color c = !it.built ? grey : i == pause_row_ ? white : ink;
+        const SDL_Color c = i == pause_row_ ? white : ink;
         if (i == pause_row_) announce(label); // (read aloud when chosen, speech.hpp)
         text(bx + (bw - text_width(label, 2)) / 2, y, label, 2, c);
         y += 36;
     }
     // What the chosen item does, and what is not built yet.
-    const std::string help = tr(std::string("pause.help.") + kPauseItems[pause_row_].id);
+    const std::string help = tr("pause.help." + hall_rows()[size_t(pause_row_)]);
     text(bx + (bw - text_width(fit(help, bw - 30, 1), 1)) / 2, by + bh - 26, fit(help, bw - 30, 1), 1, grey);
 }
 

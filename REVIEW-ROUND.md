@@ -15,7 +15,10 @@ Categories (IDEAS 19.202):
 
 ## 1. For you to test (user)
 
-Tick each box (`[x]`) as it is tested; the list carries on in the next zips until every box is ticked.
+Tick each box (`[x]`) as it is tested. A change that touches something already tested unticks its box
+in the next zip (and says so in CHANGES.md), so the boxes left unticked are always what needs testing now.
+
+- [ ] **Recheck everything.** Tick this, and the next zip unticks every box below for a fresh round (and this one).
 
 ### Personal dimension (main menu > Personal Dimensions > Personal Dimension)
 - [x] 1. **Walking and looking.** WASD/arrows, mouse, Shift to run, PgUp/PgDn to look up and down. Does it feel right? Is the hill, the sky and the clouds drawn well at your window size?
@@ -29,27 +32,34 @@ Tick each box (`[x]`) as it is tested; the list carries on in the next zips unti
 - [x] 4. **Place panel (Tab while holding).** It slides in like the setup menu's panels. Up/Down choose a row, Left/Right step it (Shift ten times), type a number and Enter, and "place it here". Does the slide match the setup menu's?
 - [x] 5. **Map and compass.** The compass along the top, the map at the top right. **+ / -** zoom the map. Turn each off in Personal Dimensions > **Features** and back on.
 - [x] 6. **Real Graphics off** (Settings): everything in the dimension should be wireframe (the ground an open grid, objects edged, clouds outlined, on black), and the characters too.
-- [x] 7. **Drawing order.** Walk round the bookcase with things on it: nothing should show through what is in front of it; characters behind objects should be hidden.
+- [ ] 7. **Drawing order.** Walk round the bookcase with things on it: nothing should show through what is in front of it; characters behind objects should be hidden.
 
 ### Keys (Settings > Controls > Keys)
 - [x] 8. Every key of your dimension is listed by section (moving, catalogue, holding, map). Enter on one, press a new key (try Shift+something), check the footers in the dimension show the new key and that it works. Backspace restores the default. Is the screen readable, and does it scroll well?
 
 ### Favourites
 - [x] 9. In the hallway, take an item and press **H**: "Kept as a favourite". H again removes it. Try a page, a picture, a model (also with the models line compacted), a world, a book.
-- [x] 10. In your dimension, the catalogue lists the favourites after the shelf items. Place one, look at it, press **O**: the hallway should open on its line with the item in hand **and its viewer open** (a model on the 3D tab).
+- [ ] 10. In your dimension, the catalogue lists the favourites after the shelf items. Place one, look at it, press **O**: the hallway should open on its line with the item in hand **and its viewer open** (a model on the 3D tab).
 - [x] 11. Main menu > Personal Dimensions > **Favourites**: every favourite listed, with the Media Player's.
 
 ### The viewer (Z, or a click on the item in hand)
-- [x] 12. A **model** or **world**: opens on the **3D** tab. Arrows/WASD turn it; Tab goes to the .obj text and the picture. Is the 3D view large and clear enough?
-- [x] 13. A **file** on the binary line: a PNG/JPEG/GIF/BMP opens as its picture (a GIF plays), a text file as its text, with the bytes (HEX) as the next tab. A file of any other kind opens as hex, and the viewer says a viewer needs making. Check `viewers-needed.txt` beside your settings file.
+- [ ] 12. A **model** or **world**: opens on the **3D** tab. Arrows/WASD turn it; Tab goes to the .obj text and the picture. Is the 3D view large and clear enough?
+- [ ] 13. A **file** on the binary line: a PNG/JPEG/GIF/BMP opens as its picture (a GIF plays), a text file as its text, with the bytes (HEX) as the next tab. A file of any other kind opens as hex, and the viewer says a viewer needs making. Check `viewers-needed.txt` beside your settings file.
 
 ### Menus
-- [x] 14. Menus picked by name (`Item:ID` in `--press`) changed nothing you can see. Just check the main and pause menus still go where they should, and Back returns to the row you came from.
+- [ ] 14. Menus picked by name (`Item:ID` in `--press`) changed nothing you can see. Just check the main and pause menus still go where they should, and Back returns to the row you came from.
 
 ### Windows only (I cannot run these here)
-- [x] 15. A Release build on Windows: the hallway (the new `keys.cpp` and `picture_source.cpp` are in its build), and that step 11 (check_stat_plugin) now passes on Windows.
+- [ ] 15. A Release build on Windows: the hallway (the new `keys.cpp` and `picture_source.cpp` are in its build), and that step 11 (check_stat_plugin) now passes on Windows.
+- [ ] 16. **Version 0.13.79**: Properties > Details on Windows, and the release package's name.
+- [ ] 17. **Replays** (main menu): the words at the top say how to record a replay and that every replay is listed there.
+- [ ] 18. **The viewer's keys** at the bottom wrap upward onto more lines at a narrow window, broken only between keys. The 3D view has its own key line.
+- [ ] 19. **Personal Dimensions on the hallway's pause menu** opens the Personal Dimensions screen over the hallway (not the setup menu); Esc there, or leaving your dimension entered from there, comes back to the paused hallway.
+- [ ] 20. **Esc in your dimension** opens its pause menu, without the hallway's tools; Personal Dimensions > Features > *The hallway's tools in its pause menu* adds them. Try a few rows: Settings and the Filter Designer come back to your dimension; the File Locator, the Harness and the Encryption Engine come back to it after; the Media Player goes into the hallway.
+- [ ] 21. **A favourite placed in your dimension shows its picture** on its front (keep a page with H, place it, look at it). Item 7 is unticked as its drawing changed (a depth test at every pixel: watch the frame rate), item 10 as favourites now carry their pictures.
 
 ---
+
 
 ## 2. Already covered by CI (run once for the round)
 - Step 10 (the hallway), about 13 minutes: everything in section 1 that has an output to check.

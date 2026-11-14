@@ -6,6 +6,8 @@
 #include "favourites.hpp"
 #include "gpu_memory.hpp"
 
+#include "cli/image_io.hpp"
+#include "sieve/paths.hpp"
 #include "cli/vault.hpp"
 #include "cli/vault_decode.hpp"
 #include "cli/timings.hpp"
@@ -1949,7 +1951,11 @@ void Hallway::keep_favourite()
         warn(trf("fav.unwritable", {why}));
         return;
     }
-    if (add_to_dimension(list, f.sha, why)) message(trf("fav.kept", {f.title.empty() ? f.sha.substr(0, 12) : f.title}));
+    if (add_to_dimension(list, f.sha, why))
+    {
+        save_favourite_picture(f.sha);
+        message(trf("fav.kept", {f.title.empty() ? f.sha.substr(0, 12) : f.title}));
+    }
     else if (!why.empty()) warn(trf("fav.unwritable", {why}));
     else
     {
@@ -1985,8 +1991,33 @@ void Hallway::open_favourite(const Favourite& f)
     if (in_hand_)
     {
         hand_tab_ = 0;
+        save_favourite_picture(f.sha); // (drawn again as this hallway draws it now)
         open_viewer(); // (read in its own viewer at once, as a visitor does: IDEAS 19.192)
     }
+}
+
+// The picture on the item in hand, as this hallway draws it on its shelf (its line's settings as they
+// are now), kept beside its favourite as favourites/SHA.png: your dimension draws it on the item's
+// front (Edward's testing, 14 November 2026: "it doesn't render its imagery"). An item with no
+// picture (a file) keeps none.
+void Hallway::save_favourite_picture(const std::string& sha)
+{
+    if (!in_hand_ || favourites_base_.empty()) return;
+    const Painter paint = face_painter(*in_hand_);
+    if (!paint) return;
+    const double aspect = double(face_rect().aspect());
+    const int w = 128, h = std::clamp(int(std::lround(double(w) * aspect)), 8, 512);
+    std::vector<uint32_t> px;
+    paint(px, w, h);
+    if (px.size() < size_t(w) * size_t(h)) return;
+    std::vector<Rgb> rgb(size_t(w) * size_t(h));
+    for (size_t i = 0; i < rgb.size(); ++i) rgb[i] = Rgb{uint8_t(px[i] >> 16), uint8_t(px[i] >> 8), uint8_t(px[i])};
+    try
+    {
+        std::filesystem::create_directories(favourites_base_ / "favourites");
+        cli::write_png(sieve::u8(favourites_base_ / "favourites" / (sha + ".png")), uint32_t(w), uint32_t(h), rgb, 1);
+    }
+    catch (const std::exception&) {} // (no picture kept: the item is drawn plain)
 }
 
 void Hallway::take_hovered()

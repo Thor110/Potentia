@@ -286,9 +286,9 @@ not show in GitHub Desktop.
 
 ```sh
 python tools/make_release.py                                   # build, stage, instructions, program, map, checks
-python tools/make_release.py --version 0.13.78                  # the same, with the version given
-python tools/make_release.py --version 0.13.78 --skip-build     # the Release build is already made
-python tools/make_release.py --version 0.13.78 --seven-zip      # carry a 7z of the folder, as before v4
+python tools/make_release.py --version 0.13.79                  # the same, with the version given
+python tools/make_release.py --version 0.13.79 --skip-build     # the Release build is already made
+python tools/make_release.py --version 0.13.79 --seven-zip      # carry a 7z of the folder, as before v4
 ```
 
 It stages only what the program uses (the programs, their data folders, an empty `maps`

@@ -4299,7 +4299,7 @@ order:
    Edward released 0.13.76 on 30 October 2026, and the version became 0.13.77 (CMakeLists.txt,
    vcpkg.json, the extension's manifest and web/README, make_release.py's examples,
    SIEVE-INSTALL-USAGE, VISION) to keep the next build apart from it. He released 0.13.77 on 5
-   November 2026 (v33, posted to encode.su), and the version is now 0.13.78, in the same places. Its release notes needed hand-fixing
+   November 2026 (v33, posted to encode.su), and the version became 0.13.78, in the same places; on 14 November 2026, after his review round, it is 0.13.79. Its release notes needed hand-fixing
    (Edward: "mostly just new lines and spaces"): `make_release.py` wrapped paragraphs and list
    items, which GitHub shows as line breaks. Each is now one line; rendered with 0.13.76's values,
    the notes match Edward's fixed copy exactly.

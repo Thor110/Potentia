@@ -90,7 +90,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return out;
     }
     // A dimension's features (IDEAS 19.197): each to be turned on or off by whoever walks it.
-    case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Action, "back"}};
+    case Screen::Features: return {{Kind::Toggle, "personal_map"}, {Kind::Toggle, "personal_compass"}, {Kind::Toggle, "personal_hallway_tools"}, {Kind::Action, "back"}};
     // The System Viewer (IDEAS 19.182, 19.183): the systems charted so far, each opened in one viewer.
     case Screen::Systems: return {{Kind::Action, "systems_formats"}, {Kind::Action, "systems_language"}, {Kind::Action, "back"}};
     case Screen::Settings:
@@ -162,6 +162,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "online") return onoff(s_.online);
     if (it.id == "personal_map") return onoff(s_.personal_map);
     if (it.id == "personal_compass") return onoff(s_.personal_compass);
+    if (it.id == "personal_hallway_tools") return onoff(s_.personal_hallway_tools);
     if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
@@ -350,12 +351,17 @@ bool MainMenu::select(const std::string& id)
 void MainMenu::back()
 {
     if (!list_.empty()) { list_.clear(); return; }
+    if (rooted_ && screen_ == root_)
+    {
+        result_ = Result::Start; // back to the hallway it was opened over
+        done_ = true;
+        return;
+    }
     // Back on the row of the screen it came from, found by its name, wherever it is in the list.
     switch (screen_)
     {
     case Screen::Main: row_ = int(items().size()) - 1; return; // Esc on the main screen points at Exit (the last) rather than quitting
     case Screen::Settings:
-        if (settings_only_) { result_ = Result::Start; done_ = true; return; } // back to the hallway
         screen_ = Screen::Main;
         select("settings");
         return;
@@ -458,6 +464,7 @@ void MainMenu::change(int dir)
         else if (it.id == "ai_explorers") s_.ai_explorers = !s_.ai_explorers;
         else if (it.id == "personal_map") s_.personal_map = !s_.personal_map;
         else if (it.id == "personal_compass") s_.personal_compass = !s_.personal_compass;
+        else if (it.id == "personal_hallway_tools") s_.personal_hallway_tools = !s_.personal_hallway_tools;
         else if (it.id == "raid_share")
         {
             // Opt in: turned on, your key is made if there is none (said, with where), so what is sent
@@ -754,6 +761,9 @@ void MainMenu::render()
                           : screen_ == Screen::Favourites ? "screen.favourites"
                           : screen_ == Screen::Keys ? "screen.keys"
                                                         : nullptr;
+    // A few words under the heading, saying what the screen is for (where a screen has them).
+    const char* intro = screen_ == Screen::Replays ? "intro.replays" : nullptr;
+    const std::vector<std::string> intro_lines = intro ? split_lines(tr(intro)) : std::vector<std::string>{};
     // Everything below the title (heading, items, help, the key list) is one block, centred in
     // the space between the title and the footer; if it is taller than that, it starts at the top.
     const auto its = items();
@@ -771,7 +781,7 @@ void MainMenu::render()
     for (const auto& it : its) has_back = has_back || it.id == "back";
     // The help block is sized for the tallest item's help, so the block does not jump as you move.
     for (const auto& it : its) help_lines = std::max(help_lines, split_lines(tr(help_key(it))).size());
-    const float block = (heading ? 40.0f : 0.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
+    const float block = (heading ? 40.0f : 0.0f) + float(intro_lines.size()) * 16 + (intro_lines.empty() ? 0.0f : 12.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
     float top = 50 + 8 * ts + 60;
     const float bottom = H - 50;
@@ -784,6 +794,12 @@ void MainMenu::render()
         draw_centred(r_, cx, y, tr(heading), 2, kAccent);
         y += 40;
     }
+    for (const std::string& l : intro_lines)
+    {
+        draw_centred(r_, cx, y, l, 1, kGrey);
+        y += 16;
+    }
+    if (!intro_lines.empty()) y += 12;
 
     // Items: on the main screen, centred; on settings screens, label left and value right.
     item_rects_.clear();

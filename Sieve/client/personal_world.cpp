@@ -2,13 +2,16 @@
 #include "personal_world.hpp"
 
 #include "font.hpp"
+#include "gpu_memory.hpp"
 #include "keys.hpp"
 #include "mesh.hpp"
+#include "pause_rows.hpp"
 #include "music.hpp"
 #include "strings.hpp"
 
 #include "cli/sieve_cache.hpp"
 #include "cli/dictionaries.hpp"
+#include "cli/image_io.hpp"
 #include "sieve/paths.hpp"
 
 #include <algorithm>
@@ -88,6 +91,106 @@ SDL_FColor mix(SDL_FColor a, SDL_FColor b, float t)
 }
 
 const SDL_FColor kSkyTop{0.13f, 0.36f, 0.86f, 1}, kSkyLow{0.72f, 0.85f, 0.98f, 1}, kGrass{0.27f, 0.60f, 0.16f, 1};
+
+} // namespace
+
+PersonalWorld::~PersonalWorld() { gpu::destroy(layer_.tex); }
+
+namespace {
+
+// One face (a convex polygon of up to six points on the screen, each with its nearness, 1/depth)
+// filled into the layer where it is nearer than what is there. Nearness, unlike depth, goes evenly
+// across the screen, so it is interpolated as the screen's own coordinates are.
+template <class Layer>
+void fill_face(Layer& L, const SDL_FPoint* p, const float* nz, int count, uint32_t argb)
+{
+    for (int k = 1; k + 1 < count; ++k)
+    {
+        const SDL_FPoint a = p[0], b = p[k], c = p[k + 1];
+        const float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        if (std::fabs(area) < 1e-6f) continue;
+        const int x0 = std::max(0, int(std::floor(std::min({a.x, b.x, c.x})))), x1 = std::min(L.w - 1, int(std::ceil(std::max({a.x, b.x, c.x}))));
+        const int y0 = std::max(0, int(std::floor(std::min({a.y, b.y, c.y})))), y1 = std::min(L.h - 1, int(std::ceil(std::max({a.y, b.y, c.y}))));
+        if (x0 > x1 || y0 > y1) continue;
+        L.x0 = std::min(L.x0, x0), L.y0 = std::min(L.y0, y0), L.x1 = std::max(L.x1, x1), L.y1 = std::max(L.y1, y1);
+        const float inv = 1.0f / area;
+        for (int y = y0; y <= y1; ++y)
+        {
+            const float py = float(y) + 0.5f;
+            for (int x = x0; x <= x1; ++x)
+            {
+                const float px = float(x) + 0.5f;
+                const float l0 = ((b.x - px) * (c.y - py) - (b.y - py) * (c.x - px)) * inv;
+                const float l1 = ((c.x - px) * (a.y - py) - (c.y - py) * (a.x - px)) * inv;
+                const float l2 = 1.0f - l0 - l1;
+                if (l0 < 0 || l1 < 0 || l2 < 0) continue;
+                const float n = l0 * nz[0] + l1 * nz[k] + l2 * nz[k + 1];
+                const size_t i = size_t(y) * size_t(L.w) + size_t(x);
+                if (n <= L.near[i]) continue;
+                L.near[i] = n;
+                L.px[i] = argb;
+            }
+        }
+    }
+}
+
+// An edge, drawn where it is not behind what is drawn (a little leeway, so a face's own edge shows).
+template <class Layer>
+void edge_line(Layer& L, SDL_FPoint a, SDL_FPoint b, float na, float nb, uint32_t argb)
+{
+    const int steps = std::max(1, int(std::ceil(std::max(std::fabs(b.x - a.x), std::fabs(b.y - a.y)))));
+    for (int s = 0; s <= steps; ++s)
+    {
+        const float u = float(s) / float(steps);
+        const int x = int(a.x + (b.x - a.x) * u), y = int(a.y + (b.y - a.y) * u);
+        if (x < 0 || y < 0 || x >= L.w || y >= L.h) continue;
+        const float n = na + (nb - na) * u;
+        const size_t i = size_t(y) * size_t(L.w) + size_t(x);
+        if (n < L.near[i] * 0.995f) continue;
+        L.px[i] = argb;
+        L.x0 = std::min(L.x0, x), L.y0 = std::min(L.y0, y), L.x1 = std::max(L.x1, x), L.y1 = std::max(L.y1, y);
+    }
+}
+
+// A face with a picture on it: its colour at each pixel read from the picture, the picture's place
+// (u, v from 0 to 1) carried across as u/depth and v/depth, so it is not skewed by perspective.
+template <class Layer>
+void fill_picture(Layer& L, const SDL_FPoint* p, const float* nz, const float (*uv)[2], const sieve::RgbaImage& img)
+{
+    const SDL_FPoint a = p[0], b = p[1], c = p[2];
+    const float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (std::fabs(area) < 1e-6f || img.width == 0 || img.height == 0) return;
+    const int x0 = std::max(0, int(std::floor(std::min({a.x, b.x, c.x})))), x1 = std::min(L.w - 1, int(std::ceil(std::max({a.x, b.x, c.x}))));
+    const int y0 = std::max(0, int(std::floor(std::min({a.y, b.y, c.y})))), y1 = std::min(L.h - 1, int(std::ceil(std::max({a.y, b.y, c.y}))));
+    if (x0 > x1 || y0 > y1) return;
+    L.x0 = std::min(L.x0, x0), L.y0 = std::min(L.y0, y0), L.x1 = std::max(L.x1, x1), L.y1 = std::max(L.y1, y1);
+    const float inv = 1.0f / area;
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x)
+        {
+            const float px = float(x) + 0.5f, py = float(y) + 0.5f;
+            const float l0 = ((b.x - px) * (c.y - py) - (b.y - py) * (c.x - px)) * inv;
+            const float l1 = ((c.x - px) * (a.y - py) - (c.y - py) * (a.x - px)) * inv;
+            const float l2 = 1.0f - l0 - l1;
+            if (l0 < 0 || l1 < 0 || l2 < 0) continue;
+            const float n = l0 * nz[0] + l1 * nz[1] + l2 * nz[2];
+            const size_t i = size_t(y) * size_t(L.w) + size_t(x);
+            if (n <= L.near[i]) continue;
+            const float u = (l0 * uv[0][0] * nz[0] + l1 * uv[1][0] * nz[1] + l2 * uv[2][0] * nz[2]) / n;
+            const float v = (l0 * uv[0][1] * nz[0] + l1 * uv[1][1] * nz[1] + l2 * uv[2][1] * nz[2]) / n;
+            const uint32_t tx = std::min(img.width - 1, uint32_t(std::max(0.0f, u) * float(img.width)));
+            const uint32_t ty = std::min(img.height - 1, uint32_t(std::max(0.0f, v) * float(img.height)));
+            const uint8_t* q = img.rgba.data() + (size_t(ty) * img.width + tx) * 4;
+            L.near[i] = n;
+            L.px[i] = 0xFF000000u | uint32_t(q[0]) << 16 | uint32_t(q[1]) << 8 | q[2];
+        }
+}
+
+uint32_t argb_of(SDL_FColor c)
+{
+    auto u = [](float v) { return uint32_t(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f); };
+    return 0xFF000000u | u(c.r) << 16 | u(c.g) << 8 | u(c.b);
+}
 
 } // namespace
 
@@ -288,7 +391,6 @@ void PersonalWorld::render()
             float lift;          // (the grass's lighter crests: its height adds this much light a metre)
             unsigned edges = 7; // the wireframe's: bit k, the edge from point k to the next, is drawn
             bool obj = false;    // an object's face (its winding outward), not the ground's
-            float obj_depth = 0; // its object's middle's depth from the eye, so objects are drawn whole, far first
         };
         std::vector<World> world;
         const int n = int(2 * kHalf / kCell);
@@ -309,6 +411,13 @@ void PersonalWorld::render()
         // otherwise be painted over by it (the cell's middle can be nearer than the thing). One
         // hidden behind a hill is left out, by a line of sight to its top over the height field.
         const size_t ground_tris = world.size(); // (the ground's; the rest are objects')
+        struct Picture
+        {
+            std::array<Pt, 4> w;
+            Pt n; // its front's outward normal
+            std::shared_ptr<const sieve::RgbaImage> img;
+        };
+        std::vector<Picture> pics;
         {
             std::vector<std::pair<std::array<Pt, 3>, SDL_FColor>> faces;
             const float eye_y = height(px_, pz_) + kEye;
@@ -322,11 +431,16 @@ void PersonalWorld::render()
                 if (!seen) continue;
                 faces.clear();
                 faces_of(p, faces);
-                // (the object's middle, its model's box turned with it, as deep as the eye sees it)
-                const auto mid = middle_of(p);
-                const float mx = mid[0] - px_, my = mid[1] - eye_y, mz = mid[2] - pz_;
-                const float od = (mx * std::sin(yaw_) + mz * std::cos(yaw_)) * std::cos(pitch_) + my * std::sin(pitch_);
-                for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7, true, od});
+                for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7, true});
+                // A favourite's picture on its front, where the hallway put it on its shelf (its line's
+                // face rectangle), a few millimetres proud of the face. (Not in the wireframe.)
+                if (!wireframe_ && p.kind.rfind("fav:", 0) == 0)
+                    if (auto img = picture_of(p.kind.substr(4)))
+                    {
+                        Picture pic;
+                        pic.img = img;
+                        if (picture_quad(p, pic.w, pic.n)) pics.push_back(std::move(pic));
+                    }
             }
         }
         struct Tri
@@ -337,8 +451,9 @@ void PersonalWorld::render()
             SDL_FColor c;
             std::array<bool, 6> edge{}; // the wireframe's: the edge from point k to the next drawn
             bool object = false;
+            std::array<float, 6> nz{}; // each point's nearness (1/depth), for the depth test
         };
-        std::vector<Tri> tris;
+        std::vector<Tri> tris, objs;
         tris.reserve(world.size());
         const float cy = std::cos(yaw_), sy0 = std::sin(yaw_), cp = std::cos(pitch_), sp = std::sin(pitch_), eye = height(px_, pz_) + kEye;
         auto cam = [&](const Pt& w) {
@@ -400,30 +515,25 @@ void PersonalWorld::render()
             {
                 const Pt& q = outp[size_t(k)];
                 tr.p[size_t(k)] = {W_ / 2 + q[0] / q[2] * f, H_ / 2 - q[1] / q[2] * f};
+                tr.nz[size_t(k)] = 1.0f / q[2];
                 sum += q[2];
             }
             tr.object = size_t(&w - world.data()) >= ground_tris;
-            // (objects after the ground, their faces far first: with the faces turned away left out, a
-            // book on a shelf is nearer than the case's back and boards behind it)
-            tr.depth = sum / float(no) - (tr.object ? 1e6f : 0.0f);
-            tris.push_back(tr);
+            tr.depth = sum / float(no);
+            if (tr.object) objs.push_back(tr);
+            else tris.push_back(tr);
         }
+        // The ground far first (its cells are alike in size, so their middles order them); the
+        // objects after it, by the depth test (draw_objects).
         std::sort(tris.begin(), tris.end(), [](const Tri& a, const Tri& b) { return a.depth > b.depth; });
         if (wireframe_)
         {
-            // Far first, the ground as its open grid (the cells' sides), then each object's faces
-            // filled black and their edges drawn, so an object hides what is behind it. (The ground
-            // is not filled: on a slope seen at a low angle its long thin cells cannot be put in
-            // order by their middles, and a cell drawn out of order would hide lines that show.
-            // Objects behind a hill are already left out, by their line of sight.)
-            const SDL_FColor black{0, 0, 0, 1};
+            // Far first, the ground as its open grid (the cells' sides); the objects after, by the depth
+            // layer below. (The ground is not filled: on a slope seen at a low angle its long thin
+            // cells cannot be put in order by their middles, and a cell drawn out of order would hide
+            // lines that show. Objects behind a hill are already left out, by their line of sight.)
             for (const Tri& t : tris)
             {
-                SDL_Vertex fill[12];
-                int nf = 0;
-                for (int k = 1; k + 1 < t.count; ++k)
-                    for (const int q : {0, k, k + 1}) fill[nf++] = {t.p[size_t(q)], black, {}};
-                if (t.object) SDL_RenderGeometry(r_, nullptr, fill, nf, nullptr, 0);
                 SDL_SetRenderDrawColorFloat(r_, t.c.r, t.c.g, t.c.b, 1);
                 for (int k = 0; k < t.count; ++k)
                     if (t.edge[size_t(k)])
@@ -442,6 +552,70 @@ void PersonalWorld::render()
             for (int k = 1; k + 1 < t.count; ++k)
                 for (const int q : {0, k, k + 1}) v.push_back({t.p[size_t(q)], t.c, {}});
         SDL_RenderGeometry(r_, nullptr, v.data(), int(v.size()), nullptr, 0);
+        }
+        // The objects: every face filled into the depth layer (black in the wireframe, its edges then
+        // drawn where they are not behind a face), and the layer laid over the ground.
+        {
+            DepthLayer& L = layer_;
+            const int lw = std::max(1, int(W_)), lh = std::max(1, int(H_));
+            if (L.w != lw || L.h != lh || !L.tex)
+            {
+                gpu::destroy(L.tex);
+                L.w = lw, L.h = lh;
+                L.px.assign(size_t(lw) * size_t(lh), 0);
+                L.near.assign(size_t(lw) * size_t(lh), 0.0f);
+                L.tex = gpu::create(r_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, lw, lh);
+                if (L.tex) SDL_SetTextureBlendMode(L.tex, SDL_BLENDMODE_BLEND);
+                L.x0 = L.y0 = 0, L.x1 = lw - 1, L.y1 = lh - 1;
+            }
+            // (only the region drawn on the last frame is cleared)
+            for (int y = L.y0; y <= L.y1; ++y)
+            {
+                const size_t row = size_t(y) * size_t(L.w);
+                std::fill(L.px.begin() + std::ptrdiff_t(row + size_t(L.x0)), L.px.begin() + std::ptrdiff_t(row + size_t(L.x1) + 1), 0u);
+                std::fill(L.near.begin() + std::ptrdiff_t(row + size_t(L.x0)), L.near.begin() + std::ptrdiff_t(row + size_t(L.x1) + 1), 0.0f);
+            }
+            L.x0 = L.w, L.y0 = L.h, L.x1 = -1, L.y1 = -1;
+            for (const Tri& t : objs) fill_face(L, t.p.data(), t.nz.data(), t.count, wireframe_ ? 0xFF000000u : argb_of(t.c));
+            for (const Picture& pic : pics)
+            {
+                // (its front turned towards you, and wholly before you)
+                const float vx = pic.w[0][0] - px_, vy = pic.w[0][1] - eye, vz = pic.w[0][2] - pz_;
+                if (vx * pic.n[0] + vy * pic.n[1] + vz * pic.n[2] >= 0) continue;
+                SDL_FPoint sp[4];
+                float nz[4];
+                bool before = true;
+                for (int k = 0; k < 4 && before; ++k)
+                {
+                    const Pt q = cam(pic.w[size_t(k)]);
+                    before = q[2] >= kNear;
+                    sp[k] = {W_ / 2 + q[0] / q[2] * f, H_ / 2 - q[1] / q[2] * f};
+                    nz[k] = 1.0f / q[2];
+                }
+                if (!before) continue;
+                const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+                const SDL_FPoint t1[3] = {sp[0], sp[1], sp[2]}, t2[3] = {sp[0], sp[2], sp[3]};
+                const float n1[3] = {nz[0], nz[1], nz[2]}, n2[3] = {nz[0], nz[2], nz[3]};
+                const float uv1[3][2] = {{uv[0][0], uv[0][1]}, {uv[1][0], uv[1][1]}, {uv[2][0], uv[2][1]}};
+                const float uv2[3][2] = {{uv[0][0], uv[0][1]}, {uv[2][0], uv[2][1]}, {uv[3][0], uv[3][1]}};
+                fill_picture(L, t1, n1, uv1, *pic.img);
+                fill_picture(L, t2, n2, uv2, *pic.img);
+            }
+            if (wireframe_)
+                for (const Tri& t : objs)
+                    for (int k = 0; k < t.count; ++k)
+                        if (t.edge[size_t(k)])
+                        {
+                            const int k2 = (k + 1) % t.count;
+                            edge_line(L, t.p[size_t(k)], t.p[size_t(k2)], t.nz[size_t(k)], t.nz[size_t(k2)], argb_of(t.c));
+                        }
+            if (L.tex && L.x1 >= L.x0 && L.y1 >= L.y0)
+            {
+                const SDL_Rect rr{L.x0, L.y0, L.x1 - L.x0 + 1, L.y1 - L.y0 + 1};
+                SDL_UpdateTexture(L.tex, &rr, L.px.data() + size_t(L.y0) * size_t(L.w) + size_t(L.x0), L.w * 4);
+                const SDL_FRect fr{float(rr.x), float(rr.y), float(rr.w), float(rr.h)};
+                SDL_RenderTexture(r_, L.tex, &fr, &fr);
+            }
         }
     }
     // Your characters on the hill: yours a few steps ahead of where you began, those in your store in
@@ -584,6 +758,7 @@ void PersonalWorld::render()
                                          f(pk::kCatalogue), f(pk::kPickUp), f(pk::kOpen), f(pk::kTakeAway), f(pk::kZoomIn) + "/" + f(pk::kZoomOut)});
         draw_text(r_, 20, H_ - 24, foot, 1, white);
     }
+    if (pause_open_) draw_pause(); // (over everything)
 }
 
 // ---- the map and the compass (IDEAS 19.197)
@@ -823,6 +998,23 @@ const Favourite* PersonalWorld::favourite(const std::string& sha) const
     return nullptr;
 }
 
+std::shared_ptr<const sieve::RgbaImage> PersonalWorld::picture_of(const std::string& sha) const
+{
+    if (const auto it = pictures_.find(sha); it != pictures_.end()) return it->second;
+    std::shared_ptr<const sieve::RgbaImage> img;
+    const auto file = file_.parent_path().parent_path() / "favourites" / (sha + ".png");
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(file, ec))
+        try
+        {
+            auto frames = sieve::cli::load_image_frames(sieve::u8(file));
+            if (!frames.empty() && frames[0].width && frames[0].width <= 4096 && frames[0].height <= 4096) img = std::make_shared<const sieve::RgbaImage>(std::move(frames[0]));
+        }
+        catch (const std::exception&) {} // (a picture that cannot be read: the item drawn plain)
+    pictures_[sha] = img;
+    return img;
+}
+
 std::string PersonalWorld::mesh_kind(const std::string& kind) const
 {
     if (kind.rfind("fav:", 0) != 0) return kind;
@@ -850,16 +1042,6 @@ static std::array<float, 3> turned(const float m[3], float yaw, float pitch, flo
     const float x2 = x1 * cp - y1 * sp, y2 = x1 * sp + y1 * cp, z2 = z1;
     // yaw: +X onto (sin, cos), +Z onto (cos, -sin)
     return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
-}
-
-std::array<float, 3> PersonalWorld::middle_of(const Placed& p) const
-{
-    const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
-    if (it == shelf_items().mesh.end()) return {p.x, p.y + 0.2f, p.z};
-    const Mesh& m = *it->second;
-    const float c[3] = {(m.lo.x + m.hi.x) / 2, (m.lo.y + m.hi.y) / 2, (m.lo.z + m.hi.z) / 2};
-    const auto r = turned(c, p.yaw, p.pitch, p.roll);
-    return {p.x + r[0], p.y + r[1], p.z + r[2]};
 }
 
 void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across) const
@@ -900,6 +1082,27 @@ void PersonalWorld::faces_of(const Placed& p, std::vector<std::pair<std::array<s
         if ((ay * bz - az * by) * n[0] + (az * bx - ax * bz) * n[1] + (ax * by - ay * bx) * n[2] < 0) std::swap(w[1], w[2]);
         out.push_back({w, t.kd});
     }
+}
+
+// Where a favourite's picture goes on it, in the world: on its front (+X), its line's face rectangle
+// (as the hallway puts the picture on the item on its shelf), a few millimetres proud of the face;
+// corners top left, top right, bottom right, bottom left as you face it (your right is its -Z), and
+// the front's outward normal.
+bool PersonalWorld::picture_quad(const Placed& p, std::array<std::array<float, 3>, 4>& w, std::array<float, 3>& n) const
+{
+    const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
+    if (it == shelf_items().mesh.end()) return false;
+    const FaceRect fr = load_face_rect(mesh_kind(p.kind));
+    const float hx = it->second->hi.x + 0.004f;
+    const float corner[4][3] = {{hx, fr.top, fr.half_width}, {hx, fr.top, -fr.half_width}, {hx, fr.bottom, -fr.half_width}, {hx, fr.bottom, fr.half_width}};
+    for (int k = 0; k < 4; ++k)
+    {
+        const auto r = turned(corner[k], p.yaw, p.pitch, p.roll);
+        w[size_t(k)] = {p.x + r[0], p.y + r[1], p.z + r[2]};
+    }
+    const float fx[3] = {1, 0, 0};
+    n = turned(fx, p.yaw, p.pitch, p.roll);
+    return true;
 }
 
 // ---- holding, placing, dropping (IDEAS 19.192), and physics
@@ -1120,7 +1323,117 @@ void PersonalWorld::place_key(SDL_Keycode k, SDL_Keymod mod)
     else if (Keys::get().is(pk::kDrop, k, mod)) drop_held();
 }
 
-void PersonalWorld::press(SDL_Keycode k, SDL_Keymod mod) { key(k, mod); }
+void PersonalWorld::press(SDL_Keycode k, SDL_Keymod mod)
+{
+    if (k == SDLK_ESCAPE) escape();
+    else if (pause_open_) pause_key(k);
+    else key(k, mod);
+}
+
+// ---- the pause menu (pause_rows.hpp: the same rows as the hallway's, less its tools unless asked for)
+
+void PersonalWorld::escape()
+{
+    if (pause_open_)
+    {
+        pause_open_ = false;
+        SDL_SetWindowRelativeMouseMode(window_, true);
+        return;
+    }
+    if (cat_panel_.open || place_panel_.open)
+    {
+        cat_panel_.open = place_panel_.open = false;
+        return;
+    }
+    if (held_ >= 0)
+    {
+        put_back_held(); // (put back where it was)
+        return;
+    }
+    pause_rows_ = pause_rows(PausePlace::Personal, hallway_tools_);
+    pause_open_ = true;
+    pause_row_ = 0;
+    SDL_SetWindowRelativeMouseMode(window_, false);
+}
+
+bool PersonalWorld::pause_select(const std::string& id)
+{
+    if (!pause_open_) return false;
+    for (size_t i = 0; i < pause_rows_.size(); ++i)
+        if (pause_rows_[i] == id)
+        {
+            pause_row_ = int(i);
+            return true;
+        }
+    return false;
+}
+
+void PersonalWorld::pause_key(SDL_Keycode k)
+{
+    const int n = int(pause_rows_.size());
+    if (n == 0) return;
+    if (k == SDLK_UP || k == SDLK_W) pause_row_ = (pause_row_ + n - 1) % n;
+    else if (k == SDLK_DOWN || k == SDLK_S) pause_row_ = (pause_row_ + 1) % n;
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) pause_choose(pause_row_);
+}
+
+void PersonalWorld::pause_choose(int row)
+{
+    if (row < 0 || row >= int(pause_rows_.size())) return;
+    const std::string& id = pause_rows_[size_t(row)];
+    if (id == "resume") escape();
+    else if (id == "leave") leave_ = true;
+    else if (id == "exit") quit_ = true;
+    else system_ = id; // (opened by whoever ran this world, which comes back to it where it can)
+}
+
+void PersonalWorld::draw_pause()
+{
+    const SDL_Color ink{255, 255, 255, 255}, dim{170, 170, 180, 255};
+    SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
+    const SDL_FRect all{0, 0, W_, H_};
+    SDL_RenderFillRect(r_, &all);
+    const float rowh = std::min(32.0f, (H_ - 140) / float(std::max<size_t>(1, pause_rows_.size())));
+    const float bw = 460, bh = 70 + rowh * float(pause_rows_.size()) + 50, bx = (W_ - bw) / 2, by = (H_ - bh) / 2;
+    SDL_SetRenderDrawColor(r_, 20, 30, 40, 235);
+    const SDL_FRect box{bx, by, bw, bh};
+    SDL_RenderFillRect(r_, &box);
+    SDL_SetRenderDrawColor(r_, 255, 255, 255, 255);
+    SDL_RenderRect(r_, &box);
+    const std::string title = tr("pause.title");
+    draw_text(r_, bx + (bw - text_width(title, 3)) / 2, by + 18, title, 3, ink);
+    pause_rects_.clear();
+    float y = by + 70;
+    for (size_t i = 0; i < pause_rows_.size(); ++i)
+    {
+        const std::string label = tr_or("pause." + pause_rows_[i] + ".personal", tr("pause." + pause_rows_[i]));
+        const SDL_FRect r{bx + 20, y - 4, bw - 40, rowh - 4};
+        pause_rects_.push_back(r);
+        if (int(i) == pause_row_)
+        {
+            SDL_SetRenderDrawColor(r_, 255, 255, 255, 50);
+            SDL_RenderFillRect(r_, &r);
+        }
+        draw_text(r_, bx + (bw - text_width(label, 2)) / 2, y, label, 2, int(i) == pause_row_ ? ink : dim);
+        y += rowh;
+    }
+    const std::string& id = pause_rows_[size_t(pause_row_)];
+    std::string help = tr_or("pause.help." + id + ".personal", tr("pause.help." + id)); // (its own words here, where it has them)
+    if (is_hallway_tool(id)) help = trf("pause.help.hallway_tool", {help});
+    // (on two lines where one is too narrow, broken at a space)
+    const size_t fits = size_t(std::max(8.0f, (bw - 30) / 8));
+    std::string second;
+    if (help.size() > fits)
+    {
+        const size_t cut = help.rfind(' ', fits);
+        second = help.substr(cut == std::string::npos ? fits : cut + 1);
+        help = help.substr(0, cut == std::string::npos ? fits : cut);
+        if (second.size() > fits) second = second.substr(0, fits - 3) + "...";
+    }
+    draw_text(r_, bx + (bw - text_width(help, 1)) / 2, by + bh - 38, help, 1, dim);
+    if (!second.empty()) draw_text(r_, bx + (bw - text_width(second, 1)) / 2, by + bh - 24, second, 1, dim);
+}
 
 void PersonalWorld::place_held()
 {
@@ -1352,6 +1665,7 @@ PersonalWorld::Result PersonalWorld::run()
     SDL_SetWindowRelativeMouseMode(window_, true);
     music_mode(MusicMode::World);
     Uint64 last = SDL_GetTicksNS();
+    system_.clear();
     for (;;)
     {
         SDL_Event e;
@@ -1364,19 +1678,37 @@ PersonalWorld::Result PersonalWorld::run()
             }
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
             {
-                if (cat_panel_.open || place_panel_.open)
+                escape();
+                continue;
+            }
+            if (pause_open_)
+            {
+                // (the pause menu takes the keys and the mouse while it is in)
+                if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) pause_key(e.key.key);
+                if (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
                 {
-                    cat_panel_.open = place_panel_.open = false;
-                    continue;
+                    float x = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x, y = e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y;
+                    SDL_RenderCoordinatesFromWindow(r_, x, y, &x, &y);
+                    for (size_t i = 0; i < pause_rects_.size(); ++i)
+                    {
+                        const SDL_FRect& r = pause_rects_[i];
+                        if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+                        {
+                            pause_row_ = int(i);
+                            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) pause_choose(int(i));
+                        }
+                    }
                 }
-                if (held_ >= 0)
+                if (leave_ || quit_ || !system_.empty())
                 {
-                    put_back_held(); // (put back where it was)
-                    continue;
+                    save();
+                    pause_open_ = false;
+                    SDL_SetWindowRelativeMouseMode(window_, false);
+                    const Result r = quit_ ? Result::Quit : leave_ ? Result::Back : Result::System;
+                    leave_ = quit_ = false; // (a system comes back to this world: its pause menu closed)
+                    return r;
                 }
-                save();
-                SDL_SetWindowRelativeMouseMode(window_, false);
-                return Result::Back;
+                continue;
             }
             if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) key(e.key.key, e.key.mod);
             if (!opened_.empty())
@@ -1400,7 +1732,7 @@ PersonalWorld::Result PersonalWorld::run()
         const Uint64 now = SDL_GetTicksNS();
         const float dt = std::min(0.1f, float(double(now - last) / 1e9));
         last = now;
-        step(dt, SDL_GetKeyboardState(nullptr));
+        if (!pause_open_) step(dt, SDL_GetKeyboardState(nullptr)); // (paused: all still)
         render();
         present(r_);
     }

@@ -1459,6 +1459,9 @@ $H --no-menu --binary-length 64 --map build/maps/sealed.sieve --locate tests/man
 rm -f build/maps/sealed.sieve
 # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
 $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
+# Personal Dimensions on the pause menu opens the main menu's Personal Dimensions screen over the
+# hallway (Esc there, or from your world, back to it), not the setup menu (Edward's testing, 14 November).
+$H --no-menu --press "Escape,Item:personal,Return" --screenshot pause-personal.png | tr -d '\r' | q "^goes to: Personal Dimensions$"
 # The Media Player (pause menu, sixth row): with --media-player a silent music player is
 # made for the picture; its settings file goes where --settings says, not beside the program.
 mkdir -p mp
@@ -1492,6 +1495,14 @@ $H --personal-world --world-file pw/p.world --screenshot pworld-features.png | t
 $H --main-menu --settings pw/f.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_map,Return" --screenshot features-menu.png > /dev/null
 grep -c "^map = off" pw/f.ini | q "^1$"
 $H --personal-world --settings pw/f.ini --world-file pw/p.world --screenshot pworld-nomap.png | tr -d '\r' | q "^features: map off, compass on$"
+# Esc in your dimension opens its pause menu (Edward's testing, 14 November): the pause menus' rows
+# from one list (pause_rows.hpp), the hallway's tools left out here at first; Personal Dimensions >
+# Features puts them in (kept as [personal] hallway_tools). A system's row chosen goes to it.
+$H --personal-world --world-file pw/p.world --press "Escape" --screenshot pworld-pause.png | tr -d '\r' | q "^pause menu: resume, locator, media, designer, harness, settings, cipher, personal, systems, leave, exit$"
+$H --personal-world --world-file pw/p.world --press "Escape,Item:locator,Return" --screenshot pworld-pause2.png | tr -d '\r' | q "^goes to: locator$"
+$H --main-menu --settings pw/t.ini --press "Item:personal,Return,Item:personal_features,Return,Item:personal_hallway_tools,Return" --screenshot features-tools.png > /dev/null
+grep -c "^hallway_tools = on" pw/t.ini | q "^1$"
+$H --personal-world --settings pw/t.ini --world-file pw/p.world --press "Escape" --screenshot pworld-pause3.png | tr -d '\r' | q "^pause menu: resume, restart, graph, navigator, locator, "
 # Favourites (IDEAS 19.190): H keeps the item in hand as a favourite of your dimension (beside the
 # settings: favourites/SHA.item and worlds/personal.favourites); your dimension's catalogue lists it
 # after the shelf items, placed it stands as its line's item, O on it opens it, and the hallway takes
@@ -1500,6 +1511,9 @@ rm -rf fv && mkdir fv
 $H --no-menu --settings fv/s.ini --warp "it was the best of times" --take --press "h" --screenshot fav-keep.png | tr -d '\r' | q "Kept as a favourite of your personal dimension: it was the best of times"
 SHA=$(sed -n 2p fv/worlds/personal.favourites | tr -d '\r')
 grep -c "^title it was the best of times$" "fv/favourites/$SHA.item" | q "^1$"
+# Its picture as the hallway draws it on the shelf, kept beside it, for your dimension to draw on its
+# front (Edward's testing, 14 November: a placed page showed no imagery).
+python3 -I -c "import sys; d=open(sys.argv[1],'rb').read(24); print(d[:8]==b'\x89PNG\r\n\x1a\n', int.from_bytes(d[16:20],'big'))" "fv/favourites/$SHA.png" | tr -d '\r' | q "^True 128$"
 $H --personal-world --settings fv/s.ini --pworld-look -45 --press "Tab,Up,Return,Tab,o" --screenshot fav-open.png | tr -d '\r' | q "^opened: pages $SHA$"
 grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
 $H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"

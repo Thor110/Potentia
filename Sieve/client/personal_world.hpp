@@ -30,6 +30,8 @@
 // back when the world opens (a line not so written is left out, and said).
 #pragma once
 
+#include "sieve/image.hpp" // RgbaImage
+
 #include <SDL3/SDL.h>
 
 #include "sieve/character.hpp"
@@ -39,6 +41,8 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -52,7 +56,16 @@ public:
     static const std::vector<std::string>& catalogue();
     // Empty when every shelf item was read from shelf-items.sieve; else what could not be.
     static std::string catalogue_note();
-    enum class Result { Back, Quit, Open }; // Open: a favourite opened (O), to be read on its own line (opened())
+    // Open: a favourite opened (O), to be read on its own line (opened()). System: a row of the pause menu
+    // chosen that is another system's (system(): its id, pause_rows.hpp), to be opened by whoever ran this.
+    enum class Result { Back, Quit, Open, System };
+    const std::string& system() const { return system_; }
+    // The pause menu (Esc): its rows as pause_rows.hpp gives them for your dimension, the hallway's tools
+    // too where Personal Dimensions > Features asks (IDEAS 19.196).
+    void set_hallway_tools(bool on) { hallway_tools_ = on; }
+    bool pause_open() const { return pause_open_; }
+    const std::vector<std::string>& pause_list() const { return pause_rows_; } // (its rows while it is in)
+    bool pause_select(const std::string& id); // its row of that name chosen (Item:ID presses); false if none
     const Favourite* opened() const { return opened_.empty() ? nullptr : favourite(opened_); }
     Result run();
     // For pictures and tests: a key as if pressed and held for `seconds`, the frame drawn, and where
@@ -107,11 +120,21 @@ private:
     // An object's shape as its turns make it: the drop from its origin to its lowest point, and how
     // far it reaches across (for knocks and aiming).
     void extent_of(const Placed& p, float& low, float& high, float& across) const;
-    std::array<float, 3> middle_of(const Placed& p) const; // its model's box's middle, in the world
     std::filesystem::path file_;
     // The panels slide in from the left as the setup menu's do (slide_panel.hpp), one at a time: the
     // catalogue, and while something is in your hand, Place (its exact place and turns).
     SlidePanel cat_panel_, place_panel_;
+    // The pause menu (Esc where nothing is open or held).
+    bool pause_open_ = false, hallway_tools_ = false;
+    int pause_row_ = 0;
+    std::vector<std::string> pause_rows_;
+    std::vector<SDL_FRect> pause_rects_;
+    std::string system_;        // a system's row chosen (Result::System)
+    bool leave_ = false, quit_ = false; // Leave your dimension / Exit Sieve chosen
+    void escape();              // Esc: a panel closed, what is held put back, else the pause menu in or out
+    void pause_key(SDL_Keycode k);
+    void pause_choose(int row);
+    void draw_pause();
     int place_row_ = 0;       // Place: the row chosen (x, y, z, yaw, pitch, roll, then "place it")
     std::string place_edit_;  // Place: a number being typed into the chosen row
     void place_key(SDL_Keycode k, SDL_Keymod mod);
@@ -156,6 +179,28 @@ private:
     bool author_ = true;
     float wind_ = 0;                                     // how far the clouds have drifted
     float W_ = 1280, H_ = 720;
+    // The objects placed, drawn with a test of depth at every pixel (Edward's testing, 14 November
+    // 2026: faces sorted by their middles popped in and out, the bookcase's long boards worst): each
+    // face rasterised here with its nearness (1/depth) kept a pixel, over the ground as one texture.
+    struct DepthLayer
+    {
+        int w = 0, h = 0;
+        std::vector<uint32_t> px; // ARGB; 0 where nothing is drawn
+        std::vector<float> near;  // 1/depth of what is drawn; 0 where nothing is
+        int x0 = 0, y0 = 0, x1 = -1, y1 = -1; // the region drawn on this frame
+        SDL_Texture* tex = nullptr;
+    };
+    DepthLayer layer_;
+    // A favourite's picture (favourites/SHA.png, kept by the hallway as it draws it), read once; null
+    // where it has none.
+    std::shared_ptr<const sieve::RgbaImage> picture_of(const std::string& sha) const;
+    bool picture_quad(const Placed& p, std::array<std::array<float, 3>, 4>& w, std::array<float, 3>& n) const;
+    mutable std::map<std::string, std::shared_ptr<const sieve::RgbaImage>> pictures_;
+
+public:
+    ~PersonalWorld();
+    PersonalWorld(const PersonalWorld&) = delete;
+    PersonalWorld& operator=(const PersonalWorld&) = delete;
 };
 
 } // namespace hallway

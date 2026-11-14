@@ -37,15 +37,11 @@ public:
     const std::string& system_root() const { return system_root_; }
     // The recording chosen in the replay viewer (Result::Replay), to play in the hallway.
     const std::filesystem::path& replay_chosen() const { return replay_chosen_; }
-    // Settings alone, as the hallway's pause menu opens them: the menu starts on the Settings
-    // screen, and backing out of it ends the menu instead of going to the main screen.
-    Result run_settings()
-    {
-        screen_ = Screen::Settings;
-        row_ = 0;
-        settings_only_ = true;
-        return run();
-    }
+    // One screen and those under it, as the hallway's pause menu opens them: the menu starts on
+    // that screen, and backing out of it ends the menu (Result::Start: back to the hallway) instead
+    // of going to the main screen. Settings, and Personal Dimensions.
+    Result run_settings() { return run_rooted(Screen::Settings); }
+    Result run_personal() { return run_rooted(Screen::Personal); }
     void press(SDL_Keycode key, SDL_Keymod mod); // one key, as if typed (scripting and tests)
     void render();
     // (The completion estimate, IDEAS §19.49, each line's walk time, was drawn by the main menu
@@ -105,7 +101,16 @@ private:
     DisplayInfo display_;
     Screen screen_ = Screen::Main;
     std::string system_root_ = "information";
-    bool settings_only_ = false;
+    // Opened on one screen alone (run_rooted): backing out of it ends the menu.
+    bool rooted_ = false;
+    Screen root_{};
+    Result run_rooted(Screen s)
+    {
+        screen_ = root_ = s;
+        row_ = 0;
+        rooted_ = true;
+        return run();
+    }
     int row_ = 0;
     int spoken_screen_ = -1; // the screen last read aloud on (speech.hpp): a new one is read from its first item
     bool done_ = false;

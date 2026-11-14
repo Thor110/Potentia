@@ -7934,6 +7934,15 @@ should always keep in mind when building systems for sieve".
 - *The rule kept from now on:* build each system so it can be taken apart and put together otherwise:
   its parts named, its state as data, its look apart from what it does, nothing fixed that need not be.
   Written into the ROADMAP's rules.
+- *A first step built (14 November 2026): the pause menus as data.* Edward's testing: "the personal
+  dimensions should open a pause menu like the hallway ... setting one up specifically for the personal
+  dimensions as a default it wouldn't include hallway tools, but they could be enabled by the user".
+  Every row any pause menu can have is one list (`client/pause_rows.hpp`), each saying where it is shown
+  (the hallway, your dimension) and whether it is a hallway tool; the hallway's pause menu and your
+  dimension's both read it, a row's words from the language file (its own words in one place, where it
+  has them: `pause.<id>.personal`). Your dimension's leaves the hallway's tools out until Personal
+  Dimensions > Features puts them in. *Next:* the main menu's and the setup menu's rows the same way,
+  and the rows each place shows chosen by the person, not only the hallway's tools on or off.
 
 **19.197 A map and a compass in the personal dimensions, each a feature to turn on or off (Edward, 13
 November 2026).** His words: "a map and a compass would be worthwhile features to add to the personal
@@ -8098,6 +8107,140 @@ well as drag them around by their connections, think spore or the sims".
 - *Fits with:* §19.186 (the Character Creator and its actions), §19.194 (modelling tools in the
   dimensions: the same dragging of points), and §19.196 (one shared way of doing a thing: dragging a
   joint here and moving an object in a dimension should feel the same).
+
+**19.204 A catalogue of personal dimensions to start from: templates (Edward, 14 November 2026). An idea
+for now.** His words: "we need a catalogue of default personal dimensions you can start with", "from
+matrix like holographic spaces to desktop background plains and with all sorts of others too", "so when
+you create a personal dimension you could use that template as a base", "users could also pick and
+choose other dimensions, users, groups or otherwise such as those from games to use as their template".
+- *What it would be:* making a dimension begins by choosing a template from a catalogue: its ground (a
+  grassy hill as now, a flat plain, a grid of light, none), its sky, its light, its rules (gravity, the
+  map), and anything placed. A template is a world file (`sieve-personal-world-v2`) with its settings,
+  kept in a catalogue as the shelf items are; another person's, a group's, or a game's world is a
+  template too, copied as a start (its author named, as §19.192's authors are).
+- *Needs:* the world's ground and sky made settings rather than fixed (the seed's hill one choice of
+  several); several worlds of your own, each from its template (`worlds/NAME.world`, as favourites
+  already allow); and, for others' templates, identity and sharing (§19.178).
+
+**19.205 Faces drawn from both sides: a two-sided flag (Edward, 14 November 2026).** His words: "we may
+want to make pages two sided from a rendering perspective, this will require a double sided flag so that
+we know by default which faces need to be rendered", "this can be attached to the face counting system
+which would only be used for finalising worlds to reduce their loads", "but the two sided flag would be
+useful all around".
+- *What it is:* each face says whether it is seen from both sides. A closed object's faces are one-sided
+  (the side turned away is behind the object itself, so it is not drawn: as now); a thin thing's (a
+  sheet of paper, a leaf, a flag) are two-sided, drawn from either side, a page's picture on both.
+- *Where it lives:* in the meshes (an `.obj` cannot say it, so a material named so, or a list beside the
+  model), read by every renderer (§19.207), and by the face finder (§19.193), which keeps a two-sided face
+  wherever either side can be seen.
+
+**19.206 An interface designer: every menu laid out by the person (Edward, 14 November 2026). An idea for
+now.** His words: "an interface designer is required in order to facilitate the adjustment and creation of
+all current menus to fit their personal dimension or state space", "this would be as simple as each menu
+with an overlay that allows users to align things, move entries up or down, separate buttons from lists
+and more".
+- *What it would be:* over any menu, an overlay (a key opens it) where its rows can be moved up and down,
+  hidden, grouped, aligned, and buttons taken out of lists; what is changed kept as data beside the
+  settings, read by the menu as its layout. It needs every menu's rows as data first: the pause menus are
+  (§19.196, 14 November); the main menu's, Settings' and the setup menu's are next.
+
+**19.207 One renderer for every three-dimensional space (Edward, 14 November 2026).** His words: "we did
+do some depth buffer and sorting for the hallway itself, where possible we should seek to use the same
+renderers and systems between any of the 3D spaces", "which includes the character creator as well".
+- *Where it stands:* the hallway draws its models with `MeshBatch` (client/mesh.hpp): a depth buffer,
+  rasterised in bands on several threads. Your dimension had its faces sorted by their middles, and on
+  14 November was given a depth layer of its own (client/personal_world.cpp), which is a second copy of
+  the same idea; the Character Creator and the setup menu draw spheres sorted far to near.
+- *To do (next):* MeshBatch made able to draw over what is already drawn (the ground, the sky), to take
+  any turn (yaw, pitch and roll), to put a picture on a face, and to draw a wireframe's edges with the
+  depth test; then your dimension's objects drawn by it and its own layer taken out; then the characters'
+  spheres in the Character Creator, the setup menu and your dimension. One renderer: one place to speed
+  up, and one place for two-sided faces (§19.205).
+
+**19.208 O in your dimension opens the hallway's own viewer, in place (Edward, 14 November 2026).** His
+words: "currently o opens an object and leads to the calculating / waiting screen", "this should seek to
+just open the page as if it were the same viewer from the hallway itself", "it might need a
+'calculating...' which is small and appears over the cursor while loading its content", "though its
+content should have been loaded and cached by distance accordingly in the personal dimension".
+- *Where it stands:* O on a favourite builds a hallway on its line (the calculating screen) and opens the
+  item there. The viewer is the hallway's (client/viewer.cpp), tied to a built hallway's lines.
+- *To do:* the viewer taken out of the hallway into a part of its own that any space can open over
+  itself, given an item and what draws it; your dimension then opens it in place, over the world, with
+  a small "calculating..." by the crosshair while the item is made. The items near you made ahead of
+  time, nearest first, as the hallway makes the books it shows; a line's space (its shape, from the
+  favourite's line settings) kept once made.
+
+**19.209 The author's tools, the first a ground shaper; who may use them (Edward, 14 November 2026).** His
+words: "we need a weapon or tool for adjusting the ground, we can start with just a simple highlighter
+that points to the floor and highlights a sphere", "radius can be adjustable, then we can flatten, lower
+or raise the terrain geometry accordingly", "this could be one of many tools that the author gets given
+access to", "they can limit or prevent joining users from having access to them", "this will need a
+friends list, ruleset panel, moderation tools etc", "it can work like a weapon and be accessed with key 1
+on the keyboard as well as put away with # for now", "a simple shape / cylinder / gun that maybe has a few
+pipes going into a barrel that use the same noise pattern used for the doors in the hallway".
+- *The first tool:* key 1 takes it out, # puts it away (both on the key registry, §19.199). Held at the
+  lower right of the view: a cylinder with a few pipes into a barrel, drawn with the door portals' noise
+  (client/door_portal.cpp). Where the crosshair meets the ground a sphere is lit; the wheel (or + and -)
+  sets its radius; one button raises the ground within it, another lowers it, a third flattens it to the
+  height at its middle, each smoothly towards the edge. The ground's heights then are the world's own,
+  kept in the world file (a v3, or heights beside it), not only made from the seed.
+- *Who may use them:* every tool is the author's; a world's rules (a panel) say which tools visitors and
+  friends may use, if any. Friends, groups and moderation wait on identity (§19.178).
+
+**19.210 Saves kept across the RAID: sieved, split and shared in small parts, with limits (Edward, 14
+November 2026). Before the RAID between machines is ever switched on for people.** His words: "currently
+I think if someone turned everything on, that would equate to everyone trying to store everyones saves all
+at once which isn't feasible", "it has to be a sieved system where the files are sieved and then split out
+and stored in sectors just like real raid", "and tallied/calculated accordingly to ensure users only store
+a bit of each and everyones saves, a chunk of the data itself rather than the whole or full save itself",
+"I suspect storing individual saves would be the most efficient way to begin with until saves become
+large", "so there might be a file size storage limiter", and why: "1 if I activate it, then it exists and
+if people start using then it exists and could be bloated very fast", "2 when I activate it and people
+start using it, there is no going back".
+- *Where it stands:* the RAID between machines (§19.176, 19.150) is off unless both halves opt in, each
+  behind its own red box. Sharing sends each save whole, sealed under a key only its owner holds, to
+  every machine named in the settings file (`[raid] peers`: there is no finding of machines, so no one
+  is sent anything they did not name); serving keeps others' sealed saves within limits set there
+  (`space_mb`, 1,024 at first, and `per_peer_mb`, 64 at first, for any one address). So today it cannot
+  grow by itself: every machine is named by hand. It is the step after this, machines finding one
+  another, that would let it grow, and that is what this entry is for.
+- *What it should be before anyone else uses it:* a save is sieved first (made as small as Sieve makes
+  it), then cut into pieces with parity (erasure coding: k pieces of data and m of parity, any k of the
+  k + m enough to make it again, as RAID 6 is with two), and each piece kept by a different machine,
+  chosen by a rule everyone can work out (a hash of the piece and the machine), so no one keeps a whole
+  save of anyone else's, and no one keeps more than their share. Every machine has a limit it sets
+  (space given, and a largest piece), and the tally (who keeps what, how full each is) is checked before
+  a piece is placed; a save larger than the limits allow is refused, said, rather than spread thin.
+- *Small saves:* while saves are small, a piece per save is the simplest and costs least to look up; the
+  split begins above a size (to be measured: the cost of a lookup against the cost of keeping copies).
+- *Before it is switched on:* the format of the pieces and of the tally fixed and versioned (a
+  `sieve-raid-piece-v1`), because once people keep pieces it cannot change without moving them all;
+  a way to leave (a machine going away hands its pieces on first); and measurements of what it costs.
+  Nothing switches it on by default, and the switch stays Edward's.
+
+**19.211 Decentralised: no server needed, ever; servers only host (Edward, 14 November 2026). A rule for
+everything, written into the ROADMAP's rules.** His words: "I would like for us to overall aim for this
+system to be decentralised", "It shouldn't require a server", "Servers are things people could setup, but
+they would host dimensions like personal dimensions, group dimensions or otherwise", "At any point the
+need for a server steps into this project, it introduces the potential for people to bastardise
+everything the project aims to do", "Which is a large range of things, primarily to help track
+authorship and prevent plaigarism".
+- *What it means for what is built:* every system works on one machine with no network, and between
+  people's own machines directly (as the RAID between machines does: each machine named, each half opt
+  in). Nothing has one place everything must pass through: no account server, no central catalogue, no
+  single list of who made what.
+- *Servers allowed, as hosts only:* anyone may run one to host dimensions (personal, group or other)
+  for others to visit, as a convenience; a dimension hosted so is the same file as one kept at home, and
+  can be moved to another host or kept at home with nothing lost.
+- *Authorship without a server:* who made a thing is shown by the thing itself, not by a server's word:
+  a creator's key signs what they make (as the RAID seals saves under a key only its owner holds), the
+  item's SHA-256 names it, and its place in the state space is its address; so a claim of authorship can
+  be checked by anyone, on any machine, with nothing but the item and the key's public half. This is
+  where §19.178 (identity) and §19.192 (authors) should go: a key per person, kept by that person.
+- *Where it bears now:* §19.210 (the RAID's pieces placed by a rule every machine can work out, not by a
+  server's list), §19.204 (templates shared as files), Online (off by default, §19.189) and any finding of
+  other machines (a list kept by each person, or found on the local network; never a central directory
+  that all must use).
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

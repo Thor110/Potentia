@@ -164,6 +164,7 @@ struct AppSettings
     // Your personal dimension's features (IDEAS 19.197): the map and the compass, each on by default and
     // each to be turned off (Personal Dimensions > Features).
     bool personal_map = true, personal_compass = true;
+    bool personal_hallway_tools = false; // the hallway's tools in your dimension's pause menu too (pause_rows.hpp)
     // Keys changed from their defaults (IDEAS 19.199; keys.hpp): "SECTION/ID" to its keys, as [keys] keeps
     // them. Only what differs is kept, so a new default reaches everyone who has not changed it.
     std::map<std::string, std::string> keys;

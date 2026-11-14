@@ -119,6 +119,7 @@ file for the run they are given in. An empty default is written empty.
 | :--- | :--- | :--- |
 | `map` | `on` | your personal dimension's map, top right: the hill from above, you and what is placed (IDEAS 19.197); on by default |
 | `compass` | `on` | your personal dimension's compass, along the top: which way you face, north being +z (IDEAS 19.197); on by default |
+| `hallway_tools` | `off` | the hallway's own tools (Restart Sieve, the node graph, the navigator) in your dimension's pause menu too; off by default |
 
 ## [game]
 

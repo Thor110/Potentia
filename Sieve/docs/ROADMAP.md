@@ -41,6 +41,12 @@ for everything and anything to be dynamic and modular, such that in theory anyon
 anything". So each system's parts are named, its state is data, its look is kept apart from what it
 does, one way of doing a thing is shared rather than copied (one sliding panel, `client/slide_panel.hpp`),
 and nothing is fixed that need not be.
+**And a second: no server needed, ever** (Edward, 14 November 2026; IDEAS §19.211): "I would like for us
+to overall aim for this system to be decentralised", "It shouldn't require a server", "At any point the
+need for a server steps into this project, it introduces the potential for people to bastardise
+everything the project aims to do". So everything Sieve does works between people's own machines alone,
+or on one machine with no network at all; a server anyone sets up only hosts dimensions (personal, group
+or otherwise) and is never the one place anything must go through, nor the keeper of who made what.
 
 5c. **After the personal world, in this order** (Edward, 13 November 2026: "try to aim to do things in an
    order that makes sense and prevents having to go backwards"). First, what the rest leans on:

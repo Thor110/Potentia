@@ -257,6 +257,46 @@ inline std::vector<std::string> wrap_words(std::string s, size_t width)
     return out;
 }
 
+// A list of keys ("Tab: next view    wheel: scroll    ..."), its entries apart by three spaces or more,
+// laid out in lines of at most `width` characters, broken only between entries, so no entry is left
+// partly on one line; an entry too long for a line alone is word-wrapped. Drawn bottom line last, so a
+// footer grows upward as keys are added (Edward, 14 November 2026). One way for every key list.
+inline std::vector<std::string> wrap_keys(const std::string& s, size_t width)
+{
+    std::vector<std::string> entries;
+    for (size_t i = 0; i < s.size();)
+    {
+        const size_t gap = s.find("   ", i);
+        const size_t end = gap == std::string::npos ? s.size() : gap;
+        if (end > i) entries.push_back(s.substr(i, end - i));
+        if (gap == std::string::npos) break;
+        i = s.find_first_not_of(' ', gap);
+        if (i == std::string::npos) break;
+    }
+    std::vector<std::string> out;
+    std::string line;
+    for (const std::string& e : entries)
+    {
+        if (!line.empty() && line.size() + 4 + e.size() <= width) line += "    " + e;
+        else
+        {
+            if (!line.empty()) out.push_back(line);
+            line.clear();
+            if (e.size() <= width) line = e;
+            else
+            {
+                auto parts = wrap_words(e, width);
+                line = parts.back();
+                parts.pop_back();
+                out.insert(out.end(), parts.begin(), parts.end());
+            }
+        }
+    }
+    if (!line.empty()) out.push_back(line);
+    if (out.empty()) out.push_back("");
+    return out;
+}
+
 // For the console readout only, which scripts read line by line and terminals may not be able
 // to show. Text drawn in the hallway keeps its own characters: the font falls back per glyph.
 inline std::string ascii(const std::string& utf8)
@@ -732,6 +772,12 @@ public:
     // Item:ID in --press (press_names.hpp): the pause menu's row of that name chosen; false if it is not
     // open or has no such row.
     bool pause_select(const std::string& id);
+    // A row of the pause menu chosen by name, as if chosen there (your dimension's pause menu hands the
+    // hallway the rows that are its: pause_rows.hpp); `quit` as pause_choose sets it.
+    void pause_choose_named(const std::string& id, bool& quit);
+    // A hallway tool opened over the hallway: "graph" or "navigator" (chosen in your dimension's pause
+    // menu, where Personal Dimensions > Features asks for the hallway's tools).
+    void open_tool(const std::string& id);
 
     void render();
 
@@ -1073,7 +1119,6 @@ public:
 
     bool menu_requested() const { return menu_requested_; }
     // The setup menu was asked for by Personal Dimensions: open it on YOURS (taken once).
-    bool take_personal_request() { const bool r = personal_requested_; personal_requested_ = false; return r; }
     bool take_systems_request() { const bool r = systems_requested_; systems_requested_ = false; return r; }
     void clear_menu_request() { menu_requested_ = false; } // back from the setup menu without a new hallway
     // Back from the setup menu to this hallway: to the pause menu if Restart Sieve opened it
@@ -1422,7 +1467,7 @@ public:
     // "use"), and from COST the item to hold again (tailored_unit()) on this line.
     // GoToPicture: a picture of the chat window on an image line of another size or palette than
     // this one's (picture_to_go()), which a hallway built with that image line goes to.
-    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture, Cipher };
+    enum class Request { None, Settings, MainMenu, GoToMelody, Tailored, Designer, Harness, GoToPicture, Cipher, Personal };
     Request request() const { return request_; }
     void clear_request() { request_ = Request::None; }
     // Asked for by the Media Player's M: the designer opened on a melody filter (IDEAS 19.19).
@@ -1485,6 +1530,8 @@ public:
     const std::optional<Space::Digits>& tailored_unit() const { return tailored_unit_; }
     // The line you are on, by its --line name (dimensions.hpp): where a new hallway should start.
     const char* line_name() const { return kDimensions[li_].line; }
+    const char* line_id() const { return kDimensions[li_].id; } // as a favourite names its line
+    void resume() { if (pause_open_) close_pause(); } // the pause menu closed, as Resume closes it
     std::string tile_decimal() const { return tile_.to_decimal(); } // (a recording's start: sieve-replay-v1)
     // The item at `unit` of this line in hand, on its COST tab (after Request::Tailored).
     void hold_on_cost(const Space::Digits& unit);
@@ -1559,6 +1606,7 @@ private:
     };
     void open_viewer();
     void flag_missing_viewer(const std::string& kind);
+    void save_favourite_picture(const std::string& sha);
     void view_show(size_t at);
     void view_raw();
     std::string view_label(ViewKind k) const;
@@ -1572,6 +1620,7 @@ private:
     void view_book_page();
     std::u32string view_row(size_t r) const;
     SDL_FRect view_area() const;
+    std::vector<std::string> view_key_lines(float W) const;
     float view_content_w() const;
     float view_content_h() const;
     float view_fit_zoom() const;
@@ -1803,7 +1852,6 @@ private:
     Uint64 message_until_ = 0;
     bool message_warns_ = false; // drawn in red (warn)
     bool menu_requested_ = false;
-    bool personal_requested_ = false;
     bool systems_requested_ = false;
     bool restart_from_pause_ = false; // the setup menu was opened by the pause menu's Restart
     float look_ = 0.0025f; // radians per pixel of mouse movement
