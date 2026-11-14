@@ -7807,6 +7807,33 @@ list for example".
   was; Main menu > Personal Dimensions > Favourites lists every one, the Media Player's melodies among
   them. *Left:* each favourite's own cover on its shelf item, files and models' weights as favourites,
   and favourites of other dimensions as they come.)
+- *Favourites of any kind, sorted by category (Edward, 14 November 2026: "favourites should be able to
+  store anything, any type of data and as such favourites should have a category dropdown to accomodate
+  that"):* a favourite is a reference to anything Sieve can name: an item of any line (files and AI
+  models' weights too, which cannot be favourites yet), a place in a dimension, a world, a character, a
+  recording, a filter, a melody, a template; each kept with its category. Main menu > Personal
+  Dimensions > Favourites, your dimension's catalogue and the Media Player's list each gain a category
+  choice (a list that drops down: all, pages, pictures, sound, models, files, worlds, characters, ...),
+  the categories read from what is kept rather than fixed, so a new kind brings its own. The favourite
+  file (`sieve-favourite-v1`) gains a `category` line; one without it takes its line's.
+- *Large files and AI models' weights (Edward, same day: "it might be necessary to leave out large files
+  or AI models weights", "perhaps their hashes could be pointed to along with some amount of their
+  address", "that could then still locate it via an inverse hashing algorithm that checks for the
+  relevant hash inbetween say 0.1 and 0.2 degrees rotation", "whatever is necessary to make it tractable
+  which might not actually be feasible", "favourites can definitely store hashes for that and link to them
+  locally for the users system"):*
+  - *Hash and a local link (practical):* such a favourite keeps the item's SHA-256 and where it is on
+    this machine (its path, or the local store), the hash checked when it is opened; moved or changed, it
+    says so and can look through the person's folders for the file with that hash. Nothing large is
+    copied, nothing leaves the machine (§19.211).
+  - *Found again from part of its address (only for small items):* to search a range of addresses for
+    the one with a given hash, every address in the range is hashed, so the cost is the number of
+    addresses in it. An item's address is as long as the item: a file of 1 GB has about 8 billion bits of
+    address, and a range of 0.1 degrees of the 360 narrows that by about 12 bits, leaving about
+    2^(8 billion - 12) to try, which no machine can. A search is tractable only where the unknown part of
+    the address is a few dozen bits; that is, where nearly all of the address is kept, which is as large
+    as the item itself. So for large items the hash and the local link are the answer; the search is for
+    small ones (a short page, a melody), and could be offered there with how long it would take shown.
 
 **19.192 Holding, placing, rotating and dropping things in a dimension; authors and visitors (Edward, 13
 November 2026).** His words: "users need a way to place and rotate items in the dimensions as well",
@@ -8372,6 +8399,43 @@ from there to add more detail/depth".
   and the bias are each a row under Settings > Graphics > Real Graphics, written in the settings file,
   listed in SETTINGS.md, and read aloud with the rest. Nothing chosen for the person in code that they
   cannot change on a menu (§19.196). Kept as an idea until the voxel drawing reaches the meshes.
+
+**19.217 Dimensions as plugins in the setup menu: each one on or off, and room for others' (Edward, 14
+November 2026). An idea for now.** His words: "a plugin system for the state space setup viewer", "this
+would allow any dimension to be turned into a plugin so that you can turn them on or off and only load
+the dimensions you wish to explore", "many current dimensions can remain hardcoded as will many future
+dimensions we might want to add but some need to leave room for others to plugin to the system".
+- *What it would be:* the lines of the setup menu as a list read at start, not only the table in the
+  code (client/dimensions.hpp): Sieve's own lines stay built in, and each can be switched off (not
+  loaded, not walked, its doors closed); a plugin dimension is a folder beside the settings holding
+  what defines it (its name, its units' shape and alphabet or grammar, how a unit is drawn on its item
+  and in the viewer, its filters), read and checked as the filter plugins already are (the Filter
+  Designer's, sieve/plugin), and refused with a reason where it asks for anything a dimension may not.
+- *Fits with:* §19.196 (the setup menu's lines as data, each one shown, none hidden), the filter plugins
+  (the same checks and versioning), §19.200 (a plugin brings its own viewer, or is flagged as needing
+  one), §19.211 (shared as files, no server), and the catalogue's grammars (§19.185: a plugin's units
+  described by a grammar the catalogue can read).
+
+**19.218 A battery dimension: every arrangement of a battery's materials and parts (Edward, 14 November
+2026). An idea for now, and a first plugin dimension.** His words: "a battery state space dimension where
+research, information and results from battery production and design can be turned into its own state
+space", "which might lead to trying every possible combination of battery that could exist, or
+theoretically could", "I know that a battery state space would be a complicated endeavour, though it is
+something we could actually automate", "but the results and reality that emanates from it, are something
+that requires real world interaction, testing, design and more", "all we could automate is the
+arrangement and combination of systems or materials used to make them".
+- *What it would be:* each unit a battery written as its design: the cathode, anode and electrolyte
+  materials (from catalogues of known ones), the separator, the cell's form and sizes, the number of
+  cells and how they are joined; every combination of these an address, as every page is on the pages
+  line. Filters keep what is possible to make (materials that can be paired, sizes within limits),
+  and the catalogue's figures (from published research, each with its source) mark what is known of a
+  combination: measured, estimated, or unknown.
+- *What it is not:* it does not say how well an untested battery works. Sieve can enumerate and arrange
+  designs and show what has been measured; how one truly behaves needs making it and testing it in the
+  world, and those results come back as data with their source. Kept honest in what it shows: an unmeasured
+  combination is shown as unmeasured, never as a prediction presented as fact.
+- *Why a plugin:* it is a field of its own, with its own data and experts to keep it; a plugin dimension
+  (§19.217) lets it be made and kept by people who know batteries, outside Sieve's own code.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
