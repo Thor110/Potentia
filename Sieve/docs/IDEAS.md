@@ -9015,6 +9015,28 @@ character generation systems in the far future". A generated set of constraints 
 as limbs are generated today, driven by expressions as the body is driven by actions (§19.186). Waits on
 the DNA dimension (§19.139) and character generation being joined.
 
+**19.229 Limbs that join their spheres, and a smoother skin: the mesh scaling system as a pipeline
+(Edward, 14 November 2026). Planned after list M.** His words: "I was thinking we might want a limb like
+connection system that actually connects the spheres/circles As well as a smooth plus that tries harder to
+normalise the mesh so that they aren't so bumpy ... this system could get quite complex quite fast". Seen
+in Images/Sieve/mesh-scaling.png: the skin (§19.225) is a row of balls along each limb, bumpy where they
+meet, and apart where they do not touch.
+- *Limbs (first):* each bone, a parent sphere and its child, joined by a rounded cone (wide at one
+  sphere, narrowing to the other) put into the skin's distance field beside the spheres. So every
+  drawing made from the field has its limbs at once (voxels, skin, quads, smooth); it bridges the gaps
+  the blend cannot (§19.225's left items; seed 12345 broken apart on the lattice, §19.216), and a limb
+  is smooth along its length. A switch, off giving today's skin exactly.
+- *Smooth plus, the surface:* the skin's corners moved towards their neighbours' average a few rounds,
+  pushed in and out by turns so the shape does not shrink (Taubin's smoothing); its rounds a setting.
+- *Smooth plus, the outline:* the quads (§19.214) subdivided a step at a time (Catmull and Clark's), so
+  the silhouette is round as well as the light (R5's left item).
+- *Kept from growing complex:* the system as a pipeline, each stage made only from the one before it:
+  spheres and bones, the field (with the limbs), the skin, the smoothing, the subdivision, the drawing.
+  Each stage one library function and one setting ("off" gives the stage before it exactly), kept by
+  what it was made from (a still character costs nothing), its readout saying what it made and how long
+  it took. Each built, compared with the stage before it and measured on its own; later stages (the
+  texture, §19.227; the face, §19.228) are added the same way without changing those before them.
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non

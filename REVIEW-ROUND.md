@@ -119,6 +119,9 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] R4. Add/remove limbs and drag joints (19.203). *Made 14 November 2026.*
 - [x] R5. A shell grown over the spheres, for quads and smooth surfaces (19.214). *Made 14 November 2026.*
 - [x] R6. The skin: a stage of the mesh scaling system wrapping the spheres in one smooth surface (a field, marching cubes), its blend a setting, measured against the other drawings (19.225). R5's first step. *Made 14 November 2026.*
+- R7. Limbs that join their spheres: a rounded cone for each bone in the skin's field, a switch (19.229). *After list M (Edward, 14 November 2026).*
+- R8. Smooth plus: the skin's surface smoothed (Taubin), its rounds a setting (19.229). *After R7.*
+- R9. The quads subdivided (Catmull–Clark) so the outline is round too, its steps a setting (19.229). *After R8.*
 
 ### List M: menus and keys `[04]` + `[10]` + you, one sitting in Settings > Keys
 - M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so
