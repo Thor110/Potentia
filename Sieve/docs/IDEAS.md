@@ -8461,6 +8461,17 @@ be able to track it down like this depending on the file size".
   half that on average"), with what would cut it (each further letter or byte known halves it, or
   better). Where the time is beyond reason (years and up), it says so plainly and does not offer to
   start, rather than starting and never finishing.
+- *In parallel (Edward, same day: "searches like this could be done in a parralel nature across threads",
+  "each thread could take a division of the line and search from there, stepping forwards and backwards
+  an interval in rotation until they all meet one by one"):* each candidate is hashed on its own, so the
+  range divides among the threads with nothing shared but "found" (N threads, about N times as fast;
+  the time shown first divided so). Each thread starts at its division's point and steps forwards and
+  backwards in turn until it meets its neighbours. Where nothing is known of where the item lies, every
+  place is as likely as any other and the order changes nothing on average; where there is a best guess
+  (a rough place, an angle), the threads start about it and spread outwards, so the likeliest are tried
+  first and it is found sooner on average. The same division would spread across machines that opt in
+  (each a share, as the RAID's machines are named: §19.210, §19.211), each told its share and reporting
+  only "found" or "not in mine".
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

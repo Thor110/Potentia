@@ -1,8 +1,8 @@
-# Idea: the hash search tells its cost first
+# Idea: the hash search in parallel
 
-- IDEAS 19.219 gains: before any search, the number of candidates worked out exactly from what is unknown, the hashing speed measured on this machine, and the time to try them all (half on average) shown, with what would cut it; beyond reason, it says so and does not offer to start.
+- IDEAS 19.219 gains: the range divided among threads (about N times as fast with N), each stepping forwards and backwards from its division's point until it meets its neighbours; with a best guess of the place, the threads start about it and spread outwards so the likeliest are tried first. The same division could spread across machines that opt in.
 
-Docs only. The example figure in it (2^36 items, about 3 hours) is an illustration of the wording, not a measurement.
+Docs only.
 
 ## Files to delete by hand
 - None.
