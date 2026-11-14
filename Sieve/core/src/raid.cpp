@@ -8,10 +8,16 @@
 // settled by open, democratic debate; IDEAS 19.177.)
 #include "sieve/raid.hpp"
 
+#include "sieve/hex.hpp"
+#include "sieve/seal.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 #include "raid_files.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -19,6 +25,19 @@
 #include <set>
 #include <stdexcept>
 #include <system_error>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 namespace sieve {
 
@@ -29,15 +48,60 @@ namespace {
 using raid_files::read_file;
 using raid_files::write_file;
 
-bool is_hex64(const std::string& s)
-{
-    return s.size() == 64 && s.find_first_not_of("0123456789abcdef") == std::string::npos;
-}
-
 fs::path chunk_path(const fs::path& folder, const std::string& h) { return folder / "chunks" / h.substr(0, 2) / h; }
 fs::path manifest_path(const fs::path& folder, const std::string& id) { return folder / "manifests" / (id + ".manifest"); }
 
-std::string sha_hex(const std::string& bytes) { return Sha256::hex(Sha256::hash(bytes)); }
+// A new folder's id: 32 hex digits, the start of the SHA-256 of everything that tells this folder from
+// any other, so that no one of them failing can make two folders alike (Edward, 14 November 2026:
+// "could you not combine it with the system id? ... yes, hash them"). Some MinGW builds'
+// std::random_device gives a fixed sequence (seal.cpp), which alone would give every new folder the
+// same id and have the RAID refuse the second as "a folder given twice". Mixed in: the system's
+// random bytes (as a key is made, where it answers), this machine's id where the system keeps one,
+// the drive the folder is on and the folder's own number on it (two folders never share both), and
+// the time to the clock's finest step. Hashed, so nothing of the machine can be read from the id,
+// which travels with the folder; and still 32 hex digits, as every folder made before has.
+std::string new_folder_id(const fs::path& folder)
+{
+    std::string mix = "sieve-raid folder id\n";
+    try
+    {
+        const SealKey r = new_seal_key();
+        mix.append(reinterpret_cast<const char*>(r.data()), r.size());
+    }
+    catch (const std::exception&)
+    {
+        mix += "(no system random bytes)\n";
+    }
+    {
+        std::random_device rd; // (more, where it is good; harmless where it is not)
+        for (int i = 0; i < 4; ++i) mix += std::to_string(rd()) + " ";
+    }
+#ifdef _WIN32
+    const HANDLE h = CreateFileW(folder.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h != INVALID_HANDLE_VALUE)
+    {
+        BY_HANDLE_FILE_INFORMATION info{};
+        if (GetFileInformationByHandle(h, &info))
+            mix += "drive " + std::to_string(info.dwVolumeSerialNumber) + " folder " + std::to_string((uint64_t(info.nFileIndexHigh) << 32) | info.nFileIndexLow) + "\n";
+        CloseHandle(h);
+    }
+#else
+    for (const char* f : {"/etc/machine-id", "/var/lib/dbus/machine-id"})
+        if (const auto t = raid_files::read_file(f))
+        {
+            mix += *t;
+            break;
+        }
+    char host[256] = {};
+    if (gethostname(host, sizeof host - 1) == 0) mix += std::string("host ") + host + "\n";
+    struct stat st{};
+    if (stat(folder.c_str(), &st) == 0) mix += "drive " + std::to_string(uint64_t(st.st_dev)) + " folder " + std::to_string(uint64_t(st.st_ino)) + "\n";
+#endif
+    mix += "path " + folder.lexically_normal().generic_string() + "\n";
+    mix += "time " + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + " " +
+           std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "\n";
+    return Sha256::hex_hash(mix).substr(0, 32);
+}
 
 } // namespace
 
@@ -81,25 +145,19 @@ std::string RaidManifest::text() const
     return t;
 }
 
-std::string RaidManifest::id() const { return sha_hex(text()); }
+std::string RaidManifest::id() const { return Sha256::hex_hash(text()); }
 
 RaidManifest read_raid_manifest(const std::string& text)
 {
     std::vector<std::string> lines;
-    for (size_t i = 0; i < text.size();)
-    {
-        const size_t e = text.find('\n', i);
-        if (e == std::string::npos) throw std::invalid_argument("a manifest's last line has no line feed");
-        lines.push_back(text.substr(i, e - i));
-        i = e + 1;
-    }
+    if (!lf_lines(text, lines)) throw std::invalid_argument("a manifest's last line has no line feed");
     if (lines.size() < 4 || lines[0] != kRaidManifestVersion) throw std::invalid_argument(std::string("not a manifest: it does not start with ") + kRaidManifestVersion);
     RaidManifest m;
     if (lines[1].rfind("name ", 0) != 0) throw std::invalid_argument("a manifest's second line is its name");
     m.name = lines[1].substr(5);
     auto number = [](const std::string& s) {
-        if (s.empty() || s.size() > 19 || s.find_first_not_of("0123456789") != std::string::npos) throw std::invalid_argument("not a number: " + s);
-        return uint64_t(std::stoull(s));
+        if (const auto v = decimal_u64(s)) return *v;
+        throw std::invalid_argument("not a number: " + s);
     };
     if (lines[2].rfind("size ", 0) != 0) throw std::invalid_argument("a manifest's third line is its size");
     m.size = number(lines[2].substr(5));
@@ -107,7 +165,7 @@ RaidManifest read_raid_manifest(const std::string& text)
     const std::string prev = lines[3].substr(9);
     if (prev != "none")
     {
-        if (!is_hex64(prev)) throw std::invalid_argument("previous: not a SHA-256: " + prev);
+        if (!is_sha256_hex(prev)) throw std::invalid_argument("previous: not a SHA-256: " + prev);
         m.previous = prev;
     }
     uint64_t total = 0;
@@ -116,7 +174,7 @@ RaidManifest read_raid_manifest(const std::string& text)
         const std::string& l = lines[i];
         if (l.size() < 6 + 64 + 2 || l.rfind("chunk ", 0) != 0 || l[70] != ' ') throw std::invalid_argument("not a chunk's line: " + l);
         const std::string h = l.substr(6, 64);
-        if (!is_hex64(h)) throw std::invalid_argument("not a SHA-256: " + h);
+        if (!is_sha256_hex(h)) throw std::invalid_argument("not a SHA-256: " + h);
         const uint64_t n = number(l.substr(71));
         if (n == 0 || n > kRaidChunk) throw std::invalid_argument("a chunk's length is out of range: " + l);
         m.chunks.push_back({h, n});
@@ -132,39 +190,23 @@ Raid::Raid(std::vector<fs::path> folders, uint32_t copies) : folders_(std::move(
     if (folders_.empty()) throw std::invalid_argument("a RAID needs at least one folder");
     for (const fs::path& f : folders_)
     {
-        std::error_code ec;
-        fs::create_directories(f, ec);
-        if (!fs::is_directory(f, ec)) throw std::invalid_argument("not a folder, and cannot be made one: " + f.string());
-        const fs::path tag = f / "sieve-raid";
-        std::string id;
-        if (const auto t = read_file(tag))
-        {
-            const std::string want = std::string(kRaidVersion) + " id=";
-            if (t->rfind(want, 0) != 0 || t->size() < want.size() + 32) throw std::invalid_argument(f.string() + "'s sieve-raid file is not " + kRaidVersion);
-            id = t->substr(want.size(), 32);
-            if (id.find_first_not_of("0123456789abcdef") != std::string::npos) throw std::invalid_argument(f.string() + "'s sieve-raid id is not hex");
-        }
-        else
-        {
-            std::random_device rd;
-            static const char* kHex = "0123456789abcdef";
-            for (int i = 0; i < 32; ++i) id += kHex[rd() & 15];
-            if (!write_file(tag, std::string(kRaidVersion) + " id=" + id + "\n")) throw std::invalid_argument("cannot write " + tag.string());
-        }
+        const std::string id = raid_files::folder_tag(f, "sieve-raid", kRaidVersion, "id", "sieve-raid id", [&f] { return new_folder_id(f); });
         if (std::find(ids_.begin(), ids_.end(), id) != ids_.end()) throw std::invalid_argument(f.string() + " is a folder given twice (the same sieve-raid id)");
         ids_.push_back(id);
     }
 }
 
-std::vector<size_t> Raid::homes(const std::string& chunk) const
+std::vector<size_t> raid_rank(const std::string& name, const std::vector<std::string>& keys)
 {
     std::vector<std::pair<std::string, size_t>> rank;
-    for (size_t i = 0; i < ids_.size(); ++i) rank.push_back({sha_hex(chunk + ids_[i]), i});
+    for (size_t i = 0; i < keys.size(); ++i) rank.push_back({Sha256::hex_hash(name + keys[i]), i});
     std::sort(rank.begin(), rank.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
     std::vector<size_t> out;
     for (const auto& r : rank) out.push_back(r.second);
     return out;
 }
+
+std::vector<size_t> Raid::homes(const std::string& chunk) const { return raid_rank(chunk, ids_); }
 
 std::string Raid::put(const std::string& name, const std::string& bytes)
 {
@@ -174,7 +216,7 @@ std::string Raid::put(const std::string& name, const std::string& bytes)
     m.name = name;
     m.size = bytes.size();
     const auto cuts = raid_cut(bytes);
-    for (const auto& [at, n] : cuts) m.chunks.push_back({sha_hex(bytes.substr(at, n)), n});
+    for (const auto& [at, n] : cuts) m.chunks.push_back({Sha256::hex_hash(bytes.substr(at, n)), n});
     if (const auto last = latest(name))
     {
         bool same = false;
@@ -227,14 +269,8 @@ std::string Raid::put(const std::string& name, const std::string& bytes)
 
 std::string Raid::get(const std::string& version) const
 {
-    if (!is_hex64(version)) throw std::invalid_argument("not a version id (64 hex digits): " + version);
-    std::optional<RaidManifest> m;
-    for (const fs::path& f : folders_)
-        if (const auto t = read_file(manifest_path(f, version)); t && sha_hex(*t) == version)
-        {
-            m = read_raid_manifest(*t);
-            break;
-        }
+    if (!is_sha256_hex(version)) throw std::invalid_argument("not a version id (64 hex digits): " + version);
+    const std::optional<RaidManifest> m = manifest(version);
     if (!m) throw std::runtime_error("no good copy of version " + version + " in any folder");
     std::string out;
     out.reserve(size_t(m->size));
@@ -242,7 +278,7 @@ std::string Raid::get(const std::string& version) const
     {
         bool found = false;
         for (const size_t i : homes(h))
-            if (const auto c = read_file(chunk_path(folders_[i], h)); c && c->size() == n && sha_hex(*c) == h)
+            if (const auto c = read_file(chunk_path(folders_[i], h)); c && c->size() == n && Sha256::hex_hash(*c) == h)
             {
                 out += *c;
                 found = true;
@@ -251,6 +287,14 @@ std::string Raid::get(const std::string& version) const
         if (!found) throw std::runtime_error("chunk " + h + " has no good copy in any folder (repair cannot help: it is lost)");
     }
     return out;
+}
+
+std::optional<RaidManifest> Raid::manifest(const std::string& version) const
+{
+    if (!is_sha256_hex(version)) return std::nullopt; // (never a path made of anything else)
+    for (const fs::path& f : folders_)
+        if (const auto t = read_file(manifest_path(f, version)); t && Sha256::hex_hash(*t) == version) return read_raid_manifest(*t);
+    return std::nullopt;
 }
 
 std::vector<RaidManifest> Raid::list() const
@@ -263,9 +307,9 @@ std::vector<RaidManifest> Raid::list() const
         {
             if (e.path().extension() != ".manifest") continue;
             const std::string id = e.path().stem().string();
-            if (all.count(id) || !is_hex64(id)) continue;
+            if (all.count(id) || !is_sha256_hex(id)) continue;
             const auto t = read_file(e.path());
-            if (!t || sha_hex(*t) != id) continue;
+            if (!t || Sha256::hex_hash(*t) != id) continue;
             try
             {
                 all.emplace(id, read_raid_manifest(*t));
@@ -360,7 +404,7 @@ RaidReport Raid::check(bool fix) const
         {
             const auto c = read_file(chunk_path(folders_[i], h));
             if (!c) continue;
-            if (c->size() == n && sha_hex(*c) == h)
+            if (c->size() == n && Sha256::hex_hash(*c) == h)
             {
                 have.push_back(i);
                 if (!good) good = *c;
