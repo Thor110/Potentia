@@ -1,23 +1,25 @@
-# Your character is you; the System Viewer back to your dimension; the task list in lists
+# Your characters are objects in your dimension
 
-## Your character in the hallway
-- It is no longer drawn ahead of you and to your right: it is you, so it stands where you stand and you do not see it. Its size still sets the hallway's scale (`hallway scale:` unchanged), and its actions still play (idle, walk, run, read).
-- Your store's characters still stand ahead on your left, as before.
-- The run's output says `your character:` and `your animation:` (they said `character beside you:` and `animation beside you:`); CI step 10 checks the new words.
-- The setting's words (`[character] beside_you`, SETTINGS.md), the MANUAL and the `--no-character` help say the same.
-- Seeing through its eyes, its arms in view where they reach, is noted in IDEAS (after 19.148), for when the camera starts at its head.
+## As you asked
+- Your characters still start where they stood (yours ahead of where you begin, your store's round the hilltop), but they are now objects like everything else there:
+  - **E** picks one up; **R/T/G** turn it; **Return** places it; **Q** drops it, and it falls and can be knocked like the rest; **Backspace** takes it away.
+  - The **catalogue** (Tab) ends with "your character", then your store's characters, so you can place them again (more than once, if you like).
+  - Things in front of them hide them as before, and they are aimed at by their spheres.
+- "Your character" means whichever character is yours at the time: change it on the CHARACTER page and the one in your world changes with it. A store character is named by its SHA-256.
+- **The world file:** while every character stays where it starts, nothing about them is written, so an untouched world is still a v1 file. Once you move one, the file gets a `characters placed` line and a `place char:you ...` (or `char:SHA`) line for each, so a character you take away stays away. A character the file names that isn't here is kept in the file and not drawn (SPECIFICATIONS §12.0r).
+- The map shows the characters where they are; the readout counts characters apart from objects.
 
-## The System Viewer from your dimension's pause menu
-- Esc there now comes back to your dimension (it went to the main menu). Not checked by CI: a screenshot run stops before the way back. Please try it (REVIEW-ROUND item 24).
+## CI (step 10)
+- New checks: an untouched world stays v1; picking up, turning and placing your character writes where it is; taking it away keeps it away; the catalogue places it again.
+- The bookcase and favourite tests now press Down to their row (the catalogue's last rows are now the characters).
 
 ## Ideas recorded
-- IDEAS 19.220: music for your personal dimension, a third space in the Media Player beside WORLD and MENU, kept in the dimension's own file so it travels with it, and loaded for whichever dimension is open.
+- IDEAS 19.221: coloured rings round what you hold, one for each way it turns (x red, y green, z blue by default, the common convention of 3D tools; one global setting for every place axes are drawn, as nothing in Sieve colours axes yet), each a little larger than the object's farthest point; once R, T or G is pressed, the mouse wheel turns it back and forth about that axis.
+- IDEAS 19.222: day and night in your dimension, on or off, the day's length any whole number of seconds up to what an unsigned 64-bit value holds (a larger one refused, never wrapped), kept in the dimension's file.
 
 ## REVIEW-ROUND.md
-- Item 19 ticked (Personal Dimensions from the hallway and back, as you found it).
-- Items 23 (your character not seen in the hallway) and 24 (the System Viewer back to your dimension) added.
-- Section 3 rewritten as you asked: the task list as lists by area (P your dimension, R characters and the renderer, M menus and keys, V viewers, F formats and grammars, S new spaces, T testing), each task saying which CI steps check it and where you test it. A batch takes tasks from one list or several and is checked by the steps they name together, not the full CI; the full CI before a release package and after each review.
-- This zip is the first such batch: three changes checked by one run of step 10.
+- Item 25 added: your characters as objects in your dimension.
+- Tasks P7 (the rings and the wheel) and P8 (day and night) added to list P.
 
 ## Files to delete by hand
 - None.

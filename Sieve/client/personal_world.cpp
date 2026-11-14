@@ -95,6 +95,36 @@ const SDL_FColor kSkyTop{0.13f, 0.36f, 0.86f, 1}, kSkyLow{0.72f, 0.85f, 0.98f, 1
 
 PersonalWorld::~PersonalWorld() { batch_.release(); }
 
+// An object's model point turned by its yaw, pitch and roll and moved to its place. The model's front
+// faces +X, its up +Y, its side +Z: roll turns about the front, pitch about the side, then yaw about
+// the vertical, so +X ends along the yaw's forward ((sin, cos) in x and z) tipped by the pitch.
+static std::array<float, 3> turned(const float m[3], float yaw, float pitch, float roll)
+{
+    const float cr = std::cos(roll), sr = std::sin(roll), cp = std::cos(pitch), sp = std::sin(pitch), cy = std::cos(yaw), sy = std::sin(yaw);
+    // roll, about X
+    const float x1 = m[0], y1 = m[1] * cr - m[2] * sr, z1 = m[1] * sr + m[2] * cr;
+    // pitch, about Z (the front up for a positive pitch)
+    const float x2 = x1 * cp - y1 * sp, y2 = x1 * sp + y1 * cp, z2 = z1;
+    // yaw: +X onto (sin, cos), +Z onto (cos, -sin)
+    return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
+}
+
+// A character's spheres as placed: each centre (its lowest sphere's foot at the place) turned with it,
+// and its radius, in metres.
+template <class F>
+static void each_sphere(const sieve::Character& c, float yaw, float pitch, float roll, F&& f)
+{
+    int32_t low = 0;
+    for (const auto& s : c.spheres) low = std::min(low, s.y - s.r);
+    const float m = 1.0f / float(sieve::kCharacterUnitsPerMetre);
+    for (const auto& s : c.spheres)
+    {
+        const float q[3] = {float(s.x) * m, float(s.y - low) * m, float(s.z) * m};
+        f(s, turned(q, yaw, pitch, roll), float(s.r) * m);
+    }
+}
+
+
 namespace {
 
 uint32_t argb_of(SDL_FColor c)
@@ -105,9 +135,17 @@ uint32_t argb_of(SDL_FColor c)
 
 } // namespace
 
-PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, std::filesystem::path world_file, uint64_t seed)
-    : window_(window), r_(renderer), characters_(std::move(characters)), file_(std::move(world_file)), seed_(seed)
+PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, bool first_is_yours, std::filesystem::path world_file, uint64_t seed)
+    : file_(std::move(world_file)), window_(window), r_(renderer), seed_(seed)
 {
+    // (your characters, each once: a store's copy of yours is yours)
+    first_is_yours_ = first_is_yours && !characters.empty();
+    for (auto& c : characters)
+    {
+        bool again = false;
+        for (const auto& d : characters_) again = again || d.id() == c.id();
+        if (!again) characters_.push_back(std::move(c));
+    }
     rows_ = catalogue();
     if (!file_.empty())
         for (const std::string& sha : dimension_favourites(favourites_list_of(file_)))
@@ -116,6 +154,8 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
                 favourites_.push_back(*f);
                 rows_.push_back("fav:" + sha);
             }
+    // Your characters after them: yours, then your store's.
+    for (size_t ci = 0; ci < characters_.size(); ++ci) rows_.push_back(ci == 0 && first_is_yours_ ? "char:you" : "char:" + characters_[ci].id());
     load(); // (what was placed before, and the world's seed)
     // The hill: one broad swell near the middle, a few smaller ones about it, all from the seed (the
     // world file's, where it has one).
@@ -131,6 +171,23 @@ PersonalWorld::PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::ve
         for (int k = 0; k < puffs; ++k) c.puffs.push_back({(unit(s) - 0.5f) * 2.2f * c.size, (unit(s) - 0.3f) * 0.5f * c.size, (0.45f + unit(s) * 0.4f) * c.size});
         clouds_.push_back(std::move(c));
     }
+    // Your characters where they have always stood, until the world says where they are: yours a few
+    // steps ahead of where you begin, those in your store in a ring round the top of the hill.
+    for (size_t ci = 0; ci < characters_.size(); ++ci)
+    {
+        Placed p;
+        p.kind = rows_[rows_.size() - characters_.size() + ci];
+        if (ci == 0 && first_is_yours_) p.x = 0, p.z = -52;
+        else
+        {
+            const size_t k = ci - (first_is_yours_ ? 1 : 0), of = characters_.size() - (first_is_yours_ ? 1 : 0);
+            const float a = 2 * kPi * float(k) / float(std::max<size_t>(1, of));
+            p.x = swells_.front().x + 14 * std::cos(a), p.z = swells_.front().z + 14 * std::sin(a);
+        }
+        p.y = ground(p.x, p.z);
+        default_chars_.push_back(p);
+    }
+    if (!characters_placed_) placed_.insert(placed_.end(), default_chars_.begin(), default_chars_.end());
     // (a v1 world's objects stand on the ground, which is known only now)
     for (Placed& p : placed_)
         if (std::isnan(p.y)) p.y = ground(p.x, p.z);
@@ -328,6 +385,7 @@ void PersonalWorld::render()
             std::shared_ptr<const sieve::RgbaImage> img;
         };
         std::vector<Picture> pics;
+        std::vector<size_t> chars_seen; // (the characters placed that are in sight, drawn below as spheres)
         {
             std::vector<std::pair<std::array<Pt, 3>, SDL_FColor>> faces;
             const float eye_y = height(px_, pz_) + kEye;
@@ -344,6 +402,11 @@ void PersonalWorld::render()
                 for (float u = 2.0f / std::max(d, 2.0f); u < 1.0f && seen; u += 2.0f / std::max(d, 2.0f))
                     seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g - eye_y) * u;
                 if (!seen) continue;
+                if (is_char(p.kind))
+                {
+                    chars_seen.push_back(size_t(&p - placed_.data()));
+                    continue;
+                }
                 faces.clear();
                 faces_of(p, faces);
                 for (const auto& [t, c] : faces) world.push_back({t, c, 0, 7, true});
@@ -495,36 +558,28 @@ void PersonalWorld::render()
             for (int k = 0; k < 4; ++k) q[k] = {pic.w[size_t(k)][0], pic.w[size_t(k)][1], pic.w[size_t(k)][2]};
             batch_.add_picture(q, *pic.img);
         }
-        // Your characters on the hill: yours a few steps ahead of where you began, those in your store in
-        // a ring round the top; at their own size (4096 units a metre). Their spheres and bones go to the
-        // same renderer as the objects, so a bookcase between you and a character hides what it covers,
-        // pixel by pixel, and spheres cut into one another where they meet (IDEAS 19.207). Drawn as the
-        // Character Creator draws them: lit from the upper left, or as rings in the wireframe.
+        // Your characters, where they are placed (as objects, above): at their own size (4096 units a
+        // metre), turned as they are placed. Their spheres and bones go to the same renderer as the
+        // objects, so a bookcase between you and a character hides what it covers, pixel by pixel, and
+        // spheres cut into one another where they meet (IDEAS 19.207). Drawn as the Character Creator
+        // draws them: lit from the upper left, or as rings in the wireframe.
+        for (const size_t i : chars_seen)
         {
-            const Swell& top = swells_.front();
-            for (size_t ci = 0; ci < characters_.size(); ++ci)
-            {
-                const sieve::Character& c = characters_[ci];
-                float bx, bz;
-                if (ci == 0) bx = 0, bz = -52;
-                else
-                {
-                    const float a = 2 * kPi * float(ci - 1) / float(std::max<size_t>(1, characters_.size() - 1));
-                    bx = top.x + 14 * std::cos(a), bz = top.z + 14 * std::sin(a);
-                }
-                int32_t low = 0;
-                for (const auto& s : c.spheres) low = std::min(low, s.y - s.r);
-                const float ground = height(bx, bz), unitm = 1.0f / float(sieve::kCharacterUnitsPerMetre);
-                auto at = [&](const sieve::Sphere& s) { return Vec3{bx + float(s.x) * unitm, ground + float(s.y - low) * unitm, bz + float(s.z) * unitm}; };
-                for (const auto& s : c.spheres)
-                    if (s.parent >= 0) batch_.add_edge(at(s), at(c.spheres[size_t(s.parent)]), 0xFF3C3C46u);
-                MeshBatch::SphereLook look;
-                look.style = wireframe_ ? MeshBatch::SphereLook::Style::Ring : MeshBatch::SphereLook::Style::Shaded;
-                look.argb = ci == 0 ? 0xFFF2EBD9u : 0xFFCCD1E6u;
-                look.ambient = 0.35f;
-                look.min_radius = 1.5f;
-                for (const auto& s : c.spheres) batch_.add_sphere(at(s), float(s.r) * unitm, look);
-            }
+            const Placed& p = placed_[i];
+            const sieve::Character* c = character(p.kind);
+            if (!c) continue;
+            std::vector<Vec3> pos(c->spheres.size());
+            each_sphere(*c, p.yaw, p.pitch, p.roll, [&](const sieve::Sphere& s, const std::array<float, 3>& w, float) {
+                pos[size_t(&s - c->spheres.data())] = Vec3{p.x + w[0], p.y + w[1], p.z + w[2]};
+            });
+            for (size_t k = 0; k < c->spheres.size(); ++k)
+                if (c->spheres[k].parent >= 0) batch_.add_edge(pos[k], pos[size_t(c->spheres[k].parent)], 0xFF3C3C46u);
+            MeshBatch::SphereLook look;
+            look.style = wireframe_ ? MeshBatch::SphereLook::Style::Ring : MeshBatch::SphereLook::Style::Shaded;
+            look.argb = p.kind == "char:you" ? 0xFFF2EBD9u : 0xFFCCD1E6u;
+            look.ambient = 0.35f;
+            look.min_radius = 1.5f;
+            for (size_t k = 0; k < c->spheres.size(); ++k) batch_.add_sphere(pos[k], float(c->spheres[k].r) / float(sieve::kCharacterUnitsPerMetre), look);
         }
         batch_.draw(r_);
     }
@@ -690,23 +745,17 @@ void PersonalWorld::draw_map()
     for (const Placed& p : placed_)
     {
         const SDL_FPoint q = at(p.x, p.z);
-        if (!inside(q)) continue;
+        if (!inside(q) || is_char(p.kind)) continue;
         SDL_SetRenderDrawColor(r_, 255, p.physics && !p.resting ? 220 : 255, p.physics && !p.resting ? 60 : 255, 255);
         const SDL_FRect d{q.x - 1.5f, q.y - 1.5f, 3, 3};
         SDL_RenderFillRect(r_, &d);
     }
-    // Your characters, as rings where they stand (the first before you, the rest round the hilltop).
+    // Your characters, as rings where they stand.
     SDL_SetRenderDrawColor(r_, 200, 205, 230, 255);
-    for (size_t ci = 0; ci < characters_.size(); ++ci)
+    for (const Placed& p : placed_)
     {
-        float bx = 0, bz = -52;
-        if (ci > 0)
-        {
-            const float a = 2 * kPi * float(ci - 1) / float(std::max<size_t>(1, characters_.size() - 1));
-            bx = swells_.empty() ? 0 : swells_[0].x + 14 * std::cos(a), bz = swells_.empty() ? 0 : swells_[0].z + 14 * std::sin(a);
-        }
-        const SDL_FPoint q = at(bx, bz);
-        if (!inside(q)) continue;
+        const SDL_FPoint q = at(p.x, p.z);
+        if (!is_char(p.kind) || !inside(q)) continue;
         for (int k = 0; k < 8; ++k)
         {
             const float a0 = 2 * kPi * float(k) / 8, a1 = 2 * kPi * float(k + 1) / 8;
@@ -865,31 +914,38 @@ std::string PersonalWorld::mesh_kind(const std::string& kind) const
     return f ? f->line : "pages"; // (one no longer kept: drawn as a page until it is taken away)
 }
 
+const sieve::Character* PersonalWorld::character(const std::string& kind) const
+{
+    if (!is_char(kind)) return nullptr;
+    if (kind == "char:you") return first_is_yours_ ? &characters_.front() : nullptr;
+    for (size_t ci = first_is_yours_ ? 1 : 0; ci < characters_.size(); ++ci)
+        if (kind.compare(5, std::string::npos, characters_[ci].id()) == 0) return &characters_[ci];
+    return nullptr;
+}
+
 std::string PersonalWorld::label_of(const std::string& kind) const
 {
+    if (kind == "char:you") return tr("pworld.char.you");
+    if (is_char(kind)) return character(kind) ? trf("pworld.char", {kind.substr(5, 12)}) : trf("pworld.char.gone", {kind.substr(5, 12)});
     if (kind.rfind("fav:", 0) != 0) return tr("pworld.object." + kind);
     const Favourite* f = favourite(kind.substr(4));
     if (!f) return trf("pworld.fav.gone", {kind.substr(4, 12)});
     return trf("pworld.fav", {f->title.empty() ? f->sha.substr(0, 12) : f->title.substr(0, 40), f->line});
 }
 
-// An object's model point turned by its yaw, pitch and roll and moved to its place. The model's front
-// faces +X, its up +Y, its side +Z: roll turns about the front, pitch about the side, then yaw about
-// the vertical, so +X ends along the yaw's forward ((sin, cos) in x and z) tipped by the pitch.
-static std::array<float, 3> turned(const float m[3], float yaw, float pitch, float roll)
-{
-    const float cr = std::cos(roll), sr = std::sin(roll), cp = std::cos(pitch), sp = std::sin(pitch), cy = std::cos(yaw), sy = std::sin(yaw);
-    // roll, about X
-    const float x1 = m[0], y1 = m[1] * cr - m[2] * sr, z1 = m[1] * sr + m[2] * cr;
-    // pitch, about Z (the front up for a positive pitch)
-    const float x2 = x1 * cp - y1 * sp, y2 = x1 * sp + y1 * cp, z2 = z1;
-    // yaw: +X onto (sin, cos), +Z onto (cos, -sin)
-    return {x2 * sy + z2 * cy, y2, x2 * cy - z2 * sy};
-}
-
 void PersonalWorld::extent_of(const Placed& p, float& low, float& high, float& across) const
 {
     low = 0, high = 0.4f, across = 0.2f;
+    if (const sieve::Character* c = character(p.kind))
+    {
+        low = 1e9f, high = -1e9f, across = 0;
+        each_sphere(*c, p.yaw, p.pitch, p.roll, [&](const sieve::Sphere&, const std::array<float, 3>& w, float r) {
+            low = std::min(low, w[1] - r), high = std::max(high, w[1] + r);
+            across = std::max(across, std::sqrt(w[0] * w[0] + w[2] * w[2]) + r);
+        });
+        if (low > high) low = 0, high = 0.4f, across = 0.2f;
+        return;
+    }
     const auto it = shelf_items().mesh.find(mesh_kind(p.kind));
     if (it == shelf_items().mesh.end()) return;
     const Mesh& m = *it->second;
@@ -1013,6 +1069,16 @@ float PersonalWorld::ray_objects(const float o[3], const float d[3], float reach
     for (size_t i = 0; i < placed_.size(); ++i)
     {
         if (int(i) == skip) continue;
+        if (is_char(placed_[i].kind))
+        {
+            const float t = char_hit(placed_[i], o, d);
+            if (t > 0 && t < bt)
+            {
+                bt = t;
+                if (which) *which = int(i);
+            }
+            continue;
+        }
         faces.clear();
         faces_of(placed_[i], faces);
         for (const auto& [t, c] : faces)
@@ -1037,6 +1103,39 @@ float PersonalWorld::ray_objects(const float o[3], const float d[3], float reach
         }
     }
     return bt;
+}
+
+// A line from `o` along `d` (a unit vector) against a character's spheres: the nearest it meets, or -1.
+float PersonalWorld::char_hit(const Placed& p, const float o[3], const float d[3]) const
+{
+    const sieve::Character* c = character(p.kind);
+    if (!c) return -1;
+    float best = -1;
+    each_sphere(*c, p.yaw, p.pitch, p.roll, [&](const sieve::Sphere&, const std::array<float, 3>& w, float r) {
+        const float m[3] = {o[0] - (p.x + w[0]), o[1] - (p.y + w[1]), o[2] - (p.z + w[2])};
+        const float b = m[0] * d[0] + m[1] * d[1] + m[2] * d[2], cc = m[0] * m[0] + m[1] * m[1] + m[2] * m[2] - r * r, disc = b * b - cc;
+        if (disc < 0) return;
+        const float t = -b - std::sqrt(disc);
+        if (t > 0 && (best < 0 || t < best)) best = t;
+    });
+    return best;
+}
+
+// Your characters all where a world without them placed by hand stands them (so nothing of them need
+// be written).
+bool PersonalWorld::chars_at_default() const
+{
+    size_t n = 0;
+    for (const Placed& p : placed_)
+    {
+        if (!is_char(p.kind)) continue;
+        ++n;
+        bool found = false;
+        for (const Placed& d : default_chars_)
+            found = found || (d.kind == p.kind && d.x == p.x && d.z == p.z && d.yaw == p.yaw && p.pitch == 0 && p.roll == 0 && !p.physics && std::fabs(p.y - d.y) < 1e-4f);
+        if (!found) return false;
+    }
+    return n == default_chars_.size();
 }
 
 int PersonalWorld::aimed() const
@@ -1415,15 +1514,21 @@ void PersonalWorld::save()
     // v1 while everything stands on the ground, turned only about the vertical and placed; v2 (the
     // 3D place, three turns, placed or dropped) as soon as anything is more, or the file held lines
     // this build keeps without reading.
-    bool v2 = !kept_lines_.empty();
-    for (const Placed& p : placed_) v2 = v2 || p.kind.rfind("fav:", 0) == 0 || p.physics || p.pitch != 0 || p.roll != 0 || std::fabs(p.y - ground(p.x, p.z)) > 1e-4f;
+    // Your characters are written only once they are not all where they stand by default (then all of
+    // them, and "characters placed", so one taken away stays away).
+    const bool chars = characters_placed_ || !chars_at_default();
+    bool v2 = !kept_lines_.empty() || chars;
+    for (const Placed& p : placed_)
+        if (!is_char(p.kind)) v2 = v2 || p.kind.rfind("fav:", 0) == 0 || p.physics || p.pitch != 0 || p.roll != 0 || std::fabs(p.y - ground(p.x, p.z)) > 1e-4f;
     std::error_code ec;
     std::filesystem::create_directories(file_.parent_path(), ec);
     std::ofstream out(file_, std::ios::binary);
     out << (v2 ? "sieve-personal-world-v2" : "sieve-personal-world-v1") << "\nseed " << seed_ << "\n";
     for (const std::string& l : kept_lines_) out << l << "\n";
+    if (chars) out << "characters placed\n";
     for (const Placed& p : placed_)
-        if (v2)
+        if (is_char(p.kind) && !chars) continue;
+        else if (v2)
             out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.y) << " " << g9(p.z) << " " << g9(p.yaw) << " " << g9(p.pitch) << " " << g9(p.roll) << " "
                 << (p.physics ? "physics" : "fixed") << "\n";
         else out << "place " << p.kind << " " << g9(p.x) << " " << g9(p.z) << " " << g9(p.yaw) << "\n";
@@ -1459,6 +1564,11 @@ void PersonalWorld::load()
             continue;
         }
         const auto& cat = catalogue();
+        if (version == 2 && word == "characters" && (ss >> how) && how == "placed")
+        {
+            characters_placed_ = true;
+            continue;
+        }
         if (word != "place")
         {
             // v2: kept as it is and written back, so a later build's lines are never lost here.
@@ -1478,7 +1588,9 @@ void PersonalWorld::load()
             p.physics = how == "physics";
             p.resting = !p.physics; // (a dropped one settles from where it was written)
         }
-        if (ok && (std::find(cat.begin(), cat.end(), p.kind) != cat.end() || (version == 2 && p.kind.rfind("fav:", 0) == 0 && p.kind.size() == 68))) placed_.push_back(p);
+        if (ok && (std::find(cat.begin(), cat.end(), p.kind) != cat.end() || (version == 2 && p.kind.rfind("fav:", 0) == 0 && p.kind.size() == 68) ||
+                   (version == 2 && (p.kind == "char:you" || (is_char(p.kind) && p.kind.size() == 69)))))
+            placed_.push_back(p);
         else ++skipped;
     }
     if (skipped) note_ = trf("pworld.skipped", {std::to_string(skipped)});
@@ -1486,9 +1598,12 @@ void PersonalWorld::load()
 
 std::string PersonalWorld::report() const
 {
+    // (your characters counted apart from the objects, though they are placed as objects are)
+    size_t chars = 0;
+    for (const Placed& p : placed_) chars += is_char(p.kind) ? 1 : 0;
     char b[160];
     std::snprintf(b, sizeof b, "seed %llu; you at %.1f, %.1f, ground %.2f m; %zu characters; %zu objects placed", (unsigned long long)seed_, double(px_), double(pz_),
-                  double(height(px_, pz_)), characters_.size(), placed_.size());
+                  double(height(px_, pz_)), chars, placed_.size() - chars);
     std::string t = b;
     for (size_t i = 0; i < placed_.size(); ++i)
         if (int(i) == held_ || placed_[i].physics || std::fabs(placed_[i].y - ground(placed_[i].x, placed_[i].z)) > 1e-3f)

@@ -60,6 +60,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 22. **Characters as true 3D spheres**: in the Character Creator (all four drawings), spheres cut into one another where they meet, **pixels** are flat squares of one size and **voxels** are real cubes that turn with the character (try [ and ]), the same cell size for every character; in your dimension, walk so a bookcase stands between you and your character: it hides exactly what it covers; in the hallway with Real Graphics on, your character is shaded spheres among the shelves. Watch the frame rate in each.
 - [ ] 23. **Your character is you** in the hallway: not drawn (no figure ahead and to your right); the hallway's scale still follows its size, and its actions still play (the output says `your character:`).
 - [ ] 24. **The System Viewer from your dimension's pause menu** comes back to your dimension on Esc (it went to the main menu). Not checked by CI: the return is beyond what a screenshot run reaches.
+- [ ] 25. **Your characters are objects in your dimension**: yours stands ahead of where you begin, as before. Look at it, E picks it up, R/T/G turn it, Return places it, Q drops it, Backspace takes it away (and it stays away next time); the catalogue (Tab) ends with "your character" and your store's, to place them again. Change your character on the CHARACTER page and the one in your world changes with it.
 
 ---
 
@@ -93,6 +94,8 @@ run before a release package, and after each of the three reviews. Each batch is
 - P4. The WORLDS address: your world as an item of the worlds line, openable from the hallway.
 - P5. Music for your dimension: a third space in the Media Player, kept in the dimension's file (19.220). Also `[07]`.
 - P6. Favourites' covers in the catalogue (their pictures are on their fronts once placed, since F7).
+- P7. Coloured rings round what you hold, one a turn, and the mouse wheel turning along the one chosen (19.221).
+- P8. Day and night, on or off, the day's length set and kept in the dimension's file (19.222).
 
 ### List R: characters and the renderer `[10]` + you, one sitting in the Character Creator
 - R1 (R4). The Character Creator's view tilted as well as turned (diagonal rotation).

@@ -1533,12 +1533,13 @@ int run(const Args& a)
         // beside --settings, else none).
         std::vector<sieve::Character> chars;
         if (auto ch = character_of(app, a)) chars.push_back(*ch);
+        const bool yours = !chars.empty();
         if (!a.has("no-character"))
             for (auto& c : read_personal_dimension(a.has("character-store") ? std::filesystem::path(a.get("character-store")) : character_store_dir(app_path)).characters) chars.push_back(std::move(c));
         const std::filesystem::path wf = a.has("world-file") ? sieve::from_u8(a.get("world-file"))
                                          : a.has("settings")  ? personal_world_file(app_path)
                                                               : std::filesystem::path();
-        hallway::PersonalWorld world(window, renderer, std::move(chars), wf);
+        hallway::PersonalWorld world(window, renderer, std::move(chars), yours, wf);
         world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
         world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
         world.set_hallway_tools(app.personal_hallway_tools);
@@ -1890,8 +1891,9 @@ int run(const Args& a)
     auto run_personal_world = [&](std::optional<hallway::Favourite>& opened, std::string& system) {
         std::vector<sieve::Character> chars;
         if (auto ch = character_of(app, a)) chars.push_back(*ch);
+        const bool yours = !chars.empty();
         for (auto& c : read_personal_dimension(character_store_dir(app_path)).characters) chars.push_back(std::move(c));
-        hallway::PersonalWorld world(window, renderer, std::move(chars), personal_world_file(app_path));
+        hallway::PersonalWorld world(window, renderer, std::move(chars), yours, personal_world_file(app_path));
         auto apply = [&] {
             world.set_wireframe(!app.real_graphics);
             world.set_features(app.personal_map, app.personal_compass);

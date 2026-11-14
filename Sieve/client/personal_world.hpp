@@ -4,7 +4,7 @@
 //
 // The main menu's Personal Dimensions opens it: a rolling grassy hill under a blue sky with white
 // clouds drifting, and your characters standing on the hill, yours (the one you play) in front of you
-// and those in your store round the top. The feeling of that famous desktop, made from Sieve's own
+// and those in your store round the top: objects of the world like any other (below). The feeling of that famous desktop, made from Sieve's own
 // shapes, not a copy of the photograph: everything drawn from the world's seed (0, the default) as a
 // line's units are, so the same seed is the same world on every machine.
 //   - The hill: a height field, the sum of a few broad swells whose places, sizes and heights come
@@ -52,7 +52,8 @@ namespace hallway {
 class PersonalWorld
 {
 public:
-    PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, std::filesystem::path world_file = {}, uint64_t seed = 0);
+    // `characters`: yours first where `first_is_yours`, then your store's.
+    PersonalWorld(SDL_Window* window, SDL_Renderer* renderer, std::vector<sieve::Character> characters, bool first_is_yours, std::filesystem::path world_file = {}, uint64_t seed = 0);
     // The catalogue of objects, by id ("cube", "pillar", ...), in the order shown.
     static const std::vector<std::string>& catalogue();
     // Empty when every shelf item was read from shelf-items.sieve; else what could not be.
@@ -166,7 +167,21 @@ private:
     bool project(float x, float y, float z, float& sx, float& sy, float& depth) const;
     SDL_Window* window_;
     SDL_Renderer* r_;
+    // Your characters are objects of the world like any other (Edward, 14 November 2026: "the fixed spot is
+    // fine so long as it is an object that can be moved around and exists in the catalog"): in the
+    // catalogue after the favourites, as "char:you" (yours, whichever it is now) and "char:SHA" (one of
+    // your store's, by its SHA-256), picked up, turned, placed, dropped and taken away as the rest are,
+    // and drawn as their spheres. A world that never had them placed by hand (no "characters placed"
+    // line) stands them where they always stood: yours ahead of where you begin, the store's round the
+    // hilltop; while they stay there, nothing of them is written, so such a world is still v1.
     std::vector<sieve::Character> characters_;
+    bool first_is_yours_ = false;
+    bool characters_placed_ = false;     // the file said where they are ("characters placed")
+    std::vector<Placed> default_chars_;  // where they stand when it does not
+    const sieve::Character* character(const std::string& kind) const; // a "char:" kind's, or null (not here)
+    static bool is_char(const std::string& kind) { return kind.rfind("char:", 0) == 0; }
+    bool chars_at_default() const;
+    float char_hit(const Placed& p, const float o[3], const float d[3]) const; // a ray's distance to its spheres, or -1
     uint64_t seed_;
     std::vector<Swell> swells_;
     std::vector<Cloud> clouds_;

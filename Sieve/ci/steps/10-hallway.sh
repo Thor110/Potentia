@@ -1518,7 +1518,7 @@ grep -c "^title it was the best of times$" "fv/favourites/$SHA.item" | q "^1$"
 # Its picture as the hallway draws it on the shelf, kept beside it, for your dimension to draw on its
 # front (Edward's testing, 14 November: a placed page showed no imagery).
 python3 -I -c "import sys; d=open(sys.argv[1],'rb').read(24); print(d[:8]==b'\x89PNG\r\n\x1a\n', int.from_bytes(d[16:20],'big'))" "fv/favourites/$SHA.png" | tr -d '\r' | q "^True 128$"
-$H --personal-world --settings fv/s.ini --pworld-look -45 --press "Tab,Up,Return,Tab,o" --screenshot fav-open.png | tr -d '\r' | q "^opened: pages $SHA$"
+$H --personal-world --settings fv/s.ini --pworld-look -45 --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,Tab,o" --screenshot fav-open.png | tr -d '\r' | q "^opened: pages $SHA$"
 grep -c "^place fav:$SHA " fv/worlds/personal.world | q "^1$"
 $H --main-menu --settings fv/s.ini --read-aloud --press "Item:personal,Return,Item:personal_favourites,Return" --screenshot favs.png | tr -d '\r' | q "^read aloud: it was the best of times, pages, in personal$"
 $H --no-menu --settings fv/s.ini --line text --open-favourite "$SHA" --screenshot fav-hand.png | tr -d '\r' | q "^favourite: in hand$"
@@ -1541,8 +1541,22 @@ $H --no-menu --settings fm/s.ini --warp "hello world" --press "J,Z" --screenshot
 grep -c . fm/viewers-needed.txt | q "^1$"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
-$H --personal-world --world-file pw/bc.world --press "Tab,Up,Return" --screenshot pworld-case.png > /dev/null
+$H --personal-world --world-file pw/bc.world --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-case.png > /dev/null
 grep -c "^place bookcase " pw/bc.world | q "^1$"
+# Your characters are objects of the world (Edward, 14 November 2026): yours stands ahead of where you
+# begin, and nothing of it is written while it stays there (the world still v1); picked up (E), turned
+# (R) and placed (Return), the world says where (v2, "characters placed"); taken away (Backspace), it
+# stays away; and the catalogue's "your character" places it again before you.
+printf 'sieve-personal-world-v1\nseed 0\n' > pw/ch.world
+$H --personal-world --world-file pw/ch.world --character c99.character --character-store pw/nostore --screenshot pworld-ch.png | tr -d '\r' | q "; 1 characters; 0 objects placed$"
+head -1 pw/ch.world | tr -d '\r' | q "^sieve-personal-world-v1$"
+$H --personal-world --world-file pw/ch.world --character c99.character --character-store pw/nostore --pworld-walk 1.0 --pworld-look -12 --press "e,r,Return" --screenshot pworld-ch2.png | tr -d '\r' | q "; char:you placed at 0.00, 1.05, -53.98$"
+tr -d '\r' < pw/ch.world | grep -c "^characters placed$" | q "^1$"
+tr -d '\r' < pw/ch.world | q "^place char:you 0 24.4472618 -53.9771004 0.261799395 0 0 fixed$"
+$H --personal-world --world-file pw/ch.world --character c99.character --character-store pw/nostore --pworld-walk 1.0 --press "BackSpace" --screenshot pworld-ch3.png | tr -d '\r' | q "; 0 characters; 0 objects placed$"
+$H --personal-world --world-file pw/ch.world --character c99.character --character-store pw/nostore --screenshot pworld-ch4.png | tr -d '\r' | q "; 0 characters; 0 objects placed$"
+$H --personal-world --world-file pw/ch.world --character c99.character --character-store pw/nostore --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-ch5.png | tr -d '\r' | q "; 1 characters; 0 objects placed$"
+tr -d '\r' < pw/ch.world | q "^place char:you 0 22.8426743 -58.5 3.14159274 0 0 fixed$"
 printf 'sieve-personal-world-v2\nseed 0\nplace bookcase 0 22.9 -57 3.14159274 0 0 fixed\nplace pages -0.1 40 -56.82 0 0 0 physics\nplace audio 1.5 25.0 -56.9 3.14159274 0 0 physics\n' > pw/on.world
 $H --personal-world --world-file pw/on.world --pworld-wait 6 --screenshot pworld-shelf.png | tr -d '\r' | q "pages dropped at -0.10, 2\.[78][0-9], .*audio dropped at 1.50, 1\.9[0-9], "
 # Every key on one registry (IDEAS 19.199): the map's zoom (+ and -), each step in halving what it

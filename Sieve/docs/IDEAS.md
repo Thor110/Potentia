@@ -8500,6 +8500,43 @@ dimension accordingly as a new media space option for where music plays and what
 - *Needs:* a line in sieve-personal-world-v2 for it (an optional line, so worlds without it read as they
   do now, with the menus' music); the Media Player told which dimension's file it is editing.
 
+**19.221 Turning what you hold: coloured rings, and the wheel (Edward, 14 November 2026). An idea for
+now.** His words: "rotation should be colour sorted so it is easy to determine which way the rotation is
+going", "that can also then be hooked up to the scroll wheel of the mouse, once you press a direction you
+can scroll it back and forth along that rotation", "the colours should be shown around the object you
+pick up, x/y/z green/red/blue accordingly", "so a circle along that rotation around the item, always
+bigger then the items bounding vertices".
+- *Today:* in your dimension R, T and G turn what you hold 15 degrees a press about the vertical, its side
+  and its front (Shift the other way), with nothing drawn to show which.
+- *What it would be:* round the held object, a circle for each way it turns, drawn in the plane of that
+  turn and coloured by its axis: x red, y green, z blue by default (Edward, same day: "keep x red, y
+  green, z blue as default, the colours should match the general / global default for these things,
+  if there even is one, if not there should be eventually"). That is the common convention of 3D tools
+  (Blender, Unity, Unreal and most modelling programs colour their axes so: x, y, z as r, g, b), so it
+  is Sieve's too. The colours are one global setting for every place axes are drawn, shown on its
+  screen, never one per tool. Each circle's radius is a little more than the farthest of the object's points from its
+  centre, so it is never hidden inside the object, however it is turned. The turn last pressed is drawn
+  bright, the others faint.
+- *The wheel:* once a turn is chosen (R, T or G pressed), the mouse wheel turns it back and forth about
+  that axis, a step a notch (the step a setting), until another is chosen or the object is placed.
+- *Where else:* the same rings wherever a thing is turned by hand: the Character Creator's view
+  (R4 in REVIEW-ROUND), the 3D viewer, models held in the hallway.
+
+**19.222 Day and night in your dimension (Edward, 14 November 2026). An idea for now.** His words: "we
+should also implement a day and night system which can be turned on or off as well as the day length
+adjusted to whatever within a strict limit of the upper bounds of storing that value".
+- *Today:* your dimension's sky is always day: one sun, fixed, lighting the hill and what is on it.
+- *What it would be:* the sun moving across the sky through a day of a set length, the sky's colours
+  and the light on everything following it (dawn, day, dusk, night, with stars and a dimmer light at
+  night), off by default or on as the person sets it under Personal Dimensions > Features.
+- *The day's length:* any whole number of seconds from 1 up to the largest the stored value holds, kept
+  in the dimension's own file (§19.220's reasoning: it travels with the dimension). The bound is fixed
+  by the format, not by a menu's guess: written as an unsigned 64-bit count of seconds, so a day can be
+  set to anything up to 2^64 - 1 seconds, and a value beyond that is refused when typed, never wrapped.
+  The time of day is worked out from the clock and the length each frame (no running total to overflow).
+- *Shared or not:* a visitor sees the dimension's own day, at the time of day its clock gives, so two
+  people in it see the same sky without a server (§19.211).
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non
