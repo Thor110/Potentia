@@ -1,6 +1,6 @@
-# Idea: the hash search in parallel
+# Idea: the Character Creator view tilted as well as turned
 
-- IDEAS 19.219 gains: the range divided among threads (about N times as fast with N), each stepping forwards and backwards from its division's point until it meets its neighbours; with a best guess of the place, the threads start about it and spread outwards so the likeliest are tried first. The same division could spread across machines that opt in.
+- IDEAS 19.214 gains: the Character Creator's view turned every way (a tilt as well as the turn about the upright, by dragging up and down and by keys), and its drawings the same list as a global choice under Settings > Graphics.
 
 Docs only.
 

@@ -8399,6 +8399,13 @@ from there to add more detail/depth".
   and the bias are each a row under Settings > Graphics > Real Graphics, written in the settings file,
   listed in SETTINGS.md, and read aloud with the rest. Nothing chosen for the person in code that they
   cannot change on a menu (§19.196). Kept as an idea until the voxel drawing reaches the meshes.
+- *The Character Creator's view, turned every way (Edward, 14 November 2026: "we also need to add diagonal
+  rotation to the character creator viewer", "and when relevant all the different rendering styles will
+  be accessible there and as a global under the graphics settings"):* today it turns about the upright
+  only ([ and ], or a drag across). To come: a tilt as well (a drag up and down, and keys for it), so it
+  is seen from above, below and every angle between, the square-on camera turned by both; the pedestal
+  tilting with it. The drawings it offers are the same list as Settings > Graphics' global choice (one
+  list of drawings, §19.196), each also choosable there for one space or for all.
 
 **19.217 Dimensions as plugins in the setup menu: each one on or off, and room for others' (Edward, 14
 November 2026). An idea for now.** His words: "a plugin system for the state space setup viewer", "this
