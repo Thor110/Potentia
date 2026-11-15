@@ -163,16 +163,25 @@ run before a release package, and after each of the three reviews. Each batch is
 - O1. RAID reads buffered `[04, 10]`; O2. sharing's questions sent together `[01, 04, 10]` (*O1, O2 and O6
   made 15 November 2026*); O3. the Creator's
   picture the size of its box `[04, 10]`; O4. recordings kept as text `[10]`; O5. edges walked only in
-  their band `[04, 10]` (*O3 and O5 made 15 November 2026*); O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
-  on a large file (a measurement, no CI).
+  their band `[04, 10]` (*O3 and O5 made 15 November 2026*; *O4 the same day*); O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
+  on a large file (a measurement, no CI; *measured the same day: no change at the peak on enwik8, so
+  nothing to change*). *List O done.*
   Each sits well with others of the same steps: O1, O2 and O6 together are one RAID batch; O3 and O5 go
   with list R.
 
 ### Last on the list: the fractal dimension reviewed
-- X1. Review the fractal dimension and add as many fractals as can be tracked down (Edward, 15 November 2026:
-  "review the fractal dimension and implement as many fractals as we can track down"): each charted by hand
-  as a `sieve-fractal-v1` ruleset where the grammar can write it, and the grammar widened (a new version)
-  where a well-known fractal needs what it cannot say. `[01]` + `[10]`.
+- X1. The fractal dimension reviewed, and its line made every ruleset of the grammar, generated (Edward, 15
+  November 2026, IDEAS 19.235): the charted ones found in it by address, the index book still naming them,
+  and the known fractals as its first filter, with exclude, include and only. `[01]` + `[10]`.
+- X2. Then as many known fractals charted as can be tracked down (Edward, the same day: "implement as many
+  fractals as we can track down", and "X1/X2 can also include charting more known fractals when we are
+  done"): each a `sieve-fractal-v1` ruleset where the grammar can write it, the grammar widened (a new
+  version) where a well-known fractal needs what it cannot say; each one charted becomes another named place
+  in X1's generated line. Spider webs among them if they can be (Edward, the same day; IDEAS 19.235: an orb
+  web's spiral needs a step that shrinks, a widened grammar). `[01]` + `[10]`.
+- Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
+  dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
+  what its fractal ways are.
 
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).

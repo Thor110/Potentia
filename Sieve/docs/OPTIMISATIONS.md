@@ -24,21 +24,16 @@ pixel for pixel: a character in its box, across its edge and off the window (a 2
 over the window), random edges in 1, 3, 7 and 8 bands (331,776,000 pixels, none different; 1,000 edges up
 to 400 px, 1.3 to 1.4 ms a frame on one thread, now 0.87 ms), and the screenshots of CI step 10.
 
-## 4. A recording keeps every input event whole
-- **Where:** the recorder in `client/app_main.cpp` (`frame.events.push_back(e)`) and `ReplayFrame` in
-  `client/replay.hpp`: each event as a 128-byte `SDL_Event`, for up to 30 minutes, and the whole recording
-  packed again each time the hallway is left while recording.
-- **Costs:** up to about 220 MB with a 1,000 Hz mouse for the full 30 minutes (estimated, not measured);
-  only while you record (F12).
-- **Needs:** a redesign of the replay type: frames kept as their text lines (already built every frame to
-  count bytes) or a compact struct, the text appended as it goes. Playback reads the same type, so it moves
-  with it. Packing only when the recording stops would leave the file on disk behind after a menu visit or a
-  crash, so that part stays.
-- **Shown the same:** a recording made, saved and played back, before and after: the saved text and the
-  `.sieve` byte for byte, and the replay ending where it did.
-- **CI:** 10.
+Made and gone, the same day: 4, a recording kept as its text, each frame's line appended as it is taken
+(a `Recording`, client/replay.hpp), where every event was kept whole. Thirty minutes at 60 frames a second
+with a 1,000 Hz mouse (17 moves a frame) held 451.9 MB that way and 49.8 MB now (30.2 MB of text), the
+same text either way; a recording made live in the hallway reads back, replays and is written again the
+same, byte for byte, as CI step 10's recordings are. Packing each time the hallway is left stays.
 
-## 7. To measure: the trial mixers on a large file
-- Review 1 made the trial mixers' history come as untouched zero pages, which should save one block the size
-  of the file during the trial of any file over 4 MiB. At 6.7 MB and 10 MB the peak memory moved by 0 and
-  10 MB (measured); a file of 100 MB or more would show it. Not a change to make: a measurement to take.
+Measured and gone, the same day: 7, the trial mixers on a large file. enwik8 (100,000,000 bytes) packed by
+the build as it is and by one whose trial history touches every page as the vector did before review 1:
+peak 3,020 MiB and 3,018 MiB, 317 s and 336 s, the same `.sieve` (24,768,406 bytes). The untouched pages
+save nothing at the peak there: the peak is set later, by the whole file's mixing, not by the trials.
+Nothing to change; the calloc stays (it costs nothing and helps where the trials are the peak).
+
+Nothing is left on this list. A cost found by a later review goes here as before.

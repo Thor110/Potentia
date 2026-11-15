@@ -1,44 +1,44 @@
-# List O: O3 and O5, the renderer
+# List O: O4 made, O7 measured (list O done)
 
-The two renderer costs the reviews left, made. The pictures are the same pixel for pixel.
+## What changed
 
-## What changed (`client/mesh.cpp`, `mesh.hpp`)
+- **O4, a recording kept as its text** (`client/replay.hpp`, `client/app_main.cpp`).
+  - A recording being made (F12, or `--record`) now keeps each frame as the line it is saved as, appended
+    as the frame is taken (`Recording`). Before, it kept every input event whole, at 128 bytes each.
+  - 30 minutes at 60 frames a second, with a 1,000 Hz mouse (17 moves a frame), held 451.9 MB before.
+    It holds 49.8 MB now: 30.2 MB of text, and room the string keeps for growing.
+  - The text is the same either way.
+  - The recording is still packed each time the hallway is left, so a crash or a menu visit leaves the
+    file on disk.
+  - Playing back is unchanged: a recording is read as before.
+- **O7, the trial mixers on a large file** (a measurement, nothing changed). enwik8 (100,000,000 bytes)
+  was packed twice:
+  - by the build as it is: peak 3,020 MiB, 317 s;
+  - by one whose trial history touches every page, as before review 1: peak 3,018 MiB, 336 s.
 
-- **O3, the Character Creator's picture.**
-  - A character drawn square-on (the Creator, and the setup menu's side panel) was drawn into a picture
-    the size of the whole window, every pixel cleared, drawn and uploaded.
-  - Now only the rectangle its spheres, bones and faces reach is drawn and uploaded. The rest is clear,
-    as it always was.
-  - The texture is still shown whole. Showing only the rectangle put some pixels one pixel off where the
-    menu is scaled down to fit its window, so that was not kept.
-  - Measured on a 20-sphere scene at 1920 x 1080: 3.7 ms a frame before, 2.6 ms now, the window's clear
-    included. Most of what is left is the renderer laying the whole texture over the window.
-- **O5, edges in their band.**
-  - Each band of rows walked every edge along its whole length, throwing away the points outside it.
-  - Now it walks only the steps that can land in its rows. Each point is worked out and tested as before.
-  - Measured with 1,000 edges up to 400 px: 1.3 to 1.4 ms a frame on one thread before, 0.87 ms now.
+  The `.sieve` was the same (24,768,406 bytes). Review 1's untouched pages save nothing at the peak here:
+  the peak comes later, from the whole file's mixing. The change stays, as it costs nothing.
 
-## How it was shown the same
+## How O4 was shown the same
 
-- **O3:** the old and new renderer, built into one small test program, drew the same scene three ways:
-  the character in its box, crossing the box's edge, and running off the window. The three pictures were
-  the same byte for byte.
-- **O5:** random edges (flat, upright, on whole rows, off the screen) in 1, 3, 7 and 8 bands, the old
-  loop against the new: 331,776,000 pixels compared, none different.
-- **The program itself:** CI step 10's 528 screenshots, from two runs of the old build and one of the new.
-  - 424 were the same in both old runs.
-  - 22 of those 424 differ on the new build. Each is in a place that varies by itself: the memory bars, the
-    character at the hallway's centre, the edge glow, the side panel's arm, and recording and audio timing.
-  - The arm, run again: three old runs gave three different pictures, and the new build's matched two of
-    them.
-  - The Creator's pictures, which never vary, are the same.
-- **CI:** steps 04 and 10 pass.
+- **The same text:** a 30-minute recording was built both ways from the same frames, and the text matched.
+- **A live recording:** one was made in the running hallway, stopped and written. It reads back, replays,
+  and is written again the same, byte for byte.
+- **CI step 10:** its recordings are replayed and written again the same, and the step passes.
 
-## Also
+## Also, noted from today's messages
 
-- `OPTIMISATIONS.md`: entries 3 and 5 removed, with their figures. 4 (recordings) and 7 (a measurement)
-  remain.
-- `REVIEW-ROUND.md`: O3 and O5 marked made.
+- **X1 and X2 split** (REVIEW-ROUND):
+  - X1: the fractal line as every ruleset of the grammar, generated, with the charted fractals as its first
+    filter (exclude, include, only) and the index book still naming them.
+  - X2: then as many known fractals charted as can be tracked down, spider webs among them. An orb web's
+    spiral needs a step that shrinks, so the grammar will need widening for it.
+- **Fractals as data in other dimensions** (IDEAS 19.235, in your words): each dimension's ways of reading
+  a ruleset as its kind of item, so fractals can be filtered out of it.
+- **HANDOFF:** two standing questions for anything new.
+  - It becomes its own line, added dynamically.
+  - It says what its fractal ways are.
+- **OPTIMISATIONS.md:** empty now. Every entry is made or measured.
 
 ## Files to delete by hand
 

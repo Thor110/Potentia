@@ -63,6 +63,12 @@ through the doors; they no longer do. They start and finish at the binary line, 
 listed at both ends of the map. A door's number (`li`) is only where a line stands; what it is,
 and everything saved per line, goes by `Media`.
 
+Adding a dimension or a system, two standing questions (Edward, 15 November 2026). It becomes its own
+line, dynamically (a row in `kDimensions`, nothing hard-coded per line). And it asks what its fractal
+ways are: how a fractal's ruleset is read as this line's kind of item, so fractals can be filtered out
+of it ("they could be represented or used to generate many different things in many different ways";
+IDEAS 19.235).
+
 The binary line is **one line met from either end** — one ordinary tile of corridor, the same
 width and height and bookcase as any other, with one side missing. Where the other wall would
 stand the floor ends at a waist-high wall (`kEdgeRail`, `kEdgeRailTop` in `client/world.hpp`) and

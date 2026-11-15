@@ -831,13 +831,13 @@ Replay load_replay_file(const std::string& path, bool cached = false)
     }
 }
 
-void save_replay_file(const std::string& path, const Replay& r)
+void save_replay_text(const std::string& path, const std::string& text)
 {
     const std::filesystem::path p = sieve::from_u8(path);
     if (p.extension() != ".sieve")
     {
         std::ofstream out(p, std::ios::binary);
-        out << r.text();
+        out << text;
         if (!out) throw std::runtime_error("cannot write " + path);
         return;
     }
@@ -847,7 +847,7 @@ void save_replay_file(const std::string& path, const Replay& r)
     std::filesystem::create_directories(dir, ec);
     {
         std::ofstream out(dir / (p.stem().string() + ".replay"), std::ios::binary);
-        out << r.text();
+        out << text;
     }
     try
     {
@@ -860,6 +860,7 @@ void save_replay_file(const std::string& path, const Replay& r)
     }
     std::filesystem::remove_all(dir, ec);
 }
+void save_replay_file(const std::string& path, const Replay& r) { save_replay_text(path, r.text()); }
 
 // Whether a recording is marked to be decoded once into the cache: --replay-cache, or its file's
 // SHA-256 in [replays] cached.
@@ -2239,15 +2240,15 @@ int run(const Args& a)
         {
             const Replay r = load_replay_file(a.get("replay"), replay_cached(app, a, a.get("replay")));
             replay_begin(*hall, r);
-            Replay again = replay_start_of(*hall);
+            Recording again(replay_start_of(*hall));
             bool q = false;
             for (const auto& f : r.frames)
             {
                 replay_frame(*hall, f, q);
-                again.frames.push_back(f);
+                again.add(f);
             }
             std::cout << "replay: " << r.frames.size() << " frames, " << hallway::hall::fixed(r.seconds(), 3) << " s\n" << hall->status() << "\n";
-            if (a.has("record")) save_replay_file(a.get("record"), again);
+            if (a.has("record")) save_replay_text(a.get("record"), again.text());
         }
         else if (a.has("record")) save_replay_file(a.get("record"), replay_start_of(*hall)); // (where it begins, no frames: a start to build on)
         hall->render();
@@ -2690,11 +2691,10 @@ int run(const Args& a)
         // (IDEAS 19.184): a replay plays its frames in place of your inputs (closing the window still
         // closes it) and then hands the hallway back to you; a recording keeps every frame from here,
         // written each time the hallway is left.
-        std::optional<Replay> playing, recording;
+        std::optional<Replay> playing;
+        std::optional<Recording> recording; // (its frames kept as their lines: OPTIMISATIONS 4)
         size_t played = 0;
         std::string record_path;           // where the recording goes
-        uint64_t record_bytes = 0;         // its text's length so far
-        double record_seconds = 0;
         Uint64 record_checked = 0;         // when the free space was last looked at
         if (first_hallway_of_run && a.has("replay"))
         {
@@ -2717,7 +2717,7 @@ int run(const Args& a)
         }
         if (first_hallway_of_run && a.has("record"))
         {
-            recording = replay_start_of(*hall);
+            recording.emplace(replay_start_of(*hall));
             record_path = a.get("record");
         }
         first_hallway_of_run = false;
@@ -2726,18 +2726,16 @@ int run(const Args& a)
             if (!recording) return;
             try
             {
-                save_replay_file(record_path, *recording);
-                if (why_key.empty()) hall->message(trf("msg.record_off", {std::to_string(recording->frames.size()), hallway::hall::fixed(record_seconds, 1), record_path}));
+                save_replay_text(record_path, recording->text());
+                if (why_key.empty()) hall->message(trf("msg.record_off", {std::to_string(recording->frames()), hallway::hall::fixed(recording->seconds(), 1), record_path}));
                 else hall->warn(trf(why_key.c_str(), {why_arg, record_path}));
-                std::cout << "recorded  " << recording->frames.size() << " frames, " << hallway::hall::fixed(record_seconds, 1) << " s, to " << record_path << "\n";
+                std::cout << "recorded  " << recording->frames() << " frames, " << hallway::hall::fixed(recording->seconds(), 1) << " s, to " << record_path << "\n";
             }
             catch (const std::exception& ex)
             {
                 hall->warn(trf("msg.record_failed", {ex.what()}));
             }
             recording.reset();
-            record_bytes = 0;
-            record_seconds = 0;
         };
         // F12: a recording started, into `replays` beside the settings, named by when it began, packed.
         auto start_recording = [&] {
@@ -2754,9 +2752,7 @@ int run(const Args& a)
             char name[64];
             std::snprintf(name, sizeof name, "%04d-%02d-%02d-%02d%02d%02d.sieve", u.tm_year + 1900, u.tm_mon + 1, u.tm_mday, u.tm_hour, u.tm_min, u.tm_sec);
             record_path = sieve::u8(dir / name);
-            recording = replay_start_of(*hall);
-            record_bytes = recording->text().size();
-            record_seconds = 0;
+            recording.emplace(replay_start_of(*hall));
             record_checked = 0;
             hall->message(trf("msg.record_on", {std::to_string(app.replays_max_minutes), record_path}));
         };
@@ -2802,12 +2798,7 @@ int run(const Args& a)
                     const ReplayFrame& f = playing->frames[played++];
                     sieve::cli::timings::Scope timed("hallway.frame.update");
                     replay_frame(*hall, f, quit);
-                    if (recording)
-                    {
-                        recording->frames.push_back(f);
-                        record_bytes += replay_frame_line(f).size();
-                        record_seconds += double(f.dt_us) / 1e6;
-                    }
+                    if (recording) recording->add(f);
                     if (played == playing->frames.size())
                     {
                         hall->message(trf("msg.replay_done", {std::to_string(played)}));
@@ -2822,9 +2813,7 @@ int run(const Args& a)
                         frame.dt_us = std::clamp<uint32_t>(uint32_t(std::lround(double(dt) * 1e6)), 1, kReplayMaxDtUs);
                         dt = float(frame.dt_us) / 1e6f;
                         frame.held = held_keys(SDL_GetKeyboardState(nullptr));
-                        record_bytes += replay_frame_line(frame).size();
-                        record_seconds += double(frame.dt_us) / 1e6;
-                        recording->frames.push_back(std::move(frame));
+                        recording->add(frame);
                     }
                     sieve::cli::timings::Scope timed("hallway.frame.update");
                     hall->update(dt, SDL_GetKeyboardState(nullptr));
@@ -2834,14 +2823,14 @@ int run(const Args& a)
                 // its own size to be written and packed). Either stops it, keeping what it has.
                 if (recording)
                 {
-                    if (record_seconds >= double(app.replays_max_minutes) * 60) stop_recording("msg.record_limit", std::to_string(app.replays_max_minutes));
+                    if (recording->seconds() >= double(app.replays_max_minutes) * 60) stop_recording("msg.record_limit", std::to_string(app.replays_max_minutes));
                     else if (now - record_checked >= 5000000000ull)
                     {
                         record_checked = now;
                         std::error_code ec;
                         const std::filesystem::path where = sieve::from_u8(record_path).parent_path();
                         const auto sp = std::filesystem::space(where.empty() ? std::filesystem::path(".") : where, ec);
-                        const uint64_t need = std::max<uint64_t>(uint64_t(app.replays_min_free_mb) << 20, 2 * record_bytes);
+                        const uint64_t need = std::max<uint64_t>(uint64_t(app.replays_min_free_mb) << 20, 2 * uint64_t(recording->text().size()));
                         if (!ec && sp.available < need) stop_recording("msg.record_disk", std::to_string(sp.available >> 20));
                     }
                 }
@@ -2860,8 +2849,8 @@ int run(const Args& a)
             if (recording)
                 try
                 {
-                    save_replay_file(record_path, *recording);
-                    std::cout << "recorded  " << recording->frames.size() << " frames, " << hallway::hall::fixed(record_seconds, 1) << " s, to " << record_path << "\n";
+                    save_replay_text(record_path, recording->text());
+                    std::cout << "recorded  " << recording->frames() << " frames, " << hallway::hall::fixed(recording->seconds(), 1) << " s, to " << record_path << "\n";
                 }
                 catch (const std::exception& ex)
                 {

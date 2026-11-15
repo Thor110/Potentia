@@ -53,6 +53,31 @@ struct Replay
 // One frame's line, as text() writes it (its length is what a recording grows by).
 std::string replay_frame_line(const ReplayFrame& f);
 
+// A recording being made (F12, or --record into the hallway): its text, the start's lines and then each
+// frame's line appended as the frame is taken. A frame costs its line, tens of bytes, where a Replay keeps
+// every event whole, 128 bytes each (a 1,000 Hz mouse for the longest recording, 30 minutes, was about
+// 220 MB that way; OPTIMISATIONS 4). Its text is what Replay::text() gives for the same start and frames,
+// and is what is saved; playing back reads it as a Replay, as before.
+class Recording
+{
+public:
+    explicit Recording(const Replay& start) : text_(start.text()) {}
+    void add(const ReplayFrame& f)
+    {
+        text_ += replay_frame_line(f);
+        ++frames_;
+        seconds_ += double(f.dt_us) / 1e6;
+    }
+    const std::string& text() const { return text_; }
+    size_t frames() const { return frames_; }
+    double seconds() const { return seconds_; } // (added as Replay::seconds adds them)
+
+private:
+    std::string text_;
+    size_t frames_ = 0;
+    double seconds_ = 0;
+};
+
 // One event as a token, or empty for one that is not kept.
 std::string replay_token(const SDL_Event& e);
 // A recording read back, checked: its version, its start, every frame's line. Throws

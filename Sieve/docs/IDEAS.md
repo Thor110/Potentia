@@ -9715,6 +9715,36 @@ for example".
   an image is just a pleasantry". So a fractal is saved and sampled as its ruleset (`.fractal`), byte for
   byte as the chart holds it, never as its picture; the every-degree sample's `.sieve` went from 77,980
   bytes with the pictures to 7,919 with the rulesets (measured 15 November 2026).
+  Every fractal, not only the charted (Edward, the same day): "we could / should look at procedurally
+  generating all possible fractals", "we could in theory take the ruleset we use and generate the state
+  space according to that", "it would become difficult to navigate, but we could change the include/exclude
+  to also have a manual option for manually charted fractals", and "we would just have to be sure that it
+  generates the existing fractals and we could ditch the layout, but having that first book still list those
+  known fractals by name would be a good idea, plus a way to only view known fractals". The space is already
+  defined: `format-fractal-v1` (FILTER-PLUGINS) passes exactly the `sieve-fractal-v1` rulesets, 1,520,532 of
+  them at 44 characters alone, so the line can be every ruleset at its address, drawn, with the charted ones
+  as places in it: the index book naming each with its address, and a known-only view (today's listed shelf)
+  beside the whole. To be part of list X (X1).
+  The known fractals as the space's first filter (Edward, the same day): "the known fractals would be the
+  first possible filter for its state space, with exclude/include/only options", and "definitely as part of
+  X1 of course". So the charted fractals are a filter of the generated line with three settings: exclude
+  (every ruleset but the charted), include (every ruleset, the charted marked), and only (the charted alone,
+  today's shelf).
+  How a fractal becomes data in the other dimensions (Edward, the same day): "we will also need to look at
+  exactly how the fractals translate into data to be filtered out of the other dimensions", "they could be
+  represented or used to generate many different things in many different ways", and "so we will need to
+  take note of that and keep it in mind in the future as we continue to add systems and dimensions". So each
+  dimension needs its own ways of reading a ruleset as its kind of item (a picture drawn by the turtle or
+  the rows, a melody from a word's symbols, a model grown in 3D, a world's ground laid out by it, bytes of a
+  file), more than one way each, every way named and versioned so the same ruleset makes the same item on
+  every machine; a filter of fractals on a line is then "the items some ruleset makes in one of that line's
+  ways". A standing note: every system and dimension added from here asks what its fractal ways are.
+  Spider webs (Edward, the same day): "we should also look at spider webs as fractals if we can". An orb
+  web is radii from a hub and a spiral wound across them, the spiral's turns closing in towards the hub:
+  close to self-similar, though not strictly a fractal. sieve-fractal-v1's turtle cannot write it yet, as
+  every step is the same length and a spiral needs each turn shorter than the last; a symbol that scales
+  the step (as many L-system tools have, `"` or `'`) would let a web, and logarithmic spirals generally, be
+  charted. Sheet and funnel webs, being irregular, are rulesets with a seed, not one fixed word. For X2.
 - *Plants and decorations grown by fractals (Edward, the same day):* "we could also use fractals as rulesets
   to generate plants and other decorations for personal dimensions, though that is partially noted
   already but plants specifically". So a charted L-system (the fractal plant is the first) is grown into
