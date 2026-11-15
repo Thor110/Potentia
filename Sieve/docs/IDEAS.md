@@ -9687,12 +9687,34 @@ for example".
 - *Step 1 built (15 November 2026, list S; SPECIFICATIONS 12.0t):* the line (`sieve-fractal-v1`, substitutions
   and L-systems, its grammar `format-fractal-v1`, so its survivors are exactly the rulesets and each one's
   survivor number its address: 1,520,532 of them at 44 characters, the shortest), its shelves charted by
-  hand in `data/fractals` (eleven to begin: the Fibonacci word first), `sieve fractal`, and the hallway's
-  Fractal Dimension screen, opened from the FRACTALS column after AI on the setup page, light purple,
-  its bar broken by a Koch curve (Edward: "it may as well also be a light shade of purple and be after the
+  hand in `data/fractals` (eleven to begin: the Fibonacci word first), `sieve fractal`, and, reworked the
+  same day at Edward's word, the FRACTALS line of the hallway: its door after AI, its index book first and
+  a book a fractal after it, taken in hand and grown a step at a time with N and B, through a new kind of
+  line any later dimension can be (a listed line: a row in `kDimensions` and a shelf, `listed_shelf.hpp`;
+  the first screen built for it is gone, its list the index book). Light purple, its bar on the setup
+  page broken by a Koch curve (Edward: "it may as well also be a light shade of purple and be after the
   AI dimension in the setup page", "it can also use a similar bar layout with the gap, unless you think of
   a fancy fractal gap"). Next: layouts, then the maze door; walking the line beyond the shelves (each
   ruleset's neighbours by address) and fractals as filters are still to come.
+- *Every dimension its own hallway line, added dynamically (Edward, the same day, seeing step 1's screen):*
+  "it should instead be books on another hallway line that can be picked up", "though having them all
+  accessible in a list makes sense", "every dimension we add should become its own hallway / line in my
+  eyes", "we should make sure it is dynamic so that we can more easily slip in new dimensions in the
+  future", and "new dimensions does make the logo out of date but that isn't a big deal, eventually there
+  might be so many dimensions that the minimap ends up needing a button to open up a larger view of the
+  minimap". So the fractal dimension becomes a line of the hallway with its own door after AI, its
+  charted fractals books on its shelves, picked up and opened as any item is, the list kept as an index;
+  and adding a dimension is to be one entry in one table, everything else (the doors, the map's
+  columns, the minimap, the menus) following from it. Charted ones first; the rest of the line later.
+  The list kept as the line's first book (Edward, the same day): "your interface is still perhaps useful, we
+  could have a single first page book that lists all of them and then the individuals". So the line's
+  first book is the index of every fractal charted, opened as the shelves' list, and each book after it
+  one fractal.
+  What the line stores (Edward, the same day): "we should only really be storing the steps used to produce
+  them, the formula, not the pngs, that is what the fractal dimension should be storing, displaying it as
+  an image is just a pleasantry". So a fractal is saved and sampled as its ruleset (`.fractal`), byte for
+  byte as the chart holds it, never as its picture; the every-degree sample's `.sieve` went from 77,980
+  bytes with the pictures to 7,919 with the rulesets (measured 15 November 2026).
 - *Plants and decorations grown by fractals (Edward, the same day):* "we could also use fractals as rulesets
   to generate plants and other decorations for personal dimensions, though that is partially noted
   already but plants specifically". So a charted L-system (the fractal plant is the first) is grown into

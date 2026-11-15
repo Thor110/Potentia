@@ -1,80 +1,57 @@
-# List S, step 1: the fractal dimension
+# List S, step 1 reworked: the fractal dimension as a hallway line
 
-Agreed before building (IDEAS 19.191, 19.235, in your words):
-- the fractal dimension comes first, then layouts (for personal dimensions, not Sieve's own lines), then
-  the maze door;
-- it is a line like the others, with its shelves charted by hand;
-- its first families are substitutions and L-systems.
+You said the fractal screen should instead be books on a hallway line that can be picked up. You also
+said every dimension we add should be its own line, made dynamic so new ones slip in easily, and that
+the screen's list would still be useful as one first book. This update does all three. The separate
+screen (`--fractals`) is gone.
 
-## What it is
+## What changed
 
-- **The line.** A ruleset is a few lines of text in a new format, `sieve-fractal-v1`:
-  - a substitution, like the Fibonacci word (0 becomes 01, 1 becomes 0); or
-  - an L-system, like Koch's snowflake or the dragon curve.
+- **The FRACTALS line.** It is the twelfth door, after AI and before binary (`... ai  fractals |
+  binary`), in light purple. Its shelves hold the fractals charted by hand in `data/fractals/chart.txt`:
+  - **Book 1 is the index.** Its cover is a small drawing of every fractal charted. Its page is the
+    numbered list of them.
+  - **Books 2 on are the 11 fractals,** each drawn on its cover.
+  - **Picked up, a fractal looks like any other item in hand.** There is a summary line, its picture,
+    "depth X of Y" and its ruleset as text. The zoom keys or N and B step the depth, which starts at
+    5 or the deepest it goes, whichever is less.
+  - **The viewer opens on the picture,** with the ruleset under the text tab.
+  - **What the line stores is each fractal's ruleset, not a picture.** F saves a fractal as
+    `Title.fractal`, byte for byte as the chart holds it, and the index as a `.txt` list. The
+    every-degree sample writes them the same way. The picture is only how it is shown, as you said.
+    The viewer's own F still exports the view on screen, as it does on every line.
+  - **Favourites and Go to work as elsewhere.** Go to takes a number or a fractal's id
+    (`--warp dragon-curve`). A number past the end is refused, with a message saying so.
+- **Listed lines, a new kind of line (`client/listed_shelf.hpp`, new).** These are lines whose items
+  are a finite list rather than an address space. The hallway, the hand, the viewer, saving, the setup
+  menu and the minimap all go through one interface, `ListedShelf`. A new dimension of this kind is a
+  row in `kDimensions` (flag `listed`) and one shelf class, with no branch per line.
+- **The setup page has a fractals column,** in the same bar layout as the others. The bar is full
+  height, with a Koch-curve break where the other lines show their gap.
+- **Removed:** `client/fractal_library.cpp/.hpp`, the `--fractals` switch, its keys and its
+  language keys.
+- **Docs:**
+  - SPEC 12.0t rewritten for the line.
+  - The door diagrams in SPEC, HANDOFF and MANUAL show twelve lines.
+  - DIMENSIONS, the fractal help page, `sieve help`'s fractal text and the catalogue entry updated.
+  - IDEAS 19.235 notes your three points.
+  - MANUAL's sample figures were measured again: 3,972 items, 13,322,835 bytes, in a `.sieve` of
+    7,919 bytes. The same sample with the fractals written as PNGs made a `.sieve` of 77,980 bytes.
+- **CI:**
+  - Step 4 walks the doors past FRACTALS.
+  - Step 10 checks the index book, depth stepping both ways, a name not charted (refused), a number
+    past the end (refused) and the new sample count. It also checks that the sample's
+    `Dragon curve.fractal` matches the chart's file byte for byte, and that no PNG is written for
+    the line. The setup menu's completion estimate now has twelve lines, and the corridor walk goes
+    ten doors each way, through FRACTALS.
+  - Every step passes (01 to 12).
 
-  Its grammar is a filter plugin, `format-fractal-v1` (330 states, compiled by `tools/grammars.py`
-  like list F's formats). Tick it on the text line over ascii96, and every survivor is a valid
-  ruleset; a ruleset's survivor number is its address.
+## Not done
 
-  Counts agree between the engine and the oracle. At 44 characters, the shortest, there are exactly
-  1,520,532 rulesets, the same as worked out by hand: 9 angles × 57 axioms × 52 rewritten letters ×
-  57 words. Held to its reader: 518 of 520 test documents get the same verdict, and the other 2 are
-  rules out of order, which only the reader weighs.
-- **The shelves, charted by hand.** They live in `data/fractals/`: `chart.txt` names each fractal,
-  and `ID.fractal` holds its ruleset. There are eleven to begin, all mathematical objects: the
-  Fibonacci word, Thue–Morse, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the
-  dragon curve, the Hilbert, Lévy C and Gosper curves, and a fractal plant. To chart another, add a
-  line to `chart.txt` and its `.fractal` file.
-- **The screen.** The Fractal Dimension shows the shelves on the left. On the right is the chosen
-  fractal, drawn at the depth you choose, with its ruleset beneath.
-  - Up/Down choose a fractal; Right or = goes a step deeper, Left or - a step back; Home shows its
-    axiom and End the deepest drawn; Esc goes back.
-  - The keys are on the registry under "The Fractal Dimension".
-  - Substitutions are drawn as their words one row per depth, so the pattern shows repeating at every
-    scale. L-systems are drawn as a turtle draws them, coloured red to violet along the path.
-- **The setup page.** A FRACTALS column stands after AI, in light purple, as you asked.
-  - Its bar is the line of rulesets at 128 characters, always broken, as AI's is.
-  - The break is drawn as a Koch curve rather than straight lines.
-  - Inside the bar, the charted fractals are a sliver.
-  - Its magnifying glass and its dots open the shelves. It is a column of its own, not a door of the
-    hallway.
-- **`sieve fractal`:** `list`, `show ID --depth N`, `draw ID --out FILE.png` and `check FILE`.
+- The logo still shows the old number of lines (you said that is fine).
+- A larger minimap view is noted for later.
 
-## Also
+## Files to delete by hand
 
-- Catalogue entries for both formats, so the "document" ring now has 12 doors, and an entry in the
-  dimensions catalogue (linked from pages).
-- A help-library page, "The Fractal Dimension".
-- SPECIFICATIONS 12.0t, and updates to DIMENSIONS, FILTER-PLUGINS §23, IDEAS 19.191 and 19.235, and
-  REVIEW-ROUND S1.
-- IDEAS also records your words from this sitting:
-  - layouts are for personal dimensions, with models made for each shape;
-  - the shelves are charted by hand;
-  - fractals can act as filters;
-  - plants and decorations grown from fractal rulesets for personal dimensions;
-  - fractal models and textures as a filter, and in time one fractal filter of every entry with its
-    rulesets shifted and adjusted procedurally;
-  - that filter's include/exclude setting (include charts what it finds; exclude knocks it out).
-
-## For you to look at (the sitting)
-
-Screenshots come with this zip, sent apart from it: the setup page's column, the Fibonacci word's rows, and the fractal
-plant. Please judge:
-- the column's look;
-- the Koch-curve break;
-- whether a plant should grow upwards rather than sideways. Every turtle starts heading east, which
-  suits the curves; plants could start heading up.
-
-## Still to come in the fractal dimension
-
-- Walking the line beyond the shelves, a ruleset's neighbours by address.
-- Fractals as filters on other lines.
-- More families: iterated function systems and tilings.
-- Then layouts (step 2) and the maze door (S2).
-
-## Checked
-
-- CI: all 12 steps passed.
-- Unit tests: `test_fractals`, 188 checks.
-- The help check: 0 missing. The settings check: 141 match. The library check: all keys and links
-  found.
+- `Sieve/client/fractal_library.cpp`
+- `Sieve/client/fractal_library.hpp`

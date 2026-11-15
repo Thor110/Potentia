@@ -55,7 +55,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/text.hpp"
 #include "sieve/fractal.hpp"
-#include "fractal_library.hpp"
+#include "listed_shelf.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/character_voxels.hpp"
@@ -771,6 +771,24 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
     out[size_t(kModelsLine)] = titled(models, false);
     out[size_t(kWorldsLine)] = worlds;
     out[size_t(kBinaryLine)] = binary;
+    // A listed line: as many units as its shelf lists (read once: a chart of a few lines).
+    for (int li = 0; li < kLines; ++li)
+        if (is_listed(li))
+        {
+            static std::array<int, kLines> listed_n = [] {
+                std::array<int, kLines> n{};
+                for (int l = 0; l < kLines; ++l)
+                    if (is_listed(l))
+                        if (const auto shelf = make_listed_shelf(kDimensions[l].media)) n[size_t(l)] = int(shelf->size());
+                return n;
+            }();
+            const uint64_t per = uint64_t(sieve::books_per_tile());
+            LineSize z;
+            z.bits = listed_n[size_t(li)] > 0 ? std::log2(double(listed_n[size_t(li)])) : 0;
+            z.padding = uint32_t((per - uint64_t(listed_n[size_t(li)]) % per) % per);
+            z.units = std::to_string(listed_n[size_t(li)]) + " listed = " + std::to_string(listed_n[size_t(li)]) + " charted";
+            out[size_t(li)] = z;
+        }
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
     const uint64_t kMaxPositions = 0xFFFFFFFFull;
     if (uint64_t(s_.image_w) * s_.image_h > kMaxPositions) out[size_t(line_of(Media::Image))].bits = out[size_t(kBooksLine)].bits = HUGE_VAL;
@@ -990,6 +1008,7 @@ double Menu::line_cache_bytes(int i) const
     case Media::Binary: pos = (uint64_t(s_.binary_bytes) + 3) / 4 + t; break;
     case Media::Tracks: pos = audio_shape(s_).second * uint64_t(s_.track_units) + t + cover; break;
     case Media::Movies: pos = positions(s_.video_w, s_.video_h, s_.frames) * uint64_t(s_.movie_units) + t + cover; break;
+    case Media::Fractals: pos = 1; break; // (an item's place in its list; its picture is drawn when shown)
     }
     const double units = double(tiles_kept()) * double(s_.items_per_wall);
     // A binary file is kept lazily (hallway.hpp, Book::is_file): only its place on the line, a
@@ -1784,9 +1803,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
         for (int c = 0; c < kMapColumns; ++c)
         {
-            const bool clicked = inside(magnifier_[c], mx, my) || inside(dots_[c], mx, my);
-            if (clicked && c == kFractalColumn) open_fractals(done, result);
-            else if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
+            if (inside(magnifier_[c], mx, my)) { if (!is_listed(overlay_of_column(c))) open_filters(overlay_of_column(c)); } // (a listed line has no filters)
             else if (inside(dots_[c], mx, my)) open_details(overlay_of_column(c));
         }
         return;
@@ -3579,6 +3596,7 @@ void Menu::render()
             {-1, tr("setup.ai_text_model"), text_model_value()},
             {-1, tr("setup.ai_picture_model"), picture_model_value()},
         };
+        case Media::Fractals: return {}; // (a listed line: no shape to set)
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         };
@@ -3736,11 +3754,6 @@ void Menu::render()
     for (int c = 0; c < kMapColumns; ++c)
     {
         const float x = x0 + float(c) * pitch;
-        if (c == kFractalColumn)
-        {
-            draw_fractal_column(x, pitch, label, top, span, scale_bits, name_scale);
-            continue;
-        }
         const bool binary = c == 0 || c == kMapColumns - 1;
         const int i = binary ? kBinaryLine : c - 1; // the door
         Theme th = theme_of(i);
@@ -3793,7 +3806,8 @@ void Menu::render()
         // swapped, so it reads like the others: a dark body in a light frame.
         const bool dark_edges = (edge.r * 3 + edge.g * 6 + edge.b) / 10 < 60;
         const SDL_Color body = dark_edges ? edge : th.bg, frame = dark_edges ? th.bg : edge;
-        const float len = std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
+        // (a listed line's bar would be less than a pixel: drawn the full height and broken, as AI's is)
+        const float len = is_listed(i) ? span : std::isfinite(z.bits) ? std::clamp(float(z.bits / scale_bits) * span, min_bar, span) : span;
         const SDL_FRect bar{x + 8, top, 40, len};
         SDL_SetRenderDrawColor(r_, body.r, body.g, body.b, 255);
         SDL_RenderFillRect(r_, &bar);
@@ -3801,8 +3815,26 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
+        // A listed line (the fractal dimension): its bar broken whatever its length, as AI's is, the
+        // break drawn as a Koch curve of two steps (Edward: "a similar bar layout with the gap, unless
+        // you think of a fancy fractal gap").
+        if (is_listed(i) && len > 40)
+        {
+            const float by = top + std::min(span / 3, len / 2);
+            const SDL_FRect gap{x + 6, by - 5, 44, 10};
+            SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+            SDL_RenderFillRect(r_, &gap);
+            static const auto koch = [] {
+                const auto f = sieve::read_fractal("sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n");
+                return sieve::fractal_lines(*f, *f->grow(2));
+            }();
+            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+            for (const float off : {-5.0f, 5.0f})
+                for (const auto& l : koch) // (9 steps wide; drawn 48 pixels across)
+                    SDL_RenderLine(r_, x + 4 + float(l[0]) * 48 / 9, by + off - float(l[1]) * 48 / 9, x + 4 + float(l[2]) * 48 / 9, by + off - float(l[3]) * 48 / 9);
+        }
         // Past the scale: a break across the bar, a third of the way down.
-        if (std::isfinite(z.bits) && z.bits > scale_bits)
+        else if (std::isfinite(z.bits) && z.bits > scale_bits)
         {
             const float by = top + span / 3;
             const SDL_FRect gap{x + 6, by - 4, 44, 8};
@@ -3854,94 +3886,6 @@ void Menu::render()
     }
 }
 
-
-// ---------------------------------------------------------------- the fractal dimension's column
-// After AI on the map (Edward, 15 November 2026: "a light shade of purple and be after the AI dimension
-// in the setup page"): a line of its own (IDEAS 19.191, 19.235), not a door of the hallway. Its bar is
-// the line's units, every text of kFractalUnit characters (the rulesets among them are its survivors),
-// broken as AI's is, the break drawn as a Koch curve; inside it, the fractals charted on its shelves, a
-// sliver. Its glass and its dots open the shelves.
-namespace {
-constexpr int kFractalUnit = 128; // the characters of a ruleset as the map counts it (a unit of ascii96)
-}
-
-void Menu::draw_fractal_column(float x, float pitch, float label, float top, float span, double scale_bits, float name_scale)
-{
-    const SDL_Color body{205, 185, 255, 255}, frame{120, 90, 200, 255}, ink{205, 185, 255, 255};
-    const int c = kFractalColumn;
-    if (fractals_charted_ < 0)
-        try
-        {
-            fractals_charted_ = int(sieve::read_fractal_chart(FractalLibrary::folder()).size());
-        }
-        catch (const std::exception&)
-        {
-            fractals_charted_ = 0;
-        }
-    const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
-    auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
-    magnifier_[c] = {x - 2, label - 2, 20, 20};
-    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
-    outline_ellipse(r_, x + 6, label + 6, 5, 5, 16);
-    SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
-    SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
-    const std::string name = tr("line.fractals");
-    text(r_, x + 22, label, name, name_scale, ink);
-    {
-        const float dx = x + 22 + text_width(name, name_scale) + 3, d = name_scale >= 2 ? 3.0f : 2.0f;
-        dots_[c] = {dx - 2, label - 2, std::max(8.0f, x + pitch - 4 - (dx - 2)), 20};
-        for (int k = 0; k < 3; ++k)
-        {
-            const SDL_FRect dot{dx, label + 1 + float(k) * 6, d, d};
-            SDL_RenderFillRect(r_, &dot);
-        }
-    }
-    const double bits = kFractalUnit * std::log2(96.0);
-    text(r_, x, label + 22, clip(tr("map.fractal_one")), 1, ink);
-    text(r_, x, label + 34, clip(trf("map.fractal_unit", {std::to_string(kFractalUnit)})), 1, ink);
-    text(r_, x, label + 46, clip(trf("map.bits", {fixed(bits, 0)})), 1, ink);
-    text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, ink);
-    text(r_, x, label + 70, clip(trf("map.charted", {std::to_string(fractals_charted_)})), 1, ink);
-    text(r_, x, label + 82, clip(trf("map.charted_bits", {fixed(fractals_charted_ > 0 ? std::log2(double(fractals_charted_)) : 0, 1)})), 1, ink);
-    // The bar, as long as the line's units are against the scale (min 12), broken a third of the way
-    // down whatever its length, as AI's is: not to scale.
-    const float len = std::clamp(float(bits / scale_bits) * span, 12.0f, span);
-    const SDL_FRect bar{x + 8, top, 40, len};
-    SDL_SetRenderDrawColor(r_, body.r, body.g, body.b, 255);
-    SDL_RenderFillRect(r_, &bar);
-    SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
-    SDL_RenderRect(r_, &bar);
-    const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
-    SDL_RenderRect(r_, &inner);
-    if (len > 40)
-    {
-        // The break: black across the bar, its two edges each a Koch curve of two steps.
-        const float by = top + std::min(span / 3, len / 2);
-        const SDL_FRect gap{x + 6, by - 5, 44, 10};
-        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
-        SDL_RenderFillRect(r_, &gap);
-        if (const auto f = sieve::read_fractal("sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n"))
-        {
-            const auto lines = sieve::fractal_lines(*f, *f->grow(2));
-            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
-            for (const float off : {-5.0f, 5.0f})
-                for (const auto& l : lines) // (9 steps wide; drawn 48 pixels across)
-                    SDL_RenderLine(r_, x + 4 + float(l[0]) * 48 / 9, by + off - float(l[1]) * 48 / 9, x + 4 + float(l[2]) * 48 / 9, by + off - float(l[3]) * 48 / 9);
-        }
-    }
-    // The charted fractals: a filled bar inside, a sliver against the line (never less than 3 pixels).
-    const float slen = std::clamp(float((fractals_charted_ > 0 ? std::log2(double(fractals_charted_)) : 0) / scale_bits) * span, 3.0f, std::max(3.0f, len - 4));
-    const SDL_FRect sv{x + 14, top + 2, 28, slen};
-    SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 220);
-    SDL_RenderFillRect(r_, &sv);
-}
-
-void Menu::open_fractals(bool& done, Result& result)
-{
-    FractalLibrary shelves(window_, r_, FractalLibrary::folder());
-    if (shelves.run() == FractalLibrary::Result::Quit) done = true, result = Result::Quit;
-    SDL_StartTextInput(window_); // (back to the setup menu as it was)
-}
 
 // ---------------------------------------------------------------- the right-hand panel
 // Opposite SETTINGS (IDEAS §19.148): a tab at the right edge while it is out, and when it is in, its
@@ -4468,6 +4412,7 @@ sieve::FilterLine Menu::part_line(int line, int part) const
 
 sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 {
+    if (is_listed(overlay_)) return listed_filters_;
     if (overlay_ == kAiLine) return cfg_.ai;
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
@@ -4477,6 +4422,7 @@ sieve::cli::LineFilters& Menu::filters_of(const ORow& row)
 
 const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 {
+    if (is_listed(overlay_)) return listed_filters_;
     if (overlay_ == kAiLine) return cfg_.ai;
     if (overlay_ == kModelsLine) return cfg_.models;
     if (overlay_ == kBinaryLine) return cfg_.binary;
@@ -4486,6 +4432,7 @@ const sieve::cli::LineFilters& Menu::filters_of(const ORow& row) const
 
 sieve::cli::FilterMode& Menu::mode_of(int line)
 {
+    if (is_listed(line)) return listed_filters_.mode;
     if (line == kModelsLine) return cfg_.models.mode;
     if (line == kAiLine) return cfg_.ai.mode;
     if (line == kBinaryLine) return cfg_.binary.mode;
@@ -4735,6 +4682,11 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
 
 const Menu::StackInfo& Menu::stack_info(int i)
 {
+    if (is_listed(i))
+    {
+        info_[i] = StackInfo{"listed", tr("status.listed"), -1, ""};
+        return info_[i];
+    }
     if (i == kAiLine)
     {
         auto [key, work] = stack_job(i, cfg_.ai);

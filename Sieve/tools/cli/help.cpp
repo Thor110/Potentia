@@ -445,7 +445,9 @@ const std::vector<Page>& pages()
          "snowflake, the dragon curve and more), each named with its ruleset. A ruleset is a substitution\n"
          "(each symbol replaced by its word at every step, drawn as its words one under another) or an\n"
          "L-system (drawn as a turtle draws: F and G a line forward, + and - turns of its angle, [ and ] a\n"
-         "place kept and taken back). The hallway shows them under Fractal Dimension on the main menu.",
+         "place kept and taken back). In the hallway it is the FRACTALS line, its door after AI: its first\n"
+         "book the index of them all, each book after it one fractal, taken in hand and grown a step at\n"
+         "a time with N and B (or = and -).",
          {{"list", "The charted fractals: id, family, size, how deep each grows, and its name (the default)."},
           {"show ID|FILE", "A ruleset at a depth: its family, its size, and its word (or how many lines it draws)."},
           {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},

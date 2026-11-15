@@ -23,8 +23,8 @@ namespace hallway {
 
 // The kinds of media on the shelves: a dimension's identity. This order is the order of anything
 // saved as a list per dimension (the music settings' modes), so it only ever grows at the end.
-enum class Media { Pages, Image, Audio, Video, Books, Models, Binary, Tracks, Movies, Worlds, Ai };
-inline constexpr int kMedia = 11;
+enum class Media { Pages, Image, Audio, Video, Books, Models, Binary, Tracks, Movies, Worlds, Ai, Fractals };
+inline constexpr int kMedia = 12;
 
 struct Dimension
 {
@@ -43,6 +43,11 @@ struct Dimension
     // not, since the real things come in one size. The wireframe follows it, and so must any Real
     // Graphics models.
     bool sizes_vary;
+    // A listed line (Edward, 15 November 2026: "every dimension we add should become its own hallway /
+    // line"): its units a finite list of items a shelf provides (listed_shelf.hpp), each a book with
+    // a title and a picture, taken in hand and opened as any item is; no filters, one ordering, its
+    // address the item's place in the list. A new dimension of this kind is a row here and a shelf.
+    bool listed = false;
 };
 
 using sieve::cli::LineKind;
@@ -73,6 +78,10 @@ inline constexpr Dimension kDimensions[] = {
     // AI (sieve/aispace.hpp): every language model of one shape, numbered by its weights; take one
     // off the shelf and talk to it. Deep violet with lilac edges.
     {Media::Ai, "ai", "ai", std::nullopt, std::nullopt, {{48, 0, 80, 255}, {200, 140, 255, 255}, "AI", "AI", "line.ai"}, 5, false},
+    // The fractal dimension (IDEAS 19.191, 19.235; SPECIFICATIONS 12.0t): the fractals charted by hand,
+    // its first book the index of them all. Light purple (Edward: "it may as well also be a light
+    // shade of purple and be after the AI dimension"), with deep violet edges.
+    {Media::Fractals, "fractals", "fractals", std::nullopt, std::nullopt, {{200, 180, 255, 255}, {90, 50, 170, 255}, "FRACTALS", "FRACTALS", "line.fractals"}, 0, true, true},
     // Binary (SPECIFICATIONS §12.1): black, with green edges and green text. What is unusual about it
     // is its shape, not its palette: one wall of shelves, and on the other side the edge and the drop.
     {Media::Binary, "binary", "binary", std::nullopt, std::nullopt, {{0, 0, 0, 255}, {32, 220, 80, 255}, "BINARY", "BINARY", "line.binary"}, 6, false},
@@ -101,7 +110,9 @@ constexpr int line_named(std::string_view name)
 }
 
 inline constexpr int kBooksLine = line_of(Media::Books), kModelsLine = line_of(Media::Models), kWorldsLine = line_of(Media::Worlds),
-                     kAiLine = line_of(Media::Ai), kBinaryLine = line_of(Media::Binary);
+                     kAiLine = line_of(Media::Ai), kFractalsLine = line_of(Media::Fractals), kBinaryLine = line_of(Media::Binary);
+// Whether the line at door li is a listed line (its units a shelf's finite list: listed_shelf.hpp).
+constexpr bool is_listed(int li) { return li >= 0 && li < kLines && kDimensions[li].listed; }
 // Whether the line at door li is a composition of another's units (tracks, movies).
 constexpr bool is_composition(int li) { return li >= 0 && li < kLines && kDimensions[li].composes.has_value(); }
 static_assert(kBinaryLine == kLines - 1, "binary is last: the corridor starts and ends at it");

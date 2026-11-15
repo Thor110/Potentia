@@ -22,8 +22,10 @@ The unit tests check that every link names a dimension that exists, that every d
 
 ## The dimensions, by kind
 
-**The hallway's eleven lines** (SPECIFICATIONS §3), all built: pages, image, audio, video; the books,
-tracks and movies composed of them; models, worlds, AI and binary.
+**The hallway's twelve lines** (SPECIFICATIONS §3), all built: pages, image, audio, video; the books,
+tracks and movies composed of them; models, worlds, AI, the fractal dimension (a listed line, its
+units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the kind is a row in
+`kDimensions` and a shelf) and binary.
 
 **Built since, from 12 November 2026:**
 
@@ -40,11 +42,12 @@ tracks and movies composed of them; models, worlds, AI and binary.
   second, 256 steps a number, so every animation is an address; played on any character. The roof:
   64 bones, 300 frames. `sieve-animation-v2` (13 November 2026) adds each bone's move per frame, so
   a glTF's translation channels (a body walking forward) come in too.
-- *The fractal dimension* (partly built, 15 November 2026, §19.191, §19.235): a line of rulesets
-  (`sieve-fractal-v1`: substitutions and L-systems), each a unit of the pages line over `ascii96` that
-  the `format-fractal-v1` filter passes; its shelves the fractals charted by hand. `sieve fractal`, and
-  the FRACTALS column on the setup page, after AI. Next: layouts (a layout is a tiling taken from it, for
-  your personal dimension), then the maze door.
+- *The fractal dimension* (partly built, 15 November 2026, §19.191, §19.235): a line of the hallway,
+  its door after AI, light purple. Its first book is the index of every fractal charted by hand, each
+  book after it one fractal (`sieve-fractal-v1`: substitutions and L-systems), taken in hand and grown a
+  step at a time. Its rulesets are also units of the pages line over `ascii96` that `format-fractal-v1`
+  passes; `sieve fractal` lists, shows and draws them. Next: layouts (a layout is a tiling taken from
+  it, for your personal dimension), then the maze door.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try
   `sieve warp --alphabet dna4 --length 12 GATTACA`. A reader of FASTA files, which would skip the

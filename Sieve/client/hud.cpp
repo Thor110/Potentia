@@ -195,7 +195,7 @@ std::string Hallway::binary_preview(const BinarySpace::Bytes& f, size_t most, ui
 std::string Hallway::one_line_preview(const Space::Digits& u)
 {
     if (on_binary()) return ""; // a file is written out by binary_preview
-    if (on_models() || on_worlds() || on_ai()) return ""; // a model (a world) is drawn, not written out: see draw_model
+    if (on_models() || on_worlds() || on_ai() || on_listed()) return ""; // a model (a world, a listed item) is drawn, not written out: see draw_model
     if (line().kind == LineKind::Text) return "\"" + ascii(utf8_encode(line().space.text_of(u))) + "\"";
     if (line().kind == LineKind::Audio)
     {
@@ -533,6 +533,50 @@ const std::string& Hallway::ai_said(const Book& b) const
 
 // A model in hand: its shape, what it says by itself, and the conversation with it so far (Enter
 // says something to it: Hallway::talk), the last lines that fit.
+float Hallway::draw_listed(const Book& bk, float x, float y, float pw, float bottom)
+{
+    const SDL_Color ink = theme().edge, dim = mix(theme().edge, theme().bg, 0.45f);
+    const ListedShelf& sh = listed_shelf();
+    const size_t i = *bk.listed;
+    text(x + 14, y, sh.summary(i), 1, dim);
+    y += 16;
+    const std::vector<std::string> lines = sh.text(i);
+    // The picture, square, as large as leaves room for the text beneath (and the depth line).
+    const float room = bottom - y - 26 - float(lines.size()) * 14;
+    const int side = int(std::max(48.0f, std::min(pw - 28, room)));
+    const uint32_t depth = held_depth();
+    const std::string key = std::to_string(i) + "/" + std::to_string(depth) + "/" + std::to_string(side);
+    if (key != listed_tex_key_)
+    {
+        if (listed_tex_) SDL_DestroyTexture(listed_tex_), listed_tex_ = nullptr;
+        if (const auto img = sh.picture(i, depth, uint32_t(side), uint32_t(side)))
+        {
+            listed_tex_ = gpu::create(r_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, int(img->width), int(img->height));
+            if (listed_tex_) SDL_UpdateTexture(listed_tex_, nullptr, img->rgba.data(), int(img->width) * 4);
+        }
+        listed_tex_key_ = key;
+    }
+    if (listed_tex_)
+    {
+        const SDL_FRect at{x + 14, y, float(side), float(side)};
+        SDL_RenderTexture(r_, listed_tex_, nullptr, &at);
+        y += float(side) + 6;
+    }
+    if (sh.deepest(i) > 0)
+    {
+        text(x + 14, y, trf("hand.listed.depth", {std::to_string(depth), std::to_string(sh.deepest(i))}), 1, ink);
+        y += 16;
+    }
+    const size_t cols = size_t(std::max(8.0f, (pw - 28) / 8));
+    for (const std::string& l : lines)
+    {
+        if (y + 14 > bottom) break;
+        text(x + 14, y, fit(l, float(cols) * 8, 1), 1, dim);
+        y += 14;
+    }
+    return y;
+}
+
 float Hallway::draw_ai(const Book& bk, float x, float y, float pw, float bottom)
 {
     const SDL_Color ink = theme().edge, dim = mix(theme().edge, theme().bg, 0.45f);
@@ -691,6 +735,7 @@ void Hallway::draw_in_hand(float W, float H)
     if (bk.model) cy = draw_model(*bk.model, x, cy, pw, y + ph - 110);
     else if (bk.world) cy = draw_world(*bk.world, x, cy, pw, y + ph - 110);
     else if (bk.ai) cy = draw_ai(bk, x, cy, pw, y + ph - 110);
+    else if (bk.listed && on_listed()) cy = draw_listed(bk, x, cy, pw, y + ph - 110);
     else if (bk.parts) cy = draw_book(*bk.parts, x, cy, pw, y + ph - 110);
     else if (bk.is_file)
     {
@@ -756,7 +801,7 @@ void Hallway::draw_in_hand(float W, float H)
         text(x + 14, cy, l, 1, ink);
         cy += 10;
     }
-    draw_footer(r_, "hand", x + 14, y + ph - 16, pw - 28, trk(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.ai ? "hand.keys.ai" : bk.is_file ? "hand.keys.file" : "hand.keys"), ink);
+    draw_footer(r_, "hand", x + 14, y + ph - 16, pw - 28, trk(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.ai ? "hand.keys.ai" : bk.is_file ? "hand.keys.file" : bk.listed && on_listed() && listed_shelf().deepest(*bk.listed) > 0 ? "hand.keys.listed" : "hand.keys"), ink);
 }
 
 // COST: what it costs to name the thing in your hand.
@@ -814,7 +859,9 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
 {
     const Theme& th = theme();
     const SDL_Color ink = th.edge, dim = mix(th.edge, th.bg, 0.45f);
-    const BigUint& n = on_books()         ? books_->size()
+    const BigUint listed_n(uint64_t(on_listed() ? listed_shelf().size() : 0));
+    const BigUint& n = on_listed()        ? listed_n
+                       : on_books()       ? books_->size()
                        : on_composition() ? comp().space->size()
                        : on_worlds()      ? world_space_->size()
                        : on_ai()          ? ai_space_->size()
@@ -828,7 +875,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // The guided length for this unit, whatever ordering you are walking in. It exists only on a
     // text line with a model behind it.
     const sieve::GuidedLine::Code* guided = nullptr;
-    if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_binary() && line().guided)
+    if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_listed() && !on_binary() && line().guided)
     {
         try
         {

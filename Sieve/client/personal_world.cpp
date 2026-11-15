@@ -302,13 +302,6 @@ const std::string& kLast = pk::declare("docs", "last", "End");
 [[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "docs"), true);
 } // namespace help_keys
 
-namespace fractal_keys {
-const std::string& kDeeper = pk::declare("fractals", "deeper", "=,Keypad +");
-const std::string& kShallower = pk::declare("fractals", "shallower", "-,Keypad -");
-const std::string& kFirst = pk::declare("fractals", "first", "Home");
-const std::string& kDeepest = pk::declare("fractals", "deepest", "End");
-[[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "fractals"), true);
-} // namespace fractal_keys
 
 namespace chain_keys {
 const std::string& kUp = pk::declare("chain", "up", "Up");

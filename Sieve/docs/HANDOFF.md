@@ -51,11 +51,12 @@ These are not preferences. Work that breaks one of them is wrong.
 - **Purely functional.** Nothing is stored. The engine sieves the state space; it does not keep a
   database of what it found.
 
-## The eleven lines
+## The twelve lines
 
-    binary | image  pages  books  audio  tracks  video  movies  models  worlds  ai | binary
+    binary | image  pages  books  audio  tracks  video  movies  models  worlds  ai  fractals | binary
 
-Defined once, in door order, in `client/dimensions.hpp` (`kDimensions`): `kLines = 11`, with
+Defined once, in door order, in `client/dimensions.hpp` (`kDimensions`): `kLines = 12` since the
+fractal dimension (15 November 2026: a listed line, `listed_shelf.hpp`, its units a shelf's list), with
 `binary` last (a static_assert holds it there). Each part stands before what is composed of it,
 and image, a part of nearly all of them, first. The middle lines used to loop into each other
 through the doors; they no longer do. They start and finish at the binary line, which is why it is

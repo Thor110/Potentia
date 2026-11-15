@@ -128,6 +128,7 @@ std::string Hallway::prepare_save()
     else
     {
         if (bk.ai) ext = ".safetensors";
+        else if (bk.listed) ext = on_listed() ? listed_shelf().file_ext(*bk.listed) : ".txt"; // (a listed item: its text)
         else if (bk.model || bk.world) ext = ".obj";
         else if (bk.parts) ext = ".txt";
         else
@@ -149,7 +150,13 @@ std::string Hallway::prepare_save()
     save_ext_ = ext;
     // An item of the image, video or audio line can be saved in other formats through ffmpeg.
     save_formats_.clear();
-    if (!bk.is_file && !bk.model && !bk.world && !bk.ai && !bk.parts && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
+    if (!bk.is_file && !bk.model && !bk.world && !bk.ai && !bk.parts && !bk.listed && line().kind != LineKind::Text) save_formats_ = cli::export_formats(line());
+    // A listed item's file is made now, from its shelf.
+    if (bk.listed)
+    {
+        std::string n;
+        save_blob_ = item_file(bk, n);
+    }
     // A track or movie can also be saved whole, as a record that J opens onto its shelf.
     if (on_composition() && !bk.unit.empty()) save_formats_.push_back({record_ext(), tr("save.record"), ""});
     return name;
@@ -364,6 +371,15 @@ std::vector<uint8_t> Hallway::item_file(const Book& bk, std::string& name)
         const std::string obj = world_space_->to_obj(*bk.world);
         return std::vector<uint8_t>(obj.begin(), obj.end());
     }
+    if (bk.listed && on_listed())
+    {
+        // A listed item: its text, the steps that make it (a fractal's ruleset, byte for byte as its
+        // file in the chart holds it), not its picture, which is only how it is shown.
+        named(listed_shelf().file_ext(*bk.listed));
+        std::string text;
+        for (const auto& l : listed_shelf().text(*bk.listed)) text += l + "\n";
+        return std::vector<uint8_t>(text.begin(), text.end());
+    }
     if (bk.ai && ai_space_)
     {
         // The model's weights as a file (sieve chat --raw talks to it, with its config), named by the
@@ -410,6 +426,7 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
         fs::create_directories(folder);
         const BigUint units = line_units();
         size_t saved = 0, skipped = 0;
+        BigUint last = units; // (a line of fewer units than degrees: each unit once, not again at every degree it spans)
         std::set<std::string> taken; // two items of one title (a blank one, say) are told apart
         for (uint32_t d = 0; d < kDegrees; ++d)
         {
@@ -418,6 +435,8 @@ std::string Hallway::sample_degrees(const std::string& dir, const std::string& s
             index.mul_small(d);
             if (index.divmod_small(kDegrees) != 0) index += BigUint(1);
             if (index >= units) { ++skipped; continue; } // a line of fewer units than degrees
+            if (is_listed(li) && index == last) { ++skipped; continue; }
+            last = index;
             place(index, true);
             if (!in_hand_) { ++skipped; continue; } // the vault's
             const Book bk = *in_hand_;

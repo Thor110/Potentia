@@ -23,18 +23,19 @@ $H --screenshot hallway.png --size 640x360
 python tools/settings_doc.py "$H" --check
 test -s hallway.png
 # The metrics list (hallway --metrics, no window): every line under the reference filters,
-# as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954%.
+# as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954% (the names padded
+# to the longest, Fractals; a listed line has no filters, so no Kept).
 $H --metrics metrics.txt --filters data/metrics/reference-filters.ini > /dev/null
-q "^Binary : 99.9954%" metrics.txt
-q "^Models : 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
+q "^Binary *: 99.9954%" metrics.txt
+q "^Models *: 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
 [ "$(grep -c ' : .*Kept : ' metrics.txt)" = 11 ]
 # ...and what each ordering saves: nothing in positional or scrambled order, what the
 # filters remove off every survivor in compact order, and the guided ordering's bound and
 # what it did on the reference text (Dickens, which the model was not trained on).
 q "^Positional and scrambled : 0 bits, on every line" metrics.txt
-q "^Binary : compact [0-9.]* bits off every survivor" metrics.txt
-q "^Pages  : guided: no minimum" metrics.txt
-q "^Pages  : guided on reference-text.txt (SHA-256 [0-9a-f]*\.\.\., [0-9]* pages): [0-9.]* bits a page" metrics.txt
+q "^Binary *: compact [0-9.]* bits off every survivor" metrics.txt
+q "^Pages *: guided: no minimum" metrics.txt
+q "^Pages *: guided on reference-text.txt (SHA-256 [0-9a-f]*\.\.\., [0-9]* pages): [0-9.]* bits a page" metrics.txt
 # The model Sieve trained, against its own file and the compressors (whose sizes depend on
 # the zlib and liblzma linked, so only the address and the file are pinned).
 q "^universalbibliothek (ai/L1/H16/A2/F64/B4/V256/key=sieve/aispace-v1" metrics.txt
@@ -860,12 +861,17 @@ build/sieve install located-force.sieve --to located_force > /dev/null
 diff -r tests/manifest_fixture located_force
 # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
 # .sieve, the same on every machine; installing it gives every file back, and a bearing
-# typed in the navigator (X, Tab) is the same item again.
-$H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3960 items"
+# typed in the navigator (X, Tab) is the same item again. (3,972: 360 a line for eleven lines, and the
+# fractal dimension's 12 items once each, a listed line being fewer items than degrees.)
+$H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3972 items"
 $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
 diff -r degrees degrees2
 build/sieve install degrees.sieve --to deg_inst > /dev/null
 diff -r degrees deg_inst
+# The fractal line's items are written as their rulesets, the steps that make them, byte for byte as
+# the chart holds them; no picture of one is stored.
+cmp "degrees/fractals/Dragon curve.fractal" data/fractals/dragon-curve.fractal
+test "$(find degrees/fractals -name '*.png' | wc -l)" = 0
 # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
 # their lines and places, made again on installing, every file the same; smaller than v4;
 # and sieve-install, the full installer, makes them again too. (The hallway's own sample is
@@ -1502,10 +1508,11 @@ $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst 
 # counts them, and the opening recipe's two layers placed among them.
 $H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | tr -d '\r' | q "^cipher: the recipe has 2 layer(s): one of the recipes of its depth, named by 260 bits$"
 # The completion estimate (IDEAS §19.49; the setup menu's map since 9 November 2026, the main menu's
-# before): a line for each of the eleven dimensions, binary first, each with its size and the time to
-# walk it at one a second.
+# before): a line for each of the twelve dimensions, binary first, each with its size and the time to
+# walk it at one a second (the fractal dimension's, a listed line, its count of items charted).
 $H --menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
-test "$(grep -c '^estimate: ' main-estimate.txt)" = 11
+test "$(grep -c '^estimate: ' main-estimate.txt)" = 12
+q "^estimate: FRACTALS  12 listed = 12 charted  ->  12 seconds$" main-estimate.txt
 q "^estimate: BINARY  title\*files<=" main-estimate.txt
 # A line's details (I, or the dots after its name in the map; 9 November 2026): what its figures
 # mean, in words; I again closes it.
@@ -1874,14 +1881,16 @@ $H --docs welcome --script "Right,Tab,Return,Backspace" --screenshot docs-back.p
 $H --docs welcome --script "Tab" --screenshot docs-index.png | tr -d '\r' | q "^documentation: page welcome of .*; INDEX: [0-9]* rows; "
 $H --docs welcome --script "=midi" --screenshot docs-search.png | tr -d '\r' | q "^  list: The viewer$"
 $H --docs nosuchpage --screenshot docs-none.png | tr -d '\r' | q "^  status: No page of the library is called nosuchpage, so it opens on its first.$"
-# The Fractal Dimension (list S, IDEAS 19.191, 19.235): its shelves, the fractals charted by hand, each
-# grown a step at a time (Right, =; Left, -), to the deepest drawn (End) and back to its axiom (Home); a
-# fractal not charted is said. Opened from the setup page's FRACTALS column, after AI.
-$H --fractals dragon-curve --screenshot fractals.png | tr -d '\r' | q "^fractals: fractal dragon-curve at depth 5: 126 symbols; 11 charted$"
-$H --fractals dragon-curve --script "Right,=,Left" --screenshot fractals-deeper.png | tr -d '\r' | q "^fractals: fractal dragon-curve at depth 6: 254 symbols; "
-$H --fractals fibonacci-word --script "Home,Right,Right,Right" --screenshot fractals-fib.png | tr -d '\r' | q "^fractals: fractal fibonacci-word at depth 3: 5 symbols; "
-$H --fractals fibonacci-word --script "Down,Down,End" --screenshot fractals-cantor.png | tr -d '\r' | q "^fractals: fractal cantor-set at depth 11: 177147 symbols; "
-$H --fractals nosuch --screenshot fractals-none.png | tr -d '\r' | q "^  status: No fractal on the shelves is called nosuch, so it opens on the first.$"
+# The fractal dimension (list S, IDEAS 19.191, 19.235), a line of its own after AI: its first book the
+# index of every fractal charted, each book after it one fractal, taken in hand as any item is and grown
+# a step at a time (N, or =; B, or -), found by its name (warp) or its place (go to). (The status line
+# is printed on a step or a key, so the checks with neither walk on the spot, --walk "0,0".)
+$H --no-menu --line fractals --walk "0,0" --goto 0 --take --screenshot fractals-index.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, .*first book 0 \"Index of the fractal dimension\""
+$H --no-menu --line fractals --walk "0,0" --warp dragon-curve --take --screenshot fractals-dragon.png | tr -d '\r' | q "| went to dragon-curve$"
+$H --no-menu --line fractals --warp dragon-curve --take --press N,N --screenshot fractals-deeper.png | tr -d '\r' | q "| Depth 7 of 16.$"
+$H --no-menu --line fractals --warp fibonacci-word --take --press B,B,B,B,B,B --screenshot fractals-first.png | tr -d '\r' | q "| It is at its first step, its axiom.$"
+$H --no-menu --line fractals --walk "0,0" --warp nosuch --screenshot fractals-none.png | tr -d '\r' | q "No item on this line is called nosuch"
+$H --no-menu --line fractals --walk "0,0" --goto 12 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 12 items"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-case.png > /dev/null
@@ -2140,10 +2149,10 @@ $H --warp "$W" --press "X,Tab,1,8,0,Return" --screenshot navangle.png | tail -2 
 navangle2=$($H --warp "$W" --press "X,Tab,3,6,0,Return" --screenshot navangle2.png | tail -2 | sed -n 1p)
 if grep -q "went to" <<< "$navangle2"; then exit 1; fi
 start=$($H --mode guided --warp "$W" --zoom 20 --walk "0,0" --screenshot start.png | book)
-# The corridor end to end and back: nine doors left from pages reach binary (books,
-# audio, tracks, video, movies, models, worlds, AI), which is where the run finishes, and
-# nine right brings you back to the same book on pages.
-out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
+# The corridor end to end and back: ten doors left from pages reach binary (books,
+# audio, tracks, video, movies, models, worlds, AI, fractals), which is where the run finishes,
+# and ten right brings you back to the same book on pages.
+out=$($H --mode guided --warp "$W" --zoom 20 --pose 0,7,-90,0 --walk "-2.3,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;-4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0;4.2,0" --screenshot guided.png)
 echo "$out"
 echo "$out" | q "BOOKS line"
 echo "$out" | q "TRACKS line"
@@ -2152,8 +2161,9 @@ echo "$out" | q "MOVIES line"
 echo "$out" | q "MODELS line"
 echo "$out" | q "WORLDS line, positional"
 echo "$out" | q "AI line, positional"
+echo "$out" | sed -n 9p | q "^FRACTALS line, positional"
 echo "$out" | q "BINARY line"
-echo "$out" | sed -n 9p | q "^BINARY line"
+echo "$out" | sed -n 10p | q "^BINARY line"
 echo "$out" | tail -2 | sed -n 1p | q "^PAGES line"
 test "$(echo "$out" | tail -2 | book)" = "$start"
 # Loops: a 2-character line is 729 units = 6 tiles, so tile 6 starts the second copy,

@@ -215,14 +215,6 @@ extern const std::string& kFirst;
 extern const std::string& kLast;
 } // namespace help_keys
 
-// The Fractal Dimension's keys (IDEAS 19.191, 19.235), besides the menus' (Up and Down a fractal, Right
-// and Left a step deeper or back, Esc): a step deeper or back by = and -, and its first and deepest.
-namespace fractal_keys {
-extern const std::string& kDeeper;
-extern const std::string& kShallower;
-extern const std::string& kFirst;
-extern const std::string& kDeepest;
-} // namespace fractal_keys
 
 // The CHAIN tab's keys (IDEAS 19.199), asked before the item page's (a key none of them is goes on to the
 // page): a stage up or down, moved up or down, its model the one before or the next, steered by the

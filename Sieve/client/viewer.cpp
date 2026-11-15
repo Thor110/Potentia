@@ -204,7 +204,9 @@ constexpr size_t kHexPer = 16, kHexCols = 6 + 2 + 3 * kHexPer + 1 + kHexPer;
 // lines that fit the window, broken only between keys, the last line at the bottom.
 std::string Hallway::view_keys() const
 {
+    const bool listed_deeper = in_hand_ && in_hand_->listed && on_listed() && listed_shelf().deepest(*in_hand_->listed) > 0;
     const char* keys = view_kinds_.empty() ? "view.keys"
+                       : listed_deeper ? "view.keys.listed"
                        : view_kinds_[view_at_] == ViewKind::Shape ? "view.keys.shape"
                        : view_kinds_[view_at_] == ViewKind::Opened && !view_opened_.sound.empty() ? "view.keys.sound"
                        : view_.picture ? (view_.frames > 1 ? "view.keys.film" : "view.keys")
@@ -324,6 +326,7 @@ std::string Hallway::view_label(ViewKind k) const
     const Book& bk = *in_hand_;
     if (bk.model || bk.world) return tr("view.tab.obj");
     if (bk.ai) return tr("view.tab.weights");
+    if (bk.listed) return tr("view.tab.text");
     if (bk.parts) return tr("view.tab.page");
     if (bk.is_file) return tr("view.tab.hex");
     switch (line().kind)
@@ -354,7 +357,13 @@ void Hallway::view_raw()
     const Book& bk = *in_hand_;
     const std::string title = title_text(bk);
     const std::string named = title.empty() ? std::string() : "\"" + title + "\"   ";
-    if (bk.model)
+    if (bk.listed && on_listed())
+    {
+        // A listed item: its text (a fractal's ruleset; the index's list of them all).
+        view_.rows = utf32_rows(listed_shelf().text(*bk.listed));
+        view_.heading = named + listed_shelf().summary(*bk.listed);
+    }
+    else if (bk.model)
     {
         view_.rows = utf32_rows(split_lines(model_space_->to_obj(*bk.model)));
         view_.heading = named + tr("view.model");
@@ -612,6 +621,8 @@ void Hallway::open_viewer()
     // A model or a world opens on itself in three dimensions, turned as on its page; its .obj text next.
     if (bk.model || bk.world) view_kinds_.insert(view_kinds_.begin(), ViewKind::Shape);
     if (face_painter(bk)) view_kinds_.push_back(ViewKind::Picture);
+    // A listed item opens on its picture (a fractal drawn), its text next.
+    if (bk.listed && view_kinds_.back() == ViewKind::Picture) std::rotate(view_kinds_.begin(), view_kinds_.end() - 1, view_kinds_.end());
     if (bk.parts || !bk.cover.empty()) view_kinds_.push_back(ViewKind::Cover);
     if (bk.parts || !title_text(bk).empty()) view_kinds_.push_back(ViewKind::Title);
     view_open_ = true;
@@ -995,7 +1006,8 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
         case SDLK_B:
         {
             const int dir = e.key.key == SDLK_N ? 1 : -1;
-            if (in_hand_ && in_hand_->parts)
+            if (in_hand_ && in_hand_->listed && on_listed()) listed_step(dir); // (a step deeper, or back)
+            else if (in_hand_ && in_hand_->parts)
             {
                 turn_page(dir);
                 if (view_kinds_[view_at_] == ViewKind::Raw)

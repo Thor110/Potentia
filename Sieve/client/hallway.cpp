@@ -115,6 +115,14 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         }
         // AI: every language model of one shape (aispace-v1), judged by its weights ([ai]); its byte
         // tokenizer is the same for every shape.
+        // The listed lines (dimensions.hpp `listed`): each its shelf, no filters.
+        for (int li = 0; li < kLines; ++li)
+            if (is_listed(li))
+            {
+                listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media);
+                modes_[li] = FilterMode::Off;
+                if (listed_[size_t(li)] && !listed_[size_t(li)]->trouble().empty()) std::cerr << kDimensions[li].id << ": " << listed_[size_t(li)]->trouble() << "\n";
+            }
         ai_space_ = std::make_unique<AiSpace>(AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}, key);
         ai_tokenizer_ = std::make_unique<sieve::llm::Tokenizer>(sieve::json::parse(AiSpace::tokenizer_json()));
         ai_filters_ = filters.ai;
@@ -288,6 +296,7 @@ void Hallway::move_tiles(int64_t d)
 // survivors; otherwise the line hides instead.
 FilterMode Hallway::effective_mode(int i) const
 {
+    if (is_listed(i)) return FilterMode::Off; // (a listed line has no filters)
     if (i == kAiLine)
     {
         if (!ai_stack_ || ai_stack_->empty()) return FilterMode::Off;
@@ -350,6 +359,7 @@ std::string Hallway::space_id() const
            : on_composition() ? comp().space->id()
            : on_worlds()      ? world_space_->id()
            : on_ai()          ? ai_space_->id()
+           : on_listed()      ? listed_shelf().id()
            : titled_here()    ? titled_here()->id()
                               : line().space.id();
 }
@@ -475,6 +485,7 @@ BigUint Hallway::units_of(int i) const
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
     if (i == kAiLine) return effective_mode(i) == FilterMode::Compact ? ai_compact_->count() : ai_space_->size();
+    if (is_listed(i)) return BigUint(uint64_t(listed_[size_t(i)] ? listed_[size_t(i)]->size() : 0));
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -604,7 +615,15 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         b.index = *idx;
         const Space& sp = line().space;
         const bool compact_here = effective_mode() == FilterMode::Compact;
-        if (on_books())
+        if (on_listed())
+        {
+            // A listed item: its place in its shelf's list is its address.
+            const ListedShelf& sh = listed_shelf();
+            b.listed = b.index.is_zero() ? 0u : uint32_t(b.index.limbs()[0]);
+            b.hex = b.index.to_hex();
+            b.fraction = sh.size() > 1 ? double(*b.listed) / double(sh.size()) : 0.0;
+        }
+        else if (on_books())
         {
             if (compact_here)
             {
@@ -872,7 +891,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             b.hex = sp.hex_of(address);
             b.fraction = sp.fraction_of(address);
         }
-        if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_composition() && !b.survivor && !stack().empty())
+        if (!on_books() && !on_models() && !on_worlds() && !on_ai() && !on_listed() && !on_composition() && !b.survivor && !stack().empty())
         {
             sieve::cli::timings::Scope timed_filters("hallway.item.filters");
             const int fail = stack().first_failure(b.unit);
@@ -916,6 +935,7 @@ const TitledSpace* Hallway::titled_here() const { return titled_of(li_); }
 
 std::string Hallway::title_text(const Book& b) const
 {
+    if (b.listed && on_listed()) return listed_shelf().title(*b.listed);
     const TitledSpace* ts = titled_of(li_);
     const std::optional<Space>* title = on_composition() ? &comp().space->title_space()
                                         : on_worlds()    ? &world_space_->title_space()
@@ -1184,8 +1204,30 @@ const Hallway::Book* Hallway::reference_book()
 
 // positional -> scrambled -> guided (if this line has a model) -> positional, keeping the book
 // you are looking at in front of you.
+// A listed item in hand a step deeper (d > 0) or back, within what its shelf draws; said where it stops.
+void Hallway::listed_step(int d)
+{
+    if (!in_hand_ || !in_hand_->listed || !on_listed()) return;
+    const ListedShelf& sh = listed_shelf();
+    const uint32_t most = sh.deepest(*in_hand_->listed);
+    held_depth(); // (its first depth, if it has just come into your hands)
+    if (d > 0 && listed_depth_ >= most) message(trf("msg.listed.deepest", {std::to_string(most)}));
+    else if (d < 0 && listed_depth_ == 0) message(tr("msg.listed.first"));
+    else
+    {
+        listed_depth_ = d > 0 ? listed_depth_ + 1 : listed_depth_ - 1;
+        message(trf("msg.listed.depth", {std::to_string(listed_depth_), std::to_string(most)}));
+        if (view_open_) view_show(view_at_); // (the viewer drawn again at the new depth)
+    }
+}
+
 void Hallway::cycle_ordering()
 {
+    if (on_listed())
+    {
+        message(tr("msg.ordering.listed")); // (one ordering: the list's own)
+        return;
+    }
     if (on_binary())
     {
         // Positional and scrambled only, keeping the file you are looking at, title, cover and all.
@@ -1268,6 +1310,11 @@ void Hallway::cycle_ordering()
 // Guided order: change the spacing of the books, keeping the point you are looking at.
 void Hallway::zoom_by(int delta)
 {
+    if (on_listed())
+    {
+        message(tr("msg.zoom.listed"));
+        return;
+    }
     if (!guided_on())
     {
         message(tr(line().guided && !on_books() ? "msg.zoom.press_m" : "msg.zoom.no_model"));
@@ -1294,6 +1341,16 @@ bool Hallway::warp(const std::string& input)
         // A world has no form to warp in from yet: its address (G), or sieve world --compose.
         if (on_worlds()) throw std::invalid_argument(tr("msg.warp.worlds"));
         if (on_ai()) throw std::invalid_argument(tr("msg.warp.ai"));
+        if (on_listed())
+        {
+            // A listed item by its name (a fractal's id; "index" for the first book).
+            const auto at = listed_shelf().find(input);
+            if (!at) throw std::invalid_argument(trf("msg.warp.listed", {input}));
+            trail_.clear();
+            place(BigUint(uint64_t(*at)), true);
+            message(trf("msg.goto.done", {input}));
+            return true;
+        }
         if (on_books())
         {
             // A book record, bound with sieve bind.
@@ -1428,6 +1485,13 @@ bool Hallway::go_to(std::string input)
         else if (on_composition()) index = effective_mode() == FilterMode::Compact ? comp().sieve->parse(input) : comp().space->parse(input);
         else if (on_worlds()) index = effective_mode() == FilterMode::Compact ? world_sieve_->parse(input) : world_space_->parse(input);
         else if (on_ai()) index = effective_mode() == FilterMode::Compact ? ai_compact_->parse(input) : ai_space_->parse(input);
+        else if (on_listed())
+        {
+            // Its place in the list, in hex as the shelves show it, or its name.
+            if (const auto at = listed_shelf().find(input)) index = BigUint(uint64_t(*at));
+            else index = BigUint::from_hex(input);
+            if (index >= BigUint(uint64_t(listed_shelf().size()))) throw std::invalid_argument(trf("msg.goto.listed_past", {std::to_string(listed_shelf().size())}));
+        }
         else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
             index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
         else if (const TitledSpace* ts = titled_here()) index = ts->parse(input);
@@ -1805,6 +1869,10 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         menu_requested_ = true;
         quit = true;
     }
+    // A listed item in hand grows a step deeper or goes a step back with the zoom keys, and with N and
+    // B as a book's pages turn.
+    else if (in_hand_ && in_hand_->listed && on_listed() && (k == hk::kZoomIn || k == hk::kZoomInFar || k == hk::kNextPage)) listed_step(1);
+    else if (in_hand_ && in_hand_->listed && on_listed() && (k == hk::kZoomOut || k == hk::kZoomOutFar || k == hk::kPreviousPage)) listed_step(-1);
     else if (k == hk::kZoomOut) zoom_by(-1);
     else if (k == hk::kZoomOutFar) zoom_by(-8);
     else if (k == hk::kZoomIn) zoom_by(1);
@@ -1955,6 +2023,7 @@ void Hallway::keep_favourite()
     }
     else if (in_hand_->world) f.index = world_space_->index_of(*in_hand_->world, AddressMode::Positional).to_hex();
     else if (in_hand_->parts && books_) f.index = books_->index_of(*in_hand_->parts, AddressMode::Positional).to_hex();
+    else if (in_hand_->listed) f.index = BigUint(uint64_t(*in_hand_->listed)).to_hex();
     else if (!in_hand_->unit.empty() && !on_binary() && !on_ai()) f.digits = in_hand_->unit;
     else
     {
@@ -2010,6 +2079,7 @@ void Hallway::open_favourite(const Favourite& f)
                   true);
         else if (on_worlds()) place(world_space_->index_of(world_space_->parts_at(at, AddressMode::Positional), mode_), true);
         else if (books_ && on_books()) go_to_book(books_->parts_at(at, AddressMode::Positional), true);
+        else if (on_listed()) place(at, true);
     }
     if (in_hand_)
     {
@@ -2127,6 +2197,7 @@ std::string Hallway::status()
         else if (first.world) where += " " + world_line_summary(*first.world) + " (" + std::to_string(first.world->slots.size()) + " models placed)";
         else if (first.ai) where += " a model that says \"" + printable(ai_says(*ai_space_, *ai_tokenizer_, *first.ai, 24)) + "\"";
         else if (first.is_file) where += " " + file_type(first.head, first.file_size) + " " + binary_preview(first.head, 16, first.file_size);
+        else if (first.listed) where += " \"" + ascii(listed_shelf().title(*first.listed)) + "\"";
         else if (line().kind == LineKind::Text) where += " \"" + ascii(utf8_encode(line().space.text_of(first.unit))) + "\"";
         if (first.guided) where += " (" + std::to_string(first.bits) + " bits)";
     }
@@ -2733,6 +2804,7 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
+    if (listed_tex_) SDL_DestroyTexture(listed_tex_);
     stop_tailoring(); // stopped at its next setting tried
     if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();

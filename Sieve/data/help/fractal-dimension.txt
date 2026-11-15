@@ -1,19 +1,19 @@
-index: fractal dimension, fractals, rulesets, Fibonacci word, golden ratio, L-system, substitution, Koch, dragon curve, FRACTALS column
+index: fractal dimension, fractals, FRACTALS line, rulesets, Fibonacci word, golden ratio, L-system, substitution, Koch, dragon curve, index book
 
-The fractal dimension is a line like the others, of rulesets: every ruleset of its grammar is on it at its address, as every page is on the pages line. Most of the line is noise, as on every line; its shelves hold the fractals charted by hand, each named with its ruleset.
+The fractal dimension is a line of the hallway, its door after AI, in light purple. Its books are the fractals charted by hand, each named with its ruleset; its first book is the index of them all. (Every ruleset of its grammar is on a line too, the text line with the format-fractal-v1 filter ticked; the shelves hold the charted ones.)
 
-## Opening it
-On the setup page (Start Sieve), the FRACTALS column stands after AI, in light purple. Its magnifying glass or its dots open the shelves. Its bar is the line of rulesets of 128 characters; inside it, the fractals charted, a sliver; it is broken, its break drawn as a Koch curve, because it is not to scale.
+## Walking it
+Go left through AI's far door, or choose FRACTALS as the line to start on. Hover over a book to see its name; take it with {key1:hallway.anywhere/take|E}, as any item. Warp ({key1:hallway.anywhere/warp|T}) to a fractal by its id, such as dragon-curve, or "index" for the first book.
 
-## Growing a fractal
-Choose a fractal with {key1:menus/up|Up} and {key1:menus/down|Down}. {key1:menus/right|Right} or {key1:fractals/deeper|=} grows it a step deeper; {key1:menus/left|Left} or {key1:fractals/shallower|-} takes it a step back; {key1:fractals/first|Home} shows its axiom and {key1:fractals/deepest|End} the deepest drawn. Esc goes back.
+## A fractal in hand
+It shows what it is, its picture at the depth you hold it at, and its ruleset. {key1:hallway.holding/next_page|N} or {key1:hallway.anywhere/zoom_in|=} grows it a step deeper; {key1:hallway.holding/previous_page|B} or {key1:hallway.anywhere/zoom_out|-} takes it a step back. {key1:hallway.holding/view|Z} opens it in the viewer, large, where N and B step it too; {key1:hallway.holding/save|F} saves its ruleset, the steps that make it (the picture is only how it is shown); {key1:hallway.holding/favourite|H} keeps it as a favourite.
 
 ## The two kinds of ruleset
 - A substitution: at every step each symbol becomes its word (0 becomes 01, 1 becomes 0, for the Fibonacci word). Drawn as its words one under another, each stretched across, so the pattern is seen repeating at every scale.
 - An L-system: drawn as a turtle draws. F and G draw a line forward, f moves without one, + and - turn by its angle, [ and ] keep a place and come back to it.
 
 ## The shelves
-The Fibonacci word (the golden ratio in two symbols), the Thue-Morse sequence, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the dragon curve, the Hilbert, Levy C and Gosper curves, and a fractal plant. More are charted by adding them to fractals/chart.txt beside the program, each as its own .fractal file.
+The index, then the Fibonacci word (the golden ratio in two symbols), the Thue-Morse sequence, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the dragon curve, the Hilbert, Levy C and Gosper curves, and a fractal plant. More are charted by adding them to fractals/chart.txt beside the program, each as its own .fractal file.
 
 ## On the command line
 sieve fractal lists the shelves; sieve fractal show and draw grow one to a depth and draw it as a picture. See [[command-line|the command line]].

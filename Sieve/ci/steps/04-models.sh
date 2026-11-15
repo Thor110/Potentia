@@ -598,14 +598,16 @@ $H --no-menu --line binary --pose "0,1.7,4,0" --bench 8 --screenshot edge.png 2>
 # by the files' kinds, are checked with the other filters below).
 $H --no-menu --line binary --walk "0,0" --screenshot bin.png | sed -n 1p | q "^BINARY line"
 # The lines no longer loop into one another: they start and finish at binary.
-# Left out of models is worlds, left out of worlds is AI, and left out of AI is binary, where
-# you are turned round to come out of its one door (in its left wall); back out through that
-# door is AI again. Right out of image is binary too, and there the door leads back to image.
+# Left out of models is worlds, left out of worlds is AI, left out of AI is the fractal dimension
+# (a listed line, 15 November 2026), and left out of that is binary, where you are turned round to
+# come out of its one door (in its left wall); back out through that door is the fractal dimension
+# again. Right out of image is binary too, and there the door leads back to image.
 $H --no-menu --line models --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7m.png | sed -n 1p | q "^WORLDS line"
 $H --no-menu --line worlds --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7w.png | sed -n 1p | q "^AI line"
-$H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
+$H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7a.png | sed -n 1p | q "^FRACTALS line"
+$H --no-menu --line fractals --pose "-1.7,7.0,0,0" --walk "-1,0" --screenshot door7.png | sed -n 1p | q "^BINARY line"
 # (A walk is in the walker's frame, so after being turned round, 4.2 is back the way you came.)
-$H --no-menu --line ai --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^AI line"
+$H --no-menu --line fractals --pose "-1.7,7.0,0,0" --walk "-1,0;4.2,0" --screenshot door8.png | sed -n 2p | q "^FRACTALS line"
 $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0" --screenshot door9.png | sed -n 1p | q "^BINARY line"
 $H --no-menu --line image --pose "1.7,7.0,0,0" --walk "1,0;-1,0" --screenshot door10.png | sed -n 2p | q "^IMAGE line"
 # Binary's other side is the drop, always on its right: the short wall stops you at the

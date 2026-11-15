@@ -39,6 +39,7 @@
 #include "music.hpp"
 #include "synth.hpp"
 #include "dimensions.hpp"
+#include "listed_shelf.hpp"
 #include "theme.hpp"
 #include "world.hpp"
 #include "favourites.hpp"
@@ -388,6 +389,24 @@ public:
     bool on_worlds() const { return li_ == kWorldsLine; }
     // AI: every language model of one shape, numbered by its weights (sieve/aispace.hpp).
     bool on_ai() const { return li_ == kAiLine; }
+    // A listed line (the fractal dimension, and the next dimensions of the kind): its units a shelf's
+    // finite list (listed_shelf.hpp), every one of its branches below asking this, not which line.
+    bool on_listed() const { return is_listed(li_); }
+    const ListedShelf& listed_shelf() const { return *listed_[size_t(li_)]; }
+    // The depth a listed item in hand (and in the viewer) is shown at: its shelf's first for the item
+    // until stepped, however it came into your hands (held_depth()).
+    uint32_t listed_depth_ = 0;
+    mutable std::optional<uint32_t> listed_depth_for_; // the item listed_depth_ belongs to
+    uint32_t held_depth() const
+    {
+        if (!in_hand_ || !in_hand_->listed || !on_listed()) return 0;
+        if (listed_depth_for_ != in_hand_->listed)
+        {
+            const_cast<Hallway*>(this)->listed_depth_ = listed_shelf().first_depth(*in_hand_->listed);
+            listed_depth_for_ = in_hand_->listed;
+        }
+        return listed_depth_;
+    }
     // The binary line. It has no state space of its own yet -- its shelves stand empty, and how
     // they are addressed is still to be worked out (SPECIFICATIONS §12.1) -- so like the books
     // and models lines it borrows the pages line's Line for the few things that ask about one.
@@ -403,7 +422,7 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_ai() && !on_binary() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_ai() && !on_listed() && !on_binary() && guided_ && line().guided != nullptr; }
     const GuidedLine& guided() const;
     const CompactLine& compact() const { return *compact_[li_]; }
     std::string ordering_name() const { return tr(std::string("ordering.") + (guided_on() ? "guided" : to_string(mode_))); }
@@ -454,6 +473,7 @@ public:
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
         std::optional<WorldSpace::Parts> world;      // the worlds line: cover, title and placed models
         std::optional<AiSpace::Digits> ai;           // the AI line: the model's weights, as digits
+        std::optional<uint32_t> listed;              // a listed line: the item's place in its shelf's list
         // The binary line: a file. Only its place, title and cover are kept on the shelf; its bytes
         // and its address in hex (each as large as the file) are worked out when something asks,
         // for the one item looked at or held (file_of, hex_of below).
@@ -614,6 +634,7 @@ public:
     bool has_titles() const
     {
         if (on_worlds()) return world_space_->title_space().has_value(); // a world keeps its title in compact too
+        if (on_listed()) return true;                                     // (each listed item its shelf's title)
         const auto* ts = titled_here();
         return ts && ts->title_space().has_value();
     }
@@ -1009,6 +1030,11 @@ public:
     float draw_model(const ModelSpace::Parts& p, float x, float y, float pw, float bottom);
     float draw_world(const WorldSpace::Parts& p, float x, float y, float pw, float bottom);
     float draw_ai(const Book& bk, float x, float y, float pw, float bottom);
+    // A listed item in hand: what it is, its picture at the depth held, and its text (listed_shelf.hpp).
+    float draw_listed(const Book& bk, float x, float y, float pw, float bottom);
+    void listed_step(int d);
+    SDL_Texture* listed_tex_ = nullptr; // its picture, kept while the item, depth and size stay
+    std::string listed_tex_key_;
     const std::string& ai_said(const Book& b) const;
     mutable std::unordered_map<std::string, std::string> ai_said_; // a model's address -> what it says by itself
     // A mesh in hand, turned by the mouse or A and D, with its .obj text beside it (the first
@@ -2012,6 +2038,7 @@ private:
     // where they rank, its survivors in every ordering; its byte tokenizer, and the model in hand
     // while it is talked to.
     std::unique_ptr<AiSpace> ai_space_;
+    std::array<std::unique_ptr<ListedShelf>, kLines> listed_; // each listed line's shelf (nullptr elsewhere)
     LineFilters ai_filters_;
     std::unique_ptr<FilterStack> ai_stack_;
     std::unique_ptr<CompactLine> ai_compact_;

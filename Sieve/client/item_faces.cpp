@@ -237,6 +237,33 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
                               px.begin() + std::ptrdiff_t(size_t(y + oy) * size_t(w)));
         };
     }
+    if (on_listed())
+    {
+        if (!b.listed) return {};
+        // A listed item's front: its title on a band across the top, its picture below, drawn at the
+        // depth it is held at (the shelf's own first depth on the shelf).
+        const ListedShelf* shelf = &listed_shelf();
+        const size_t i = *b.listed;
+        const uint32_t depth = in_hand_ && in_hand_->listed == b.listed ? held_depth() : shelf->first_depth(i);
+        const std::u32string title = utf8_decode(shelf->title(i));
+        const Theme& th = theme();
+        const uint32_t band = argb(th.edge), ink = argb(th.bg);
+        return [shelf, i, depth, title, band, ink, nw, lp](std::vector<uint32_t>& px, int w, int h) {
+            px.assign(size_t(w) * size_t(h), 0xFF101418u);
+            const int top = paint_title_band(px, w, h, title, true, band, ink, nw, lp);
+            const int side = std::max(1, std::min(w, h - top));
+            if (const auto img = shelf->picture(i, depth, uint32_t(side), uint32_t(side)))
+            {
+                const int ox = (w - side) / 2, oy = top + (h - top - side) / 2;
+                for (int y = 0; y < side && oy + y < h; ++y)
+                    for (int x = 0; x < side && ox + x < w; ++x)
+                    {
+                        const uint8_t* p = &img->rgba[(size_t(y) * size_t(side) + size_t(x)) * 4];
+                        px[size_t(oy + y) * size_t(w) + size_t(ox + x)] = 0xFF000000u | uint32_t(p[0]) << 16 | uint32_t(p[1]) << 8 | uint32_t(p[2]);
+                    }
+            }
+        };
+    }
     if (on_ai())
     {
         if (!b.ai) return {};
@@ -816,7 +843,7 @@ DisplayText Hallway::display_text_here() const
                                                        : nullptr;
     const double title = ttl && *ttl ? double((*ttl)->unit_length()) : 0.0;
     if (on_books()) return display_text_books(double(unit_line(LineKind::Text).space.unit_length()));
-    if (!on_models() && !on_worlds() && !on_binary() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
+    if (!on_models() && !on_worlds() && !on_binary() && !on_listed() && line().kind == LineKind::Text) return display_text_pages(double(line().space.unit_length()), title);
     return display_text_titled(title);
 }
 

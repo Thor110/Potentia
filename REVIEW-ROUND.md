@@ -153,7 +153,7 @@ run before a release package, and after each of the three reviews. Each batch is
 - F3. v34 measured and frozen (task 118). *Frozen 12 November 2026; measured whole 15 November 2026 (results/v34-measured-2026-11-15.md).*
 
 ### List S: new spaces `[10]` + you, a sitting each
-- S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198). *Agreed 15 November 2026: the fractal dimension first, then layouts (for personal dimensions), then the maze door. Step 1 made the same day: the fractal dimension's line, grammar, shelves, `sieve fractal`, its screen and the setup page's FRACTALS column (SPECIFICATIONS 12.0t).*
+- S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198). *Agreed 15 November 2026: the fractal dimension first, then layouts (for personal dimensions), then the maze door. Step 1 made the same day: the fractal dimension's grammar, shelves and `sieve fractal`, then reworked as the hallway's FRACTALS line (its door after AI, its index book first, a new listed kind of line any later dimension can be) (SPECIFICATIONS 12.0t).*
 
 ### List T: testing itself (its own CI change, checked by running it)
 - [x] T1. Screenshots made by a tool, and the CI runner running only the steps a change reaches (19.202). *First step made 14 November 2026: `ci/run.sh --changed`, `tools/screenshots.py`.*

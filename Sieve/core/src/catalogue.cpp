@@ -225,7 +225,7 @@ std::vector<FormatEntry> gather()
         "sieve raid pieces and join; not yet sent between machines (SPECIFICATIONS 12.0s; IDEAS 19.210)");
     own(kFractalVersion, "A fractal's ruleset: a substitution or an L-system, grown to a depth and drawn", "document",
         std::string("first line \"") + kFractalVersion + "\", then \"substitution\" or \"lsystem ANGLE\", \"axiom WORD\" and \"rule SYMBOL WORD\" lines",
-        "the fractal dimension: sieve fractal, and the hallway's FRACTALS column (SPECIFICATIONS 12.0t; IDEAS 19.191, 19.235); its grammar data/filters/format-fractal-v1.sfilter (IDEAS 19.185)");
+        "the fractal dimension: sieve fractal, and the hallway's FRACTALS line (SPECIFICATIONS 12.0t; IDEAS 19.191, 19.235); its grammar data/filters/format-fractal-v1.sfilter (IDEAS 19.185)");
     own(kFractalChartVersion, "The fractal dimension's shelves: the fractals charted by hand, each named with its ruleset", "document",
         std::string("first line \"") + kFractalChartVersion + "\", then \"fractal ID TITLE\" lines; each ruleset ID.fractal beside it",
         "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; IDEAS 19.235)");

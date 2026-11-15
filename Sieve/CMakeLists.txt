@@ -755,7 +755,7 @@ if(SIEVE_BUILD_CLIENT)
         client/cipher_screen.cpp
         client/manual_nav.cpp
         client/help_library.cpp
-        client/fractal_library.cpp
+        client/listed_shelf.cpp
         client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp

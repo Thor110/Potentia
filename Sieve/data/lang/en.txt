@@ -534,10 +534,6 @@ map.scale = scale: the longest line fills the height ({0} bits)
 map.scale.broken = scale: {0} bits fill the height; a line far longer is drawn broken
 map.units = {0} units
 map.bits = {0} bits
-map.fractal_one = 1 unit
-map.fractal_unit = = a ruleset, {0} chars
-map.charted = {0} charted
-map.charted_bits = charted ~{0} bits
 map.tiles = ~10^{0} tiles
 details.title = {0}: what its figures mean
 details.size = Size: {0}
@@ -633,6 +629,7 @@ status.counting = counting... (a custom grammar compiles the first time only, th
 ; filter.<name>.<parameter> (e.g. filter.words-v2 = ..., filter.title-v1.max_length = ...).
 ; Left out, they show the English text built into Sieve.
 status.too_large = line too large to open
+status.listed = no filters (its items are listed, not counted)
 status.none_units = no filters ticked: every unit is shelved
 status.none_books = no filters ticked: every book is shelved
 status.survivors = survivors: {0} (exact); compact in every ordering
@@ -979,6 +976,8 @@ hand.keys = {key1:hallway.holding/view|Z} / click it: view    {key1:hallway.hold
 hand.keys.file = {key1:hallway.holding/view|Z} / click it: view    {key1:hallway.holding/next_tab|C}: the next tab    {key1:hallway.holding/save|F}: save as a file    {key1:hallway.holding/its_file|J}: open it on its own line    {key1:hallway.anywhere/take|E} / Esc: put it back
 hand.keys.book = {key1:hallway.holding/next_page|N} / {key1:hallway.holding/previous_page|B}: turn the page    {key1:hallway.holding/view|Z} / click it: view    {key1:hallway.holding/next_tab|C}: the next tab    {key1:hallway.holding/save|F}: save    {key1:hallway.holding/its_file|J}: its file    {key1:hallway.holding/favourite|H}: favourite    {key1:hallway.anywhere/take|E} / Esc: put it back
 hand.keys.world = {key1:hallway.holding/turn_left|A} / {key1:hallway.holding/turn_right|D} / mouse: turn    {key1:hallway.holding/upright|R}: upright    {key1:hallway.holding/view|Z} / click it: its .obj text    {key1:hallway.holding/next_tab|C}: next tab    {key1:hallway.holding/save|F}: save    {key1:hallway.holding/its_file|J}: its file    {key1:hallway.holding/favourite|H}: favourite    {key1:hallway.anywhere/take|E} / Esc: put it back
+hand.keys.listed = {key1:hallway.holding/next_page|N} / {key1:hallway.anywhere/zoom_in|=}: a step deeper    {key1:hallway.holding/previous_page|B} / {key1:hallway.anywhere/zoom_out|-}: a step back    {key1:hallway.holding/view|Z} / click it: view    {key1:hallway.holding/next_tab|C}: the next tab    {key1:hallway.holding/save|F}: save    {key1:hallway.holding/favourite|H}: favourite    {key1:hallway.anywhere/take|E} / Esc: put it back
+hand.listed.depth = depth {0} of {1}
 hand.keys.ai = {key1:hallway.holding/use|Enter}: talk to it (CHAT)    {key1:hallway.holding/next_tab|C}: the next tab    {key1:hallway.holding/save|F}: save it (.safetensors)    {key1:hallway.holding/its_file|J}: its file    {key1:hallway.anywhere/take|E} / Esc: put it back
 hand.keys.model = {key1:hallway.holding/turn_left|A} / {key1:hallway.holding/turn_right|D} / mouse: turn    {key1:hallway.holding/upright|R}: upright    {key1:hallway.holding/view|Z} / click it: its .obj text    {key1:hallway.holding/next_tab|C}: next tab    {key1:hallway.holding/save|F}: save    {key1:hallway.holding/its_file|J}: its file    {key1:hallway.holding/favourite|H}: favourite    {key1:hallway.anywhere/take|E} / Esc: put it back
 hand.title_label = TITLE
@@ -1182,7 +1181,6 @@ keys.section.media.rings = The Media Player: the rings
 keys.section.main = The main menu and Potentia Settings
 keys.section.cipher = The Encryption Engine
 keys.section.docs = The Documentation
-keys.section.fractals = The Fractal Dimension
 keys.section.chain = The CHAIN tab (an AI model in hand)
 keys.menus.up = the row above
 keys.menus.down = the row below
@@ -1243,10 +1241,6 @@ keys.docs.search = search the library (typing on the list searches too)
 keys.docs.history = back to the page read before
 keys.docs.first = the first row of the list, or the top of the page
 keys.docs.last = the last row of the list, or the foot of the page
-keys.fractals.deeper = grow the fractal a step deeper (the menus' Right too)
-keys.fractals.shallower = take the fractal a step back (the menus' Left too)
-keys.fractals.first = the fractal at its first step, its axiom
-keys.fractals.deepest = the fractal at the deepest it is drawn
 keys.chain.up = the stage above
 keys.chain.down = the stage below
 keys.chain.move_up = move the stage up
@@ -1765,6 +1759,7 @@ view.keys = Tab: next view    wheel: scroll    Shift + wheel: across    Ctrl + w
 view.keys.book = N / B: turn the page    Tab: next view    wheel: scroll    Shift + wheel: across    Ctrl + wheel / + -: zoom    drag / arrows: move    0: fit    1: one to one    Esc / Z: close
 view.keys.shape = arrows / WASD: turn it    Tab: next view    wheel: scroll    Ctrl + wheel / + -: zoom    drag: move    0: fit    1: one to one    Esc / Z: close
 view.keys.sound = Space: play / stop    Tab: next view    wheel: scroll    Shift + wheel: across    Ctrl + wheel / + -: zoom    drag / arrows: move    0: fit    1: one to one    Esc / Z: close
+view.keys.listed = N / B: a step deeper, or back    Tab: next view    wheel: scroll    Ctrl + wheel / + -: zoom    drag / arrows: move    0: fit    1: one to one    Esc / Z: close
 view.keys.film = Space: play / stop    N / B: a frame    Tab: next view    wheel: scroll    Ctrl + wheel / + -: zoom    drag / arrows: move    0: fit    1: one to one    Esc / Z: close
 msg.view = viewing its {0}, {1} x {2} at one to one
 msg.view.stopped = stopped
@@ -2026,19 +2021,19 @@ docs.no_library = The help library was not found ({0}).
 docs.missing = The library's contents name pages that are not there: {0}.
 docs.footer = Up/Down: a row, or scroll the page    Enter / Right: open it    Left: back to the list    {key1:menus/next|Tab} / {key1:docs/previous|Shift+Tab}: CONTENTS, INDEX, SEARCH (on the page: its links; Enter follows one)    {key1:docs/search|Ctrl+F}: search    {key1:docs/history|Backspace}: the page before    PgUp PgDn: a screen    Esc: the main menu
 
-; ---- The Fractal Dimension (fractal_library.cpp, IDEAS 19.191, 19.235)
-fractals.title = FRACTAL DIMENSION
-fractals.subtitle = Every ruleset of its grammar is on its line; its shelves hold the fractals charted by hand. Choose one, and grow it a step at a time.
-fractals.shelves = SHELVES: {0} charted
+; ---- The fractal dimension, a listed line (listed_shelf.cpp, IDEAS 19.191, 19.235)
+fractals.index = Index of the fractal dimension
+fractals.index.summary = The fractals charted by hand: {0}, each a book after this one.
 fractals.substitution = a substitution
-fractals.lsystem = an L-system
-fractals.depth = depth {0} of {1}: {2} symbols
-fractals.deepest = It is drawn here to depth {0} at most (the command line, sieve fractal draw, goes as deep as its ruleset grows).
-fractals.summary = fractal {0} at depth {1}: {2} symbols; {3} charted
-fractals.empty = The shelves are empty: no fractals are charted.
+fractals.lsystem.angle = an L-system, turning {0} degrees
 fractals.unreadable = The shelves could not be read: {0}
-fractals.no_such = No fractal on the shelves is called {0}, so it opens on the first.
-fractals.footer = {key1:menus/up|Up}/{key1:menus/down|Down}: a fractal    {key1:menus/right|Right} / {key1:fractals/deeper|=}: a step deeper    {key1:menus/left|Left} / {key1:fractals/shallower|-}: a step back    {key1:fractals/first|Home} / {key1:fractals/deepest|End}: its first and deepest    {key1:menus/back|Esc}: back
+msg.ordering.listed = This line has one ordering: the order its items are listed in.
+msg.zoom.listed = Holding one of its items, the zoom keys grow it a step deeper or back.
+msg.warp.listed = No item on this line is called {0} (a fractal's id, or index).
+msg.goto.listed_past = This line holds {0} items: its addresses run from 0 to one less.
+msg.listed.depth = Depth {0} of {1}.
+msg.listed.deepest = It is drawn to depth {0} at most here (sieve fractal draw goes as deep as its ruleset grows).
+msg.listed.first = It is at its first step, its axiom.
 
 ; ---- Manual Navigation (manual_nav.cpp)
 mnav.title = MANUAL NAVIGATION
