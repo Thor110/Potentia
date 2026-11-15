@@ -9,7 +9,7 @@ const std::vector<Dimension>& dimensions()
     static const std::vector<Dimension> d = {
         // The hallway's eleven lines (SPECIFICATIONS §3).
         {"pages", "Pages", S::Built, "a unit of text: a pinned alphabet's symbols at a fixed length",
-         "any alphabet of up to 2^31 symbols, any length the setup menu sets", "books binary dna research", "SPECIFICATIONS §3"},
+         "any alphabet of up to 2^31 symbols, any length the setup menu sets", "books binary dna research fractals", "SPECIFICATIONS §3"},
         {"image", "Image", S::Built, "a small picture: its pixels at a fixed size and depth", "the size and depth the setup menu sets",
          "movies binary", "SPECIFICATIONS §3"},
         {"audio", "Audio", S::Built, "a melody of note events, or sound itself (pcm)", "the events, voices and lengths set",
@@ -40,6 +40,11 @@ const std::vector<Dimension>& dimensions()
          "IDEAS 19.159, 19.162, 19.170"},
         {"dna", "DNA", S::Partly, "a sequence of the four bases: a unit of the pages line over dna4 (a, c, g, t)",
          "the length the setup menu sets; not yet a reader of FASTA files", "pages species research", "IDEAS 19.139 c, 19.152, 19.162"},
+
+        {"fractals", "The fractal dimension", S::Partly,
+         "a ruleset (sieve-fractal-v1: a substitution or an L-system): a unit of the pages line over ascii96 that format-fractal-v1 passes",
+         "words of 1 to 64 symbols, grown to 2,097,152; its shelves the fractals charted by hand (data/fractals)", "pages personal",
+         "IDEAS 19.191, 19.235; SPECIFICATIONS §12.0t"},
 
         // Planned: each named where it was first written about.
         {"research", "Research", S::Planned, "a finding: a claim, what it rests on, where it was measured",

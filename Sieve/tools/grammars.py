@@ -553,6 +553,23 @@ def world_v2():
     return seq("sieve-personal-world-v2\nseed ", decimal_at_most(2 ** 64 - 1), "\n", alt(*firsts))
 
 
+# ---- sieve-fractal-v1 (core/include/sieve/fractal.hpp read_fractal): the fractal dimension's line
+
+
+def fractal_v1():
+    """A ruleset: a substitution (symbols 0-9, a-z) or an L-system (letters, + - [ ] |; only letters
+    rewritten; its angle 1 to 359 whole degrees), its axiom and its rules (one or more), every word 1 to
+    64 symbols. The rules' order (by symbol, each once) is the reader's alone: a walk would remember
+    every symbol already given."""
+    sub_symbols = "0123456789abcdefghijklmnopqrstuvwxyz"
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    ls_symbols = letters + "+-[]|"
+    word = lambda s: rep(chars(s), 1, 64)
+    sub = seq("substitution\naxiom ", word(sub_symbols), "\n", rep(seq("rule ", chars(sub_symbols), " ", word(sub_symbols), "\n"), 1, None))
+    ls = seq("lsystem ", decimal_between(1, 359), "\naxiom ", word(ls_symbols), "\n", rep(seq("rule ", chars(letters), " ", word(ls_symbols), "\n"), 1, None))
+    return seq("sieve-fractal-v1\n", alt(sub, ls))
+
+
 PLUGINS = [
     ("format-actions", 1, actions_v1,
      "One sieve-actions-v1 map exactly: an action's animation for each of the seven actions, in order (IDEAS 19.185, 19.186).",
@@ -590,6 +607,15 @@ PLUGINS = [
       "model named once and every model placed named, a melody's digits below its note set's base and a",
       "whole number of units and voices, each number the one %.9g writes for a float, and, in a world with",
       "nothing else of v2's, whether a place stands off the ground (that needs the seed's ground)."]),
+    ("format-fractal", 1, fractal_v1,
+     "One sieve-fractal-v1 ruleset (its rules' order aside): the fractal dimension's line, each ruleset at its address (IDEAS 19.191, 19.235).",
+     ["A fractal's ruleset (sieve-fractal-v1, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp) written as a",
+      "filter, so the text line over ascii96 with it ticked is the fractal dimension: \"sieve-fractal-v1\", then",
+      "\"substitution\" (symbols 0-9 and a-z) or \"lsystem ANGLE\" (1 to 359 degrees; letters and + - [ ] |),",
+      "\"axiom WORD\" and one or more \"rule SYMBOL WORD\" (an L-system's only for letters), every word 1 to 64",
+      "symbols and every line ending in a line feed. One thing the reader asks and a walk does not: that the",
+      "rules stand in the order of their symbols, each once. So its survivors are the reader's rulesets with",
+      "their rules in any order; tools/check_formats.py checks every other verdict."]),
     ("format-world", 1, world_v1,
      "One sieve-personal-world-v1 exactly as it is written (the numbers a float's own aside): a personal dimension's seed and what is placed (IDEAS 19.185, 19.187).",
      ["A personal dimension's world (sieve-personal-world-v1, SPECIFICATIONS 12.0r, client/personal_world.cpp)",

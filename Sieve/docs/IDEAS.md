@@ -9676,6 +9676,55 @@ for example".
   for the files no short rule makes (most of them: §19.191's honest limits, the pigeonhole of §6).
 - *When (Edward, the same day):* "We will set it up after working through everything that is ahead of us
   and testing etc". Planned only, after the present lists and their testing.
+- *A line, charted by hand (Edward, the same day, starting list S):* "the fractal dimension should also just
+  be a line like the other dimensions, but it would need to be manually charted", "by manually charted, I
+  mean its entries or fractals will have to be charted and added to the shelves manually". So the line
+  holds every ruleset of its grammar at its address, as the pages line holds every page, and its shelves
+  show the fractals charted by hand, each named with its ruleset; the rest of the line is there to walk.
+  The order agreed: the fractal dimension first, then layouts (a layout is a tiling taken from it), then
+  the maze door (a maze generator taken from it); the grammar's first families substitutions and
+  L-systems.
+- *Step 1 built (15 November 2026, list S; SPECIFICATIONS 12.0t):* the line (`sieve-fractal-v1`, substitutions
+  and L-systems, its grammar `format-fractal-v1`, so its survivors are exactly the rulesets and each one's
+  survivor number its address: 1,520,532 of them at 44 characters, the shortest), its shelves charted by
+  hand in `data/fractals` (eleven to begin: the Fibonacci word first), `sieve fractal`, and the hallway's
+  Fractal Dimension screen, opened from the FRACTALS column after AI on the setup page, light purple,
+  its bar broken by a Koch curve (Edward: "it may as well also be a light shade of purple and be after the
+  AI dimension in the setup page", "it can also use a similar bar layout with the gap, unless you think of
+  a fancy fractal gap"). Next: layouts, then the maze door; walking the line beyond the shelves (each
+  ruleset's neighbours by address) and fractals as filters are still to come.
+- *Plants and decorations grown by fractals (Edward, the same day):* "we could also use fractals as rulesets
+  to generate plants and other decorations for personal dimensions, though that is partially noted
+  already but plants specifically". So a charted L-system (the fractal plant is the first) is grown into
+  an object of a personal dimension: its turtle's lines drawn in 3D as stems and branches, its depth,
+  angle and a seed as the object's settings, and the same settings make the same plant on every machine,
+  kept as the ruleset and settings, never as its mesh (§19.191's "a ruleset applied to an object makes
+  another"; the half rooms and own objects of §19.187). Trees, bushes, grass, ferns and other
+  decorations are rulesets of the same kind; growing upwards, where the shelves' drawings start heading
+  east, is the turtle's start turned to the vertical.
+- *Fractal models as a filter, and one filter of every entry (Edward, the same day):* "same rules will apply
+  that it can create fractal models in a way that becomes a new filter to knock 3D models and textures out
+  of state spaces", and "I am thinking eventually we will want a fractal filter that uses all of the fractal
+  dimensions entries as well as a procedural system for shifting/adjusting their rulesets in a variety of
+  ways". So the models and textures a ruleset grows (plants, decorations, surfaces) are themselves a filter
+  on the models and image lines, passing what a fractal makes; and in time one fractal filter holds every
+  entry of the fractal dimension, each widened by a procedural system that shifts and adjusts its ruleset
+  (its angle, its depth, a rule's word changed a symbol at a time, two rulesets crossed, its window
+  moved), so the family it passes grows from the shelves outwards. What it passes stays small against
+  each line, as every short rule's does (the pigeonhole of §6), which is why each survivor is named in so
+  few bits.
+- *Include or exclude (Edward, the same day):* "that filter might want an include/exclude setting where if it
+  is on it specifically charts all the stuff found by it in dimensions and off where it excludes them". So
+  the fractal filter has one switch: *include* keeps only what the fractals make on a line, and charts each
+  find (its line, its address and the fractal and settings that made it) so it can be found again and
+  favourited; *exclude* knocks those out and keeps everything else, so a line can be walked with its
+  fractal-made units set aside. The other filters already offer the like as the stack's modes (mark,
+  hide, compact, and excluded, which keeps only what a stack refuses), so this is that choice made
+  per filter, with charting added on the include side.
+- *Fractals as filters (Edward, the same day):* "these fractals could also as mentioned become a filter that
+  use various adjustments and rulesets to knock themselves out across the state space dimensions". A
+  charted fractal, with its adjustments (its depth, where its window starts, its variants), is a filter
+  any line can run: what it makes passes, everything else is knocked out.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
@@ -9722,6 +9771,13 @@ about anything else using an object and a ruleset or a ruleset and a ruleset".
   structure: rules name some items briefly, they do not shorten every item (the pigeonhole of §6). A
   hyperbolic layout cannot be drawn in flat space without distortion (the Poincaré disc shrinks the far
   cells towards its rim).
+- *Layouts are for personal dimensions, not Sieve's own (Edward, 15 November 2026):* "that would be for
+  someone who wants to layout a dimension in their personal dimension, so they could lay out the line as a
+  hexagon, circle, or anything really", "I don't know for sure how that will work yet as it will need models
+  made to suit every shape, though half the room does that for hexagons and circles so that is simple
+  enough", and "So it isn't for the Sieve dimensions itself". So the hallway's lines keep their corridor;
+  a layout is a person's own arrangement of a line inside their personal dimension, and each shape needs
+  rooms (models) made to suit it, the half room serving hexagons and circles. How that works is open.
 - *First step proposed:* `sieve-layout-v1`, a hexagonal layout of one line in a personal dimension
   (rings of hexagons round the item you stand at), with its numbering checked against the corridor's
   order; then {7,3} in the Poincaré disc; then the grammar of the fractal dimension. *Planned only;*

@@ -73,6 +73,7 @@
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
+#include "sieve/fractal.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
 #include "sieve/character.hpp"
@@ -1344,6 +1345,70 @@ int raid_between_machines(const Args& a, const std::string& what)
 
 } // namespace
 
+// The fractal dimension (IDEAS 19.191, 19.235; list S, step 1): its shelves, charted by hand, and any
+// ruleset grown, drawn and checked.
+int cmd_fractal(const Args& a)
+{
+    const std::string what = a.positional.empty() ? "list" : a.positional[0];
+    const auto folder = a.has("folder") ? sieve::from_u8(a.get("folder")) : find_data_folder("fractals", "chart.txt");
+    if (what == "list")
+    {
+        const auto chart = sieve::read_fractal_chart(folder);
+        std::cout << "shelves   " << chart.size() << " fractals, charted by hand (" << sieve::u8(folder / "chart.txt") << ")\n";
+        for (const auto& c : chart)
+            std::cout << "  " << c.id << "  " << (c.fractal.family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system")
+                      << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest() << ": " << c.title << "\n";
+        return 0;
+    }
+    if (a.positional.size() < 2) throw std::invalid_argument("give a charted fractal's id, or a .fractal file");
+    // A charted id, else a file.
+    std::string text, name = a.positional[1];
+    bool charted = false;
+    if (what != "check")
+        for (const auto& c : sieve::read_fractal_chart(folder))
+            if (c.id == name) text = c.text, name = c.id + ": " + c.title, charted = true;
+    if (!charted) text = read_given_file(a.positional[1]);
+    std::string why;
+    const auto f = sieve::read_fractal(text, &why);
+    if (what == "check")
+    {
+        if (!f)
+        {
+            std::cout << "not a " << sieve::kFractalVersion << ": " << why << "\n";
+            return 1;
+        }
+        std::cout << "a " << sieve::kFractalVersion << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
+        return 0;
+    }
+    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ": " + why);
+    const uint32_t depth = a.has("depth") ? a.get_u32("depth", 0) : std::min<uint32_t>(f->deepest(), 6);
+    if (depth > f->deepest()) throw std::invalid_argument("it grows to depth " + std::to_string(f->deepest()) + " at most (" + std::to_string(sieve::kFractalMost) + " symbols)");
+    const std::string word = *f->grow(depth);
+    if (what == "show")
+    {
+        std::cout << "fractal   " << name << "\n"
+                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + std::to_string(f->angle) + " degrees") << "\n"
+                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v1 passes)\n"
+                  << "depth     " << depth << " of " << f->deepest() << ": " << word.size() << " symbols\n";
+        if (f->family == sieve::Fractal::Family::Substitution) std::cout << "word      " << word.substr(0, 80) << (word.size() > 80 ? "..." : "") << "\n";
+        else std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";
+        return 0;
+    }
+    if (what == "draw")
+    {
+        if (!a.has("out")) throw std::invalid_argument("give where to write the picture: --out FILE.png");
+        const uint32_t size = a.has("size") ? a.get_u32("size", 512) : 512;
+        const auto img = sieve::draw_fractal(*f, depth, size, size);
+        if (!img) throw std::invalid_argument("it cannot be drawn at that size and depth");
+        std::vector<sieve::Rgb> rgb(size_t(img->width) * img->height);
+        for (size_t i = 0; i < rgb.size(); ++i) rgb[i] = {img->rgba[i * 4], img->rgba[i * 4 + 1], img->rgba[i * 4 + 2]};
+        write_png(a.get("out"), img->width, img->height, rgb, 1);
+        std::cout << "drew      " << name << " at depth " << depth << " (" << word.size() << " symbols) to " << a.get("out") << " (" << size << " x " << size << ")\n";
+        return 0;
+    }
+    throw std::invalid_argument("give what to do: list, show, draw or check");
+}
+
 int cmd_raid(const Args& a)
 {
     if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share, fetch, check, pieces, join, place or leave");
@@ -1508,12 +1573,12 @@ int cmd_catalogue(const Args& a)
     }
     // --check-format KIND --in FILE: each line a whole document of that kind, escaped (\n a line feed),
     // read by the format's own reader and said whether it reads (tools/check_formats.py sets these
-    // beside the format's grammar's verdicts, IDEAS 19.185). KIND: actions, save. (The replay and the
+    // beside the format's grammar's verdicts, IDEAS 19.185). KIND: actions, save, fractal. (The replay and the
     // personal dimension's world are read by the hallway: hallway --check-format.)
     if (a.has("check-format"))
     {
         const std::string kind = a.get("check-format");
-        if (kind != "actions" && kind != "save") throw std::invalid_argument("--check-format: actions or save (replay and world: hallway --check-format)");
+        if (kind != "actions" && kind != "save" && kind != "fractal") throw std::invalid_argument("--check-format: actions, save or fractal (replay and world: hallway --check-format)");
         std::ifstream in(sieve::from_u8(a.get("in")), std::ios::binary);
         if (!in) throw std::invalid_argument("cannot read " + a.get("in"));
         size_t good = 0, bad = 0;
@@ -1526,7 +1591,8 @@ int cmd_catalogue(const Args& a)
             try
             {
                 if (kind == "actions") (void)sieve::read_actions(doc);
-                else (void)sieve::read_save(doc);
+                else if (kind == "save") (void)sieve::read_save(doc);
+                else if (std::string why; !sieve::read_fractal(doc, &why)) throw std::invalid_argument(why);
                 ++good;
                 std::cout << "read       pass  " << doc.size() << " symbols\n";
             }
@@ -3917,7 +3983,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "fractal" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
@@ -4054,6 +4120,7 @@ int main(int argc, char** argv)
         if (a.command == "import") return cmd_import(a);
         if (a.command == "dimensions") return cmd_dimensions(a);
         if (a.command == "raid") return cmd_raid(a);
+        if (a.command == "fractal") return cmd_fractal(a);
         if (a.command == "catalogue") return cmd_catalogue(a);
         if (a.command == "world") return cmd_world(a);
         if (a.command == "tensors") return cmd_tensors(a);

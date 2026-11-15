@@ -267,6 +267,7 @@ line.movies = MOVIES
 line.models = MODELS
 line.worlds = WORLDS
 line.ai = AI
+line.fractals = FRACTALS
 line.binary = BINARY
 model.summary = {0}/{1} vertices used, {2}/{3} faces are triangles
 world.summary = {0} models in a grid of {1}^3: {2} vertices, {3} triangles
@@ -533,6 +534,10 @@ map.scale = scale: the longest line fills the height ({0} bits)
 map.scale.broken = scale: {0} bits fill the height; a line far longer is drawn broken
 map.units = {0} units
 map.bits = {0} bits
+map.fractal_one = 1 unit
+map.fractal_unit = = a ruleset, {0} chars
+map.charted = {0} charted
+map.charted_bits = charted ~{0} bits
 map.tiles = ~10^{0} tiles
 details.title = {0}: what its figures mean
 details.size = Size: {0}
@@ -1177,6 +1182,7 @@ keys.section.media.rings = The Media Player: the rings
 keys.section.main = The main menu and Potentia Settings
 keys.section.cipher = The Encryption Engine
 keys.section.docs = The Documentation
+keys.section.fractals = The Fractal Dimension
 keys.section.chain = The CHAIN tab (an AI model in hand)
 keys.menus.up = the row above
 keys.menus.down = the row below
@@ -1237,6 +1243,10 @@ keys.docs.search = search the library (typing on the list searches too)
 keys.docs.history = back to the page read before
 keys.docs.first = the first row of the list, or the top of the page
 keys.docs.last = the last row of the list, or the foot of the page
+keys.fractals.deeper = grow the fractal a step deeper (the menus' Right too)
+keys.fractals.shallower = take the fractal a step back (the menus' Left too)
+keys.fractals.first = the fractal at its first step, its axiom
+keys.fractals.deepest = the fractal at the deepest it is drawn
 keys.chain.up = the stage above
 keys.chain.down = the stage below
 keys.chain.move_up = move the stage up
@@ -2015,6 +2025,20 @@ docs.no_page = No page of the library is called {0}, so it opens on its first.
 docs.no_library = The help library was not found ({0}).
 docs.missing = The library's contents name pages that are not there: {0}.
 docs.footer = Up/Down: a row, or scroll the page    Enter / Right: open it    Left: back to the list    {key1:menus/next|Tab} / {key1:docs/previous|Shift+Tab}: CONTENTS, INDEX, SEARCH (on the page: its links; Enter follows one)    {key1:docs/search|Ctrl+F}: search    {key1:docs/history|Backspace}: the page before    PgUp PgDn: a screen    Esc: the main menu
+
+; ---- The Fractal Dimension (fractal_library.cpp, IDEAS 19.191, 19.235)
+fractals.title = FRACTAL DIMENSION
+fractals.subtitle = Every ruleset of its grammar is on its line; its shelves hold the fractals charted by hand. Choose one, and grow it a step at a time.
+fractals.shelves = SHELVES: {0} charted
+fractals.substitution = a substitution
+fractals.lsystem = an L-system
+fractals.depth = depth {0} of {1}: {2} symbols
+fractals.deepest = It is drawn here to depth {0} at most (the command line, sieve fractal draw, goes as deep as its ruleset grows).
+fractals.summary = fractal {0} at depth {1}: {2} symbols; {3} charted
+fractals.empty = The shelves are empty: no fractals are charted.
+fractals.unreadable = The shelves could not be read: {0}
+fractals.no_such = No fractal on the shelves is called {0}, so it opens on the first.
+fractals.footer = {key1:menus/up|Up}/{key1:menus/down|Down}: a fractal    {key1:menus/right|Right} / {key1:fractals/deeper|=}: a step deeper    {key1:menus/left|Left} / {key1:fractals/shallower|-}: a step back    {key1:fractals/first|Home} / {key1:fractals/deepest|End}: its first and deepest    {key1:menus/back|Esc}: back
 
 ; ---- Manual Navigation (manual_nav.cpp)
 mnav.title = MANUAL NAVIGATION

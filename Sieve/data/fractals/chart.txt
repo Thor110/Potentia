@@ -1,0 +1,12 @@
+sieve-fractal-chart-v1
+fractal fibonacci-word Fibonacci word (the golden ratio)
+fractal thue-morse Thue-Morse sequence
+fractal cantor-set Cantor set
+fractal koch-curve Koch curve
+fractal koch-snowflake Koch snowflake
+fractal sierpinski-triangle Sierpinski triangle
+fractal dragon-curve Dragon curve
+fractal hilbert-curve Hilbert curve
+fractal levy-c-curve Levy C curve
+fractal gosper-curve Gosper curve
+fractal fractal-plant Fractal plant

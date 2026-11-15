@@ -96,7 +96,7 @@ python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for
 # unnamed, a melody past its set, and a world with nothing of v2's but its places' heights), which the
 # reader alone refuses. A v2 world of 33 characters is one kept line of one character: 10 seeds x 94.
 python ../tools/grammars.py --check
-for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60; do
+for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60; do
   python sieve_ref.py plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
   $S filters --plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
@@ -104,7 +104,10 @@ done
 $S filters --plugin ../data/filters/format-actions-v1.sfilter --length 195 | tr -d '\r' | grep -c "^survivors  810544624661213367964996895060815354972889892659483948276203088055391907479552$" > /dev/null
 python ../tools/check_formats.py "$S" ../build/hallway . | tr -d '\r' > formats.txt
 $S filters --plugin ../data/filters/format-world-v2.sfilter --length 33 | tr -d '\r' | grep -c "^survivors  940$" > /dev/null
-for k in actions save replay world world-v2; do
+# The fractal dimension's line (IDEAS 19.191, 19.235): at 44 characters, the shortest, every L-system of
+# one digit's angle, one symbol's axiom and one rule of one symbol: 9 x 57 x 52 x 57.
+$S filters --plugin ../data/filters/format-fractal-v1.sfilter --length 44 | tr -d '\r' | grep -c "^survivors  1520532$" > /dev/null
+for k in actions save replay world world-v2 fractal; do
   grep -c "^$k: [0-9]* documents (" formats.txt > /dev/null
 done
 # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way

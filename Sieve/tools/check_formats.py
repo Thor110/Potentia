@@ -476,6 +476,54 @@ def world2_beyond_walk(doc, why):
     return not structural
 
 
+# sieve-fractal-v1: the fractal dimension's rulesets.
+
+FRACTAL_CHARTED = ["sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 1 0\n", "sieve-fractal-v1\nlsystem 90\naxiom FX\nrule X X+YF+\nrule Y -FX-Y\n",
+                   "sieve-fractal-v1\nlsystem 25\naxiom X\nrule F FF\nrule X F+[[X]-X]-F[-FX]+X\n"]
+
+
+def fractal_doc(r):
+    if r.random() < 0.5:
+        sym = "0123456789abcdefghijklmnopqrstuvwxyz"
+        pool = sym[:r.choice([2, 3, 10, 36])]
+        used = sorted(r.sample(pool, r.randint(1, min(3, len(pool)))))
+        word = lambda: "".join(r.choice(sym[:12]) for _ in range(r.randint(1, r.choice([3, 8, 64]))))
+        t = "sieve-fractal-v1\nsubstitution\naxiom " + word() + "\n"
+    else:
+        letters = "FGXYABfz"
+        used = sorted(r.sample(letters, r.randint(1, 3)))
+        word = lambda: "".join(r.choice(letters + "+-[]|") for _ in range(r.randint(1, r.choice([4, 12, 64]))))
+        t = f"sieve-fractal-v1\nlsystem {r.choice([1, 25, 60, 90, 120, 359, r.randint(1, 359)])}\naxiom " + word() + "\n"
+    for s in used:
+        t += f"rule {s} {word()}\n"
+    return t
+
+
+def fractal_edges(r):
+    h = "sieve-fractal-v1\n"
+    return FRACTAL_CHARTED + [
+        h + "substitution\naxiom 0\n",  # no rule
+        h + "substitution\naxiom 0\nrule 0 01\nrule 0 1\n",  # a symbol twice
+        h + "substitution\naxiom 0\nrule 1 0\nrule 0 01\n",  # out of order: a walk does not weigh it
+        h + "substitution\naxiom 0\nrule 0 " + "0" * 64 + "\n",
+        h + "substitution\naxiom 0\nrule 0 " + "0" * 65 + "\n",
+        h + "substitution\naxiom A\nrule A 0\n",  # a capital in a substitution
+        h + "lsystem 0\naxiom F\nrule F FF\n",
+        h + "lsystem 360\naxiom F\nrule F FF\n",
+        h + "lsystem 090\naxiom F\nrule F FF\n",
+        h + "lsystem 90\naxiom F\nrule + FF\n",  # only letters have rules
+        h + "lsystem 90\naxiom F\nrule F F F\n",
+        h + "lsystem 90\naxiom \nrule F F\n",
+        h + "lsystem 90\naxiom F\nrule F FF",  # its last line not ended
+        "sieve-fractal-v2\nsubstitution\naxiom 0\nrule 0 01\n",
+    ]
+
+
+def fractal_beyond_walk(doc, why):
+    """A ruleset the reader refuses only because its rules are out of order or one is given twice."""
+    return "in the order of their symbols" in why
+
+
 FORMATS = [
     # name, reader program ("sieve" or "hallway"), kind, plugin, documents, edges, beyond a walk
     ("actions", "sieve", "actions", "format-actions-v1.sfilter", actions_doc, actions_edges, None),
@@ -483,6 +531,7 @@ FORMATS = [
     ("replay", "hallway", "replay", "format-replay-v1.sfilter", replay_doc, replay_edges, replay_beyond_walk),
     ("world", "hallway", "world", "format-world-v1.sfilter", world_doc, world_edges, world_beyond_walk),
     ("world-v2", "hallway", "world", "format-world-v2.sfilter", world2_doc, world2_edges, world2_beyond_walk),
+    ("fractal", "sieve", "fractal", "format-fractal-v1.sfilter", fractal_doc, fractal_edges, fractal_beyond_walk),
 ]
 
 OTHERS = ["", "a", "0", " ", "\n", "-", "Z", ".", "\r"]

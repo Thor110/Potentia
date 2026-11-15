@@ -29,6 +29,7 @@
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
+#include "sieve/fractal.hpp"
 #include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
@@ -7409,6 +7410,48 @@ void test_raid_pieces()
     CHECK(std::find(now.begin(), now.end(), leaving) == now.end());
 }
 
+extern std::string g_data; // (the data folder: defined below, set from the tests folder)
+
+// The fractal dimension's rulesets (IDEAS 19.191, 19.235): read as written, grown, drawn, and the
+// shelves' chart read whole.
+void test_fractals()
+{
+    const std::string fib = "sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 1 0\n";
+    const auto f = read_fractal(fib);
+    CHECK(f && f->text() == fib);
+    // the Fibonacci word: its lengths are the Fibonacci numbers, its ones at 1/phi^2 of its places
+    CHECK(*f->grow(0) == "0" && *f->grow(1) == "01" && *f->grow(5) == "0100101001001");
+    CHECK(f->grow(20)->size() == 17711);
+    {
+        const std::string w = *f->grow(25);
+        const double ones = double(std::count(w.begin(), w.end(), '1')) / double(w.size());
+        CHECK(std::fabs(ones - 0.3819660112501051) < 1e-6);
+    }
+    CHECK(f->deepest() == 29); // 1,346,269 symbols at 29; 2,178,309 at 30, past the limit of 2,097,152
+    // The dragon curve: 2^n lines at depth n, each a step long.
+    const auto d = read_fractal("sieve-fractal-v1\nlsystem 90\naxiom FX\nrule X X+YF+\nrule Y -FX-Y\n");
+    CHECK(d && d->angle == 90);
+    CHECK(fractal_lines(*d, *d->grow(10)).size() == 1024);
+    for (const auto& l : fractal_lines(*d, *d->grow(6))) CHECK(std::fabs(std::hypot(l[2] - l[0], l[3] - l[1]) - 1) < 1e-9);
+    const auto img = draw_fractal(*d, 8, 64, 48);
+    CHECK(img && img->width == 64 && img->height == 48 && img->rgba.size() == 64u * 48 * 4);
+    CHECK(!draw_fractal(*d, d->deepest() + 1, 64, 64)); // past its limit: nothing, not a word of millions
+    // Not as written: each refused with a reason.
+    for (const std::string bad : {std::string("sieve-fractal-v1\nsubstitution\naxiom 0\n"), std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 1 0\nrule 0 01\n"),
+                                  std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 0 1\n"), std::string("sieve-fractal-v1\nlsystem 0\naxiom F\nrule F FF\n"),
+                                  std::string("sieve-fractal-v1\nlsystem 090\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v1\nlsystem 90\naxiom F\nrule + FF\n"),
+                                  std::string("sieve-fractal-v1\nsubstitution\naxiom A\nrule A 0\n"), std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01"),
+                                  std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 ") + std::string(65, '0') + "\n"})
+    {
+        std::string why;
+        CHECK(!read_fractal(bad, &why) && !why.empty());
+    }
+    // The shelves as charted in the repository: every entry read, and each grows at least a step.
+    const auto chart = read_fractal_chart(std::filesystem::path(g_data) / "fractals");
+    CHECK(chart.size() == 11 && chart[0].id == "fibonacci-word");
+    for (const auto& c : chart) CHECK(c.fractal.deepest() >= 5 && c.fractal.text() == c.text);
+}
+
 void test_raid_net()
 {
     namespace fs = std::filesystem;
@@ -8921,6 +8964,7 @@ void run_all(int argc, char** argv)
     RUN(test_raid());
     RUN(test_raid_net());
     RUN(test_raid_pieces());
+    RUN(test_fractals());
     RUN(test_format_stats());
     RUN(test_catalogue());
     RUN(test_save());

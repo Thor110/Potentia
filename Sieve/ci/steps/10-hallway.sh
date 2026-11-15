@@ -712,11 +712,12 @@ test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
-# pages line as its alphabet. (document's 10: text and image above it; the manifest, PDF, the
+# pages line as its alphabet. (document's 12: text and image above it; the manifest, PDF, the
 # catalogue's two record formats, the hallway's recordings (sieve-replay-v1), favourites, as one
-# and as a dimension's list, and the RAID's tally of who keeps its pieces, beneath.)
+# and as a dimension's list, the RAID's tally of who keeps its pieces, and the fractal dimension's
+# rulesets and chart, beneath.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 10 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 12 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
@@ -1873,6 +1874,14 @@ $H --docs welcome --script "Right,Tab,Return,Backspace" --screenshot docs-back.p
 $H --docs welcome --script "Tab" --screenshot docs-index.png | tr -d '\r' | q "^documentation: page welcome of .*; INDEX: [0-9]* rows; "
 $H --docs welcome --script "=midi" --screenshot docs-search.png | tr -d '\r' | q "^  list: The viewer$"
 $H --docs nosuchpage --screenshot docs-none.png | tr -d '\r' | q "^  status: No page of the library is called nosuchpage, so it opens on its first.$"
+# The Fractal Dimension (list S, IDEAS 19.191, 19.235): its shelves, the fractals charted by hand, each
+# grown a step at a time (Right, =; Left, -), to the deepest drawn (End) and back to its axiom (Home); a
+# fractal not charted is said. Opened from the setup page's FRACTALS column, after AI.
+$H --fractals dragon-curve --screenshot fractals.png | tr -d '\r' | q "^fractals: fractal dragon-curve at depth 5: 126 symbols; 11 charted$"
+$H --fractals dragon-curve --script "Right,=,Left" --screenshot fractals-deeper.png | tr -d '\r' | q "^fractals: fractal dragon-curve at depth 6: 254 symbols; "
+$H --fractals fibonacci-word --script "Home,Right,Right,Right" --screenshot fractals-fib.png | tr -d '\r' | q "^fractals: fractal fibonacci-word at depth 3: 5 symbols; "
+$H --fractals fibonacci-word --script "Down,Down,End" --screenshot fractals-cantor.png | tr -d '\r' | q "^fractals: fractal cantor-set at depth 11: 177147 symbols; "
+$H --fractals nosuch --screenshot fractals-none.png | tr -d '\r' | q "^  status: No fractal on the shelves is called nosuch, so it opens on the first.$"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-case.png > /dev/null

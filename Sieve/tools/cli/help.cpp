@@ -433,6 +433,30 @@ const std::vector<Page>& pages()
           {"sieve raid share game.sav --drives D:/raid,E:/raid --key my.key --peers friend.example:47100,other.example:47100", "send it out, sealed"},
           {"sieve raid fetch REMOTE --key my.key --peers friend.example:47100 --out game.sav", "bring it back"}}},
 
+        {"fractal", "The fractal dimension: its shelves, charted by hand, and any ruleset grown and drawn.",
+         "sieve fractal [list] [--folder DIR]\n"
+         "       sieve fractal show ID|FILE [--depth N]\n"
+         "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX]\n"
+         "       sieve fractal check FILE",
+         "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"
+         "grammar (sieve-fractal-v1, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96 that\n"
+         "the format-fractal-v1 filter passes, so its survivor number is its address. Its shelves show the\n"
+         "fractals charted by hand (fractals/chart.txt beside the program: the Fibonacci word, Koch's\n"
+         "snowflake, the dragon curve and more), each named with its ruleset. A ruleset is a substitution\n"
+         "(each symbol replaced by its word at every step, drawn as its words one under another) or an\n"
+         "L-system (drawn as a turtle draws: F and G a line forward, + and - turns of its angle, [ and ] a\n"
+         "place kept and taken back). The hallway shows them under Fractal Dimension on the main menu.",
+         {{"list", "The charted fractals: id, family, size, how deep each grows, and its name (the default)."},
+          {"show ID|FILE", "A ruleset at a depth: its family, its size, and its word (or how many lines it draws)."},
+          {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},
+          {"check FILE", "Whether a file is a sieve-fractal-v1 ruleset, and if not why; exit 1 if not."},
+          {"--depth N", "How many steps to grow it (default: 6, or as deep as it goes under its limit)."},
+          {"--size PX", "The picture's width and height (default 512)."},
+          {"--folder DIR", "Read the chart from DIR instead of the one beside the program."}},
+         {{"sieve fractal", "the shelves"},
+          {"sieve fractal show fibonacci-word --depth 8", "the golden ratio's word, 55 symbols"},
+          {"sieve fractal draw dragon-curve --depth 12 --out dragon.png", "a picture of it"}}},
+
         {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
          "sieve dimensions [ID]",
          "The catalogue of dimensions (IDEAS 19.162): the hallway's lines, the characters and their\n"
@@ -1677,7 +1701,7 @@ void print_usage()
         {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
-        {"Other lines", {"mesh", "import", "dimensions", "catalogue", "raid", "world", "ai", "ai-train", "diffuse"}},
+        {"Other lines", {"mesh", "import", "dimensions", "fractal", "catalogue", "raid", "world", "ai", "ai-train", "diffuse"}},
         {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;

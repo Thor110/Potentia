@@ -14,6 +14,7 @@ page items Taking an item off the shelf
 page viewer The viewer
 page warp-and-addresses Warping and going to an address
 page filters Filters
+page fractal-dimension The Fractal Dimension
 page pause-menu The pause menu
 
 category systems Systems

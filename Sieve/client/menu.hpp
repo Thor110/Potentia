@@ -434,8 +434,12 @@ private:
     void add_filter_rows(std::vector<ORow>& rows, const sieve::FilterLine& line, const sieve::cli::LineFilters& lf, int part) const;
     int overlay_ = -1; // the door of the line whose filters are open (dimensions.hpp), or -1
     int details_ = -1; // the door of the line whose details are open, or -1
-    SDL_FRect dots_[kLines + 1] = {}; // the details button beside each column's name
+    // The map's columns: binary, the lines between, the fractal dimension (after AI: IDEAS 19.191, 19.235,
+    // a line of its own, not a door of the hallway), binary again.
+    static constexpr int kMapColumns = kLines + 2, kFractalColumn = kLines;
+    SDL_FRect dots_[kMapColumns] = {}; // the details button beside each column's name
     void render_details(float W, float H);
+    void draw_fractal_column(float x, float pitch, float label, float top, float span, double scale_bits, float name_scale);
     int line_of_row() const; // the line whose settings row is chosen, else the one you will start on
     int orow_ = 0;
     int oscroll_ = 0;
@@ -443,8 +447,12 @@ private:
     StackInfo info_[kLines]; // one per line of the map, by door
     // One glass per column of the map: binary, the lines between, binary again. Both binary columns
     // open the same filters, because it is one line met at both ends.
-    SDL_FRect magnifier_[kLines + 1] = {};
-    static int overlay_of_column(int c) { return c == 0 || c == kLines ? kBinaryLine : c - 1; }
+    SDL_FRect magnifier_[kMapColumns] = {};
+    // The door a column shows (-1 for the fractal dimension's, which opens its own screen).
+    static int overlay_of_column(int c) { return c == 0 || c == kMapColumns - 1 ? kBinaryLine : c == kFractalColumn ? -1 : c - 1; }
+    // The fractal dimension: its shelves opened over the menu (fractal_library.hpp); how many are charted.
+    void open_fractals(bool& done, Result& result);
+    int fractals_charted_ = -1; // -1 until read
     SDL_FRect box_ = {};
     std::vector<std::pair<SDL_FRect, int>> row_rects_; // overlay rows on screen
     bool in_game_ = false;

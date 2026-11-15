@@ -18,6 +18,7 @@
 #include "cipher_screen.hpp"
 #include "manual_nav.hpp"
 #include "help_library.hpp"
+#include "fractal_library.hpp"
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
@@ -256,6 +257,8 @@ const char* kUsage =
     "                      says whether each reads (tools/check_formats.py; no window is opened)\n"
     "  --docs PAGE         with --screenshot: a picture of the Documentation open on PAGE (an id from help/contents.txt);\n"
     "                      --script \"Tab,Down,Return,=words\" its keys and a search typed\n"
+    "  --fractals ID       with --screenshot: a picture of the Fractal Dimension on the fractal ID (from\n"
+    "                      fractals/chart.txt); --script \"Down,Right,=\" its keys\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
     "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
     "                      keeps a log there (none otherwise); --manual-log LOG (in place of FILE) replays a log;\n"
@@ -1656,6 +1659,19 @@ int run(const Args& a)
         std::istringstream list(docs.list_text()), page(docs.page_text());
         for (std::string l; std::getline(list, l);) std::cout << "  list: " << l << "\n";
         for (std::string l; std::getline(page, l);) std::cout << "  page: " << l << "\n";
+        return shot_done();
+    }
+    if (shot && a.has("fractals"))
+    {
+        // A picture of the Fractal Dimension (for documentation and testing): --fractals ID opens it on
+        // that fractal; --script runs its keys.
+        FractalLibrary fl(window, renderer, FractalLibrary::folder(), a.get("fractals"));
+        if (a.has("script"))
+            for (const auto& [key, mod] : parse_presses(a.get("script"))) fl.press(key, mod);
+        fl.render();
+        shoot();
+        std::cout << "fractals: " << fl.summary() << "\n";
+        if (!fl.status().empty()) std::cout << "  status: " << fl.status() << "\n";
         return shot_done();
     }
     if (shot && (a.has("manual-nav") || a.has("manual-log") || a.has("manual-pick") || a.has("manual-example")))

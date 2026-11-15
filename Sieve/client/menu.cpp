@@ -54,6 +54,8 @@
 #include "sieve/guided.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/text.hpp"
+#include "sieve/fractal.hpp"
+#include "fractal_library.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/character_voxels.hpp"
@@ -1780,9 +1782,11 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                     side_page_to(i);
                     return;
                 }
-        for (int c = 0; c < kLines + 1; ++c)
+        for (int c = 0; c < kMapColumns; ++c)
         {
-            if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
+            const bool clicked = inside(magnifier_[c], mx, my) || inside(dots_[c], mx, my);
+            if (clicked && c == kFractalColumn) open_fractals(done, result);
+            else if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
             else if (inside(dots_[c], mx, my)) open_details(overlay_of_column(c));
         }
         return;
@@ -3417,7 +3421,7 @@ void Menu::render()
     // and the footer. In a smaller window it is drawn at that size and scaled down to fit, instead
     // of running off the edge; worked out from the rows and the text, so a row added later cannot
     // bring that back.
-    const int kMinW = std::max({int(std::ceil(kMapX + kMapPitchMin * float(kLines + 1) + 20)), int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)),
+    const int kMinW = std::max({int(std::ceil(kMapX + kMapPitchMin * float(kMapColumns) + 20)), int(std::ceil(20 + text_width(tr("setup.subtitle"), 1) + 20 + kBudgetW + 20)),
                                 int(std::ceil(20 + text_width(tr("setup.title"), 3) + 20 + text_width(tr("setup.calculating.banner"), 1) + 20 +
                                               kBudgetW + 20))});
     const int kMinH = int(std::ceil(kListTop + kHeadH + float(kFirstLineRow) * kRowH + kActionsGap + kActionsLow));
@@ -3721,7 +3725,7 @@ void Menu::render()
     // drawn like any other line, with its own two colours and a bar of the same width, and its
     // size is every file up to the BINARY length (SPECIFICATIONS §12.1).
     // Beside the settings panel, or across the room it leaves (past the SETTINGS tab) while it is out.
-    const float x0 = kPanelTabW + 8 + panel_.shown * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_.shown * kSideW) / float(kLines + 1));
+    const float x0 = kPanelTabW + 8 + panel_.shown * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_.shown * kSideW) / float(kMapColumns));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 148, bottom = H - 60 - foot_up, span = bottom - top, min_bar = 12;
@@ -3729,13 +3733,18 @@ void Menu::render()
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, map_y, tr("map.title"), 1, white);
     text(r_, x0, map_y + 12, trf(broken_any ? "map.scale.broken" : "map.scale", {fixed(scale_bits, 0)}), 1, grey);
-    for (int c = 0; c < kLines + 1; ++c)
+    for (int c = 0; c < kMapColumns; ++c)
     {
-        const bool binary = c == 0 || c == kLines;
+        const float x = x0 + float(c) * pitch;
+        if (c == kFractalColumn)
+        {
+            draw_fractal_column(x, pitch, label, top, span, scale_bits, name_scale);
+            continue;
+        }
+        const bool binary = c == 0 || c == kMapColumns - 1;
         const int i = binary ? kBinaryLine : c - 1; // the door
         Theme th = theme_of(i);
         const SDL_Color ink = menu_ink(th);
-        const float x = x0 + float(c) * pitch;
         const LineSize& z = sizes[size_t(i)];
         // Labels above the bar, so a full-length bar never runs into them.
         const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
@@ -3845,6 +3854,94 @@ void Menu::render()
     }
 }
 
+
+// ---------------------------------------------------------------- the fractal dimension's column
+// After AI on the map (Edward, 15 November 2026: "a light shade of purple and be after the AI dimension
+// in the setup page"): a line of its own (IDEAS 19.191, 19.235), not a door of the hallway. Its bar is
+// the line's units, every text of kFractalUnit characters (the rulesets among them are its survivors),
+// broken as AI's is, the break drawn as a Koch curve; inside it, the fractals charted on its shelves, a
+// sliver. Its glass and its dots open the shelves.
+namespace {
+constexpr int kFractalUnit = 128; // the characters of a ruleset as the map counts it (a unit of ascii96)
+}
+
+void Menu::draw_fractal_column(float x, float pitch, float label, float top, float span, double scale_bits, float name_scale)
+{
+    const SDL_Color body{205, 185, 255, 255}, frame{120, 90, 200, 255}, ink{205, 185, 255, 255};
+    const int c = kFractalColumn;
+    if (fractals_charted_ < 0)
+        try
+        {
+            fractals_charted_ = int(sieve::read_fractal_chart(FractalLibrary::folder()).size());
+        }
+        catch (const std::exception&)
+        {
+            fractals_charted_ = 0;
+        }
+    const size_t cols = size_t(std::max(8.0f, pitch - 8) / 8);
+    auto clip = [&](const std::string& t) { return text_cells(t) <= cols ? t : fit_cells(t, cols - 2) + ".."; };
+    magnifier_[c] = {x - 2, label - 2, 20, 20};
+    SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
+    outline_ellipse(r_, x + 6, label + 6, 5, 5, 16);
+    SDL_RenderLine(r_, x + 10, label + 10, x + 15, label + 15);
+    SDL_RenderLine(r_, x + 11, label + 10, x + 16, label + 15);
+    const std::string name = tr("line.fractals");
+    text(r_, x + 22, label, name, name_scale, ink);
+    {
+        const float dx = x + 22 + text_width(name, name_scale) + 3, d = name_scale >= 2 ? 3.0f : 2.0f;
+        dots_[c] = {dx - 2, label - 2, std::max(8.0f, x + pitch - 4 - (dx - 2)), 20};
+        for (int k = 0; k < 3; ++k)
+        {
+            const SDL_FRect dot{dx, label + 1 + float(k) * 6, d, d};
+            SDL_RenderFillRect(r_, &dot);
+        }
+    }
+    const double bits = kFractalUnit * std::log2(96.0);
+    text(r_, x, label + 22, clip(tr("map.fractal_one")), 1, ink);
+    text(r_, x, label + 34, clip(trf("map.fractal_unit", {std::to_string(kFractalUnit)})), 1, ink);
+    text(r_, x, label + 46, clip(trf("map.bits", {fixed(bits, 0)})), 1, ink);
+    text(r_, x, label + 58, clip(trf("map.tiles", {fixed(std::max(0.0, bits * std::log10(2.0) - std::log10(128.0)), 1)})), 1, ink);
+    text(r_, x, label + 70, clip(trf("map.charted", {std::to_string(fractals_charted_)})), 1, ink);
+    text(r_, x, label + 82, clip(trf("map.charted_bits", {fixed(fractals_charted_ > 0 ? std::log2(double(fractals_charted_)) : 0, 1)})), 1, ink);
+    // The bar, as long as the line's units are against the scale (min 12), broken a third of the way
+    // down whatever its length, as AI's is: not to scale.
+    const float len = std::clamp(float(bits / scale_bits) * span, 12.0f, span);
+    const SDL_FRect bar{x + 8, top, 40, len};
+    SDL_SetRenderDrawColor(r_, body.r, body.g, body.b, 255);
+    SDL_RenderFillRect(r_, &bar);
+    SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+    SDL_RenderRect(r_, &bar);
+    const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
+    SDL_RenderRect(r_, &inner);
+    if (len > 40)
+    {
+        // The break: black across the bar, its two edges each a Koch curve of two steps.
+        const float by = top + std::min(span / 3, len / 2);
+        const SDL_FRect gap{x + 6, by - 5, 44, 10};
+        SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+        SDL_RenderFillRect(r_, &gap);
+        if (const auto f = sieve::read_fractal("sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n"))
+        {
+            const auto lines = sieve::fractal_lines(*f, *f->grow(2));
+            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+            for (const float off : {-5.0f, 5.0f})
+                for (const auto& l : lines) // (9 steps wide; drawn 48 pixels across)
+                    SDL_RenderLine(r_, x + 4 + float(l[0]) * 48 / 9, by + off - float(l[1]) * 48 / 9, x + 4 + float(l[2]) * 48 / 9, by + off - float(l[3]) * 48 / 9);
+        }
+    }
+    // The charted fractals: a filled bar inside, a sliver against the line (never less than 3 pixels).
+    const float slen = std::clamp(float((fractals_charted_ > 0 ? std::log2(double(fractals_charted_)) : 0) / scale_bits) * span, 3.0f, std::max(3.0f, len - 4));
+    const SDL_FRect sv{x + 14, top + 2, 28, slen};
+    SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 220);
+    SDL_RenderFillRect(r_, &sv);
+}
+
+void Menu::open_fractals(bool& done, Result& result)
+{
+    FractalLibrary shelves(window_, r_, FractalLibrary::folder());
+    if (shelves.run() == FractalLibrary::Result::Quit) done = true, result = Result::Quit;
+    SDL_StartTextInput(window_); // (back to the setup menu as it was)
+}
 
 // ---------------------------------------------------------------- the right-hand panel
 // Opposite SETTINGS (IDEAS §19.148): a tab at the right edge while it is out, and when it is in, its

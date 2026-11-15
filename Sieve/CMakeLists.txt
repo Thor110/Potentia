@@ -58,6 +58,7 @@ add_library(sieve_core STATIC
     core/src/seal.cpp
     core/src/raid_net.cpp
     core/src/raid_piece.cpp
+    core/src/fractal.cpp
     core/src/format_stats.cpp
     core/src/json.cpp
     core/src/safetensors.cpp
@@ -687,6 +688,10 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/help
             $<TARGET_FILE_DIR:sieve>/help
+    # The fractal dimension's shelves, charted by hand (IDEAS 19.191, 19.235): the chart and its rulesets.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/fractals
+            $<TARGET_FILE_DIR:sieve>/fractals
     # Sieve's voice (tools/cli/voice.hpp): its pronunciations and alignment; its clips are found in
     # the anchors (data/anchors/public-domain/voice), above a build inside the repository.
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -750,6 +755,7 @@ if(SIEVE_BUILD_CLIENT)
         client/cipher_screen.cpp
         client/manual_nav.cpp
         client/help_library.cpp
+        client/fractal_library.cpp
         client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp

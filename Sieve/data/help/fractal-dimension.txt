@@ -1,0 +1,19 @@
+index: fractal dimension, fractals, rulesets, Fibonacci word, golden ratio, L-system, substitution, Koch, dragon curve, FRACTALS column
+
+The fractal dimension is a line like the others, of rulesets: every ruleset of its grammar is on it at its address, as every page is on the pages line. Most of the line is noise, as on every line; its shelves hold the fractals charted by hand, each named with its ruleset.
+
+## Opening it
+On the setup page (Start Sieve), the FRACTALS column stands after AI, in light purple. Its magnifying glass or its dots open the shelves. Its bar is the line of rulesets of 128 characters; inside it, the fractals charted, a sliver; it is broken, its break drawn as a Koch curve, because it is not to scale.
+
+## Growing a fractal
+Choose a fractal with {key1:menus/up|Up} and {key1:menus/down|Down}. {key1:menus/right|Right} or {key1:fractals/deeper|=} grows it a step deeper; {key1:menus/left|Left} or {key1:fractals/shallower|-} takes it a step back; {key1:fractals/first|Home} shows its axiom and {key1:fractals/deepest|End} the deepest drawn. Esc goes back.
+
+## The two kinds of ruleset
+- A substitution: at every step each symbol becomes its word (0 becomes 01, 1 becomes 0, for the Fibonacci word). Drawn as its words one under another, each stretched across, so the pattern is seen repeating at every scale.
+- An L-system: drawn as a turtle draws. F and G draw a line forward, f moves without one, + and - turn by its angle, [ and ] keep a place and come back to it.
+
+## The shelves
+The Fibonacci word (the golden ratio in two symbols), the Thue-Morse sequence, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the dragon curve, the Hilbert, Levy C and Gosper curves, and a fractal plant. More are charted by adding them to fractals/chart.txt beside the program, each as its own .fractal file.
+
+## On the command line
+sieve fractal lists the shelves; sieve fractal show and draw grow one to a depth and draw it as a picture. See [[command-line|the command line]].

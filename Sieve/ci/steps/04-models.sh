@@ -213,6 +213,17 @@ if grep -c "cube" "$SIEVE_STATS"/*.stats > /dev/null; then exit 1; fi # (no file
 # The catalogue of dimensions: DNA links to research, and research is linked from DNA.
 $exe dimensions | tr -d '\r' | q "^research   planned"
 $exe dimensions research | tr -d '\r' | q "^linked by .*dna"
+# The fractal dimension (list S, IDEAS 19.191, 19.235): its shelves charted by hand, a ruleset grown
+# (the Fibonacci word's lengths are Fibonacci numbers), drawn, and one not as written refused.
+$exe dimensions fractals | tr -d '\r' | q "^linked by pages$"
+$exe fractal | tr -d '\r' | q "^shelves   11 fractals, charted by hand "
+$exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19: Dragon curve$"
+$exe fractal show fibonacci-word --depth 8 | tr -d '\r' | q "^word      0100101001001010010100100101001001010010100100101001010$"
+$exe fractal show dragon-curve --depth 10 | tr -d '\r' | q "^lines     1024 drawn$"
+$exe fractal draw koch-snowflake --depth 4 --size 256 --out snowflake.png | tr -d '\r' | q "^drew      koch-snowflake: Koch snowflake at depth 4 (1792 symbols) to snowflake.png (256 x 256)$"
+printf 'sieve-fractal-v1\nsubstitution\naxiom 0\nrule 1 0\nrule 0 01\n' > unordered.fractal
+if $exe fractal check unordered.fractal > fractal-check.txt; then exit 1; fi
+tr -d '\r' < fractal-check.txt | q "the rules are in the order of their symbols, each once$"
 test "$a" = "000f00ff00f000ff0ffff0ff0504e6b3e128a4dc725baedf8e0"
 $exe mesh --read "$a" --out round.obj 2>/dev/null
 # Symmetric on the grid, and no two spaces in a row anywhere in the canonical form.

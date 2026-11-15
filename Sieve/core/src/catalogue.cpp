@@ -12,6 +12,7 @@
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
+#include "sieve/fractal.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/text.hpp"
 
@@ -222,6 +223,12 @@ std::vector<FormatEntry> gather()
     own(kRaidPieceVersion, "A piece of a sealed save: one of K of data and M of parity, any K enough", "container",
         std::string("first line \"") + kRaidPieceVersion + "\", then \"of SHA LENGTH\" and \"code K M INDEX\"; named by SHA-256",
         "sieve raid pieces and join; not yet sent between machines (SPECIFICATIONS 12.0s; IDEAS 19.210)");
+    own(kFractalVersion, "A fractal's ruleset: a substitution or an L-system, grown to a depth and drawn", "document",
+        std::string("first line \"") + kFractalVersion + "\", then \"substitution\" or \"lsystem ANGLE\", \"axiom WORD\" and \"rule SYMBOL WORD\" lines",
+        "the fractal dimension: sieve fractal, and the hallway's FRACTALS column (SPECIFICATIONS 12.0t; IDEAS 19.191, 19.235); its grammar data/filters/format-fractal-v1.sfilter (IDEAS 19.185)");
+    own(kFractalChartVersion, "The fractal dimension's shelves: the fractals charted by hand, each named with its ruleset", "document",
+        std::string("first line \"") + kFractalChartVersion + "\", then \"fractal ID TITLE\" lines; each ruleset ID.fractal beside it",
+        "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; IDEAS 19.235)");
     own(kRaidTallyVersion, "Who keeps the RAID's pieces: each machine's space, largest piece and what it keeps", "document",
         std::string("first line \"") + kRaidTallyVersion + "\", then \"keeper ADDRESS SPACE LARGEST USED\" lines",
         "sieve raid place and leave (SPECIFICATIONS 12.0s; IDEAS 19.210)");
