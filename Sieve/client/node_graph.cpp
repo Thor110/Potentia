@@ -712,12 +712,15 @@ void Hallway::draw_sort(const Book& bk, float x, float cy, float pw, float botto
         cy += 13;
     }
     cy += 6;
-    const SDL_FRect area{x + 14, cy, pw - 28, std::max(40.0f, bottom - cy - 20)};
+    // (the keys under the graph through the one footer, footer.hpp: the graph shorter by the lines past one)
+    const std::string keys = trk("sort.keys");
+    const float keys_up = footer_extra({{keys, grey}}, pw - 28, 12);
+    const SDL_FRect area{x + 14, cy, pw - 28, std::max(40.0f, bottom - cy - 20 - keys_up)};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderFillRect(r_, &area);
     if (g && g->ready) graph_step(*g, 1500000);
     draw_graph(g, area, sort_yaw_, sort_pitch_, 1.0f, node, node < 0, -1, -1);
-    text(x + 14, area.y + area.h + 4, fit(tr("sort.keys"), pw - 28, 1), 1, grey);
+    draw_footer(r_, "sort", x + 14, area.y + area.h + 4 + keys_up, pw - 28, keys, grey);
 }
 
 // The item page's tabs: ITEM, COST, SORT, and META when the item is an anchor of the chosen map
@@ -1025,7 +1028,10 @@ void Hallway::draw_graph_view(float W, float H)
     button("export", tr("graph.export"), 72, g && g->ready);
     // The graph, and what is chosen in it.
     const float info_h = 118;
-    const SDL_FRect area{20, 114, W - 40, std::max(60.0f, H - 114 - info_h - 40)};
+    // (the keys at the foot through the one footer, footer.hpp: the graph shorter by the lines past one)
+    const std::string keys = tr("graph.keys");
+    const float keys_up = footer_extra({{keys, grey}}, W - 40, 12);
+    const SDL_FRect area{20, 114, W - 40, std::max(60.0f, H - 114 - info_h - 40 - keys_up)};
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 40);
     SDL_RenderRect(r_, &area);
     if (g && g->ready)
@@ -1084,8 +1090,8 @@ void Hallway::draw_graph_view(float W, float H)
         std::lock_guard<std::mutex> lock(graph_lock_);
         status = graph_status_;
     }
-    if (!status.empty()) text(20, H - 44, fit(status, W - 40, 1), 1, busy ? white : ink);
-    text(20, H - 24, fit(tr("graph.keys"), W - 40, 1), 1, grey);
+    if (!status.empty()) text(20, H - 44 - keys_up, fit(status, W - 40, 1), 1, busy ? white : ink);
+    draw_footer(r_, "graph", 20, H - 24, W - 40, keys, grey);
     // The dropdown, over everything.
     if (graph_drop_)
     {

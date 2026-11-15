@@ -5,6 +5,7 @@
 #include "dialogs.hpp"
 #include "dimensions.hpp"
 #include "font.hpp"
+#include "footer.hpp"
 #include "music.hpp"
 #include "strings.hpp"
 
@@ -1553,18 +1554,22 @@ void ManualNav::render()
         }
     }
     const int rows = row_of.back() + 1;
+    // The keys at the foot, through the one footer (footer.hpp): the buttons and the status above them,
+    // however many lines they wrap onto.
+    const std::string keys = tr("mnav.footer");
+    const float keys_up = footer_extra({{keys, kGrey}}, W - 48, 12);
     float bx = 24;
     for (size_t i = 0; i < names.size(); ++i)
     {
         if (i > 0 && row_of[i] != row_of[i - 1]) bx = 24;
-        const SDL_FRect b{bx, H - 92 - 34 * float(rows - 1 - row_of[i]), 8 * float(names[i].size()) + 24, 26};
+        const SDL_FRect b{bx, H - 92 - keys_up - 34 * float(rows - 1 - row_of[i]), 8 * float(names[i].size()) + 24, 26};
         box(r_, b, SDL_Color{20, 20, 20, 255}, kGrey);
         txt(r_, b.x + 12, b.y + 9, names[i], kWhite);
         buttons_.emplace_back(b, int(i));
         bx += b.w + 10;
     }
-    txt(r_, 24, H - 52, fit_cells(status_, cols), kGood);
-    txt(r_, 24, H - 32, fit_cells(tr("mnav.footer"), cols), kGrey);
+    txt(r_, 24, H - 52 - keys_up, fit_cells(status_, cols), kGood);
+    draw_footer(r_, "manual_nav", 24, H - 32, W - 48, keys, kGrey);
 }
 
 } // namespace hallway

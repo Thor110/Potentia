@@ -40,7 +40,7 @@ Three things hold for everything it keeps, at every stage:
 
 ### Between machines (stage 3; SPECIFICATIONS §12.0o)
 
-- **Your key** (`sieve raid key`, or made when sharing is first ticked in Settings > Infinite RAID): 32
+- **Your key** (`sieve raid key`, or made when sharing is first ticked in Potentia Settings > Infinite RAID): 32
   random bytes, `sieve-raid-key-v1`. Lose it and what others keep for you cannot be read by anyone,
   you included: keep it safe, and keep a copy.
 - **Sealing** (`sieve-seal-v1`): ChaCha20 and HMAC-SHA-256 under keys drawn from yours. The same chunk
@@ -53,7 +53,7 @@ Three things hold for everything it keeps, at every stage:
   like RAID 1, done piece by piece over a changing set of machines rather than over one fixed group.
 - **The remote id**: the name of the sealed index. With it and your key, `sieve raid fetch` brings a
   save back on any machine. The hallway keeps each one it shares in `raid-shared.txt` beside your key.
-- **Kept whole by its owner** (`sieve raid check`, Settings > Infinite RAID's Check my shares). Machines
+- **Kept whole by its owner** (`sieve raid check`, Potentia Settings > Infinite RAID's Check my shares). Machines
   come and go, so the owner asks every machine which pieces it still keeps; a piece kept on too few is
   had from one that holds it, checked against its name, and put on the next machines down. A piece no
   machine keeps is lost, and said.
@@ -61,7 +61,7 @@ Three things hold for everything it keeps, at every stage:
   pieces it cannot read, up to the space you give in all (1 GiB by default) and the most for any one
   address (64 MiB), counted by address kept only as a salted hash (IDEAS §19.179). Nothing kept is
   deleted to make room; a piece over either limit is refused. Up to 32 connections are answered at once.
-- **Online, off by default** (Settings > Online, `[online] enabled`; IDEAS §19.189). Edward: "We
+- **Online, off by default** (Potentia Settings > Online, `[online] enabled`; IDEAS §19.189). Edward: "We
   should make sure online isn't a requirement and that it is off by default". Sharing, keeping others'
   saves and checking shares all need it on as well as their own box; while it is off each says so and
   nothing is sent or answered. The RAID on your own drives needs no network and is never gated.
@@ -111,7 +111,7 @@ machines may keep what, for whom, and how much, each answer checkable.
 | | |
 | :--- | :--- |
 | Commands | `sieve help raid`: put, get, list, verify, repair, key, serve, share, fetch, check |
-| The menus | Settings > Online (needed for everything between machines); Settings > Infinite RAID (share, copies, check, serve); the CHARACTER page's Ctrl+S |
+| The menus | Potentia Settings > Online (needed for everything between machines); Potentia Settings > Infinite RAID (share, copies, check, serve); the CHARACTER page's Ctrl+S |
 | Settings file | `[online]`: enabled; `[raid]`: drives, share, peers, copies, key, serve, listen, held, space_mb, per_peer_mb |
 | Specifications | SPECIFICATIONS §12.0l (stages 1 and 2), §12.0o (stage 3) |
 | The plan | IDEAS §19.150 (why), §19.154 (the store), §19.176 (the stages), §19.177 (the licence), §19.178 and §19.179 (identity and limits) |

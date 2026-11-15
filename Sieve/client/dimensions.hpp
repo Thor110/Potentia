@@ -29,7 +29,7 @@ inline constexpr int kMedia = 11;
 struct Dimension
 {
     Media media;
-    const char* id;   // "pages": the music files, the setup menu's focus, Real Graphics' models (<model>-<id>.obj, faces.ini)
+    const char* id;   // "pages": the music files, the setup menu's focus, the models drawn with Wireframe off (<model>-<id>.obj, faces.ini)
     const char* line; // the --line name and the setup menu's start line ("text" for pages)
     std::optional<sieve::cli::LineKind> unit; // the unit line it is (text, image, audio or video), if it is one
     // The unit line it is a composition of (audio for tracks, video for movies; sieve/composition.hpp):

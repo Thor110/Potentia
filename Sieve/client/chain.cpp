@@ -16,6 +16,7 @@
 #include "hallway.hpp"
 
 #include "dialogs.hpp"
+#include "keys.hpp"
 #include "cli/dictionaries.hpp"
 #include "cli/train.hpp"
 #include "sieve/sha256.hpp"
@@ -373,21 +374,26 @@ void Hallway::chain_run(const std::string& input)
 bool Hallway::chain_key(const SDL_KeyboardEvent& k)
 {
     if (!chain_ready_) chain_defaults();
-    const bool ctrl = (k.mod & SDL_KMOD_CTRL) != 0;
     const int n = int(chain_.size());
     chain_sel_ = n ? std::clamp(chain_sel_, 0, n - 1) : 0;
-    switch (k.key)
+    // Its keys as set (Settings > Controls > Keys, "The CHAIN tab"), asked before the item page's: a key
+    // none of them is goes on to the page (C, Esc and the rest).
+    namespace ck = chain_keys;
+    const std::string a = Keys::get().which({ck::kUp, ck::kDown, ck::kMoveUp, ck::kMoveDown, ck::kPreviousModel, ck::kNextModel, ck::kSteer, ck::kAdd, ck::kRemove, ck::kRun, ck::kSave, ck::kOpen},
+                                            k.key, k.mod);
+    if (a == ck::kUp || a == ck::kMoveUp)
     {
-    case SDLK_UP:
-        if (ctrl && chain_sel_ > 0) std::swap(chain_[size_t(chain_sel_)], chain_[size_t(chain_sel_ - 1)]);
+        if (a == ck::kMoveUp && chain_sel_ > 0) std::swap(chain_[size_t(chain_sel_)], chain_[size_t(chain_sel_ - 1)]);
         if (chain_sel_ > 0) --chain_sel_;
         return true;
-    case SDLK_DOWN:
-        if (ctrl && chain_sel_ + 1 < n) std::swap(chain_[size_t(chain_sel_)], chain_[size_t(chain_sel_ + 1)]);
+    }
+    if (a == ck::kDown || a == ck::kMoveDown)
+    {
+        if (a == ck::kMoveDown && chain_sel_ + 1 < n) std::swap(chain_[size_t(chain_sel_)], chain_[size_t(chain_sel_ + 1)]);
         if (chain_sel_ + 1 < n) ++chain_sel_;
         return true;
-    case SDLK_LEFT:
-    case SDLK_RIGHT:
+    }
+    if (a == ck::kPreviousModel || a == ck::kNextModel)
     {
         if (!n) return true;
         const std::vector<ChainStage> all = chain_choices();
@@ -397,48 +403,50 @@ bool Hallway::chain_key(const SDL_KeyboardEvent& k)
             if (all[size_t(i)].kind == s.kind && all[size_t(i)].name == s.name) at = i;
         const int m = int(all.size());
         const bool steer = s.steer;
-        s = all[size_t(((at + (k.key == SDLK_RIGHT ? 1 : -1)) % m + m) % m)];
+        s = all[size_t(((at + (a == ck::kNextModel ? 1 : -1)) % m + m) % m)];
         s.steer = steer && s.kind == ChainStage::Kind::Draw;
         return true;
     }
-    case SDLK_F:
+    if (a == ck::kSteer)
+    {
         // A picture or melody stage steered by the filters, or not.
         if (n && chain_[size_t(chain_sel_)].kind == ChainStage::Kind::Draw) chain_[size_t(chain_sel_)].steer = !chain_[size_t(chain_sel_)].steer;
         return true;
-    case SDLK_N:
-    case SDLK_INSERT:
+    }
+    if (a == ck::kAdd)
+    {
         chain_.insert(chain_.begin() + (n ? chain_sel_ + 1 : 0), n ? chain_[size_t(chain_sel_)] : chain_choices().front());
         chain_sel_ = n ? chain_sel_ + 1 : 0;
         return true;
-    case SDLK_DELETE:
-    case SDLK_BACKSPACE:
+    }
+    if (a == ck::kRemove)
+    {
         if (n) chain_.erase(chain_.begin() + chain_sel_);
         chain_sel_ = std::max(0, std::min(chain_sel_, int(chain_.size()) - 1));
         return true;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
+    }
+    if (a == ck::kRun)
+    {
         hand_tab_ = chat_tab();
         open_chat();
         chat_text_ = "/chain ";
         return true;
-    case SDLK_S:
-        if (!ctrl) return false;
-        {
-            const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
-            const std::string start = std::string(docs ? docs : "") + "models.chain";
-            static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
-            save_file_dialog(chain_saved, this, window_, kChain, 1, start.c_str(), this);
-        }
-        return true;
-    case SDLK_O:
-        if (!ctrl) return false;
-        {
-            static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
-            open_file_dialog(chain_opened, this, window_, kChain, 1, nullptr, false, false, this);
-        }
-        return true;
-    default: return false;
     }
+    if (a == ck::kSave)
+    {
+        const char* docs = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+        const std::string start = std::string(docs ? docs : "") + "models.chain";
+        static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
+        save_file_dialog(chain_saved, this, window_, kChain, 1, start.c_str(), this);
+        return true;
+    }
+    if (a == ck::kOpen)
+    {
+        static const SDL_DialogFileFilter kChain[] = {{"Sieve chains", "chain"}};
+        open_file_dialog(chain_opened, this, window_, kChain, 1, nullptr, false, false, this);
+        return true;
+    }
+    return false;
 }
 
 void Hallway::chain_poll()
@@ -552,13 +560,7 @@ void Hallway::draw_chain(float x, float top, float w, float bottom)
         }
     }
     else text(x, y, tr("chain.empty"), 1, ink);
-    const std::vector<std::string> keys = wrap_words(tr("chain.keys"), size_t(std::max(8.0f, w / 8)));
-    float ky = bottom - 8 - 14 * float(keys.size());
-    for (const std::string& l : keys)
-    {
-        text(x, ky, l, 1, grey);
-        ky += 14;
-    }
+    draw_footer(r_, "chain", x, bottom - 8 - 14, w, trk("chain.keys"), grey, 14); // (the one footer, footer.hpp)
 }
 
 } // namespace hallway::hall

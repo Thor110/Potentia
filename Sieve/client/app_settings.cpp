@@ -154,7 +154,7 @@ void AppSettings::set_real_graphics(bool on)
     if (on)
     {
         edge_glow = false;
-        door_portals = true; // it comes with Real Graphics, but stands on its own afterwards
+        door_portals = true; // it comes with Wireframe off, but stands on its own afterwards
     }
 }
 
@@ -197,6 +197,9 @@ AppSettings AppSettings::load(const fs::path& path)
             else if (key == "fullscreen") s.fullscreen = on_off(value, false);
             else if (key == "vsync") s.vsync = on_off(value, true);
             else if (key == "edge_glow") s.edge_glow = on_off(value, false);
+            // Wireframe (IDEAS 19.223), the models' switch the other way round; real_graphics, its
+            // name before, still read, so a file written before the change keeps its choice.
+            else if (key == "wireframe") s.real_graphics = !on_off(value, true);
             else if (key == "real_graphics") s.real_graphics = on_off(value, false);
             else if (key == "door_portals") s.door_portals = on_off(value, false);
             else if (key == "graphics_memory_gb") read_int(value, 1, 128, s.graphics_memory_gb);
@@ -255,7 +258,7 @@ AppSettings AppSettings::load(const fs::path& path)
         }
         else if (section == "keys")
         {
-            if (!key.empty()) s.keys[key] = value; // (a key changed on Settings > Controls > Keys)
+            if (!key.empty()) s.keys[key] = value; // (a key changed on Potentia Settings > Controls > Keys)
         }
         else if (section == "personal")
         {
@@ -388,8 +391,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"graphics", "resolution", resolution.w > 0 ? resolution.str() : std::string(), "the window's size, WxH; empty: chosen from the display at start"},
         {"graphics", "fullscreen", on_off(fullscreen), "on: fullscreen at the resolution; off: a window"},
         {"graphics", "vsync", on_off(vsync), "on: wait for the display; off: frames as fast as they can be drawn (may tear)"},
-        {"graphics", "edge_glow", on_off(edge_glow), "Geometry Edge Glow (only one of it and Real Graphics is on)"},
-        {"graphics", "real_graphics", on_off(real_graphics), "Real Graphics (only one of it and Geometry Edge Glow is on)"},
+        {"graphics", "edge_glow", on_off(edge_glow), "Geometry Edge Glow, drawn on the wireframe (turning it on turns Wireframe on)"},
+        {"graphics", "wireframe", on_off(!real_graphics), "Wireframe: everything drawn as lines; off, the models in the meshes folder (real_graphics, its name before, is still read the other way round)"},
         {"graphics", "door_portals", on_off(door_portals), "Door Portals: procedural data noise in the doorways"},
         {"graphics", "graphics_memory_gb", std::to_string(graphics_memory_gb), "the graphics card's memory, for the setup menu's budget, 1 to 128"},
         {"graphics", "view_rooms", std::to_string(view_rooms), "View Distance: rooms drawn and kept either side of yours, 2 to 64"},
@@ -423,12 +426,12 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"character", "speaks", character_speaks, "the languages your character speaks (IDEAS 19.183): ids of the language catalogue (data/languages), separated by commas; empty: none chosen"},
         {"character", "actions", character_actions, "your character's actions (IDEAS 19.186): the SHA-256 of its map of each action (idle, walk, run, ...) to the animation that plays it, read from the actions folder beside this file; empty: none, and its one animation plays whatever it does"},
         {"character", "animation", character_animation, "the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none"},
-        {"character", "drawing", std::to_string(character_drawing), "how characters are drawn everywhere with Real Graphics on (IDEAS 19.214): the Character Creator, the CHARACTER page, your personal dimension and the hallway; one setting, changed on Settings > Graphics (Character Drawing) and by the Creator's drawing row alike: 0 pixels, 1 wireframe, 2 voxels, 3 shaded (the default), 4 skin (one smooth surface over the spheres, IDEAS 19.225), 5 quads (the skin as its four-sided faces, their sides drawn), 6 smooth (the skin lit at its corners, its normals averaged across the faces round them; both IDEAS 19.214); with Real Graphics off, the wireframe"},
-        {"character", "voxel_size", std::to_string(character_voxel_size), "how big a voxel is (IDEAS 19.216), for characters drawn as voxels or pixels everywhere, on Settings > Graphics > Character Voxels: 0 the character's height in 16 cells (the default, as before); 1 one lattice for every character, cells of voxel_base_mm times a power of two, each character taking the coarsest at which its smallest sphere is still voxel_across cells wide (never more than 256 cells across its widest side), its grid anchored at its centre"},
+        {"character", "drawing", std::to_string(character_drawing), "how characters are drawn everywhere with Wireframe off (IDEAS 19.214): the Character Creator, the CHARACTER page, your personal dimension and the hallway; one setting, changed on Potentia Settings > Graphics (Character Drawing) and by the Creator's drawing row alike: 0 pixels, 1 wireframe, 2 voxels, 3 shaded (the default), 4 skin (one smooth surface over the spheres, IDEAS 19.225), 5 quads (the skin as its four-sided faces, their sides drawn), 6 smooth (the skin lit at its corners, its normals averaged across the faces round them; both IDEAS 19.214); with Wireframe on, the wireframe"},
+        {"character", "voxel_size", std::to_string(character_voxel_size), "how big a voxel is (IDEAS 19.216), for characters drawn as voxels or pixels everywhere, on Potentia Settings > Graphics > Character Voxels: 0 the character's height in 16 cells (the default, as before); 1 one lattice for every character, cells of voxel_base_mm times a power of two, each character taking the coarsest at which its smallest sphere is still voxel_across cells wide (never more than 256 cells across its widest side), its grid anchored at its centre"},
         {"character", "voxel_base_mm", std::to_string(character_voxel_base_mm), "the lattice's finest cell, in millimetres, 1 to 100 (10 by default); used with voxel_size 1"},
         {"character", "voxel_across", std::to_string(character_voxel_across), "on the lattice, a character's smallest sphere is at least this many cells wide, 1 to 8 (2 by default); used with voxel_size 1"},
         {"character", "voxel_joined", on_off(character_voxel_joined), "on: greedy meshing (IDEAS 19.215), the voxels' faces that lie in one plane, face the same way and share a colour drawn as one rectangle, the lines between their cells drawn as before, so the picture is the same with fewer faces; off: each face drawn on its own (the default)"},
-        {"character", "skin_blend", std::to_string(character_skin_blend), "the skin (drawings 4 to 6, IDEAS 19.225), on Settings > Graphics > Character Voxels (Skin Blend): how full it fills the creases where spheres meet, as a percentage of the spheres' mean radius, 0 to 200 (50 by default); 0 is the spheres' plain union, every crease kept"},
+        {"character", "skin_blend", std::to_string(character_skin_blend), "the skin (drawings 4 to 6, IDEAS 19.225), on Potentia Settings > Graphics > Character Voxels (Skin Blend): how full it fills the creases where spheres meet, as a percentage of the spheres' mean radius, 0 to 200 (50 by default); 0 is the spheres' plain union, every crease kept"},
         {"character", "skin_detail", std::to_string(character_skin_detail), "the skin's grid: the voxels' cell (by voxel_size's rule) halved this many times, 0 to 3 (1 by default); finer is smoother and costs more (never more than 160 cells across a character's widest side; past that its cells are doubled)"},
         {"character", "beside_you", on_off(character_beside), "on: your character is you in the hallway, not drawn, its size setting the hallway's scale and its actions played (the default); off: left out there"},
         {"raid", "drives", raid_drives, "the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there"},
@@ -447,11 +450,11 @@ std::vector<AppSettings::Row> AppSettings::rows() const
         {"personal", "shaper_strength", std::to_string(personal_shaper_strength), "how fast the ground shaper raises, lowers or flattens the ground at its brush's middle, in metres a second, 1 to 20 (4 by default), less towards its edge"},
         {"personal", "hallway_tools", on_off(personal_hallway_tools), "the hallway's own tools (Restart Sieve, the node graph, the navigator) in your dimension's pause menu too; off by default"},
         {"game", "ai_explorers", on_off(ai_explorers), "AI Explorers in the state space (IDEAS 19.189): off (the default) or on; not built yet, so nothing reads it until they are"},
-        {"raid", "share", on_off(raid_share), "OPT IN ONLY (Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
+        {"raid", "share", on_off(raid_share), "OPT IN ONLY (Potentia Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine"},
         {"raid", "copies", std::to_string(raid_copies), "with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer"},
         {"raid", "peers", raid_peers, "the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none"},
         {"raid", "key", raid_key, "your key's file (sieve-raid-key-v1); keep it safe and keep a copy, as without it what others keep for you cannot be read by anyone; empty: raid.key beside these settings, made when share is first turned on"},
-        {"raid", "serve", on_off(raid_serve), "OPT IN ONLY (Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none"},
+        {"raid", "serve", on_off(raid_serve), "OPT IN ONLY (Potentia Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none"},
         {"raid", "listen", raid_listen, "with serve on: the address answered on, HOST:PORT (0.0.0.0: every network this machine is on; 127.0.0.1: this machine alone)"},
         {"raid", "held", raid_held, "with serve on: the folder others' saves are kept in; empty: raid-held beside these settings"},
         {"raid", "space_mb", std::to_string(raid_space_mb), "with serve on: the most kept for others in all, in MiB (1024 by default)"},
@@ -471,8 +474,8 @@ std::vector<AppSettings::Row> AppSettings::rows() const
     for (const Settings::Entry& e : setup.entries()) r.push_back({"setup", e.key, e.value, e.note});
     r.push_back({"paths", "ffmpeg", ffmpeg, "the ffmpeg program; empty: SIEVE_FFMPEG, then one beside Sieve, then the PATH"});
     r.push_back({"language", "language", language, "the language file's name in data/lang (en: English)"});
-    // Only the keys changed from their defaults, so none are written until one is (Settings > Controls > Keys).
-    for (const auto& [id, k] : keys) r.push_back({"keys", id, k, "changed from its default on Settings > Controls > Keys"});
+    // Only the keys changed from their defaults, so none are written until one is (Potentia Settings > Controls > Keys).
+    for (const auto& [id, k] : keys) r.push_back({"keys", id, k, "changed from its default on Potentia Settings > Controls > Keys"});
     return r;
 }
 

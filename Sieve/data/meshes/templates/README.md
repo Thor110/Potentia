@@ -1,6 +1,6 @@
-# Real Graphics templates
+# Model templates (Wireframe off)
 
-These are the five starting models for the **Real Graphics** option (Settings > Graphics). Each one is built to the hallway's exact measurements, so a model made from it lines up with the wireframe, the book picking and the doors. `tools/build_mesh_templates.py` regenerates them.
+These are the five starting models drawn when **Wireframe** is off (Potentia Settings > Graphics; it was called Real Graphics, its sense the other way round). Each one is built to the hallway's exact measurements, so a model made from it lines up with the wireframe, the book picking and the doors. `tools/build_mesh_templates.py` regenerates them.
 
 | Template | What it is |
 | :--- | :--- |

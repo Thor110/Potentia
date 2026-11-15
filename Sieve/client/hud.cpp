@@ -4,6 +4,9 @@
 
 #include "hallway.hpp"
 #include "gpu_memory.hpp"
+#include "keys.hpp"
+
+#include <string>
 
 namespace hallway::hall {
 
@@ -402,18 +405,20 @@ void Hallway::draw_hud(int w, int h)
 
     if (in_hand_) draw_in_hand(W, H);
 
-    // Messages, input box and help.
+    // Messages, input box and help. The message stands just above the keys, however many lines they
+    // wrap onto (the one footer, footer.hpp).
+    const float foot_up = footer_extra({{keys_footer(), ink}}, W - 24, 12);
     if (!message_.empty() && SDL_GetTicks() < message_until_)
     {
         if (message_warns_)
         {
             // A warning: red, on a dark plate, as [Null Title] is, so it reads on the red lines too.
-            const SDL_FRect plate{8, H - 40, text_width(message_, 1) + 8, 16};
+            const SDL_FRect plate{8, H - 40 - foot_up, text_width(message_, 1) + 8, 16};
             SDL_SetRenderDrawColor(r_, 0, 0, 0, 220);
             SDL_RenderFillRect(r_, &plate);
-            text(12, H - 36, message_, 1, SDL_Color{255, 70, 70, 255});
+            text(12, H - 36 - foot_up, message_, 1, SDL_Color{255, 70, 70, 255});
         }
-        else text(12, H - 36, message_, 1, ink);
+        else text(12, H - 36 - foot_up, message_, 1, ink);
     }
     if (input_ != Input::None)
     {
@@ -427,10 +432,7 @@ void Hallway::draw_hud(int w, int h)
         panel(10, H / 2 + 40, W - 20, 34);
         text(20, H / 2 + 49, prompt + text_ + ((SDL_GetTicks() / 400) % 2 ? "_" : " "), 2, ink);
     }
-    text(12, H - 18,
-         tr("hud.keys1") + (guided_on() ? tr("hud.keys.zoom") : std::string()) + tr("hud.keys2") +
-             tr(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + tr("hud.keys3"),
-         1, ink);
+    draw_footer(r_, "hallway", 12, H - 18, W - 24, keys_footer(), ink);
     // Last, so nothing else in the readout is drawn over it.
     if (!chat_open_) draw_compass(float(W), float(H)); // not over the CHAT tab's buttons
     if (pause_open_) draw_pause(W, H);
@@ -754,7 +756,7 @@ void Hallway::draw_in_hand(float W, float H)
         text(x + 14, cy, l, 1, ink);
         cy += 10;
     }
-    text(x + 14, y + ph - 16, tr(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.ai ? "hand.keys.ai" : bk.is_file ? "hand.keys.file" : "hand.keys"), 1, ink);
+    draw_footer(r_, "hand", x + 14, y + ph - 16, pw - 28, trk(bk.parts ? "hand.keys.book" : bk.model ? "hand.keys.model" : bk.world ? "hand.keys.world" : bk.ai ? "hand.keys.ai" : bk.is_file ? "hand.keys.file" : "hand.keys"), ink);
 }
 
 // COST: what it costs to name the thing in your hand.
@@ -792,7 +794,7 @@ void Hallway::draw_help(const Book& bk, float x, float cy, float pw, float botto
     const float key_w = std::min(260.0f, pw * 0.35f), what_w = pw - 28 - key_w - 12;
     for (const char* id : rows)
     {
-        const std::string& line = tr(id);
+        const std::string line = trk(id); // (its keys as set)
         const size_t bar = line.find('|');
         if (line.empty() || bar == std::string::npos) continue;
         // The description wrapped to its column, a row per line.
@@ -895,7 +897,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
     // holds its units only (a book's, its title and pages), so the address names more than it.
     if (*bk.file_bytes > 0)
         row(tr("cost.file"), file_bits, trf("cost.bytes", {std::to_string(*bk.file_bytes)}),
-            tr(bk.parts || on_composition() || on_worlds() || titled_here() ? "cost.file.parts" : "cost.file.note"));
+            trk(bk.parts || on_composition() || on_worlds() || titled_here() ? "cost.file.parts" : "cost.file.note"));
     cy += 6;
     row(tr("ordering.positional"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.same"));
     row(tr("ordering.scrambled"), bits, trf("cost.chars", {digits_in(bits, 4)}), tr("cost.shuffled"));
@@ -969,7 +971,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
         text(x + 260, cy, trf("cost.chars", {digits_in(bits, per)}), 1, ink);
         cy += 12;
     }
-    text(x + 14, bottom - 16, tr("hand.keys.cost"), 1, ink);
+    draw_footer(r_, "cost", x + 14, bottom - 16, pw - 28, trk("hand.keys.cost"), ink);
 }
 
 // COST's balance: the cheapest address found for the item in hand (`best` bits, by way of `by`)
@@ -1192,6 +1194,19 @@ void Hallway::vla_search_further()
 {
     std::lock_guard<std::mutex> lock(vla_mx_);
     if (vla_want_ < kVlaFurthest) vla_want_ = std::min(kVlaFurthest, std::max(vla_want_, kMaxAngleDecimals) * 2);
+}
+
+std::string Hallway::keys_footer() const
+{
+    return trk("hud.keys1") + (guided_on() ? trk("hud.keys.zoom") : std::string()) + trk("hud.keys2") +
+           trk(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + trk("hud.keys3");
+}
+
+bool Hallway::keys_changed()
+{
+    for (const auto& row : Keys::get().listing())
+        if (row.changed && row.section.rfind("hallway.", 0) == 0) return true;
+    return false;
 }
 
 } // namespace hallway::hall

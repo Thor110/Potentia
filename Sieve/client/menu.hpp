@@ -292,12 +292,12 @@ private:
     std::vector<std::string> alpha_rows() const; // "" separators, built-in ids, then block ids
     std::vector<std::string> alpha_stack() const; // the parts of the current spec
     void alpha_choose(int row);
-    void alpha_key(SDL_Keycode key);
+    void alpha_key(const SDL_Event& e);
     void render_alphabets(float W, float H);
     bool alpha_open_ = false;
     int arow_ = 0, ascroll_ = 0;
     std::vector<std::pair<SDL_FRect, int>> arow_rects_;
-    void overlay_key(SDL_Keycode key, bool shift);
+    void overlay_key(const SDL_Event& e);
     void overlay_change(int dir, bool big);
     // Z / C: every filter on this tab / on both tabs switched on, or off if all were on already.
     // Z: this tab of this line; C: both tabs of this line; X: both tabs of every line.
@@ -490,14 +490,15 @@ private:
     };
     std::vector<CatDoor> cat_doors() const;
     void cat_init();
-    void cat_key(SDL_Keycode key);
+    void cat_key(const SDL_Event& e);
+    void cat_step(int dir); // the next door (1) or the one before (-1), as the wheel turns the ring
     void render_catalogue(float x, float top, float bottom, float width);
     // LANGUAGE (page 3): the languages your character speaks, ticked from the language catalogue;
     // part of its save (sieve-save-v1, sieve/save.hpp).
     std::vector<std::string> speaks_;
     int speak_row_ = 0;
     std::vector<const sieve::FormatEntry*> speak_rows() const;
-    void speak_key(SDL_Keycode key);
+    void speak_key(const SDL_Event& e);
     void render_speaks(float x, float top, float bottom);
     void speaks_from_settings();
     sieve::CharacterSave character_save() const;
@@ -522,7 +523,7 @@ private:
     std::vector<sieve::Character> playground_;
     int yours_row_ = 0;          // over the playground first, then the store
     void yours_read();
-    void yours_key(SDL_Keycode key);
+    void yours_key(const SDL_Event& e);
     void render_yours(float x, float top, float bottom);
     // The pedestal under the character (IDEAS §19.150): a click and drag on the drawing turns it, as
     // [ and ] do from the keys (15 degrees a press); and tilts it (Edward, 14 November 2026: "add
@@ -577,7 +578,7 @@ private:
     // the rows and the lines under them (from y, returning where they end), and the drawing.
     float render_char_rows(float x, float top, float width);
     void render_char_drawing(float bx, float by, float bw, float bh);
-    // Real Graphics off: every character drawn as the wireframe, whatever the drawing row says.
+    // Wireframe on: every character drawn as the wireframe, whatever the drawing row says.
     bool char_draw_forced() const { return app_ && !app_->real_graphics; }
     // The drawing chosen: the settings' own (IDEAS 19.214: one setting for every space, Settings > Graphics
     // changing the same one), or the page's where there are no settings.
@@ -659,6 +660,7 @@ public:
     // the whole window, not the setup menu's sliding panel; Esc goes back the way it came (Back).
     void open_viewer(const std::string& id);
     bool viewer() const { return viewer_; }
+    int row() const { return row_; } // the setup list's chosen row (0 the first)
 private:
     void toggle_side();
     void set_side(bool open);    // in or out; only one panel is in at a time (see panel_before_side_)

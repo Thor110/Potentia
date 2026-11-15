@@ -8,6 +8,7 @@
 #include "strings.hpp"
 
 #include "font.hpp"
+#include "keys.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "sieve/text.hpp"
@@ -141,9 +142,14 @@ std::string tr_or(std::string_view key, const std::string& fallback)
     return fallback;
 }
 
+std::string trk(std::string_view key)
+{
+    return Keys::get().keyed(tr(key));
+}
+
 std::string trf(std::string_view key, const std::vector<std::string>& args)
 {
-    std::string s = tr(key);
+    std::string s = trk(key); // (the keys first, so an argument that happens to hold "{key:" is left as it is)
     for (size_t i = 0; i < args.size(); ++i)
     {
         const std::string mark = "{" + std::to_string(i) + "}";

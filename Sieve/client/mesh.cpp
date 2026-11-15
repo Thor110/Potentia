@@ -1,4 +1,4 @@
-// Sieve hallway — loading the Real Graphics models, and drawing them.
+// Sieve hallway — loading the models drawn with Wireframe off, and drawing them.
 //
 // Two halves, and they have little to do with each other. The first reads Wavefront .obj and .mtl
 // files by hand, since the only thing wanted from them is flat-coloured triangles, and builds the

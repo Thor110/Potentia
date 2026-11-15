@@ -62,6 +62,7 @@ private:
     enum Row { kInput, kInputKind, kRecipe, kAction, kRows };
     enum class Action { Encrypt, Decrypt, Break, Catalogue };
     void key(SDL_Keycode k, SDL_Keymod mod);
+    void change(int dir); // the chosen row's choice the next one on (1) or back (-1): the input's kind, the action
     void handle(const SDL_Event& e);
     void run_recipe(); // works the output out again
     std::string* text_row(); // the row being typed into, if the row chosen takes text

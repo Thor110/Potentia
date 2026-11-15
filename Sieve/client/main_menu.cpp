@@ -19,6 +19,7 @@
 #include "menu.hpp" // line_sizes_of
 #include "character_look.hpp" // kDrawCount
 #include "font.hpp"
+#include "footer.hpp"
 #include "music.hpp"
 #include "raid_service.hpp"
 #include "sieve/paths.hpp"
@@ -74,14 +75,16 @@ std::vector<MainMenu::Item> MainMenu::items() const
 {
     switch (screen_)
     {
-    // The same systems as the pause menu, in the same order (IDEAS §19.18), less what needs a
-    // hallway already walked (the node graph, the navigator).
+    // The systems arranged by size, from Start Sieve to Exit Sieve (IDEAS 19.188, Edward: "sort of in
+    // size"), with the Character Creator and Replays after Personal Dimensions, whose characters and
+    // walks they are, and Potentia Settings last before Exit. The pause menu keeps its own order (IDEAS
+    // 19.18). The rows' ids are what scripts and the CI name (Item:ID), so the order can change again
+    // without changing them; Start Sieve stays first, where the menu opens.
     case Screen::Main:
-        // (Manual Navigation after the pause menu's systems, then Personal Dimensions, the System Viewer,
-        // the Character Creator and Replays, before Exit: the CI's walks through this menu pick most rows
-        // by name, Item:ID, and some still count rows.)
-        return {{Kind::Action, "start"},    {Kind::Action, "locator"}, {Kind::Action, "media"}, {Kind::Action, "designer"},
-                {Kind::Action, "harness"}, {Kind::Action, "settings"}, {Kind::Action, "cipher"}, {Kind::Action, "manual_nav"}, {Kind::Action, "personal"}, {Kind::Action, "systems"}, {Kind::Action, "creator"}, {Kind::Action, "replays"}, {Kind::Action, "exit"}};
+        return {{Kind::Action, "start"},    {Kind::Action, "locator"},  {Kind::Action, "media"},      {Kind::Action, "designer"},
+                {Kind::Action, "harness"},  {Kind::Action, "personal"}, {Kind::Action, "creator"},    {Kind::Action, "replays"},
+                {Kind::Action, "cipher"},   {Kind::Action, "manual_nav"}, {Kind::Action, "systems"}, {Kind::Action, "settings"},
+                {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
     case Screen::Personal:
         return {{Kind::Action, "personal_one"}, {Kind::Action, "personal_features"}, {Kind::Action, "personal_favourites"}, {Kind::Action, "personal_others"},
@@ -105,7 +108,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
         return {{Kind::Action, "graphics"}, {Kind::Action, "controls"}, {Kind::Action, "language"}, {Kind::Action, "programs"},
                 {Kind::Action, "raid"}, {Kind::Action, "game_systems"}, {Kind::Toggle, "online"}, {Kind::Action, "back"}};
     case Screen::Graphics:
-        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "real_graphics"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
+        return {{Kind::Choice, "resolution"}, {Kind::Toggle, "fullscreen"}, {Kind::Toggle, "vsync"}, {Kind::Toggle, "edge_glow"}, {Kind::Toggle, "wireframe"}, {Kind::Toggle, "door_portals"}, {Kind::Number, "graphics_memory"}, {Kind::Toggle, "fps_counter"},
                 {Kind::Number, "view_rooms"}, {Kind::Number, "picture_rooms"}, {Kind::Number, "axis_colours"},
                 {Kind::Number, "character_drawing"}, {Kind::Action, "character_voxels"}, {Kind::Action, "back"}};
     // How big a voxel is and whether the voxels' faces are joined (IDEAS 19.216, 19.215), for the voxels
@@ -153,7 +156,7 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "fullscreen") return onoff(s_.fullscreen);
     if (it.id == "vsync") return onoff(s_.vsync);
     if (it.id == "edge_glow") return onoff(s_.edge_glow);
-    if (it.id == "real_graphics") return onoff(s_.real_graphics);
+    if (it.id == "wireframe") return onoff(!s_.real_graphics);
     if (it.id == "door_portals") return onoff(s_.door_portals);
     if (it.id == "graphics_memory") return trf("value.graphics_memory", {std::to_string(s_.graphics_memory_gb)});
     if (it.id == "fps_counter") return onoff(s_.fps_counter);
@@ -389,8 +392,11 @@ std::string MainMenu::key_row_label(size_t i) const
     return tr("keys.section." + rows[i].section) + ": " + tr(rows[i].name_key);
 }
 
-bool MainMenu::select(const std::string& id)
+bool MainMenu::select(const std::string& id_given)
 {
+    // A row's name before it was renamed, still taken, so a script written then still reaches it:
+    // real_graphics is Wireframe now (IDEAS 19.223), the same row, its sense turned round.
+    const std::string id = id_given == "real_graphics" ? std::string("wireframe") : id_given;
     const auto its = items();
     for (size_t i = 0; i < its.size(); ++i)
         if (its[i].id == id)
@@ -495,7 +501,7 @@ void MainMenu::change(int dir)
             SDL_SetRenderVSync(r_, s_.vsync ? 1 : 0);
         }
         else if (it.id == "edge_glow") s_.set_edge_glow(!s_.edge_glow);
-        else if (it.id == "real_graphics") s_.set_real_graphics(!s_.real_graphics);
+        else if (it.id == "wireframe") s_.set_wireframe(s_.real_graphics); // (on if the models were drawn)
         else if (it.id == "door_portals") s_.door_portals = !s_.door_portals;
         else if (it.id == "fps_counter") s_.fps_counter = !s_.fps_counter;
         else if (it.id == "invert_mouse_y") s_.invert_mouse_y = !s_.invert_mouse_y;
@@ -684,20 +690,25 @@ void MainMenu::handle(const SDL_Event& event)
         };
         if (e.type == SDL_EVENT_KEY_DOWN)
         {
-            switch (e.key.key)
+            // (the keys as set: Settings > Controls > Keys, "The menus" and "The main menu and Potentia Settings")
+            namespace mk = hallway::menu_keys;
+            namespace nk = hallway::main_keys;
+            const std::string k = hallway::Keys::get().which({mk::kUp, mk::kDown, mk::kPageUp, mk::kPageDown, nk::kFirst, nk::kLast, mk::kChoose, mk::kToggle, mk::kBack, mk::kLeft}, e);
+            if (k == mk::kUp) --list_row_;
+            else if (k == mk::kDown) ++list_row_;
+            else if (k == mk::kPageUp) list_row_ -= kListRows;
+            else if (k == mk::kPageDown) list_row_ += kListRows;
+            else if (k == nk::kFirst) list_row_ = 0;
+            else if (k == nk::kLast) list_row_ = count - 1;
+            else if (k == mk::kChoose || k == mk::kToggle)
             {
-            case SDLK_UP: --list_row_; break;
-            case SDLK_DOWN: ++list_row_; break;
-            case SDLK_PAGEUP: list_row_ -= kListRows; break;
-            case SDLK_PAGEDOWN: list_row_ += kListRows; break;
-            case SDLK_HOME: list_row_ = 0; break;
-            case SDLK_END: list_row_ = count - 1; break;
-            case SDLK_RETURN:
-            case SDLK_KP_ENTER:
-            case SDLK_SPACE: choose_from_list(list_row_); return;
-            case SDLK_ESCAPE:
-            case SDLK_LEFT: list_.clear(); return;
-            default: break;
+                choose_from_list(list_row_);
+                return;
+            }
+            else if (k == mk::kBack || k == mk::kLeft)
+            {
+                list_.clear();
+                return;
             }
             keep_visible();
         }
@@ -740,26 +751,21 @@ void MainMenu::handle(const SDL_Event& event)
     if (e.type != SDL_EVENT_KEY_DOWN) return;
     // A recording's row: Enter plays it; Space, Left and Right tick its box (below).
     const auto its = items();
-    if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) && row_ >= 0 && row_ < n && its[size_t(row_)].kind == Kind::Replay)
+    // (the keys as set: Settings > Controls > Keys, "The menus" and "The main menu and Potentia Settings")
+    namespace mk = hallway::menu_keys;
+    const std::string k = hallway::Keys::get().which({mk::kUp, mk::kDown, mk::kLeft, mk::kRight, mk::kChoose, mk::kToggle, mk::kBack, hallway::main_keys::kBack}, e);
+    if (k == mk::kChoose && row_ >= 0 && row_ < n && its[size_t(row_)].kind == Kind::Replay)
     {
         replay_chosen_ = replays_[size_t(std::stoul(its[size_t(row_)].id.substr(7)))];
         result_ = Result::Replay;
         done_ = true;
         return;
     }
-    switch (e.key.key)
-    {
-    case SDLK_UP: row_ = (row_ + n - 1) % n; break;
-    case SDLK_DOWN: row_ = (row_ + 1) % n; break;
-    case SDLK_LEFT: change(-1); break;
-    case SDLK_RIGHT:
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-    case SDLK_SPACE: change(1); break;
-    case SDLK_ESCAPE:
-    case SDLK_BACKSPACE: back(); break;
-    default: break;
-    }
+    if (k == mk::kUp) row_ = (row_ + n - 1) % n;
+    else if (k == mk::kDown) row_ = (row_ + 1) % n;
+    else if (k == mk::kLeft) change(-1);
+    else if (k == mk::kRight || k == mk::kChoose || k == mk::kToggle) change(1);
+    else if (k == mk::kBack || k == hallway::main_keys::kBack) back();
 }
 
 MainMenu::Result MainMenu::run()
@@ -885,7 +891,7 @@ void MainMenu::render()
     const int first = compact ? std::clamp(row_ - shown / 2, 0, std::max(0, int(its.size()) - shown)) : 0;
     size_t help_lines = 0, key_lines = 0;
     if (row_ >= 0 && row_ < int(its.size())) help_lines = split_lines(tr(help_key(its[size_t(row_)]))).size();
-    if (screen_ == Screen::Controls) key_lines = split_lines(tr("controls.keys")).size();
+    if (screen_ == Screen::Controls) key_lines = split_lines(trk("controls.keys")).size();
     bool has_back = false;
     for (const auto& it : its) has_back = has_back || it.id == "back";
     // The help block is sized for the tallest item's help, so the block does not jump as you move.
@@ -893,12 +899,15 @@ void MainMenu::render()
     float block = (heading ? 40.0f : 0.0f) + float(intro_lines.size()) * 16 + (intro_lines.empty() ? 0.0f : 12.0f) + float(std::min<int>(shown, int(its.size()))) * rowh + (has_back ? 12.0f : 0.0f) + 16 + float(help_lines) * 14 +
                         (key_lines ? 16 + 28 + float(key_lines) * 14 : 0.0f);
     float top = 50 + 8 * ts + 60;
-    const float bottom = H - 50;
+    // (above the footer, however many lines it wraps onto: the one footer, footer.hpp)
+    const std::string footer = trk(list_.empty() ? "menu.footer" : "menu.footer.list");
+    const float bottom = H - 50 - footer_extra({{footer, kDim}}, W - 40, 12);
     // Rows drawn closer where the screen would otherwise run into the key list at the foot (Settings >
     // Graphics since its Character Drawing row, IDEAS 19.214, at 720 rows high), never closer than 28
     // pixels. Only the screens named here: the others keep their spacing, so their pictures are as they
-    // were, until one of them grows too.
-    const bool fit_rows = screen_ == Screen::Graphics;
+    // were, until one of them grows too. The main menu is one: in a small window (1024x600) its last
+    // rows, Potentia Settings among them, would otherwise run under the footer and off the window.
+    const bool fit_rows = screen_ == Screen::Graphics || screen_ == Screen::Main;
     if (fit_rows && block > bottom - top && !its.empty())
     {
         const float less = std::min(rowh - 28.0f, (block - (bottom - top)) / float(its.size()));
@@ -1045,14 +1054,14 @@ void MainMenu::render()
         item_y = hy;
     }
 
-    // Controls: the keys, from the language file.
+    // Controls: the keys, from the language file, named as they are set (trk).
     if (screen_ == Screen::Controls)
     {
         float ky = item_y + 16;
         draw_centred(r_, cx, ky, tr("controls.keys.title"), 2, kAccent);
         ky += 28;
         const float kx = cx - boxw / 2 + 20;
-        for (const auto& line : split_lines(tr("controls.keys")))
+        for (const auto& line : split_lines(trk("controls.keys")))
         {
             if (ky > H - 60) break;
             const size_t bar = line.find('|');
@@ -1067,7 +1076,7 @@ void MainMenu::render()
     }
 
     // Footer.
-    draw_centred(r_, cx, H - 30, tr(list_.empty() ? "menu.footer" : "menu.footer.list"), 1, kDim);
+    draw_footer(r_, "menu", cx, H - 30, W - 40, footer, kDim, 12, FooterAlign::Centre);
 
     // An open drop-down list, over everything.
     list_rects_.clear();

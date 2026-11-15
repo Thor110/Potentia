@@ -158,8 +158,11 @@ void Hallway::draw_pause(float W, float H)
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 200);
     const SDL_FRect all{0, 0, W, H};
     SDL_RenderFillRect(r_, &all);
-    // As tall as its rows: the title, a row each, and the line under the list.
-    const float bw = 460, bh = 70 + 36.0f * float(hall_rows().size()) + 36, bx = (W - bw) / 2, by = (H - bh) / 2;
+    // As tall as its rows: the title, a row each, and the line under the list (taller by the lines
+    // that line wraps onto, through the one footer, footer.hpp).
+    const std::string help = tr("pause.help." + hall_rows()[size_t(pause_row_)]);
+    const float bw = 460, help_up = pause_confirm_ ? 0 : footer_extra({{help, grey}}, bw - 30, 12);
+    const float bh = 70 + 36.0f * float(hall_rows().size()) + 36 + help_up, bx = (W - bw) / 2, by = (H - bh) / 2;
     panel(bx, by, bw, bh, 240);
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     const SDL_FRect border{bx, by, bw, bh};
@@ -170,7 +173,7 @@ void Hallway::draw_pause(float W, float H)
     {
         const std::string q = tr("pause.confirm"), keys = tr("pause.confirm.keys");
         text(bx + (bw - text_width(q, 2)) / 2, by + 130, q, 2, white);
-        text(bx + (bw - text_width(keys, 1)) / 2, by + 170, keys, 1, ink);
+        draw_footer(r_, "pause.confirm", bx + bw / 2, by + 170, bw - 30, keys, ink, 12, FooterAlign::Centre);
         return;
     }
     pause_rects_.clear();
@@ -191,8 +194,7 @@ void Hallway::draw_pause(float W, float H)
         y += 36;
     }
     // What the chosen item does, and what is not built yet.
-    const std::string help = tr("pause.help." + hall_rows()[size_t(pause_row_)]);
-    text(bx + (bw - text_width(fit(help, bw - 30, 1), 1)) / 2, by + bh - 26, fit(help, bw - 30, 1), 1, grey);
+    draw_footer(r_, "pause", bx + bw / 2, by + bh - 26, bw - 30, help, grey, 12, FooterAlign::Centre);
 }
 
 } // namespace hallway::hall

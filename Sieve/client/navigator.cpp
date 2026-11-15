@@ -383,7 +383,11 @@ void Hallway::draw_navigator(float W, float H)
     nav_x0_ = 20 + kLabelW;
     nav_y0_ = 110;
     const size_t rows = (nav_width_ + nav_cols_ - 1) / nav_cols_;
-    nav_rows_shown_ = std::max(1, int((H - nav_y0_ - 150) / kRowH));
+    // The keys at the foot, through the one footer (footer.hpp): everything above them moves up by the
+    // lines they wrap onto.
+    const std::vector<FooterLine> keys{{tr("nav.keys1"), grey}, {tr("nav.keys2"), grey}};
+    const float keys_up = footer_extra(keys, W - 40, 14);
+    nav_rows_shown_ = std::max(1, int((H - nav_y0_ - 150 - keys_up) / kRowH));
     // Keep the chosen digit in view; PgUp/PgDn scroll freely within the rows there are.
     const int sel_row = int(nav_sel_ / nav_cols_);
     if (nav_scroll_ < 0) nav_scroll_ = std::max(0, sel_row - nav_rows_shown_ / 2);
@@ -431,7 +435,7 @@ void Hallway::draw_navigator(float W, float H)
 
     // The bearing: the position as an angle round the loop, which can be typed instead.
     {
-        const float ay = H - 136;
+        const float ay = H - 136 - keys_up;
         const std::string label = trf("nav.angle", {std::to_string(angle_decimals_)});
         text(20, ay + 4, label, 1, nav_angle_focus_ ? white : grey);
         const float bx = 20 + text_width(label, 1) + 12;
@@ -449,7 +453,7 @@ void Hallway::draw_navigator(float W, float H)
     // What the chosen digit does, and where the address stands.
     const size_t p = nav_width_ - 1 - nav_sel_;
     const double frac = nav_value_.is_zero() ? 0.0 : std::pow(10.0, nav_value_.log10_approx() - line_units().log10_approx());
-    float y = H - 92;
+    float y = H - 92 - keys_up;
     // The same place in decimal (IDEAS 5.11a), worked out when the address changes, up to 4,096
     // hex digits (a decimal conversion grows with the square of the length); its first and last
     // digits where it is wider than the screen.
@@ -488,8 +492,7 @@ void Hallway::draw_navigator(float W, float H)
         const std::string pg = trf("nav.page", {std::to_string(page), std::to_string(pages)});
         text(W - 20 - text_width(pg, 2), y, pg, 2, ink);
     }
-    text(20, H - 40, fit(tr("nav.keys1"), W - 40, 1), 1, grey);
-    text(20, H - 26, fit(tr("nav.keys2"), W - 40, 1), 1, grey);
+    draw_footer(r_, "navigator", 20, H - 26, W - 40, keys, 14);
 }
 
 } // namespace hallway::hall

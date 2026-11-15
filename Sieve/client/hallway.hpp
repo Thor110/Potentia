@@ -30,6 +30,7 @@
 #include "camera.hpp"
 #include "file_locator.hpp"
 #include "font.hpp"
+#include "footer.hpp"
 #include "main_menu.hpp"
 #include "menu.hpp"
 #include "mesh.hpp"
@@ -124,7 +125,7 @@ static_assert(int(LineKind::Text) == 0 && int(LineKind::Image) == 1 && int(LineK
 // others. Its room is always the same way round, shelves on one side of the line and the drop on
 // the other; coming in from the last door before it you are turned to face the other way along it
 // (see binary_from_).)
-// The short wall on the binary line's open edge, under Real Graphics: dark, so the drop past it
+// The short wall on the binary line's open edge, with Wireframe off: dark, so the drop past it
 // is what the eye goes to.
 constexpr SDL_FColor kRailColour{0.42f, 0.44f, 0.42f, 1.0f};
 // (view_rooms(), the tiles drawn and kept either side of yours: the View Distance setting, menu.hpp.)
@@ -156,7 +157,7 @@ struct Segment
 };
 
 // One tile's edges: the hallway (floor, ceiling, walls, door frames, floor marks) and/or the two
-// bookcases. Real Graphics replaces each part with its model when there is one.
+// bookcases. With Wireframe off each part is replaced with its model when there is one.
 // `only`: 0 for both walls, or -1 / +1 for just that one. The binary line has one wall, because
 // its other side is the edge (build_edge below), so it is built with only = -1 or +1.
 inline std::vector<Segment> build_tile(bool hallway = true, bool shelves = true, int only = 0)
@@ -255,46 +256,6 @@ inline std::vector<std::string> wrap_words(std::string s, size_t width)
     return out;
 }
 
-// A list of keys ("Tab: next view    wheel: scroll    ..."), its entries apart by three spaces or more,
-// laid out in lines of at most `width` characters, broken only between entries, so no entry is left
-// partly on one line; an entry too long for a line alone is word-wrapped. Drawn bottom line last, so a
-// footer grows upward as keys are added (Edward, 14 November 2026). One way for every key list.
-inline std::vector<std::string> wrap_keys(const std::string& s, size_t width)
-{
-    std::vector<std::string> entries;
-    for (size_t i = 0; i < s.size();)
-    {
-        const size_t gap = s.find("   ", i);
-        const size_t end = gap == std::string::npos ? s.size() : gap;
-        if (end > i) entries.push_back(s.substr(i, end - i));
-        if (gap == std::string::npos) break;
-        i = s.find_first_not_of(' ', gap);
-        if (i == std::string::npos) break;
-    }
-    std::vector<std::string> out;
-    std::string line;
-    for (const std::string& e : entries)
-    {
-        if (!line.empty() && line.size() + 4 + e.size() <= width) line += "    " + e;
-        else
-        {
-            if (!line.empty()) out.push_back(line);
-            line.clear();
-            if (e.size() <= width) line = e;
-            else
-            {
-                auto parts = wrap_words(e, width);
-                line = parts.back();
-                parts.pop_back();
-                out.insert(out.end(), parts.begin(), parts.end());
-            }
-        }
-    }
-    if (!line.empty()) out.push_back(line);
-    if (out.empty()) out.push_back("");
-    return out;
-}
-
 // For the console readout only, which scripts read line by line and terminals may not be able
 // to show. Text drawn in the hallway keeps its own characters: the font falls back per glyph.
 inline std::string ascii(const std::string& utf8)
@@ -370,7 +331,7 @@ inline std::string short_big(const BigUint& v, bool negative = false)
 class Hallway
 {
 public:
-    // Real Graphics: a line's models (null where a file is missing: that part stays wireframe).
+    // Wireframe off: a line's models (null where a file is missing: that part stays wireframe).
     struct Models
     {
         bool loaded = false;
@@ -1137,13 +1098,18 @@ public:
     void release_textures();
     void set_controls(int sensitivity_percent, bool invert_y);
     void set_fps_counter(bool on) { fps_counter_ = on; }
-    // How characters standing in the hallway are drawn with Real Graphics on (IDEAS 19.214): [character]
+    // How characters standing in the hallway are drawn with Wireframe off (IDEAS 19.214): [character]
     // drawing, every space's one setting (character_look.hpp); shaded by default, as they always were.
     void set_character_drawing(int drawing) { char_drawing_ = drawing; }
     // How big their voxels are and whether the voxels' faces are joined (IDEAS 19.216, 19.215).
     void set_voxels(const VoxelChoice& v) { voxels_ = v; }
     // (for pictures and tests) what the readout says of it: empty for shaded (as before the choice came).
     std::string drawing_report() const;
+    // The keys along the foot of the hallway, as drawn: read from the key registry (IDEAS 19.199), so
+    // they name the keys as set. keys_changed(): whether any of the hallway's own keys differs from its
+    // default (the readout says the footer only then, so a default run reads as it did).
+    std::string keys_footer() const;
+    static bool keys_changed();
     // Your character (IDEAS 19.148), walking beside you: a little ahead and to the right, on the
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
@@ -1265,7 +1231,7 @@ private:
         if (on_binary()) return binary_from_;
         return sx < 0 ? (li_ + 1) % kLines : (li_ + kLines - 1) % kLines;
     }
-    Models models_[kLines]; // Real Graphics, per line
+    Models models_[kLines]; // drawn with Wireframe off, per line
     MeshBatch models_batch_;
     // The last picture drawn in each of the two places one can appear (on the shelf you are
     // looking at, and in your hand), so an unchanged picture is not rebuilt every frame.
@@ -1647,7 +1613,7 @@ private:
     void view_book_page();
     std::u32string view_row(size_t r) const;
     SDL_FRect view_area() const;
-    std::vector<std::string> view_key_lines(float W) const;
+    std::string view_keys() const;
     float view_content_w() const;
     float view_content_h() const;
     float view_fit_zoom() const;
@@ -1976,7 +1942,7 @@ private:
                      const std::vector<std::array<double, 9>>* turns = nullptr, MeshBatch* into = nullptr); // (each sphere's turn: its held model turns with it)
     float hall_scale_ = 1, max_scale_ = 16;
     bool character_fits_ = true;
-    // `into`: Real Graphics on, the spheres and bones go to the models' renderer (depth-tested against
+    // `into`: Wireframe off, the spheres and bones go to the models' renderer (depth-tested against
     // the shelves and books, IDEAS 19.207); the pass after it then draws only the held models' lines.
     void draw_character(SDL_Color edge, MeshBatch* into = nullptr);
     bool figures_in_batch_ = false;
@@ -2005,7 +1971,7 @@ private:
     std::unique_ptr<CompactLine> compact_[kLines]; // survivors in every ordering, where the stack can rank
     FilterMode modes_[kLines] = {}; // all Off
     std::unique_ptr<BookSpace> books_; // the books line
-    std::unique_ptr<ModelSpace> model_space_; // the models line (Models above is Real Graphics)
+    std::unique_ptr<ModelSpace> model_space_; // the models line (Models above is what Wireframe off draws)
     // The binary line: every file of 0..N bytes (SPECIFICATIONS §12.1, binary-v1). It has one
     // wall, so its files stand only in the left wall's half of each tile's slots; the loop counts
     // the right wall's slots as empty, and these two convert between a file's place on the line

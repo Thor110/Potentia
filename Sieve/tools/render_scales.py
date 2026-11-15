@@ -30,7 +30,7 @@ HALL = (300, 150, 1500, 850)
 WORLD_NEAR = (420, 250, 1180, 690)
 
 # Each step: (caption, line under it, settings file name or None, hallway arguments, crop box).
-# Settings files: "wire" (Real Graphics off), "real" (on), "d0".."d3" (the Character Creator's drawings).
+# Settings files: "wire" (Wireframe on), "real" (Wireframe off), "d0".."d3" (the Character Creator's drawings).
 STEPS = [
     ("PURE STATE", "a settings line: everything else is made from it", None, None, None),
     ("SKELETON + SPHERES OF INFLUENCE", "bones joining each body piece's reach (rings)", "d1", ["--menu", "--real-graphics", "--character", "c.character", "--creator"], CREATOR),
@@ -42,8 +42,8 @@ STEPS = [
     ("TRIANGLES FILLED", "the same mesh, solid", "real", ["--personal-world", "--world-file", "bookcase.world", "--pworld-look", "0", "--no-map", "--no-compass"], (100, 90, 1500, 900)),
     ("ONE DEPTH BUFFER, WIREFRAME", "rings cut by a bookcase's edge", "wire", ["--character", "c.character", "--personal-world", "--world-file", "crossing.world", "--no-map", "--no-compass", "--pworld-walk", "0.95", "--pworld-look", "-12"], WORLD_NEAR),
     ("ONE DEPTH BUFFER, SOLID", "spheres and triangles cut each other", "real", ["--character", "c.character", "--personal-world", "--world-file", "crossing.world", "--no-map", "--no-compass", "--pworld-walk", "0.95", "--pworld-look", "-12"], WORLD_NEAR),
-    ("THE HALLWAY, WIREFRAME", "Real Graphics off: rings and bones", "wire", ["--no-menu", "--character", "c.character", "--pose", "0,1.6,0,-10"], HALL),
-    ("THE HALLWAY, REAL GRAPHICS", "shaded spheres among the shelves", "real", ["--no-menu", "--character", "c.character", "--pose", "0,1.6,0,-10"], HALL),
+    ("THE HALLWAY, WIREFRAME", "Wireframe on: rings and bones", "wire", ["--no-menu", "--character", "c.character", "--pose", "0,1.6,0,-10"], HALL),
+    ("THE HALLWAY, WIREFRAME OFF", "shaded spheres among the shelves", "real", ["--no-menu", "--character", "c.character", "--pose", "0,1.6,0,-10"], HALL),
 ]
 FOOT = [
     "Every panel is a frame drawn by Sieve through one renderer (MeshBatch): one character (seed 99) and the shelf items.",
@@ -71,7 +71,7 @@ def main():
     work = a.work or tempfile.mkdtemp(prefix="render-scales-")
     os.makedirs(work, exist_ok=True)
     files = {"c.character": CHARACTER, "bookcase.world": WORLD_BOOKCASE, "crossing.world": WORLD_CROSSING,
-             "wire.ini": "[graphics]\nreal_graphics = off\n", "real.ini": "[graphics]\nreal_graphics = on\nedge_glow = off\n"}
+             "wire.ini": "[graphics]\nwireframe = on\n", "real.ini": "[graphics]\nwireframe = off\nedge_glow = off\n"}
     for k in range(4):
         files[f"d{k}.ini"] = f"[character]\ndrawing = {k}\n"
     for name, text in files.items():

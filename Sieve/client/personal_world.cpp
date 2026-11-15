@@ -2,6 +2,7 @@
 #include "personal_world.hpp"
 
 #include "font.hpp"
+#include "footer.hpp"
 #include "gpu_memory.hpp"
 #include "keys.hpp"
 #include "mesh.hpp"
@@ -147,6 +148,168 @@ const std::string& kOpen = pk::declare("creator", "open", "Ctrl+O");
 // (both read in the Creator: a key given to one of them is a clash with the other)
 [[maybe_unused]] const bool kCreatorTogether = (Keys::get().together("creator", "creator.edit"), true);
 } // namespace creator_keys
+
+// The hallway's own keys (IDEAS 19.199, put on the registry on 14 November 2026; keys.hpp names them),
+// their defaults the keys they were. Declared here, after the Creator's, for the reason the Creator's are:
+// so they come last, as sections of their own, and no row already on Settings > Controls > Keys moves.
+// Five sections, by when the keys are read: walking (held, with empty hands), whatever you hold, with
+// empty hands (N, B, [ and ] do other things holding), holding something, and typing (the warp and go-to
+// boxes). Esc (put down, pause, close a box) and the mouse buttons stay fixed, as they are everywhere.
+namespace hallway_keys {
+const std::string& kForward = pk::declare("hallway.walking", "forward", "W,Up");
+const std::string& kBack = pk::declare("hallway.walking", "back", "S,Down");
+const std::string& kLeft = pk::declare("hallway.walking", "left", "A");
+const std::string& kRight = pk::declare("hallway.walking", "right", "D");
+const std::string& kTurnLeft = pk::declare("hallway.walking", "turn_left", "Left");
+const std::string& kTurnRight = pk::declare("hallway.walking", "turn_right", "Right");
+const std::string& kRun = pk::declare("hallway.walking", "run", "Left Shift,Right Shift");
+const std::string& kTake = pk::declare("hallway.anywhere", "take", "E");
+const std::string& kWarp = pk::declare("hallway.anywhere", "warp", "T");
+const std::string& kGoTo = pk::declare("hallway.anywhere", "go_to", "G");
+const std::string& kNavigator = pk::declare("hallway.anywhere", "navigator", "X");
+const std::string& kGraph = pk::declare("hallway.anywhere", "graph", "O");
+const std::string& kOrdering = pk::declare("hallway.anywhere", "ordering", "M");
+const std::string& kZoomOut = pk::declare("hallway.anywhere", "zoom_out", "-,Keypad -");
+const std::string& kZoomIn = pk::declare("hallway.anywhere", "zoom_in", "=,Keypad +");
+const std::string& kZoomOutFar = pk::declare("hallway.anywhere", "zoom_out_far", "Shift+-,Shift+Keypad -");
+const std::string& kZoomInFar = pk::declare("hallway.anywhere", "zoom_in_far", "Shift+=,Shift+Keypad +");
+const std::string& kThousandOn = pk::declare("hallway.anywhere", "thousand_on", "PageUp");
+const std::string& kThousandBack = pk::declare("hallway.anywhere", "thousand_back", "PageDown");
+const std::string& kHome = pk::declare("hallway.anywhere", "home", "Home");
+const std::string& kMouse = pk::declare("hallway.anywhere", "mouse", "Tab");
+const std::string& kMenu = pk::declare("hallway.anywhere", "menu", "F1");
+const std::string& kQuit = pk::declare("hallway.anywhere", "quit", "Ctrl+Q");
+const std::string& kTrailNext = pk::declare("hallway.empty_handed", "trail_next", "N");
+const std::string& kTrailBack = pk::declare("hallway.empty_handed", "trail_back", "B");
+const std::string& kMillionOn = pk::declare("hallway.empty_handed", "million_on", "]");
+const std::string& kMillionBack = pk::declare("hallway.empty_handed", "million_back", "[");
+const std::string& kNextPage = pk::declare("hallway.holding", "next_page", "N");
+const std::string& kPreviousPage = pk::declare("hallway.holding", "previous_page", "B");
+const std::string& kSpinLeft = pk::declare("hallway.holding", "turn_left", "A");
+const std::string& kSpinRight = pk::declare("hallway.holding", "turn_right", "D");
+const std::string& kNextTab = pk::declare("hallway.holding", "next_tab", "C");
+const std::string& kUpright = pk::declare("hallway.holding", "upright", "R");
+const std::string& kPlay = pk::declare("hallway.holding", "play", "P");
+const std::string& kNextMap = pk::declare("hallway.holding", "next_map", "]");
+const std::string& kPreviousMap = pk::declare("hallway.holding", "previous_map", "[");
+const std::string& kAnchor = pk::declare("hallway.holding", "anchor", "V");
+const std::string& kSave = pk::declare("hallway.holding", "save", "F");
+const std::string& kItsFile = pk::declare("hallway.holding", "its_file", "J");
+const std::string& kCipher = pk::declare("hallway.holding", "cipher", "I");
+const std::string& kTailor = pk::declare("hallway.holding", "tailor", "K");
+const std::string& kFurther = pk::declare("hallway.holding", "further", "L");
+const std::string& kUse = pk::declare("hallway.holding", "use", "Return,Keypad Enter");
+const std::string& kFavourite = pk::declare("hallway.holding", "favourite", "H");
+const std::string& kView = pk::declare("hallway.holding", "view", "Z");
+const std::string& kTypedGo = pk::declare("hallway.typing", "go", "Return,Keypad Enter");
+const std::string& kTypedErase = pk::declare("hallway.typing", "erase", "Backspace");
+const std::string& kTypedPaste = pk::declare("hallway.typing", "paste", "Ctrl+V");
+// (read together: walking's held keys while the keys of whatever you hold and of empty hands are pressed;
+// holding, whatever-you-hold's with holding's. Walking and holding are never read together: you stand
+// still while holding something, so A and D can turn what you hold.)
+[[maybe_unused]] const bool kTogether = (Keys::get().together("hallway.walking", "hallway.anywhere"), Keys::get().together("hallway.walking", "hallway.empty_handed"),
+                                         Keys::get().together("hallway.empty_handed", "hallway.anywhere"), Keys::get().together("hallway.holding", "hallway.anywhere"), true);
+} // namespace hallway_keys
+
+// The menus' shared navigation, the setup menu's keys and the Media Player's (IDEAS 19.199, put on the
+// registry on 14 November 2026; keys.hpp names them), their defaults the keys they were. Declared here,
+// after the hallway's, for the reason the Creator's are: so they come last, as sections of their own, and
+// no row already on Settings > Controls > Keys moves. Esc is the menus' "back" here, unlike in the hallway
+// (where it puts a book down or pauses, fixed): every list leaves by the same action, so it is one row.
+namespace menu_keys {
+const std::string& kUp = pk::declare("menus", "up", "Up");
+const std::string& kDown = pk::declare("menus", "down", "Down");
+const std::string& kLeft = pk::declare("menus", "left", "Left");
+const std::string& kRight = pk::declare("menus", "right", "Right");
+const std::string& kChoose = pk::declare("menus", "choose", "Return,Keypad Enter");
+const std::string& kToggle = pk::declare("menus", "toggle", "Space");
+const std::string& kBack = pk::declare("menus", "back", "Escape");
+const std::string& kNext = pk::declare("menus", "next", "Tab");
+const std::string& kPageUp = pk::declare("menus", "page_up", "PageUp");
+const std::string& kPageDown = pk::declare("menus", "page_down", "PageDown");
+} // namespace menu_keys
+
+namespace setup_keys {
+const std::string& kAlphabets = pk::declare("setup", "alphabets", "A");
+const std::string& kFilters = pk::declare("setup", "filters", "F");
+const std::string& kDetails = pk::declare("setup", "details", "I");
+const std::string& kErase = pk::declare("setup", "erase", "Backspace");
+const std::string& kFirst = pk::declare("setup", "first", "Home");
+const std::string& kLast = pk::declare("setup", "last", "End");
+const std::string& kThisTab = pk::declare("setup.filters", "this_tab", "Z");
+const std::string& kEveryLine = pk::declare("setup.filters", "every_line", "X");
+const std::string& kBothTabs = pk::declare("setup.filters", "both_tabs", "C");
+const std::string& kCreator = pk::declare("setup.side", "creator", "C");
+const std::string& kPreviousTab = pk::declare("setup.side", "previous_tab", "Ctrl+Left");
+const std::string& kNextTab = pk::declare("setup.side", "next_tab", "Ctrl+Right");
+const std::string& kPlayground = pk::declare("setup.side", "playground", "P");
+const std::string& kKeep = pk::declare("setup.side", "keep", "K");
+const std::string& kDoorBack = pk::declare("setup.catalogue", "back", "Backspace");
+const std::string& kRoot = pk::declare("setup.catalogue", "root", "Home");
+const std::string& kOtherSystem = pk::declare("setup.catalogue", "other_system", "S");
+const std::string& kOntoLine = pk::declare("setup.catalogue", "onto_line", "L");
+// (read together: the list's with the menus' and the filters window's (X on the list too); the right-hand
+// panel's with the menus', the CHARACTER page's (the Creator's keys) and SYSTEMS' (the catalogue's); the
+// Character Creator's with the menus' (its Tab, arrows, Enter and Esc).)
+[[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "setup"), Keys::get().together("menus", "setup.filters"), Keys::get().together("setup", "setup.filters"),
+                                         Keys::get().together("menus", "setup.side"), Keys::get().together("menus", "setup.catalogue"), Keys::get().together("setup.side", "setup.catalogue"),
+                                         Keys::get().together("setup.side", "creator"), Keys::get().together("menus", "creator"), Keys::get().together("menus", "creator.edit"), true);
+} // namespace setup_keys
+
+namespace media_keys {
+const std::string& kUp = pk::declare("media", "up", "Up,W");
+const std::string& kDown = pk::declare("media", "down", "Down,S");
+const std::string& kLess = pk::declare("media", "less", "Left,A");
+const std::string& kMore = pk::declare("media", "more", "Right,D");
+const std::string& kChoose = pk::declare("media", "choose", "Return,Keypad Enter,Space");
+const std::string& kNextColumn = pk::declare("media", "next_column", "Tab");
+const std::string& kBack = pk::declare("media", "back", "Escape");
+const std::string& kRings = pk::declare("media", "rings", "R");
+const std::string& kGoTo = pk::declare("media", "go_to", "G");
+const std::string& kSave = pk::declare("media", "save", "F");
+const std::string& kFavourite = pk::declare("media", "favourite", "V");
+const std::string& kNext = pk::declare("media", "next", "N");
+const std::string& kMelody = pk::declare("media", "melody", "M");
+const std::string& kRingsClose = pk::declare("media.rings", "close", "R,Escape");
+const std::string& kRingsZoomIn = pk::declare("media.rings", "zoom_in", "=,Plus,Keypad +");
+const std::string& kRingsZoomOut = pk::declare("media.rings", "zoom_out", "-,Keypad -");
+} // namespace media_keys
+
+namespace main_keys {
+const std::string& kBack = pk::declare("main", "back", "Backspace");
+const std::string& kFirst = pk::declare("main", "first", "Home");
+const std::string& kLast = pk::declare("main", "last", "End");
+[[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "main"), true);
+} // namespace main_keys
+
+namespace cipher_keys {
+const std::string& kErase = pk::declare("cipher", "erase", "Backspace");
+const std::string& kItem = pk::declare("cipher", "item", "Ctrl+I");
+const std::string& kFile = pk::declare("cipher", "file", "Ctrl+O");
+const std::string& kSave = pk::declare("cipher", "save", "Ctrl+S");
+const std::string& kGo = pk::declare("cipher", "go", "Ctrl+G");
+const std::string& kPaste = pk::declare("cipher", "paste", "Ctrl+V");
+const std::string& kCopy = pk::declare("cipher", "copy", "Ctrl+C");
+[[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "cipher"), true);
+} // namespace cipher_keys
+
+namespace chain_keys {
+const std::string& kUp = pk::declare("chain", "up", "Up");
+const std::string& kDown = pk::declare("chain", "down", "Down");
+const std::string& kMoveUp = pk::declare("chain", "move_up", "Ctrl+Up");
+const std::string& kMoveDown = pk::declare("chain", "move_down", "Ctrl+Down");
+const std::string& kPreviousModel = pk::declare("chain", "previous_model", "Left");
+const std::string& kNextModel = pk::declare("chain", "next_model", "Right");
+const std::string& kSteer = pk::declare("chain", "steer", "F");
+const std::string& kAdd = pk::declare("chain", "add", "N,Insert");
+const std::string& kRemove = pk::declare("chain", "remove", "Delete,Backspace");
+const std::string& kRun = pk::declare("chain", "run", "Return,Keypad Enter");
+const std::string& kSave = pk::declare("chain", "save", "Ctrl+S");
+const std::string& kOpen = pk::declare("chain", "open", "Ctrl+O");
+// (read with the hallway's keys of whatever you hold, which a key none of these is goes on to; the item
+// page's own (N, F, Return) it takes the place of on its tab, so those are not checked against it)
+[[maybe_unused]] const bool kTogether = (Keys::get().together("chain", "hallway.anywhere"), true);
+} // namespace chain_keys
 
 namespace {
 
@@ -709,13 +872,13 @@ void PersonalWorld::render()
         for (int k = 0; k < 3; ++k) sun[k] = sky.sun[k];
     }
     auto lit_by = [&](SDL_FColor c) { return SDL_FColor{c.r * sky.light.r, c.g * sky.light.g, c.b * sky.light.b, c.a}; };
-    // (Real Graphics off: the wireframe's lines dimmer at night, not coloured, so they stay readable on black)
+    // (Wireframe on: the wireframe's lines dimmer at night, not coloured, so they stay readable on black)
     const float wire_dim = 0.4f + 0.6f * sky.day;
     // The sky: deep blue overhead to pale at the horizon (where a level line meets the screen).
     const float f = (H_ / 2) / std::tan(kFov / 2), horizon = H_ / 2 + std::tan(pitch_) * f;
     if (wireframe_)
     {
-        // Real Graphics off: everything as the wireframe on black (Edward, 13 November 2026: "everything
+        // Wireframe on: everything as the wireframe on black (Edward, 13 November 2026: "everything
         // should be wireframe when real graphics are off").
         SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
         SDL_RenderClear(r_);
@@ -763,7 +926,7 @@ void PersonalWorld::render()
                 constexpr int kSides = 32;
                 if (wireframe_)
                 {
-                    // (Real Graphics off: its outline, as the clouds are drawn)
+                    // (Wireframe on: its outline, as the clouds are drawn)
                     SDL_SetRenderDrawColorFloat(r_, core.r, core.g, core.b, 1);
                     outline_ellipse(r_, sx, sy, rad, rad, kSides);
                 }
@@ -1216,9 +1379,10 @@ void PersonalWorld::render()
     // Their tabs at the left edge while they are out: Place while something is held, else the catalogue.
     if (held_ >= 0) place_panel_.draw_tab(r_, 2, 80, tr("pworld.place.tab"));
     else if (!worlds_panel_.open) cat_panel_.draw_tab(r_, 2, 80, tr("pworld.catalogue.tab")); // (not over the worlds line's panel)
-    if (!note_.empty()) draw_text(r_, 20, H_ - 42, note_, 1, white);
     {
-        // The footer: the keys as they are set (Settings > Controls > Keys), each by what it does.
+        // The footer: the keys as they are set (Settings > Controls > Keys), each by what it does, drawn
+        // through the one footer (footer.hpp), so keys that do not fit wrap onto lines above; the note
+        // stands above them however many lines they take.
         const Keys& K = Keys::get();
         auto f = [&](const std::string& id) { return K.first(id); };
         std::string foot;
@@ -1240,7 +1404,8 @@ void PersonalWorld::render()
             foot = trf("pworld.footer", {f(pk::kForward) + " " + f(pk::kLeft) + " " + f(pk::kBack) + " " + f(pk::kRight), f(pk::kLookUp) + "/" + f(pk::kLookDown), f(pk::kRun),
                                          f(pk::kCatalogue), f(pk::kPickUp), f(pk::kOpen), f(pk::kTakeAway), f(pk::kZoomIn) + "/" + f(pk::kZoomOut)});
         if (day_on_ && !cat_panel_.open && held_ < 0 && !day_panel_.open && !worlds_panel_.open) foot += "   " + trf("pworld.footer.day_key", {f(pk::kDayLength)});
-        draw_text(r_, 20, H_ - 24, foot, 1, white);
+        if (!note_.empty()) draw_text(r_, 20, H_ - 42 - footer_extra({{foot, white}}, W_ - 40, 12), note_, 1, white);
+        draw_footer(r_, "personal", 20, H_ - 24, W_ - 40, foot, white);
     }
     if (in_place_state_ == InPlace::State::Making)
     {
@@ -1292,7 +1457,7 @@ void PersonalWorld::draw_compass()
 }
 
 // The map, top right: the whole world from above, north up, its ground shaded by height (contours
-// while Real Graphics is off), what is placed as dots, your characters as rings, you as an arrow.
+// while Wireframe is on), what is placed as dots, your characters as rings, you as an arrow.
 void PersonalWorld::draw_map()
 {
     constexpr int kCells = 32;
@@ -1381,7 +1546,7 @@ void PersonalWorld::draw_map()
 // The catalogue is Sieve's own shelf items, one for each line (Edward, 13 November 2026: "the
 // default placeable objects can just be the sieve books for shelves"): a page, a picture, a cassette
 // and so on, at their size on the shelves. They are drawn from shelf-items.sieve in data/objects,
-// not from the meshes folder, which anyone may change for Real Graphics: "they also need sieving and
+// not from the meshes folder, which anyone may change for the models drawn with Wireframe off: "they also need sieving and
 // preserving somewhere aside from the overridable ones". The .sieve is read in memory, every member
 // checked against its SHA-256 as installing checks it, nothing written to disk.
 const std::vector<std::string>& PersonalWorld::catalogue()
@@ -2234,8 +2399,15 @@ void PersonalWorld::draw_pause()
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 170);
     const SDL_FRect all{0, 0, W_, H_};
     SDL_RenderFillRect(r_, &all);
+    const std::string& id = pause_rows_[size_t(pause_row_)];
+    std::string help = tr_or("pause.help." + id + ".personal", tr("pause.help." + id)); // (its own words here, where it has them)
+    if (is_hallway_tool(id)) help = trf("pause.help.hallway_tool", {help});
+    // What the chosen row does, through the one footer (footer.hpp): one line, or two where one is too
+    // narrow, in the room under the rows; the box taller by any lines past two.
+    const float bw = 460;
+    const size_t help_rows = footer_rows({{help, dim}}, bw - 30).size();
     const float rowh = std::min(32.0f, (H_ - 140) / float(std::max<size_t>(1, pause_rows_.size())));
-    const float bw = 460, bh = 70 + rowh * float(pause_rows_.size()) + 50, bx = (W_ - bw) / 2, by = (H_ - bh) / 2;
+    const float bh = 70 + rowh * float(pause_rows_.size()) + 50 + 14.0f * float(help_rows > 2 ? help_rows - 2 : 0), bx = (W_ - bw) / 2, by = (H_ - bh) / 2;
     SDL_SetRenderDrawColor(r_, 20, 30, 40, 235);
     const SDL_FRect box{bx, by, bw, bh};
     SDL_RenderFillRect(r_, &box);
@@ -2258,21 +2430,7 @@ void PersonalWorld::draw_pause()
         draw_text(r_, bx + (bw - text_width(label, 2)) / 2, y, label, 2, int(i) == pause_row_ ? ink : dim);
         y += rowh;
     }
-    const std::string& id = pause_rows_[size_t(pause_row_)];
-    std::string help = tr_or("pause.help." + id + ".personal", tr("pause.help." + id)); // (its own words here, where it has them)
-    if (is_hallway_tool(id)) help = trf("pause.help.hallway_tool", {help});
-    // (on two lines where one is too narrow, broken at a space)
-    const size_t fits = size_t(std::max(8.0f, (bw - 30) / 8));
-    std::string second;
-    if (help.size() > fits)
-    {
-        const size_t cut = help.rfind(' ', fits);
-        second = help.substr(cut == std::string::npos ? fits : cut + 1);
-        help = help.substr(0, cut == std::string::npos ? fits : cut);
-        if (second.size() > fits) second = second.substr(0, fits - 3) + "...";
-    }
-    draw_text(r_, bx + (bw - text_width(help, 1)) / 2, by + bh - 38, help, 1, dim);
-    if (!second.empty()) draw_text(r_, bx + (bw - text_width(second, 1)) / 2, by + bh - 24, second, 1, dim);
+    draw_footer(r_, "pause.personal", bx + bw / 2, by + bh - (help_rows > 1 ? 24 : 38), bw - 30, help, dim, 14, FooterAlign::Centre);
 }
 
 void PersonalWorld::pick_up(int which)

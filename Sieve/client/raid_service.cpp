@@ -162,7 +162,7 @@ void apply(const AppSettings& s, const fs::path& settings_path)
             set_status(std::string("not serving: ") + e.what());
         }
     });
-    // A moment for it to start listening (or say why it cannot), so what Settings > Infinite RAID shows next
+    // A moment for it to start listening (or say why it cannot), so what Potentia Settings > Infinite RAID shows next
     // is so: at most two seconds.
     for (int i = 0; i < 200 && serving_status().rfind("starting", 0) == 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
 }
@@ -186,7 +186,7 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     if (!s.raid_share) return;
     if (!s.online)
     {
-        note("not shared: Online is off (Settings > Online)");
+        note("not shared: Online is off (Potentia Settings > Online)");
         return;
     }
     const std::vector<std::string> peers = comma_list(s.raid_peers);
@@ -204,7 +204,7 @@ void share(const AppSettings& s, const fs::path& settings_path, std::vector<fs::
     sieve::SealKey key;
     try
     {
-        key = read_key(key_path(s, settings_path), " (turning sharing on in Settings > Infinite RAID makes one)");
+        key = read_key(key_path(s, settings_path), " (turning sharing on in Potentia Settings > Infinite RAID makes one)");
     }
     catch (const std::exception& e)
     {
@@ -255,7 +255,7 @@ void check(const AppSettings& s, const fs::path& settings_path)
     if (g_checker.joinable()) g_checker.join();
     if (!s.online)
     {
-        note("nothing checked: Online is off (Settings > Online)");
+        note("nothing checked: Online is off (Potentia Settings > Online)");
         return;
     }
     const std::vector<std::string> peers = comma_list(s.raid_peers);

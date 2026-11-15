@@ -75,6 +75,11 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 37. **The skin** (R6): drawing **skin** (one Right from shaded), then Skin Blend (0 to 200%) and Skin Detail on Character Voxels. Is the surface smooth where spheres meet, and does it follow the joints while an action plays?
 - [ ] 38. **Quads and smooth** (R5): drawings **quads** and **smooth** (two and three Rights from shaded): quads drawn with darker sides, smooth lit softly across each face. Its outline still shows the skin's facets (subdivision is left for later).
 - [ ] 39. **Editing by the joints** (R4), in the Creator: click a sphere to choose it, drag it (the limb beyond follows); **.** and **Comma** step through spheres, **N** grows a limb, **X** takes it away, **J** / **Shift+J** add or take out a joint, **T** stretching, **Ctrl+arrows** nudge, **Ctrl+Z** undo. A bilateral or radial character changes on every side at once; Ctrl+S saves it as a v4 character. Settings > Controls > Keys lists these and the Creator's own keys (A, [ ], Home, R, G, the files); give one an editing key's key and that screen names the clash in red.
+- [ ] 40. **The hallway's keys** (M1): Settings > Controls > Keys, after the Creator's rows, five sections for the hallway (walking, anywhere, empty-handed, holding, typing). Change one (try take, E, to Y, or the thousand-tile jump to J): the footer, the item's HELP and COST tabs, and Settings > Controls name the new key, and it works. Backspace on the row gives the default back. Esc, the mouse and the wheel stay fixed.
+- [ ] 41. **Every other screen's keys** (M2): the menus (Up, Down, Enter, Esc...), the setup menu, the Media Player, the rings, the Encryption Engine and the CHAIN tab have sections of their own. Give the setup menu's "the row below" a letter (J): it still moves down, even off the key's row, where other letters are typed into the key.
+- [ ] 42. **The main menu's new order** (M3): Start Sieve, File Locator, Media Player, Filter Designer, AI Training Harness, Personal Dimensions, Character Creator, Replays, Encryption Engine, Manual Navigation, System Viewer, Potentia Settings, Exit Sieve. In a small window (1024x600) every row should fit above the footer (the rows are drawn closer); at 1280x720 they are a little closer than before too.
+- [ ] 43. **Wireframe** (M4): Settings > Graphics > **Wireframe**, on by default (it is the old Real Graphics, turned round). An older settings file with `real_graphics = on` should open with Wireframe off, and `--real-graphics` still works beside the new `--wireframe`.
+- [ ] 44. **Footers wrap** (M5): make the window narrow (800 wide) on each screen: the line of keys at the foot breaks between keys onto more lines, upwards, never off the edge. The File Locator's and the Media Player's own buttons do not move up yet (IDEAS 19.224).
 
 ---
 
@@ -124,12 +129,12 @@ run before a release package, and after each of the three reviews. Each batch is
 - R9. The quads subdivided (Catmull–Clark) so the outline is round too, its steps a setting (19.229). *After R8.*
 
 ### List M: menus and keys `[04]` + `[10]` + you, one sitting in Settings > Keys
-- M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so
-  later changes to them need `[01]` rather than `[10]`.
-- M2. The setup menu's, the Media Player's and each other system's keys, one commit each.
-- M3. The main menu reordered and Settings renamed (19.188).
-- M4. "Real Graphics" renamed "Wireframe", its sense turned round, old files and `--real-graphics` still read (19.223). Also `[03]`, `[11]` where their lines name it.
-- M5. Every footer of keys wraps upwards as the viewer's does, on every screen, with a CI check that no footer line is wider than its window (19.224).
+- [x] M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so
+  later changes to them need `[01]` rather than `[10]`. *Made 14 November 2026.*
+- [x] M2. The setup menu's, the Media Player's and each other system's keys, one commit each. *Made 14 November 2026.*
+- [x] M3. The main menu reordered and Settings renamed (19.188). *Made 14 November 2026.*
+- [x] M4. "Real Graphics" renamed "Wireframe", its sense turned round, old files and `--real-graphics` still read (19.223). Also `[03]`, `[11]` where their lines name it. *Made 14 November 2026.*
+- [x] M5. Every footer of keys wraps upwards as the viewer's does, on every screen, with a CI check that no footer line is wider than its window (19.224). *Made 14 November 2026.*
 
 ### List V: viewers `[10]` + you, one sitting with files of each kind
 - V1. Sound files to the audio player, .obj/glTF files to the 3D view (the rest of 19.200).

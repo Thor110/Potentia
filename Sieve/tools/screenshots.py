@@ -101,9 +101,9 @@ def main():
     # (one for each character drawing: 0 pixels, 1 wireframe, 2 voxels, 3 shaded, 4 the skin, IDEAS 19.225;
     # 5 the skin's quads and 6 the smooth skin, IDEAS 19.214)
     for k in range(7):
-        files[f"d{k}.ini"] = f"[character]\ndrawing = {k}\n[graphics]\nreal_graphics = on\n"
+        files[f"d{k}.ini"] = f"[character]\ndrawing = {k}\n[graphics]\nwireframe = off\n"
     # (the voxels on the world lattice with their faces joined, IDEAS 19.216 and 19.215)
-    files["vl.ini"] = "[character]\ndrawing = 2\nvoxel_size = 1\nvoxel_joined = on\n[graphics]\nreal_graphics = on\n"
+    files["vl.ini"] = "[character]\ndrawing = 2\nvoxel_size = 1\nvoxel_joined = on\n[graphics]\nwireframe = off\n"
     for name, text in files.items():
         with open(os.path.join(work, name), "w", newline="\n") as f:
             f.write(text)

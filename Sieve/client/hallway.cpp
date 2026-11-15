@@ -1,10 +1,11 @@
 // Sieve hallway -- the corridor itself: the lines and where you stand in them, the filters,
-// finding and placing units, movement and doors, input, the frame, and Real Graphics. The parts
+// finding and placing units, movement and doors, input, the frame, and the models (Wireframe off). The parts
 // drawn over it live in files of their own (hallway.hpp says which).
 
 #include "hallway.hpp"
 #include "favourites.hpp"
 #include "gpu_memory.hpp"
+#include "keys.hpp"
 #include "character_look.hpp"
 
 #include "cli/image_io.hpp"
@@ -19,6 +20,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <future>
+#include <string>
+#include <vector>
 
 namespace hallway::hall {
 
@@ -1475,27 +1478,29 @@ void Hallway::step_trail(int dir)
 // ---- movement and doors
 void Hallway::update(float dt, const bool* keys)
 {
+    // (walking's keys from the registry, as set: IDEAS 19.199)
+    namespace hk = hallway_keys;
+    auto held = [keys](const std::string& id) { return Keys::get().held(id, keys); };
     // What your character is doing (IDEAS 19.186), for the animation it plays: reading what you hold,
     // standing, walking, or running with Shift.
     {
         const bool still = input_ != Input::None || nav_open_ || pause_open_ || locator_.is_open();
-        const bool moving = !still && !in_hand_ && (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_D]);
-        const bool shift = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
-        action_now_ = in_hand_ ? sieve::Action::Read : moving ? (shift ? sieve::Action::Run : sieve::Action::Walk) : sieve::Action::Idle;
+        const bool moving = !still && !in_hand_ && (held(hk::kForward) || held(hk::kBack) || held(hk::kLeft) || held(hk::kRight));
+        action_now_ = in_hand_ ? sieve::Action::Read : moving ? (held(hk::kRun) ? sieve::Action::Run : sieve::Action::Walk) : sieve::Action::Idle;
     }
     // Holding a book, you stand still: walking or turning under an open book is disorienting.
     if (input_ != Input::None || in_hand_ || nav_open_ || pause_open_ || locator_.is_open()) return;
     // Your stride shrinks as the hallway grows to fit your character (hall_scale_).
-    const float speed = ((keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]) ? 9.0f : 3.0f) / hall_scale_;
+    const float speed = (held(hk::kRun) ? 9.0f : 3.0f) / hall_scale_;
     const Vec3 fwd = {std::sin(cam_.yaw), 0, std::cos(cam_.yaw)};
     const Vec3 right = {std::cos(cam_.yaw), 0, -std::sin(cam_.yaw)};
     Vec3 move{};
-    if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]) move = move + fwd;
-    if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) move = move - fwd;
-    if (keys[SDL_SCANCODE_D]) move = move + right;
-    if (keys[SDL_SCANCODE_A]) move = move - right;
-    if (keys[SDL_SCANCODE_LEFT]) cam_.yaw -= 1.8f * dt;
-    if (keys[SDL_SCANCODE_RIGHT]) cam_.yaw += 1.8f * dt;
+    if (held(hk::kForward)) move = move + fwd;
+    if (held(hk::kBack)) move = move - fwd;
+    if (held(hk::kRight)) move = move + right;
+    if (held(hk::kLeft)) move = move - right;
+    if (held(hk::kTurnLeft)) cam_.yaw -= 1.8f * dt;
+    if (held(hk::kTurnRight)) cam_.yaw += 1.8f * dt;
     if (dot(move, move) > 0) move_by(normalize(move) * (speed * dt));
 }
 
@@ -1687,18 +1692,21 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         if (e.type == SDL_EVENT_TEXT_INPUT) text_ += e.text.text;
         if (e.type == SDL_EVENT_KEY_DOWN)
         {
+            // (the typing keys from the registry; Esc stays fixed, as it is everywhere)
+            namespace hk = hallway_keys;
+            const std::string key = Keys::get().which({hk::kTypedErase, hk::kTypedPaste, hk::kTypedGo}, e.key.key, e.key.mod);
             if (e.key.key == SDLK_ESCAPE) close_input();
-            else if (e.key.key == SDLK_BACKSPACE && !text_.empty())
+            else if (key == hk::kTypedErase && !text_.empty())
             {
                 // Remove one UTF-8 character.
                 do text_.pop_back();
                 while (!text_.empty() && (static_cast<unsigned char>(text_.back()) & 0xC0) == 0x80);
             }
-            else if (e.key.key == SDLK_V && (e.key.mod & SDL_KMOD_CTRL))
+            else if (key == hk::kTypedPaste)
             {
                 if (char* clip = SDL_GetClipboardText()) { text_ += clip; SDL_free(clip); }
             }
-            else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)
+            else if (key == hk::kTypedGo)
             {
                 const Input which = input_;
                 const std::string t = text_;
@@ -1758,157 +1766,148 @@ void Hallway::handle_event(const SDL_Event& e, bool& quit)
         }
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return;
-    // Held keys repeat only for what is meant to repeat (jumps, zoom, pages); a held E would
-    // otherwise take a book and put it back again and again.
-    if (e.key.repeat)
-        switch (e.key.key)
-        {
-        case SDLK_PAGEUP: case SDLK_PAGEDOWN: case SDLK_LEFTBRACKET: case SDLK_RIGHTBRACKET:
-        case SDLK_MINUS: case SDLK_KP_MINUS: case SDLK_EQUALS: case SDLK_KP_PLUS: case SDLK_N: case SDLK_B: break;
-        default: return;
-        }
-    switch (e.key.key)
+    // Esc stays fixed, as everywhere: put down what is in your hands first; with nothing in them, pause.
+    if (e.key.key == SDLK_ESCAPE)
     {
-    case SDLK_ESCAPE:
-        // Put down what is in your hands first; with nothing in them, pause.
+        if (e.key.repeat) return;
         if (in_hand_) drop_in_hand();
         else open_pause();
-        break;
-    case SDLK_TAB: SDL_SetWindowRelativeMouseMode(window_, !SDL_GetWindowRelativeMouseMode(window_)); break;
-    case SDLK_Q:
-        if (e.key.mod & SDL_KMOD_CTRL) quit = true;
-        break;
-    case SDLK_E: take_or_return(); break;
-    case SDLK_T: open_input(Input::Warp); break;
-    case SDLK_G: open_input(Input::Goto); break;
-    case SDLK_X: open_navigator(); break;
-    case SDLK_O: open_graph(); break;
-    case SDLK_M: cycle_ordering(); break;
-    case SDLK_F1:
+        return;
+    }
+    // The rest from the registry, as set (IDEAS 19.199): whatever you hold's keys, and holding's or empty
+    // hands' (N, B, [ and ] do other things holding something). Asked by which() so a key pressed with a
+    // modifier more than its chord asks is still that key (Shift held to run, and E), as it always was.
+    namespace hk = hallway_keys;
+    std::vector<std::string> mine = {hk::kTake, hk::kWarp, hk::kGoTo, hk::kNavigator, hk::kGraph, hk::kOrdering, hk::kZoomOut, hk::kZoomIn, hk::kZoomOutFar, hk::kZoomInFar,
+                                     hk::kThousandOn, hk::kThousandBack, hk::kHome, hk::kMouse, hk::kMenu, hk::kQuit};
+    if (in_hand_)
+        mine.insert(mine.end(), {hk::kNextPage, hk::kPreviousPage, hk::kSpinLeft, hk::kSpinRight, hk::kNextTab, hk::kUpright, hk::kPlay, hk::kNextMap, hk::kPreviousMap,
+                                 hk::kAnchor, hk::kSave, hk::kItsFile, hk::kCipher, hk::kTailor, hk::kFurther, hk::kUse, hk::kFavourite, hk::kView});
+    else mine.insert(mine.end(), {hk::kTrailNext, hk::kTrailBack, hk::kMillionOn, hk::kMillionBack});
+    const std::string k = Keys::get().which(mine, e.key.key, e.key.mod);
+    if (k.empty()) return;
+    // Held keys repeat only for what is meant to repeat (jumps, zoom, pages); a held E would
+    // otherwise take a book and put it back again and again.
+    if (e.key.repeat && k != hk::kThousandOn && k != hk::kThousandBack && k != hk::kMillionOn && k != hk::kMillionBack && k != hk::kNextMap && k != hk::kPreviousMap &&
+        k != hk::kZoomOut && k != hk::kZoomIn && k != hk::kZoomOutFar && k != hk::kZoomInFar && k != hk::kTrailNext && k != hk::kTrailBack && k != hk::kNextPage &&
+        k != hk::kPreviousPage)
+        return;
+    if (k == hk::kMouse) SDL_SetWindowRelativeMouseMode(window_, !SDL_GetWindowRelativeMouseMode(window_));
+    else if (k == hk::kQuit) quit = true;
+    else if (k == hk::kTake) take_or_return();
+    else if (k == hk::kWarp) open_input(Input::Warp);
+    else if (k == hk::kGoTo) open_input(Input::Goto);
+    else if (k == hk::kNavigator) open_navigator();
+    else if (k == hk::kGraph) open_graph();
+    else if (k == hk::kOrdering) cycle_ordering();
+    else if (k == hk::kMenu)
+    {
         menu_requested_ = true;
         quit = true;
-        break;
-    case SDLK_MINUS:
-    case SDLK_KP_MINUS: zoom_by((e.key.mod & SDL_KMOD_SHIFT) ? -8 : -1); break;
-    case SDLK_EQUALS:
-    case SDLK_KP_PLUS: zoom_by((e.key.mod & SDL_KMOD_SHIFT) ? 8 : 1); break;
-    case SDLK_N:
-        if (in_hand_ && in_hand_->parts) turn_page(1);
-        else step_trail(1);
-        break;
-    case SDLK_B:
-        if (in_hand_ && in_hand_->parts) turn_page(-1);
-        else step_trail(-1);
-        break;
-    case SDLK_A:
-        if (in_hand_ && hand_tab_ == 2) sort_yaw_ -= 0.15f;
-        else if (in_hand_ && (in_hand_->model || in_hand_->world)) model_spin_ -= 0.15f;
-        break;
-    case SDLK_D:
-        if (in_hand_ && hand_tab_ == 2) sort_yaw_ += 0.15f;
-        else if (in_hand_ && (in_hand_->model || in_hand_->world)) model_spin_ += 0.15f;
-        break;
-    case SDLK_C:
-        // The item page's tabs: the thing itself, what it costs to name it, and where it stands
-        // in a map (SORT).
-        if (in_hand_) select_hand_tab((hand_tab_ + 1) % hand_tabs());
-        break;
-    case SDLK_R:
-        if (in_hand_ && (in_hand_->model || in_hand_->world)) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }
-        break;
-    case SDLK_P:
-        if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
-        {
-            // Through the music player when there is one, which fades the music out under it.
-            std::string err;
-            if (sieve::is_notes3_symbols(line().space.symbols_id()))
+    }
+    else if (k == hk::kZoomOut) zoom_by(-1);
+    else if (k == hk::kZoomOutFar) zoom_by(-8);
+    else if (k == hk::kZoomIn) zoom_by(1);
+    else if (k == hk::kZoomInFar) zoom_by(8);
+    else if (k == hk::kNextPage && in_hand_->parts) turn_page(1);
+    else if (k == hk::kPreviousPage && in_hand_->parts) turn_page(-1);
+    else if (k == hk::kNextPage || k == hk::kTrailNext) step_trail(1); // (holding something without pages: the trail, as before)
+    else if (k == hk::kPreviousPage || k == hk::kTrailBack) step_trail(-1);
+    else if (k == hk::kSpinLeft)
+    {
+        if (hand_tab_ == 2) sort_yaw_ -= 0.15f;
+        else if (in_hand_->model || in_hand_->world) model_spin_ -= 0.15f;
+    }
+    else if (k == hk::kSpinRight)
+    {
+        if (hand_tab_ == 2) sort_yaw_ += 0.15f;
+        else if (in_hand_->model || in_hand_->world) model_spin_ += 0.15f;
+    }
+    // The item page's tabs: the thing itself, what it costs to name it, and where it stands in a map (SORT).
+    else if (k == hk::kNextTab) select_hand_tab((hand_tab_ + 1) % hand_tabs());
+    else if (k == hk::kUpright)
+    {
+        if (in_hand_->model || in_hand_->world) { model_spin_ = kModelSpin; model_tilt_ = kModelTilt; }
+    }
+    else if (k == hk::kPlay)
+    {
+            if (in_hand_ && !on_books() && line().kind == LineKind::Audio)
             {
-                // Open-ended notes, made into sound at the set's tempo and played as sound.
-                const uint32_t rate = kSynthRate;
-                std::vector<float> s = render_notes3(sieve::notes3_set_of(line().space.symbols_id()), in_hand_->unit, rate);
-                err = music() ? music()->play_samples(std::move(s), rate) : synth_.play_samples(s, rate);
-            }
-            else if (sieve::is_pcm_symbols(line().space.symbols_id()))
-            {
-                const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
-                err = music() ? music()->play_sound(f, in_hand_->unit) : synth_.play_sound(f, in_hand_->unit);
-            }
-            else
-            {
-                const sieve::NoteSet set = note_set_of(line().space.symbols_id());
-                err = music() ? music()->play_item(set, in_hand_->unit) : synth_.play(set, in_hand_->unit);
-            }
-            message(err.empty() ? tr("msg.playing") : err);
-        }
-        break;
-    case SDLK_PAGEUP: jump_tiles(1000); break;
-    case SDLK_PAGEDOWN: jump_tiles(-1000); break;
-    case SDLK_RIGHTBRACKET:
-        if (in_hand_) graph_select(graph_sel_ + 1); // holding something: the map it is shown against, and V adds to
-        else jump_tiles(1000000);
-        break;
-    case SDLK_LEFTBRACKET:
-        if (in_hand_) graph_select(graph_sel_ - 1);
-        else jump_tiles(-1000000);
-        break;
-    case SDLK_V:
-        if (in_hand_) graph_add_anchor(*in_hand_);
-        break;
-    case SDLK_F:
-        if (in_hand_) save_in_hand();
-        break;
-    case SDLK_J:
-        if (in_hand_) jump_kind();
-        break;
-    case SDLK_I:
-        // The Encryption Engine, with the item in hand as its input: its bytes, as F would save them.
-        if (in_hand_ && !withheld(*in_hand_))
-        {
-            try
-            {
-                std::string name;
-                std::vector<uint8_t> bytes;
-                if (on_binary() && in_hand_->is_file)
+                // Through the music player when there is one, which fades the music out under it.
+                std::string err;
+                if (sieve::is_notes3_symbols(line().space.symbols_id()))
                 {
-                    bytes = file_of(*in_hand_);
-                    name = binary_file_name(*in_hand_, cli::sha256_hex(bytes));
+                    // Open-ended notes, made into sound at the set's tempo and played as sound.
+                    const uint32_t rate = kSynthRate;
+                    std::vector<float> s = render_notes3(sieve::notes3_set_of(line().space.symbols_id()), in_hand_->unit, rate);
+                    err = music() ? music()->play_samples(std::move(s), rate) : synth_.play_samples(s, rate);
                 }
-                else bytes = item_file(*in_hand_, name);
-                cipher_item_ = std::make_pair(std::move(bytes), name);
-                request_ = Request::Cipher;
-                quit = true; // the frame loop hands over to the engine, as the pause menu's row does
+                else if (sieve::is_pcm_symbols(line().space.symbols_id()))
+                {
+                    const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
+                    err = music() ? music()->play_sound(f, in_hand_->unit) : synth_.play_sound(f, in_hand_->unit);
+                }
+                else
+                {
+                    const sieve::NoteSet set = note_set_of(line().space.symbols_id());
+                    err = music() ? music()->play_item(set, in_hand_->unit) : synth_.play(set, in_hand_->unit);
+                }
+                message(err.empty() ? tr("msg.playing") : err);
             }
-            catch (const std::exception& ex)
+    }
+    else if (k == hk::kThousandOn) jump_tiles(1000);
+    else if (k == hk::kThousandBack) jump_tiles(-1000);
+    else if (k == hk::kNextMap) graph_select(graph_sel_ + 1); // holding something: the map it is shown against, and V adds to
+    else if (k == hk::kPreviousMap) graph_select(graph_sel_ - 1);
+    else if (k == hk::kMillionOn) jump_tiles(1000000);
+    else if (k == hk::kMillionBack) jump_tiles(-1000000);
+    else if (k == hk::kAnchor) graph_add_anchor(*in_hand_);
+    else if (k == hk::kSave) save_in_hand();
+    else if (k == hk::kItsFile) jump_kind();
+    else if (k == hk::kCipher)
+    {
+            // The Encryption Engine, with the item in hand as its input: its bytes, as F would save them.
+            if (in_hand_ && !withheld(*in_hand_))
             {
-                warn(trf("msg.jump.failed", {ex.what()}));
+                try
+                {
+                    std::string name;
+                    std::vector<uint8_t> bytes;
+                    if (on_binary() && in_hand_->is_file)
+                    {
+                        bytes = file_of(*in_hand_);
+                        name = binary_file_name(*in_hand_, cli::sha256_hex(bytes));
+                    }
+                    else bytes = item_file(*in_hand_, name);
+                    cipher_item_ = std::make_pair(std::move(bytes), name);
+                    request_ = Request::Cipher;
+                    quit = true; // the frame loop hands over to the engine, as the pause menu's row does
+                }
+                catch (const std::exception& ex)
+                {
+                    warn(trf("msg.jump.failed", {ex.what()}));
+                }
             }
-        }
-        break;
-    case SDLK_K:
-        if (in_hand_) tailor_in_hand(); // COST: the filters tailored to it (tailoring.cpp)
-        break;
-    case SDLK_L:
-        if (in_hand_ && hand_tab_ == 1) vla_search_further(); // COST: the shortest route searched to more places
-        break;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-        if (in_hand_ && in_hand_->ai) open_chat(); // the AI line: the CHAT tab (chat.cpp)
-        else if (in_hand_) apply_tailored(quit);
-        break;
-    case SDLK_H:
-        if (in_hand_) keep_favourite(); // (your personal dimension's favourites: IDEAS 19.190)
-        break;
-    case SDLK_Z:
-        if (in_hand_) open_viewer();
-        break;
-    case SDLK_HOME:
+    }
+    else if (k == hk::kTailor) tailor_in_hand(); // COST: the filters tailored to it (tailoring.cpp)
+    else if (k == hk::kFurther)
+    {
+        if (hand_tab_ == 1) vla_search_further(); // COST: the shortest route searched to more places
+    }
+    else if (k == hk::kUse)
+    {
+        if (in_hand_->ai) open_chat(); // the AI line: the CHAT tab (chat.cpp)
+        else apply_tailored(quit);
+    }
+    else if (k == hk::kFavourite) keep_favourite(); // (your personal dimension's favourites: IDEAS 19.190)
+    else if (k == hk::kView) open_viewer();
+    else if (k == hk::kHome)
+    {
         tile_ = TileIndex{};
         rebase();
         face(0);
         drop_in_hand();
         message(tr("msg.home"));
-        break;
-    default: break;
     }
 }
 
@@ -2178,7 +2177,7 @@ void Hallway::render()
         const Vec3 shift{0, 0, t * kTile};
         visible[t + kBack] = cam_.box_visible(tile_lo_ + shift, tile_hi_ + shift);
     }
-    // Real Graphics: the line's models, where it has them; the rest stays wireframe.
+    // Wireframe off: the line's models, where it has them; the rest stays wireframe.
     fps_tris_ = 0;
     const Models* md = real_graphics_ ? &models() : nullptr;
     const bool real_hall = md && md->hallway, real_cases = md && md->bookshelf, real_books = md && md->book,
@@ -2245,7 +2244,7 @@ void Hallway::render()
                         : (real_hall ? (real_cases ? none : case_geometry_) : (real_cases ? hall_geometry_ : tile_geometry_));
         for (const Segment& s : edges) add(s, z0);
         // The binary line's open side: the short wall on the last edge of the floor. Under
-        // Real Graphics it is a solid model instead (draw_models), so it is not drawn twice.
+        // Wireframe off it is a solid model instead (draw_models), so it is not drawn twice.
         if (on_binary() && !real_hall)
             for (const Segment& s : edge_geometry_[b]) add(s, z0);
         const uint32_t books = real_books ? 0 : books_in_tile(t);
@@ -2315,7 +2314,7 @@ void Hallway::render()
     draw_hud(w, h);
 }
 
-// ---- Real Graphics
+// ---- The models (Wireframe off)
 const char* Hallway::media_name(Media m) { return kDimensions[line_of(m)].id; }
 
 // The current line's models, loaded the first time they are needed.
@@ -2341,7 +2340,7 @@ const Hallway::Models& Hallway::models()
                                      {std::max(x, x - sign * 0.12f), kEdgeRailTop, kTile}, kRailColour);
             }
         m.loaded = true;
-        std::cerr << "real graphics for the " << medium << " line:";
+        std::cerr << "models for the " << medium << " line:"; // (drawn with Wireframe off)
         for (const auto& [name, mesh] : {std::pair{"hallway", li_ == kBinaryLine && m.edge ? m.edge : m.hallway}, {"bookshelf", m.bookshelf},
                                          {"book", m.book}, {"marker", m.marker}})
             std::cerr << " " << name << "=" << (mesh ? std::filesystem::path(mesh->source).filename().string() : std::string("wireframe"));
@@ -2601,7 +2600,7 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
     };
     if (into)
     {
-        // Real Graphics: its bones and spheres given to the models' renderer, each sphere a sphere (its
+        // Wireframe off: its bones and spheres given to the models' renderer, each sphere a sphere (its
         // depth at every pixel), lit from the upper left as the Character Creator draws it, the head warmer.
         auto argb = [](int r, int g, int b) { return 0xFF000000u | uint32_t(std::clamp(r, 0, 255)) << 16 | uint32_t(std::clamp(g, 0, 255)) << 8 | uint32_t(std::clamp(b, 0, 255)); };
         for (const sieve::Sphere& p : c.spheres)
@@ -2622,7 +2621,7 @@ void Hallway::draw_figure(const sieve::Character& c, SDL_Color edge, int place, 
         }, voxels_, &figure_unjoined_);
         return;
     }
-    // (with Real Graphics, the bones and spheres are in the models' image already: only what it holds)
+    // (with Wireframe off, the bones and spheres are in the models' image already: only what it holds)
     const bool in_batch = figures_in_batch_;
     SDL_SetRenderDrawColor(r_, Uint8(edge.r * 0.6f), Uint8(edge.g * 0.6f), Uint8(edge.b * 0.6f), 255);
     if (!in_batch)
@@ -2772,7 +2771,7 @@ void Hallway::release_textures()
 }
 
 // From the main menu's settings: mouse look, and the graphics options (Geometry Edge Glow and
-// Real Graphics are recorded here for the renderer; both are off by default).
+// the models (Wireframe off) are recorded here for the renderer; both are off by default).
 void Hallway::set_controls(int sensitivity_percent, bool invert_y)
 {
     look_ = 0.0025f * float(sensitivity_percent) / 100.0f;

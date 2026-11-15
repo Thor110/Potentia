@@ -50,7 +50,7 @@ std::string character_drawing_report(int chosen, bool real_graphics, size_t tria
 {
     if (chosen == kDrawDefault) return std::string(); // (as the space drew before the choice came to it)
     std::string s = std::string("drawn as ") + character_drawing_name(chosen);
-    if (!real_graphics) return std::string("drawn as wireframe (Real Graphics is off; ") + character_drawing_name(chosen) + " chosen)";
+    if (!real_graphics) return std::string("drawn as wireframe (Wireframe is on; ") + character_drawing_name(chosen) + " chosen)";
     if (chosen == kDrawVoxels)
     {
         s += ", " + std::to_string(triangles) + " triangles of cubes";

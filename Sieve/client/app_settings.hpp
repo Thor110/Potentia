@@ -7,7 +7,7 @@
 // every setting there is. The hallway's options (--length, --ffmpeg, ...) win over the file for
 // the run they are given in. save() writes the file in this order:
 //
-//   [graphics]   resolution, fullscreen, vsync, edge_glow, real_graphics, door_portals,
+//   [graphics]   resolution, fullscreen, vsync, edge_glow, wireframe, door_portals,
 //                graphics_memory_gb, view_rooms, picture_rooms, fps_counter, axis_colours
 //   [world]      model_cache_mb, angle_decimals, filter_memory_mb, counting_memory_pct,
 //                merge_cache_pct, unit_time_ms, item_memory_pct
@@ -106,7 +106,10 @@ struct AppSettings
     bool fullscreen = false;
     bool vsync = true;           // wait for the display's refresh
     bool edge_glow = false;      // Geometry Edge Glow
-    bool real_graphics = false;  // Real Graphics
+    // Whether the models are drawn: the setting shown as Wireframe, the other way round (IDEAS
+    // 19.223: Wireframe on, the default, is this off). Kept the right way up here, as the renderers
+    // ask whether to draw the models; the file and Settings say it as Wireframe.
+    bool real_graphics = false;
     bool door_portals = false;   // Door Portals: procedural data noise in the doorways
     int graphics_memory_gb = 4;  // the graphics card's memory, which the setup menu's budget keeps within
     // View distance: the rooms drawn and kept either side of yours, 2..64, and the rooms
@@ -219,7 +222,7 @@ struct AppSettings
     int raid_copies = 3;
     // How characters are drawn in every space (IDEAS 19.214): 0 pixels, 1 wireframe, 2 voxels, 3 shaded
     // (Edward, 13 November 2026; the default, as every space drew them before the choice reached it), 4 the
-    // skin over the spheres (IDEAS 19.225); the wireframe while Real Graphics is off. One setting, on Settings > Graphics and in the Creator alike.
+    // skin over the spheres (IDEAS 19.225); the wireframe while Wireframe is on. One setting, on Settings > Graphics and in the Creator alike.
     int character_drawing = 3;
     // How big the voxels are and whether their faces are joined (IDEAS 19.216, 19.215), for every space that
     // draws characters as voxels or pixels, on Settings > Graphics > Character Voxels: 0 the character's
@@ -275,11 +278,12 @@ struct AppSettings
     // entries added since it was written, and is written again at start so that it gains them.
     bool complete = true;
 
-    // Geometry Edge Glow and Real Graphics exclude each other; both may be off. Turning Real
-    // Graphics on also turns Door Portals on, which is otherwise free to be set either way:
-    // nothing ever turns it off for you.
+    // Geometry Edge Glow is drawn on the wireframe only: turning it on turns Wireframe on, and
+    // turning Wireframe off turns it off. Turning Wireframe off also turns Door Portals on, which is
+    // otherwise free to be set either way: nothing ever turns it off for you.
     void set_edge_glow(bool on);
     void set_real_graphics(bool on);
+    void set_wireframe(bool on) { set_real_graphics(!on); }
 
     static std::filesystem::path default_path();
     static AppSettings load(const std::filesystem::path& path); // missing file: defaults

@@ -24,11 +24,14 @@
 // Keys: Tab moves between the columns, Up and Down along one, Left and Right change a setting
 // (Shift: ten steps), ENTER plays a melody or presses a button, G goes to the melody, F saves it,
 // V adds it to the favourites (or takes it off, in that list), N plays a new melody now, Esc
-// goes back to the pause menu.
+// goes back to the pause menu. Those are their defaults: every one is on the key registry (IDEAS 19.199,
+// keys.hpp's media_keys), so Settings > Controls > Keys can give it another, and the footer and the
+// rows that name a key read it from there.
 
 #include "hallway.hpp"
 
 #include "dialogs.hpp"
+#include "keys.hpp"
 #include "personal_world.hpp"
 
 #include <algorithm>
@@ -438,17 +441,13 @@ void Hallway::rings_event(const SDL_Event& e)
 {
     if (e.type == SDL_EVENT_MOUSE_WHEEL) rings_.zoom(e.wheel.y > 0 ? 1 : -1);
     if (e.type != SDL_EVENT_KEY_DOWN) return;
-    switch (e.key.key)
-    {
-    case SDLK_ESCAPE:
-    case SDLK_R: rings_open_ = false; break;
-    case SDLK_EQUALS:
-    case SDLK_PLUS:
-    case SDLK_KP_PLUS: rings_.zoom(1); break;
-    case SDLK_MINUS:
-    case SDLK_KP_MINUS: rings_.zoom(-1); break;
-    default: break;
-    }
+    // Its keys on the registry (Settings > Controls > Keys, "The Media Player: the rings"); a modifier
+    // held changes nothing, as before.
+    namespace mk = media_keys;
+    const std::string k = Keys::get().which({mk::kRingsClose, mk::kRingsZoomIn, mk::kRingsZoomOut}, e);
+    if (k == mk::kRingsClose) rings_open_ = false;
+    else if (k == mk::kRingsZoomIn) rings_.zoom(1);
+    else if (k == mk::kRingsZoomOut) rings_.zoom(-1);
 }
 
 void Hallway::draw_rings(float W, float H)
@@ -498,16 +497,21 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
     int& row = media_area_ == 1 ? media_row_ : media_sel_[media_area_];
     const int n = counts[media_area_];
     using K = MediaRow::Kind;
-    if (e.key.key == SDLK_R && !(e.key.mod & SDL_KMOD_CTRL))
+    // Its keys on the registry (Settings > Controls > Keys, "The Media Player"): asked which one it is,
+    // with Shift (ten steps, the column before) or another modifier held as well.
+    namespace mk = media_keys;
+    const std::string k = Keys::get().which({mk::kUp, mk::kDown, mk::kLess, mk::kMore, mk::kChoose, mk::kNextColumn, mk::kBack, mk::kRings, mk::kGoTo, mk::kSave,
+                                             mk::kFavourite, mk::kNext, mk::kMelody},
+                                            e);
+    if (k == mk::kRings && !(e.key.mod & SDL_KMOD_CTRL))
     {
         // The rings: the music as a circle of notes (IDEAS 19.175).
         rings_open_ = true;
         rings_tick_ = 0;
         return;
     }
-    switch (e.key.key)
+    if (k == mk::kBack)
     {
-    case SDLK_ESCAPE:
         // Back to the pause menu, or, opened from the main menu, back to that.
         close_media_player();
         if (media_from_main_)
@@ -516,34 +520,28 @@ void Hallway::media_event(const SDL_Event& e, bool& quit)
             request_ = Request::MainMenu;
             quit = true;
         }
-        break;
-    case SDLK_TAB: focus((media_area_ + (shift ? 2 : 1)) % 3); break;
-    case SDLK_UP:
-    case SDLK_W: if (n > 0) row = (row + n - 1) % n; break;
-    case SDLK_DOWN:
-    case SDLK_S: if (n > 0) row = (row + 1) % n; break;
-    case SDLK_LEFT:
-    case SDLK_A: if (media_area_ == 1) media_change(-1, shift, quit); break;
-    case SDLK_RIGHT:
-    case SDLK_D: if (media_area_ == 1) media_change(1, shift, quit); break;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-    case SDLK_SPACE:
+    }
+    else if (k == mk::kNextColumn) focus((media_area_ + (shift ? 2 : 1)) % 3);
+    else if (k == mk::kUp) { if (n > 0) row = (row + n - 1) % n; }
+    else if (k == mk::kDown) { if (n > 0) row = (row + 1) % n; }
+    else if (k == mk::kLess) { if (media_area_ == 1) media_change(-1, shift, quit); }
+    else if (k == mk::kMore) { if (media_area_ == 1) media_change(1, shift, quit); }
+    else if (k == mk::kChoose)
+    {
         if (media_area_ == 1) media_change(1, false, quit);
         else media_act(K::Play, quit);
-        break;
-    case SDLK_G: media_act(K::GoTo, quit); break;
-    case SDLK_F: media_act(K::Save, quit); break;
-    case SDLK_V: media_act(K::Favourite, quit); break;
-    case SDLK_N: media_act(K::Next, quit); break;
-    case SDLK_M:
+    }
+    else if (k == mk::kGoTo) media_act(K::GoTo, quit);
+    else if (k == mk::kSave) media_act(K::Save, quit);
+    else if (k == mk::kFavourite) media_act(K::Favourite, quit);
+    else if (k == mk::kNext) media_act(K::Next, quit);
+    else if (k == mk::kMelody)
+    {
         // A melody filter made in the Filter Designer (IDEAS 19.19), which plays what it keeps as
         // it is tested; the application opens it over this hallway and comes back here.
         request_ = Request::Designer;
         designer_melody_ = true;
         quit = true;
-        break;
-    default: break;
     }
 }
 
@@ -559,7 +557,7 @@ void Hallway::draw_media_player(float W, float H)
     if (!p)
     {
         text(20, 70, tr("media.no_player"), 1, grey);
-        text(20, H - 26, tr("media.keys"), 1, grey);
+        draw_footer(r_, "media", 20, H - 26, W - 40, trk("media.keys"), grey);
         return;
     }
     const float gap = 20, lw = (W - 4 * gap) * 0.3f, cw = (W - 4 * gap) * 0.4f, rw = lw;
@@ -596,7 +594,7 @@ void Hallway::draw_media_player(float W, float H)
         }
     };
     list(lx, lw, 0, p->recent(), tr("media.recent"), tr("media.recent_empty"));
-    list(rx, rw, 2, p->favourites(), tr("media.favourites"), tr("media.favourites_empty"));
+    list(rx, rw, 2, p->favourites(), tr("media.favourites"), trk("media.favourites_empty"));
 
     // The controls.
     frame(cx, cw, 1, trf("media.controls", {mode_name(media_mode_)}));
@@ -642,7 +640,7 @@ void Hallway::draw_media_player(float W, float H)
             break;
         case K::LineMode: label = "   " + tr(line_key(row.line)); value = tr(std::string("media.mode.") + music_mode_name(s.modes[size_t(kDimensions[row.line].media)])); break;
         case K::Fifths: label = tr("media.fifths"); value = tr(s.fifths ? "media.value.on" : "media.value.off"); break;
-        case K::Next: label = tr("media.next"); break;
+        case K::Next: label = trk("media.next"); break;
         case K::Filters: label = tr(s.tracks ? "media.filters.tracks" : "media.filters"); header = true; break;
         case K::Filter:
         {
@@ -660,9 +658,9 @@ void Hallway::draw_media_player(float W, float H)
             break;
         }
         case K::Play: label = tr("media.play"); break;
-        case K::GoTo: label = tr("media.goto"); break;
-        case K::Save: label = tr("media.save"); break;
-        case K::Favourite: label = tr(from_favs ? "media.fav_remove" : "media.fav_add"); break;
+        case K::GoTo: label = trk("media.goto"); break;
+        case K::Save: label = trk("media.save"); break;
+        case K::Favourite: label = trk(from_favs ? "media.fav_remove" : "media.fav_add"); break;
         case K::Own:
             label = tr("media.personal.own");
             value = p->personal() ? trf("media.personal.own.yes", {world_name(p->personal_world())}) : tr("media.personal.own.no");
@@ -707,7 +705,7 @@ void Hallway::draw_media_player(float W, float H)
     if (status.empty()) status = p->status();
     if (!p->audio()) status = tr("media.silent") + (status.empty() ? "" : ": " + status);
     if (!status.empty()) text(20, y, fit(status, W - 40, 1), 1, white);
-    text(20, H - 18, fit(tr("media.keys"), W - 40, 1), 1, grey);
+    draw_footer(r_, "media", 20, H - 18, W - 40, trk("media.keys"), grey); // (the one footer, footer.hpp: wrapped, not cut)
 }
 
 } // namespace hallway::hall

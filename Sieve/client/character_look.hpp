@@ -35,7 +35,7 @@ inline bool skin_drawing(int drawing) { return drawing == kDrawSkin || drawing =
 // Its name for readouts: "pixels", "wireframe", "voxels", "shaded", "skin", "quads" or "smooth".
 const char* character_drawing_name(int drawing);
 
-// The drawing a space uses: the one chosen with Real Graphics on, the wireframe with it off (as
+// The drawing a space uses: the one chosen with Wireframe off, the wireframe with it off (as
 // everything else is then drawn).
 inline int character_drawing_shown(int chosen, bool real_graphics) { return real_graphics ? chosen : int(kDrawWireframe); }
 
@@ -63,7 +63,7 @@ VoxelChoice voxel_choice_of(const AppSettings& app);
 
 // What a space says of its characters' drawing in its readout, said only where it differs from what the
 // space drew before the choice reached it (so a readout that does not use the choice is as it was):
-// empty for shaded with Real Graphics on. For voxels with the lattice or joining chosen, also the cubes'
+// empty for shaded with Wireframe off. For voxels with the lattice or joining chosen, also the cubes'
 // triangles before joining (`unjoined`) and the rule.
 std::string character_drawing_report(int chosen, bool real_graphics, size_t triangles, const VoxelChoice& voxels = {}, size_t unjoined = 0);
 

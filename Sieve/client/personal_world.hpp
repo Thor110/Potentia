@@ -94,9 +94,9 @@ public:
     void look(float pitch_degrees) { pitch_ = pitch_degrees * 3.14159265f / 180.0f; } // (for pictures and tests)
     void render();
     void settle_panels() { cat_panel_.settle(), place_panel_.settle(), day_panel_.settle(), worlds_panel_.settle(); } // (a picture: the panels where they are going)
-    // Real Graphics off: the characters drawn as the wireframe (rings and bones), as everywhere else.
+    // Wireframe on: the characters drawn as the wireframe (rings and bones), as everywhere else.
     void set_wireframe(bool on) { wireframe_ = on; }
-    // How the characters are drawn with Real Graphics on (IDEAS 19.214): [character] drawing, every space's
+    // How the characters are drawn with Wireframe off (IDEAS 19.214): [character] drawing, every space's
     // one setting (character_look.hpp); shaded by default, as they always were here.
     void set_character_drawing(int drawing) { char_drawing_ = drawing; }
     // How big their voxels are and whether the voxels' faces are joined (IDEAS 19.216, 19.215).

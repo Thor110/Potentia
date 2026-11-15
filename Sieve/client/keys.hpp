@@ -2,95 +2,51 @@
 // press handlers to new systems, the system itself has a primary tag and it can funnel/filter itself
 // upstream to the controls listings ... so that all keys are adjustable through and through").
 //
-// A system names each thing a key does where the system is written, as a KeyAction: its section (the
-// system's tag, a path such as "personal dimension/minimap"), its id within the section, the language key
-// of its name, and its default keys. It then asks the registry whether an event is that action, or
-// whether that action's keys are held, rather than testing key codes itself. So every action is listed,
-// by section, on Settings > Controls > Keys, where any of them can be given other keys; and the footers
-// that name keys read them from here, so they show the keys as they are set.
-//
-// Keys are written as SDL names them ("E", "Return", "Keypad +"), with "Shift+", "Ctrl+" or "Alt+" before
-// one that needs them, several apart by commas: "W,Up". A change is kept in the settings file under
-// [keys] as "SECTION/ID = KEYS" (only where it differs from the default), and read back at start.
+// The registry itself (actions declared by section, asked by what they do, their keys kept as [keys]
+// overrides, clashes found) is the core's, sieve/key_registry.hpp, where the unit tests reach it. Here it
+// is given SDL's key names ("E", "Return", "Keypad +"), and asked of SDL's key events and of the
+// keyboard's held keys. Every system's actions are listed, by section, on Settings > Controls > Keys,
+// where any of them can be given other keys; the footers that name keys read them from here (or through
+// "{key:SECTION/ID|shown}" in a language string, trf and trk), so they show the keys as they are set.
 #pragma once
+
+#include "sieve/key_registry.hpp"
 
 #include <SDL3/SDL.h>
 
-#include <map>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace hallway {
 
-struct KeyChord
-{
-    SDL_Keycode key = SDLK_UNKNOWN;
-    SDL_Keymod mod = SDL_KMOD_NONE; // only Shift, Ctrl and Alt (either side) are told apart
-};
+// (the window-free part is the core's, sieve/key_registry.hpp, so the unit tests check it)
+using sieve::chord_name;
+using sieve::KeyAction;
+using sieve::KeyChord;
+using sieve::parse_chord;
+using sieve::parse_chords;
 
-struct KeyAction
-{
-    std::string section;  // e.g. "personal dimension/minimap"
-    std::string id;       // e.g. "zoom_in"; with the section, its name in the settings file
-    std::string name_key; // the language key of what it does
-    std::string defaults; // its default keys, as written above
-};
-
-// "Shift+R" and the like: one chord, or SDLK_UNKNOWN if it is not a key's name.
-KeyChord parse_chord(const std::string& text);
-std::vector<KeyChord> parse_chords(const std::string& text);
-std::string chord_name(const KeyChord& c);
-
-class Keys
+// The registry with SDL's key names, its key events and the keyboard's held keys.
+class Keys : public sieve::KeyRegistry
 {
 public:
+    // The one registry of the program (its key names SDL's from the first call on).
     static Keys& get();
-    // Declared once, where the system is (a second declaration of the same section and id is ignored).
-    // Returns the full id ("SECTION/ID") to ask by.
-    const std::string& declare(const KeyAction& a);
-    // Whether a key press is this action (its key, and its modifiers exactly).
-    bool is(const std::string& full_id, SDL_Keycode key, SDL_Keymod mod) const;
+    using sieve::KeyRegistry::is;
     bool is(const std::string& full_id, const SDL_Event& e) const;
+    // The same with its modifiers held and perhaps others too (Shift held with Left is still Left, as the
+    // menus' keys always were, where Shift changes by ten), and of a screen's actions the one a key press
+    // is (see the core's which()): both "" or false for anything but a key press.
+    using sieve::KeyRegistry::within;
+    bool within(const std::string& full_id, const SDL_Event& e) const;
+    using sieve::KeyRegistry::which;
+    std::string which(const std::vector<std::string>& full_ids, const SDL_Event& e) const;
     // Whether any of its keys is held now (for walking and the like; modifiers are not asked).
     bool held(const std::string& full_id, const bool* keyboard) const;
-    // Its keys as set, for a footer or help line: "W / Up".
-    std::string names(const std::string& full_id) const;
-    std::string first(const std::string& full_id) const; // its first key only, for a short footer
-    // Every action, in the order declared, and its keys as set.
-    struct Row
-    {
-        std::string full_id, section, name_key, keys;
-        bool changed; // differs from its default
-    };
-    std::vector<Row> listing() const;
-    // Set from the settings file ([keys]), or by Settings > Controls > Keys; "" puts back the default.
-    void set(const std::string& full_id, const std::string& keys);
-    // What differs from the defaults, to be kept in the settings file.
-    std::map<std::string, std::string> overrides() const;
-    // Two sections whose keys are read on the same screen (the Character Creator's fixed keys and its
-    // editing keys), so a key given to one must not be given to the other: checked together by clashes().
-    void together(const std::string& section_a, const std::string& section_b);
-    // Two actions whose keys are the same, in one section or in two sections said together: the key, and
-    // the two actions' full ids (Settings > Controls > Keys names them in red).
-    struct Clash
-    {
-        std::string chord, a, b;
-    };
-    std::vector<Clash> clashes() const;
-
-private:
-    struct Entry
-    {
-        KeyAction action;
-        std::string keys; // as set
-        std::vector<KeyChord> chords;
-    };
-    std::vector<Entry> entries_;
-    std::map<std::string, size_t> index_; // full id to entry
-    std::map<std::string, std::string> pending_; // set before its system declared it (read from settings first)
-    std::vector<std::pair<std::string, std::string>> together_; // sections checked together for clashes
-    const Entry* find(const std::string& full_id) const;
+    // Whether any key of a section, or of the sections under it ("setup" holds "setup.side"), differs
+    // from its default: a readout names a screen's keys as set only then, so with the defaults it is as
+    // it was.
+    bool changed_in(const std::string& section) const;
 };
 
 // The Character Creator's editing keys (IDEAS 19.203): the chosen sphere the next or the one before, a limb
@@ -130,5 +86,160 @@ extern const std::string& kImportModel;
 extern const std::string& kSkeleton;
 extern const std::string& kOpen;
 } // namespace creator_keys
+
+// The hallway's own keys (IDEAS 19.199), declared after the Creator's (personal_world.cpp): walking (held),
+// whatever you hold, with empty hands, holding something, and typing in the warp and go-to boxes.
+namespace hallway_keys {
+extern const std::string& kForward;
+extern const std::string& kBack;
+extern const std::string& kLeft;
+extern const std::string& kRight;
+extern const std::string& kTurnLeft;
+extern const std::string& kTurnRight;
+extern const std::string& kRun;
+extern const std::string& kTake;
+extern const std::string& kWarp;
+extern const std::string& kGoTo;
+extern const std::string& kNavigator;
+extern const std::string& kGraph;
+extern const std::string& kOrdering;
+extern const std::string& kZoomOut;
+extern const std::string& kZoomIn;
+extern const std::string& kZoomOutFar;
+extern const std::string& kZoomInFar;
+extern const std::string& kThousandOn;
+extern const std::string& kThousandBack;
+extern const std::string& kHome;
+extern const std::string& kMouse;
+extern const std::string& kMenu;
+extern const std::string& kQuit;
+extern const std::string& kTrailNext;
+extern const std::string& kTrailBack;
+extern const std::string& kMillionOn;
+extern const std::string& kMillionBack;
+extern const std::string& kNextPage;
+extern const std::string& kPreviousPage;
+extern const std::string& kSpinLeft;
+extern const std::string& kSpinRight;
+extern const std::string& kNextTab;
+extern const std::string& kUpright;
+extern const std::string& kPlay;
+extern const std::string& kNextMap;
+extern const std::string& kPreviousMap;
+extern const std::string& kAnchor;
+extern const std::string& kSave;
+extern const std::string& kItsFile;
+extern const std::string& kCipher;
+extern const std::string& kTailor;
+extern const std::string& kFurther;
+extern const std::string& kUse;
+extern const std::string& kFavourite;
+extern const std::string& kView;
+extern const std::string& kTypedGo;
+extern const std::string& kTypedErase;
+extern const std::string& kTypedPaste;
+} // namespace hallway_keys
+
+// The menus' navigation, one shared section every list reads (IDEAS 19.199, put on the registry on 14
+// November 2026), so a change to it is a change on every list that reads it: a row up or down, a setting
+// less or more, choose, Space (tick or change, where a list takes it), back (Esc), the next area (Tab) and
+// a page up or down. Declared after the hallway's (personal_world.cpp), as the systems below are.
+namespace menu_keys {
+extern const std::string& kUp;
+extern const std::string& kDown;
+extern const std::string& kLeft;
+extern const std::string& kRight;
+extern const std::string& kChoose;
+extern const std::string& kToggle;
+extern const std::string& kBack;
+extern const std::string& kNext;
+extern const std::string& kPageUp;
+extern const std::string& kPageDown;
+} // namespace menu_keys
+
+// The setup menu's own keys (IDEAS 19.199), besides the menus' above and the Character Creator's: the
+// list's (the alphabets, a line's filters and details, a character of the key taken back, the first and
+// last alphabet), the filters window's three toggles, the right-hand panel's (the Character Creator, the
+// tabs, YOURS' playground and keep) and the catalogue's (SYSTEMS and the System Viewer).
+namespace setup_keys {
+extern const std::string& kAlphabets;
+extern const std::string& kFilters;
+extern const std::string& kDetails;
+extern const std::string& kErase;
+extern const std::string& kFirst;
+extern const std::string& kLast;
+extern const std::string& kThisTab;
+extern const std::string& kEveryLine;
+extern const std::string& kBothTabs;
+extern const std::string& kCreator;
+extern const std::string& kPreviousTab;
+extern const std::string& kNextTab;
+extern const std::string& kPlayground;
+extern const std::string& kKeep;
+extern const std::string& kDoorBack;
+extern const std::string& kRoot;
+extern const std::string& kOtherSystem;
+extern const std::string& kOntoLine;
+} // namespace setup_keys
+
+// The main menu's and Settings' keys (IDEAS 19.199), besides the menus': back as Esc is (Backspace), and a
+// drop-down list's first and last rows. (Settings > Controls > Keys' own Enter, Backspace and Esc on a key's
+// row stay fixed, so a key can always be given back.)
+namespace main_keys {
+extern const std::string& kBack;
+extern const std::string& kFirst;
+extern const std::string& kLast;
+} // namespace main_keys
+
+// The Encryption Engine's keys (IDEAS 19.199), besides the menus' (Tab there puts the output in as the
+// input): a character taken back (Ctrl: the row cleared), the item in hand, a file, save, go to it, paste
+// and copy.
+namespace cipher_keys {
+extern const std::string& kErase;
+extern const std::string& kItem;
+extern const std::string& kFile;
+extern const std::string& kSave;
+extern const std::string& kGo;
+extern const std::string& kPaste;
+extern const std::string& kCopy;
+} // namespace cipher_keys
+
+// The CHAIN tab's keys (IDEAS 19.199), asked before the item page's (a key none of them is goes on to the
+// page): a stage up or down, moved up or down, its model the one before or the next, steered by the
+// filters, one added after it or taken away, run from CHAT, and a chain saved or opened.
+namespace chain_keys {
+extern const std::string& kUp;
+extern const std::string& kDown;
+extern const std::string& kMoveUp;
+extern const std::string& kMoveDown;
+extern const std::string& kPreviousModel;
+extern const std::string& kNextModel;
+extern const std::string& kSteer;
+extern const std::string& kAdd;
+extern const std::string& kRemove;
+extern const std::string& kRun;
+extern const std::string& kSave;
+extern const std::string& kOpen;
+} // namespace chain_keys
+
+// The Media Player's keys (IDEAS 19.199) and its rings': W, A, S and D beside the arrows, as they were.
+namespace media_keys {
+extern const std::string& kUp;
+extern const std::string& kDown;
+extern const std::string& kLess;
+extern const std::string& kMore;
+extern const std::string& kChoose;
+extern const std::string& kNextColumn;
+extern const std::string& kBack;
+extern const std::string& kRings;
+extern const std::string& kGoTo;
+extern const std::string& kSave;
+extern const std::string& kFavourite;
+extern const std::string& kNext;
+extern const std::string& kMelody;
+extern const std::string& kRingsClose;
+extern const std::string& kRingsZoomIn;
+extern const std::string& kRingsZoomOut;
+} // namespace media_keys
 
 } // namespace hallway

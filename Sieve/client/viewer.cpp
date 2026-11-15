@@ -102,16 +102,16 @@ constexpr size_t kHexPer = 16, kHexCols = 6 + 2 + 3 * kHexPer + 1 + kHexPer;
 
 } // namespace
 
-// The keys under the view, as lines that fit the window's width (wrap_keys: broken only between
-// keys), the last line at the bottom.
-std::vector<std::string> Hallway::view_key_lines(float W) const
+// The keys under the view, as written: drawn through the one footer (footer.hpp), which lays them out in
+// lines that fit the window, broken only between keys, the last line at the bottom.
+std::string Hallway::view_keys() const
 {
     const char* keys = view_kinds_.empty() ? "view.keys"
                        : view_kinds_[view_at_] == ViewKind::Shape ? "view.keys.shape"
                        : view_.picture ? (view_.frames > 1 ? "view.keys.film" : "view.keys")
                        : in_hand_ && in_hand_->parts ? "view.keys.book"
                                                      : "view.keys";
-    return wrap_keys(tr(keys), size_t(std::max(8.0f, (W - 28) / 8)));
+    return tr(keys);
 }
 
 // What the view shows, and where on it: the area below the heading and above the keys.
@@ -119,7 +119,7 @@ SDL_FRect Hallway::view_area() const
 {
     int w = 0, h = 0;
     SDL_GetCurrentRenderOutputSize(r_, &w, &h);
-    const float foot = kFoot + float(view_key_lines(float(w)).size() - 1) * kKeyLine;
+    const float foot = kFoot + footer_extra({{view_keys(), SDL_Color{}}}, float(w) - 28, kKeyLine);
     return {0, kHead, float(w), std::max(1.0f, float(h) - kHead - foot)};
 }
 
@@ -925,8 +925,7 @@ void Hallway::draw_viewer(float W, float H)
     SDL_SetRenderDrawColor(r_, ink.r, ink.g, ink.b, 255);
     SDL_RenderLine(r_, 0, a.y - 1, W, a.y - 1);
     SDL_RenderLine(r_, 0, a.y + a.h, W, a.y + a.h);
-    const auto keys = view_key_lines(W);
-    for (size_t i = 0; i < keys.size(); ++i) text(14, H - kFoot + 7 - float(keys.size() - 1 - i) * kKeyLine, keys[i], 1, ink);
+    draw_footer(r_, "viewer", 14, H - kFoot + 7, W - 28, view_keys(), ink, kKeyLine);
 }
 
 } // namespace hallway::hall

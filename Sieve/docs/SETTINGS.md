@@ -15,8 +15,8 @@ file for the run they are given in. An empty default is written empty.
 | `resolution` | (empty) | the window's size, WxH; empty: chosen from the display at start |
 | `fullscreen` | `off` | on: fullscreen at the resolution; off: a window |
 | `vsync` | `on` | on: wait for the display; off: frames as fast as they can be drawn (may tear) |
-| `edge_glow` | `off` | Geometry Edge Glow (only one of it and Real Graphics is on) |
-| `real_graphics` | `off` | Real Graphics (only one of it and Geometry Edge Glow is on) |
+| `edge_glow` | `off` | Geometry Edge Glow, drawn on the wireframe (turning it on turns Wireframe on) |
+| `wireframe` | `on` | Wireframe: everything drawn as lines; off, the models in the meshes folder (real_graphics, its name before, is still read the other way round) |
 | `door_portals` | `off` | Door Portals: procedural data noise in the doorways |
 | `graphics_memory_gb` | `4` | the graphics card's memory, for the setup menu's budget, 1 to 128 |
 | `view_rooms` | `7` | View Distance: rooms drawn and kept either side of yours, 2 to 64 |
@@ -81,12 +81,12 @@ file for the run they are given in. An empty default is written empty.
 | `speaks` | (empty) | the languages your character speaks (IDEAS 19.183): ids of the language catalogue (data/languages), separated by commas; empty: none chosen |
 | `actions` | (empty) | your character's actions (IDEAS 19.186): the SHA-256 of its map of each action (idle, walk, run, ...) to the animation that plays it, read from the actions folder beside this file; empty: none, and its one animation plays whatever it does |
 | `animation` | (empty) | the animation your character plays (IDEAS 19.170): its SHA-256, read from the animations folder beside this file; empty: none |
-| `drawing` | `3` | how characters are drawn everywhere with Real Graphics on (IDEAS 19.214): the Character Creator, the CHARACTER page, your personal dimension and the hallway; one setting, changed on Settings > Graphics (Character Drawing) and by the Creator's drawing row alike: 0 pixels, 1 wireframe, 2 voxels, 3 shaded (the default), 4 skin (one smooth surface over the spheres, IDEAS 19.225), 5 quads (the skin as its four-sided faces, their sides drawn), 6 smooth (the skin lit at its corners, its normals averaged across the faces round them; both IDEAS 19.214); with Real Graphics off, the wireframe |
-| `voxel_size` | `0` | how big a voxel is (IDEAS 19.216), for characters drawn as voxels or pixels everywhere, on Settings > Graphics > Character Voxels: 0 the character's height in 16 cells (the default, as before); 1 one lattice for every character, cells of voxel_base_mm times a power of two, each character taking the coarsest at which its smallest sphere is still voxel_across cells wide (never more than 256 cells across its widest side), its grid anchored at its centre |
+| `drawing` | `3` | how characters are drawn everywhere with Wireframe off (IDEAS 19.214): the Character Creator, the CHARACTER page, your personal dimension and the hallway; one setting, changed on Potentia Settings > Graphics (Character Drawing) and by the Creator's drawing row alike: 0 pixels, 1 wireframe, 2 voxels, 3 shaded (the default), 4 skin (one smooth surface over the spheres, IDEAS 19.225), 5 quads (the skin as its four-sided faces, their sides drawn), 6 smooth (the skin lit at its corners, its normals averaged across the faces round them; both IDEAS 19.214); with Wireframe on, the wireframe |
+| `voxel_size` | `0` | how big a voxel is (IDEAS 19.216), for characters drawn as voxels or pixels everywhere, on Potentia Settings > Graphics > Character Voxels: 0 the character's height in 16 cells (the default, as before); 1 one lattice for every character, cells of voxel_base_mm times a power of two, each character taking the coarsest at which its smallest sphere is still voxel_across cells wide (never more than 256 cells across its widest side), its grid anchored at its centre |
 | `voxel_base_mm` | `10` | the lattice's finest cell, in millimetres, 1 to 100 (10 by default); used with voxel_size 1 |
 | `voxel_across` | `2` | on the lattice, a character's smallest sphere is at least this many cells wide, 1 to 8 (2 by default); used with voxel_size 1 |
 | `voxel_joined` | `off` | on: greedy meshing (IDEAS 19.215), the voxels' faces that lie in one plane, face the same way and share a colour drawn as one rectangle, the lines between their cells drawn as before, so the picture is the same with fewer faces; off: each face drawn on its own (the default) |
-| `skin_blend` | `50` | the skin (drawings 4 to 6, IDEAS 19.225), on Settings > Graphics > Character Voxels (Skin Blend): how full it fills the creases where spheres meet, as a percentage of the spheres' mean radius, 0 to 200 (50 by default); 0 is the spheres' plain union, every crease kept |
+| `skin_blend` | `50` | the skin (drawings 4 to 6, IDEAS 19.225), on Potentia Settings > Graphics > Character Voxels (Skin Blend): how full it fills the creases where spheres meet, as a percentage of the spheres' mean radius, 0 to 200 (50 by default); 0 is the spheres' plain union, every crease kept |
 | `skin_detail` | `1` | the skin's grid: the voxels' cell (by voxel_size's rule) halved this many times, 0 to 3 (1 by default); finer is smoother and costs more (never more than 160 cells across a character's widest side; past that its cells are doubled) |
 | `beside_you` | `on` | on: your character is you in the hallway, not drawn, its size setting the hallway's scale and its actions played (the default); off: left out there |
 | `max_hall_scale` | `16` | how many times the hallway may grow so that your character fits its doors, 1 to 64 (a larger character does not fit) |
@@ -96,11 +96,11 @@ file for the run they are given in. An empty default is written empty.
 | Setting | Default | What it is |
 | :--- | :--- | :--- |
 | `drives` | (empty) | the infinite RAID (IDEAS 19.176): folders, separated by commas (a spare drive, a second disk), where each character saved with Ctrl+S is also kept as a new version, every piece on two of them; empty: not kept there |
-| `share` | `off` | OPT IN ONLY (Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine |
+| `share` | `off` | OPT IN ONLY (Potentia Settings > Infinite RAID): on: each Ctrl+S also sends your save, sealed under your key so only you can read it, to the machines in peers; off (the default): it never leaves this machine |
 | `copies` | `3` | with share on: how many of the machines keep each piece of your save, 1 to 16 (3 by default; with fewer machines, each of them); Check my shares puts back any piece kept on fewer |
 | `peers` | (empty) | the machines your save is sent to with share on: HOST:PORT, separated by commas (each running sieve raid serve, or Sieve with serve on); empty: none |
 | `key` | (empty) | your key's file (sieve-raid-key-v1); keep it safe and keep a copy, as without it what others keep for you cannot be read by anyone; empty: raid.key beside these settings, made when share is first turned on |
-| `serve` | `off` | OPT IN ONLY (Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none |
+| `serve` | `off` | OPT IN ONLY (Potentia Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none |
 | `listen` | `0.0.0.0:47100` | with serve on: the address answered on, HOST:PORT (0.0.0.0: every network this machine is on; 127.0.0.1: this machine alone) |
 | `held` | (empty) | with serve on: the folder others' saves are kept in; empty: raid-held beside these settings |
 | `space_mb` | `1024` | with serve on: the most kept for others in all, in MiB (1024 by default) |

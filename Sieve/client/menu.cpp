@@ -21,6 +21,7 @@
 #include "music.hpp"
 
 #include "font.hpp"
+#include "footer.hpp"
 #include "gpu_memory.hpp"
 #include "mesh.hpp"
 #include "character_look.hpp"
@@ -952,7 +953,7 @@ void Menu::render_details(float W, float H)
             y += 12;
         }
     }
-    text(r_, x, box_.y + box_.h - 18, tr("details.keys"), 1, grey);
+    draw_footer(r_, "details", x, box_.y + box_.h - 18, box_.w - 28, trk("details.keys"), grey);
     if (read_aloud()) announce(trf("details.title", {tr(th.key)}));
 }
 
@@ -1000,7 +1001,7 @@ double Menu::graphics_mb_needed() const { return double(model_cache_mb()) + clos
 
 // The world's share of the graphics memory, from what it makes (gpu_memory.hpp counts it): the
 // renderer's own frames (the one shown, the one being drawn and one queued, each the window's
-// size), Real Graphics' frame (the window's size) and the doorways' portal noise (a kPortalGrain-th
+// size), the models' frame with Wireframe off (the window's size) and the doorways' portal noise (a kPortalGrain-th
 // of it each way) when they are on, a sign over the doors for each line, and the item in hand's
 // picture (two, at an image's or a video frame's pixels). Or what is held already, where that is
 // more (in the hallway: the letters' atlases and whatever else it has made). It was 512 MB, taken
@@ -1113,7 +1114,7 @@ void SDLCALL picture_model_chosen(void* user, const char* const* files, int)
 std::string Menu::text_model_value() const
 {
     if (!app_) return "-";
-    if (app_->text_model.empty()) return tr("setup.ai_text_model.hand");
+    if (app_->text_model.empty()) return trk("setup.ai_text_model.hand");
     const std::filesystem::path d = path_utf8(app_->text_model);
     return trf(sieve::cli::is_model_folder(d) ? "setup.ai_text_model.value" : "setup.ai_model.bad", {utf8_path(d.filename())});
 }
@@ -1124,7 +1125,7 @@ std::string Menu::picture_model_value() const
     if (app_->picture_model.empty())
     {
         const auto runs = sieve::cli::picture_models_in(sieve::cli::training_run_dirs());
-        return runs.empty() ? tr("setup.ai_picture_model.none") : trf("setup.ai_picture_model.first", {utf8_path(runs.front().filename())});
+        return runs.empty() ? trk("setup.ai_picture_model.none") : trf("setup.ai_picture_model.first", {utf8_path(runs.front().filename())});
     }
     const std::filesystem::path d = path_utf8(app_->picture_model);
     std::error_code ec;
@@ -1606,7 +1607,7 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     Result r = Result::Enter;
     // A scripted Return on ENTER THE HALLWAY waits, as a person would, for the dimensions to be
     // calculated (it is refused until they are).
-    if ((key == SDLK_RETURN || key == SDLK_KP_ENTER) && row_ == kEnterRow && calculating())
+    if (Keys::get().within(menu_keys::kChoose, key, mod) && row_ == kEnterRow && calculating())
     {
         finish_filter_warmup();
         poll_toggle();
@@ -1637,13 +1638,13 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     // The System Viewer: the catalogue's keys, the wheel turning its ring; Esc back the way it came.
     if (viewer_)
     {
-        if (e.type == SDL_EVENT_MOUSE_WHEEL) cat_key(e.wheel.y > 0 ? SDLK_LEFT : SDLK_RIGHT);
-        else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)
+        if (e.type == SDL_EVENT_MOUSE_WHEEL) cat_step(e.wheel.y > 0 ? -1 : 1);
+        else if (Keys::get().within(menu_keys::kBack, e))
         {
             done = true;
             result = Result::Back;
         }
-        else if (e.type == SDL_EVENT_KEY_DOWN) cat_key(e.key.key);
+        else if (e.type == SDL_EVENT_KEY_DOWN) cat_key(e);
         return;
     }
     // The character creator: its own keys (the drag above still turns the character).
@@ -1793,31 +1794,34 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         if (panel_.shown > 0 && e.wheel.mouse_x < panel_.shown * kMapX)
             list_scroll_ = std::clamp(list_scroll_ - e.wheel.y * 3 * kRowH, 0.0f, list_scroll_max_);
         else if (side_.open && side_page_ == 2)
-            cat_key(e.wheel.y > 0 ? SDLK_LEFT : SDLK_RIGHT); // the catalogue's ring turns a door a notch
+            cat_step(e.wheel.y > 0 ? -1 : 1); // the catalogue's ring turns a door a notch
         else if (side_.open)
             side_scroll_ = std::clamp(side_scroll_ - e.wheel.y * 3 * 14.0f, 0.0f, side_scroll_max_);
         return;
     }
     if (alpha_open_)
     {
-        if (e.type == SDL_EVENT_KEY_DOWN) alpha_key(e.key.key);
+        if (e.type == SDL_EVENT_KEY_DOWN) alpha_key(e);
         return;
     }
     if (overlay_ >= 0)
     {
-        if (e.type == SDL_EVENT_KEY_DOWN) overlay_key(e.key.key, (e.key.mod & SDL_KMOD_SHIFT) != 0);
+        if (e.type == SDL_EVENT_KEY_DOWN) overlay_key(e);
         return;
     }
     if (details_ >= 0)
     {
-        // Esc or I closes it; F goes on to the same line's filters; Left and Right step through the lines.
+        // Esc or I closes it; F goes on to the same line's filters; Left and Right step through the lines
+        // (the keys as set: Settings > Controls > Keys).
         if (e.type != SDL_EVENT_KEY_DOWN) return;
-        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_I) details_ = -1;
-        else if (e.key.key == SDLK_F) open_filters(details_);
-        else if (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)
+        const Keys& keys = Keys::get();
+        const std::string k = keys.which({menu_keys::kBack, setup_keys::kDetails, setup_keys::kFilters, menu_keys::kLeft, menu_keys::kRight}, e);
+        if (k == menu_keys::kBack || k == setup_keys::kDetails) details_ = -1;
+        else if (k == setup_keys::kFilters) open_filters(details_);
+        else if (k == menu_keys::kLeft || k == menu_keys::kRight)
         {
             const int c = details_ == kBinaryLine ? 0 : details_ + 1; // its column
-            details_ = overlay_of_column((c + (e.key.key == SDLK_RIGHT ? 1 : kLines - 1)) % kLines);
+            details_ = overlay_of_column((c + (k == menu_keys::kRight ? 1 : kLines - 1)) % kLines);
         }
         return;
     }
@@ -1837,114 +1841,117 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
     // While it is in, the right-hand panel takes the keys (its page's settings); Esc closes it.
     if (side_.open)
     {
-        if (e.key.key == SDLK_ESCAPE) set_side(false);
-        else if (e.key.key == SDLK_TAB) toggle_panel(); // the settings instead (only one panel is in at a time)
-        else if ((side_page_ == 0 || (!Keys::get().is(creator_keys::kImportModel, e) && !Keys::get().is(creator_keys::kSkeleton, e))) && char_ctrl_key(e)) {} // (a model and a skeleton: the CHARACTER page's alone)
-        else if (side_page_ == 0 && !(e.key.mod & SDL_KMOD_CTRL) && e.key.key == SDLK_C) open_creator(false); // the character creator
-        else if (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_PAGEDOWN ||
-                 ((e.key.mod & SDL_KMOD_CTRL) && (e.key.key == SDLK_LEFT || e.key.key == SDLK_RIGHT)))
+        // (its keys as set: Settings > Controls > Keys, "The setup menu: the right-hand panel" and "The
+        // menus"; the tab keys asked first, so Ctrl+Left is the tab before rather than Left)
+        const Keys& keys = Keys::get();
+        const std::string tab = keys.which({setup_keys::kPreviousTab, setup_keys::kNextTab, menu_keys::kPageUp, menu_keys::kPageDown, menu_keys::kLeft, menu_keys::kRight}, e);
+        const bool back_tab = tab == setup_keys::kPreviousTab || tab == menu_keys::kPageUp, on_tab = tab == setup_keys::kNextTab || tab == menu_keys::kPageDown;
+        if (keys.within(menu_keys::kBack, e)) set_side(false);
+        else if (keys.within(menu_keys::kNext, e)) toggle_panel(); // the settings instead (only one panel is in at a time)
+        else if ((side_page_ == 0 || (!keys.is(creator_keys::kImportModel, e) && !keys.is(creator_keys::kSkeleton, e))) && char_ctrl_key(e)) {} // (a model and a skeleton: the CHARACTER page's alone)
+        else if (side_page_ == 0 && !(e.key.mod & SDL_KMOD_CTRL) && keys.within(setup_keys::kCreator, e)) open_creator(false); // the character creator
+        else if (back_tab || on_tab)
         {
             // The next tab or the one before, in the order they stand: CHARACTER, LANGUAGE, YOURS,
             // SYSTEMS (pages 0, 3, 1, 2). Ctrl+Left/Right too, for keyboards with no Page keys.
             static const int kOrder[] = {0, 3, 1, 2};
             int at = 0;
             while (at < 4 && kOrder[at] != side_page_) ++at;
-            side_page_to(kOrder[(at + (e.key.key == SDLK_PAGEUP || e.key.key == SDLK_LEFT ? 3 : 1)) % 4]);
+            side_page_to(kOrder[(at + (back_tab ? 3 : 1)) % 4]);
         }
-        else if (side_page_ == 1) yours_key(e.key.key);
-        else if (side_page_ == 2) cat_key(e.key.key);
-        else if (side_page_ == 3) speak_key(e.key.key);
+        else if (side_page_ == 1) yours_key(e);
+        else if (side_page_ == 2) cat_key(e);
+        else if (side_page_ == 3) speak_key(e);
         else char_key(e);
         return;
     }
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0, ctrl = (e.key.mod & SDL_KMOD_CTRL) != 0;
     const int step = ctrl ? 100 : shift ? 10 : 1;
+    // The list's keys as set (Settings > Controls > Keys: "The menus", "The setup menu" and X of its
+    // filters window), asked which one this is with Shift or Ctrl held too (ten or a hundred steps).
+    namespace mk = menu_keys;
+    namespace sk = setup_keys;
+    const std::string k = Keys::get().which({mk::kNext, mk::kUp, mk::kDown, mk::kLeft, mk::kRight, mk::kPageUp, mk::kPageDown, sk::kErase, sk::kAlphabets, sk::kEveryLine,
+                                             sk::kFilters, sk::kDetails, mk::kChoose, mk::kBack},
+                                            e);
     // "Enter again to go in anyway" holds only for the Enter straight after it.
-    if (e.key.key != SDLK_RETURN && e.key.key != SDLK_KP_ENTER) go_anyway_armed_ = false;
+    if (k != mk::kChoose) go_anyway_armed_ = false;
     // Moving through the settings, or changing one, with the panel closed by hand brings it back.
-    switch (e.key.key)
-    {
-    case SDLK_UP:
-    case SDLK_DOWN:
-    case SDLK_LEFT:
-    case SDLK_RIGHT:
-    case SDLK_PAGEUP:
-    case SDLK_PAGEDOWN:
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
+    if (k == mk::kUp || k == mk::kDown || k == mk::kLeft || k == mk::kRight || k == mk::kPageUp || k == mk::kPageDown || k == mk::kChoose)
         if (!panel_.open && !panel_auto_) toggle_panel();
-        break;
-    default: break;
-    }
     // On the key's row a letter, a digit, - or _ is typing (taken as text above), never a shortcut:
     // A would open the alphabets, F the filters (Edward, 9 November 2026). Ctrl and Alt still act.
-    if (row_ == 2 && !(e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT)) &&
+    // The row above and below are the exception: someone who gave them a letter must still be able
+    // to leave the key's row, and the letter's text that follows lands on the new row, which takes none.
+    if (row_ == 2 && k != mk::kUp && k != mk::kDown && !(e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT)) &&
         ((e.key.key >= SDLK_A && e.key.key <= SDLK_Z) || (e.key.key >= SDLK_0 && e.key.key <= SDLK_9) || e.key.key == SDLK_MINUS))
         return;
-    switch (e.key.key)
+    if (k == mk::kNext) toggle_panel();
+    else if (k == mk::kUp) row_ = (row_ + row_count() - 1) % row_count();
+    else if (k == mk::kDown) row_ = (row_ + 1) % row_count();
+    else if (k == mk::kLeft) adjust(-1, step);
+    else if (k == mk::kRight) adjust(1, step);
+    else if (k == mk::kPageUp) adjust(1, 0);
+    else if (k == mk::kPageDown) adjust(-1, 0);
+    else if (k == sk::kErase)
     {
-    case SDLK_TAB: toggle_panel(); break;
-    case SDLK_UP: row_ = (row_ + row_count() - 1) % row_count(); break;
-    case SDLK_DOWN: row_ = (row_ + 1) % row_count(); break;
-    case SDLK_LEFT: adjust(-1, step); break;
-    case SDLK_RIGHT: adjust(1, step); break;
-    case SDLK_PAGEUP: adjust(1, 0); break;
-    case SDLK_PAGEDOWN: adjust(-1, 0); break;
-    case SDLK_BACKSPACE:
         if (row_ == 2 && !s_.key.empty()) s_.key.pop_back();
-        break;
-    case SDLK_A:
+    }
+    else if (k == sk::kAlphabets)
+    {
         // The alphabet picker: the built-ins, then every Unicode block, to stack as you like.
         open_alphabets();
-        break;
-    case SDLK_X:
+    }
+    else if (k == sk::kEveryLine)
+    {
         // Optimise all dimensions, as X in a filters window does (and, after the filter memory has
         // changed, with it). (Not on the key's row, where X is a letter of the key: above.)
         toggle_all_filters(ToggleScope::EveryLine);
-        break;
-    case SDLK_F:
+    }
+    else if (k == sk::kFilters)
+    {
         // The filters of the line whose settings are selected; anywhere else, of the line you will
         // start on (line_of_row). F again closes them.
         open_filters(line_of_row());
-        break;
-    case SDLK_I:
+    }
+    else if (k == sk::kDetails)
+    {
         // The details of the same line (9 November 2026): what its figures in the map mean.
         open_details(line_of_row());
-        break;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
+    }
+    else if (k == mk::kChoose)
+    {
         // The way in is the last row, chosen like any other: Enter anywhere else does nothing,
         // so a stray Return while setting a line up never drops you into the hallway.
         // Find my limits and Reset act where they stand; only the last row is the way in.
-        if (row_ == kLimitsRow) { find_limits(); break; }
-        if (row_ == kAiRows + 4 || row_ == kAiRows + 5) { choose_model_folder(row_ - kAiRows - 4); break; }
-        if (row_ == kResetRow) { reset_settings(); break; }
-        if (row_ != kEnterRow) break;
-        if (calculating()) break; // greyed until the dimensions are calculated
+        if (row_ == kLimitsRow) { find_limits(); return; }
+        if (row_ == kAiRows + 4 || row_ == kAiRows + 5) { choose_model_folder(row_ - kAiRows - 4); return; }
+        if (row_ == kResetRow) { reset_settings(); return; }
+        if (row_ != kEnterRow) return;
+        if (calculating()) return; // greyed until the dimensions are calculated
         if (s_.key.empty()) s_.key = "sieve";
         // Over the budget, the foot of the list says which limit and which line, and the first
         // Enter only says what going in anyway means: slower than this machine's budget, with only
         // the room you stand in kept (thin). A second Enter goes in. Past too_large_bits(), where one
         // address would need a gigabyte, the way stays shut.
-        if (too_large()) break;
+        if (too_large()) return;
         if (over_budget() >= 0 || graphics_over())
         {
             if (!go_anyway_armed_)
             {
                 go_anyway_armed_ = true;
-                break;
+                return;
             }
             went_in_thin_ = true;
         }
         save_filters();
         done = true;
         result = Result::Enter;
-        break;
-    case SDLK_ESCAPE:
+    }
+    else if (k == mk::kBack)
+    {
         done = true;
         result = Result::Back;
-        break;
-    default: break;
     }
 }
 
@@ -2404,23 +2411,27 @@ std::string Menu::catalogue_line() const
     return cat_at_ + ": " + std::to_string(n) + (n == 1 ? " door" : " doors");
 }
 
-void Menu::cat_key(SDL_Keycode key)
+void Menu::cat_step(int dir)
+{
+    cat_init();
+    const int n = int(cat_doors().size());
+    if (n) cat_door_ = (cat_door_ + n + (dir < 0 ? -1 : 1)) % n;
+}
+
+// The catalogue's keys as set (Settings > Controls > Keys: "The menus" and "The setup menu: the
+// catalogue"), on SYSTEMS and in the System Viewer.
+void Menu::cat_key(const SDL_Event& e)
 {
     cat_init();
     const auto doors = cat_doors();
     const int n = int(doors.size());
-    switch (key)
+    namespace mk = menu_keys;
+    namespace sk = setup_keys;
+    const std::string k = Keys::get().which({mk::kLeft, mk::kUp, mk::kRight, mk::kDown, mk::kChoose, sk::kDoorBack, sk::kRoot, sk::kOtherSystem, sk::kOntoLine}, e);
+    if (k == mk::kLeft || k == mk::kUp) cat_step(-1);
+    else if (k == mk::kRight || k == mk::kDown) cat_step(1);
+    else if (k == mk::kChoose) // through the door
     {
-    case SDLK_LEFT:
-    case SDLK_UP:
-        if (n) cat_door_ = (cat_door_ + n - 1) % n;
-        return;
-    case SDLK_RIGHT:
-    case SDLK_DOWN:
-        if (n) cat_door_ = (cat_door_ + 1) % n;
-        return;
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER: // through the door
         if (n && cat_door_ < n)
         {
             cat_back_.push_back(cat_at_);
@@ -2428,8 +2439,9 @@ void Menu::cat_key(SDL_Keycode key)
             cat_door_ = 0;
             cat_note_.clear();
         }
-        return;
-    case SDLK_BACKSPACE: // back the way you came
+    }
+    else if (k == sk::kDoorBack) // back the way you came
+    {
         if (!cat_back_.empty())
         {
             cat_at_ = cat_back_.back();
@@ -2437,24 +2449,24 @@ void Menu::cat_key(SDL_Keycode key)
             cat_door_ = 0;
             cat_note_.clear();
         }
-        return;
-    case SDLK_HOME: // to the system's root
+    }
+    else if (k == sk::kRoot) // to the system's root
     {
         const std::string root = cat_system_ ? "language" : "information";
         if (cat_at_ != root) cat_back_.push_back(cat_at_);
         cat_at_ = root;
         cat_door_ = 0;
         cat_note_.clear();
-        return;
     }
-    case SDLK_S: // the other system, from its root (IDEAS 19.183)
+    else if (k == sk::kOtherSystem) // the other system, from its root (IDEAS 19.183)
+    {
         cat_system_ = 1 - cat_system_;
         cat_back_.push_back(cat_at_);
         cat_at_ = cat_system_ ? "language" : "information";
         cat_door_ = 0;
         cat_note_.clear();
-        return;
-    case SDLK_L:
+    }
+    else if (k == sk::kOntoLine)
     {
         // Onto its line: an alphabet or a Unicode block becomes the pages line's alphabet.
         std::string alphabet;
@@ -2467,9 +2479,6 @@ void Menu::cat_key(SDL_Keycode key)
         }
         s_.alphabet = alphabet;
         cat_note_ = trf("side.cat.on_line", {alphabet});
-        return;
-    }
-    default: return;
     }
 }
 
@@ -2582,21 +2591,17 @@ std::vector<const sieve::FormatEntry*> Menu::speak_rows() const
     return rows;
 }
 
-void Menu::speak_key(SDL_Keycode key)
+void Menu::speak_key(const SDL_Event& e)
 {
     cat_init();
     const auto rows = speak_rows();
     const int n = int(rows.size());
     if (!n) return;
-    switch (key)
-    {
-    case SDLK_UP: speak_row_ = (speak_row_ + n - 1) % n; return;
-    case SDLK_DOWN: speak_row_ = (speak_row_ + 1) % n; return;
-    case SDLK_SPACE:
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER:
-    case SDLK_RIGHT:
-    case SDLK_LEFT:
+    namespace mk = menu_keys;
+    const std::string k = Keys::get().which({mk::kUp, mk::kDown, mk::kToggle, mk::kChoose, mk::kRight, mk::kLeft}, e);
+    if (k == mk::kUp) speak_row_ = (speak_row_ + n - 1) % n;
+    else if (k == mk::kDown) speak_row_ = (speak_row_ + 1) % n;
+    else if (!k.empty())
     {
         // Spoken or not: the choice is part of your character's save, kept as soon as it is made.
         const std::string& id = rows[size_t(std::clamp(speak_row_, 0, n - 1))]->id;
@@ -2604,9 +2609,6 @@ void Menu::speak_key(SDL_Keycode key)
         if (at != speaks_.end() && *at == id) speaks_.erase(at);
         else speaks_.insert(at, id);
         char_store();
-        return;
-    }
-    default: return;
     }
 }
 
@@ -2759,8 +2761,11 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         return true;
     }
     if (e.type != SDL_EVENT_KEY_DOWN) return false;
-    const SDL_Keycode k = e.key.key;
-    if (k == SDLK_ESCAPE)
+    // Its Esc, Tab and the arrows, Enter and Space on the actions are the menus' (Settings > Controls >
+    // Keys, "The menus"), as set.
+    namespace mk = menu_keys;
+    const Keys& keys = Keys::get();
+    if (keys.within(mk::kBack, e))
     {
         creator_ = false;
         if (creator_from_main_)
@@ -2770,7 +2775,7 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         }
         return true;
     }
-    if (k == SDLK_TAB)
+    if (keys.within(mk::kNext, e))
     {
         creator_focus_ = 1 - creator_focus_;
         return true;
@@ -2783,9 +2788,10 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         return true;
     }
     const int n = int(sieve::kActionCount);
-    if (k == SDLK_UP) creator_action_ = (creator_action_ + n - 1) % n;
-    else if (k == SDLK_DOWN) creator_action_ = (creator_action_ + 1) % n;
-    else if (k == SDLK_LEFT || k == SDLK_RIGHT)
+    const std::string k = keys.which({mk::kUp, mk::kDown, mk::kLeft, mk::kRight, mk::kChoose, mk::kToggle}, e);
+    if (k == mk::kUp) creator_action_ = (creator_action_ + n - 1) % n;
+    else if (k == mk::kDown) creator_action_ = (creator_action_ + 1) % n;
+    else if (k == mk::kLeft || k == mk::kRight)
     {
         // The choices: none, then each stored animation that fits this character.
         std::vector<std::string> choices{""};
@@ -2795,12 +2801,12 @@ bool Menu::creator_key(const SDL_Event& e, bool& done, Result& result)
         auto at = std::find(choices.begin(), choices.end(), char_actions_.of(act));
         int i = at == choices.end() ? 0 : int(at - choices.begin());
         const int m = int(choices.size());
-        i = (i + (k == SDLK_RIGHT ? 1 : m - 1)) % m;
+        i = (i + (k == mk::kRight ? 1 : m - 1)) % m;
         char_actions_.set(act, choices[size_t(i)]);
         char_store();
         char_note_ = trf("creator.set", {sieve::action_name(act), choices[size_t(i)].empty() ? tr("creator.none") : choices[size_t(i)].substr(0, 12)});
     }
-    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE)
+    else if (k == mk::kChoose || k == mk::kToggle)
     {
         // Played on the character: the action's animation, or said that it has none.
         const sieve::Action act = sieve::Action(creator_action_);
@@ -3009,7 +3015,7 @@ void Menu::render_creator(float W, float H)
     text(r_, 20, 48, tr("creator.subtitle"), 1, grey);
     // The left column: the character's rows, then its actions; the right: the character, large.
     const float colw = std::min(560.0f, W * 0.42f), x = 20, top = 64;
-    text(r_, x + 14, top + 22, tr(creator_focus_ == 0 ? "creator.focus.character" : "creator.focus.actions"), 1, warm);
+    text(r_, x + 14, top + 22, trk(creator_focus_ == 0 ? "creator.focus.character" : "creator.focus.actions"), 1, warm);
     float y = render_char_rows(x, top, colw) + 6;
     text(r_, x + 14, y, tr("creator.actions"), 2, creator_focus_ == 1 ? warm : white);
     y += 26;
@@ -3046,23 +3052,23 @@ void Menu::render_creator(float W, float H)
     for (const auto& a : creator_anims_) fitting += sieve::animation_fits(char_, a) ? 1 : 0;
     text(r_, x + 14, y + 6, trf("creator.store", {std::to_string(creator_anims_.size()), std::to_string(fitting)}), 1, grey);
     render_char_drawing(x + colw + 20, 70, W - (x + colw + 20) - 20, H - 70 - 40);
-    {
-        namespace ck = creator_keys;
-        const Keys& keys = Keys::get();
-        text(r_, 20, H - 24, trf("creator.footer", {keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kSave), keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)}), 1, grey);
-    }
-    // Editing by its joints (IDEAS 19.203): once a sphere is picked or an editing key pressed, what is
-    // chosen and the editing keys as set (Settings > Controls > Keys), above the footer.
+    // The footer, through the one footer (footer.hpp), so keys that do not fit wrap onto lines above.
+    // Editing by its joints (IDEAS 19.203): once a sphere is picked or an editing key pressed, the
+    // editing keys as set (Settings > Controls > Keys) are its line above, and what is chosen above them.
+    namespace ck = creator_keys;
+    const Keys& keys = Keys::get();
+    std::vector<FooterLine> foot;
+    if (char_editing_)
+        foot.push_back({trf("creator.edit.keys", {keys.first(ck::kNextSphere) + "/" + keys.first(ck::kPreviousSphere), keys.first(ck::kGrow), keys.first(ck::kRemoveLimb),
+                                                  keys.first(ck::kAddJoint) + "/" + keys.first(ck::kRemoveJoint), keys.first(ck::kStretch), keys.first(ck::kNudgeUp), keys.first(ck::kUndo)}),
+                        grey});
+    foot.push_back({trf("creator.footer", {keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kSave), keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)}), grey});
+    draw_footer(r_, "creator", 20, H - 24, W - 40, foot, 14);
     if (char_editing_)
     {
-        namespace ck = creator_keys;
-        const Keys& keys = Keys::get();
         const std::string line = trf("creator.edit.status", {std::to_string(char_sphere_), std::to_string(char_.spheres.size()), std::to_string(char_images_.empty() ? 0 : char_images_.size() - 1),
                                                               tr(char_stretch_ ? "creator.edit.stretching" : "creator.edit.keeping"), std::to_string(char_undo_.size())});
-        const std::string keys_line = trf("creator.edit.keys", {keys.first(ck::kNextSphere) + "/" + keys.first(ck::kPreviousSphere), keys.first(ck::kGrow), keys.first(ck::kRemoveLimb),
-                                                                keys.first(ck::kAddJoint) + "/" + keys.first(ck::kRemoveJoint), keys.first(ck::kStretch), keys.first(ck::kNudgeUp), keys.first(ck::kUndo)});
-        text(r_, 20, H - 52, fit_cells(line, size_t((W - 40) / 8)), 1, SDL_Color{230, 200, 120, 255});
-        text(r_, 20, H - 38, fit_cells(keys_line, size_t((W - 40) / 8)), 1, grey);
+        text(r_, 20, H - 52 - footer_extra(foot, W - 40, 14), fit_cells(line, size_t((W - 40) / 8)), 1, SDL_Color{230, 200, 120, 255});
     }
 }
 
@@ -3086,9 +3092,11 @@ void Menu::render_viewer(float W, float H)
     text(r_, 20, 16, tr("viewer.title"), 3, white);
     text(r_, 20, 48, tr("viewer.subtitle"), 1, grey);
     // As wide as the window allows but no wider than reads well; the ring's middle the window's.
-    const float width = std::min(W - 40, 1100.0f), x = (W - width) / 2, top = 60, bottom = H - 30;
+    // (the ring above the keys, however many lines they wrap onto: the one footer, footer.hpp)
+    const std::string keys = trk("viewer.footer");
+    const float width = std::min(W - 40, 1100.0f), x = (W - width) / 2, top = 60, bottom = H - 30 - footer_extra({{keys, grey}}, W - 40, 14);
     render_catalogue(x, top, bottom, width);
-    text(r_, 20, H - 24, tr("viewer.footer"), 1, grey);
+    draw_footer(r_, "system_viewer", 20, H - 24, W - 40, keys, grey, 14);
 }
 
 void Menu::open_yours()
@@ -3118,9 +3126,13 @@ void Menu::yours_read()
 }
 
 // YOURS: Up/Down choose one of your characters, Enter makes it the one you are (and goes to CHARACTER).
-void Menu::yours_key(SDL_Keycode key)
+void Menu::yours_key(const SDL_Event& e)
 {
-    if (key == SDLK_P)
+    // (the keys as set: Settings > Controls > Keys, "The menus" and "The setup menu: the right-hand panel")
+    namespace mk = menu_keys;
+    namespace sk = setup_keys;
+    const std::string k = Keys::get().which({sk::kPlayground, mk::kUp, mk::kDown, sk::kKeep, mk::kChoose}, e);
+    if (k == sk::kPlayground)
     {
         // The playground: the next eight along the seed walk from the character you are.
         char_init();
@@ -3137,9 +3149,9 @@ void Menu::yours_key(SDL_Keycode key)
     const int np = int(playground_.size()), n = np + int(yours_.characters.size());
     if (n == 0) return;
     const sieve::Character& chosen = yours_row_ < np ? playground_[size_t(yours_row_)] : yours_.characters[size_t(yours_row_ - np)];
-    if (key == SDLK_UP) yours_row_ = (yours_row_ + n - 1) % n;
-    else if (key == SDLK_DOWN) yours_row_ = (yours_row_ + 1) % n;
-    else if (key == SDLK_K && yours_row_ < np)
+    if (k == mk::kUp) yours_row_ = (yours_row_ + n - 1) % n;
+    else if (k == mk::kDown) yours_row_ = (yours_row_ + 1) % n;
+    else if (k == sk::kKeep && yours_row_ < np)
     {
         // Kept: written to the store by its SHA-256, and the store read again. It is written even
         // when the file is there, so a damaged copy is mended rather than left out of both lists
@@ -3148,7 +3160,7 @@ void Menu::yours_key(SDL_Keycode key)
         playground_.erase(playground_.begin() + yours_row_);
         yours_read();
     }
-    else if (key == SDLK_RETURN || key == SDLK_KP_ENTER)
+    else if (k == mk::kChoose)
     {
         char_init();
         char_ = chosen;
@@ -3285,12 +3297,14 @@ void Menu::load_character(const std::string& path)
 void Menu::char_key(const SDL_Event& e)
 {
     namespace ck = creator_keys;
+    namespace mk = menu_keys;
     const Keys& keys = Keys::get();
-    const SDL_Keycode key = e.key.key;
     const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
     constexpr int kRows = 9;
     auto& s = char_settings_;
-    const int dir = key == SDLK_RIGHT ? 1 : key == SDLK_LEFT ? -1 : 0;
+    // The rows chosen and changed by the menus' keys as set (Shift held: ten, or a thousand models).
+    const std::string nav = keys.which({mk::kUp, mk::kDown, mk::kLeft, mk::kRight}, e);
+    const int dir = nav == mk::kRight ? 1 : nav == mk::kLeft ? -1 : 0;
     auto bump = [&](uint32_t& v, uint32_t lo, uint32_t hi) { v = uint32_t(std::clamp(int64_t(v) + dir, int64_t(lo), int64_t(hi))); };
     // The keys on the registry (Settings > Controls > Keys, "The Character Creator"), as they are set.
     if (keys.is(ck::kTakeOff, e)) // the animation taken off the character
@@ -3346,12 +3360,11 @@ void Menu::char_key(const SDL_Event& e)
         s = sieve::walk_character(s, keys.is(ck::kNextTen, e) ? 10 : 1); // the seed walk: the next character (or ten on)
         remake = true;
     }
-    if (!remake) switch (key)
+    if (!remake) switch (nav == mk::kUp ? 0 : nav == mk::kDown ? 1 : dir != 0 ? 2 : 3)
     {
-    case SDLK_UP: char_row_ = (char_row_ + kRows - 1) % kRows; return;
-    case SDLK_DOWN: char_row_ = (char_row_ + 1) % kRows; return;
-    case SDLK_LEFT:
-    case SDLK_RIGHT:
+    case 0: char_row_ = (char_row_ + kRows - 1) % kRows; return;
+    case 1: char_row_ = (char_row_ + 1) % kRows; return;
+    case 2:
         switch (char_row_)
         {
         case 0: s.seed += uint64_t(int64_t(dir) * (shift ? 10 : 1)); break;
@@ -3659,12 +3672,16 @@ void Menu::render()
     for (int i = kLimitsRow; i < int(rows.size()); ++i) draw_row(i, actions_y + float(i - kLimitsRow) * kRowH);
     // The SETTINGS tab at the left edge, while the panel is (mostly) out: a click, or Tab, brings it in.
     panel_.draw_tab(r_, 2, 80, tr("setup.panel_tab"));
-    text(r_, 20, H - 40, tr("setup.footer1"), 1, grey);
+    // The footer, through the one footer (footer.hpp): keys that do not fit wrap onto lines above, and
+    // the line of status above it moves up with them.
     // (typing edits the key only while its row is chosen: the hint is shown only then)
-    text(r_, 20, H - 26, (row_ == 2 ? tr("setup.footer2.key") + "   " : std::string()) + tr(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), 1, grey);
+    const std::vector<FooterLine> foot{{trk("setup.footer1"), grey},
+                                       {(row_ == 2 ? tr("setup.footer2.key") + "   " : std::string()) + trk(in_game_ ? "setup.footer2.in_game" : "setup.footer2"), grey}};
+    draw_footer(r_, "setup", 20, H - 26, W - 40, foot, 14);
+    const float foot_up = footer_extra(foot, W - 40, 14);
     const SDL_Color red{255, 80, 80, 255};
-    if (too_large()) text(r_, 20, H - 54, tr("setup.too_large"), 1, white);
-    else if (go_anyway_armed_) text(r_, 20, H - 54, tr("setup.go_anyway"), 1, SDL_Color{255, 200, 80, 255}); // in place of why
+    if (too_large()) text(r_, 20, H - 54 - foot_up, tr("setup.too_large"), 1, white);
+    else if (go_anyway_armed_) text(r_, 20, H - 54 - foot_up, trk("setup.go_anyway"), 1, SDL_Color{255, 200, 80, 255}); // in place of why
     else if (const int over = over_budget(); over >= 0)
     {
         // Not a limit of the design: a limit of this machine, named so it can be reduced, and
@@ -3672,9 +3689,9 @@ void Menu::render()
         const Theme& th = theme_of(over);
         const Budget mb = machine_budget();
         const bool slow = line_ms(over, mb) > mb.ms_per_unit_at_limit;
-        text(r_, 20, H - 54, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
+        text(r_, 20, H - 54 - foot_up, trf(slow ? "setup.over_time" : "setup.over_budget", {tr(th.key)}), 1, red);
     }
-    else if (graphics_over()) text(r_, 20, H - 54, tr("setup.over_graphics"), 1, red);
+    else if (graphics_over()) text(r_, 20, H - 54 - foot_up, tr("setup.over_graphics"), 1, red);
 
     // The map: one bar per line, length proportional to its size in bits.
     const auto sizes = line_sizes();
@@ -3707,7 +3724,7 @@ void Menu::render()
     const float x0 = kPanelTabW + 8 + panel_.shown * (kMapX - kPanelTabW - 8), pitch = std::max(kMapPitchMin, (W - x0 - 20 - side_.shown * kSideW) / float(kLines + 1));
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
-    const float label = map_y + 38, top = map_y + 148, bottom = H - 60, span = bottom - top, min_bar = 12;
+    const float label = map_y + 38, top = map_y + 148, bottom = H - 60 - foot_up, span = bottom - top, min_bar = 12;
     // Line names are drawn at double size where a column is wide enough to hold one.
     const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
     text(r_, x0, map_y, tr("map.title"), 1, white);
@@ -3862,36 +3879,29 @@ void Menu::render_side(float W, float H)
     }
     // How to move between them, at the tabs' right end (where it fits), so it is seen on every page.
     {
-        const std::string keys = tr("side.tabs.keys");
+        const std::string keys = trk("side.tabs.keys");
         const float kw = text_width(keys, 1);
         if (px + kw <= x + kSideW - 14) text(r_, x + kSideW - 14 - kw, top + 12, keys, 1, grey);
     }
-    if (side_page_ == 1)
+    // Each page's keys along the panel's foot, through the one footer (footer.hpp): the page above them,
+    // however many lines they wrap onto.
+    namespace ck = creator_keys;
+    const Keys& keys = Keys::get();
+    const std::string foot = side_page_ == 1   ? trk("side.yours.footer")
+                             : side_page_ == 2 ? trk("side.cat.footer")
+                             : side_page_ == 3 ? trk("side.speaks.footer")
+                                               : trf("side.footer", {keys.first(ck::kNext), keys.first(ck::kRandom), keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kPlay),
+                                                                    keys.first(ck::kSave), keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)});
+    const float above = bottom - footer_extra({{foot, grey}}, kSideW - 28, 12);
+    if (side_page_ == 1) render_yours(x, top, above);
+    else if (side_page_ == 2) render_catalogue(x, top, above, kSideW);
+    else if (side_page_ == 3) render_speaks(x, top, above);
+    else
     {
-        render_yours(x, top, bottom);
-        text(r_, x + 14, bottom - 22, tr("side.yours.footer"), 1, grey);
-        return;
+        const float yy = render_char_rows(x, top, kSideW);
+        render_char_drawing(x + 14, yy, kSideW - 28, (above - 34) - yy);
     }
-    if (side_page_ == 2)
-    {
-        render_catalogue(x, top, bottom, kSideW);
-        text(r_, x + 14, bottom - 22, tr("side.cat.footer"), 1, grey);
-        return;
-    }
-    if (side_page_ == 3)
-    {
-        render_speaks(x, top, bottom);
-        text(r_, x + 14, bottom - 22, tr("side.speaks.footer"), 1, grey);
-        return;
-    }
-    const float yy = render_char_rows(x, top, kSideW);
-    render_char_drawing(x + 14, yy, kSideW - 28, (bottom - 34) - yy);
-    {
-        namespace ck = creator_keys;
-        const Keys& keys = Keys::get();
-        text(r_, x + 14, bottom - 22, trf("side.footer", {keys.first(ck::kNext), keys.first(ck::kRandom), keys.first(ck::kTurnLeft), keys.first(ck::kTurnRight), keys.first(ck::kPlay), keys.first(ck::kSave),
-                                                         keys.first(ck::kOpen), keys.first(ck::kImportModel), keys.first(ck::kSkeleton)}), 1, grey);
-    }
+    draw_footer(r_, side_page_ == 0 ? "character" : side_page_ == 1 ? "character.yours" : side_page_ == 2 ? "character.catalogue" : "character.speaks", x + 14, bottom - 22, kSideW - 28, foot, grey);
 }
 
 // The CHARACTER page's rows, and the lines under them (what it is, what it plays, the last note):
@@ -3967,7 +3977,7 @@ float Menu::render_char_rows(float x, float top, float width)
                                   char_.given ? given : cs.head ? tr("side.yes") : tr("side.no"),
                                   char_draw_forced() ? tr("side.char.draw.forced") : tr(std::string("side.char.draw.") + std::to_string(char_draw())),
                                   trf("side.char.sphere_of", {std::to_string(char_sphere_), std::to_string(char_.spheres.size())}),
-                                  char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : tr("side.char.none")};
+                                  char_.held(char_sphere_) ? char_.held(char_sphere_)->substr(0, 12) + "..." : trk("side.char.none")};
     static const char* const kLabels[] = {"side.char.seed", "side.char.limbs", "side.char.joints", "side.char.branches", "side.char.symmetry", "side.char.head", "side.char.drawing", "side.char.sphere", "side.char.model"};
     float y = top + 40;
     for (int i = 0; i < 9; ++i)
@@ -4003,7 +4013,7 @@ float Menu::render_char_rows(float x, float top, float width)
 void Menu::render_char_drawing(float bx, float by, float bw, float bh)
 {
     // How it is drawn: as the drawing row says (shaded unless changed), but always the wireframe while
-    // Real Graphics is off, as everything else then is (Edward, 13 November 2026).
+    // Wireframe is on, as everything else then is (Edward, 13 November 2026).
     const int draw = char_draw_forced() ? 1 : char_draw();
     char_drag_ = bh > 40 ? SDL_FRect{bx, by, bw, bh} : SDL_FRect{};
     if (bh > 40)
@@ -5545,28 +5555,27 @@ void Menu::overlay_change(int dir, bool big)
     save_filters();
 }
 
-void Menu::overlay_key(SDL_Keycode key, bool shift)
+void Menu::overlay_key(const SDL_Event& e)
 {
+    // Its keys as set (Settings > Controls > Keys: "The menus", "The setup menu" and its filters window).
+    namespace mk = menu_keys;
+    namespace sk = setup_keys;
+    const bool shift = (e.key.mod & SDL_KMOD_SHIFT) != 0;
     const int n = int(overlay_rows().size());
-    switch (key)
+    const std::string k = Keys::get().which({mk::kUp, mk::kDown, mk::kLeft, mk::kRight, mk::kToggle, mk::kChoose, sk::kThisTab, sk::kEveryLine, sk::kBothTabs, mk::kBack, sk::kFilters}, e);
+    if (k == mk::kUp) orow_ = (orow_ + n - 1) % n;
+    else if (k == mk::kDown) orow_ = (orow_ + 1) % n;
+    else if (k == mk::kLeft) overlay_change(-1, shift);
+    else if (k == mk::kRight || k == mk::kToggle || k == mk::kChoose) overlay_change(1, shift);
+    else if (k == sk::kThisTab) toggle_all_filters(ToggleScope::ThisTab);
+    else if (k == sk::kEveryLine) toggle_all_filters(ToggleScope::EveryLine);
+    else if (k == sk::kBothTabs) toggle_all_filters(ToggleScope::BothTabs);
+    else if (k == mk::kBack || k == sk::kFilters)
     {
-    case SDLK_UP: orow_ = (orow_ + n - 1) % n; break;
-    case SDLK_DOWN: orow_ = (orow_ + 1) % n; break;
-    case SDLK_LEFT: overlay_change(-1, shift); break;
-    case SDLK_RIGHT:
-    case SDLK_SPACE:
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER: overlay_change(1, shift); break;
-    case SDLK_Z: toggle_all_filters(ToggleScope::ThisTab); break;
-    case SDLK_X: toggle_all_filters(ToggleScope::EveryLine); break;
-    case SDLK_C: toggle_all_filters(ToggleScope::BothTabs); break;
-    case SDLK_ESCAPE:
-    case SDLK_F:
         save_filters();
         overlay_ = -1;
         orow_ = 0;
         return; // closed: overlay_rows() has no line to read any more, so nothing below applies
-    default: break;
     }
     orow_ = std::clamp(orow_, 0, int(overlay_rows().size()) - 1);
 }
@@ -5644,30 +5653,25 @@ void Menu::alpha_choose(int row)
     s_.alphabet = spec;
 }
 
-void Menu::alpha_key(SDL_Keycode key)
+void Menu::alpha_key(const SDL_Event& e)
 {
     const int n = int(alpha_rows().size());
     auto step = [&](int dir) {
         do arow_ = (arow_ + n + dir) % n;
         while (alpha_rows()[size_t(arow_)].empty());
     };
-    switch (key)
-    {
-    case SDLK_UP: step(-1); break;
-    case SDLK_DOWN: step(1); break;
-    case SDLK_PAGEUP: for (int i = 0; i < 8; ++i) step(-1); break;
-    case SDLK_PAGEDOWN: for (int i = 0; i < 8; ++i) step(1); break;
-    case SDLK_HOME: arow_ = 0; break;
-    case SDLK_END: arow_ = n - 1; break;
-    case SDLK_SPACE:
-    case SDLK_RIGHT:
-    case SDLK_RETURN:
-    case SDLK_KP_ENTER: alpha_choose(arow_); break;
-    case SDLK_LEFT: alpha_choose(arow_); break;
-    case SDLK_A:
-    case SDLK_ESCAPE: alpha_open_ = false; break;
-    default: break;
-    }
+    // Its keys as set (Settings > Controls > Keys: "The menus" and "The setup menu"; A closes it again).
+    namespace mk = menu_keys;
+    namespace sk = setup_keys;
+    const std::string k = Keys::get().which({mk::kUp, mk::kDown, mk::kPageUp, mk::kPageDown, sk::kFirst, sk::kLast, mk::kToggle, mk::kRight, mk::kChoose, mk::kLeft, sk::kAlphabets, mk::kBack}, e);
+    if (k == mk::kUp) step(-1);
+    else if (k == mk::kDown) step(1);
+    else if (k == mk::kPageUp) for (int i = 0; i < 8; ++i) step(-1);
+    else if (k == mk::kPageDown) for (int i = 0; i < 8; ++i) step(1);
+    else if (k == sk::kFirst) arow_ = 0;
+    else if (k == sk::kLast) arow_ = n - 1;
+    else if (k == mk::kToggle || k == mk::kRight || k == mk::kChoose || k == mk::kLeft) alpha_choose(arow_);
+    else if (k == sk::kAlphabets || k == mk::kBack) alpha_open_ = false;
     arow_ = std::clamp(arow_, 0, n - 1);
 }
 
@@ -5722,7 +5726,10 @@ void Menu::render_alphabets(float W, float H)
         it.h = float(it.lines.size()) * 12 + 8;
         items.push_back(it);
     }
-    const float top = box_.y + 54, bottom = box_.y + box_.h - 44;
+    // (the list and the status above the keys, however many lines they wrap onto: the one footer)
+    const std::string keys = trk("alphabets.footer");
+    const float keys_up = footer_extra({{keys, grey}}, box_.w - 28, 12);
+    const float top = box_.y + 54, bottom = box_.y + box_.h - 44 - keys_up;
     ascroll_ = std::clamp(ascroll_, 0, std::max(0, int(items.size()) - 1));
     if (arow_ < ascroll_) ascroll_ = arow_;
     for (;;)
@@ -5755,8 +5762,8 @@ void Menu::render_alphabets(float W, float H)
     const sieve::Alphabet& chosen = sieve::alphabet_of(s_.alphabet);
     std::string status = trf("alphabets.status", {chosen.id(), std::to_string(chosen.size())});
     if (!chosen.text_is_encodable()) status += "  " + tr("alphabets.surrogates");
-    text(r_, x, box_.y + box_.h - 36, status.substr(0, cols), 1, white);
-    text(r_, x, box_.y + box_.h - 20, tr("alphabets.footer"), 1, grey);
+    text(r_, x, box_.y + box_.h - 36 - keys_up, status.substr(0, cols), 1, white);
+    draw_footer(r_, "alphabets", x, box_.y + box_.h - 20, box_.w - 28, keys, grey);
 }
 
 void Menu::render_overlay(float W, float H)
@@ -5927,7 +5934,10 @@ void Menu::render_overlay(float W, float H)
         footer.push_back(f.substr(0, cut));
         f = f.substr(std::min(f.size(), cut + (cut < f.size() && f[cut] == ' ' ? 1 : 0)));
     }
-    const float top = box_.y + 54, bottom = box_.y + box_.h - 44 - 12.0f * float(footer.size() > 1 ? footer.size() - 1 : 0);
+    // (the list and the status above the keys, however many lines they wrap onto: the one footer)
+    const std::string keys = trk("filters.footer");
+    const float keys_up = footer_extra({{keys, grey}}, box_.w - 28, 12);
+    const float top = box_.y + 54, bottom = box_.y + box_.h - 44 - 12.0f * float(footer.size() > 1 ? footer.size() - 1 : 0) - keys_up;
     // Scroll: first row shown.
     oscroll_ = std::clamp(oscroll_, 0, std::max(0, int(items.size()) - 1));
     if (orow_ < oscroll_) oscroll_ = orow_;
@@ -5960,8 +5970,8 @@ void Menu::render_overlay(float W, float H)
     if (oscroll_ > 0) text(r_, box_.x + box_.w - 90, top - 12, tr("filters.more_above"), 1, grey);
     if (y < bottom && false) {}
     for (size_t k = 0; k < footer.size(); ++k)
-        text(r_, x, box_.y + box_.h - 36 - 12.0f * float(footer.size() - 1 - k), footer[k], 1, white);
-    text(r_, x, box_.y + box_.h - 20, tr("filters.footer"), 1, grey);
+        text(r_, x, box_.y + box_.h - 36 - keys_up - 12.0f * float(footer.size() - 1 - k), footer[k], 1, white);
+    draw_footer(r_, "filters", x, box_.y + box_.h - 20, box_.w - 28, keys, grey);
 }
 
 } // namespace hallway

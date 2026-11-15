@@ -8117,6 +8117,44 @@ modular, as per everything".
   keys as set; Settings > Controls > Keys listing every action by section, Enter then a key to change
   it, Backspace for the default. *Next:* the hallway's keys, then the setup menu's, the Media Player's
   and each other system's, one at a time.
+- *Built, the hallway's keys (14 November 2026):* every key `client/hallway.cpp` tested by its code is on
+  the registry, 48 actions in five sections declared after the Creator's (so no row before them moves):
+  walking (held), whatever you hold, with empty hands, holding something, and typing in the warp and
+  go-to boxes, each section with its language name and each action its own; their defaults the keys they
+  were, none given twice where read together. Esc, the mouse buttons and the wheel stay fixed. A key is
+  asked with which(): exact first, else the chord with the most of the modifiers held, so Shift held to
+  run and E still takes a book while Shift and - still zooms eight steps. The footers name keys from the
+  registry through `{key:SECTION/ID|shown}` in the language file (trk, trf), which keeps `shown` while the
+  defaults stand, so every default picture is as it was: the hallway's footer, the item page's key lines,
+  its HELP rows, SORT's keys, the map hint and Settings > Controls' list (controls.keys). The window-free
+  part of the registry moved to the core (`sieve/key_registry.hpp`), and the favourites' reader and
+  writer too (`sieve/favourites.hpp`; the combined catalogue stays in the client), one copy each, so the
+  unit tests check them (test_key_registry, test_favourites). *Left:* the CHAIN and CHAT tabs' keys, the
+  viewer's, the pause menu's and the tools opened over the hallway, F12, then the setup menu's, the Media
+  Player's and the rest, each in turn; the Controls list shows each changed key in place, so a changed
+  walking key reads "I / Up A S D" rather than a list of its own.
+- *Built, the other systems' keys (14 November 2026):* ten more sections, declared after the hallway's (so
+  no row before them moves; the menus' row up is row 114 on Settings > Controls > Keys), their defaults the
+  keys they were: **the menus** (one section every list that reads it shares: the rows, less and more,
+  choose, Space, back, the next area, a page up and down), **the setup menu** (the alphabets, a line's
+  filters and details, a character of the key taken back, the first and last alphabet), its filters
+  window's three toggles, its right-hand panel's (the Creator, the tabs, YOURS' playground and keep) and
+  its catalogue's (SYSTEMS and the System Viewer), **the Media Player** and its rings, **the main menu and
+  Settings** (Backspace back, a list's first and last rows), **the Encryption Engine** and **the CHAIN
+  tab**. The Character Creator's Tab, arrows, Enter and Esc read the menus' section. Each screen asks
+  which of its actions a key is (which(), so Shift held with Left is still Left, ten steps, as before) and
+  its footers, key lines and buttons name the keys through `{key1:SECTION/ID|shown}`, so every default
+  picture and readout is as it was (checked against the build before list M on 41 runs: the setup menu
+  and its windows and panel, the Creator, the System Viewer, the Media Player and rings, the main menu,
+  the Encryption Engine, the CHAIN tab). Sections read on one screen are declared together and the
+  defaults give no clash; a picture of the main menu says any clash as `key clash:` lines, and the
+  setup menu's and the Media Player's readouts give their footer as set once one of their keys is
+  changed. *Left:* the pause menu's keys, the File Locator's, the Filter Designer's, the AI Training
+  Harness's, Manual Navigation's, the viewer's, CHAT's, the Navigation System's, the Node Graph Viewer's
+  and the installer's (each to read the menus' section for its list keys and a section of its own for the
+  rest), F12; still fixed by choice: the Keys screen's own Enter, Backspace and Esc on a key's row (so a
+  key can always be given back), the key left of 1 (found by its place, not its key code) and typing on
+  the key's row.
 
 **19.200 Every item opens in a viewer that already exists; where none does, it is flagged (Edward, 13
 November 2026).** His words: "all items should always default to using a viewer that already exists, if
@@ -8876,7 +8914,26 @@ adjusted to whatever within a strict limit of the upper bounds of storing that v
   option, the readouts (`real graphics off`) and the CI lines that match them.
 - *Kept working:* a settings file with `real_graphics = on` still read (as `wireframe = off`), and
   `--real-graphics` kept as another name for `--wireframe off`, so no one's file or script breaks.
-  Planned only.
+- *Built (14 November 2026), a first working version:* Potentia Settings > Graphics has a **Wireframe**
+  row in Real Graphics' place, on by default, so the default picture is unchanged; its help says what it
+  draws, and Geometry Edge Glow's, Door Portals', the FPS Counter's and Character Drawing's help name it.
+  The settings file writes `[graphics] wireframe = on|off`; a file with `real_graphics = on|off` is read
+  as `wireframe = off|on` (and, missing the new entry, is written again at start with it). The glow is
+  drawn on the wireframe only, so turning it on turns Wireframe on and turning Wireframe off turns the
+  glow off, as the two excluded each other before. The hallway takes `--wireframe on|off` (in its help;
+  anything else is refused), winning over the file for the run; `--real-graphics` works as before, as
+  `--wireframe off`; `Item:real_graphics` in `--press` still reaches the row. The readouts now say
+  `graphics: edge glow off, wireframe on, ...`, `models for the audio line: ...` (was `real graphics for
+  ...`), `character drawing: voxels (the wireframe, as Wireframe is on)` and `characters: drawn as
+  wireframe (Wireframe is on; voxels chosen)`; the Creator's drawing row reads `wireframe (Wireframe is
+  on)`. MANUAL, SETTINGS, SPECIFICATIONS, the templates' README, `tools/screenshots.py` and
+  `tools/render_scales.py` say Wireframe; CI step 10 matches the new words and checks the default, the
+  row, the glow turning it back on, an old file read, `--wireframe on|off` over the file and a bad value
+  refused (steps 03, 04 and 11 had no line that matched the old words; their `--real-graphics` options are
+  kept). Inside the code the switch is still kept the right way up, as `AppSettings::real_graphics`.
+  *Left:* the comments in the template `.obj` and `.mtl` files (and `tools/build_mesh_templates.py`, which
+  writes them) still say "Real Graphics template", left so the meshes stay byte for byte as they are;
+  HANDOFF's history keeps the old name; CI's many `--real-graphics` options are kept as they are.
 
 **19.224 Every footer of keys wraps upwards (Edward, 14 November 2026). An idea for now.** His words:
 "could you also make sure that all windows and menus that have button text and descriptions at the
@@ -8892,6 +8949,46 @@ around above them".
   the screen, and nothing has to be shortened to fit.
 - *Checked by:* a CI picture of each at a narrow window, and a check that no footer line is wider than
   its window. Planned only.
+- *Built on 14 November 2026 (M5, the first working version):* one footer for every screen,
+  `hallway::draw_footer` (client/footer.hpp/.cpp), laid out by `sieve::wrap_footer`
+  (core/include/sieve/footer_wrap.hpp, in the core so the unit tests check it): a footer is one or more
+  lines, each a list of entries apart by two spaces or more; each line is laid out in the room the screen
+  gives it, in the font's own widths, broken only between entries (an entry too long alone between words,
+  a word too long between characters, never inside one), the gaps kept as written, and drawn with its
+  last line where the screen always drew it and the others above. `wrap_keys` moved there from
+  client/hallway.hpp (the viewer now draws through the same footer). Drawn through it: the hallway's
+  footer, the item in hand's and its COST, sort, CHAT and CHAIN tabs', the viewer's, the address
+  navigator's two lines, the node graph's, the pause menu's line under its rows (the box taller by its
+  extra lines) and its question's keys, your personal dimension's (its panels' keys are that footer) and
+  its pause menu's, the main menu's and Potentia Settings', the setup menu's two lines, the right-hand
+  panel's four pages (CHARACTER among them), the filters, details and alphabets windows', the Character
+  Creator's (its editing keys as the line above), the System Viewer's, the Media Player's and the rings',
+  the File Locator's and its folder question's, the AI Training Harness's (its one line, or two lower and
+  closer, as before), the Filter Designer's two and its list's, the Encryption Engine's two and Manual
+  Navigation's. What stood just above a footer (the hallway's message, a status line, the setup menu's
+  status and map, the Creator's editing status, the buttons, the list, the graph, the picture) moves up by
+  the footer's extra lines. Footers that were cut short with ".." (the File Locator's, the Media Player's,
+  the navigator's, the node graph's, the pause menu's help) now wrap instead. The readout says each footer
+  drawn with `--footers` (`footer NAME: N lines, widest W of window X (room R)`, pixels, the window being
+  the size the screen lays out in, so the setup menu, drawn at its own size and scaled in a small window,
+  says that size); without it the readout is as it was. CI step 10 runs 24 screens at 800 by 600 with it
+  and checks that every footer line is within its room and every room within its window, and names how
+  many lines some take (the hallway's 2, the navigator's 3 or more, your dimension's 2 or more); unit test
+  `test_footer_wrap`. At 1280 by 720 every footer that fitted is drawn as before, pixel for pixel, against
+  a build of the tree just before this item (compared: the hallway's, the CHAIN tab's, the pause menu's,
+  the main menu's, Settings' and its Keys screen's, the setup menu's, the Creator's, the System Viewer's,
+  the Harness's, the Designer's, the Encryption Engine's, Manual Navigation's and the viewer's; the only
+  other differences in those pictures came from the two builds' own folders: a stored character standing
+  in the hallway, and a saved map's path); those that did not fit now wrap there: your dimension's (two lines, its L key no longer cut off), the item in
+  hand's COST keys, CHAT's (now broken between keys rather than words), the CHARACTER page's, the File
+  Locator's, the Media Player's and the navigator's. *Left:* the File Locator's buttons and the Media
+  Player's columns do not move up for a wrapped footer, so in a small window (800 by 600) the File
+  Locator's footer is drawn over its last buttons, as its one line already was; the Filter Designer's list
+  pane does not leave room for a wrapped list footer; the Character Creator's editing status line and other
+  one-line status lines are still cut, not wrapped (they are not lists of keys); the controls table on
+  Settings > Controls and the right-hand panel's tab keys (shown only where they fit) are not footers and
+  are as they were; the separate sieve-view picture viewer and the installer program keep their own
+  footers.
 
 **19.225 A skin over the simple shapes: the mesh scaling system's next stage (Edward, 14 November
 2026). An idea for now.** His words: "for the mesh scaling system we also need a morphing shape bounds
@@ -9037,6 +9134,13 @@ meet, and apart where they do not touch.
   it took. Each built, compared with the stage before it and measured on its own; later stages (the
   texture, §19.227; the face, §19.228) are added the same way without changing those before them.
 
+**19.230 The DNA dimension as a place to learn (Edward, 14 November 2026).** His words: "I would love to
+look at the plan or hope to eventually hook this up to the DNA dimension and use it as an intermediary to
+help people actually learn to genetically engineer things, reverse engineer the formulae for life one day
+... But that is a long way off yet". The DNA dimension (§19.139: public, consented sets only) joined to
+the characters (§19.228, faces and bodies from it) so that a person can change a sequence and see what it
+makes, and learn from that. For later, alongside the other dimensions; nothing is built for it yet.
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non
@@ -9106,4 +9210,20 @@ eventually and Settings should be renamed Potentia Settings so that it can fit a
   CI steps reach every row so (17 sequences in steps 04 and 10), and Back returns to the row it came
   from by name; so moving a row, or adding one, no longer changes any step. The reorder and the rename
   are what is left.)
+- *Built 14 November 2026:* the main menu now runs Start Sieve, File Locator, Media Player, Filter
+  Designer, AI Training Harness, Personal Dimensions, Character Creator, Replays, Encryption Engine,
+  Manual Navigation, System Viewer, **Potentia Settings**, Exit Sieve (client/main_menu.cpp). Of the
+  rows added since the list was written, the Character Creator and Replays go after Personal
+  Dimensions, whose characters and walks they are; the System Viewer, already on the menu, after
+  Manual Navigation, as the list has it. No other row is on the main menu. The rows' ids are unchanged
+  (`Item:settings` is still the row), so no CI `--press` moved; the one line of MANUAL that counted
+  rows (Down five times for Settings) now names it. The screen titles became **POTENTIA SETTINGS >
+  ...**: the longest, POTENTIA SETTINGS > GRAPHICS > CHARACTER VOXELS, fits at 1024x600 as at
+  1280x720 (looked at in both). The help, the read-aloud texts, the settings file's comments
+  (docs/SETTINGS.md), the RAID's notes, the Keys screen's section "The main menu and Potentia
+  Settings", `--help` and MANUAL say Potentia Settings too. CI step 10 counts rows on purpose in four
+  read-aloud lines, so a move is seen. *Left:* the pause menu keeps its order and its row "Settings"
+  (§19.18; it opens the same screens, now titled POTENTIA SETTINGS); and at 1024x600 the main menu's
+  thirteen rows of 44 pixels still run under the footer, as before (now Potentia Settings and Exit
+  Sieve, where Replays and Exit Sieve were), to be fitted as Settings > Graphics' rows are.
 

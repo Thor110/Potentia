@@ -2,6 +2,7 @@
 #include "rings.hpp"
 
 #include "font.hpp"
+#include "footer.hpp"
 #include "strings.hpp"
 
 #include <algorithm>
@@ -142,7 +143,7 @@ void Rings::draw(SDL_Renderer* r, float W, float H) const
     std::string playing;
     for (const RingNote& n : now_) playing += (playing.empty() ? "" : "  ") + note_name(int(std::lround(n.midi)));
     draw_text(r, 20, 56, playing.empty() ? tr("rings.silent") : trf("rings.playing", {playing}), 1, grey);
-    draw_text(r, 20, H - 24, tr("rings.footer"), 1, grey);
+    draw_footer(r, "rings", 20, H - 24, W - 40, trk("rings.footer"), grey);
 }
 
 std::string Rings::report() const

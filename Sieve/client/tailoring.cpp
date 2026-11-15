@@ -123,7 +123,7 @@ float Hallway::draw_tailor(const Book& bk, double unit_bits, float x, float cy, 
     const TailorJob* j = tailor_of(bk);
     if (!j)
     {
-        text(x + 14, cy, tr("cost.tailor.start"), 1, ink);
+        text(x + 14, cy, trk("cost.tailor.start"), 1, ink);
         return cy + 20;
     }
     if (!j->ready)
@@ -135,7 +135,7 @@ float Hallway::draw_tailor(const Book& bk, double unit_bits, float x, float cy, 
         }
         const int done = j->progress.done, total = j->progress.total;
         text(x + 14, cy,
-             fit(done >= total && total > 0 ? tr("cost.tailor.set") : trf("cost.tailor.running", {std::to_string(done), std::to_string(total), current}),
+             fit(done >= total && total > 0 ? trk("cost.tailor.set") : trf("cost.tailor.running", {std::to_string(done), std::to_string(total), current}),
                  pw - 28, 1),
              1, ink);
         return cy + 20;
@@ -148,7 +148,7 @@ float Hallway::draw_tailor(const Book& bk, double unit_bits, float x, float cy, 
     const sieve::cli::TailorResult& r = j->result;
     if (!r.finished)
     {
-        text(x + 14, cy, tr("cost.tailor.stopped"), 1, dim);
+        text(x + 14, cy, trk("cost.tailor.stopped"), 1, dim);
         return cy + 20;
     }
     if (r.filters.enabled.empty())

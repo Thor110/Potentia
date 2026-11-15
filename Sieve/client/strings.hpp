@@ -41,8 +41,12 @@ const std::string& tr(std::string_view key);
 // The string for a key, or `fallback` when no language has it (for text that has an English
 // original elsewhere, such as a filter's description in the core's registry).
 std::string tr_or(std::string_view key, const std::string& fallback);
-// The same, with {0}, {1}, ... replaced by the arguments.
+// The same, with {0}, {1}, ... replaced by the arguments, and the keys named in it as they are set.
 std::string trf(std::string_view key, const std::vector<std::string>& args);
+// The string with the keys named in it as they are set (IDEAS 19.199): "{key:SECTION/ID|shown}" is
+// `shown` while that action has its default keys, so a footer reads as it was written, and its keys from
+// the registry once they are changed ("{key1:...}": its first key only). See sieve/key_registry.hpp.
+std::string trk(std::string_view key);
 
 // The folder the language files are read from (first that exists).
 std::filesystem::path language_folder();

@@ -1740,8 +1740,10 @@ void Hallway::draw_chat(float x, float top, float w, float bottom)
     if (chat_models_.size() > 1) chat_bar_.push_back({SDL_FRect{x, top + 12, std::min(w, text_width(figures, 1)), 16}, 3});
 
     // The box to type in, its lines wrapped, the last few shown; the buttons round it.
-    const std::vector<std::string> keys = wrap_words(tr(chat_editing_ ? "chat.keys.context" : "chat.keys"), size_t(std::max(8.0f, w / 8)));
-    const float button = 36, keys_y = bottom - 8 - kSmallLine * float(keys.size());
+    // (the keys through the one footer, footer.hpp: broken only between keys, the box above them)
+    const std::string keys = tr(chat_editing_ ? "chat.keys.context" : "chat.keys");
+    const size_t key_rows = footer_rows({{keys, grey}}, w, kSmall).size();
+    const float button = 36, keys_y = bottom - 8 - kSmallLine * float(key_rows);
     const size_t cols = size_t(std::max(8.0f, (w - 2 * button - 160) / (8 * kBig)));
     std::vector<std::string> typed;
     for (const std::string& para : paragraphs(chat_text_ + ((SDL_GetTicks() / 400) % 2 ? "_" : " ")))
@@ -1781,7 +1783,7 @@ void Hallway::draw_chat(float x, float top, float w, float bottom)
     SDL_RenderRect(r_, &box);
     const float text_y = box_y + (box_h - lines_h) / 2 + (kBigLine - 8 * kBig) / 2;
     for (size_t k = 0; k < typed.size(); ++k) text(tx + 8, text_y + kBigLine * float(k), typed[k], kBig, white);
-    for (size_t k = 0; k < keys.size(); ++k) text(x, keys_y + kSmallLine * float(k), keys[k], kSmall, grey);
+    draw_footer(r_, "chat", x, bottom - 8 - kSmallLine, w, keys, grey, kSmallLine, FooterAlign::Left, kSmall);
 
     // The conversation, newest at the foot, scrolled up by chat_scroll_.
     const float area_top = top + 46, area_bottom = box_y - 12;

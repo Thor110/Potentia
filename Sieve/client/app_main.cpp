@@ -81,6 +81,9 @@ bool save_render(SDL_Renderer* r, const std::string& path)
     }
     write_png(path, uint32_t(rgb->w), uint32_t(rgb->h), px, 1);
     SDL_DestroySurface(rgb);
+    // (--footers: what each footer drawn for this picture took, footer.hpp, so a check can see none
+    // runs off the side of a narrow window)
+    if (footer_report()) say_footers(std::cout);
     return true;
 }
 
@@ -140,8 +143,9 @@ const char* kUsage =
     "  The main menu opens first: Start Sieve, the File Locator (as in the pause menu; Go to it builds\n"
     "  the hallway and walks to the file), the Media Player, the Filter Designer (make filter plugins\n"
     "  as nodes), the AI Training Harness (train a model of the AI line from a recorded run, and check\n"
-    "  it comes out the same), Settings (graphics, controls, language; saved to sieve-hallway.ini), the\n"
-    "  Encryption Engine, Manual Navigation (a file's bytes turned by hand) and Exit Sieve. Start Sieve opens the setup menu\n"
+    "  it comes out the same), Personal Dimensions, the Character Creator, Replays, the Encryption\n"
+    "  Engine, Manual Navigation (a file's bytes turned by hand), the System Viewer, Potentia Settings\n"
+    "  (graphics, controls, language; saved to sieve-hallway.ini) and Exit Sieve. Start Sieve opens the setup menu\n"
     "  (Esc: back to the main menu): adjust every line's state space and see the lines as a map.\n"
     "  The three dots after a line's name in the map (or I) open its details: its size, address\n"
     "  length, walk time, tiles, filters and cost here.\n"
@@ -227,8 +231,8 @@ const char* kUsage =
     "  --creator           with --menu: the Character Creator instead (the whole window, as the main menu's\n"
     "                      Character Creator opens it): your character and its actions\n"
     "  --creator-drag DX,DY  with --creator: after --press, the chosen sphere dragged DX, DY pixels by the\n"
-    "                      mouse, as a person would (IDEAS 19.203; the editing keys are on Settings >\n"
-    "                      Controls > Keys, and --press can give them)\n"
+    "                      mouse, as a person would (IDEAS 19.203; the editing keys are on Potentia\n"
+    "                      Settings > Controls > Keys, and --press can give them)\n"
     "  --system-viewer ID  with --menu: the System Viewer instead (the whole window, as the main menu's\n"
     "                      System Viewer opens it), standing at entry ID\n"
     "  --save-character FILE  with --menu: save your character to FILE as the CHARACTER page's Ctrl+S does\n"
@@ -242,6 +246,8 @@ const char* kUsage =
     "                      (--busy: while the dimensions are still being calculated, if that is caught)\n"
     "  --main-menu         with --screenshot: a picture of the main menu (--press keys go to it)\n"
     "  --read-aloud        the menus read aloud for this run (not saved); with --screenshot, prints what was said\n"
+    "  --footers           with --screenshot: says each footer of keys drawn, \"footer NAME: N lines, widest W of\n"
+    "                      window X (room R)\", widths in pixels (every footer wraps upwards to fit, IDEAS 19.224)\n"
     "  --text-to-voice     the CHAT tab's replies spoken for this run (not saved); with --screenshot, prints the last\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
@@ -295,8 +301,10 @@ const char* kUsage =
     "                      crosshair is; Item:ID: the main or pause menu's row named ID, as Up/Down would\n"
     "                      reach it), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
-    "  --real-graphics     draw with Real Graphics: the models in the meshes folder\n"
-    "  --door-portals      fill the doorways with procedural data noise (Real Graphics turns this on)\n"
+    "  --wireframe on|off  draw everything as lines (on), or with the models in the meshes folder\n"
+    "                      (off); the settings file's [graphics] wireframe unless given\n"
+    "  --real-graphics     the same as --wireframe off (its name before)\n"
+    "  --door-portals      fill the doorways with procedural data noise (Wireframe off turns this on)\n"
     "  --model-cache MB    display cache: memory for the pictures on items (8 up, default 64)\n"
     "  --model-tile PX     display size: how wide each item's picture is drawn (16 up to the\n"
     "                      renderer's widest texture, default 64)\n"
@@ -371,6 +379,21 @@ bool pcm_settings_ok(const Args& a)
     {
         return false;
     }
+}
+
+// --wireframe on|off (IDEAS 19.223): Wireframe for this run, whatever the settings file says;
+// --real-graphics, its name before, is --wireframe off. Anything else is refused at the start.
+bool wireframe_off_given(const Args& a)
+{
+    return a.has("wireframe") ? a.get("wireframe") == "off" : a.has("real-graphics");
+}
+
+// Whether this run draws the models (Wireframe off): --wireframe or --real-graphics if given,
+// else the settings.
+bool models_drawn(const AppSettings& app, const Args& a)
+{
+    if (a.has("wireframe")) return a.get("wireframe") == "off";
+    return app.real_graphics || a.has("real-graphics");
 }
 
 // Whether the settings make a notes3 set (one they cannot make falls back to notes104).
@@ -1249,6 +1272,8 @@ int run(const Args& a)
     if (a.has("size") && !hallway::parse_size(a.get("size"), w, h))
         throw std::invalid_argument("--size expects WxH, e.g. 1280x720");
     const bool shot = a.has("screenshot");
+    if (a.has("wireframe") && a.get("wireframe") != "on" && a.get("wireframe") != "off")
+        throw std::invalid_argument("--wireframe expects on or off");
 
     // --write-settings OUT: the settings file as save() writes it, from --settings PATH or from the
     // defaults, without a window. Written twice, once from the other, it comes out the same.
@@ -1329,6 +1354,7 @@ int run(const Args& a)
     // How a model given as a file keeps its weights ([models] widen_weights; --widen-weights for this run).
     if (a.has("widen-weights")) app.widen_weights = 1;
     set_read_aloud(app.read_aloud); // the menus read aloud ([controls] read_aloud; speech.hpp)
+    if (a.has("footers")) set_footer_report(true); // (the readout says each footer: footer.hpp)
     if (a.has("read-aloud")) set_read_aloud(true); // for this run only, not saved; scripted pictures print what is said
     set_text_to_voice(app.text_to_voice); // the CHAT tab's replies spoken ([controls] text_to_voice)
     if (a.has("text-to-voice")) set_text_to_voice(true); // for this run only, not saved; scripted pictures print the reply spoken
@@ -1757,6 +1783,9 @@ int run(const Args& a)
         mm.render();
         shoot();
         std::cout << "main menu: language " << language_code() << ", font " << font_name() << "\n";
+        // Keys given twice where they are read together (Settings > Controls > Keys names them in red),
+        // said only when there are any: the defaults give none, so the readout is as it was.
+        for (const auto& c : hallway::Keys::get().clashes()) std::cout << "key clash: " << c.chord << " for " << c.a << " and " << c.b << "\n";
         return shot_done();
     }
     if (shot && a.has("personal-world"))
@@ -1774,7 +1803,7 @@ int run(const Args& a)
                                          : a.has("settings")  ? personal_world_file(app_path)
                                                               : std::filesystem::path();
         hallway::PersonalWorld world(window, renderer, std::move(chars), yours, wf);
-        world.set_wireframe(!(app.real_graphics || a.has("real-graphics")));
+        world.set_wireframe(!models_drawn(app, a));
         world.set_character_drawing(app.character_drawing);
         world.set_voxels(voxel_choice_of(app));
         world.set_features(app.personal_map && !a.has("no-map"), app.personal_compass && !a.has("no-compass"));
@@ -1921,7 +1950,7 @@ int run(const Args& a)
     if (shot && a.has("menu"))
     {
         // A picture of the setup menu (for documentation and testing); --press keys go to the menu.
-        if (a.has("real-graphics")) app.real_graphics = true; // (characters drawn as the drawing row says)
+        app.real_graphics = models_drawn(app, a); // (with Wireframe off, characters drawn as the drawing row says)
         Menu menu(window, renderer, settings, filters, filters_path, &app, a.has("settings") ? app_path : std::filesystem::path());
         if (a.has("character")) menu.load_character(a.get("character"));
         // Into sphere 0, as Ctrl+I does into the chosen one (--import-obj is the older name, kept).
@@ -1965,6 +1994,11 @@ int run(const Args& a)
             if (menu.edit_ms() > 0) std::cout << "character edit time: " << menu.edit_ms() << " ms (the last edit)\n";
         }
         else std::cout << "settings panel: " << (menu.panel_open() ? "in" : "out") << "\n";
+        // The setup menu's footer and its chosen row, said once one of its keys or the menus' is changed
+        // (IDEAS 19.199), so a check can see the key as set work and named; with the defaults the readout
+        // is as it was.
+        if (hallway::Keys::get().changed_in("menus") || hallway::Keys::get().changed_in("setup"))
+            std::cout << "setup footer: " << hallway::trk("setup.footer1") << "   " << hallway::trk("setup.footer2") << "\nsetup row: " << menu.row() << "\n";
         if (menu.side_open() && menu.side_page() == 3)
         {
             const std::string sp = sieve::join_fields(menu.speaks(), ',');
@@ -1984,7 +2018,7 @@ int run(const Args& a)
         // How characters are drawn (IDEAS 19.214), said only where it is not shaded (the default), so a
         // readout that does not use the choice is as it was.
         if (app.character_drawing != hallway::kDrawDefault)
-            std::cout << "character drawing: " << hallway::character_drawing_name(app.character_drawing) << (app.real_graphics ? "" : " (the wireframe while Real Graphics is off)") << "\n";
+            std::cout << "character drawing: " << hallway::character_drawing_name(app.character_drawing) << (app.real_graphics ? "" : " (the wireframe, as Wireframe is on)") << "\n";
         // The voxels' cell and faces (IDEAS 19.216, 19.215), said only where the lattice or joining is chosen
         // (so a readout of today's cubes is as it was) and voxels were drawn.
         if (voxel_choice_of(app).chosen() && !menu.voxels_line().empty()) std::cout << "voxels: " << menu.voxels_line() << "\n";
@@ -2003,11 +2037,11 @@ int run(const Args& a)
             return make_hallway(window, renderer, a, true, filters, app.angle_decimals);
         }();
         {
-            const bool glow = app.edge_glow || a.has("edge-glow"), real = app.real_graphics || a.has("real-graphics");
-            // --real-graphics brings Door Portals with it, as turning it on in the menu does. The
-            // saved setting is taken as it stands: a settings file that turns portals off with
-            // Real Graphics on means exactly that, since nothing may turn them off but you.
-            const bool portals = app.door_portals || a.has("real-graphics") || a.has("door-portals");
+            const bool glow = app.edge_glow || a.has("edge-glow"), real = models_drawn(app, a);
+            // --wireframe off (or --real-graphics) brings Door Portals with it, as turning Wireframe
+            // off in the menu does. The saved setting is taken as it stands: a settings file that turns
+            // portals off with Wireframe off means exactly that, since nothing may turn them off but you.
+            const bool portals = app.door_portals || wireframe_off_given(a) || a.has("door-portals");
             hall->set_graphics(glow && !real, real, portals);
             hall->set_model_files(a.get("text-model", app.text_model), a.get("picture-model", app.picture_model));
             hall->set_model_cache(a.has("model-cache") ? int(a.get_u32("model-cache", 64)) : app.model_cache_mb);
@@ -2049,7 +2083,7 @@ int run(const Args& a)
             }
             if (a.has("thin")) hall->set_thin(true); // (a walk to a long file in --press may have made it thin already)
             // On stderr: stdout is where the readout goes, which scripts read line by line.
-            std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", real graphics " << (real ? "on" : "off")
+            std::cerr << "graphics: edge glow " << (glow && !real ? "on" : "off") << ", wireframe " << (real ? "off" : "on")
                       << ", door portals " << (portals ? "on" : "off")
                       << ", fps counter " << (app.fps_counter || a.has("fps-counter") ? "on" : "off") << "\n";
         }
@@ -2182,9 +2216,14 @@ int run(const Args& a)
         hall->render();
         shoot();
         std::cout << "saved " << a.get("screenshot") << "\n";
+        // The keys along its foot, said once one of the hallway's keys is changed (IDEAS 19.199), so a check
+        // can see the footer name the key as set; with the defaults the readout is as it was.
+        if (Hallway::keys_changed()) std::cout << "keys footer: " << hall->keys_footer() << "\n";
         // How the characters standing in the hallway were drawn (IDEAS 19.214), said only where not shaded.
         if (const std::string t = hall->drawing_report(); !t.empty()) std::cout << "characters: " << t << "\n";
         if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
+        // The Media Player's footer (and its rings'), said once one of its keys is changed (IDEAS 19.199).
+        if (hallway::Keys::get().changed_in("media")) std::cout << "media footer: " << hallway::trk("media.keys") << "\nrings footer: " << hallway::trk("rings.footer") << "\n";
         if (const std::string t = hall->media_report(); !t.empty()) std::cout << "media: " << t << "\n"; // (only while the Media Player shows PERSONAL)
         if (a.has("action") || hall->has_actions()) std::cout << "action: " << hall->action_line() << "\n"; // (IDEAS 19.186)
         if (read_aloud() && !last_announced().empty()) std::cout << "read aloud: " << last_announced() << "\n";

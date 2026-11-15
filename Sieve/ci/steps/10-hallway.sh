@@ -414,8 +414,8 @@ $H --settings crt/c.ini --no-menu --action jump --screenshot crt-jump.png | tr -
 # One drawing of characters for every space (IDEAS 19.214): Settings > Graphics > Character Drawing is
 # the Creator's drawing row ([character] drawing), one step Left from shaded being voxels (since the
 # skin, its quads and its smooth drawing came after it, three Rights from shaded reach the smooth
-# drawing); the Creator, your dimension and the hallway then draw voxels, and say so; with Real Graphics
-# off, each says
+# drawing); the Creator, your dimension and the hallway then draw voxels, and say so; with Wireframe
+# on (the default), each says
 # it draws the wireframe; shaded (the default) says nothing, as before.
 rm -rf cdr
 mkdir -p cdr
@@ -423,9 +423,9 @@ touch cdr/g.ini
 $H --main-menu --settings cdr/g.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_drawing,Left" --screenshot cdr-graphics.png > /dev/null
 grep -c "^drawing = 2 " cdr/g.ini | q "^1$"
 $H --menu --real-graphics --settings cdr/g.ini --creator --screenshot cdr-creator.png | tr -d '\r' | q "^character drawing: voxels$"
-$H --menu --settings cdr/g.ini --creator --screenshot cdr-creator-off.png | tr -d '\r' | q "^character drawing: voxels (the wireframe while Real Graphics is off)$"
+$H --menu --settings cdr/g.ini --creator --screenshot cdr-creator-off.png | tr -d '\r' | q "^character drawing: voxels (the wireframe, as Wireframe is on)$"
 $H --personal-world --real-graphics --settings cdr/g.ini --pworld-look -10 --screenshot cdr-pworld.png | tr -d '\r' | q "^characters: drawn as voxels, [1-9][0-9]* triangles of cubes$"
-$H --personal-world --settings cdr/g.ini --pworld-look -10 --screenshot cdr-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; voxels chosen)$"
+$H --personal-world --settings cdr/g.ini --pworld-look -10 --screenshot cdr-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Wireframe is on; voxels chosen)$"
 $H --no-menu --real-graphics --settings cdr/g.ini --character-store pdim/characters --screenshot cdr-hall.png | tr -d '\r' | q "^characters: drawn as voxels, [1-9][0-9]* triangles of cubes$"
 $H --menu --real-graphics --creator --screenshot cdr-shaded.png | tr -d '\r' > cdr/shaded.txt
 test "$(grep -c "^character drawing:" cdr/shaded.txt || true)" = 0 # (grep -c counts 0 and fails: "|| true" keeps its 0 and the ERR trap quiet)
@@ -482,15 +482,15 @@ q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%)
 $H --menu --real-graphics --settings skn/s.ini --character c99.character --creator --screenshot skn-creator2.png > /dev/null
 cmp skn-creator.png skn-creator2.png
 $H --menu --real-graphics --settings skn/b.ini --character c99.character --creator --screenshot skn-union.png | tr -d '\r' | q "^skin: cell 20\.1 units (the voxels' halved 2 times), blend 0\.0 units (0%), "
-$H --menu --settings skn/off.ini --character c99.character --creator --screenshot skn-off.png | tr -d '\r' | q "^character drawing: skin (the wireframe while Real Graphics is off)$"
+$H --menu --settings skn/off.ini --character c99.character --creator --screenshot skn-off.png | tr -d '\r' | q "^character drawing: skin (the wireframe, as Wireframe is on)$"
 $H --personal-world --real-graphics --settings skn/s.ini --pworld-look -10 --screenshot skn-pworld.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin$"
-$H --personal-world --settings skn/off.ini --pworld-look -10 --screenshot skn-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; skin chosen)$"
+$H --personal-world --settings skn/off.ini --pworld-look -10 --screenshot skn-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Wireframe is on; skin chosen)$"
 $H --no-menu --real-graphics --settings skn/s.ini --character-store pdim/characters --screenshot skn-hall.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin$"
 # The skin's quads and its smooth drawing (IDEAS 19.214): two and three Rights from shaded on Settings >
 # Graphics > Character Drawing, drawings 5 and 6. The Creator says how many quads the skin is and how many
 # it drew, and for the smooth drawing how long its normals took to average across the faces; your
-# dimension and the hallway say how many quads, or triangles of smooth skin, they drew; with Real Graphics
-# off each draws the wireframe and says so; the same drawn twice is the same picture, byte for byte.
+# dimension and the hallway say how many quads, or triangles of smooth skin, they drew; with Wireframe
+# on each draws the wireframe and says so; the same drawn twice is the same picture, byte for byte.
 rm -rf sqd
 mkdir -p sqd
 touch sqd/q.ini
@@ -510,10 +510,10 @@ q "^character drawing: smooth$" sqd/smooth.txt
 q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, normals averaged in [0-9.]* ms$" sqd/smooth.txt
 $H --menu --real-graphics --settings sqd/m.ini --character c99.character --creator --screenshot sqd-smooth2.png > /dev/null
 cmp sqd-smooth.png sqd-smooth2.png
-$H --menu --settings sqd/off.ini --character c99.character --creator --screenshot sqd-off.png | tr -d '\r' | q "^character drawing: quads (the wireframe while Real Graphics is off)$"
+$H --menu --settings sqd/off.ini --character c99.character --creator --screenshot sqd-off.png | tr -d '\r' | q "^character drawing: quads (the wireframe, as Wireframe is on)$"
 $H --personal-world --real-graphics --settings sqd/q.ini --pworld-look -10 --screenshot sqd-pworld.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin$"
 $H --personal-world --real-graphics --settings sqd/m.ini --pworld-look -10 --screenshot sqd-pworld2.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin$"
-$H --personal-world --settings sqd/off.ini --pworld-look -10 --screenshot sqd-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Real Graphics is off; quads chosen)$"
+$H --personal-world --settings sqd/off.ini --pworld-look -10 --screenshot sqd-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Wireframe is on; quads chosen)$"
 $H --no-menu --real-graphics --settings sqd/q.ini --character-store pdim/characters --screenshot sqd-hall.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin$"
 $H --no-menu --real-graphics --settings sqd/m.ini --character-store pdim/characters --screenshot sqd-hall2.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin$"
 # Editing a character by its joints (IDEAS 19.203): in the Character Creator . chooses the next sphere,
@@ -624,7 +624,7 @@ kill $raidn_serve
 # Online off (the default) keeps it from answering, however it is set, and its Answering on row says
 # so, and why (since 14 November 2026, as sharing and checking say so); on, it answers.
 printf '[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\nserve = on\n' > raidn/offline.ini
-$H --main-menu --settings raidn/offline.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_listen" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134: not answering, as Online is off (Settings > Online)$"
+$H --main-menu --settings raidn/offline.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_listen" --screenshot raid-offline.png | tr -d '\r' | q "^read aloud: Answering on, 127.0.0.1:47134: not answering, as Online is off (Potentia Settings > Online)$"
 test ! -e raidn-held2
 printf '[online]\nenabled = on\n[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
 $H --main-menu --settings raidn/serve.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_serve,Return,Item:raid_listen" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
@@ -1439,6 +1439,13 @@ $H --main-menu --press "Item:cipher" --screenshot main-cipher.png | q "saved mai
 # no voice here. The main menu's item, the setup menu's row with its section and value, a filter
 # with its tick said as on or off, and the File Locator's box as pressed.
 $H --main-menu --read-aloud --press Down --screenshot ra-main.png | tr -d '\r' | q "^read aloud: File Locator$"
+# The main menu by size, Start Sieve to Exit Sieve (IDEAS 19.188): Personal Dimensions sixth, the
+# Character Creator and Replays after it, and Potentia Settings (Settings until then, its id still
+# settings) the row above Exit. Rows counted here on purpose, so a move of these rows is seen.
+$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down" --screenshot ra-main-order.png | tr -d '\r' | q "^read aloud: Personal Dimensions$"
+$H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down" --screenshot ra-main-order2.png | tr -d '\r' | q "^read aloud: Encryption Engine$"
+$H --main-menu --read-aloud --press "Up,Up" --screenshot ra-main-order3.png | tr -d '\r' | q "^read aloud: Potentia Settings$"
+$H --main-menu --read-aloud --press "Item:settings" --screenshot ra-main-settings.png | tr -d '\r' | q "^read aloud: Potentia Settings$"
 $H --menu --read-aloud --press "Down,Down,Down" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
 $H --menu --read-aloud --press "F,Down,Down" --screenshot ra-filters.png | tr -d '\r' | q -E "^read aloud: max-run-v1, (On|Off), Filtered: "
 $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --screenshot ra-locator.png | tr -d '\r' | q "^read aloud: Optimise Search, Off$"
@@ -1750,6 +1757,61 @@ $H --main-menu --settings kb/s.ini --read-aloud --press "Item:settings,Return,It
 $H --main-menu --settings kb/s.ini --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return,F" --screenshot keys2.png > /dev/null
 grep -c "^personal.holding/pick_up = F " kb/s.ini | q "^1$"
 $H --personal-world --settings kb/s.ini --pworld-look -45 --press "Tab,Return,Tab,f" --screenshot pworld-f.png | tr -d '\r' | q "pages held at "
+# The hallway's own keys on the registry too (IDEAS 19.199), in sections after the Creator's so no row
+# before them moves: walk forward is the first of them on Settings > Controls > Keys; one changed there
+# (jump 1000 tiles on, to J) is kept under [keys] and used, PageUp then jumping no more; and the footer
+# names the key as set (the readout says it only once a hallway key is changed). A key pressed with a
+# modifier more than its chord asks is still that key unless another key asks it (Shift and - zooms out
+# eight steps, not one).
+rm -rf hk
+mkdir hk
+touch hk/s.ini
+$H --main-menu --settings hk/s.ini --read-aloud --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:66" --screenshot hk-row.png | tr -d '\r' | q "^read aloud: The hallway: walking: walk forward, W / Up$"
+$H --main-menu --settings hk/s.ini --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:83,Return,J" --screenshot hk-set.png > /dev/null
+grep -c "^hallway.anywhere/thousand_on = J " hk/s.ini | q "^1$"
+$H --no-menu --settings hk/s.ini --press "J" --screenshot hk-j.png | tr -d '\r' > hk/j.txt
+q "| jumped 1000 tiles (128000 books)$" hk/j.txt
+q "^keys footer: WASD move .* wheel/J/\[ \] jump " hk/j.txt
+$H --no-menu --settings hk/s.ini --press "PageUp" --screenshot hk-pgup.png | tr -d '\r' > hk/pgup.txt
+test "$(grep -c "jumped 1000 tiles" hk/pgup.txt || true)" = 0
+$H --no-menu --press "PageUp" --screenshot hk-default.png | tr -d '\r' > hk/default.txt
+q "| jumped 1000 tiles (128000 books)$" hk/default.txt
+test "$(grep -c "^keys footer:" hk/default.txt || true)" = 0
+$H --warp "$W" --press "M,M,Shift+-" --screenshot hk-far.png | q "PAGES line, guided zoom 50, "
+# The other systems' keys on the registry too (IDEAS 19.199): the menus' (one shared section every list
+# reads), the setup menu's, the Media Player's and its rings', the main menu's, the Encryption Engine's and
+# the CHAIN tab's, in sections after the hallway's so no row before them moves (the menus' row up is the
+# first of them). With the defaults no two keys read together clash and nothing more is said; one changed
+# is used, its old key no longer, and the footer names it as set.
+rm -rf mk
+mkdir mk
+touch mk/s.ini
+$H --main-menu --settings mk/s.ini --read-aloud --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:114" --screenshot mk-row.png | tr -d '\r' > mk/row.txt
+q "^read aloud: The menus: any list: the row above, Up$" mk/row.txt
+test "$(grep -c "^key clash:" mk/row.txt || true)" = 0
+$H --main-menu --settings mk/s.ini --press "Item:settings,Return,Item:controls,Return,Item:keys,Return,Item:keyrow:115,Return,J" --screenshot mk-set.png > /dev/null
+grep -c "^menus/down = J " mk/s.ini | q "^1$"
+$H --menu --settings mk/s.ini --press "J,J,J,Down" --screenshot mk-menu.png | tr -d '\r' > mk/menu.txt
+q "^setup row: 3$" mk/menu.txt
+q "^setup footer: Up/J choose " mk/menu.txt
+$H --menu --settings mk/d.ini --filters mk/d-filters.ini --press "Down,Down" --screenshot mk-default.png | tr -d '\r' > mk/default.txt
+test "$(grep -c "^setup footer:" mk/default.txt || true)" = 0
+printf '[keys]\nmenus/down = A\n' > mk/clash.ini
+$H --main-menu --settings mk/clash.ini --screenshot mk-clash.png | tr -d '\r' | q "^key clash: A for menus/down and setup/alphabets$"
+printf '[keys]\nsetup/details = Q\nmedia/rings = J\nmedia/go_to = K\nmenus/next = J\nchain/add = J\nmain/back = J\n' > mk/k.ini
+$H --menu --settings mk/k.ini --press "Q" --screenshot mk-details.png | tr -d '\r' | q "^details: "
+$H --menu --settings mk/k.ini --press "I" --screenshot mk-details2.png | tr -d '\r' > mk/i.txt
+test "$(grep -c "^details:" mk/i.txt || true)" = 0
+$H --no-menu --media-player --settings mk/k.ini --press "Escape,Item:media,Return,j" --screenshot mk-rings.png | tr -d '\r' > mk/rings.txt
+q "^rings: zoom 0;" mk/rings.txt
+q "^media footer: .*   K go to   " mk/rings.txt
+$H --no-menu --media-player --settings mk/k.ini --press "Escape,Item:media,Return,r" --screenshot mk-rings2.png | tr -d '\r' > mk/r.txt
+test "$(grep -c "^rings:" mk/r.txt || true)" = 0
+$H --cipher --settings mk/k.ini --script "J" --screenshot mk-cipher.png | tr -d '\r' | q "^output: 61747461636b206174206461776e$"
+$H --main-menu --settings mk/k.ini --read-aloud --press "Item:settings,Return,J" --screenshot mk-main.png | tr -d '\r' | q "^read aloud: Potentia Settings$"
+$H --no-menu --settings mk/k.ini --line ai --walk "0,0" --take --chain --chain-press "Down,J,Right" --chain-save mk/j.chain --training-dir data/training --screenshot mk-chain.png > /dev/null
+$H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,N,Right" --chain-save mk/n.chain --training-dir data/training --screenshot mk-chain2.png > /dev/null
+cmp mk/j.chain mk/n.chain
 # Holding (IDEAS 19.192): E picks up what the crosshair is on, R and T turn it, Return places it where
 # it is held (here a little above the grass, tipped), and the world is written as v2 for it; Q drops one,
 # which falls and comes to rest on the grass; both read back. A v2 line this build does not know is
@@ -2011,33 +2073,55 @@ done
 $H --menu --screenshot menu5.png | q "saved menu5.png"
 # The main menu, its settings screens and a language file with gaps (English fills them).
 $H --main-menu --screenshot main.png | q "saved main.png"
-$H --line image --edge-glow --walk "0,0" --screenshot glow.png 2>&1 | q "graphics: edge glow on, real graphics off"
-# Real Graphics: a line loads its own item model where there is one (data/meshes/book-audio.obj
+$H --line image --edge-glow --walk "0,0" --screenshot glow.png 2>&1 | q "graphics: edge glow on, wireframe on"
+# Wireframe off (--real-graphics, its older name): a line loads its own item model where there is one (data/meshes/book-audio.obj
 # here) and the templates for the rest.
 out=$($H --line audio --real-graphics --walk "0,0" --screenshot real.png 2>&1)
-echo "$out" | q "real graphics for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book-audio.obj marker=marker.obj"
+echo "$out" | q "models for the audio line: hallway=hallway.obj bookshelf=bookshelf.obj book=book-audio.obj marker=marker.obj"
 # Tracks and movies have models of their own (begun as copies of audio's and video's).
 for l in tracks movies; do
-  $H --line $l --real-graphics --walk "0,0" --screenshot real-$l.png 2>&1 | q "real graphics for the $l line: .* book=book-$l.obj"
+  $H --line $l --real-graphics --walk "0,0" --screenshot real-$l.png 2>&1 | q "models for the $l line: .* book=book-$l.obj"
 done
 out=$($H --real-graphics --fps-counter --bench 5 --walk "0,0" --screenshot fps.png 2>&1)
 echo "$out" | q "^bench: 5 frames"
-echo "$out" | q "graphics: edge glow off, real graphics on, door portals on, fps counter on"
-# Door Portals: Real Graphics brings them, and they also stand alone with the wireframe.
+echo "$out" | q "graphics: edge glow off, wireframe off, door portals on, fps counter on"
+# Door Portals: Wireframe off brings them, and they also stand alone with the wireframe.
 $H --line image --door-portals --walk "0,0" --screenshot portal.png 2>&1 | q "door portals on"
 $H --line image --edge-glow --walk "0,0" --screenshot noportal.png 2>&1 | q "door portals off"
 test -s portal.png
 test -s noportal.png
 $H --main-menu --press "Item:settings,Return,Return,Return" --screenshot main-res.png | q "saved"
-# Settings, Graphics, then VSync off, Geometry Edge Glow on, Real Graphics on — which
-# turns the glow back off, the two being mutually exclusive. From a settings file that
-# does not exist yet, so the toggles start from their defaults whatever ran before.
+# Settings, Graphics, then VSync off, Geometry Edge Glow on, Wireframe off — which
+# turns the glow back off, the glow being drawn on the wireframe only. From a settings file
+# that does not exist yet, so the toggles start from their defaults whatever ran before.
+# Item:real_graphics, the row's name before (IDEAS 19.223), still reaches the Wireframe row.
 rm -f app.ini
 $H --main-menu --settings app.ini --press "Item:settings,Return,Return,Item:vsync,Return,Item:edge_glow,Return,Item:real_graphics,Return" --screenshot main-gfx.png > /dev/null
 grep -q "^vsync = off" app.ini
 grep -q "^edge_glow = off" app.ini
-grep -q "^real_graphics = on" app.ini
-grep -q "^door_portals = on" app.ini   # Real Graphics brings Door Portals with it
+grep -q "^wireframe = off" app.ini
+test "$(grep -c '^real_graphics' app.ini || true)" = 0
+grep -q "^door_portals = on" app.ini   # Wireframe off brings Door Portals with it
+# Wireframe (IDEAS 19.223): on by default; the row by its own name turns it off, and the glow
+# turned on after it turns it back on. A settings file with the old real_graphics is read the
+# other way round, and --wireframe on|off wins over the file for the run, --real-graphics being
+# --wireframe off.
+$H --write-settings wf-default.ini | q "wrote"
+grep -q "^wireframe = on " wf-default.ini
+rm -f wf.ini
+$H --main-menu --settings wf.ini --press "Item:settings,Return,Item:graphics,Return,Item:wireframe,Return" --screenshot main-wf.png > /dev/null
+grep -q "^wireframe = off " wf.ini
+$H --main-menu --settings wf.ini --press "Item:settings,Return,Item:graphics,Return,Item:edge_glow,Return" --screenshot main-wf2.png > /dev/null
+grep -q "^wireframe = on " wf.ini
+grep -q "^edge_glow = on " wf.ini
+printf '[graphics]\nreal_graphics = on\n' > wf-old.ini
+$H --settings wf-old.ini --write-settings wf-new.ini | q "wrote"
+grep -q "^wireframe = off " wf-new.ini
+$H --line audio --settings wf-old.ini --walk "0,0" --screenshot wf-old.png 2>&1 | q "graphics: edge glow off, wireframe off, door portals off"
+$H --line audio --settings wf-old.ini --wireframe on --walk "0,0" --screenshot wf-on.png 2>&1 | q "graphics: edge glow off, wireframe on, door portals off"
+$H --line audio --wireframe off --walk "0,0" --screenshot wf-off.png 2>&1 | q "graphics: edge glow off, wireframe off, door portals on"
+if $H --wireframe maybe --screenshot wf-bad.png > wf-bad.txt 2>&1; then exit 1; fi
+q "^error: --wireframe expects on or off$" wf-bad.txt
 # View Distance and Picture Distance, the two rows after the FPS counter, save.
 rm -f vr.ini
 $H --main-menu --settings vr.ini --press "Item:settings,Return,Return,Item:view_rooms,Right,Item:picture_rooms,Right,Right" --screenshot main-view.png > /dev/null
@@ -2159,6 +2243,90 @@ build/sieve check --length 26 --filters pat.ini --model none "abcdefghijklmnopqr
 build/sieve check --length 26 --filters pat.ini --model none "it was the best of times it" | q "stack: passes"
 printf "[binary]\nmode = compact\nfilters = not-an-item-v1\n[binary.not-an-item-v1]\nitems = all\n" > nia.ini
 $H --no-menu --line binary --filters nia.ini --walk "0,0" --screenshot nia.png | q "^BINARY line, positional, filters: 1 hide (compact: not-an-item-v1 judges models file by file"
+# Every footer of keys wraps upwards through the one footer (IDEAS 19.224, client/footer.hpp): at an
+# 800 by 600 window --footers says each footer drawn ("footer NAME: N lines, widest W of window X (room
+# R)"), and no line of any of them is wider than its room, nor its room than its window, on every screen
+# --press reaches. fits FILE: there is at least one footer, and every one fits.
+fits() { tr -d '\r' < "$1" | awk '/^footer / { n++; sub(/\)$/, "", $11); if ($6 + 0 > $11 + 0 || $11 + 0 > $9 + 0) bad++ } END { exit (n == 0 || bad > 0) }'; }
+$H --size 800x600 --no-menu --footers --screenshot fw-hallway.png > fw-hallway.txt
+fits fw-hallway.txt
+q "^footer hallway: 2 lines, widest [0-9]* of window 800 (room 776)$" fw-hallway.txt
+$H --size 800x600 --no-menu --footers --press "E" --screenshot fw-hand.png > fw-hand.txt
+fits fw-hand.txt
+q "^footer hand: 2 lines, " fw-hand.txt
+$H --size 800x600 --no-menu --footers --press "E,Z" --screenshot fw-viewer.png > fw-viewer.txt
+fits fw-viewer.txt
+q "^footer viewer: 2 lines, " fw-viewer.txt
+$H --size 800x600 --no-menu --footers --line binary --walk "0,0" --take --route-places 640 --screenshot fw-cost.png > fw-cost.txt
+fits fw-cost.txt
+q "^footer cost: 2 lines, " fw-cost.txt
+$H --size 800x600 --no-menu --footers --line ai --walk "0,0" --take --chat --training-dir data/training --screenshot fw-chat.png > fw-chat.txt
+fits fw-chat.txt
+q "^footer chat: " fw-chat.txt
+$H --size 800x600 --no-menu --footers --line ai --walk "0,0" --take --chain --training-dir data/training --screenshot fw-chain.png > fw-chain.txt
+fits fw-chain.txt
+q "^footer chain: " fw-chain.txt
+$H --size 800x600 --no-menu --footers --press "Escape" --screenshot fw-pause.png > fw-pause.txt
+fits fw-pause.txt
+q "^footer pause: 1 line, " fw-pause.txt
+$H --size 800x600 --no-menu --footers --press "X" --screenshot fw-nav.png > fw-nav.txt
+fits fw-nav.txt
+q "^footer navigator: [3-9] lines, " fw-nav.txt
+$H --size 800x600 --no-menu --footers --map tests/manifest_fixture --graph --screenshot fw-graph.png > fw-graph.txt
+fits fw-graph.txt
+q "^footer graph: 2 lines, " fw-graph.txt
+$H --size 800x600 --main-menu --footers --screenshot fw-menu.png > fw-menu.txt
+fits fw-menu.txt
+q "^footer menu: 1 line, " fw-menu.txt
+$H --size 800x600 --main-menu --footers --press "Item:settings,Return" --screenshot fw-settings.png > fw-settings.txt
+fits fw-settings.txt
+q "^footer menu: " fw-settings.txt
+$H --size 800x600 --menu --footers --screenshot fw-setup.png > fw-setup.txt
+fits fw-setup.txt
+q "^footer setup: 2 lines, " fw-setup.txt
+$H --size 800x600 --menu --footers --press "\`" --screenshot fw-character.png > fw-character.txt
+fits fw-character.txt
+q "^footer character: 2 lines, " fw-character.txt
+$H --size 800x600 --menu --footers --creator --screenshot fw-creator.png > fw-creator.txt
+fits fw-creator.txt
+q "^footer creator: " fw-creator.txt
+$H --size 800x600 --menu --footers --system-viewer information --screenshot fw-sysviewer.png > fw-sysviewer.txt
+fits fw-sysviewer.txt
+q "^footer system_viewer: " fw-sysviewer.txt
+$H --size 800x600 --no-menu --footers --media-player --press "Escape,Item:media,Return" --screenshot fw-media.png > fw-media.txt
+fits fw-media.txt
+q "^footer media: 2 lines, " fw-media.txt
+$H --size 800x600 --no-menu --footers --rings 48,60,64,67,72 --screenshot fw-rings.png > fw-rings.txt
+fits fw-rings.txt
+q "^footer rings: " fw-rings.txt
+$H --size 800x600 --no-menu --footers --locate tests/manifest_fixture --screenshot fw-locator.png > fw-locator.txt
+fits fw-locator.txt
+q "^footer locator: [2-9] lines, " fw-locator.txt
+$H --size 800x600 --footers --harness --training-dir data/training --screenshot fw-harness.png > fw-harness.txt
+fits fw-harness.txt
+q "^footer harness: " fw-harness.txt
+$H --size 800x600 --footers --designer --screenshot fw-designer.png > fw-designer.txt
+fits fw-designer.txt
+q "^footer designer: " fw-designer.txt
+$H --size 800x600 --footers --cipher --screenshot fw-cipher.png > fw-cipher.txt
+fits fw-cipher.txt
+q "^footer cipher: " fw-cipher.txt
+$H --size 800x600 --footers --manual-example --manual-seed 7 --screenshot fw-mnav.png > fw-mnav.txt
+fits fw-mnav.txt
+q "^footer manual_nav: " fw-mnav.txt
+$H --size 800x600 --footers --personal-world --screenshot fw-personal.png > fw-personal.txt
+fits fw-personal.txt
+q "^footer personal: [2-9] lines, " fw-personal.txt
+$H --size 800x600 --footers --personal-world --press "Escape" --screenshot fw-ppause.png > fw-ppause.txt
+fits fw-ppause.txt
+q "^footer pause.personal: " fw-ppause.txt
+# ...and without --footers the readout says none, as it always read.
+$H --size 800x600 --personal-world --screenshot fw-quiet.png > fw-quiet.txt
+test "$(grep -c '^footer ' fw-quiet.txt || true)" = 0
+# At 1280 by 720 your dimension's footer, wider than the window, takes two lines; the main menu's,
+# which fits, stays on its one as written.
+$H --footers --personal-world --screenshot fw-personal-wide.png | tr -d '\r' | q "^footer personal: 2 lines, widest [0-9]* of window 1280 (room 1240)$"
+$H --footers --main-menu --screenshot fw-menu-wide.png | tr -d '\r' | q "^footer menu: 1 line, widest [0-9]* of window 1280 (room 1240)$"
 test -s compact.png
 test -s mixed.png
 test -s mark.png

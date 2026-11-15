@@ -4,6 +4,8 @@
 
 #include "dialogs.hpp"
 #include "font.hpp"
+#include "footer.hpp"
+#include "keys.hpp"
 #include "music.hpp"
 #include "strings.hpp"
 
@@ -281,41 +283,47 @@ void CipherScreen::handle(const SDL_Event& event)
         for (int i = 0; i < int(row_rects_.size()); ++i)
             if (inside(row_rects_[size_t(i)], e.button.x, e.button.y))
             {
-                if (row_ == i && (i == kInputKind || i == kAction)) key(e.button.button == SDL_BUTTON_LEFT ? SDLK_RIGHT : SDLK_LEFT, SDL_KMOD_NONE);
+                if (row_ == i && (i == kInputKind || i == kAction)) change(e.button.button == SDL_BUTTON_LEFT ? 1 : -1);
                 row_ = i;
             }
     }
 }
 
+void CipherScreen::change(int dir)
+{
+    if (row_ == kInputKind)
+    {
+        // From a file's bytes back to what was typed; otherwise text and hex in turn.
+        if (in_bytes_)
+        {
+            in_bytes_.reset();
+            in_name_.clear();
+        }
+        else input_hex_ = !input_hex_;
+    }
+    else if (row_ == kAction) action_ = Action((int(action_) + 4 + dir) % 4);
+    else return;
+    run_recipe();
+}
+
+// Its keys as set (Settings > Controls > Keys: "The menus" and "The Encryption Engine"), asked which one a
+// press is with any modifier held too, as the keys always were (Ctrl+Backspace clears the row).
 void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
 {
+    namespace mk = menu_keys;
+    namespace ck = cipher_keys;
     const bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
-    if (k == SDLK_ESCAPE)
+    const std::string a = Keys::get().which({mk::kBack, mk::kUp, mk::kDown, mk::kLeft, mk::kRight, mk::kChoose, mk::kNext, ck::kErase, ck::kItem, ck::kFile, ck::kSave, ck::kGo, ck::kPaste, ck::kCopy}, k, mod);
+    if (a == mk::kBack)
     {
         done_ = true;
         result_ = Result::Back;
     }
-    else if (k == SDLK_UP) row_ = (row_ + kRows - 1) % kRows;
-    else if (k == SDLK_DOWN) row_ = (row_ + 1) % kRows;
-    else if (k == SDLK_LEFT || k == SDLK_RIGHT)
-    {
-        const int dir = k == SDLK_RIGHT ? 1 : -1;
-        if (row_ == kInputKind)
-        {
-            // From a file's bytes back to what was typed; otherwise text and hex in turn.
-            if (in_bytes_)
-            {
-                in_bytes_.reset();
-                in_name_.clear();
-            }
-            else input_hex_ = !input_hex_;
-        }
-        else if (row_ == kAction) action_ = Action((int(action_) + 4 + dir) % 4);
-        else return;
-        run_recipe();
-    }
-    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) run_recipe();
-    else if (k == SDLK_TAB)
+    else if (a == mk::kUp) row_ = (row_ + kRows - 1) % kRows;
+    else if (a == mk::kDown) row_ = (row_ + 1) % kRows;
+    else if (a == mk::kLeft || a == mk::kRight) change(a == mk::kRight ? 1 : -1);
+    else if (a == mk::kChoose) run_recipe();
+    else if (a == mk::kNext)
     {
         // The output in as the input, in hex: decrypt what was encrypted, or go another round.
         if (!have_out_) return;
@@ -336,7 +344,7 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
         else if (action_ == Action::Decrypt) action_ = Action::Encrypt;
         run_recipe();
     }
-    else if (k == SDLK_BACKSPACE)
+    else if (a == ck::kErase)
     {
         if (row_ == kInput && in_bytes_)
         {
@@ -349,11 +357,11 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
             else pop_char(*t);
         }
     }
-    else if (ctrl && k == SDLK_I) button(kItemButton);
-    else if (ctrl && k == SDLK_O) button(kFileButton);
-    else if (ctrl && k == SDLK_S) button(kSaveButton);
-    else if (ctrl && k == SDLK_G) button(kGoButton);
-    else if (ctrl && k == SDLK_V)
+    else if (a == ck::kItem) button(kItemButton);
+    else if (a == ck::kFile) button(kFileButton);
+    else if (a == ck::kSave) button(kSaveButton);
+    else if (a == ck::kGo) button(kGoButton);
+    else if (a == ck::kPaste)
     {
         if (row_ == kInput) typed_input();
         if (std::string* t = text_row())
@@ -363,7 +371,7 @@ void CipherScreen::key(SDL_Keycode k, SDL_Keymod mod)
                 SDL_free(clip);
             }
     }
-    else if (ctrl && k == SDLK_C)
+    else if (a == ck::kCopy)
     {
         if (have_out_) SDL_SetClipboardText(hex_of(out_).c_str());
     }
@@ -466,6 +474,10 @@ void CipherScreen::render()
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
 
     const float x = 24, label_w = 150;
+    // The keys at the foot, through the one footer (footer.hpp): the status and the hex above them,
+    // however many lines they wrap onto.
+    const std::vector<FooterLine> keys{{trk("cipher.footer"), kGrey}, {trk("cipher.footer2"), kDim}};
+    const float keys_up = footer_extra(keys, W - 2 * x, 16);
     const size_t cells = size_t(std::max(20.0f, (W - x - label_w - 24) / 8));
     txt(r_, x, 16, tr("cipher.title"), kWhite, 2.5f);
     txt(r_, x, 44, tr("cipher.subtitle"), kGrey);
@@ -509,7 +521,7 @@ void CipherScreen::render()
         float bx = x;
         for (int b = 0; b < kButtons; ++b)
         {
-            const std::string label = tr(names[b]);
+            const std::string label = trk(names[b]); // (its key as set)
             const SDL_FRect r{bx, y, text_width(label, 1) + 20, 20};
             button_rects_[size_t(b)] = r;
             const SDL_Color c = on[b] ? kAccent : kDim;
@@ -537,7 +549,7 @@ void CipherScreen::render()
         txt(r_, x, y, tr("cipher.hex"), kGrey);
         // As many lines of hex as fit above the footer; the rest is marked, and Ctrl+C copies all.
         const auto hex_lines = wrap(hex_of(out_), cells);
-        const size_t room = size_t(std::max(1.0f, (H - 120 - y) / kLine));
+        const size_t room = size_t(std::max(1.0f, (H - 120 - keys_up - y) / kLine));
         for (size_t l = 0; l < hex_lines.size() && l < room; ++l)
             txt(r_, x + label_w, y + kLine * float(l), hex_lines[l] + (l + 1 == room && hex_lines.size() > room ? " .." : ""), kWhite);
         y += kLine * float(std::min(room, hex_lines.size())) + 4;
@@ -551,9 +563,8 @@ void CipherScreen::render()
     }
 
     const bool bad = !have_out_ && action_ != Action::Break && action_ != Action::Catalogue;
-    txt(r_, x, H - 58, fit_cells(status_, size_t((W - 2 * x) / 8)), bad ? kBad : kGood);
-    txt(r_, x, H - 40, tr("cipher.footer"), kGrey);
-    txt(r_, x, H - 24, tr("cipher.footer2"), kDim);
+    txt(r_, x, H - 58 - keys_up, fit_cells(status_, size_t((W - 2 * x) / 8)), bad ? kBad : kGood);
+    draw_footer(r_, "cipher", x, H - 24, W - 2 * x, keys, 16);
 }
 
 } // namespace hallway

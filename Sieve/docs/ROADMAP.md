@@ -68,7 +68,8 @@ or otherwise) and is never the one place anything must go through, nor the keepe
 **Final tasks (to do near the end, each as one change):** the main menu reordered from Start Sieve to
 Exit Sieve, Settings renamed Potentia Settings, the Character Creator and Replays placed in it, and the
 CI steps made to choose rows by name first so that ordering stops being baked into them (Edward, 13
-November 2026; IDEAS §19.188).
+November 2026; IDEAS §19.188). *Built 14 November 2026:* the rows choose by name, the menu is in that
+order with the Creator and Replays after Personal Dimensions, and the row is Potentia Settings.
 
 **Waiting on Edward:** who runs the RAID's first known nodes, and the step from IP addresses to verified
 identity (§19.178, §19.179); which open registries the catalogue takes in, each licence checked

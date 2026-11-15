@@ -6,6 +6,7 @@
 #include "sieve/format_stats.hpp"
 
 #include "font.hpp"
+#include "footer.hpp"
 #include "music.hpp"
 #include "strings.hpp"
 
@@ -1667,23 +1668,16 @@ void Harness::render()
         button_rects_.push_back({br, a});
         bx += bw + 10;
     }
-    txt(r_, 16, H - 46, status_.substr(0, size_t((W - 32) / 8)), status_bad_ ? kBad : kWhite);
     {
-        // The keys: on two lines where one is wider than the window (the runs' list of keys is
-        // about 150 characters, and the window may be 1,024 pixels), broken between two keys.
+        // The keys, through the one footer (footer.hpp), broken only between two keys where they are
+        // wider than the window (the runs' list of keys is about 150 characters, and the window may be
+        // 1,024 pixels): on one line at H - 26, or on two closer together and lower, below the status
+        // line at H - 46, which moves up for any line past two.
         const std::string keys = tr(training() ? (djob_.valid() ? "harness.footer.training.pictures" : "harness.footer.training") : prompting_ ? "harness.footer.prompt"
                                     : curriculum_ ? "harness.footer.curriculum" : pic_recipe_ ? "harness.footer.pictures" : "harness.footer");
-        const size_t fits = size_t(std::max(1.0f, (W - 32) / 8));
-        size_t cut = std::string::npos;
-        if (keys.size() > fits)
-            for (size_t at = keys.find("   "); at != std::string::npos && at <= fits; at = keys.find("   ", at + 3)) cut = at;
-        if (cut == std::string::npos) txt(r_, 16, H - 26, keys, kGrey);
-        else
-        {
-            // (below the status line, at H - 46: the two lines closer together, and lower)
-            txt(r_, 16, H - 31, keys.substr(0, cut), kGrey);
-            txt(r_, 16, H - 18, keys.substr(keys.find_first_not_of(' ', cut)), kGrey);
-        }
+        const size_t rows = footer_rows({{keys, kGrey}}, W - 32).size();
+        txt(r_, 16, H - 46 - 13.0f * float(rows > 2 ? rows - 2 : 0), status_.substr(0, size_t((W - 32) / 8)), status_bad_ ? kBad : kWhite);
+        draw_footer(r_, "harness", 16, rows > 1 ? H - 18 : H - 26, W - 32, keys, kGrey, 13);
     }
 }
 

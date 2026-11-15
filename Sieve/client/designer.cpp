@@ -9,6 +9,7 @@
 #include "designer.hpp"
 
 #include "font.hpp"
+#include "footer.hpp"
 #include "music.hpp"
 #include "synth.hpp"
 #include "strings.hpp"
@@ -1089,15 +1090,19 @@ void Designer::render()
     txt(r_, 16, 12, tr("designer.title"), kWhite, 2.5f);
     const std::string file = doc_.file_name() + (dirty_ ? "  " + tr("designer.unsaved_mark") : "");
     txt(r_, 16, 38, file, dirty_ ? kAccent : kGrey);
-    const float top = 56, bottom = H - 54, left_w = 260, right_w = 360;
+    // The keys at the foot, through the one footer (footer.hpp): the status and the panes above them,
+    // however many lines they wrap onto.
+    std::vector<FooterLine> keys{{tr(editor_open_ ? "designer.footer.editor" : "designer.footer"), kGrey}};
+    if (!editor_open_) keys.push_back({tr("designer.footer2"), kGrey});
+    const float keys_up = footer_extra(keys, W - 32, 14);
+    const float top = 56, bottom = H - 54 - keys_up, left_w = 260, right_w = 360;
     canvas_ = {left_w + 12, top, W - left_w - right_w - 24, bottom - top};
     build();
     draw_list(8, top, left_w, bottom - top);
     draw_canvas(canvas_.x, canvas_.y, canvas_.w, canvas_.h);
     draw_test(W - right_w - 4, top, right_w, bottom - top);
-    txt(r_, 16, H - 46, status_.substr(0, size_t((W - 32) / 8)), status_.find("not ") == 0 ? kBad : kWhite);
-    txt(r_, 16, H - 30, tr(editor_open_ ? "designer.footer.editor" : "designer.footer"), kGrey);
-    if (!editor_open_) txt(r_, 16, H - 16, tr("designer.footer2"), kGrey);
+    txt(r_, 16, H - 46 - keys_up, status_.substr(0, size_t((W - 32) / 8)), status_.find("not ") == 0 ? kBad : kWhite);
+    draw_footer(r_, "designer", 16, editor_open_ ? H - 30 : H - 16, W - 32, keys, 14);
     if (editor_open_) draw_editor(W, H);
     draw_popup(W, H);
 }
@@ -1195,7 +1200,7 @@ void Designer::draw_list(float x, float y, float w, float h)
             d = d.substr(std::min(d.size(), cut + 1));
             dy += kRow;
         }
-        txt(r_, x + 8, y + h - 28, tr(f->plugin_sha256.empty() ? "designer.list.keys.builtin" : "designer.list.keys.custom"), kDim);
+        draw_footer(r_, "designer.list", x + 8, y + h - 28, w - 16, tr(f->plugin_sha256.empty() ? "designer.list.keys.builtin" : "designer.list.keys.custom"), kDim);
     }
 }
 

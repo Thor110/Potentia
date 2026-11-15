@@ -1,4 +1,4 @@
-// Sieve hallway — Real Graphics: the models that replace the wireframe when the option is on.
+// Sieve hallway — the models that replace the wireframe when Wireframe is off.
 //
 // Four models, one set per line (see data/meshes/templates/README.md):
 //   hallway    one 8 m tile of corridor, doors included

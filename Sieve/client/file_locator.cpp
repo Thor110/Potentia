@@ -6,6 +6,7 @@
 
 #include "dialogs.hpp"
 #include "font.hpp"
+#include "footer.hpp"
 #include "strings.hpp"
 
 #include "cli/compare.hpp"
@@ -1895,7 +1896,11 @@ void FileLocator::draw(float W, float H)
         }
         else if (r.tailored_filters) button("use_filters", tr("loc.use_filters"), y + 40);
     }
-    if (!status.empty()) draw_text(r_, 20, H - 58, fit_text(status, W - 40, 1), 1, busy ? white : ink);
+    // The keys at the foot, through the one footer (footer.hpp): wrapped, not cut, and the lines of the
+    // work above them moved up by however many lines they take.
+    const std::string keys = tr(in_world() ? "loc.keys" : "loc.keys.menu");
+    const float keys_up = footer_extra({{keys, grey}}, W - 40, 12);
+    if (!status.empty()) draw_text(r_, 20, H - 58 - keys_up, fit_text(status, W - 40, 1), 1, busy ? white : ink);
     if (busy)
     {
         // The job's estimate, and how long it has run.
@@ -1908,16 +1913,16 @@ void FileLocator::draw(float W, float H)
                 est = e.empty() ? trf("loc.elapsed", {duration_text(since(job_started_))}) : trf("loc.estimate.so_far", {e, duration_text(since(job_started_))});
             }
         }
-        if (!est.empty()) draw_text(r_, 20, H - 42, fit_text(est, W - 40, 1), 1, grey);
+        if (!est.empty()) draw_text(r_, 20, H - 42 - keys_up, fit_text(est, W - 40, 1), 1, grey);
         // What it is doing now, and the best found so far.
         std::string now;
         {
             std::lock_guard<std::mutex> lock(mx_);
             now = progress_;
         }
-        if (!now.empty()) draw_text(r_, 20, H - 74, fit_text(now, W - 40, 1), 1, ink);
+        if (!now.empty()) draw_text(r_, 20, H - 74 - keys_up, fit_text(now, W - 40, 1), 1, ink);
     }
-    draw_text(r_, 20, H - 26, fit_text(tr(in_world() ? "loc.keys" : "loc.keys.menu"), W - 40, 1), 1, grey);
+    draw_footer(r_, "locator", 20, H - 26, W - 40, keys, grey);
     if (asking_folder_) draw_folder_prompt(W, H, ink, grey);
     // Read aloud: a button (above), or else the status line when it changes. While a job runs only
     // its first status is read, so an install's file-by-file lines do not talk over each other; its
@@ -2000,7 +2005,7 @@ void FileLocator::folder_event(const SDL_Event& e)
 void FileLocator::draw_folder_prompt(float W, float H, SDL_Color ink, SDL_Color grey)
 {
     const FolderAsk& a = *asking_folder_;
-    const float w = std::min(W - 40, 760.0f), h = 132, x = (W - w) / 2, y = (H - h) / 2;
+    const float w = std::min(W - 40, 760.0f), keys_up = footer_extra({{tr("loc.offer.keys"), grey}}, w - 32, 12), h = 132 + keys_up, x = (W - w) / 2, y = (H - h) / 2;
     const SDL_FRect box{x, y, w, h};
     SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
     SDL_RenderFillRect(r_, &box);
@@ -2009,7 +2014,7 @@ void FileLocator::draw_folder_prompt(float W, float H, SDL_Color ink, SDL_Color 
     draw_text(r_, x + 16, y + 14, fit_text(tr("loc.offer.title"), w - 32, 1.5f), 1.5f, ink);
     draw_text(r_, x + 16, y + 46, fit_text(a.text + "_", w - 32, 2), 2, SDL_Color{255, 255, 255, 255});
     if (!a.problem.empty()) draw_text(r_, x + 16, y + 80, fit_text(a.problem, w - 32, 1), 1, SDL_Color{255, 80, 80, 255});
-    draw_text(r_, x + 16, y + 104, fit_text(tr("loc.offer.keys"), w - 32, 1), 1, grey);
+    draw_footer(r_, "locator.folder", x + 16, y + 104 + keys_up, w - 32, tr("loc.offer.keys"), grey);
 }
 
 // What the work says of itself (sieve/stop.hpp), on the worker: the line of what it is doing, and

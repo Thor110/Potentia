@@ -41,7 +41,7 @@ SDL_Color Hallway::portal_colour(const Theme& th)
     return luma(th.edge) >= luma(th.bg) ? th.edge : th.bg;
 }
 
-// `depth` is the models' depth buffer when Real Graphics drew this frame, else null: the
+// `depth` is the models' depth buffer when the models drew this frame (Wireframe off), else null: the
 // portal is drawn over that image, so without it a door far down the corridor would show
 // through the bookcases between you and it.
 void Hallway::draw_portal(const std::vector<Vec3>& quad, const Theme& dest, const float* depth, int dw, int dh)

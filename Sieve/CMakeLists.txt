@@ -46,6 +46,8 @@ add_library(sieve_core STATIC
     core/src/character_voxels.cpp
     core/src/character_skin.cpp
     core/src/character_edit.cpp
+    core/src/key_registry.cpp
+    core/src/favourites.cpp
     core/src/importers.cpp
     core/src/dimensions.cpp
     core/src/animation.cpp
@@ -760,6 +762,7 @@ if(SIEVE_BUILD_CLIENT)
         client/keys.cpp
         client/speech.cpp
         client/font.cpp
+        client/footer.cpp
         client/gpu_memory.cpp
         client/hallway.cpp
         client/hud.cpp

@@ -20,6 +20,9 @@
 #include "sieve/character_voxels.hpp"
 #include "sieve/character_skin.hpp"
 #include "sieve/character_edit.hpp"
+#include "sieve/key_registry.hpp"
+#include "sieve/footer_wrap.hpp"
+#include "sieve/favourites.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/dimensions.hpp"
 #include "sieve/animation.hpp"
@@ -64,11 +67,14 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cstdint>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -8149,6 +8155,219 @@ void test_character_edit()
     std::printf("  an edited character: %zu spheres, %zu mirrored pairs found; %s\n", e.spheres.size(), mirrored(e), e.id().substr(0, 16).c_str());
 }
 
+// The one footer's layout (IDEAS 19.224, sieve/footer_wrap.hpp): a footer that fits comes out exactly as
+// written, one too wide is broken only between keys with each line within the room, the last lines last
+// (the screen draws them upwards from its foot), an entry too long alone broken between words, a word too
+// long between characters (never inside one), and the room measured by the caller's own widths.
+void test_footer_wrap()
+{
+    using sieve::wrap_footer;
+    const std::string keys = "Up/Down choose   Enter select   Left/Right change   Esc back   (the mouse works too)";
+    CHECK(wrap_footer(keys, 200) == std::vector<std::string>{keys});
+    CHECK(wrap_footer(keys, keys.size()) == std::vector<std::string>{keys});
+    const auto two = wrap_footer(keys, 60);
+    CHECK(two.size() == 2 && two[0] == "Up/Down choose   Enter select   Left/Right change   Esc back" && two[1] == "(the mouse works too)");
+    for (size_t room : {10, 14, 20, 33, 40, 61})
+    {
+        const auto lines = wrap_footer(keys, room);
+        std::string joined;
+        for (const std::string& l : lines)
+        {
+            CHECK(l.size() <= room);
+            joined += (joined.empty() ? "" : " ") + l;
+        }
+        // Nothing lost or added but spacing: every word of the footer is there, in order.
+        std::string words, w2;
+        for (char c : keys) words += c == ' ' && !words.empty() && words.back() == ' ' ? std::string() : std::string(1, c);
+        for (char c : joined) w2 += c == ' ' && !w2.empty() && w2.back() == ' ' ? std::string() : std::string(1, c);
+        CHECK(words == w2);
+    }
+    // At a room that holds each key, no key is parted between lines.
+    for (const std::string& l : wrap_footer(keys, 30))
+        CHECK(l == "Up/Down choose   Enter select" || l == "Left/Right change   Esc back" || l == "(the mouse works too)");
+    // Two spaces part entries as three do (the hallway's own footer is written so).
+    CHECK((wrap_footer("W move  Shift run  [ ] jump", 20) == std::vector<std::string>{"W move  Shift run", "[ ] jump"}));
+    // Gaps are kept as written (four spaces stay four), and spaces at the ends dropped.
+    CHECK(wrap_footer("  A: one    B: two  ", 80) == std::vector<std::string>{"A: one    B: two"});
+    CHECK(wrap_footer("", 10) == std::vector<std::string>{""});
+    // An entry too long alone: between words, then a word too long between characters.
+    CHECK((wrap_footer("one two three", 7) == std::vector<std::string>{"one two", "three"}));
+    CHECK((wrap_footer("abcdefghij", 4) == std::vector<std::string>{"abcd", "efgh", "ij"}));
+    // Measured in the caller's units: here two units a character, and a two-byte character one unit.
+    const auto halves = wrap_footer("A: one   B: two", 12.0, [](const std::string& t) { return 2 * t.size(); });
+    CHECK((halves == std::vector<std::string>{"A: one", "B: two"}));
+    const auto cells = [](const std::string& t) {
+        size_t n = 0;
+        for (unsigned char c : t) n += (c & 0xC0) != 0x80;
+        return n;
+    };
+    const auto acc = wrap_footer("\xc3\xa9\xc3\xa9\xc3\xa9", 2.0, cells); // three e-acutes, two to a line
+    CHECK((acc == std::vector<std::string>{"\xc3\xa9\xc3\xa9", "\xc3\xa9"}));
+}
+
+// The key registry (IDEAS 19.199, sieve/key_registry.hpp): chords read and named, actions declared and
+// asked, keys set and kept as overrides, clashes found, and footers' keys filled in. Without a naming a
+// single character names its key; a few of SDL's names are given here as the hallway gives SDL's.
+void test_key_registry()
+{
+    CHECK(parse_chord("E").key == 'e' && parse_chord("E").mod == 0 && chord_name(parse_chord("E")) == "E");
+    CHECK(parse_chord("  e ").key == 'e');
+    CHECK(parse_chord("Shift+R").mod == kKeyShift && chord_name(parse_chord("Shift+R")) == "Shift+R");
+    CHECK(chord_name(parse_chord("Shift+Alt+Ctrl+X")) == "Ctrl+Alt+Shift+X"); // (always written in one order)
+    CHECK(parse_chord("Comma").key == ',' && chord_name(parse_chord("Comma")) == "Comma");
+    CHECK(parse_chord("Plus").key == '+' && chord_name(parse_chord("Plus")) == "+");
+    CHECK(parse_chord("Return").key == 0 && parse_chord("").key == 0 && parse_chord("Shift+").key == 0);
+    CHECK(plain_mods(0x0001) == kKeyShift && plain_mods(0x0080) == kKeyCtrl && plain_mods(0x0200 | 0x1000) == kKeyAlt);
+
+    const uint32_t kReturn = 13, kUp = 0x40000052, kLShift = 0x400000E1, kKpPlus = 0x40000057;
+    set_key_naming({[&](const std::string& n) -> uint32_t {
+                        if (n == "Return") return kReturn;
+                        if (n == "Up") return kUp;
+                        if (n == "Left Shift") return kLShift;
+                        if (n == "Keypad +") return kKpPlus;
+                        return n.size() == 1 ? uint32_t(std::tolower(static_cast<unsigned char>(n[0]))) : 0;
+                    },
+                    [&](uint32_t c) -> std::string {
+                        if (c == kReturn) return "Return";
+                        if (c == kUp) return "Up";
+                        if (c == kLShift) return "Left Shift";
+                        if (c == kKpPlus) return "Keypad +";
+                        return c > ' ' && c <= '~' ? std::string(1, char(std::toupper(int(c)))) : std::string();
+                    }});
+    CHECK(parse_chords("W, ,Up,Bogus,Comma,Keypad +").size() == 4);
+    CHECK(chord_name(parse_chord("Ctrl+Return")) == "Ctrl+Return");
+
+    KeyRegistry k;
+    const std::string& fwd = k.declare({"walk", "forward", "keys.walk.forward", "W,Up"});
+    CHECK(fwd == "walk/forward");
+    CHECK(&k.declare({"walk", "forward", "other", "Q"}) == &fwd && k.names(fwd) == "W / Up"); // (a second declaration is ignored)
+    const std::string& zoom = k.declare({"view", "zoom_out", "keys.view.zoom_out", "-"});
+    const std::string& far = k.declare({"view", "zoom_out_far", "keys.view.zoom_out_far", "Shift+-"});
+    const std::string& go = k.declare({"view", "go", "keys.view.go", "Return,Ctrl+G"});
+    CHECK(k.is(fwd, 'w', 0) && k.is(fwd, kUp, 0) && !k.is(fwd, 'w', 0x0001) && !k.is(fwd, 's', 0) && !k.is("no/such", 'w', 0));
+    CHECK(k.within(fwd, 'w', 0x0001) && !k.within(far, '-', 0) && k.within(far, '-', 0x0002 | 0x0040));
+    CHECK(k.is(go, 'g', 0x0040) && !k.is(go, 'g', 0) && k.within(go, kReturn, 0x0100));
+    CHECK(k.which({zoom, far}, '-', 0) == zoom && k.which({zoom, far}, '-', 0x0001) == far && k.which({zoom, far}, '-', 0x0001 | 0x0040) == far &&
+          k.which({zoom, far}, '-', 0x0040) == zoom && k.which({zoom, far}, '=', 0).empty());
+    CHECK(k.first(fwd) == "W" && k.names(go) == "Return / Ctrl+G" && k.names("no/such") == "?" && k.first("no/such") == "-");
+    CHECK(k.chords(fwd).size() == 2 && k.chords(fwd)[1].key == kUp && k.chords("no/such").empty());
+
+    // A screen's keys asked together (the setup menu's right-hand panel): a chord with Ctrl is the tab before
+    // rather than Left, while Shift held with Left is still Left (ten steps), as the menus always took it.
+    {
+        KeyRegistry s;
+        const std::string& left = s.declare({"menus", "left", "keys.menus.left", "A"});
+        const std::string& tab = s.declare({"side", "previous_tab", "keys.side.previous_tab", "Ctrl+A"});
+        CHECK(s.which({tab, left}, 'a', 0) == left && s.which({tab, left}, 'a', 0x0001) == left && s.which({tab, left}, 'a', 0x0040) == tab &&
+              s.which({tab, left}, 'a', 0x0040 | 0x0001) == tab && s.which({left}, 'a', 0x0040) == left);
+        s.together("menus", "side");
+        CHECK(s.clashes().empty()); // (Ctrl+A is not A)
+    }
+
+    // Footers' keys: as written while the defaults stand, as set once changed.
+    const std::string footer = "{key1:walk/forward|W} walk  {key:walk/forward|W/Up}  {key:no/such|N} x  {keyboard}  {key:open";
+    CHECK(k.keyed(footer) == "W walk  W/Up  N x  {keyboard}  {key:open");
+    CHECK(!k.changed(fwd) && k.overrides().empty());
+    k.set(fwd, "I,Up");
+    CHECK(k.changed(fwd) && k.is(fwd, 'i', 0) && !k.is(fwd, 'w', 0) && k.names(fwd) == "I / Up");
+    CHECK(k.keyed(footer) == "I walk  I / Up  N x  {keyboard}  {key:open");
+    CHECK(k.overrides().size() == 1 && k.overrides().at("walk/forward") == "I,Up");
+    k.set(fwd, "Bogus"); // (no key in it: the default again, as an empty one is)
+    CHECK(!k.changed(fwd) && k.names(fwd) == "W / Up");
+    k.set(fwd, "I");
+    k.set(fwd, "");
+    CHECK(!k.changed(fwd) && k.overrides().empty());
+
+    // Set before its system declares it (the settings file is read first): kept, then taken at declaring.
+    k.set("late/act", "L");
+    CHECK(k.overrides().size() == 1 && k.overrides().at("late/act") == "L" && !k.is("late/act", 'l', 0));
+    const std::string& late = k.declare({"late", "act", "keys.late.act", "K"});
+    CHECK(k.is(late, 'l', 0) && k.changed(late) && k.overrides().size() == 1);
+    const auto rows = k.listing();
+    CHECK(rows.size() == 5 && rows[0].full_id == "walk/forward" && rows[0].section == "walk" && rows[0].name_key == "keys.walk.forward" && rows[0].keys == "W / Up" &&
+          !rows[0].changed && rows[4].full_id == "late/act" && rows[4].changed && rows[4].keys == "L");
+
+    // Clashes: within one section, and between two sections only once they are said to be read together.
+    CHECK(k.clashes().empty());
+    k.set(far, "-");
+    auto c = k.clashes();
+    CHECK(c.size() == 1 && c[0].chord == "-" && c[0].a == "view/zoom_out" && c[0].b == "view/zoom_out_far");
+    k.set(far, "");
+    k.set(late, "W");
+    CHECK(k.clashes().empty());
+    k.together("walk", "late");
+    c = k.clashes();
+    CHECK(c.size() == 1 && c[0].chord == "W" && c[0].a == "walk/forward" && c[0].b == "late/act");
+    set_key_naming({}); // (the plain naming again, for the tests after)
+    CHECK(parse_chord("Return").key == 0 && parse_chord("q").key == 'q');
+}
+
+// Favourites' files (IDEAS 19.190, sieve/favourites.hpp): a favourite written and read back, named by its
+// SHA-256, one changed by hand refused, and a dimension's list kept in order, each once.
+void test_favourites()
+{
+    namespace fs = std::filesystem;
+    const fs::path base = fs::temp_directory_path() / ("sieve-favourites-test-" + std::to_string(std::random_device{}()));
+    std::error_code ec;
+    fs::remove_all(base, ec);
+    CHECK(favourite_sha("titled-v1", {1, 2, 3}) == Sha256::hex(Sha256::hash(std::string("titled-v1\n1,2,3"))));
+    CHECK(favourite_sha("titled-v1", {}, "1f") == Sha256::hex(Sha256::hash(std::string("titled-v1\n\n1f"))));
+    CHECK(favourites_dir(base) == base / "favourites");
+    CHECK(favourites_list_of(fs::path("worlds") / "personal.world") == fs::path("worlds") / "personal.favourites");
+
+    Favourite f;
+    f.line = "pages";
+    f.space = "titled-v1";
+    f.title = "100% a title\nover two lines\r";
+    f.digits = {1, 2, 3};
+    f.sha = favourite_sha(f.space, f.digits);
+    std::string why;
+    CHECK(save_favourite(base, f, why) && why.empty());
+    std::string text;
+    {
+        std::ifstream in(favourites_dir(base) / (f.sha + ".item"), std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    CHECK(text == "sieve-favourite-v1\nline pages\nspace titled-v1\ntitle 100%25 a title%0Aover two lines%0D\ndigits 1,2,3\n");
+    const auto back = read_favourite(base, f.sha);
+    CHECK(back && back->sha == f.sha && back->line == "pages" && back->space == "titled-v1" && back->title == f.title && back->digits == f.digits && back->index.empty());
+    CHECK(!read_favourite(base, std::string(64, '0')));
+
+    // One kept by its place (a model, a world, a book): no digits, its address in hex.
+    Favourite m;
+    m.line = "models";
+    m.space = "titled-v1";
+    m.title = "a model";
+    m.index = "1f";
+    m.sha = favourite_sha(m.space, {}, m.index);
+    CHECK(m.sha != favourite_sha(m.space, {}) && save_favourite(base, m, why));
+    const auto mb = read_favourite(base, m.sha);
+    CHECK(mb && mb->digits.empty() && mb->index == "1f" && mb->line == "models");
+
+    // Changed by hand, so it is no longer the favourite its name says; or not a favourite at all.
+    std::ofstream(favourites_dir(base) / (f.sha + ".item"), std::ios::binary) << "sieve-favourite-v1\nline pages\nspace titled-v1\ntitle x\ndigits 1,2,4\n";
+    CHECK(!read_favourite(base, f.sha));
+    std::ofstream(favourites_dir(base) / (f.sha + ".item"), std::ios::binary) << "sieve-favourite-v1\nline pages\nspace titled-v1\ntitle x\ndigits 1,x,3\n";
+    CHECK(!read_favourite(base, f.sha));
+    std::ofstream(favourites_dir(base) / (f.sha + ".item"), std::ios::binary) << "sieve-favourite-v2\nline pages\nspace titled-v1\ndigits 1,2,3\n";
+    CHECK(!read_favourite(base, f.sha));
+    std::ofstream(favourites_dir(base) / (f.sha + ".item"), std::ios::binary) << "sieve-favourite-v1\r\nline pages\r\nspace titled-v1\r\ntitle x\r\ndigits 1,2,3\r\n";
+    CHECK(read_favourite(base, f.sha) && read_favourite(base, f.sha)->title == "x"); // (CR LF read as LF)
+
+    // A dimension's list: in the order kept, each once; a line not a SHA-256 is passed over.
+    const fs::path list = favourites_list_of(base / "worlds" / "personal.world");
+    CHECK(dimension_favourites(list).empty());
+    CHECK(add_to_dimension(list, f.sha, why) && !add_to_dimension(list, f.sha, why) && add_to_dimension(list, m.sha, why));
+    CHECK(dimension_favourites(list) == std::vector<std::string>({f.sha, m.sha}));
+    CHECK(remove_from_dimension(list, f.sha) && !remove_from_dimension(list, f.sha));
+    CHECK(dimension_favourites(list) == std::vector<std::string>({m.sha}));
+    std::ofstream(list, std::ios::binary | std::ios::app) << "not a sha\n" << std::string(64, 'A') << "\n";
+    CHECK(dimension_favourites(list) == std::vector<std::string>({m.sha}));
+    std::ofstream(list, std::ios::binary) << "sieve-favourites-v2\n" << m.sha << "\n";
+    CHECK(dimension_favourites(list).empty());
+    fs::remove_all(base, ec);
+}
+
 void run_all(int argc, char** argv)
 {
     RUN(test_sha256());
@@ -8170,6 +8389,9 @@ void run_all(int argc, char** argv)
     RUN(test_character_skin());
     RUN(test_skin_quads_and_smooth());
     RUN(test_character_edit());
+    RUN(test_key_registry());
+    RUN(test_footer_wrap());
+    RUN(test_favourites());
     RUN(test_raid());
     RUN(test_raid_net());
     RUN(test_format_stats());
