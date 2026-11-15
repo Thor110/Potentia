@@ -1,0 +1,46 @@
+# Every screen and feature's screenshot, as data (IDEAS 19.202: "each screen gets a screenshot as does
+# each feature and those screenshots get tagged with a version number"), made by tools/screenshots.py.
+#
+# One shot a line, three fields split by " | ":
+#   NAME    the picture's name (NAME-vVERSION.png), and the screen or feature it shows
+#   DEPENDS the files it is made from, as patterns within Sieve/ split by spaces: when none of them
+#           has changed since the shot was last made, it is not made again
+#   ARGS    the hallway's arguments for it (--screenshot is added); the words {character} and
+#           {world} stand for the files the tool writes beside the shots (seed 99's character; a
+#           world with a bookcase and a page); {d0} to {d6} settings with each character drawing,
+#           {vl} the voxels on the world lattice, their faces joined; {sl} the skin with its limbs;
+#           {ss} the skin's quads smoothed ten rounds; {sd} the skin's quads subdivided two steps
+# Every shot also depends on the language file and the program's version.
+
+main-menu            | client/main_menu.* client/menu.* client/font.*                 | --main-menu
+setup-menu           | client/menu.* client/font.* client/slide_panel.hpp             | --menu
+character-page       | client/menu.* client/mesh.* core/src/character.cpp             | --menu --character {character} --press `
+character-pixels     | client/menu.* client/mesh.* core/src/character.cpp             | --menu --real-graphics --character {character} --creator --settings {d0}
+character-wireframe  | client/menu.* client/mesh.* core/src/character.cpp             | --menu --real-graphics --character {character} --creator --settings {d1}
+character-voxels     | client/menu.* client/mesh.* core/src/character.cpp             | --menu --real-graphics --character {character} --creator --settings {d2}
+character-shaded     | client/menu.* client/mesh.* core/src/character.cpp             | --menu --real-graphics --character {character} --creator --settings {d3}
+character-tilted     | client/menu.* client/mesh.* core/src/character.cpp             | --menu --real-graphics --character {character} --creator --settings {d3} --press Shift+],Shift+],Shift+]
+character-voxels-lattice | client/menu.* client/character_look.* core/src/character_voxels.cpp | --menu --real-graphics --character {character} --creator --settings {vl}
+character-skin       | client/menu.* client/character_look.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d4}
+character-quads      | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d5}
+character-smooth     | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d6}
+character-skin-limbs | client/menu.* client/character_look.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {sl}
+character-skin-smoothed | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {ss}
+character-skin-subdivided | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {sd}
+character-edited     | client/menu.* client/keys.* core/src/character_edit.cpp core/src/character.cpp | --menu --real-graphics --character {character} --creator --press .,.,J,N --creator-drag 40,-60
+yours-page           | client/menu.* client/character_store.hpp                       | --menu --press `,PageDown,PageDown
+hallway-wireframe    | client/hallway.* client/mesh.* client/rings.cpp                | --no-menu --pose 0,1.6,0,-10
+hallway-real         | client/hallway.* client/mesh.* client/rings.cpp data/meshes/*  | --no-menu --real-graphics --pose 0,1.6,0,-10
+hallway-pause        | client/hallway.* client/pause_menu.cpp client/pause_rows.hpp   | --no-menu --press Escape
+dimension-wireframe  | client/personal_world.* client/mesh.*                          | --personal-world --world-file {world} --pworld-look -12
+dimension-real       | client/personal_world.* client/mesh.* data/objects/*           | --personal-world --real-graphics --world-file {world} --pworld-look -12
+dimension-voxels     | client/personal_world.* client/character_look.* core/src/character_voxels.cpp | --personal-world --settings {d2} --world-file {world} --pworld-look -12
+dimension-skin       | client/personal_world.* client/character_look.* core/src/character_skin.cpp | --personal-world --settings {d4} --character {character} --pworld-walk 1.0 --pworld-look -12
+dimension-smooth     | client/personal_world.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --personal-world --settings {d6} --character {character} --pworld-walk 1.0 --pworld-look -12
+dimension-catalogue  | client/personal_world.* client/slide_panel.hpp                 | --personal-world --real-graphics --world-file {world} --press Tab
+dimension-pause      | client/personal_world.* client/pause_rows.hpp                  | --personal-world --real-graphics --world-file {world} --press Escape
+settings-graphics    | client/main_menu.* client/app_settings.*                       | --main-menu --press Item:settings,Return,Item:graphics,Return,Item:character_drawing
+settings-voxels      | client/main_menu.* client/app_settings.*                       | --main-menu --press Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return
+settings-keys        | client/main_menu.* client/keys.*                               | --main-menu --press Item:settings,Return,Item:controls,Return,Item:keys,Return
+replays              | client/main_menu.* client/replay.*                             | --main-menu --press Item:replays,Return
+viewer-text          | client/viewer.cpp client/hallway.*                             | --no-menu --warp hello_world --press J,Z
