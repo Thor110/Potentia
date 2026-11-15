@@ -58,7 +58,97 @@ static float smooth_min(float a, float b, float k)
     return std::min(a, b) - h * h * k * 0.25f;
 }
 
-SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend)
+std::vector<SkinLimb> skin_limbs(const std::vector<Sphere>& spheres, float blend)
+{
+    std::vector<SkinLimb> out;
+    const float k = std::max(0.0f, blend);
+    for (size_t i = 0; i < spheres.size(); ++i)
+    {
+        const Sphere& c = spheres[i];
+        if (c.parent < 0 || size_t(c.parent) >= spheres.size() || size_t(c.parent) == i) continue;
+        const Sphere& p = spheres[size_t(c.parent)];
+        SkinLimb l;
+        l.parent = uint32_t(c.parent), l.child = uint32_t(i);
+        l.a[0] = float(p.x), l.a[1] = float(p.y), l.a[2] = float(p.z);
+        l.b[0] = float(c.x), l.b[1] = float(c.y), l.b[2] = float(c.z);
+        const float rp = std::max(0.0f, float(p.r));
+        // (set back by the blend, but never by more than half the parent, so a small joint still sends out
+        // a limb as wide as it nearly is)
+        l.ra = rp - std::min(k, 0.5f * rp);
+        l.rb = std::max(0.0f, float(c.r));
+        out.push_back(l);
+    }
+    return out;
+}
+
+// A limb's cone with what does not depend on the point worked out once, for the many grid corners it is
+// asked about. Worked in doubles: the squares below run to many figures more than a float keeps.
+namespace {
+struct Cone
+{
+    double a[3], ba[3], r1, r2, l2, rr, a2, il2;
+    bool ball;       // one end's sphere holds the other's: the cone is the larger sphere
+    explicit Cone(const SkinLimb& limb)
+    {
+        for (int k = 0; k < 3; ++k) a[k] = limb.a[k], ba[k] = double(limb.b[k]) - double(limb.a[k]);
+        r1 = limb.ra, r2 = limb.rb;
+        l2 = ba[0] * ba[0] + ba[1] * ba[1] + ba[2] * ba[2];
+        rr = r1 - r2;
+        a2 = l2 - rr * rr;
+        ball = !(a2 > 0);
+        il2 = ball ? 0.0 : 1.0 / l2;
+    }
+    double distance(const float p[3]) const
+    {
+        const double pa[3] = {double(p[0]) - a[0], double(p[1]) - a[1], double(p[2]) - a[2]};
+        if (ball)
+        {
+            double d2 = 0;
+            for (int k = 0; k < 3; ++k)
+            {
+                const double d = pa[k] - (r1 >= r2 ? 0.0 : ba[k]);
+                d2 += d * d;
+            }
+            return std::sqrt(d2) - std::max(r1, r2);
+        }
+        // The exact distance with one square root (as Inigo Quilez gives it): y is how far along the bone
+        // the point lies (scaled by its length squared), x2 how far from the bone; the point is nearest the
+        // child's sphere, the parent's, or the cone's side between them, as the side's slope decides.
+        const double y = pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2];
+        const double z = y - l2;
+        double x2 = 0;
+        for (int k = 0; k < 3; ++k)
+        {
+            const double q = pa[k] * l2 - ba[k] * y;
+            x2 += q * q;
+        }
+        const double y2 = y * y * l2, z2 = z * z * l2;
+        auto sign = [](double v) { return v > 0 ? 1.0 : v < 0 ? -1.0 : 0.0; };
+        const double k = sign(rr) * rr * rr * x2;
+        if (sign(z) * a2 * z2 > k) return std::sqrt(x2 + z2) * il2 - r2;
+        if (sign(y) * a2 * y2 < k) return std::sqrt(x2 + y2) * il2 - r1;
+        return (std::sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
+    }
+    // At least how far the point is from the cone: its distance from the bone less the wider end's radius
+    // (the cone lies within the spheres of that radius along the bone), cheaper than the exact distance.
+    double at_least(const float p[3]) const
+    {
+        const double pa[3] = {double(p[0]) - a[0], double(p[1]) - a[1], double(p[2]) - a[2]};
+        const double t = l2 > 0 ? std::clamp((pa[0] * ba[0] + pa[1] * ba[1] + pa[2] * ba[2]) / l2, 0.0, 1.0) : 0.0;
+        double d2 = 0;
+        for (int k = 0; k < 3; ++k)
+        {
+            const double d = pa[k] - t * ba[k];
+            d2 += d * d;
+        }
+        return std::sqrt(d2) - std::max(r1, r2);
+    }
+};
+} // namespace
+
+float skin_limb_distance(const SkinLimb& limb, const float p[3]) { return float(Cone(limb).distance(p)); }
+
+SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend, const std::vector<SkinLimb>& limbs)
 {
     SkinMesh out;
     if (spheres.empty() || !(cell > 0)) return out;
@@ -84,10 +174,74 @@ SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend)
     auto idx = [&](size_t x, size_t y, size_t z) { return (z * ny + y) * nx + x; };
     std::vector<float> field(nx * ny * nz, reach);
     // Each corner's nearest sphere (by the distance from its surface), for the vertices' colours.
+    // (The nearest starts unreached, so a limb's corners beyond every sphere's reach still find one; a
+    // sphere's own are all within its reach, so for the spheres alone this is as it was.)
     std::vector<int32_t> owner(field.size(), -1);
-    std::vector<float> nearest(field.size(), reach);
+    std::vector<float> nearest(field.size(), 1e30f);
+    // The limbs, by the sphere each takes the place of (its child).
+    std::vector<int32_t> limb_of(spheres.size(), -1);
+    for (size_t li = 0; li < limbs.size(); ++li)
+        if (limbs[li].child < spheres.size()) limb_of[limbs[li].child] = int32_t(li);
+    // Which limb last visited each corner, so a corner within the boxes of two pieces of one limb (below)
+    // takes that limb into its field once. (Only kept when there are limbs.)
+    std::vector<uint32_t> visited(limbs.empty() ? 0 : field.size(), 0);
     for (size_t si = 0; si < spheres.size(); ++si)
     {
+        if (limb_of[si] >= 0)
+        {
+            // A limb, in its child's place in the order: worked out over the corners within reach of the
+            // box round both its ends, its corners' nearest sphere the nearer of the two it joins.
+            const SkinLimb& l = limbs[size_t(limb_of[si])];
+            const Cone cone(l);
+            const Sphere& sp = spheres[l.parent];
+            const Sphere& sc = spheres[l.child];
+            // A long slanting bone's one box would hold most of the grid (a chain zigzagging corner to
+            // corner took 49 s with 4,096 spheres), so the bone is cut into pieces, each with the box of
+            // its own stretch: the round cone is the union of the spheres along it, their centres and radii
+            // going evenly from one end to the other, so each piece's box holds the spheres at its two ends.
+            const float dab[3] = {l.b[0] - l.a[0], l.b[1] - l.a[1], l.b[2] - l.a[2]};
+            const float length = std::sqrt(dab[0] * dab[0] + dab[1] * dab[1] + dab[2] * dab[2]);
+            const float piece = std::max(4.0f * cell, std::max(l.ra, l.rb) + reach);
+            const int pieces = std::clamp(int(std::ceil(length / piece)), 1, 4096);
+            const uint32_t stamp = uint32_t(limb_of[si]) + 1;
+            for (int pc = 0; pc < pieces; ++pc)
+            {
+            const float t0 = float(pc) / float(pieces), t1 = float(pc + 1) / float(pieces);
+            const float r0 = l.ra + (l.rb - l.ra) * t0, r1 = l.ra + (l.rb - l.ra) * t1;
+            int a0[3], a1[3];
+            for (int a = 0; a < 3; ++a)
+            {
+                const float e0 = l.a[a] + dab[a] * t0, e1 = l.a[a] + dab[a] * t1;
+                const float lo_a = std::min(e0 - r0, e1 - r1), hi_a = std::max(e0 + r0, e1 + r1);
+                a0[a] = std::max(0, int(std::floor((lo_a - reach) / cell)) - g0[a]);
+                a1[a] = std::min(n[a] - 1, int(std::ceil((hi_a + reach) / cell)) - g0[a]);
+            }
+            for (int z = a0[2]; z <= a1[2]; ++z)
+                for (int y = a0[1]; y <= a1[1]; ++y)
+                    for (int x = a0[0]; x <= a1[0]; ++x)
+                    {
+                        const size_t vi = idx(size_t(x), size_t(y), size_t(z));
+                        if (visited[vi] == stamp) continue;
+                        visited[vi] = stamp;
+                        const float q[3] = {float(g0[0] + x) * cell, float(g0[1] + y) * cell, float(g0[2] + z) * cell};
+                        // (most of a slanting limb's box is far from it: those corners are passed over
+                        // by the cheaper bound before the exact distance is asked)
+                        if (cone.at_least(q) >= double(reach)) continue;
+                        const float d = float(cone.distance(q));
+                        if (d >= reach) continue;
+                        const size_t i = idx(size_t(x), size_t(y), size_t(z));
+                        field[i] = smooth_min(field[i], d, k);
+                        auto surface = [&](const Sphere& s) {
+                            const float dx = q[0] - float(s.x), dy = q[1] - float(s.y), dz = q[2] - float(s.z);
+                            return std::sqrt(dx * dx + dy * dy + dz * dz) - float(s.r);
+                        };
+                        const float dp = surface(sp), dc = surface(sc);
+                        const float dn = std::min(dp, dc);
+                        if (dn < nearest[i]) nearest[i] = dn, owner[i] = int32_t(dc <= dp ? l.child : l.parent);
+                    }
+            }
+            continue;
+        }
         const Sphere& p = spheres[si];
         const float c[3] = {float(p.x), float(p.y), float(p.z)}, r = float(p.r);
         int a0[3], a1[3];
@@ -241,6 +395,300 @@ std::vector<float> skin_smooth_normals(const SkinMesh& skin)
             for (int k = 0; k < 3; ++k) m[k] = skin.vertices[v].n[k];
     }
     return n;
+}
+
+SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float mu)
+{
+    SkinMesh out = skin;
+    const size_t nv = out.vertices.size();
+    if (rounds == 0 || nv == 0) return out;
+    // Each vertex's neighbours, once each, kept as one list with where each vertex's run starts (built
+    // once, as the faces do not change between rounds). The quads' sides when every triangle is half of
+    // one (the skin as surface nets makes it), else the triangles' sides.
+    const bool by_quads = !out.quads.empty() && out.quad_count() * 2 == out.triangles();
+    const std::vector<uint32_t>& faces = by_quads ? out.quads : out.tris;
+    const size_t corners = by_quads ? 4 : 3;
+    // (each face's sides counted at both ends, laid out by vertex, then each vertex's few made unique in
+    // place: a skin's neighbours are four or so, so this is linear in the faces, with no sort of them all)
+    std::vector<uint32_t> start(nv + 1, 0);
+    auto each_side = [&](auto&& take) {
+        for (size_t f = 0; f + corners <= faces.size(); f += corners)
+            for (size_t k = 0; k < corners; ++k)
+            {
+                const uint32_t i = faces[f + k], j = faces[f + (k + 1) % corners];
+                if (i == j || i >= nv || j >= nv) continue;
+                take(i, j);
+                take(j, i);
+            }
+    };
+    each_side([&](uint32_t i, uint32_t) { ++start[size_t(i) + 1]; });
+    for (size_t v = 0; v < nv; ++v) start[v + 1] += start[v];
+    std::vector<uint32_t> next(start[nv]), fill(start.begin(), start.end() - 1);
+    each_side([&](uint32_t i, uint32_t j) { next[fill[i]++] = j; });
+    size_t kept = 0;
+    for (size_t v = 0; v < nv; ++v)
+    {
+        const auto b = next.begin() + std::ptrdiff_t(start[v]), e = next.begin() + std::ptrdiff_t(start[v + 1]);
+        std::sort(b, e);
+        const auto u = std::unique(b, e);
+        start[v] = uint32_t(kept);
+        for (auto it = b; it != u; ++it) next[kept++] = *it;
+    }
+    start[nv] = uint32_t(kept);
+    next.resize(kept);
+    // The steps, each from where every vertex stood before it (so the order the vertices are visited in
+    // does not matter), the positions kept in doubles between steps so many rounds do not gather the
+    // floats' rounding.
+    std::vector<double> p(nv * 3), q(nv * 3);
+    for (size_t v = 0; v < nv; ++v)
+        for (int k = 0; k < 3; ++k) p[v * 3 + size_t(k)] = double(out.vertices[v].p[k]);
+    auto step = [&](double weight) {
+        for (size_t v = 0; v < nv; ++v)
+        {
+            const uint32_t b = start[v], e = start[v + 1];
+            if (b == e)
+            {
+                for (int k = 0; k < 3; ++k) q[v * 3 + size_t(k)] = p[v * 3 + size_t(k)];
+                continue;
+            }
+            double mean[3] = {0, 0, 0};
+            for (uint32_t m = b; m < e; ++m)
+                for (int k = 0; k < 3; ++k) mean[k] += p[size_t(next[m]) * 3 + size_t(k)];
+            for (int k = 0; k < 3; ++k)
+            {
+                const double here = p[v * 3 + size_t(k)];
+                q[v * 3 + size_t(k)] = here + weight * (mean[k] / double(e - b) - here);
+            }
+        }
+        p.swap(q);
+    };
+    for (uint32_t r = 0; r < rounds; ++r)
+    {
+        step(double(lambda));
+        step(double(mu));
+    }
+    for (size_t v = 0; v < nv; ++v)
+        for (int k = 0; k < 3; ++k) out.vertices[v].p[k] = float(p[v * 3 + size_t(k)]);
+    const std::vector<float> n = skin_smooth_normals(out);
+    for (size_t v = 0; v < nv; ++v)
+        for (int k = 0; k < 3; ++k) out.vertices[v].n[k] = n[v * 3 + size_t(k)];
+    return out;
+}
+
+double skin_volume(const SkinMesh& skin)
+{
+    double six = 0;
+    for (size_t t = 0; t < skin.triangles(); ++t)
+    {
+        const float* a = skin.vertices[skin.tris[t * 3]].p;
+        const float* b = skin.vertices[skin.tris[t * 3 + 1]].p;
+        const float* c = skin.vertices[skin.tris[t * 3 + 2]].p;
+        // (a . (b x c): six times the signed volume of the triangle and the origin)
+        six += double(a[0]) * (double(b[1]) * c[2] - double(b[2]) * c[1]) + double(a[1]) * (double(b[2]) * c[0] - double(b[0]) * c[2]) +
+               double(a[2]) * (double(b[0]) * c[1] - double(b[1]) * c[0]);
+    }
+    return six / 6.0;
+}
+
+// The faces a subdivision step starts from: the quads when every triangle is half of one (the skin as
+// surface nets makes it, and every step's output), else the triangles (the rule's general form).
+static bool skin_by_quads(const SkinMesh& skin) { return !skin.quads.empty() && skin.quad_count() * 2 == skin.triangles(); }
+
+size_t skin_subdivided_quads(const SkinMesh& skin, uint32_t steps)
+{
+    if (steps == 0) return skin.quad_count();
+    // (the first step: one quad for each corner of each face; every step after it, four for each)
+    size_t n = skin_by_quads(skin) ? skin.quads.size() : skin.tris.size();
+    for (uint32_t s = 1; s < steps; ++s)
+    {
+        if (n > (size_t(1) << 60)) return n; // (far past any bound; kept from overflowing)
+        n *= 4;
+    }
+    return n;
+}
+
+uint32_t skin_subdivision_steps(const SkinMesh& skin, uint32_t asked, size_t most_quads)
+{
+    uint32_t steps = 0;
+    while (steps < asked && skin_subdivided_quads(skin, steps + 1) <= most_quads) ++steps;
+    return steps;
+}
+
+// One step of Catmull and Clark's rule (skin_subdivide's), positions in doubles.
+static SkinMesh skin_subdivide_once(const SkinMesh& skin)
+{
+    const size_t nv = skin.vertices.size();
+    const bool by_quads = skin_by_quads(skin);
+    const std::vector<uint32_t>& faces = by_quads ? skin.quads : skin.tris;
+    const size_t corners = by_quads ? 4 : 3;
+    const size_t nf = faces.size() / corners;
+    SkinMesh out;
+    for (int a = 0; a < 3; ++a) out.grid[a] = skin.grid[a];
+    if (nv == 0 || nf == 0) return out;
+    // Each vertex's neighbours, once each and sorted, laid out as one list with where each vertex's run
+    // starts (as skin_taubin finds them), and each edge's number given at its lower end and copied to its
+    // upper, so an edge is found from either end by a short search of that end's few neighbours.
+    std::vector<uint32_t> start(nv + 1, 0);
+    auto each_side = [&](auto&& take) {
+        for (size_t f = 0; f < nf; ++f)
+            for (size_t k = 0; k < corners; ++k)
+            {
+                const uint32_t i = faces[f * corners + k], j = faces[f * corners + (k + 1) % corners];
+                if (i == j || i >= nv || j >= nv) continue;
+                take(i, j);
+                take(j, i);
+            }
+    };
+    each_side([&](uint32_t i, uint32_t) { ++start[size_t(i) + 1]; });
+    for (size_t v = 0; v < nv; ++v) start[v + 1] += start[v];
+    std::vector<uint32_t> next(start[nv]), fill(start.begin(), start.end() - 1);
+    each_side([&](uint32_t i, uint32_t j) { next[fill[i]++] = j; });
+    size_t kept = 0;
+    for (size_t v = 0; v < nv; ++v)
+    {
+        const auto b = next.begin() + std::ptrdiff_t(start[v]), e = next.begin() + std::ptrdiff_t(start[v + 1]);
+        std::sort(b, e);
+        const auto u = std::unique(b, e);
+        start[v] = uint32_t(kept);
+        for (auto it = b; it != u; ++it) next[kept++] = *it;
+    }
+    start[nv] = uint32_t(kept);
+    next.resize(kept);
+    auto slot = [&](uint32_t i, uint32_t j) {
+        const auto b = next.begin() + std::ptrdiff_t(start[i]), e = next.begin() + std::ptrdiff_t(start[size_t(i) + 1]);
+        return size_t(std::lower_bound(b, e, j) - next.begin());
+    };
+    std::vector<uint32_t> edge_of(kept, 0);
+    uint32_t ne = 0;
+    for (uint32_t v = 0; v < uint32_t(nv); ++v)
+        for (uint32_t m = start[v]; m < start[size_t(v) + 1]; ++m)
+            if (next[m] > v) edge_of[m] = ne++;
+    for (uint32_t v = 0; v < uint32_t(nv); ++v)
+        for (uint32_t m = start[v]; m < start[size_t(v) + 1]; ++m)
+            if (next[m] < v) edge_of[m] = edge_of[slot(next[m], v)];
+    auto edge = [&](uint32_t i, uint32_t j) { return edge_of[slot(i, j)]; };
+    // The face points: each face's corners' average.
+    std::vector<double> fp(nf * 3, 0.0);
+    for (size_t f = 0; f < nf; ++f)
+    {
+        for (size_t k = 0; k < corners; ++k)
+            for (int a = 0; a < 3; ++a) fp[f * 3 + size_t(a)] += double(skin.vertices[faces[f * corners + k]].p[a]);
+        for (int a = 0; a < 3; ++a) fp[f * 3 + size_t(a)] /= double(corners);
+    }
+    // Each edge's ends, and the faces either side of it (their points summed, and how many: two on a
+    // closed surface, one on an outline, more where the skin touches itself along an edge).
+    std::vector<uint32_t> ends(size_t(ne) * 2, 0);
+    for (uint32_t v = 0; v < uint32_t(nv); ++v)
+        for (uint32_t m = start[v]; m < start[size_t(v) + 1]; ++m)
+            if (next[m] > v) ends[size_t(edge_of[m]) * 2] = v, ends[size_t(edge_of[m]) * 2 + 1] = next[m];
+    std::vector<double> edge_faces(size_t(ne) * 3, 0.0);
+    std::vector<uint32_t> edge_count(ne, 0);
+    // Each vertex's faces: their points summed, and how many.
+    std::vector<double> vertex_faces(nv * 3, 0.0);
+    std::vector<uint32_t> vertex_count(nv, 0);
+    for (size_t f = 0; f < nf; ++f)
+        for (size_t k = 0; k < corners; ++k)
+        {
+            const uint32_t i = faces[f * corners + k], j = faces[f * corners + (k + 1) % corners];
+            if (i >= nv || j >= nv) continue;
+            for (int a = 0; a < 3; ++a) vertex_faces[size_t(i) * 3 + size_t(a)] += fp[f * 3 + size_t(a)];
+            ++vertex_count[i];
+            if (i == j) continue;
+            const uint32_t e = edge(i, j);
+            for (int a = 0; a < 3; ++a) edge_faces[size_t(e) * 3 + size_t(a)] += fp[f * 3 + size_t(a)];
+            ++edge_count[e];
+        }
+    auto pos = [&](uint32_t v, int a) { return double(skin.vertices[v].p[a]); };
+    // The new vertices: the old corners moved (first, so each keeps its number), then the edges' points,
+    // then the faces'.
+    out.vertices.resize(nv + size_t(ne) + nf);
+    std::vector<double> ep(size_t(ne) * 3);
+    for (uint32_t e = 0; e < ne; ++e)
+    {
+        const uint32_t i = ends[size_t(e) * 2], j = ends[size_t(e) * 2 + 1];
+        const uint32_t c = edge_count[e];
+        for (int a = 0; a < 3; ++a)
+            ep[size_t(e) * 3 + size_t(a)] = c >= 2 ? (pos(i, a) + pos(j, a) + edge_faces[size_t(e) * 3 + size_t(a)]) / double(2 + c) : 0.5 * (pos(i, a) + pos(j, a));
+        SkinVertex& w = out.vertices[nv + e];
+        for (int a = 0; a < 3; ++a) w.p[a] = float(ep[size_t(e) * 3 + size_t(a)]);
+        w.sphere = skin.vertices[i].sphere; // (i is the lower-numbered end)
+    }
+    for (uint32_t v = 0; v < uint32_t(nv); ++v)
+    {
+        SkinVertex& w = out.vertices[v];
+        w = skin.vertices[v];
+        const uint32_t b = start[v], e = start[size_t(v) + 1];
+        if (b == e || vertex_count[v] == 0) continue; // (in no face: left where it is)
+        uint32_t outline = 0, along[2] = {0, 0};
+        for (uint32_t m = b; m < e; ++m)
+            if (edge_count[edge_of[m]] == 1)
+            {
+                if (outline < 2) along[outline] = next[m];
+                ++outline;
+            }
+        if (outline == 2)
+        {
+            for (int a = 0; a < 3; ++a) w.p[a] = float((6.0 * pos(v, a) + pos(along[0], a) + pos(along[1], a)) / 8.0);
+            continue;
+        }
+        if (outline > 0) continue; // (where outlines meet: a corner, kept)
+        const double n = double(e - b);
+        for (int a = 0; a < 3; ++a)
+        {
+            double mids = 0;
+            for (uint32_t m = b; m < e; ++m) mids += 0.5 * (pos(v, a) + pos(next[m], a));
+            const double F = vertex_faces[size_t(v) * 3 + size_t(a)] / double(vertex_count[v]), R = mids / n;
+            w.p[a] = float((F + 2.0 * R + (n - 3.0) * pos(v, a)) / n);
+        }
+    }
+    for (size_t f = 0; f < nf; ++f)
+    {
+        SkinVertex& w = out.vertices[nv + ne + f];
+        for (int a = 0; a < 3; ++a) w.p[a] = float(fp[f * 3 + size_t(a)]);
+        // (the sphere most corners share; the first corner's wins a tie)
+        size_t best = 0;
+        w.sphere = skin.vertices[faces[f * corners]].sphere;
+        for (size_t i = 0; i < corners; ++i)
+        {
+            size_t count = 0;
+            for (size_t j = 0; j < corners; ++j) count += skin.vertices[faces[f * corners + j]].sphere == skin.vertices[faces[f * corners + i]].sphere;
+            if (count > best) best = count, w.sphere = skin.vertices[faces[f * corners + i]].sphere;
+        }
+    }
+    // The new faces: one quad at each corner of each face (the corner, its side's point onwards, the face's
+    // point, the point of the side before it), wound as the face was, split along its shorter diagonal as
+    // skin_mesh splits its own.
+    out.quads.reserve(nf * corners * 4);
+    out.tris.reserve(nf * corners * 6);
+    auto d2 = [&](uint32_t i, uint32_t j) {
+        const float* p = out.vertices[i].p;
+        const float* r = out.vertices[j].p;
+        return (p[0] - r[0]) * (p[0] - r[0]) + (p[1] - r[1]) * (p[1] - r[1]) + (p[2] - r[2]) * (p[2] - r[2]);
+    };
+    for (size_t f = 0; f < nf; ++f)
+        for (size_t k = 0; k < corners; ++k)
+        {
+            const uint32_t prev = faces[f * corners + (k + corners - 1) % corners], here = faces[f * corners + k], after = faces[f * corners + (k + 1) % corners];
+            if (here >= nv || prev >= nv || after >= nv || here == prev || here == after) continue;
+            const uint32_t q[4] = {here, uint32_t(nv) + edge(here, after), uint32_t(nv + ne + f), uint32_t(nv) + edge(prev, here)};
+            const bool first = d2(q[0], q[2]) <= d2(q[1], q[3]);
+            const uint32_t tri[6] = {q[0], q[1], q[2], q[0], q[2], q[3]};
+            const uint32_t alt[6] = {q[1], q[2], q[3], q[1], q[3], q[0]};
+            for (int m = 0; m < 6; ++m) out.tris.push_back(first ? tri[m] : alt[m]);
+            for (int m = 0; m < 4; ++m) out.quads.push_back(q[(m + (first ? 0 : 1)) % 4]);
+        }
+    return out;
+}
+
+SkinMesh skin_subdivide(const SkinMesh& skin, uint32_t steps)
+{
+    if (steps == 0) return skin;
+    SkinMesh out = skin_subdivide_once(skin);
+    for (uint32_t s = 1; s < steps; ++s) out = skin_subdivide_once(out);
+    const std::vector<float> n = skin_smooth_normals(out);
+    for (size_t v = 0; v < out.vertices.size(); ++v)
+        for (int k = 0; k < 3; ++k) out.vertices[v].n[k] = n[v * 3 + size_t(k)];
+    return out;
 }
 
 } // namespace sieve

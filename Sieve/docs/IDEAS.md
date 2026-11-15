@@ -9133,6 +9133,201 @@ meet, and apart where they do not touch.
   what it was made from (a still character costs nothing), its readout saying what it made and how long
   it took. Each built, compared with the stage before it and measured on its own; later stages (the
   texture, §19.227; the face, §19.228) are added the same way without changing those before them.
+- *Built on 15 November 2026 (R7, the first stage: limbs):* **Limbs**, `[character] skin_limbs`, off by
+  default, a row on Potentia Settings > Graphics > Character Voxels after Skin Detail. One library
+  function, `sieve::skin_limbs` (sieve/character_skin.hpp), makes the stage from the spheres and bones: one
+  `SkinLimb` a bone, a rounded cone from the parent's centre to the child's, and `sieve::skin_mesh` takes
+  them into its field (`sieve::skin_limb_distance`, the cone's exact signed distance with one square root,
+  as Inigo Quilez gives it, in doubles; a cheaper bound first passes over the corners of a slanting limb's
+  box that are far from it; and, after review, each bone is cut into pieces a few cells long, each worked
+  over its own box, a corner visited once a limb, because one box round a long slanting bone holds most of
+  the grid: a chain of 4,096 spheres zigzagging corner to corner, at the finest detail, took 49,261 ms to
+  skin with limbs and now 1,004 ms (49.5 ms without limbs), the same 4,624 triangles). Each limb takes its child sphere's place in the field, in the spheres' order,
+  joined by the same smooth minimum: its child end is the child's sphere whole, so every sphere's surface
+  is in the field once and the smooth minimum never meets a surface with itself (were the spheres kept
+  beside their limbs, each would swell by a quarter of the blend, and a body with five limbs by more than
+  half of it); its parent end is set back inside the parent by the blend (by at most half the parent's
+  radius), so where the limb leaves the parent the smooth minimum fills the shoulder as it fills any
+  crease; with no blend the cone is the two spheres' hull exactly. A vertex's sphere (its colour) is the
+  nearer of the limb's two. With no limbs `skin_mesh` is the code it was, so off is today's skin exactly.
+  So every drawing made from the field has its limbs at once: the skin, the quads and the smooth drawing;
+  the voxels and pixels are made from the spheres directly (`sieve::voxel_faces`, a cell filled where its
+  middle is in a sphere), not from the field, and are left as they are. Kept by what it was made from: the
+  skin's key gains the spheres' parents with Limbs on, so a skin with limbs is never taken for one
+  without. Made from the spheres as posed in each frame, so the limbs follow the joints as an action plays
+  (the imported arm, tests/arm.gltf, at frames 0, 16 and 30: its two limbs bend with the elbow, 2,324,
+  2,428 and 2,356 triangles in 0.68, 0.79 and 0.59 ms). Readouts, said only with Limbs on: the Creator's
+  `skin:` line ends `, N limbs joined`; your dimension's and the hallway's `characters: drawn as skin, ...`
+  end `, with limbs`. Measured (the Creator at 1280x720, its readout, one core, two runs each; triangles
+  made, off then on, and the time to make the skin):
+  seed 99 (5 limbs, 1 branch, 26 limbs joined) at 1, 2 and 4 cells to a voxel 5,780 in 1.45 and 1.42 ms
+  against 5,712 in 3.23 and 2.71; 23,180 in 9.06 and 8.73 against 22,676 in 14.62 and 14.77; 93,148 in
+  65.4 and 70.1 against 90,816 in 93.6 and 91.5. Seed 42 (16 limbs, 12 joints, 3 branches; 481 limbs)
+  4,616 in 2.28 and 2.06 against 4,944 in 4.72 and 4.51; 20,264 in 15.4 and 10.6 against 20,668 in 20.8
+  and 16.9; 85,036 in 69.2 and 68.3 against 84,952 in 87.1 and 100.4. Seed 7 (8 limbs, 4 joints, 2
+  branches, radial; 65 limbs) 8,760 in 2.43 and 3.70 against 8,828 in 4.41 and 4.63; 35,180 in 15.4 and
+  15.4 against 35,080 in 24.7 and 25.2 (at 4 cells a voxel made coarser to fit, so the same). Seed 12345
+  (3 limbs, 6 joints, no head; 18 limbs) 26,548 in 11.5 to 13.6 ms against 26,756 in 15.7 to 18.4 at every
+  detail (its cell made coarser to fit from the first). One sphere (no limbs, no head): no limbs to join,
+  38,460 triangles either way, the same picture byte for byte. So the triangles stay within 8% of the
+  skin's without limbs (most within 3%) and the make takes about one and a half times as long (twice at the coarsest
+  cell). The pieces the skin falls into (the unit tests, 2 cells to a voxel; then on the world lattice):
+  seed 42 2 without limbs, 1 with (on the lattice 4 and 1); seed 7 6 and 1 (9 and 1); seed 99 and seed
+  12345 1 either way (seed 12345's voxels fall apart on the lattice, but its skin's blend already held it
+  together; with limbs its upright limb is a smooth tube rather than a row of balls pinched where they
+  barely touch, looked at by height and on the lattice). The unit tests: the cone's distance against a
+  thousand spheres swept along the bone (outside it, less than 0.001 units apart over 2,000 points; inside,
+  not outside), and one end's sphere holding the other's giving the larger sphere; one sphere has no limbs
+  and its skin is the same with them; two spheres 400 apart, two pieces of skin alone and one closed piece
+  with their limb (every edge between two triangles and two quads, V - E + F = 2), its middle 80.6 units
+  from the bone where the cone's side is 80.4; four characters with no edge left open, every vertex's
+  sphere theirs, seed 99 off still its 23,180. Off, nothing changes: the Creator in all seven drawings
+  for seeds 99, 12345, 42 and 7, on the lattice, with Wireframe on and the CHARACTER page, your dimension
+  (from afar and from close, shaded, skin, quads and smooth) and the imported arm came out byte for byte as
+  the program before R7, PNG and stdout (the times a skin took masked, as two runs of either differ in
+  them; the CHARACTER page's setup-menu picture differs only in its opening-time figure, as two runs of the
+  old program do). The one change to what was there: Potentia Settings > Graphics > Character Voxels has a
+  row more (it still fits at 1024x600). *Left:* the head joined to the body like any limb, so with Limbs
+  on the body and head become one dome (a choice of which bones are limbs may be wanted); the colour where
+  two spheres' parts of a limb meet is a ragged line, as the nearest sphere decides it a cell at a time
+  (blending the two would smooth it); a limb's knuckles where the spheres along it change size quickly
+  (seed 12345's lower limb), which the next stage, the smoothing, is for; the cone's parent end set back by
+  a fixed rule (the blend, at most half the parent) rather than a setting; the time a frame with limbs
+  (not measured: `--bench` in your dimension with `--pworld-walk` ran on past ten minutes here and was
+  stopped, so only the make time is given); the make on more than one thread; and the rest of this entry: Taubin's smoothing, Catmull and Clark's subdivision, each its own
+  stage after this one.
+- *Built on 15 November 2026 (R8, the second stage: smooth plus, the surface):* **Skin Smoothing**,
+  `[character] skin_smoothing`, 0 to 20 rounds, 0 (off) by default, a row on Potentia Settings > Graphics >
+  Character Voxels after Limbs. One library function, `sieve::skin_taubin` (sieve/character_skin.hpp),
+  makes the stage from the skin (with its limbs, if Limbs is on): Taubin's method, each round a shrink
+  step (every corner moved 0.5 of the way to its neighbours' average) and an inflate step (moved -0.53 of
+  the way), each step from where every corner stood before it, the positions kept in doubles between
+  steps. A corner's neighbours are those it shares a side of a quad with (the surface nets' own grid), so
+  the diagonal each quad was split along does not pull one way harder. Only the corners move: the
+  triangles, quads, colours and grid are the skin's, so it stays closed with the same faces; each corner's
+  normal is then the faces' round it (`skin_smooth_normals`), as the field's slope no longer says where the
+  moved surface faces. 0 rounds is the skin exactly. `sieve::skin_volume` (the signed volume of a closed
+  surface) measures it. `make_skin` applies it after the skin and before the three drawings that use it
+  (skin, quads, smooth). Kept by what it was made from: each kept skin keeps its smoothed copy and the rounds
+  it was made with, so a still character costs nothing and a change of rounds alone smooths the kept skin
+  again without making its field again. Readouts, said only with rounds above 0: the Creator's `skin:` line
+  ends `, smoothed N rounds in M ms, volume A to B cubic units (P%)`; your dimension's and the hallway's
+  `characters: drawn as skin, ...` end `, smoothed N rounds`. Measured (the Creator at 1280x720, its
+  readout, 2 cells to a voxel, two runs each; the time for 1, 4, 10 and 20 rounds, then the volume after
+  them as a share of the skin's): seed 99 (23,180 triangles) 1.18 and 1.15, 1.53 and 1.86, 2.27 and 2.70,
+  3.52 and 3.86 ms, 100.02%, 100.11%, 100.30%, 100.62%; with limbs (22,676) 1.05 and 1.44, 1.42 and 1.51,
+  2.18 and 2.13, 3.36 and 5.62 ms, 100.02%, 100.07%, 100.20%, 100.41%. Seed 42 (16 limbs, 12 joints, 3
+  branches; 20,264) 0.99 and 1.17, 1.64 and 1.58, 2.29 and 2.15, 3.29 and 4.43 ms, 99.89%, 99.82%, 99.91%,
+  100.28%; with limbs (20,668) 0.96 and 0.96, 1.32 and 1.39, 1.99 and 2.06, 3.10 and 3.06 ms, 99.96%,
+  100.00%, 100.19%, 100.62%. Seed 7 (radial; 35,180) 2.14 and 3.07, 2.80 and 2.87, 4.31 and 4.64, 6.74 and
+  6.67 ms, 100.02%, 100.15%, 100.41%, 100.84%; with limbs (35,080) 2.07 and 1.95, 2.71 and 2.69, 6.02 and
+  4.10, 7.33 and 6.87 ms, 100.01%, 100.08%, 100.23%, 100.47%. Seed 12345 (26,548) 1.47 and 1.43, 2.76 and
+  1.88, 2.88 and 4.29, 4.73 and 4.28 ms, 100.02%, 100.11%, 100.29%, 100.59%; with limbs (26,756) 1.46 and
+  1.35, 1.87 and 1.94, 2.73 and 2.69, 4.09 and 6.61 ms, 100.02%, 100.08%, 100.21%, 100.42%. One sphere
+  (38,460) 2.05 and 2.07, 2.75 and 2.57, 7.19 and 3.61, 7.59 and 5.27 ms, 100.00%, 100.01%, 100.03%,
+  100.06%. So about one to two milliseconds to find the neighbours and work out the normals, and 0.1 to
+  0.3 ms a round (the unit tests, from what nine more rounds add: 0.08 to 0.47 ms), beside the 9 to 19 ms
+  the skin itself takes to make; the volume never fell by more than 0.18% (seed 42 at 4 rounds) and rose
+  by at most 0.84% (seed 7 at 20), rising slowly with the rounds as each inflate step goes a little past
+  the shrink before it; at the coarsest detail (1 cell to a voxel) seed 99 at 20 rounds held 101.08%. The
+  corners moved 0.02, 0.04 and 0.06 cells on average at 1, 4 and 10 rounds (seed 42 the most, 0.08 at 10).
+  The unit tests: no rounds the same skin byte for byte; one sphere of radius 100 on a 10-unit grid its
+  corners 0.246 units from the sphere on average (root mean square), 0.150 after 10 rounds, its volume
+  100.31% of the skin's where the shrink step alone leaves 94.58%, still closed (every edge between two
+  triangles, V - E + F = 2), its quads the same, every normal of length one and outwards; five
+  characters (one sphere, seeds 99, 42, 7 and 12345, with and without limbs) the same triangles and quads
+  at 1, 4 and 10 rounds, no edge left open, the volume within a percent. Off, nothing changes: the
+  Creator in all seven drawings for the five characters (with `skin_smoothing` left out of the settings
+  file and with it at 0), on the lattice, with Wireframe on and the CHARACTER page, your dimension (from
+  afar and from close, shaded, skin, quads and smooth) and the hallway with three characters came out as
+  the program before R7: 92 of 97 runs byte for byte in PNG and stdout (the times a skin took masked), and
+  the other five differ only in pixels the program before R7 changes between two runs of itself (the
+  CHARACTER page's opening-time figure, a book being drawn from its shelf in the hallway), their stdout the
+  same. The one change to what was there: Potentia Settings > Graphics > Character Voxels has a row more
+  (it still fits at 1024x600). *Left:* the knuckles where the spheres along a limb change size (seed
+  12345's lower limb) and the swellings where spheres meet stay: Taubin's method eases only what is a few
+  cells across (it passes the broad shape by design), and the corners move a few hundredths of a cell, so
+  the change is seen in the quads' even spacing and the softer light more than in the outline; easing
+  those would want a wider pass (lambda and mu chosen for a lower pass band, more rounds on a coarser copy,
+  or the next stage's subdivision). Lambda and mu are fixed (0.5 and -0.53), not settings; every neighbour
+  counts the same (cotangent weights would keep the quads' shapes better where they are uneven); the
+  volume's slow rise over many rounds is left as it is rather than scaled back; the colour line between
+  two spheres is still the field's; the rounds run on one thread; and the time a frame takes with smoothing
+  in your dimension is not measured (the make is, above, and a still character is kept). Catmull and
+  Clark's subdivision is the next stage after this one.
+- *Built on 15 November 2026 (R9, the third stage: smooth plus, the outline):* **Skin Subdivision**,
+  `[character] skin_subdivision`, 0 to 3 steps, 0 (off) by default, a row on Potentia Settings > Graphics
+  > Character Voxels after Skin Smoothing (it still fits at 1024x600). One library function,
+  `sieve::skin_subdivide` (sieve/character_skin.hpp), makes the stage from the skin as the smoothing left
+  it: Catmull and Clark's rule a step at a time, each face's point its corners' average, each edge's point
+  the average of its ends and the two faces' points beside it, each old corner moved to (F + 2R + (n - 3)P)
+  / n, positions in doubles within a step; each face of k corners becomes k quads, so quads stay quads,
+  four of each, and a skin given as triangles alone is taken by the general form (each triangle three
+  quads; an edge with one face is kept as an outline, one with more than two faces averages them all).
+  Each new quad is split along its shorter diagonal and kept as the skin keeps its own (face q the
+  triangles 2q and 2q + 1); a new corner's sphere is the old corner's, an edge's ends' (the lower-numbered
+  end's where they differ) and the one most of a face's corners share; the normals are the faces' round
+  each corner (`skin_smooth_normals`). No steps is the skin exactly. Kept from growing past what can be
+  drawn: `sieve::skin_subdivision_steps` takes the most of the steps asked whose quads stay within
+  `kSkinMostSubdividedQuads`, 200,000 (chosen from the frame times below: two steps of three
+  characters in the hallway already take about 114 ms a frame in the software renderer), and the readout
+  says when it took fewer. Offered to the quads and smooth drawings only (`VoxelChoice::subdivision_for`):
+  the skin drawing stays the skin's own triangles, the stage the others are compared with. `make_skin`
+  applies it after the smoothing; kept by what it was made from: each kept skin keeps its subdivided copy
+  with the steps asked and the rounds of smoothing it came from, so a still character costs nothing and a
+  change of steps alone subdivides the kept skin again without making its field or smoothing it again.
+  Readouts, said only with steps above 0 for those two drawings: the Creator's `skin:` line goes on
+  `, subdivided N steps in M ms, A to B quads` (its quads or triangles made then the subdivided skin's),
+  and where fewer were taken ` (S asked: another step would pass 200000 quads)`; your dimension's and the
+  hallway's `characters: drawn as quads|smooth, ...` end `, subdivided up to N steps (at most 200000 quads
+  a frame, shared by its characters)`: there the 200,000 are shared by the characters a space draws in a
+  frame (each given 200,000 divided by their number; after review, 15 November 2026), so thirty placed
+  characters neither draw nor keep thirty times the bound. Measured (the Creator at 1280x720, its readout, two runs each; the quads before and after
+  and the time): at 2 cells to a voxel, seed 99 (5 limbs, 1 branch) 11,590 to 46,360 in 5.41 and 5.76 ms
+  and to 185,440 in 29.6 and 28.9 ms (three asked: two taken); seed 42 (16 limbs, 12 joints, 3 branches)
+  10,132 to 40,528 in 5.02 and 4.93, to 162,112 in 25.7 and 26.5 (three asked: two); seed 7 (radial)
+  17,590 to 70,360 in 9.03 and 9.11 (two asked: one, as two would make 281,440); seed 12345 13,274 to
+  53,096 in 8.59 and 7.31 (two asked: one); one sphere (no limbs, no head) 19,230 to 76,920 in 9.69 and
+  8.57 (two asked: one). At 1 cell to a voxel with three asked: seed 99 2,890 to 184,960 in three steps,
+  35.5 and 30.9 ms; seed 42 2,308 to 147,712 in three, 23.7 and 23.8; seed 7 4,380 to 70,080 in two, 10.5
+  and 10.7; one sphere 4,758 to 76,128 in two, 12.2 and 15.4; seed 12345 (its cell made coarser to fit)
+  one, 6.33 and 6.21. Seed 7 with limbs and 4 rounds of smoothing: 17,540 to 70,160 in one step, 9.08
+  ms. The library alone (the unit tests, one run; the same characters with and without limbs and with 0
+  and 4 rounds of smoothing): one step 3.6 to 9.7 ms, two 17 to 42 ms, about 0.08 to 0.14 microseconds a
+  quad made; the volume after two steps 97.2% (seed 42, whose thin limbs shrink most) to 99.96% (one
+  sphere) of the skin's, as Catmull and Clark's surface lies inside the faces it is made from. One sphere
+  of radius 100 on a 10-unit grid (1,830 quads): the sharpest bend between two neighbouring triangles,
+  which is what the outline shows, 7.5 degrees, then 4.5 and 2.4 after one and two steps; the corners'
+  distances from the middle spread 0.089 units about their mean, then 0.071 and 0.074; the volume 98.90%
+  of the true ball's, then 98.58% and 98.51%. Time a frame (the hallway with the three characters of the
+  store, software renderer at 1280x720, 60 frames with --bench, one run each): quads 26.9 ms (19,777
+  quads drawn), one step 53.8 (79,302), two 113.8 (212,679); smooth 29.6 (39,630 triangles), 61.5
+  (158,618), 123.1 (425,443): the frame grows with the faces drawn. The unit tests: no steps the same skin
+  byte for byte (a cube, one sphere and five characters); a cube of six quads one step to 24 quads and 26
+  corners, each old corner at 5/9 as the rule gives, closed and outwards; the cube as twelve triangles
+  alone to 36 quads, then 144; the bound's steps exact at 384 quads and one under; one sphere at one and
+  two steps four and sixteen times the quads, closed (every edge between two triangles, V - E + F = 2),
+  every normal of length one and outwards, the sharpest bend smaller with each step and the volume within
+  3% of the ball; five characters (one sphere, seeds 99, 42, 7 and 12345, with and without limbs, with 0
+  and 4 rounds) at one and two steps exactly four and sixteen times the quads, no edge left open, every
+  corner's sphere theirs, the volume between 90% and 101% of the skin's. Off, nothing changes: the
+  Creator in all seven drawings for the five characters (with `skin_subdivision` left out of the settings
+  file and with it at 0), on the lattice, with Wireframe on and the CHARACTER page, your dimension (from
+  afar and from close, shaded, skin, quads and smooth) and the hallway with three characters came out as
+  the program before R7: 91 of 97 runs byte for byte in PNG and stdout (the times a skin took masked), and
+  the other six differ only in pixels the program before R7 changes between two runs of itself (the
+  CHARACTER page's opening-time figure, a book drawn in the hallway), their stdout the same; with steps
+  asked, the skin drawing is byte for byte the skin drawing without them. The one change to what was
+  there: Potentia Settings > Graphics > Character Voxels has a row more. *Left:* at two or three steps
+  each small quad's sides are drawn darker, so the quads drawing darkens to its edges' colour (drawing
+  only the skin's own quads' sides over the subdivided faces would keep the light); the bound is one
+  figure for every machine, not measured against the frame time it allows (a bound by distance, coarser
+  far away, would let a near character have more steps); the subdivision runs on one thread and is made
+  again whenever a character moves, as the skin is (an animated character at two steps would add the 17 to
+  42 ms a two-step make took to each frame it changes in); the volume it loses (up to 2.8% for thin limbs) is not put back; a
+  corner's sphere is chosen, not blended, so the colour line between two spheres is still ragged; the
+  limit surface's exact normals (rather than the faces' averaged) and creases where wanted are not made;
+  and NURBS or other patches fitted to the quads are still to come.
 
 **19.230 The DNA dimension as a place to learn (Edward, 14 November 2026).** His words: "I would love to
 look at the plan or hope to eventually hook this up to the DNA dimension and use it as an intermediary to

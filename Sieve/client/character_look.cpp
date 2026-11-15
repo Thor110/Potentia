@@ -43,6 +43,9 @@ VoxelChoice voxel_choice_of(const AppSettings& app)
     v.joined = app.character_voxel_joined;
     v.skin_blend = uint32_t(std::clamp(app.character_skin_blend, 0, 200));
     v.skin_detail = uint32_t(std::clamp(app.character_skin_detail, 0, 3));
+    v.skin_limbs = app.character_skin_limbs;
+    v.skin_smoothing = uint32_t(std::clamp(app.character_skin_smoothing, 0, 20));
+    v.skin_subdivision = uint32_t(std::clamp(app.character_skin_subdivision, 0, int(sieve::kSkinMostSubdivisionSteps)));
     return v;
 }
 
@@ -61,6 +64,14 @@ std::string character_drawing_report(int chosen, bool real_graphics, size_t tria
     else if (chosen == kDrawSkin) s += ", " + std::to_string(triangles) + " triangles of skin";
     else if (chosen == kDrawQuads) s += ", " + std::to_string(triangles) + " quads of skin";
     else if (chosen == kDrawSmooth) s += ", " + std::to_string(triangles) + " triangles of smooth skin";
+    // (said only with Limbs on, so a readout of the skin without them is as it was)
+    if (skin_drawing(chosen) && voxels.skin_limbs) s += ", with limbs";
+    // (and only with Skin Smoothing's rounds above 0, for the same reason)
+    if (skin_drawing(chosen) && voxels.skin_smoothing > 0) s += ", smoothed " + std::to_string(voxels.skin_smoothing) + (voxels.skin_smoothing == 1 ? " round" : " rounds");
+    // (and only with Skin Subdivision's steps above 0 for the quads or smooth drawing; a skin that would
+    // pass the bound is given fewer steps, which the Creator's readout says one character at a time)
+    if (const uint32_t steps = voxels.subdivision_for(chosen); steps > 0)
+        s += ", subdivided up to " + std::to_string(steps) + (steps == 1 ? " step" : " steps") + " (at most " + std::to_string(sieve::kSkinMostSubdividedQuads) + " quads a frame, shared by its characters)";
     return s;
 }
 
@@ -73,6 +84,30 @@ std::string SkinReport::line(const VoxelChoice& voxels, int drawing) const
     std::snprintf(ms_text, sizeof ms_text, "%.2f", ms);
     const char* what = drawing == kDrawQuads ? " quads made, " : " triangles made, ";
     std::string s = std::string(buf) + std::to_string(made) + what + std::to_string(drawn) + " drawn, made in " + ms_text + " ms" + (kept ? " (kept from a frame before)" : "");
+    // The limbs (IDEAS 19.229): how many bones were joined, said only where they are on.
+    if (voxels.skin_limbs) s += ", " + std::to_string(limbs) + " limbs joined";
+    // The smoothing (IDEAS 19.229's second stage): its rounds, the time they took and the volume kept,
+    // said only where it is asked for.
+    if (voxels.skin_smoothing > 0)
+    {
+        char smoothing_text[160];
+        std::snprintf(smoothing_text, sizeof smoothing_text, ", smoothed %u %s in %.2f ms%s, volume %.0f to %.0f cubic units (%.2f%%)", unsigned(voxels.skin_smoothing),
+                      voxels.skin_smoothing == 1 ? "round" : "rounds", smoothing_ms, smoothing_kept ? " (kept from a frame before)" : "", volume, smoothed_volume,
+                      volume != 0 ? 100.0 * smoothed_volume / volume : 0.0);
+        s += smoothing_text;
+    }
+    // The subdivision (IDEAS 19.229's third stage): the steps taken, the time they took and the quads
+    // before and after, said only where asked for (the quads and smooth drawings); where fewer steps were
+    // taken than asked, how many were asked and why.
+    if (const uint32_t asked = voxels.subdivision_for(drawing); asked > 0)
+    {
+        char sub_text[224];
+        std::snprintf(sub_text, sizeof sub_text, ", subdivided %u %s in %.2f ms%s, %zu to %zu quads", unsigned(subdivision_steps), subdivision_steps == 1 ? "step" : "steps", subdivision_ms,
+                      subdivision_kept ? " (kept from a frame before)" : "", subdivision_from, subdivision_quads);
+        s += sub_text;
+        if (subdivision_steps < asked)
+            s += " (" + std::to_string(asked) + " asked: another step would pass " + std::to_string(sieve::kSkinMostSubdividedQuads) + " quads)";
+    }
     if (drawing == kDrawSmooth)
     {
         char smooth_text[64];
@@ -87,62 +122,131 @@ std::string SkinReport::line(const VoxelChoice& voxels, int drawing) const
 // the last frame's are let go: with the room for both, a character standing still is always found from
 // the frame before, however many are in sight.
 static size_t skins_kept = 8;
+// How many characters the space drawing now said it draws in a frame (at least one): they share one
+// bound on subdivided quads, so thirty characters do not draw thirty times 200,000 quads, nor keep them.
+static size_t skins_sharing = 1;
 
 void skins_kept_for(size_t characters_in_a_frame)
 {
     skins_kept = std::max(skins_kept, std::max<size_t>(8, characters_in_a_frame * 2));
+    skins_sharing = std::max<size_t>(1, characters_in_a_frame);
 }
 
-std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere>& spheres, float voxel_cell, const VoxelChoice& voxels, SkinReport* report)
+std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere>& spheres, float voxel_cell, const VoxelChoice& voxels, SkinReport* report, int drawing, size_t sharing)
 {
     const auto t0 = std::chrono::steady_clock::now();
     const sieve::SkinCell sc = sieve::skin_cell(spheres, voxel_cell, voxels.skin_detail);
     const float blend = sieve::skin_blend(spheres, voxels.skin_blend);
-    // What it is made from, as a key: each sphere's centre and radius, the cell and the blend.
+    // The limbs, the pipeline's first stage (IDEAS 19.229): none unless asked for, so the skin is then
+    // made from the spheres alone, as before.
+    const std::vector<sieve::SkinLimb> limbs = voxels.skin_limbs ? sieve::skin_limbs(spheres, blend) : std::vector<sieve::SkinLimb>{};
+    // What it is made from, as a key: each sphere's centre and radius, the cell and the blend; with limbs,
+    // also each sphere's parent (the bones), so a skin without limbs is never taken for one with them.
     std::vector<int32_t> key;
-    key.reserve(spheres.size() * 4 + 2);
+    key.reserve(spheres.size() * 5 + 3);
     for (const sieve::Sphere& p : spheres) key.insert(key.end(), {p.x, p.y, p.z, p.r});
     int32_t cb[2];
     std::memcpy(&cb[0], &sc.cell, sizeof(float));
     std::memcpy(&cb[1], &blend, sizeof(float));
     key.insert(key.end(), cb, cb + 2);
+    if (voxels.skin_limbs)
+    {
+        key.push_back(-2); // (a mark: the parents follow)
+        for (const sieve::Sphere& p : spheres) key.push_back(p.parent);
+    }
     // The last few made, the newest last (drawn on the main thread only). As many are kept as
-    // skins_kept_for asks, so a space never draws more characters in a frame than are kept.
+    // skins_kept_for asks, so a space never draws more characters in a frame than are kept. Each keeps the
+    // skin as the field made it and, once asked for, the same skin smoothed (IDEAS 19.229's second stage)
+    // with the rounds it was smoothed by, so a still character costs nothing and a change of rounds alone
+    // smooths the kept skin again without making its field again.
     struct Kept
     {
         std::vector<int32_t> key;
         std::shared_ptr<const sieve::SkinMesh> skin;
         double ms = 0;
+        uint32_t rounds = 0; // the rounds `smoothed` was made with (0: none made yet)
+        std::shared_ptr<const sieve::SkinMesh> smoothed;
+        double smooth_ms = 0, volume = 0, smoothed_volume = 0;
+        // The subdivision (IDEAS 19.229's third stage) made from the skin above, smoothed or not: the
+        // steps asked and the rounds of smoothing it was made from (so a change of either makes it again
+        // from the kept skin, and nothing else), the steps taken, and the time it took.
+        uint32_t sub_asked = 0, sub_rounds = 0, sub_steps = 0;
+        size_t sub_most = 0; // the bound on quads it was made within (the frame's, shared)
+        std::shared_ptr<const sieve::SkinMesh> subdivided;
+        double sub_ms = 0;
     };
     static std::vector<Kept> kept;
     const size_t kKeep = skins_kept;
-    for (size_t i = 0; i < kept.size(); ++i)
+    bool found = false;
+    for (size_t i = 0; i < kept.size() && !found; ++i)
         if (kept[i].key == key)
         {
             Kept k = std::move(kept[i]);
             kept.erase(kept.begin() + std::ptrdiff_t(i));
             kept.push_back(std::move(k));
-            if (report)
-            {
-                report->cell = sc.cell, report->blend = blend, report->coarser = sc.coarser, report->kept = true;
-                for (int a = 0; a < 3; ++a) report->grid[a] = kept.back().skin->grid[a];
-                report->made = kept.back().skin->triangles();
-                report->ms = kept.back().ms;
-            }
-            return kept.back().skin;
+            found = true;
         }
-    auto skin = std::make_shared<const sieve::SkinMesh>(sieve::skin_mesh(spheres, sc.cell, blend));
-    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-    while (kept.size() >= kKeep) kept.erase(kept.begin());
-    kept.push_back(Kept{std::move(key), skin, ms});
+    if (!found)
+    {
+        auto skin = std::make_shared<const sieve::SkinMesh>(sieve::skin_mesh(spheres, sc.cell, blend, limbs));
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        while (kept.size() >= kKeep) kept.erase(kept.begin());
+        Kept made;
+        made.key = std::move(key), made.skin = skin, made.ms = ms;
+        kept.push_back(std::move(made));
+    }
+    Kept& k = kept.back();
+    // The smoothing (Taubin's, IDEAS 19.229): made from the skin above only when asked for, so with no
+    // rounds the skin drawn is the one the field made, as before.
+    const uint32_t rounds = voxels.skin_smoothing;
+    bool smoothed_kept = true;
+    if (rounds > 0 && k.rounds != rounds)
+    {
+        const auto s0 = std::chrono::steady_clock::now();
+        k.smoothed = std::make_shared<const sieve::SkinMesh>(sieve::skin_taubin(*k.skin, rounds));
+        k.smooth_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - s0).count();
+        k.rounds = rounds;
+        k.volume = sieve::skin_volume(*k.skin);
+        k.smoothed_volume = sieve::skin_volume(*k.smoothed);
+        smoothed_kept = false;
+    }
+    // The subdivision (Catmull and Clark's, IDEAS 19.229): made from the stage before it (the smoothed
+    // skin, or the skin with no rounds) only for the quads and smooth drawings when asked for, so with no
+    // steps the faces drawn are the skin's own, as before.
+    const std::shared_ptr<const sieve::SkinMesh>& before = rounds > 0 ? k.smoothed : k.skin;
+    const uint32_t asked = voxels.subdivision_for(drawing);
+    bool subdivided_kept = true;
+    const size_t most = sieve::kSkinMostSubdividedQuads / std::max<size_t>(1, sharing);
+    if (asked > 0 && (k.sub_asked != asked || k.sub_rounds != rounds || k.sub_most != most || !k.subdivided))
+    {
+        const auto s0 = std::chrono::steady_clock::now();
+        k.sub_steps = sieve::skin_subdivision_steps(*before, asked, most);
+        k.sub_most = most;
+        k.subdivided = k.sub_steps > 0 ? std::make_shared<const sieve::SkinMesh>(sieve::skin_subdivide(*before, k.sub_steps)) : before;
+        k.sub_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - s0).count();
+        k.sub_asked = asked, k.sub_rounds = rounds;
+        subdivided_kept = false;
+    }
+    const std::shared_ptr<const sieve::SkinMesh>& drawn = asked > 0 ? k.subdivided : before;
     if (report)
     {
-        report->cell = sc.cell, report->blend = blend, report->coarser = sc.coarser, report->kept = false;
-        for (int a = 0; a < 3; ++a) report->grid[a] = skin->grid[a];
-        report->made = skin->triangles();
-        report->ms = ms;
+        report->cell = sc.cell, report->blend = blend, report->coarser = sc.coarser, report->kept = found;
+        for (int a = 0; a < 3; ++a) report->grid[a] = k.skin->grid[a];
+        report->made = drawn->triangles();
+        report->ms = k.ms;
+        report->limbs = limbs.size();
+        if (rounds > 0)
+        {
+            report->smoothing_ms = k.smooth_ms, report->smoothing_kept = smoothed_kept;
+            report->volume = k.volume, report->smoothed_volume = k.smoothed_volume;
+        }
+        if (asked > 0)
+        {
+            report->subdivision_steps = k.sub_steps, report->subdivision_ms = k.sub_ms, report->subdivision_kept = subdivided_kept;
+            report->subdivision_from = before->quad_count(), report->subdivision_quads = drawn->quad_count();
+        }
     }
-    return skin;
+    return drawn;
 }
 
 void skin_triangle_look(const sieve::SkinMesh& skin, size_t triangle, float normal[3], uint32_t& sphere)
@@ -288,7 +392,7 @@ size_t add_character_drawing(MeshBatch& batch, const Camera& cam, int drawing, c
     {
         // The skin (IDEAS 19.225) and its quads and smooth drawing (IDEAS 19.214): placed and turned as the
         // character is, lit in camera space with the look's ambient light, coloured as each sphere's look.
-        const std::shared_ptr<const sieve::SkinMesh> kept = make_skin(spheres, cell, voxels);
+        const std::shared_ptr<const sieve::SkinMesh> kept = make_skin(spheres, cell, voxels, nullptr, drawing, skins_sharing);
         SkinPlacing place;
         place.world = true;
         place.point = at.point;

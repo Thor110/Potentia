@@ -80,6 +80,9 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 42. **The main menu's new order** (M3): Start Sieve, File Locator, Media Player, Filter Designer, AI Training Harness, Personal Dimensions, Character Creator, Replays, Encryption Engine, Manual Navigation, System Viewer, Potentia Settings, Exit Sieve. In a small window (1024x600) every row should fit above the footer (the rows are drawn closer); at 1280x720 they are a little closer than before too.
 - [ ] 43. **Wireframe** (M4): Settings > Graphics > **Wireframe**, on by default (it is the old Real Graphics, turned round). An older settings file with `real_graphics = on` should open with Wireframe off, and `--real-graphics` still works beside the new `--wireframe`.
 - [ ] 44. **Footers wrap** (M5): make the window narrow (800 wide) on each screen: the line of keys at the foot breaks between keys onto more lines, upwards, never off the edge. The File Locator's and the Media Player's own buttons do not move up yet (IDEAS 19.224).
+- [ ] 45. **Limbs** (R7): Potentia Settings > Graphics > Character Voxels > **Limbs** on, then the skin, quads or smooth drawing in the Creator: each limb becomes one smooth tube from sphere to sphere, the gaps bridged (try seed 12345, whose long limb was a row of balls). The head joins the body as a limb does, so they become one dome: say if you would rather the head stay apart. Off, the skin is exactly as before.
+- [ ] 46. **Skin Smoothing** (R8): the row after Limbs, 0 (off) to 20 rounds. The quads grow more even and the light softer; the knuckles where sphere sizes change stay. The Creator's readout gives the volume before and after (it should stay within about 1%).
+- [ ] 47. **Skin Subdivision** (R9): the row after Skin Smoothing, 0 to 3 steps, for the quads and smooth drawings: the outline goes from faceted to round. A fine skin may be given fewer steps than asked (the readout says so). In your dimension and the hallway the bound is shared by the characters in sight, so with many placed each is given fewer steps: watch the frame rate there with 1 and 2 steps. At 2 or 3 steps the quads drawing's many small edges darken it (left for later).
 
 ---
 
@@ -124,9 +127,9 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] R4. Add/remove limbs and drag joints (19.203). *Made 14 November 2026.*
 - [x] R5. A shell grown over the spheres, for quads and smooth surfaces (19.214). *Made 14 November 2026.*
 - [x] R6. The skin: a stage of the mesh scaling system wrapping the spheres in one smooth surface (a field, marching cubes), its blend a setting, measured against the other drawings (19.225). R5's first step. *Made 14 November 2026.*
-- R7. Limbs that join their spheres: a rounded cone for each bone in the skin's field, a switch (19.229). *After list M (Edward, 14 November 2026).*
-- R8. Smooth plus: the skin's surface smoothed (Taubin), its rounds a setting (19.229). *After R7.*
-- R9. The quads subdivided (Catmull–Clark) so the outline is round too, its steps a setting (19.229). *After R8.*
+- [x] R7. Limbs that join their spheres: a rounded cone for each bone in the skin's field, a switch (19.229). *Made 15 November 2026.*
+- [x] R8. Smooth plus: the skin's surface smoothed (Taubin), its rounds a setting (19.229). *Made 15 November 2026.*
+- [x] R9. The quads subdivided (Catmull–Clark) so the outline is round too, its steps a setting (19.229). *Made 15 November 2026.*
 
 ### List M: menus and keys `[04]` + `[10]` + you, one sitting in Settings > Keys
 - [x] M1. The hallway's keys onto the registry; unit tests for the registry and the favourites' files, so

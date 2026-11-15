@@ -4177,7 +4177,7 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
         skin_report_ = SkinReport{};
         if (skin_drawing(draw))
         {
-            const std::shared_ptr<const sieve::SkinMesh> kept = make_skin(shown.spheres, cell_u, vox, &skin_report_);
+            const std::shared_ptr<const sieve::SkinMesh> kept = make_skin(shown.spheres, cell_u, vox, &skin_report_, draw);
             if (draw == kDrawQuads) skin_report_.made = kept->quad_count();
             SkinPlacing place;
             place.world = false;

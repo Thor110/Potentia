@@ -184,6 +184,16 @@ value.skin_detail.1 = 2 cells to a voxel
 value.skin_detail.2 = 4 cells to a voxel
 value.skin_detail.3 = 8 cells to a voxel
 help.skin_detail = The skin drawing's grid: 1, 2, 4 or 8 of its cells across a voxel of Voxel Size (2 by default). Finer is smoother\nand costs more; never more than 160 cells across a character's widest side.
+item.skin_limbs = Limbs
+help.skin_limbs = The skin drawings (skin, quads, smooth): each bone joined by a rounded cone, wide at one sphere and narrowing to the other,\nso the skin runs along its limbs and bridges the gaps between spheres. Off by default (the spheres alone).
+item.skin_smoothing = Skin Smoothing
+value.skin_smoothing = {0} rounds
+value.skin_smoothing_one = 1 round
+help.skin_smoothing = The skin drawings (skin, quads, smooth): rounds of Taubin's smoothing, each moving every corner towards\nits neighbours and a little back out, so the skin's small bumps are eased and it does not shrink. Off by default (0 to 20).
+item.skin_subdivision = Skin Subdivision
+value.skin_subdivision = {0} steps
+value.skin_subdivision_one = 1 step
+help.skin_subdivision = The quads and smooth drawings: steps of Catmull and Clark's subdivision, each splitting every quad into four\nand rounding the corners, so the outline is round as well as the light. Off by default (0 to 3; never past 200000 quads).
 item.fps_counter = FPS Counter
 help.fps_counter = Frames per second in the top right corner of the hallway: the average over the last half\nsecond, its slowest frame and, with Wireframe off, how many triangles each frame draws.
 

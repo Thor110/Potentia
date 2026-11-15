@@ -59,10 +59,36 @@ struct SkinCell
 };
 SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_t halvings);
 
-// The skin over these spheres at this cell and blend (both in the character's units). The grid's corners
-// lie at whole cells from the character's centre, so as it moves the grid holds still on it and the skin
-// does not shimmer. Empty for no spheres or no cell.
-SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend);
+// A limb (IDEAS 19.229, the pipeline's first stage): one bone, a sphere and its parent, as a rounded cone
+// in the field, so the skin runs along the bone rather than being a row of balls apart where they do not
+// touch. The cone runs from the parent's centre to the child's, the child's end as wide as the child's
+// sphere, so it is the whole of the child's sphere and the field takes it in that sphere's place (each
+// sphere's surface is then in the field once, and the smooth minimum adds nothing where it would only meet
+// itself). The parent's end is set back inside the parent's sphere by the blend (by at most half the
+// parent's radius), so that where the limb leaves the parent the smooth minimum fills the shoulder as it
+// fills any crease, and does not swell the parent where the cone would lie on it. With no blend the cone
+// is the two spheres' hull exactly.
+struct SkinLimb
+{
+    uint32_t parent = 0, child = 0; // the spheres it joins
+    float a[3] = {0, 0, 0}, ra = 0; // the parent's end: its centre, and the cone's radius there
+    float b[3] = {0, 0, 0}, rb = 0; // the child's end: its centre and radius
+};
+
+// The limbs of these spheres (one for every sphere with a parent, in the spheres' order) at this blend.
+// The stage's switch is whether it is used: skin_mesh with no limbs is the skin of the spheres alone,
+// exactly as it was before limbs came.
+std::vector<SkinLimb> skin_limbs(const std::vector<Sphere>& spheres, float blend);
+
+// The exact signed distance from p to a limb's rounded cone (negative inside): the distance to the surface
+// swept by a sphere moving from one end to the other, its radius running straight from one to the other.
+// Where one end's sphere holds the other's, it is that sphere's distance.
+float skin_limb_distance(const SkinLimb& limb, const float p[3]);
+
+// The skin over these spheres at this cell and blend (both in the character's units), with these limbs in
+// its field (none: the spheres alone). The grid's corners lie at whole cells from the character's centre,
+// so as it moves the grid holds still on it and the skin does not shimmer. Empty for no spheres or no cell.
+SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend, const std::vector<SkinLimb>& limbs = {});
 
 // Each vertex's normal averaged across the faces round it (IDEAS 19.214's smooth drawing): the sum of
 // its triangles' normals, each as long as twice its triangle's area so a large face counts for more, made
@@ -71,5 +97,55 @@ SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend);
 // (on one sphere the field's slope is the nearer to the sphere's true normal: the unit tests measure
 // both). A vertex no triangle uses keeps its field normal.
 std::vector<float> skin_smooth_normals(const SkinMesh& skin);
+
+// Smooth plus, the surface (IDEAS 19.229, the pipeline's second stage): the skin's corners moved towards
+// the average of their neighbours a round at a time, by Taubin's method, so the bumps where spheres and
+// limbs meet are eased without the shape shrinking as plain averaging would shrink it. Each round is two
+// steps over every vertex at once: a shrink, each corner moved `lambda` of the way to its neighbours'
+// average, then an inflate, moved `mu` of the way (mu negative and larger than lambda, so it moves out a
+// little further than the shrink moved in; the two together pass the broad shape and damp the fine
+// ripples). A vertex's neighbours are the corners it shares a side of a quad with (the surface nets'
+// own grid, four or so each; the triangles' sides where the skin has no quads), so the diagonal each quad
+// was split along does not pull harder one way than the other. Only where the vertices are changes: the
+// triangles, quads, colours and grid are the skin's, so the mesh stays closed with the same faces. Each
+// vertex's normal is then the faces' round it (as skin_smooth_normals gives it), since the field's slope
+// no longer says where the moved surface faces. No rounds gives the skin exactly as it came.
+inline constexpr float kTaubinShrink = 0.5f;
+inline constexpr float kTaubinInflate = -0.53f;
+SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda = kTaubinShrink, float mu = kTaubinInflate);
+
+// The volume a closed skin holds, in the character's units cubed (the sum over its triangles of the
+// signed volume each makes with the origin, which for a closed surface wound outwards is what it holds,
+// wherever the origin is): how the smoothing is measured not to shrink the shape.
+double skin_volume(const SkinMesh& skin);
+
+// Smooth plus, the outline (IDEAS 19.229, the pipeline's third stage): the skin's faces subdivided by
+// Catmull and Clark's rule `steps` times, so the outline is round as well as the light (the smoothing
+// before it moves the corners, but a silhouette drawn with the skin's own faces still shows their
+// edges). Each step puts a point in every face (its corners' average), one on every edge (the average of
+// its two ends and the points of the faces either side of it) and moves every corner to (F + 2R + (n - 3)P)
+// / n, where P is where it stood, F the average of the points of the n faces round it and R of the middles
+// of its n edges; each face of k corners then becomes k quads, one at each corner. So quads stay quads,
+// four for each, and a skin given as triangles alone (with no quads) is taken by the rule's general form,
+// each triangle three quads at the first step. An edge between one face is an outline: its point is its
+// middle, and an end with two such edges moves as a curve does (six eighths of itself and one of each
+// neighbour). Each new quad is split into two triangles along its shorter diagonal and kept as skin_mesh
+// keeps them (face q the triangles 2q and 2q + 1); each new corner's sphere is its own for the old
+// corners, its two ends' for an edge's point where they share one (else the lower-numbered end's, so
+// the choice is the same every time), and the one most of its corners share for a face's point; its normal the faces' round it, as
+// skin_smooth_normals gives it. No steps gives the skin exactly as it came.
+SkinMesh skin_subdivide(const SkinMesh& skin, uint32_t steps);
+
+// The faces a step makes: each face of k corners becomes k quads. Each step after the first multiplies
+// the quads by four.
+size_t skin_subdivided_quads(const SkinMesh& skin, uint32_t steps);
+
+// The steps that may be taken of those asked without passing `most_quads` quads: each step multiplies the
+// faces by about four, so a fine skin subdivided three times could ask for more than the renderer can draw
+// in a frame. The steps taken are the most of those asked whose quads stay within the bound; the readout
+// says when fewer were taken than asked.
+inline constexpr uint32_t kSkinMostSubdivisionSteps = 3;
+inline constexpr size_t kSkinMostSubdividedQuads = 200000;
+uint32_t skin_subdivision_steps(const SkinMesh& skin, uint32_t asked, size_t most_quads = kSkinMostSubdividedQuads);
 
 } // namespace sieve

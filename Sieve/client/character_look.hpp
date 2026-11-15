@@ -50,6 +50,20 @@ struct VoxelChoice
     // for its grid. Used only when the skin is drawn.
     uint32_t skin_blend = 50;
     uint32_t skin_detail = 1;
+    // The skin's limbs (IDEAS 19.229; [character] skin_limbs): each bone a rounded cone in its field. Off,
+    // the skin is the spheres' alone, as it was.
+    bool skin_limbs = false;
+    // Smooth plus, the surface (IDEAS 19.229's second stage; [character] skin_smoothing): the rounds of
+    // Taubin's smoothing the skin is given after it is made. 0, the skin as the field made it, as before.
+    uint32_t skin_smoothing = 0;
+    // Smooth plus, the outline (IDEAS 19.229's third stage; [character] skin_subdivision): the steps of
+    // Catmull and Clark's subdivision the quads and smooth drawings are given after the smoothing, at most
+    // sieve::kSkinMostSubdivisionSteps and never past sieve::kSkinMostSubdividedQuads. 0, the skin's own
+    // faces, as before.
+    uint32_t skin_subdivision = 0;
+    // The steps a drawing is subdivided by: the quads and smooth drawings only (the skin drawing is the
+    // skin's own triangles, the stage the others are compared with).
+    uint32_t subdivision_for(int drawing) const { return drawing == kDrawQuads || drawing == kDrawSmooth ? skin_subdivision : 0; }
     // The cell for a character at rest, by the rule chosen (its height in 16 cells by default).
     float cell(const sieve::Character& at_rest) const { return sieve::voxel_cell(at_rest, sizing); }
     bool anchored() const { return sizing.rule == sieve::VoxelSizing::Lattice; }
@@ -78,6 +92,19 @@ struct SkinReport
     double ms = 0;     // the time it took to make (when it was made, if it was kept from a frame before)
     bool kept = false; // kept from a frame before, so made no time in this one
     double smooth_ms = 0; // the smooth drawing's: the time its normals took to average, in this frame
+    size_t limbs = 0;     // the limbs put into its field (with Limbs on; said only then)
+    // The smoothing's (with Skin Smoothing's rounds above 0; said only then): the time its rounds took
+    // (when they were made, if kept from a frame before) and the volume the skin held before and after.
+    double smoothing_ms = 0;
+    bool smoothing_kept = false;
+    double volume = 0, smoothed_volume = 0;
+    // The subdivision's (with steps asked for the quads or smooth drawing; said only then): the steps taken
+    // (fewer than asked where another would pass the bound on quads), the quads before and after, and the
+    // time it took (when it was made, if kept from a frame before).
+    uint32_t subdivision_steps = 0;
+    size_t subdivision_from = 0, subdivision_quads = 0;
+    double subdivision_ms = 0;
+    bool subdivision_kept = false;
     // `drawing` says which of the skin's three drawings it was: the skin's line is as it was before the
     // other two came; the quads' counts quads; the smooth drawing's adds the normals' time.
     std::string line(const VoxelChoice& voxels, int drawing = kDrawSkin) const;
@@ -89,10 +116,16 @@ struct SkinReport
 // square-on drawing and add_character_drawing alike. The last few skins made are kept, each with what it
 // was made from, so a character standing still (or one seen in several frames in the same pose) is made
 // once, not every frame; `report`, where given, says what it cost to make and whether it was kept.
-std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere>& spheres, float voxel_cell, const VoxelChoice& voxels, SkinReport* report = nullptr);
+// `drawing` says which of the skin's three drawings it is for: the quads and smooth drawings are given the
+// subdivision (VoxelChoice::subdivision_for), the skin drawing never. `sharing` is how many characters
+// share the frame's bound on subdivided quads (sieve::kSkinMostSubdividedQuads), so a space with many
+// characters gives each fewer steps rather than drawing many times the bound.
+std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere>& spheres, float voxel_cell, const VoxelChoice& voxels, SkinReport* report = nullptr,
+                                                 int drawing = kDrawSkin, size_t sharing = 1);
 // Said by a space before it draws its characters: how many it draws in this frame, so that make_skin keeps
 // at least twice that many skins (never fewer than eight; the number kept only grows) and a character
-// standing still is not made again however many are in sight.
+// standing still is not made again however many are in sight. The same number shares the frame's bound
+// on subdivided quads among them (add_character_drawing passes it to make_skin).
 void skins_kept_for(size_t characters_in_a_frame);
 
 // One skin triangle's normal for its lighting (its corners' normals averaged, of length one) and its

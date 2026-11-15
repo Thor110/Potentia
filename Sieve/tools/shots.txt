@@ -8,7 +8,8 @@
 #   ARGS    the hallway's arguments for it (--screenshot is added); the words {character} and
 #           {world} stand for the files the tool writes beside the shots (seed 99's character; a
 #           world with a bookcase and a page); {d0} to {d6} settings with each character drawing,
-#           {vl} the voxels on the world lattice, their faces joined
+#           {vl} the voxels on the world lattice, their faces joined; {sl} the skin with its limbs;
+#           {ss} the skin's quads smoothed ten rounds; {sd} the skin's quads subdivided two steps
 # Every shot also depends on the language file and the program's version.
 
 main-menu            | client/main_menu.* client/menu.* client/font.*                 | --main-menu
@@ -23,6 +24,9 @@ character-voxels-lattice | client/menu.* client/character_look.* core/src/charac
 character-skin       | client/menu.* client/character_look.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d4}
 character-quads      | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d5}
 character-smooth     | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {d6}
+character-skin-limbs | client/menu.* client/character_look.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {sl}
+character-skin-smoothed | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {ss}
+character-skin-subdivided | client/menu.* client/character_look.* client/mesh.* core/src/character_skin.cpp | --menu --real-graphics --character {character} --creator --settings {sd}
 character-edited     | client/menu.* client/keys.* core/src/character_edit.cpp core/src/character.cpp | --menu --real-graphics --character {character} --creator --press .,.,J,N --creator-drag 40,-60
 yours-page           | client/menu.* client/character_store.hpp                       | --menu --press `,PageDown,PageDown
 hallway-wireframe    | client/hallway.* client/mesh.* client/rings.cpp                | --no-menu --pose 0,1.6,0,-10

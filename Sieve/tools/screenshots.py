@@ -104,6 +104,12 @@ def main():
         files[f"d{k}.ini"] = f"[character]\ndrawing = {k}\n[graphics]\nwireframe = off\n"
     # (the voxels on the world lattice with their faces joined, IDEAS 19.216 and 19.215)
     files["vl.ini"] = "[character]\ndrawing = 2\nvoxel_size = 1\nvoxel_joined = on\n[graphics]\nwireframe = off\n"
+    # (the skin with its limbs, IDEAS 19.229)
+    files["sl.ini"] = "[character]\ndrawing = 4\nskin_limbs = on\n[graphics]\nwireframe = off\n"
+    # (the skin's quads after ten rounds of Taubin's smoothing, IDEAS 19.229's second stage)
+    files["ss.ini"] = "[character]\ndrawing = 5\nskin_smoothing = 10\n[graphics]\nwireframe = off\n"
+    # (the skin's quads subdivided two steps by Catmull and Clark's rule, IDEAS 19.229's third stage)
+    files["sd.ini"] = "[character]\ndrawing = 5\nskin_subdivision = 2\n[graphics]\nwireframe = off\n"
     for name, text in files.items():
         with open(os.path.join(work, name), "w", newline="\n") as f:
             f.write(text)
@@ -111,6 +117,9 @@ def main():
     for k in range(7):
         stand[f"{{d{k}}}"] = os.path.join(work, f"d{k}.ini")
     stand["{vl}"] = os.path.join(work, "vl.ini")
+    stand["{sl}"] = os.path.join(work, "sl.ini")
+    stand["{ss}"] = os.path.join(work, "ss.ini")
+    stand["{sd}"] = os.path.join(work, "sd.ini")
     env = dict(os.environ, SDL_VIDEO_DRIVER=os.environ.get("SDL_VIDEO_DRIVER", "offscreen"), HOME=work, USERPROFILE=work)
     made = kept = same = 0
     try:

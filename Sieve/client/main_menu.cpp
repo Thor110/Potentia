@@ -113,10 +113,12 @@ std::vector<MainMenu::Item> MainMenu::items() const
                 {Kind::Number, "character_drawing"}, {Kind::Action, "character_voxels"}, {Kind::Action, "back"}};
     // How big a voxel is and whether the voxels' faces are joined (IDEAS 19.216, 19.215), for the voxels
     // and pixels of Character Drawing; then the skin's blend and detail (IDEAS 19.225), its grid the
-    // voxels' cell halved, so it is set beside them.
+    // voxels' cell halved, so it is set beside them, and its limbs, smoothing and subdivision (IDEAS
+    // 19.229), the first three stages of the pipeline the skin is made by, in the order they are made.
     case Screen::Voxels:
         return {{Kind::Number, "voxel_size"}, {Kind::Number, "voxel_base_mm"}, {Kind::Number, "voxel_across"}, {Kind::Toggle, "voxel_joined"},
-                {Kind::Number, "skin_blend"}, {Kind::Number, "skin_detail"}, {Kind::Action, "back"}};
+                {Kind::Number, "skin_blend"}, {Kind::Number, "skin_detail"}, {Kind::Toggle, "skin_limbs"},
+                {Kind::Number, "skin_smoothing"}, {Kind::Number, "skin_subdivision"}, {Kind::Action, "back"}};
     case Screen::Controls: return {{Kind::Number, "mouse_sensitivity"}, {Kind::Toggle, "invert_mouse_y"}, {Kind::Toggle, "read_aloud"}, {Kind::Toggle, "text_to_voice"}, {Kind::Action, "keys"}, {Kind::Action, "back"}};
     // Every key of every system that has moved onto the registry (keys.hpp), by section: Enter, then the
     // key wanted; Backspace puts back the default.
@@ -204,6 +206,9 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "voxel_joined") return onoff(s_.character_voxel_joined);
     if (it.id == "skin_blend") return trf("value.skin_blend", {std::to_string(s_.character_skin_blend)});
     if (it.id == "skin_detail") return tr("value.skin_detail." + std::to_string(s_.character_skin_detail));
+    if (it.id == "skin_limbs") return onoff(s_.character_skin_limbs);
+    if (it.id == "skin_subdivision") return s_.character_skin_subdivision == 0 ? tr("value.off") : s_.character_skin_subdivision == 1 ? tr("value.skin_subdivision_one") : trf("value.skin_subdivision", {std::to_string(s_.character_skin_subdivision)});
+    if (it.id == "skin_smoothing") return s_.character_skin_smoothing == 0 ? tr("value.off") : s_.character_skin_smoothing == 1 ? tr("value.skin_smoothing_one") : trf("value.skin_smoothing", {std::to_string(s_.character_skin_smoothing)});
     if (it.id == "ai_explorers") return onoff(s_.ai_explorers) + "  " + tr("value.to_come");
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
@@ -529,6 +534,7 @@ void MainMenu::change(int dir)
         else if (it.id == "personal_turning_rings") s_.personal_turning_rings = !s_.personal_turning_rings;
         else if (it.id == "personal_day_night") s_.personal_day_night = !s_.personal_day_night;
         else if (it.id == "voxel_joined") s_.character_voxel_joined = !s_.character_voxel_joined;
+        else if (it.id == "skin_limbs") s_.character_skin_limbs = !s_.character_skin_limbs;
         else if (it.id == "personal_catalogue_covers") s_.personal_catalogue_covers = !s_.personal_catalogue_covers;
         else if (it.id == "personal_open_in_place") s_.personal_open_in_place = !s_.personal_open_in_place;
         else if (it.id == "raid_share")
@@ -568,6 +574,8 @@ void MainMenu::change(int dir)
         else if (it.id == "voxel_across") s_.character_voxel_across = std::clamp(s_.character_voxel_across + dir, 1, 8);
         else if (it.id == "skin_blend") s_.character_skin_blend = std::clamp(s_.character_skin_blend + 10 * dir, 0, 200);
         else if (it.id == "skin_detail") s_.character_skin_detail = std::clamp(s_.character_skin_detail + dir, 0, 3);
+        else if (it.id == "skin_smoothing") s_.character_skin_smoothing = std::clamp(s_.character_skin_smoothing + dir, 0, 20);
+        else if (it.id == "skin_subdivision") s_.character_skin_subdivision = std::clamp(s_.character_skin_subdivision + dir, 0, 3);
         else if (it.id == "axis_colours")
         {
             // The presets in turn (from colours of one's own, Right goes to the first, Left to the last).

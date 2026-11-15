@@ -68,6 +68,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
@@ -8049,6 +8050,418 @@ void test_skin_quads_and_smooth()
     CHECK(skin_smooth_normals(SkinMesh{}).empty());
 }
 
+// The skin's limbs (IDEAS 19.229, the pipeline's first stage): the rounded cone's distance exact (outside
+// it, the nearest of the spheres swept along the bone, found by trying a thousand of them; inside,
+// negative); no limbs, the skin exactly as before; one sphere has none; two spheres apart are two pieces
+// of skin alone and one closed piece with their limb, as wide at its middle as the cone; and characters
+// of many limbs and one that stands apart closed, in as many pieces as the limbs leave them.
+static size_t skin_pieces(const SkinMesh& m)
+{
+    std::vector<uint32_t> up(m.vertices.size());
+    for (size_t i = 0; i < up.size(); ++i) up[i] = uint32_t(i);
+    auto top = [&](uint32_t i) {
+        while (up[i] != i) i = up[i] = up[up[i]];
+        return i;
+    };
+    for (size_t t = 0; t < m.triangles(); ++t)
+        for (int k = 1; k < 3; ++k) up[top(m.tris[t * 3 + size_t(k)])] = top(m.tris[t * 3]);
+    size_t n = 0;
+    for (size_t i = 0; i < up.size(); ++i) n += top(uint32_t(i)) == i;
+    return n;
+}
+
+static bool skin_closed(const SkinMesh& m, bool pieces_allowed)
+{
+    std::map<std::pair<uint32_t, uint32_t>, int> edges;
+    for (size_t t = 0; t < m.triangles(); ++t)
+        for (int k = 0; k < 3; ++k)
+        {
+            const uint32_t i = m.tris[t * 3 + size_t(k)], j = m.tris[t * 3 + size_t((k + 1) % 3)];
+            ++edges[{std::min(i, j), std::max(i, j)}];
+        }
+    for (const auto& e : edges)
+        if (pieces_allowed ? e.second % 2 != 0 : e.second != 2) return false;
+    return pieces_allowed || int64_t(m.vertices.size()) - int64_t(edges.size()) + int64_t(m.triangles()) == 2;
+}
+
+static bool same_skin(const SkinMesh& x, const SkinMesh& y)
+{
+    if (x.tris != y.tris || x.quads != y.quads || x.vertices.size() != y.vertices.size()) return false;
+    for (size_t i = 0; i < x.vertices.size(); ++i)
+        if (std::memcmp(x.vertices[i].p, y.vertices[i].p, sizeof x.vertices[i].p) != 0 || std::memcmp(x.vertices[i].n, y.vertices[i].n, sizeof x.vertices[i].n) != 0 ||
+            x.vertices[i].sphere != y.vertices[i].sphere)
+            return false;
+    return true;
+}
+
+void test_skin_limbs()
+{
+    // The distance: a cone from radius 100 at the origin to 50 at 300 along x.
+    SkinLimb l;
+    l.ra = 100, l.b[0] = 300, l.rb = 50;
+    auto swept = [&](const float p[3]) {
+        float best = 1e30f;
+        for (int i = 0; i <= 1000; ++i)
+        {
+            const float t = float(i) / 1000.0f, c = 300.0f * t, r = 100.0f + (50.0f - 100.0f) * t;
+            best = std::min(best, std::sqrt((p[0] - c) * (p[0] - c) + p[1] * p[1] + p[2] * p[2]) - r);
+        }
+        return best;
+    };
+    uint64_t rng = 12345;
+    auto next = [&]() {
+        rng = rng * 6364136223846793005ull + 1442695040888963407ull;
+        return float(int32_t(rng >> 33) % 1000) - 500.0f + 150.0f * float(rng >> 63);
+    };
+    float worst = 0;
+    for (int i = 0; i < 2000; ++i)
+    {
+        const float p[3] = {next(), next(), next()};
+        const float d = skin_limb_distance(l, p), want = swept(p);
+        if (want > 0) worst = std::max(worst, std::fabs(d - want));
+        else CHECK(d <= 0.5f);
+    }
+    std::printf("  a limb's distance against a thousand swept spheres: at most %.3f units apart outside it\n", double(worst));
+    CHECK(worst < 0.5f);
+    {
+        const float behind[3] = {-150, 0, 0}, beyond[3] = {400, 0, 0}, middle[3] = {150, 0, 0};
+        CHECK(std::fabs(skin_limb_distance(l, behind) - 50.0f) < 1e-3f);
+        CHECK(std::fabs(skin_limb_distance(l, beyond) - 50.0f) < 1e-3f);
+        CHECK(skin_limb_distance(l, middle) < -50.0f);
+        // One end's sphere holding the other's: the larger sphere.
+        SkinLimb in = l;
+        in.b[0] = 20, in.rb = 30;
+        const float p[3] = {0, 130, 0};
+        CHECK(std::fabs(skin_limb_distance(in, p) - 30.0f) < 1e-3f);
+    }
+    // One sphere: no limbs, and the skin the same with them as without.
+    Sphere a;
+    a.r = 100;
+    CHECK(skin_limbs({a}, 50.0f).empty());
+    CHECK(same_skin(skin_mesh({a}, 10.0f, 50.0f, skin_limbs({a}, 50.0f)), skin_mesh({a}, 10.0f, 50.0f)));
+    // Two spheres 400 apart (radius 100 and 60, the second the first's child): two pieces without their
+    // limb; one closed piece with it, its middle as wide as the cone there.
+    {
+        Sphere b;
+        b.parent = 0, b.x = 400, b.r = 60;
+        const std::vector<Sphere> two = {a, b};
+        const std::vector<SkinLimb> limbs = skin_limbs(two, 0.0f);
+        CHECK(limbs.size() == 1 && limbs[0].parent == 0 && limbs[0].child == 1 && limbs[0].ra == 100.0f && limbs[0].rb == 60.0f);
+        const SkinMesh apart = skin_mesh(two, 5.0f, 0.0f), joined = skin_mesh(two, 5.0f, 0.0f, limbs);
+        CHECK(skin_pieces(apart) == 2);
+        CHECK(skin_pieces(joined) == 1);
+        CHECK(skin_closed(joined, false));
+        check_skin_quads(joined, false);
+        float most = 0;
+        for (const SkinVertex& v : joined.vertices)
+            if (std::fabs(v.p[0] - 200.0f) < 2.5f) most = std::max(most, std::sqrt(v.p[1] * v.p[1] + v.p[2] * v.p[2]));
+        // (the side's radius at the middle: the tangent's slope sin = 40 / 400, so 80 / cos at the middle)
+        const float want = 80.0f / std::sqrt(1.0f - 0.01f);
+        std::printf("  two spheres 400 apart joined by their limb: %zu triangles, its middle %.1f units from the bone (the cone's %.1f)\n", joined.triangles(), double(most), double(want));
+        CHECK(std::fabs(most - want) < 5.0f);
+        // With a blend the far ends are still each its own sphere's.
+        const SkinMesh soft = skin_mesh(two, 5.0f, 50.0f, skin_limbs(two, 50.0f));
+        CHECK(skin_pieces(soft) == 1);
+        CHECK(skin_closed(soft, false));
+    }
+    // Characters: off is the skin as before (seed 99 pinned at its triangles), and with limbs every
+    // skin has no edge left open, every vertex's sphere one of the character's.
+    struct Case
+    {
+        uint64_t seed;
+        uint32_t limbs, joints, branches;
+        Symmetry symmetry;
+        bool head;
+    };
+    const Case cases[] = {{99, 5, 3, 1, Symmetry::Bilateral, true}, {12345, 3, 6, 0, Symmetry::Bilateral, false}, {42, 16, 12, 3, Symmetry::Bilateral, true}, {7, 8, 4, 2, Symmetry::Radial, true}};
+    for (const Case& k : cases)
+    {
+        CharacterSettings t;
+        t.seed = k.seed, t.limbs = k.limbs, t.joints = k.joints, t.branches = k.branches, t.symmetry = k.symmetry, t.head = k.head;
+        const Character c = unfold_character(t);
+        const SkinCell sc = skin_cell(c.spheres, voxel_cell(c), 1);
+        const float blend = skin_blend(c.spheres, 50);
+        const SkinMesh off = skin_mesh(c.spheres, sc.cell, blend, {});
+        CHECK(same_skin(off, skin_mesh(c.spheres, sc.cell, blend)));
+        const std::vector<SkinLimb> limbs = skin_limbs(c.spheres, blend);
+        CHECK(limbs.size() + 1 == c.spheres.size());
+        const SkinMesh on = skin_mesh(c.spheres, sc.cell, blend, limbs);
+        CHECK(skin_closed(on, true));
+        check_skin_quads(on, true);
+        for (const SkinVertex& v : on.vertices) CHECK(v.sphere < c.spheres.size());
+        std::printf("  seed %llu (%zu spheres): %zu triangles in %zu pieces without limbs, %zu in %zu with %zu limbs\n", (unsigned long long)k.seed, c.spheres.size(), off.triangles(),
+                    skin_pieces(off), on.triangles(), skin_pieces(on), limbs.size());
+        if (k.seed == 99) CHECK(off.triangles() == 23180);
+        CHECK(skin_pieces(on) <= skin_pieces(off));
+        if (k.seed == 12345) CHECK(skin_pieces(on) == 1);
+        // On the world lattice (IDEAS 19.216), where seed 12345's voxels fall apart, its skin's cell the
+        // lattice's halved.
+        VoxelSizing lattice;
+        lattice.rule = VoxelSizing::Lattice;
+        const SkinCell lc = skin_cell(c.spheres, voxel_cell_of(c, lattice).cell, 1);
+        const SkinMesh loff = skin_mesh(c.spheres, lc.cell, blend), lon = skin_mesh(c.spheres, lc.cell, blend, limbs);
+        CHECK(skin_closed(lon, true));
+        std::printf("    on the lattice (cell %.1f): %zu triangles in %zu pieces without limbs, %zu in %zu with them\n", double(lc.cell), loff.triangles(), skin_pieces(loff), lon.triangles(),
+                    skin_pieces(lon));
+        CHECK(skin_pieces(lon) == 1);
+    }
+}
+
+// Smooth plus, the surface (IDEAS 19.229, the pipeline's second stage): Taubin's smoothing of the skin.
+// No rounds is the skin exactly; with rounds only the vertices move (the same triangles and quads, the
+// mesh still closed, every normal of length one and outwards on a sphere); one sphere's skin comes nearer
+// its sphere and keeps its volume, where the shrink step alone loses volume; and characters of one
+// sphere, many limbs and radial symmetry, with and without limbs, keep their volume to within a
+// percent, measured with the time a round takes.
+void test_skin_taubin()
+{
+    CHECK(skin_taubin(SkinMesh{}, 4).vertices.empty());
+    CHECK(skin_volume(SkinMesh{}) == 0.0);
+    Sphere a;
+    a.r = 100;
+    const SkinMesh m = skin_mesh({a}, 10.0f, 0.0f);
+    CHECK(same_skin(skin_taubin(m, 0), m));
+    auto spread = [](const SkinMesh& s) { // (the root mean square of each vertex's distance from radius 100)
+        double sum = 0;
+        for (const SkinVertex& v : s.vertices)
+        {
+            const double d = std::sqrt(double(v.p[0]) * v.p[0] + double(v.p[1]) * v.p[1] + double(v.p[2]) * v.p[2]) - 100.0;
+            sum += d * d;
+        }
+        return std::sqrt(sum / double(s.vertices.size()));
+    };
+    const SkinMesh t = skin_taubin(m, 10);
+    CHECK(t.tris == m.tris && t.quads == m.quads && t.vertices.size() == m.vertices.size());
+    CHECK(skin_closed(t, false));
+    check_skin_quads(t, false);
+    for (size_t i = 0; i < t.vertices.size(); ++i)
+    {
+        const SkinVertex& v = t.vertices[i];
+        CHECK(v.sphere == m.vertices[i].sphere);
+        const float len = std::sqrt(v.n[0] * v.n[0] + v.n[1] * v.n[1] + v.n[2] * v.n[2]);
+        CHECK(std::fabs(len - 1.0f) < 1e-4f);
+        CHECK(v.p[0] * v.n[0] + v.p[1] * v.n[1] + v.p[2] * v.n[2] > 0); // (outwards)
+    }
+    const double ball = 4.0 / 3.0 * 3.14159265358979 * 1e6, v0 = skin_volume(m), v1 = skin_volume(t);
+    const double shrunk = skin_volume(skin_taubin(m, 10, kTaubinShrink, 0.0f));
+    std::printf("  one sphere's skin (%zu triangles): volume %.0f (the ball's %.0f), after 10 rounds %.0f (%.2f%%), the shrink step alone %.0f (%.2f%%); "
+                "its corners' distance from the sphere %.3f units, after %.3f\n",
+                m.triangles(), v0, ball, v1, 100.0 * v1 / v0, shrunk, 100.0 * shrunk / v0, spread(m), spread(t));
+    CHECK(std::fabs(v0 - ball) < 0.02 * ball);
+    CHECK(std::fabs(v1 - v0) < 0.01 * v0);
+    CHECK(shrunk < 0.95 * v0);
+    CHECK(spread(t) < spread(m));
+    // Characters (one sphere, seed 99, many limbs, radial, one that stands apart), with limbs and without.
+    struct Case
+    {
+        uint64_t seed;
+        uint32_t limbs, joints, branches;
+        Symmetry symmetry;
+        bool head;
+    };
+    const Case cases[] = {{1, 0, 1, 0, Symmetry::Bilateral, false}, {99, 5, 3, 1, Symmetry::Bilateral, true}, {42, 16, 12, 3, Symmetry::Bilateral, true},
+                          {7, 8, 4, 2, Symmetry::Radial, true}, {12345, 3, 6, 0, Symmetry::Bilateral, false}};
+    for (const Case& k : cases)
+    {
+        CharacterSettings st;
+        st.seed = k.seed, st.limbs = k.limbs, st.joints = k.joints, st.branches = k.branches, st.symmetry = k.symmetry, st.head = k.head;
+        const Character c = unfold_character(st);
+        const SkinCell sc = skin_cell(c.spheres, voxel_cell(c), 1);
+        const float blend = skin_blend(c.spheres, 50);
+        for (int with_limbs = 0; with_limbs < 2; ++with_limbs)
+        {
+            const SkinMesh s = skin_mesh(c.spheres, sc.cell, blend, with_limbs ? skin_limbs(c.spheres, blend) : std::vector<SkinLimb>{});
+            const double before = skin_volume(s);
+            std::printf("  seed %llu (%zu spheres%s): %zu triangles, volume %.0f;", (unsigned long long)k.seed, c.spheres.size(), with_limbs ? ", limbs" : "", s.triangles(), before);
+            double ms_of[11] = {0};
+            for (uint32_t rounds : {1u, 4u, 10u})
+            {
+                const auto t0 = std::chrono::steady_clock::now();
+                const SkinMesh r = skin_taubin(s, rounds);
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                const double after = skin_volume(r);
+                double moved = 0;
+                for (size_t i = 0; i < s.vertices.size(); ++i)
+                {
+                    const float* p = s.vertices[i].p;
+                    const float* q = r.vertices[i].p;
+                    moved += std::sqrt(double(p[0] - q[0]) * (p[0] - q[0]) + double(p[1] - q[1]) * (p[1] - q[1]) + double(p[2] - q[2]) * (p[2] - q[2]));
+                }
+                ms_of[rounds] = ms;
+                std::printf(" %u rounds in %.2f ms, %.0f (%.2f%%, corners moved %.3f cells on average);", unsigned(rounds), ms, after,
+                            100.0 * after / before, moved / double(s.vertices.size()) / double(sc.cell));
+                CHECK(r.tris == s.tris && r.quads == s.quads);
+                CHECK(std::fabs(after - before) < 0.01 * before);
+                if (rounds == 4) CHECK(skin_closed(r, true));
+            }
+            // (a round's own time: what nine more rounds added, the neighbours and normals made once either way)
+            std::printf(" %.3f ms a round\n", (ms_of[10] - ms_of[1]) / 9.0);
+        }
+    }
+}
+
+// Smooth plus, the outline (IDEAS 19.229, the pipeline's third stage): Catmull and Clark's subdivision of
+// the skin. No steps is the skin exactly; each step makes four quads of each (each triangle of a skin
+// given as triangles alone three), the mesh still closed (every edge between two triangles, V - E + F = 2
+// for one sphere), wound outwards; one sphere's outline comes nearer the sphere; a cube's corners move as
+// the rule says; the bound on quads takes fewer steps; and characters of one sphere, many limbs and radial
+// symmetry, with and without limbs and smoothing, stay closed, measured with the time each step takes.
+void test_skin_subdivide()
+{
+    CHECK(skin_subdivide(SkinMesh{}, 2).vertices.empty());
+    // A cube of side 2 as six quads (wound anticlockwise from outside): one step moves each corner from
+    // (1, 1, 1) to (5/9, 5/9, 5/9), as the rule gives for three faces round it.
+    {
+        SkinMesh cube;
+        const float c[8][3] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1}, {-1, -1, 1}, {1, -1, 1}, {1, 1, 1}, {-1, 1, 1}};
+        for (const auto& p : c)
+        {
+            SkinVertex v{};
+            for (int k = 0; k < 3; ++k) v.p[k] = p[k];
+            cube.vertices.push_back(v);
+        }
+        const uint32_t f[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {2, 3, 7, 6}, {1, 2, 6, 5}, {0, 4, 7, 3}};
+        for (const auto& q : f)
+        {
+            cube.quads.insert(cube.quads.end(), {q[0], q[1], q[2], q[3]});
+            cube.tris.insert(cube.tris.end(), {q[0], q[1], q[2], q[0], q[2], q[3]});
+        }
+        CHECK(skin_closed(cube, false));
+        CHECK(same_skin(skin_subdivide(cube, 0), cube));
+        const SkinMesh one = skin_subdivide(cube, 1);
+        CHECK(one.quad_count() == 24 && one.triangles() == 48 && one.vertices.size() == 26);
+        CHECK(skin_closed(one, false));
+        check_skin_quads(one, false);
+        CHECK(std::fabs(one.vertices[6].p[0] - 5.0f / 9.0f) < 1e-5f && std::fabs(one.vertices[6].p[2] - 5.0f / 9.0f) < 1e-5f);
+        CHECK(skin_volume(one) > 0);
+        // Given as triangles alone (no quads): the rule's general form, three quads a triangle.
+        SkinMesh tri = cube;
+        tri.quads.clear();
+        const SkinMesh t1 = skin_subdivide(tri, 1);
+        CHECK(t1.quad_count() == 36 && skin_closed(t1, false));
+        CHECK(skin_subdivided_quads(tri, 1) == 36 && skin_subdivided_quads(tri, 2) == 144);
+        CHECK(skin_subdivide(tri, 2).quad_count() == 144);
+        CHECK(skin_volume(t1) > 0);
+        // The bound: the steps whose quads stay within it.
+        CHECK(skin_subdivision_steps(cube, 3, 384) == 3 && skin_subdivision_steps(cube, 3, 383) == 2 && skin_subdivision_steps(cube, 3, 23) == 0);
+        CHECK(skin_subdivision_steps(cube, 0) == 0);
+    }
+    // One sphere of radius 100 on a 10-unit grid: rounder for the subdivision (its corners' distances from
+    // the middle spread less about their mean than the skin's), and the sharpest bend between two
+    // neighbouring triangles, which is what an outline shows, smaller with each step, every normal of length one and outwards, still one closed
+    // piece. (Catmull and Clark's surface lies inside the faces it is made from, so the corners come a
+    // little nearer the middle: the volume measures how much.)
+    Sphere a;
+    a.r = 100;
+    const SkinMesh m = skin_mesh({a}, 10.0f, 0.0f);
+    CHECK(same_skin(skin_subdivide(m, 0), m));
+    auto roundness = [](const SkinMesh& s) { // (the root mean square of each corner's distance from the mean distance)
+        double sum = 0, sum2 = 0;
+        for (const SkinVertex& v : s.vertices)
+        {
+            const double d = std::sqrt(double(v.p[0]) * v.p[0] + double(v.p[1]) * v.p[1] + double(v.p[2]) * v.p[2]);
+            sum += d, sum2 += d * d;
+        }
+        const double n = double(s.vertices.size()), mean = sum / n;
+        return std::sqrt(std::max(0.0, sum2 / n - mean * mean));
+    };
+    auto sharpest = [](const SkinMesh& s) { // (the largest angle between two triangles that share a side, in degrees)
+        std::map<std::pair<uint32_t, uint32_t>, std::vector<size_t>> sides;
+        std::vector<double> n(s.triangles() * 3);
+        for (size_t t = 0; t < s.triangles(); ++t)
+        {
+            const float* p0 = s.vertices[s.tris[t * 3]].p;
+            const float* p1 = s.vertices[s.tris[t * 3 + 1]].p;
+            const float* p2 = s.vertices[s.tris[t * 3 + 2]].p;
+            const double e1[3] = {double(p1[0]) - p0[0], double(p1[1]) - p0[1], double(p1[2]) - p0[2]}, e2[3] = {double(p2[0]) - p0[0], double(p2[1]) - p0[1], double(p2[2]) - p0[2]};
+            double g[3] = {e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]};
+            const double l = std::sqrt(g[0] * g[0] + g[1] * g[1] + g[2] * g[2]);
+            for (int k = 0; k < 3; ++k) n[t * 3 + size_t(k)] = l > 0 ? g[k] / l : 0;
+            for (int k = 0; k < 3; ++k)
+            {
+                const uint32_t i = s.tris[t * 3 + size_t(k)], j = s.tris[t * 3 + size_t((k + 1) % 3)];
+                sides[{std::min(i, j), std::max(i, j)}].push_back(t);
+            }
+        }
+        double most = 0;
+        for (const auto& e : sides)
+            if (e.second.size() == 2)
+            {
+                const double* x = &n[e.second[0] * 3];
+                const double* y = &n[e.second[1] * 3];
+                most = std::max(most, std::acos(std::clamp(x[0] * y[0] + x[1] * y[1] + x[2] * y[2], -1.0, 1.0)) * 180.0 / 3.14159265358979);
+            }
+        return most;
+    };
+    const double ball = 4.0 / 3.0 * 3.14159265358979 * 1e6;
+    std::printf("  one sphere's skin: %zu quads, its corners' distances spread %.3f units, the sharpest bend %.1f degrees, volume %.2f%% of the ball's;", m.quad_count(), roundness(m),
+                sharpest(m), 100.0 * skin_volume(m) / ball);
+    double was_sharp = sharpest(m);
+    for (uint32_t steps = 1; steps <= 2; ++steps)
+    {
+        const SkinMesh s = skin_subdivide(m, steps);
+        CHECK(s.quad_count() == m.quad_count() << (2 * steps));
+        CHECK(skin_closed(s, false));
+        check_skin_quads(s, false);
+        for (const SkinVertex& v : s.vertices)
+        {
+            const float len = std::sqrt(v.n[0] * v.n[0] + v.n[1] * v.n[1] + v.n[2] * v.n[2]);
+            CHECK(std::fabs(len - 1.0f) < 1e-4f);
+            CHECK(v.p[0] * v.n[0] + v.p[1] * v.n[1] + v.p[2] * v.n[2] > 0);
+            CHECK(v.sphere == 0);
+        }
+        const double round = roundness(s), sharp = sharpest(s);
+        std::printf(" %u %s %zu quads, %.3f units, %.1f degrees, %.2f%%;", unsigned(steps), steps == 1 ? "step" : "steps", s.quad_count(), round, sharp, 100.0 * skin_volume(s) / ball);
+        CHECK(round < roundness(m));
+        CHECK(sharp < was_sharp);
+        CHECK(std::fabs(skin_volume(s) - ball) < 0.03 * ball);
+        was_sharp = sharp;
+    }
+    std::printf("\n");
+    // Characters (one sphere, seed 99, many limbs, radial, one that stands apart), with and without
+    // limbs, with and without four rounds of smoothing before it.
+    struct Case
+    {
+        uint64_t seed;
+        uint32_t limbs, joints, branches;
+        Symmetry symmetry;
+        bool head;
+    };
+    const Case cases[] = {{1, 0, 1, 0, Symmetry::Bilateral, false}, {99, 5, 3, 1, Symmetry::Bilateral, true}, {42, 16, 12, 3, Symmetry::Bilateral, true},
+                          {7, 8, 4, 2, Symmetry::Radial, true}, {12345, 3, 6, 0, Symmetry::Bilateral, false}};
+    for (const Case& k : cases)
+    {
+        CharacterSettings st;
+        st.seed = k.seed, st.limbs = k.limbs, st.joints = k.joints, st.branches = k.branches, st.symmetry = k.symmetry, st.head = k.head;
+        const Character c = unfold_character(st);
+        const SkinCell sc = skin_cell(c.spheres, voxel_cell(c), 1);
+        const float blend = skin_blend(c.spheres, 50);
+        for (int with_limbs = 0; with_limbs < 2; ++with_limbs)
+            for (uint32_t rounds : {0u, 4u})
+            {
+                const SkinMesh s0 = skin_mesh(c.spheres, sc.cell, blend, with_limbs ? skin_limbs(c.spheres, blend) : std::vector<SkinLimb>{});
+                const SkinMesh s = skin_taubin(s0, rounds);
+                CHECK(same_skin(skin_subdivide(s, 0), s));
+                const double before = skin_volume(s);
+                std::printf("  seed %llu (%zu spheres%s, %u rounds): %zu quads;", (unsigned long long)k.seed, c.spheres.size(), with_limbs ? ", limbs" : "", unsigned(rounds), s.quad_count());
+                for (uint32_t steps = 1; steps <= 2; ++steps)
+                {
+                    const auto t0 = std::chrono::steady_clock::now();
+                    const SkinMesh r = skin_subdivide(s, steps);
+                    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+                    CHECK(r.quad_count() == s.quad_count() << (2 * steps));
+                    CHECK(r.quad_count() == skin_subdivided_quads(s, steps));
+                    CHECK(skin_closed(r, true));
+                    for (const SkinVertex& v : r.vertices) CHECK(v.sphere < c.spheres.size());
+                    const double after = skin_volume(r);
+                    CHECK(after > 0.9 * before && after < 1.01 * before);
+                    std::printf(" %u %s %zu quads in %.2f ms (volume %.2f%%);", unsigned(steps), steps == 1 ? "step" : "steps", r.quad_count(), ms, 100.0 * after / before);
+                }
+                std::printf(" at most %u of 3 steps within %zu quads\n", unsigned(skin_subdivision_steps(s, 3)), kSkinMostSubdividedQuads);
+            }
+    }
+}
+
 // Editing a character by its joints (IDEAS 19.203, sieve/character_edit.hpp): a seed-made character kept
 // as its spheres with its symmetry (sieve-character-v4), its mirrored spheres found and kept mirrored
 // through every edit, bones keeping their lengths, and each edit undone by its opposite to the same text.
@@ -8388,6 +8801,9 @@ void run_all(int argc, char** argv)
     RUN(test_voxel_lattice_and_joining());
     RUN(test_character_skin());
     RUN(test_skin_quads_and_smooth());
+    RUN(test_skin_limbs());
+    RUN(test_skin_taubin());
+    RUN(test_skin_subdivide());
     RUN(test_character_edit());
     RUN(test_key_registry());
     RUN(test_footer_wrap());

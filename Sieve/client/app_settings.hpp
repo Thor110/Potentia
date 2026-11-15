@@ -238,6 +238,17 @@ struct AppSettings
     // and how many times the voxels' cell is halved for its grid (0 to 3). Used only when it is drawn.
     int character_skin_blend = 50;
     int character_skin_detail = 1;
+    // Limbs (IDEAS 19.229, the mesh scaling pipeline's first stage): each bone put into the skin's field
+    // as a rounded cone from the parent sphere to the child, so the skin runs along every limb and bridges
+    // the gaps between spheres. Off until turned on (off, the skin is exactly as it was).
+    bool character_skin_limbs = false;
+    // Skin Smoothing (IDEAS 19.229, the pipeline's second stage): the rounds of Taubin's smoothing the
+    // skin is given after it is made, 0 to 20. 0 until asked for (then the skin is exactly as it was).
+    int character_skin_smoothing = 0;
+    // Skin Subdivision (IDEAS 19.229, the pipeline's third stage): the steps of Catmull and Clark's
+    // subdivision the quads and smooth drawings are given after the smoothing, 0 to 3. 0 until asked for
+    // (then those drawings are of the skin's own faces, as they were).
+    int character_skin_subdivision = 0;
     bool character_beside = true;
     int character_max_scale = 16;   // how many times the hallway may grow to fit it, 1 to 64
     bool locator_compare = true;     // Compare with zip and 7z: what they make of it worked out and shown beside Sieve's (IDEAS 19.124)

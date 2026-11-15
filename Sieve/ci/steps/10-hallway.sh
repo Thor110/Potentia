@@ -516,6 +516,86 @@ $H --personal-world --real-graphics --settings sqd/m.ini --pworld-look -10 --scr
 $H --personal-world --settings sqd/off.ini --pworld-look -10 --screenshot sqd-pworld-off.png | tr -d '\r' | q "^characters: drawn as wireframe (Wireframe is on; quads chosen)$"
 $H --no-menu --real-graphics --settings sqd/q.ini --character-store pdim/characters --screenshot sqd-hall.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin$"
 $H --no-menu --real-graphics --settings sqd/m.ini --character-store pdim/characters --screenshot sqd-hall2.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin$"
+# The skin's limbs (IDEAS 19.229, the first stage of the mesh scaling pipeline): Limbs on Settings >
+# Graphics > Character Voxels, off by default. Off, the skin is as it was (no limbs said, the same
+# triangles, the same picture byte for byte); on, each bone is a rounded cone in the skin's field, the
+# Creator says how many limbs it joined (26 for seed 99) and the triangles change; your dimension and the
+# hallway say "with limbs"; the same skin with limbs made twice is the same picture.
+rm -rf slm
+mkdir -p slm
+cp skn/s.ini slm/s.ini
+cp skn/s.ini slm/l.ini
+$H --main-menu --settings slm/l.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:skin_limbs,Return" --screenshot slm-menu.png > /dev/null
+grep -c "^skin_limbs = on " slm/l.ini | q "^1$"
+grep -c "^skin_limbs = off " slm/s.ini | q "^1$"
+$H --menu --real-graphics --settings slm/s.ini --character c99.character --creator --screenshot slm-off.png | tr -d '\r' > slm/off.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" slm/off.txt
+test "$(grep -c "limbs joined" slm/off.txt || true)" = 0
+cmp slm-off.png skn-creator.png
+$H --menu --real-graphics --settings slm/l.ini --character c99.character --creator --screenshot slm-on.png | tr -d '\r' > slm/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 22676 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, 26 limbs joined$" slm/on.txt
+$H --menu --real-graphics --settings slm/l.ini --character c99.character --creator --screenshot slm-on2.png > /dev/null
+cmp slm-on.png slm-on2.png
+$H --personal-world --real-graphics --settings slm/l.ini --pworld-look -10 --screenshot slm-pworld.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, with limbs$"
+$H --no-menu --real-graphics --settings slm/l.ini --character-store pdim/characters --screenshot slm-hall.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, with limbs$"
+# Smooth plus, the surface (IDEAS 19.229, the pipeline's second stage): Skin Smoothing on Settings >
+# Graphics > Character Voxels, rounds of Taubin's smoothing, 0 (off) by default. Off, the skin is as it
+# was (nothing said of smoothing, the same picture byte for byte); with four rounds the Creator says the
+# rounds, their time and the volume before and after (kept within half a percent), the triangles the same
+# 23180, the picture changed, and the same picture made twice; your dimension and the hallway say the
+# rounds; with limbs too, both stages are said.
+rm -rf ssm
+mkdir -p ssm
+cp skn/s.ini ssm/s.ini
+cp skn/s.ini ssm/r.ini
+$H --main-menu --settings ssm/r.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:skin_smoothing,Right,Right,Right,Right" --screenshot ssm-menu.png > /dev/null
+grep -c "^skin_smoothing = 4 " ssm/r.ini | q "^1$"
+grep -c "^skin_smoothing = 0 " ssm/s.ini | q "^1$"
+$H --menu --real-graphics --settings ssm/s.ini --character c99.character --creator --screenshot ssm-off.png | tr -d '\r' > ssm/off.txt
+test "$(grep -c "smoothed" ssm/off.txt || true)" = 0
+cmp ssm-off.png skn-creator.png
+$H --menu --real-graphics --settings ssm/r.ini --character c99.character --creator --screenshot ssm-on.png | tr -d '\r' > ssm/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, smoothed 4 rounds in [0-9.]* ms.*, volume [1-9][0-9]* to [1-9][0-9]* cubic units (100\.[0-4][0-9]%)$" ssm/on.txt
+if cmp -s ssm-on.png skn-creator.png; then exit 1; fi
+$H --menu --real-graphics --settings ssm/r.ini --character c99.character --creator --screenshot ssm-on2.png > /dev/null
+cmp ssm-on.png ssm-on2.png
+$H --personal-world --real-graphics --settings ssm/r.ini --pworld-look -10 --screenshot ssm-pworld.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, smoothed 4 rounds$"
+$H --no-menu --real-graphics --settings ssm/r.ini --character-store pdim/characters --screenshot ssm-hall.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, smoothed 4 rounds$"
+sed -e "s/^skin_limbs = off /skin_limbs = on /" ssm/r.ini > ssm/lr.ini
+$H --menu --real-graphics --settings ssm/lr.ini --character c99.character --creator --screenshot ssm-limbs.png | tr -d '\r' | q "^skin: .*, 26 limbs joined, smoothed 4 rounds in [0-9.]* ms"
+$H --personal-world --real-graphics --settings ssm/lr.ini --pworld-look -10 --screenshot ssm-pworld2.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, with limbs, smoothed 4 rounds$"
+# Smooth plus, the outline (IDEAS 19.229, the pipeline's third stage): Skin Subdivision on Settings >
+# Graphics > Character Voxels, steps of Catmull and Clark's subdivision for the quads and smooth drawings,
+# 0 (off) by default. Off, the quads are as they were (nothing said of subdivision, the same picture byte
+# for byte); with two steps the Creator says the steps, their time and the quads before and after (seed
+# 99's 11590 four times four, 185440), the picture changed and the same made twice; three asked are cut to
+# two and the readout says why; the skin drawing is never subdivided (the same picture); the smooth
+# drawing's triangles are twice the quads; your dimension and the hallway say the steps and the bound.
+rm -rf ssd
+mkdir -p ssd
+cp sqd/q.ini ssd/s.ini
+cp sqd/q.ini ssd/q.ini
+$H --main-menu --settings ssd/q.ini --press "Item:settings,Return,Item:graphics,Return,Item:character_voxels,Return,Item:skin_subdivision,Right,Right" --screenshot ssd-menu.png > /dev/null
+grep -c "^skin_subdivision = 2 " ssd/q.ini | q "^1$"
+grep -c "^skin_subdivision = 0 " ssd/s.ini | q "^1$"
+$H --menu --real-graphics --settings ssd/s.ini --character c99.character --creator --screenshot ssd-off.png | tr -d '\r' > ssd/off.txt
+test "$(grep -c "subdivided" ssd/off.txt || true)" = 0
+cmp ssd-off.png sqd-quads.png
+$H --menu --real-graphics --settings ssd/q.ini --character c99.character --creator --screenshot ssd-on.png | tr -d '\r' > ssd/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 185440 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, subdivided 2 steps in [0-9.]* ms.*, 11590 to 185440 quads$" ssd/on.txt
+if cmp -s ssd-on.png sqd-quads.png; then exit 1; fi
+$H --menu --real-graphics --settings ssd/q.ini --character c99.character --creator --screenshot ssd-on2.png > /dev/null
+cmp ssd-on.png ssd-on2.png
+sed -e "s/^skin_subdivision = 2 /skin_subdivision = 3 /" ssd/q.ini > ssd/q3.ini
+$H --menu --real-graphics --settings ssd/q3.ini --character c99.character --creator --screenshot ssd-three.png | tr -d '\r' | q "^skin: .*, subdivided 2 steps in [0-9.]* ms.*, 11590 to 185440 quads (3 asked: another step would pass 200000 quads)$"
+sed -e "s/^drawing = 5 /drawing = 4 /" ssd/q.ini > ssd/k.ini
+$H --menu --real-graphics --settings ssd/k.ini --character c99.character --creator --screenshot ssd-skin.png | tr -d '\r' > ssd/skin.txt
+test "$(grep -c "subdivided" ssd/skin.txt || true)" = 0
+cmp ssd-skin.png skn-creator.png
+sed -e "s/^drawing = 5 /drawing = 6 /" ssd/q.ini > ssd/m.ini
+$H --menu --real-graphics --settings ssd/m.ini --character c99.character --creator --screenshot ssd-smooth.png | tr -d '\r' | q "^skin: .*, 370880 triangles made, .*, subdivided 2 steps in [0-9.]* ms.*, 11590 to 185440 quads, normals averaged in [0-9.]* ms$"
+$H --personal-world --real-graphics --settings ssd/q.ini --pworld-look -10 --screenshot ssd-pworld.png | tr -d '\r' | q "^characters: drawn as quads, [1-9][0-9]* quads of skin, subdivided up to 2 steps (at most 200000 quads a frame, shared by its characters)$"
+$H --no-menu --real-graphics --settings ssd/m.ini --character-store pdim/characters --screenshot ssd-hall.png | tr -d '\r' | q "^characters: drawn as smooth, [1-9][0-9]* triangles of smooth skin, subdivided up to 2 steps (at most 200000 quads a frame, shared by its characters)$"
 # Editing a character by its joints (IDEAS 19.203): in the Character Creator . chooses the next sphere,
 # J adds a joint after it and N grows a limb from it, on both sides of a mirrored character at once; the
 # character is kept as its spheres (sieve-character-v4, its symmetry kept) in the settings file, reads back
