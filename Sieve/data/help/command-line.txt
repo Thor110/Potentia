@@ -1,0 +1,33 @@
+index: command line, sieve, sieve help, hallway --help, options, warp, install, locate
+
+Beside the hallway, Sieve has a command-line program, sieve. In an installed copy it is in the tools folder, with sieve-install.
+
+## Getting help from the program itself
+Every command explains itself, with its options, defaults and examples:
+- sieve help lists every command, by what it is for.
+- sieve help COMMAND explains one command in full (or COMMAND --help).
+- sieve help lines lists the lines and all their options.
+- hallway --help lists the hallway's options.
+- sieve-install --help lists the installer's.
+
+## A few commands
+- sieve locate FOLDER --installer NAME.sieve packs a folder into a .sieve, and sieve locate FOLDER --program NAME.exe makes an installer program.
+- sieve install NAME.sieve --to FOLDER installs one again.
+- sieve warp gives the address of a piece of content, and sieve read gives back the content at an address.
+- sieve info says how big a line is.
+- sieve browse shows random units of a line.
+- sieve filters lists a line's filters.
+
+On the command line, packing aims for the smallest size unless --priority says otherwise; the File Locator's default is Balanced. See [[file-locator]].
+
+## The hallway's main options
+The hallway takes the same line options as sieve, named for each line because every line is open at once, such as --length for the pages line and --image-width for the image line. It also takes:
+- --line, to choose the line you start on, and --mode positional, scrambled or guided.
+- --warp INPUT or --goto ADDRESS to set where you start; --goto also takes a percentage, or @ and a tile number.
+- --no-menu to skip the setup menu.
+- --settings PATH to use another settings file, and --filters PATH for another filter settings file.
+- --record FILE and --replay FILE to record a walk or play one back. See [[replays]].
+
+Options given on the command line win over the settings file for that run.
+
+See also [[warp-and-addresses]] and [[sieve-files]].

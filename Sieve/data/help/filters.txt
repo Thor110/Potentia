@@ -1,0 +1,30 @@
+index: filters, filter list, mark, hide, compact, full, excluded, survivors, magnifying glass, hard, soft
+
+Nearly every possible page, picture or melody is noise. Filters thin the shelves down to what passes a rule, such as every word being a dictionary word, or every note being in one key.
+
+## Opening a line's filters
+In the setup menu, click the magnifying glass beside a line's title, or press {key1:setup/filters|F} on that line's settings. The line's filter list opens over the map.
+
+Beside its title, a live tally gives the amount of content filtered: the exact share of the line that the ticked filters remove. It says "not countable" when the filters cannot count what they keep.
+
+Space or Right ticks or changes a row, and Left steps back. With the mouse, click to tick or change, and right-click to step back. Esc, F or a click outside closes the list and saves it.
+
+## Display modes
+- off: every book on the shelves.
+- mark: books that fail are drawn faint, so you see exactly what is rejected.
+- hide: books that fail are left out and the rest keep their places. Good for browsing.
+- compact: only the books that pass stand on the shelves, packed together, and the line is exactly as long as their number.
+- full: compact, with titles and covers kept.
+- excluded: the books that pass are left out and those that fail keep their places, each with the filter that rejected it.
+
+Compact needs a filter that can count and rank what it keeps. The footer of the list says what the ticked filters can do.
+
+## The filters
+Each filter has a tickbox and a description, and its settings appear under it once it is ticked. Each built-in filter is labelled hard, setting aside only noise or other lines' content, or soft, which may set aside what a person would keep.
+
+Three keys turn many filters on or off at once: every filter of this page ({key1:setup.filters/this_tab|Z}), of every page of every line ({key1:setup.filters/every_line|X}), or of both main pages ({key1:setup.filters/both_tabs|C}).
+
+Filters you make yourself appear in the CUSTOM FILTERS tab. See [[filter-designer]].
+
+## Tailoring filters to an item
+Holding an item on the pages, image, audio or video line, {key1:hallway.holding/tailor|K} searches the line's filters for those that keep it and give it the cleanest address. See [[items]].

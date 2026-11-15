@@ -84,6 +84,16 @@ bool is_flac(const std::vector<uint8_t>& b);
 // A FLAC of one channel of 16-bit samples, decoded (its MD5 checked); nothing for any other.
 std::optional<std::vector<int16_t>> flac_mono16(const std::vector<uint8_t>& f, uint32_t* rate = nullptr);
 
+// A sound file's samples, interleaved, as signed numbers of `bits` bits (floating point read as 24-bit).
+struct SoundSamples
+{
+    uint32_t rate = 0, channels = 0, bits = 0;
+    std::vector<int32_t> samples;
+};
+// Any sound file is_sound() names, or a FLAC file, as its samples, refused (nothing, `why` saying why)
+// where they cannot be read or are more than `most` (every channel counted), before they are decoded.
+std::optional<SoundSamples> sound_samples(const std::vector<uint8_t>& b, uint64_t most, std::string* why = nullptr);
+
 // A FLAC file re-coded (Sound as FLAC): its samples decoded and coded again by libFLAC at the effort
 // asked, in the streamable subset; its own metadata blocks kept (tags, pictures, cue sheet, application
 // blocks) but its padding and seek table (whose points would point into the old frames), after the new

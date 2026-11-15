@@ -5,6 +5,7 @@
 #include <FLAC/stream_encoder.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 
@@ -563,6 +564,7 @@ struct Decoded
 {
     uint32_t channels = 0, bits = 0, rate = 0;
     uint64_t total = 0;
+    uint64_t most = UINT64_MAX; // the most samples (every channel counted) it may hold, or it is refused
     std::vector<FLAC__int32> samples;
     bool bad = false, info = false;
     const uint8_t* p = nullptr;
@@ -586,12 +588,15 @@ void whole_metadata(const FLAC__StreamDecoder*, const FLAC__StreamMetadata* m, v
     d->bits = m->data.stream_info.bits_per_sample;
     d->rate = m->data.stream_info.sample_rate;
     d->total = m->data.stream_info.total_samples;
+    // (refused before anything is decoded where the samples it says it has are more than may be held:
+    // a few bytes of FLAC can say hours of silence)
+    if (d->channels == 0 || d->total > d->most / d->channels) d->bad = true;
     d->info = true;
 }
 FLAC__StreamDecoderWriteStatus whole_write(const FLAC__StreamDecoder*, const FLAC__Frame* f, const FLAC__int32* const ch[], void* c)
 {
     auto* d = static_cast<Decoded*>(c);
-    if (!d->info || f->header.channels != d->channels || f->header.bits_per_sample != d->bits || d->samples.size() / d->channels + f->header.blocksize > d->total)
+    if (!d->info || d->bad || f->header.channels != d->channels || f->header.bits_per_sample != d->bits || d->samples.size() / d->channels + f->header.blocksize > d->total)
     {
         d->bad = true;
         return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
@@ -602,9 +607,10 @@ FLAC__StreamDecoderWriteStatus whole_write(const FLAC__StreamDecoder*, const FLA
 }
 void whole_error(const FLAC__StreamDecoder*, FLAC__StreamDecoderErrorStatus, void* c) { static_cast<Decoded*>(c)->bad = true; }
 
-std::optional<Decoded> decode_whole(const std::vector<uint8_t>& f)
+std::optional<Decoded> decode_whole(const std::vector<uint8_t>& f, uint64_t most = UINT64_MAX)
 {
     auto d = std::make_optional<Decoded>();
+    d->most = most;
     d->p = f.data();
     d->n = f.size();
     FLAC__StreamDecoder* dec = FLAC__stream_decoder_new();
@@ -875,6 +881,66 @@ std::optional<std::vector<uint8_t>> sound_as_flac(const std::vector<uint8_t>& b,
         flac = std::move(tagged);
     }
     return flac;
+}
+
+// Any sound file this carries, or a FLAC file, as its samples (for the hallway's viewer, IDEAS 19.200).
+std::optional<SoundSamples> sound_samples(const std::vector<uint8_t>& b, uint64_t most, std::string* why)
+{
+    auto say = [&](const char* w) {
+        if (why) *why = w;
+        return std::nullopt;
+    };
+    SoundSamples s;
+    if (is_flac(b))
+    {
+        // What its STREAMINFO says it holds, looked at first (its channels less one in 3 bits, then 5 of
+        // bits, then 36 of samples a channel, from its 13th byte), so a stream saying too many is not begun.
+        const auto blocks = flac_blocks(b);
+        if (blocks && !blocks->first.empty() && (blocks->first[0][0] & 0x7F) == 0 && blocks->first[0].size() >= 4 + 18)
+        {
+            const uint8_t* si = blocks->first[0].data() + 4;
+            const uint64_t channels = ((si[12] >> 1) & 7) + 1;
+            const uint64_t total = uint64_t(si[13] & 0x0F) << 32 | uint64_t(si[14]) << 24 | uint64_t(si[15]) << 16 | uint64_t(si[16]) << 8 | si[17];
+            if (total > most / channels) return say("it holds more samples than the viewer takes");
+        }
+        auto d = decode_whole(b, most);
+        if (!d) return say("its FLAC stream could not be decoded whole");
+        s.rate = d->rate;
+        s.channels = d->channels;
+        s.bits = d->bits;
+        s.samples.assign(d->samples.begin(), d->samples.end());
+        return s;
+    }
+    const auto l = layout_of(b);
+    if (!l) return say("its samples could not be found in it");
+    const uint32_t bytes = l->bits / 8;
+    if (l->data / bytes > most) return say("it holds more samples than the viewer takes");
+    s.rate = l->rate;
+    s.channels = l->channels;
+    // Floating point read as 24-bit integers (rounded, clamped): what is shown and played, not carried.
+    s.bits = l->flt ? 24 : l->bits;
+    s.samples.reserve(size_t(l->data / bytes));
+    for (const uint8_t *p = b.data() + l->samples_at, *end = p + l->data; p < end; p += bytes)
+    {
+        if (!l->flt)
+        {
+            s.samples.push_back(sample_at(p, *l));
+            continue;
+        }
+        const uint64_t u = raw_at(p, *l);
+        double v = 0;
+        if (l->bits == 32)
+        {
+            const uint32_t u32 = uint32_t(u);
+            float f = 0;
+            std::memcpy(&f, &u32, 4);
+            v = f;
+        }
+        else std::memcpy(&v, &u, 8);
+        if (!std::isfinite(v)) v = 0;
+        s.samples.push_back(int32_t(std::lround(std::clamp(v, -1.0, 1.0) * 8388607.0)));
+    }
+    return s;
 }
 
 } // namespace sieve::cli

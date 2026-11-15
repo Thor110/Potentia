@@ -1,0 +1,21 @@
+index: replays, recording, record, play back, f12, cache, replays folder
+
+Sieve can record what you do in the hallway and play it back exactly, step for step.
+
+## Recording
+Press F12 in the hallway to start a recording, and F12 again to stop it. Everything you do is kept, from where you stand: each key, the mouse, and the time of each frame. The recording is saved in a replays folder beside the settings file, packed as a .sieve file and named by when it began.
+
+A recording stops by itself after a set time, or when the drive it is written to runs short of space. Either way it keeps what it has. Both limits are in the settings file.
+
+## Playing one back
+Choose Replays on the main menu. The few words at the top of the screen say how to record one, and below them every recording is listed.
+- Enter plays the chosen recording in the hallway, from where it began, and then hands the hallway back to you.
+- Space ticks its cache box, so a long recording is decoded once into the cache instead of each time it is played.
+
+## When a recording will not play
+A recording plays back exactly where the hallway starts as it did when it was made, with the same settings. One made elsewhere is refused, and Sieve says where it began.
+
+## Good to know
+F12 cannot be changed on the Keys screen yet. A recording can also be made or played from the command line: see [[command-line]].
+
+See also [[walking]] and [[main-menu]].

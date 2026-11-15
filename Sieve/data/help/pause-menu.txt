@@ -1,0 +1,27 @@
+index: pause menu, pause, esc, resume sieve, restart sieve, node graph viewer, navigation system, exit sieve
+
+Press Esc in the hallway to pause. If you are holding something, the first Esc puts it down; press Esc again to pause.
+
+## The rows
+- Resume Sieve: back to the hallway (Esc does the same).
+- Restart Sieve: the setup menu, for new lines, or Esc back here. See [[first-walk]].
+- Node Graph Viewer: maps of verified anchors, real files and how they link, as {key1:hallway.anywhere/graph|O} in the hallway.
+- Navigation System: every digit of the address you are at, as {key1:hallway.anywhere/navigator|X} in the hallway. See [[warp-and-addresses]].
+- File Locator: a file's or a folder's place, compared with zip and 7z, and Sieve instructions and installers. See [[file-locator]].
+- Media Player: the background music. See [[media-player]].
+- Filter Designer and AI Training Harness: as from the main menu, over the hallway. See [[filter-designer]] and [[training-harness]].
+- Settings: graphics, controls and language, as in the main menu. See [[settings]].
+- Encryption Engine: encrypt, decrypt or break, with a recipe of layers. See [[encryption-engine]].
+- Personal Dimensions: your world, its features and your favourites. See [[personal-dimension]].
+- System Viewer: the systems charted so far. See [[system-viewer]].
+- Exit Sieve: to the main menu, or out.
+
+Every tool opened from the pause menu, the setup menu included, comes back to it with Esc.
+
+## The node graph
+In the Node Graph Viewer, choose a map from the drop-down list: This installation, the maps in the maps folder, or open or make one from a folder. Drag or the arrow keys turn it and the wheel zooms. Click a node, or press Tab, to choose it; Enter or a double click walks to its file on the binary line. Export writes the graph for other programs.
+
+## In your personal dimension
+Your personal dimension has a pause menu of its own: the same rows less the hallway's own tools (Restart Sieve, the Node Graph Viewer and the Navigation System), and with Leave Your Dimension, which takes you back to where you came from. See [[personal-dimension]].
+
+The pause menu's keys cannot be changed yet.

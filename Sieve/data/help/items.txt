@@ -1,0 +1,27 @@
+index: item, item page, take, tabs, cost, sort, help tab, save, favourite, put down
+
+## Taking an item
+Look at a book: the one you can take shimmers in its line's edge colour, and a panel shows its place on the shelf, its address, how far along the line it is, and a preview. Press {key1:hallway.anywhere/take|E} or click to take it off the shelf, and the same again to put it back. Esc also puts down what you hold.
+
+## The item page
+With something in hand, the item page opens. Its tabs are:
+- ITEM: the thing itself, such as a page's full text, a picture in its palette's colours, a film's frames, a melody's notes.
+- COST: what it costs to name it. Each row is the same number written another way: its positional, scrambled and guided addresses and its shortest route.
+- SORT: where it stands in a map of real files.
+- HELP: the keys for what you hold on this line.
+- META appears between SORT and HELP for an item that has notes kept about it in a map. A model of the AI line also has a CHAT tab, where you can talk to it.
+
+{key1:hallway.holding/next_tab|C} moves between the tabs, or click a tab.
+
+## What you can do with it
+- {key1:hallway.holding/view|Z}, or a click on the thing, opens it in the [[viewer]].
+- {key1:hallway.holding/play|P} plays a melody or a track.
+- {key1:hallway.holding/next_page|N} and {key1:hallway.holding/previous_page|B} turn a book's pages.
+- {key1:hallway.holding/save|F} saves it as a file wherever you choose: a page as text, a picture as a PNG, notes as a MIDI file, a model as an .obj, a file on the binary line as exactly its bytes.
+- {key1:hallway.holding/its_file|J} goes to its file on the binary line. Holding a file there, J opens it on the line that holds its kind, so J twice takes an item to its file and back.
+- {key1:hallway.holding/favourite|H} keeps it as a favourite for your personal dimension; H again lets it go. See [[personal-dimension]].
+- {key1:hallway.holding/cipher|I} opens the [[encryption-engine]] with the item as its input.
+- {key1:hallway.holding/tailor|K}, on the pages, image, audio or video line, searches the line's filters for those that keep this item and give it the cleanest address. See [[filters]].
+- {key1:hallway.holding/anchor|V}, holding a file of the binary line, adds it to the chosen map as a verified anchor.
+
+A message saying something was stopped is shown in red.

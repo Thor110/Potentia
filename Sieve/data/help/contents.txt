@@ -1,0 +1,40 @@
+# Sieve's help library: the table of contents.
+# One entry a line: "category ID Title" or "page ID Title".
+# Pages belong to the category above them. The first page listed opens first.
+
+category start Getting started
+page welcome Welcome to Sieve
+page main-menu The main menu
+page first-walk Your first walk
+
+category hallway The hallway
+page walking Walking and looking
+page lines The lines
+page items Taking an item off the shelf
+page viewer The viewer
+page warp-and-addresses Warping and going to an address
+page filters Filters
+page pause-menu The pause menu
+
+category systems Systems
+page file-locator The File Locator
+page encryption-engine The Encryption Engine
+page media-player The Media Player
+page manual-navigation Manual Navigation
+page filter-designer The Filter Designer
+page training-harness The AI Training Harness
+page personal-dimension Your personal dimension
+page character-creator The Character Creator
+page replays Recording and replays
+page system-viewer The System Viewer
+
+category files Sieve files
+page sieve-files Making and installing .sieve files
+page picture-viewer The picture viewer
+
+category settings Settings
+page settings Potentia Settings
+page keys Changing the keys
+
+category command-line The command line
+page command-line The sieve program and the hallway's options

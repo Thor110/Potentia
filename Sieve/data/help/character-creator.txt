@@ -1,0 +1,27 @@
+index: character creator, character, seed, spheres, actions, animation, drawing, joints, undo
+
+Your character is you in the hallway and in your personal dimension. The Character Creator shows it large, with its settings, its spheres and the animation each of its actions plays. Open it from the main menu, or press {key1:setup.side/creator|C} on the CHARACTER page of the setup menu's right-hand panel.
+
+## The window
+On the left are the character's settings, and below them its actions. On the right is the character itself.
+- Drag, the wheel, or {key1:creator/turn_left|[} and {key1:creator/turn_right|]} turn it.
+- Dragging up and down, or {key1:creator/tilt_up|Shift+[} and {key1:creator/tilt_down|Shift+]}, tilt it.
+- {key1:creator/view_home|Home} puts the view back.
+
+## Settings
+A character is made from a seed and a few settings: limbs, joints a limb, branches at each limb's end, symmetry and a head. {key1:creator/random|R} draws a new seed at random, and {key1:creator/next|G} takes a step along the seed walk, a fixed rule that makes the next character from this one. The same seed is always the same character.
+
+The drawing row chooses how characters are drawn everywhere when Wireframe is off: pixels, wireframe, voxels, shaded, skin, quads or smooth. It is the same setting as Potentia Settings > Graphics > Character Drawing. See [[settings]].
+
+## Actions
+Tab moves between the settings and the actions: idle, walk, run, jump, take, read and wave. On an action, Left and Right go through the animations in your store that fit this character, and Enter plays the chosen one. In the hallway your character then plays them as you stand, walk, run and read.
+
+## Editing by its joints
+Click a sphere to pick it, and drag to move it. {key1:creator.edit/next_sphere|.} and {key1:creator.edit/previous_sphere|Comma} choose the next sphere or the one before. {key1:creator.edit/grow|N} grows a new limb from it, {key1:creator.edit/remove_limb|X} takes it away with all beyond it, {key1:creator.edit/add_joint|J} adds a joint after it, and {key1:creator.edit/stretch|T} lets bones stretch as you drag. {key1:creator.edit/undo|Ctrl+Z} undoes the last edit. A mirrored character changes on every side at once.
+
+## Files
+- {key1:creator/save|Ctrl+S} saves the character as a .character file, and {key1:creator/open|Ctrl+O} opens one.
+- {key1:creator/import_model|Ctrl+I} imports a model (.obj, .gltf or .glb) into the chosen sphere.
+- {key1:creator/skeleton|Ctrl+K} takes a glTF's skeleton as your character, with its first animation. {key1:creator/play|A} pauses and plays it.
+
+Esc goes back to where the Creator was opened from.

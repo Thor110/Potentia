@@ -44,3 +44,4 @@ settings-voxels      | client/main_menu.* client/app_settings.*                 
 settings-keys        | client/main_menu.* client/keys.*                               | --main-menu --press Item:settings,Return,Item:controls,Return,Item:keys,Return
 replays              | client/main_menu.* client/replay.*                             | --main-menu --press Item:replays,Return
 viewer-text          | client/viewer.cpp client/hallway.*                             | --no-menu --warp hello_world --press J,Z
+documentation        | client/help_library.* data/help/*                              | --docs welcome

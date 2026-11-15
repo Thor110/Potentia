@@ -1,42 +1,70 @@
-# R7 to R9: the mesh scaling pipeline (15 November 2026)
+# List V: the viewers (V1 and V2)
 
-Three new stages for the skin, quads and smooth drawings, each a row on Potentia Settings > Graphics >
-Character Voxels, each off by default. Off, every picture and readout is as before (compared byte for
-byte with the build before R7). To test: section 1 of REVIEW-ROUND.md, items 45 to 47 (new).
+Unzip at the root of the repository (this zip's folders are `Sieve/` and `REVIEW-ROUND.md`, with no
+extra `Potentia/` folder above them).
 
-## R7. Limbs (IDEAS 19.229)
-- **Limbs** (`[character] skin_limbs`, off by default): each bone becomes a rounded cone in the skin's
-  field, so a limb is one smooth tube from sphere to sphere and spheres that do not touch are joined.
-  The limbs follow the joints as an action plays. The voxels and pixels are made from the spheres, so
-  Limbs leaves them as they are.
-- Measured: triangles stay within 8% of the skin without limbs; making the skin takes about 1.4 to 2.1
-  times as long (seed 99 at the default detail: 22,676 triangles in about 15 ms, against 23,180 in 9).
-- The head is joined to the body like any limb, so the two become one dome.
+**Files to delete by hand:** none from this zip. If not done already, delete the folder `Potentia/` at
+the root of the repository: it was left there by the first R7–R9 zip (every file one folder too deep),
+and the corrected R7–R9 zip put the same files in their right places.
 
-## R8. Skin Smoothing (IDEAS 19.229)
-- **Skin Smoothing** (`[character] skin_smoothing`, 0 to 20 rounds, 0 off): Taubin's smoothing of the
-  skin (a shrink step then an inflate step a round), the same triangles, normals made again after.
-- Measured: 1 to 2 ms to start, then 0.1 to 0.3 ms a round; after 20 rounds the volume is 100.06% to
-  100.84% of the skin's. The knuckles where sphere sizes change quickly stay.
+## V1. Sound and model files open in the viewers made for them (IDEAS 19.200)
 
-## R9. Skin Subdivision (IDEAS 19.229)
-- **Skin Subdivision** (`[character] skin_subdivision`, 0 to 3 steps, 0 off): Catmull and Clark's
-  subdivision of the quads and smooth drawings, after the smoothing, so the outline is round too. The
-  skin drawing keeps its own triangles, to compare with.
-- Each step makes four times the quads (seed 99: 11,590, then 46,360 in about 5 ms, then 185,440 in
-  about 29 ms). A step that would pass 200,000 quads is not taken, and the readout says so.
+On the binary line, a file picked up and opened (Z) now goes to:
 
-## Fixed after the review
-- Limbs on a long slanting bone checked most of the grid: a 4,096-sphere chain zigzagging corner to
-  corner took 49 s to skin. Each bone is now worked in short pieces: 1.0 s, the same triangles.
-- The 200,000-quad bound was per character, so a dimension with thirty characters could draw and keep
-  thirty times that. In your dimension and the hallway the bound is now shared by the characters drawn
-  in a frame. The Creator, with one character, is unchanged.
-- The MANUAL's "halves with each step" corrected to the measured 7.5, 4.5 and 2.4 degrees.
+- **Sound** (WAV and FLAC by their kind; AIFF, Wave64, .au and CAF by their first bytes): its waveform,
+  a band a channel, drawn as the audio line draws a unit. **Space** plays it, through the music player
+  where there is one (the music fades under it), and again stops it; closing the viewer stops it.
+- **MIDI**: its notes, each voice on its own lines, read as the audio line reads a MIDI file, at the
+  tempo the file sets first. Space plays them. A chord's other notes and tracks past the fifteenth are
+  left out, and the foot of the screen says how many.
+- **Models** (.obj, glTF with its buffers inside, .glb): its **3D** view, turned with the arrows or WASD,
+  its text the next tab where it is text.
 
-## Left (IDEAS 19.229)
-- At 2 or 3 steps the quads drawing's edges darken it; the colour line between spheres is ragged; the
-  frame time with these stages in your dimension is not yet measured; each stage runs on one thread.
+A sound of more than 2^26 samples (every channel counted) is refused before it is decoded, a FLAC by
+what its STREAMINFO says, so a few bytes claiming hours cannot fill the memory; a glTF whose buffers
+are files beside it says it cannot be read from its bytes. Neither is flagged in `viewers-needed.txt`.
+MP3 and Ogg have no decoder in the hallway yet, so they are still flagged.
 
-## Files to delete by hand
-None.
+Code: `client/viewer.cpp`, `client/hallway.hpp`; `tools/cli/flac_wav.*` gains `sound_samples`, and its
+FLAC decoder a limit on the samples it may hold.
+
+## V2. The Documentation (IDEAS 19.201)
+
+A new main-menu row, **Documentation**, before Potentia Settings: Sieve's help library. CONTENTS,
+INDEX and SEARCH on the left, the page on the right; links followed in place (Tab to a link, Enter),
+Backspace back through the pages read, typing searches. Its keys are on Settings > Controls > Keys
+under "The Documentation", and the keys the pages name read as you have set them.
+
+The library is data: `Sieve/data/help/contents.txt` and one file a page, 25 pages in six categories,
+written for the person using Sieve from the manual and the menus' own words.
+`python tools/check_library.py` (run in CI) checks every page, link and key named against the code.
+
+Code: `client/help_library.*` (new), `client/main_menu.*`, `client/app_main.cpp` (`--docs PAGE`),
+`client/personal_world.cpp` and `client/keys.hpp` (its keys), `CMakeLists.txt` and
+`tools/make_release.py` (the help folder beside the program).
+
+## Checked
+
+- CI: all 12 steps pass (01 to 09 and 11 to 12 on the changes; step 10 again after its fix below).
+  The first run of step 10 failed at the new check that Space plays a WAV: the CI machine has no sound
+  card, so it said "audio unavailable". The two play checks now play into SDL's dummy audio device.
+- New CI checks in step 10: each kind of file opened and played, the FLAC refusal, the MP3 still
+  flagged, the Documentation's link, back, index, search and missing page, its footer's width, and
+  the main menu's new row.
+- `tools/check_help.py`: 0 missing. Settings check: 141 settings match.
+
+## Ideas written down (docs/IDEAS.md)
+
+- A priority mark for new entries (*low*, *medium*, *high*), described at the top of IDEAS.
+- 19.231 The hash viewer (*priority: low*; in REVIEW-ROUND's Later list, not list V), with the
+  measurements: hashes carry no trace of their file's place.
+- 19.232 Pages of few values left to the binary line (2^k symbols), the partial filter for runs on two
+  symbols, the bits' other order, and four candidate filters for sound itself.
+- 19.233 State spaces unfolding as formats are added: formats as branches, endless parameters as axes,
+  meanings as a layer of tags, a hyperbolic layout, colour by branch.
+- 19.234 Towards the shortest program: Kolmogorov complexity, time-bounded search, recipes, routes to
+  a file in bits, and everyone's favourites as one index (1.66 trillion, about 41 bits a route).
+
+## To test (REVIEW-ROUND.md, items 48 to 51)
+
+48 sound files, 49 MIDI files, 50 model files, 51 the Documentation.

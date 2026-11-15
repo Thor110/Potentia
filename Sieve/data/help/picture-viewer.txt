@@ -1,0 +1,31 @@
+index: picture viewer, sieve-view, simage, pictures, thumbnails, animated gif, export, zoom
+
+sieve-view is Sieve's picture viewer, a small program of its own beside the hallway. It opens pictures, and Sieve instructions that hold only pictures.
+
+## What it opens
+- A picture: PNG, JPEG, BMP, GIF or TGA.
+- A .simage file: Sieve instructions holding a picture.
+- A .sieve file whose files are all pictures. If it holds several, each is shown in turn.
+
+On Windows, once the right-click menu is installed, .simage files open in the viewer. See [[sieve-files]].
+
+## Looking around
+- Right and Left show the next and the previous picture in the same folder.
+- The wheel zooms about the pointer.
+- 0 fits the picture to the window, and 1 shows it one to one.
+
+## Animated GIFs
+An animated GIF plays, each frame for its own delay. Pause or Play (P) stops and starts it, and comma and full stop step a frame back or on. Where the frames would not all fit in memory, its first frame is shown, and the foot of the window says why.
+
+## The buttons
+- Sieve makes the picture shown into NAME.simage beside it, packed so that it opens about as quickly as the picture did.
+- Export writes the picture as a PNG; for an animated GIF, the frame shown.
+- Save file writes a .sieve's picture file as it was carried.
+
+## Safe to open
+A .sieve can hold anything under any name, so the viewer reads its listing first, with nothing unpacked. It refuses the whole file where a file in it is not a picture, or where it would not fit in memory, and says why. Each picture's file is checked as it is installed.
+
+## Thumbnails in Explorer
+On Windows, Explorer can show a .simage's picture as its thumbnail, in place of the viewer's icon. The right-click menu's install script sets this up for your user.
+
+sieve-view --help lists its keys and options.

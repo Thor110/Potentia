@@ -293,6 +293,15 @@ const std::string& kCopy = pk::declare("cipher", "copy", "Ctrl+C");
 [[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "cipher"), true);
 } // namespace cipher_keys
 
+namespace help_keys {
+const std::string& kPrevious = pk::declare("docs", "previous", "Shift+Tab");
+const std::string& kSearch = pk::declare("docs", "search", "Ctrl+F");
+const std::string& kHistory = pk::declare("docs", "history", "Backspace,Alt+Left");
+const std::string& kFirst = pk::declare("docs", "first", "Home");
+const std::string& kLast = pk::declare("docs", "last", "End");
+[[maybe_unused]] const bool kTogether = (Keys::get().together("menus", "docs"), true);
+} // namespace help_keys
+
 namespace chain_keys {
 const std::string& kUp = pk::declare("chain", "up", "Up");
 const std::string& kDown = pk::declare("chain", "down", "Down");

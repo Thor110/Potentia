@@ -1,0 +1,23 @@
+index: start sieve, setup menu, enter the hallway, first walk, global, map, take, book
+
+This page takes you from the main menu to your first item in hand.
+
+## 1. Start Sieve
+Choose Start Sieve on the main menu. It opens the setup menu: the settings on the left, and a map of the lines beside them. The map draws every line side by side, each bar as long as the line's size in bits, and shows its units, its tiles and how long walking it would take.
+
+The settings begin with GLOBAL, for what belongs to the whole corridor, such as the key, the ordering and the line you start on. Below come the lines, each with its own shape: how long a page is and its alphabet, a picture's size and palette, how many notes a melody has, and so on. You can leave everything as it is for a first walk.
+
+Beside each line's title is a magnifying glass, which opens its filters (see [[filters]]). The three dots after a line's name on the map explain its figures in words.
+
+At the foot are three actions: FIND MY LIMITS sets every line to the largest shape this computer can open, RESET EVERY SHAPE puts them all back, and ENTER THE HALLWAY walks in.
+
+## 2. Walk
+Choose ENTER THE HALLWAY. You stand in a corridor lined with bookcases. Walk with {key1:hallway.walking/forward|W}, {key1:hallway.walking/back|S}, {key1:hallway.walking/left|A} and {key1:hallway.walking/right|D}, and look around with the mouse. More keys are on [[walking]].
+
+## 3. Pick something up
+Look at a book: the one you can take shimmers in its line's edge colour, and a panel shows its place on the shelf, its address, how far along the line it is, and a preview. Press {key1:hallway.anywhere/take|E} or click to take it off the shelf. The item page opens with the thing in your hands: the text of a page, a picture, the notes of a melody. See [[items]].
+
+Press Esc to put it down again.
+
+## 4. Going back
+{key1:hallway.anywhere/menu|F1} brings the setup menu back over the hallway. Esc there returns you to the hallway as it was; ENTER THE HALLWAY walks into a new one with the new settings. Esc in the hallway opens the [[pause-menu]].

@@ -1,0 +1,30 @@
+index: system viewer, systems, formats, language, catalogue, doors, ring, entries
+
+The System Viewer shows the systems charted so far, each a web of entries and links, walked as a ring of doors. Open it from the main menu or the pause menu.
+
+## Choosing a system
+It opens on a screen of the systems charted so far:
+- Formats: every format Sieve knows (files, scripts, alphabets and its own), from information down. It opens standing at information.
+- Language: spoken languages by family, each linked to the scripts it is written in. It opens standing at language.
+
+The two are one web, so a language's door leads on to its script, and from there to everything else. {key1:setup.catalogue/other_system|S} turns from one system to the other, and the heading says which you are in.
+
+## Walking it
+The entry you stand at is in the middle, and its doors are in a ring round it:
+- what it is part of, in gold,
+- what is part of it, in grey,
+- its other links, in blue.
+
+Only so many doors are shown at once, a window round the chosen one.
+
+- {key1:menus/left|Left} and {key1:menus/right|Right}, or the wheel, choose a door.
+- {key1:menus/choose|Enter} goes through it.
+- {key1:setup.catalogue/back|Backspace} goes back the way you came.
+- {key1:setup.catalogue/root|Home} goes to the root.
+- {key1:setup.catalogue/onto_line|L} takes an alphabet or a Unicode block straight onto the pages line as its alphabet.
+- {key1:menus/back|Esc} goes back to the menu, or the hallway, you came from.
+
+## In the setup menu
+The same catalogue is the SYSTEMS tab of the setup menu's right-hand panel, with the same keys. The System Viewer gives it the whole window.
+
+See also [[lines]] for the pages line and its alphabet.

@@ -1,0 +1,23 @@
+index: welcome, sieve, hallway, gallery of babel, address, unit, line, getting started
+
+Welcome to Sieve. This library explains the program for the person using it: what each screen is for, which keys to press and what happens when you do. Choose a page from the contents on the left, look a word up in the index, or follow the links in the pages.
+
+## What Sieve does
+Sieve does two things, and does both exactly.
+
+- It packs a file or a folder into one .sieve file and gives it back byte for byte. Everything is checked as it goes: you either get back precisely what went in, or Sieve refuses and says why. See [[sieve-files]].
+- It gives every possible text, picture, melody and file an exact address: a number that names it and nothing else.
+
+## What the hallway is
+The hallway is the program you are in now: a 3D walk through the Gallery of Babel. It is one endless corridor lined with bookcases, and every book on every shelf is one unit: one possible page, picture, melody, film, model or file. As you walk forward, the address of the books increases.
+
+The corridor holds several lines, one for each kind of content. Each line has its own colours, and black doors in the walls lead from one line to the next. See [[lines]].
+
+Most of what is on the shelves is noise, because nearly every possible page is gibberish. Filters let you thin the shelves down to what looks like real words, pictures or tunes. See [[filters]].
+
+## Where to start
+- [[main-menu]] lists everything the main menu opens.
+- [[first-walk]] takes you from the main menu into the hallway and through picking up your first item.
+- [[walking]] lists the keys for moving about.
+
+Every key named in these pages is shown as you have set it. You can change most of them: see [[keys]].

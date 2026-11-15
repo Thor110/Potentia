@@ -1,0 +1,25 @@
+index: personal dimension, your world, catalogue, favourites, place, pick up, ground shaper, day and night, features
+
+Your personal dimension is a world of your own: a grassy hill under a blue sky, with your character and your store's characters on it. Open it from Personal Dimensions on the main menu or the pause menu, then Personal Dimension. Other People's Personal Dimensions and Group Dimensions are listed there too, but are not built yet.
+
+## Moving
+{key1:personal.moving/forward|W}, {key1:personal.moving/back|S}, {key1:personal.moving/left|A} and {key1:personal.moving/right|D} walk, the mouse looks, and {key1:personal.moving/run|Left Shift} runs. {key1:personal.moving/look_up|PgUp} and {key1:personal.moving/look_down|PgDn} look up and down. Esc opens the dimension's pause menu, with Leave Your Dimension to go back.
+
+## Placing things
+{key1:personal.catalogue/open|Tab} opens a catalogue: one of Sieve's shelf items for each line, a bookcase, your favourites, your characters and your own objects. Choose with {key1:personal.catalogue/up|Up} and {key1:personal.catalogue/down|Down}; {key1:personal.catalogue/place|Enter} places it on the grass before you, and {key1:personal.catalogue/take_away|Backspace} takes away the one nearest you.
+
+To bring in a model of your own (an .obj or a glTF), open the catalogue and press {key1:personal.objects/import|I}.
+
+## Holding things
+Look at a thing and press {key1:personal.holding/pick_up|E}, or click, to pick it up. {key1:personal.holding/turn|R}, {key1:personal.holding/tip|T} and {key1:personal.holding/roll|G} turn it (with Shift, the other way); {key1:personal.holding/drop|Q} drops it, and {key1:personal.holding/put_back|Esc} puts it back. {key1:personal.holding/open|O} opens a favourite in the hallway's own viewer, over your dimension. See [[viewer]].
+
+## Favourites
+In the hallway, {key1:hallway.holding/favourite|H} with an item in hand keeps it as a favourite. Main menu > Personal Dimensions > Favourites lists them all.
+
+## The ground shaper
+{key1:personal.tools/shaper|1} takes out the ground shaper and {key1:personal.tools/put_away|#} puts it away. Hold the left button or {key1:personal.tools/raise|Z} to raise the ground, the right button or {key1:personal.tools/lower|X} to lower it, and the middle button or {key1:personal.tools/flatten|C} to flatten it.
+
+## Features
+Personal Dimensions > Features turns on or off the map, the compass, the turning rings, day and night, and more. With day and night on, the sun crosses the sky once a day; in the dimension, {key1:personal.day/length|L} opens a panel where you type how many seconds a day lasts.
+
+What you place is kept, and is there when you come back. See also [[character-creator]].

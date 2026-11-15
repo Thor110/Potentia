@@ -8,6 +8,10 @@
 //   - a picture or a film: its pixels, one to one or as large as you like, a frame at a time;
 //   - a book: the page open in it (N and B turn the pages here too);
 //   - a track: its notes; a model: its .obj text; a file: all of it as a hex dump.
+// A file opens first in the viewer made for its kind (IDEAS 19.200): a picture as its pixels, a text as
+// its text, a sound (WAV, FLAC, AIFF, Wave64, .au, CAF) as its waveform and a MIDI file as its notes,
+// either played with Space, and a model (.obj, glTF, .glb) in three dimensions as a model on the models
+// line is; its bytes are a view behind it.
 // That is what the thing is. The buttons along the top show what else was made of it on the way to
 // the shelf: the PICTURE on the item (drawn again by the same painter, as large as its letters or
 // the screen need), its COVER, and its TITLE (a book's whole title page). F saves what is shown:
@@ -19,17 +23,23 @@
 // the wheel zooms about the pointer; dragging moves it. Arrows or WASD move it, PgUp and PgDn by a
 // screen, Home and End to the top and the foot, + and - zoom (Shift: twice as far), 0 fits it to
 // the window and 1 is one to one. N and B turn a book's page or a film's frame, Space plays or
-// stops a film. Tab (Shift: back) or a click on a button changes the view, F saves. Esc or Z closes it.
+// stops a film, or a sound file's sound. Tab (Shift: back) or a click on a button changes the view, F saves. Esc or Z closes it.
 
 #include "hallway.hpp"
 #include "gpu_memory.hpp"
 #include "picture_source.hpp"
 
+#include "cli/flac_wav.hpp"
+#include "sieve/importers.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
+#include <functional>
 #include <string>
+#include <string_view>
 
 namespace hallway::hall {
 
@@ -96,6 +106,94 @@ std::vector<std::u32string> utf32_rows(const std::vector<std::string>& lines)
     return rows;
 }
 
+// A waveform drawn `w` x `h`: each channel a band, its silence line halfway between the two colours,
+// and in each column the samples from its lowest to its highest (env_of(c) gives channel c's spans, a
+// column each), reaching back to the middle of the column before, as the item page draws it.
+std::vector<uint32_t> draw_wave(uint32_t channels, double full, uint32_t w, uint32_t h, SDL_Color bg, SDL_Color ink,
+                                const std::function<std::vector<sieve::PcmSpan>(uint32_t)>& env_of)
+{
+    const uint32_t back = argb(bg), fore = argb(ink);
+    const uint32_t dim = 0xFF000000u | uint32_t((bg.r + ink.r) / 2) << 16 | uint32_t((bg.g + ink.g) / 2) << 8 | uint32_t((bg.b + ink.b) / 2);
+    std::vector<uint32_t> px(size_t(w) * h, back);
+    for (uint32_t c = 0; c < channels; ++c)
+    {
+        const uint32_t top = uint32_t(uint64_t(h) * c / channels), bottom = uint32_t(uint64_t(h) * (c + 1) / channels);
+        if (bottom <= top) continue;
+        const double band = double(bottom - top), mid = double(top) + band / 2.0, half = band * 0.45;
+        const std::vector<sieve::PcmSpan> env = env_of(c);
+        for (uint32_t x = 0; x < w && x < env.size(); ++x)
+        {
+            const uint32_t m = std::min(bottom - 1, uint32_t(mid));
+            px[size_t(m) * w + x] = dim;
+            const double before = x ? (double(env[x - 1].lo) + double(env[x - 1].hi)) / 2 : double(env[x].lo);
+            const double hi = std::max(double(env[x].hi), before), lo = std::min(double(env[x].lo), before);
+            const int64_t y0 = std::lround(mid - hi / full * half), y1 = std::lround(mid - lo / full * half);
+            for (int64_t y = std::max<int64_t>(top, y0); y <= std::min<int64_t>(int64_t(bottom) - 1, y1); ++y) px[size_t(y) * w + x] = fore;
+        }
+    }
+    return px;
+}
+
+// Channel c of interleaved samples drawn `columns` wide: each column's lowest and highest sample (a
+// column with no sample of its own takes the one it falls on), as sieve::pcm_envelope does a unit's.
+std::vector<sieve::PcmSpan> interleaved_envelope(const std::vector<int32_t>& s, uint32_t channels, uint32_t c, uint32_t columns)
+{
+    std::vector<sieve::PcmSpan> env(columns);
+    const uint64_t frames = s.size() / channels;
+    if (frames == 0) return env;
+    for (uint32_t x = 0; x < columns; ++x)
+    {
+        const uint64_t a = frames * x / columns, b = std::max(a + 1, frames * (x + 1) / columns);
+        int32_t lo = s[size_t(a) * channels + c], hi = lo;
+        for (uint64_t i = a + 1; i < b && i < frames; ++i)
+        {
+            const int32_t v = s[size_t(i) * channels + c];
+            lo = std::min(lo, v);
+            hi = std::max(hi, v);
+        }
+        env[x] = {lo, hi};
+    }
+    return env;
+}
+
+// The most samples (every channel counted) a sound file may have to open in the viewer: 2^26, about 12
+// minutes and 40 seconds of CD sound. Its samples are refused before they are decoded where it says it
+// has more, so a few bytes of FLAC claiming hours cannot fill the memory.
+constexpr uint64_t kViewerMostSamples = uint64_t(1) << 26;
+
+// The tempo a MIDI file sets first (its first FF 51 03 meta event), in quarter notes a minute, 1 to 1000;
+// 120 where it sets none, as MIDI has it.
+uint32_t midi_tempo(const std::vector<uint8_t>& m)
+{
+    for (size_t i = 0; i + 6 <= m.size(); ++i)
+        if (m[i] == 0xFF && m[i + 1] == 0x51 && m[i + 2] == 0x03)
+        {
+            const uint32_t us = uint32_t(m[i + 3]) << 16 | uint32_t(m[i + 4]) << 8 | m[i + 5];
+            if (us == 0) break;
+            return std::clamp<uint32_t>(uint32_t(std::lround(60000000.0 / double(us))), 1, 1000);
+        }
+    return 120;
+}
+
+// Whether a text file reads as a model: a glTF's JSON (an object with an "asset" member), or an .obj
+// (a line of a vertex, "v ", and one of a face, "f ").
+bool text_is_model(const std::vector<uint8_t>& b)
+{
+    const std::string_view t(reinterpret_cast<const char*>(b.data()), b.size());
+    const size_t first = t.find_first_not_of(" \t\r\n");
+    if (first != std::string_view::npos && t[first] == '{') return t.find("\"asset\"") != std::string_view::npos;
+    bool v = false, f = false;
+    for (size_t at = 0; at < t.size() && !(v && f);)
+    {
+        const size_t end = std::min(t.find('\n', at), t.size());
+        const std::string_view l = t.substr(at, end - at);
+        v = v || l.starts_with("v ");
+        f = f || l.starts_with("f ");
+        at = end + 1;
+    }
+    return v && f;
+}
+
 // The hex dump's row width: the offset, sixteen bytes and the sixteen characters beside them, as
 // the item page shows a file (hud.cpp draw_file).
 constexpr size_t kHexPer = 16, kHexCols = 6 + 2 + 3 * kHexPer + 1 + kHexPer;
@@ -108,6 +206,7 @@ std::string Hallway::view_keys() const
 {
     const char* keys = view_kinds_.empty() ? "view.keys"
                        : view_kinds_[view_at_] == ViewKind::Shape ? "view.keys.shape"
+                       : view_kinds_[view_at_] == ViewKind::Opened && !view_opened_.sound.empty() ? "view.keys.sound"
                        : view_.picture ? (view_.frames > 1 ? "view.keys.film" : "view.keys")
                        : in_hand_ && in_hand_->parts ? "view.keys.book"
                                                      : "view.keys";
@@ -214,7 +313,11 @@ std::string Hallway::view_label(ViewKind k) const
     case ViewKind::Shape: return tr("view.tab.shape");
     case ViewKind::Cover: return tr("view.tab.cover");
     case ViewKind::Title: return tr("view.tab.title");
-    case ViewKind::Opened: return tr(view_opened_.viewer == "text" ? "view.tab.text" : "view.tab.pixels");
+    case ViewKind::Opened:
+        return tr(view_opened_.viewer == "text" || view_opened_.viewer == "model" ? "view.tab.text"
+                  : view_opened_.viewer == "sound"                                ? "view.tab.sound"
+                  : view_opened_.viewer == "notes"                                ? "view.tab.notes"
+                                                                                  : "view.tab.pixels");
     case ViewKind::Raw: break;
     }
     // What the thing itself is, on this line.
@@ -346,29 +449,8 @@ void Hallway::view_raw()
 std::vector<uint32_t> Hallway::waveform_argb(const Space::Digits& u, uint32_t w, uint32_t h) const
 {
     const sieve::PcmFormat f = sieve::pcm_format_of(line().space.symbols_id());
-    const SDL_Color bg = theme().bg, ink = theme().edge;
-    const uint32_t back = argb(bg), fore = argb(ink);
-    // The silence line halfway between the two colours.
-    const uint32_t dim = 0xFF000000u | uint32_t((bg.r + ink.r) / 2) << 16 | uint32_t((bg.g + ink.g) / 2) << 8 | uint32_t((bg.b + ink.b) / 2);
-    std::vector<uint32_t> px(size_t(w) * h, back);
-    const double full = double(uint64_t(1) << (f.bits - 1));
-    for (uint32_t c = 0; c < f.channels; ++c)
-    {
-        const uint32_t top = uint32_t(uint64_t(h) * c / f.channels), bottom = uint32_t(uint64_t(h) * (c + 1) / f.channels);
-        const double band = double(bottom - top), mid = double(top) + band / 2.0, half = band * 0.45;
-        const std::vector<sieve::PcmSpan> env = sieve::pcm_envelope(f, u, c, w);
-        for (uint32_t x = 0; x < w; ++x)
-        {
-            const uint32_t m = std::min(bottom - 1, uint32_t(mid));
-            px[size_t(m) * w + x] = dim;
-            // Reaching back to the middle of the column before, as the item page draws it.
-            const double before = x ? (double(env[x - 1].lo) + double(env[x - 1].hi)) / 2 : double(env[x].lo);
-            const double hi = std::max(double(env[x].hi), before), lo = std::min(double(env[x].lo), before);
-            const int64_t y0 = std::lround(mid - hi / full * half), y1 = std::lround(mid - lo / full * half);
-            for (int64_t y = std::max<int64_t>(top, y0); y <= std::min<int64_t>(int64_t(bottom) - 1, y1); ++y) px[size_t(y) * w + x] = fore;
-        }
-    }
-    return px;
+    return draw_wave(f.channels, double(uint64_t(1) << (f.bits - 1)), w, h, theme().bg, theme().edge,
+                     [&](uint32_t c) { return sieve::pcm_envelope(f, u, c, w); });
 }
 
 // Shows view `at` of the thing in hand, from the top, a picture fitted to the window.
@@ -417,10 +499,19 @@ void Hallway::view_show(size_t at)
         view_.ph = uint32_t(n);
         const SDL_Color edge = theme().edge;
         if (bk.model) render_model_face(*model_space_, *bk.model, n, model_spin_, model_tilt_, edge, view_.px);
-        else
+        else if (bk.world)
         {
             const WorldSpace::Mesh m = world_mesh(*world_space_, *bk.world);
             render_mesh_face(m.vertices, m.faces, n, model_spin_, model_tilt_, edge, view_.px);
+        }
+        else
+        {
+            // A model file, as its importer read it (sieve/importers.hpp).
+            const OpenedFile& o = view_opened_;
+            render_mesh_face(o.mesh.verts, o.mesh.faces, n, model_spin_, model_tilt_, edge, view_.px);
+            view_.heading = named + trf(o.text.empty() ? "view.opened.model" : "view.opened.model.text",
+                                        {o.format, std::to_string(o.mesh.verts.size()), std::to_string(o.mesh.faces.size())});
+            break;
         }
         view_.heading = named + tr("view.shape");
         break;
@@ -428,10 +519,27 @@ void Hallway::view_show(size_t at)
     case ViewKind::Opened:
     {
         OpenedFile& o = view_opened_;
-        if (o.viewer == "text")
+        if (o.viewer == "text" || o.viewer == "model")
         {
             view_.rows = page_rows(utf8_decode(o.text), view_aspect_, view_.cols);
             view_.heading = named + trf("view.opened.text", {o.kind, std::to_string(o.text.size())});
+        }
+        else if (o.viewer == "notes")
+        {
+            // Each voice's notes, wrapped, a blank line between voices.
+            std::vector<std::string> lines;
+            size_t at = 0;
+            for (uint32_t v = 1;; ++v)
+            {
+                const size_t end = o.text.find(" // ", at);
+                if (v > 1) lines.emplace_back();
+                const std::vector<std::string> w = wrap_words(trf("view.opened.voice", {std::to_string(v)}) + " " + o.text.substr(at, end == std::string::npos ? std::string::npos : end - at), 64);
+                lines.insert(lines.end(), w.begin(), w.end());
+                if (end == std::string::npos) break;
+                at = end + 4;
+            }
+            view_.rows = utf32_rows(lines);
+            view_.heading = named + trf("view.opened.notes", {std::to_string(o.voices), std::to_string(o.tempo)});
         }
         else
         {
@@ -441,7 +549,9 @@ void Hallway::view_show(size_t at)
             view_.pw = o.w;
             view_.ph = o.h;
             view_.frames = o.frames;
-            view_.heading = named + trf("view.opened.picture", {o.kind, std::to_string(o.w), std::to_string(o.h)});
+            view_.heading = named + (o.viewer == "sound" ? trf("view.opened.sound", {o.kind, std::to_string(o.samples), std::to_string(o.rate),
+                                                                                      std::to_string(o.bits), std::to_string(o.channels)})
+                                                         : trf("view.opened.picture", {o.kind, std::to_string(o.w), std::to_string(o.h)}));
         }
         break;
     }
@@ -492,8 +602,13 @@ void Hallway::open_viewer()
     view_kinds_ = {ViewKind::Raw};
     view_opened_ = OpenedFile{};
     view_.px_opened = false; // (what the view holds is not this file's)
-    // A file opens first in the viewer made for its kind, where there is one; its bytes come next.
-    if (bk.is_file && open_file_by_kind(file_of(bk))) view_kinds_.insert(view_kinds_.begin(), ViewKind::Opened);
+    // A file opens first in the viewer made for its kind, where there is one; its bytes come next. A
+    // model file opens in three dimensions, its text (where it is text) next.
+    if (bk.is_file && open_file_by_kind(file_of(bk)))
+    {
+        if (view_opened_.viewer != "model" || !view_opened_.text.empty()) view_kinds_.insert(view_kinds_.begin(), ViewKind::Opened);
+        if (view_opened_.viewer == "model") view_kinds_.insert(view_kinds_.begin(), ViewKind::Shape);
+    }
     // A model or a world opens on itself in three dimensions, turned as on its page; its .obj text next.
     if (bk.model || bk.world) view_kinds_.insert(view_kinds_.begin(), ViewKind::Shape);
     if (face_painter(bk)) view_kinds_.push_back(ViewKind::Picture);
@@ -506,12 +621,22 @@ void Hallway::open_viewer()
     // A file opens in the viewer made for its kind. Where none is made yet, it is shown as its bytes
     // and the kind is flagged, so the viewers still to be made are known (Edward, 13 November 2026: "if
     // one doesnt exist it should flag it to us and tell us a new viewer needs to be created").
-    if (bk.is_file && view_kinds_[0] == ViewKind::Raw && !view_.bytes.empty()) flag_missing_viewer(file_type(view_.bytes, view_.bytes.size()));
+    // (a kind whose viewer could not show this one is not flagged: it has a viewer, and why it could not
+    // is said)
+    if (bk.is_file && view_kinds_[0] == ViewKind::Raw && !view_.bytes.empty() && view_opened_.viewer.empty())
+        flag_missing_viewer(file_type(view_.bytes, view_.bytes.size()));
+    // Where the viewer made for its kind could not show it, why (after the view's own message, so it is
+    // the one read).
+    if (!view_opened_.said.empty()) message(view_opened_.said);
 }
 
 // The viewers made for kinds of file (file-kinds-v1), as data: a kind not listed has none yet, and is
 // shown as its bytes and flagged. Pictures are made by sieve-view's reader (picture_source.cpp: every
-// limit a hostile file could push against checked before anything is decoded); text is shown as text.
+// limit a hostile file could push against checked before anything is decoded); text is shown as text;
+// sound is read as the FLAC way reads it (cli/flac_wav.hpp) and MIDI as the audio line's notes3 reads
+// it. Besides the table, a sound file of a kind file-kinds-v1 does not name (AIFF, Wave64, .au, CAF)
+// is known by its first bytes, and a model by its own (a .glb) or by its text (a glTF's JSON, an .obj).
+// MP3 and Ogg have no decoder here yet, so they are flagged.
 namespace {
 struct FileViewer
 {
@@ -521,6 +646,7 @@ struct FileViewer
 constexpr FileViewer kFileViewers[] = {
     {"PNG", "picture"}, {"JPG", "picture"}, {"GIF", "picture"}, {"BMP", "picture"},
     {"TXT", "text"},    {"BOOK", "text"},   {"MANIFEST", "text"},
+    {"WAV", "sound"},   {"FLAC", "sound"},  {"MID", "notes"},
 };
 const char* viewer_of_kind(const std::string& kind)
 {
@@ -537,14 +663,20 @@ bool Hallway::open_file_by_kind(const std::vector<uint8_t>& bytes)
 {
     OpenedFile& o = view_opened_;
     o.kind = file_type(bytes, bytes.size());
+    if (bytes.empty()) return false;
+    const bool glb = bytes.size() >= 12 && std::memcmp(bytes.data(), "glTF", 4) == 0;
+    if ((glb || (o.kind == "TXT" && text_is_model(bytes))) && open_model_file(bytes)) return true;
     const char* viewer = viewer_of_kind(o.kind);
-    if (!viewer || bytes.empty()) return false;
+    if (!viewer && cli::is_sound(bytes)) viewer = "sound";
+    if (!viewer) return false;
     o.viewer = viewer;
     if (o.viewer == "text")
     {
         o.text.assign(bytes.begin(), bytes.end());
         return true;
     }
+    if (o.viewer == "sound") return open_sound_file(bytes);
+    if (o.viewer == "notes") return open_midi_file(bytes);
     try
     {
         sieve::view::Picture p;
@@ -565,9 +697,142 @@ bool Hallway::open_file_by_kind(const std::vector<uint8_t>& bytes)
     catch (const std::exception& e)
     {
         o.why_not = e.what();
-        message(trf("view.opened.not", {o.kind, o.why_not}));
+        o.said = trf("view.opened.not", {o.kind, o.why_not});
         return false;
     }
+}
+
+// A sound file: its samples read (refused before decoding where there are more than the viewer takes),
+// its waveform drawn as the audio line draws a unit's, and the sound kept as one channel to play.
+bool Hallway::open_sound_file(const std::vector<uint8_t>& bytes)
+{
+    OpenedFile& o = view_opened_;
+    std::string why;
+    std::optional<cli::SoundSamples> s = cli::sound_samples(bytes, kViewerMostSamples, &why);
+    if (!s || s->channels == 0 || s->rate == 0 || s->samples.size() < s->channels)
+    {
+        o.why_not = s ? tr("view.opened.silent") : why;
+        o.said = trf("view.opened.not.sound", {o.kind, o.why_not});
+        return false;
+    }
+    if (o.kind == "?") o.kind = cli::sound_name(bytes);
+    o.rate = s->rate;
+    o.channels = s->channels;
+    o.bits = s->bits;
+    o.samples = s->samples.size() / s->channels;
+    const double aspect = double(o.channels) / 8.0;
+    o.w = uint32_t(std::max<uint64_t>(1, std::min<uint64_t>(o.samples, uint64_t(view_picture_px(aspect)))));
+    o.h = std::max<uint32_t>(o.channels, uint32_t(std::lround(double(o.w) * aspect)));
+    o.px = draw_wave(o.channels, double(uint64_t(1) << (o.bits - 1)), o.w, o.h, theme().bg, theme().edge,
+                     [&](uint32_t c) { return interleaved_envelope(s->samples, o.channels, c, o.w); });
+    // Each frame's channels added and scaled to -1..1 (divided by the channels, so it cannot clip).
+    const float full = float(uint64_t(1) << (o.bits - 1)) * float(o.channels);
+    o.sound.resize(size_t(o.samples));
+    for (size_t i = 0; i < o.sound.size(); ++i)
+    {
+        float v = 0;
+        for (uint32_t c = 0; c < o.channels; ++c) v += float(s->samples[i * o.channels + c]);
+        o.sound[i] = v / full;
+    }
+    return true;
+}
+
+// A MIDI file: read as the audio line reads one into open-ended notes (sieve/notes3.hpp), in a set as
+// wide as MIDI (every pitch, 96 ticks a quarter, 8 levels, a voice a track with notes) at the tempo the
+// file sets first; shown as their notation, and played as the line plays notes3.
+bool Hallway::open_midi_file(const std::vector<uint8_t>& bytes)
+{
+    OpenedFile& o = view_opened_;
+    try
+    {
+        o.tempo = midi_tempo(bytes);
+        constexpr uint32_t kTpq = 96, kLongest = 65535, kLevels = 8;
+        const sieve::Notes3Set wide = sieve::make_notes3_set(0, 127, kTpq, kLongest, kLevels, sieve::kNotes3MaxVoices, o.tempo, {});
+        std::vector<std::string> report;
+        o.text = sieve::midi_to_notes3(bytes, wide, &report);
+        // What the reading left out (a chord's other notes, tracks past the fifteenth), said when the
+        // viewer opens; its last line, that the tempo and instruments are the line's, is not so here
+        // (the tempo is the file's own).
+        std::string left;
+        for (size_t k = 0; k + 1 < report.size(); ++k) left += (left.empty() ? "" : "; ") + report[k];
+        if (!left.empty()) o.said = trf("view.opened.notes.left", {left});
+        // Its voices, and the most events in one: the set made to fit them, every voice in one unit.
+        size_t voices = 1, most = 0, events = 0;
+        for (size_t at = 0; at <= o.text.size();)
+        {
+            const size_t sp = std::min(o.text.find(' ', at), o.text.size());
+            const std::string_view w(o.text.data() + at, sp - at);
+            if (w == "//")
+            {
+                ++voices;
+                most = std::max(most, events);
+                events = 0;
+            }
+            else if (!w.empty()) ++events;
+            at = sp + 1;
+        }
+        most = std::max(most, events);
+        if (most == 0) throw std::invalid_argument(tr("view.opened.no_notes"));
+        o.voices = uint32_t(voices);
+        const sieve::Notes3Set set = sieve::make_notes3_set(0, 127, kTpq, kLongest, kLevels, o.voices, o.tempo, {});
+        const sieve::Notes3CanonResult r = sieve::canonicalise_notes3(o.text, set, uint32_t(std::min<size_t>(most, UINT32_MAX)));
+        if (r.units.empty()) throw std::invalid_argument(tr("view.opened.no_notes"));
+        o.sound = render_notes3(set, r.units[0], kSynthRate);
+        o.rate = kSynthRate;
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        o.why_not = e.what();
+        o.said = trf("view.opened.not.notes", {o.kind, o.why_not});
+        return false;
+    }
+}
+
+// A model file (.obj, glTF, .glb), read by the importers (sieve/importers.hpp: what the file holds
+// beyond its mesh is counted there, not shown here). A glTF whose buffers are files beside it cannot be
+// read from the bytes alone, and is said so.
+bool Hallway::open_model_file(const std::vector<uint8_t>& bytes)
+{
+    OpenedFile& o = view_opened_;
+    try
+    {
+        sieve::ImportedModel m = sieve::read_model(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        if (m.mesh.faces.empty()) return false; // (a text with a stray "v " and "f " line is still text)
+        o.viewer = "model";
+        o.mesh = std::move(m.mesh);
+        o.format = m.format;
+        for (const sieve::ImportFormat& f : sieve::import_formats())
+            if (f.id == m.format) o.format = std::string(f.name);
+        if (o.kind == "TXT") o.text.assign(bytes.begin(), bytes.end());
+        return true;
+    }
+    catch (const std::exception& e)
+    {
+        o.why_not = e.what();
+        o.said = trf("view.opened.not.model", {o.why_not});
+        return false;
+    }
+}
+
+// Space on a sound or notes: plays it from the start, through the music player when there is one (which
+// fades the music out under it); again, stops it.
+void Hallway::view_play()
+{
+    if (view_sounding_ && SDL_GetTicks() >= view_sound_ends_) view_sounding_ = false; // (it has finished by itself)
+    if (view_sounding_)
+    {
+        if (music()) music()->stop_item();
+        synth_.stop();
+        view_sounding_ = false;
+        message(tr("msg.view.stopped"));
+        return;
+    }
+    const OpenedFile& o = view_opened_;
+    const std::string err = music() ? music()->play_samples(o.sound, o.rate) : synth_.play_samples(o.sound, o.rate);
+    view_sounding_ = err.empty();
+    view_sound_ends_ = SDL_GetTicks() + Uint64(double(o.sound.size()) * 1000.0 / double(std::max<uint32_t>(1, o.rate))) + 1;
+    message(err.empty() ? tr("msg.playing") : err);
 }
 
 void Hallway::flag_missing_viewer(const std::string& kind)
@@ -600,6 +865,12 @@ void Hallway::close_viewer()
     view_job_ = {};
     view_open_ = false;
     view_drag_ = false;
+    if (view_sounding_) // (the sound is the viewer's, so it stops with it)
+    {
+        if (music()) music()->stop_item();
+        synth_.stop();
+        view_sounding_ = false;
+    }
     view_ = ViewDoc{}; // a picture's pixels, a file's bytes
     view_kinds_.clear();
     view_opened_ = OpenedFile{};
@@ -740,7 +1011,14 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
             }
             break;
         }
-        case SDLK_SPACE: view_.playing = !view_.playing; break;
+        case SDLK_SPACE:
+            if (view_kinds_[view_at_] == ViewKind::Opened && !view_opened_.sound.empty())
+            {
+                view_play();
+                return;
+            }
+            view_.playing = !view_.playing;
+            break;
         case SDLK_TAB: view_show(view_at_ + ((mod & SDL_KMOD_SHIFT) ? view_kinds_.size() - 1 : 1)); return;
         case SDLK_F: save_view(); return;
         default: return;

@@ -1,0 +1,25 @@
+index: .sieve, sieve files, installer, sieve-install, install, extract, right-click menu, create .sieve, compress to
+
+A .sieve file holds a file or a folder as instructions for making it again, packed whichever way comes out smallest. Installing it gives back every file exactly, and every file is checked before anything is written, so a damaged file leaves the destination as it was.
+
+## Making one
+- In the hallway: the [[file-locator]]'s Save Sieve instructions... gives a .sieve, for anyone who already has Sieve. Make an installer program... gives a single program that anyone can run, with nothing else needed.
+- From the right-click menu (Windows): Create .sieve on any file or folder saves NAME.sieve beside it. Several chosen at once make one .sieve of just them. On Windows 11 it is under "Show more options".
+- From the command line: sieve locate. See [[command-line]].
+
+## Installing one
+- An installer program: run it. It shows what it installs and where. Browse or type another folder if you like, then choose Install.
+- A .sieve file: put it beside sieve-install and run that, drop the file on its window, or open the file with it.
+- In the hallway: the File Locator's Install from Sieve instructions... takes a .sieve or an installer program, then asks for the folder to put it in.
+- From the right-click menu (Windows): Sieve > Extract here, or Extract to a folder of its name.
+
+## Files already there
+Unless Replace is ticked, the installer asks about each file already in the destination before writing anything: which file, its size there now and the size it would give. Answer Yes, No, Yes to all, No to all or Cancel (Y, N, A, Shift+N and Esc). A file answered No is left as it was; Cancel writes nothing.
+
+Cancelling part way removes whatever was written, including the folders it made.
+
+## Other archives
+sieve-install also opens .zip, .7z, .rar, .tar.gz and many other archives, unpacking them one layer at a time, as other archivers do: a .tar.gz gives its .tar, a .zip its files. A damaged or encrypted archive is refused before anything is written.
+
+## The right-click menu
+On Windows, running install_context.bat in the context folder of your Sieve folder adds Sieve to the right-click menu: Extract here and Extract to a folder of its name on .sieve files and other archives, Create .sieve and Compress to on every file and folder, and .simage files opening in the [[picture-viewer]].

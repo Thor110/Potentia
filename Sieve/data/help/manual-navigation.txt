@@ -1,0 +1,26 @@
+index: manual navigation, bytes, binary line, rotation, bearing, steering, load file, width
+
+Manual Navigation turns a file's bytes by hand and shows where each turn puts the file on the binary line. Open it from the main menu.
+
+## The example
+It opens on an example: a small square of random bytes, to learn to drive on. W makes the square larger and Shift+W smaller. With FRESH RANDOM BYTES ticked (R), a new size gets new random bytes; unticked, it keeps the bytes it has.
+
+## Your own file
+Load File (Ctrl+O) puts a file in the example's place, as it is. A .sieve file is loaded so that you can steer one.
+
+## The sheet of bytes
+On the left, the bytes are laid out as a sheet, WIDTH bytes a row, each row's first offset at its left. A file is laid out whole and scrolls with the wheel, PgUp, PgDn, Home and End.
+
+- Left and Right choose a byte, or click it. Ctrl+Up and Ctrl+Down move a row.
+- Up and Down turn the chosen byte (Shift: 16 at a time). Shift and the wheel, the arrows, or two hex digits typed turn it too.
+- A byte no longer as it was loaded is shown in the accent colour.
+
+## The circle
+On the right, a circle. The dot's angle is the file's rotation on the binary line: 0 at the top, clockwise, as on a compass. Its distance from the centre is how far that rotation is from landing exactly on a bearing at the precision shown. The centre is an exact landing; the rim is halfway between two bearings. [ and ] change the precision.
+
+Each turn leaves a mark: green where it moved in towards the centre, red where it moved out. Undoing a step takes its mark away, so the marks are always the walk to where you are.
+
+## Steering
+A line under the readout says, for the byte chosen, how far one turn of it moves the file, and which value of it would put the dot nearest the centre. A hollow mark on the circle shows where.
+
+Manual Navigation's keys cannot be changed yet. See also [[lines]] for the binary line.

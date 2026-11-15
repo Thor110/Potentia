@@ -1,0 +1,24 @@
+index: media player, music, background music, melody, favourites, rings, midi, tempo, voice
+
+Melodies from the audio line play quietly behind everything: one mode for the menus and one for walking the hallway, crossfading as you move between them. Each melody is a unit of the audio line drawn at random from what that mode's filters keep, so every melody is a book on a shelf, with an address. The Media Player is where you set it all.
+
+Open it from the main menu or the pause menu. From the main menu the hallway is built with the player open over it; Esc there comes back to the main menu.
+
+## Its three columns
+- On the left, the last melodies the player chose, each with where it played and when. Melodies you play yourself are not listed.
+- In the middle, the controls. MODE switches between the menus' settings, the world's and your personal dimension's. They cover music on or off, volume, where melodies come from (the audio line or the tracks line), length, tempo, voice, echo, the quiet between melodies, a new melody now, and the mode's filters.
+- On the right, your favourites.
+
+## Acting on a melody
+The actions work on the highlighted melody: play it, go to it on its line, save it as MIDI ({key1:media/save|F}), or add it to the favourites or take it off ({key1:media/favourite|V}). {key1:media/go_to|G} goes to it, and {key1:media/next|N} gives the next melody.
+
+## Keys
+Move through the rows with {key1:media/up|Up} and {key1:media/down|Down}, change a setting with {key1:media/less|Left} and {key1:media/more|Right}, and press with {key1:media/choose|Enter}. {key1:media/next_column|Tab} moves to the next column and {key1:media/back|Esc} goes back.
+
+## The rings
+{key1:media/rings|R} opens the rings: the music as a circle, the lowest octave innermost and the highest outermost, each ring twelve sectors, one a note, lit as loud as each note sounds now. {key1:media.rings/zoom_in|=} and {key1:media.rings/zoom_out|-} zoom the lens in to each note's overtones, and further, to each note's own wave. {key1:media.rings/close|R} goes back.
+
+## A melody filter
+{key1:media/melody|M} opens the [[filter-designer]] on a melody filter. Each time it is tested it plays a melody it keeps. Esc comes back here.
+
+Each line of the hallway plays in a musical mode of its own, and the change is heard from the next note after a door.

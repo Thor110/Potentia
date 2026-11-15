@@ -1,0 +1,32 @@
+index: walking, moving, running, looking, mouse, keys, home, start line, compass, quit
+
+## Moving
+- {key1:hallway.walking/forward|W} walks forward and {key1:hallway.walking/back|S} back.
+- {key1:hallway.walking/left|A} and {key1:hallway.walking/right|D} step to the side.
+- {key1:hallway.walking/turn_left|Left} and {key1:hallway.walking/turn_right|Right} turn.
+- Hold {key1:hallway.walking/run|Left Shift} to run.
+
+The mouse looks around. {key1:hallway.anywhere/mouse|Tab} frees the mouse or captures it again.
+
+## Going further, faster
+The corridor goes on for ever, so walking is not the only way along it.
+- The mouse wheel jumps one tile of corridor at a time. Spun quickly it goes further, and a pause or a turn back starts it at one tile again.
+- {key1:hallway.anywhere/thousand_on|PgUp} and {key1:hallway.anywhere/thousand_back|PgDn} jump a thousand tiles.
+- With empty hands, {key1:hallway.empty_handed/million_on|]} and {key1:hallway.empty_handed/million_back|[} jump a million tiles.
+- {key1:hallway.anywhere/home|Home} takes you to tile 0, the start of every line, marked by a double start line on the floor.
+
+To jump straight to something particular, see [[warp-and-addresses]].
+
+## Where you are
+Each line is a loop. Where each copy of a line begins, a checkered start line crosses the floor. In a corner of the screen a compass draws the corridor as rings, one for each line, with a needle at your place on the line you are on and a mark on every other ring where you last stood on that line. Zero is at the top, and it is the same place for every line.
+
+## Doors
+The walls repeat shelf, door, shelf. A sign over each doorway names the line it leads to, in that line's colours. A door in the left wall leads to the next line and one in the right wall to the previous line. A door keeps your place in the corridor: step straight back through it and you are exactly where you were. See [[lines]].
+
+## Other keys
+- {key1:hallway.anywhere/ordering|M} switches the ordering: positional, scrambled, then guided on the pages line.
+- {key1:hallway.anywhere/menu|F1} opens the setup menu over the hallway.
+- Esc opens the [[pause-menu]], closes a panel, or frees the mouse.
+- {key1:hallway.anywhere/quit|Ctrl+Q} quits.
+
+Every key here can be changed: see [[keys]].

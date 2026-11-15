@@ -1,0 +1,32 @@
+index: keys, controls, change a key, key registry, default, shortcut, clash, [keys]
+
+Most of Sieve's keys can be changed. Every key named in this library is shown as you have set it.
+
+## Changing a key
+1. Open Potentia Settings, then Controls, then Keys.
+2. The keys are listed by section. Choose the one you want to change and press Enter.
+3. Press the key you want, with Shift, Ctrl or Alt if you like.
+
+Esc leaves the key as it was. Backspace on a row puts back its default. A * marks a key you have changed.
+
+A change is kept in the settings file, under [keys], and the footers along the foot of each screen name the keys as you set them.
+
+## The sections
+Your personal dimension's keys come first (moving, the catalogue, holding, the map, the author's tools, your own objects), then the Character Creator's (its editing keys are listed last of all). After them come the hallway's, in five sections:
+- The hallway: walking: forward, back, the steps aside, the turns and run.
+- Whatever you hold: take, warp, go to, the navigator, the node graph, the ordering, the zooms, the thousand-tile jumps, home, the mouse, the setup menu and quit.
+- With empty hands: along a trail, and the million-tile jumps.
+- Holding something: the page keys, turning, the tabs, play, save, its file, favourite, the viewer and the rest.
+- Typing: go, erase and paste in the warp and go-to boxes.
+
+Then the menus, the setup menu, the Media Player, the main menu and Potentia Settings, the Encryption Engine, the Documentation (this library) and the CHAIN tab. The menus' keys are one section shared by every list, so a change there changes all of them.
+
+## Clashes
+A key given twice where both are read at once is named in red on the Keys screen. The defaults give none twice.
+
+A key held with Shift, Ctrl or Alt is still that key, unless another key asks for that modifier.
+
+## What cannot be changed yet
+Esc, the mouse buttons and the wheel; the Keys screen's own Enter, Backspace and Esc, so a key can always be put back; and F12. Not yet on the list: the pause menu's keys, the viewer's, the File Locator's, the Filter Designer's, the AI Training Harness's, Manual Navigation's, CHAT's, the Navigation System's, the Node Graph Viewer's and the installer's.
+
+See also [[settings]] and [[walking]].

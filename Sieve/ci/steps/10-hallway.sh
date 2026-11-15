@@ -1632,6 +1632,7 @@ ups=$(printf 'Up,%.0s' $(seq 15)); zs=$(printf 'Ctrl+Z,%.0s' $(seq 15))
 $H --manual-nav mnav.bin --script "${ups}${zs%,}" --screenshot mnav-undo.png | tr -d '\r' | q "^  rotation 2.8 degrees"
 $H --manual-nav mnav.bin --script "U,${ups}${zs%,}" --screenshot mnav-undo10.png | tr -d '\r' | q "^  rotation 9.8 degrees"
 $H --main-menu --press "Item:manual_nav" --screenshot main-mnav.png | q "saved main-mnav.png"
+$H --main-menu --read-aloud --press "Item:docs" --screenshot main-docs.png | tr -d '\r' | q "^read aloud: Documentation$"
 $H --designer --screenshot designer.png | q "designer: my-words-v1"
 $H --designer --busy --screenshot designer-busy.png | q "designer: my-words-v1"
 # Opening the designer compiles nothing: only F5 (TEST NOW), Save or the relation check do.
@@ -1807,6 +1808,71 @@ grep -c . fm/viewers-needed.txt | q "^1$"
 $H --no-menu --settings fm/s.ini --line image --walk "0,0" --press "E,J,Z" --screenshot openpng.png 2>&1 | tr -d '\r' | q "viewing its PIXELS, 10 x 10 at "
 $H --no-menu --settings fm/s.ini --warp "hello world" --press "J,Z" --screenshot opentxt.png 2>&1 | tr -d '\r' | q "viewing its TEXT, "
 grep -c . fm/viewers-needed.txt | q "^1$"
+# Sound and models too (list V1): a WAV and an AIFF open as their waveform, a MIDI file as its notes,
+# either played with Space; an .obj and a .glb open in three dimensions, a glTF whose buffer is a file
+# beside it is said to be unreadable from its bytes and shown as its text; a FLAC whose STREAMINFO says
+# more samples than the viewer takes is refused before it is decoded, its kind not flagged; an MP3 has
+# no decoder here yet, so it is flagged.
+python - <<'EOF'
+import json, math, struct, wave
+w = wave.open("fm/tone.wav", "wb"); w.setnchannels(2); w.setsampwidth(2); w.setframerate(8000)
+w.writeframes(b"".join(struct.pack("<hh", int(9000 * math.sin(i / 3)), int(5000 * math.sin(i / 5))) for i in range(4000))); w.close()
+data = b"".join(struct.pack(">h", int(9000 * math.sin(i / 4))) for i in range(4000))
+comm = struct.pack(">hIh", 1, 4000, 16) + struct.pack(">HQ", 16383 + 12, int(8000 / 2 ** 12 * 2 ** 63))
+body = b"AIFF" + b"COMM" + struct.pack(">I", len(comm)) + comm + b"SSND" + struct.pack(">I", 8 + len(data)) + bytes(8) + data
+open("fm/tone.aiff", "wb").write(b"FORM" + struct.pack(">I", len(body)) + body)
+def trk(b): return b"MTrk" + struct.pack(">I", len(b)) + b
+notes = b"".join(bytes([0, 0x90, p, 100, 0x60, 0x80, p, 0]) for p in (60, 62, 64, 65, 67)) + b"\0\xff\x2f\0"
+open("fm/tune.mid", "wb").write(b"MThd" + struct.pack(">IHHH", 6, 1, 2, 96) + trk(b"\0\xff\x51\x03\x0a\x2c\x2a\0\xff\x2f\0") + trk(notes))
+v = [(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),(-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
+f = [(1,2,3),(1,3,4),(5,7,6),(5,8,7),(1,5,6),(1,6,2),(2,6,7),(2,7,3),(3,7,8),(3,8,4),(4,8,5),(4,5,1)]
+open("fm/cube.obj", "w").write("".join("v %d %d %d\n" % p for p in v) + "".join("f %d %d %d\n" % t for t in f))
+bin_ = b"".join(struct.pack("<3f", *p) for p in v) + b"".join(struct.pack("<3H", *(i - 1 for i in t)) for t in f)
+def gltf(buffer):
+    return {"asset": {"version": "2.0"}, "buffers": [buffer],
+            "bufferViews": [{"buffer": 0, "byteLength": 96}, {"buffer": 0, "byteOffset": 96, "byteLength": 72}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 8, "type": "VEC3"},
+                          {"bufferView": 1, "componentType": 5123, "count": 36, "type": "SCALAR"}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}], "nodes": [{"mesh": 0}], "scenes": [{"nodes": [0]}]}
+open("fm/cube.gltf", "w").write(json.dumps(gltf({"byteLength": 168, "uri": "cube.bin"})))
+js = json.dumps(gltf({"byteLength": 168})).encode(); js += b" " * (-len(js) % 4)
+open("fm/cube.glb", "wb").write(b"glTF" + struct.pack("<II", 2, 12 + 8 + len(js) + 8 + len(bin_)) + struct.pack("<I", len(js)) + b"JSON" + js +
+                                struct.pack("<I", len(bin_)) + b"BIN\0" + bin_)
+# STREAMINFO alone: blocks of 4096, 44100 a second, 2 channels, 16 bits, 2^36 - 1 samples a channel
+si = struct.pack(">HH", 4096, 4096) + bytes(6) + ((44100 << 44) | (1 << 41) | (15 << 36) | ((1 << 36) - 1)).to_bytes(8, "big") + bytes(16)
+open("fm/huge.flac", "wb").write(b"fLaC" + bytes([0x80, 0, 0, 34]) + si)
+EOF
+cp tests/mp3/tone.mp3 fm/tone.mp3
+opened() { $H --no-menu --settings fm/s.ini --line binary --binary-length "$(wc -c < "fm/$1")" --warp "fm/$1" --take --press "$2" --screenshot "$3" 2>&1 | tr -d '\r'; }
+opened tone.wav "Z" open-wav.png | q "| viewing its SOUND, "
+# (played into SDL's dummy audio device: the runners have no sound card, and every other check here
+# plays nothing)
+export SDL_AUDIO_DRIVER=dummy
+opened tone.wav "Z,Space" open-wav-play.png | q "| playing$"
+opened tone.aiff "Z" open-aiff.png | q "| viewing its SOUND, "
+opened tune.mid "Z" open-mid.png | q "| viewing its NOTES, "
+opened tune.mid "Z,Space" open-mid-play.png | q "| playing$"
+unset SDL_AUDIO_DRIVER
+opened cube.obj "Z" open-obj.png | q "| viewing its 3D, "
+opened cube.obj "Z,Tab" open-obj-text.png | q "| viewing its TEXT, "
+opened cube.glb "Z" open-glb.png | q "| viewing its 3D, "
+opened cube.gltf "Z" open-gltf.png | q "| This file looks like a model but could not be read as one (glTF: buffer 0 could not be read (cube.bin)), so it is shown as it is.$"
+opened huge.flac "Z" open-huge.png | q "| This FLAC file could not be opened as its sound (it holds more samples than the viewer takes), so it is shown as its bytes.$"
+grep -c . fm/viewers-needed.txt | q "^1$"
+opened tone.mp3 "Z" open-mp3.png | q "^viewer: none for MP3 files yet$"
+grep -c "^MP3$" fm/viewers-needed.txt | q "^1$"
+# The Documentation (list V2, IDEAS 19.201): the help library's pages, links and keys checked against
+# the code; it opens on a page, follows a link (Right, Tab, Enter) and comes back (Backspace), its INDEX
+# is a Tab away, a search typed finds the pages holding its words, and a page it has not is said.
+python tools/check_library.py
+$H --docs welcome --screenshot docs.png | tr -d '\r' > docs.txt
+q "^documentation: page welcome of [0-9]* pages in 6 categories; CONTENTS: " docs.txt
+test "$(grep -c '^  status: ' docs.txt || true)" = 0
+$H --docs welcome --script "Right,Tab,Return" --screenshot docs-link.png | tr -d '\r' | q "^documentation: page sieve-files of .*; 1 pages back$"
+$H --docs welcome --script "Right,Tab,Return,Backspace" --screenshot docs-back.png | tr -d '\r' | q "^documentation: page welcome of .*; 0 pages back$"
+$H --docs welcome --script "Tab" --screenshot docs-index.png | tr -d '\r' | q "^documentation: page welcome of .*; INDEX: [0-9]* rows; "
+$H --docs welcome --script "=midi" --screenshot docs-search.png | tr -d '\r' | q "^  list: The viewer$"
+$H --docs nosuchpage --screenshot docs-none.png | tr -d '\r' | q "^  status: No page of the library is called nosuchpage, so it opens on its first.$"
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-case.png > /dev/null
@@ -2394,6 +2460,9 @@ q "^footer cipher: " fw-cipher.txt
 $H --size 800x600 --footers --manual-example --manual-seed 7 --screenshot fw-mnav.png > fw-mnav.txt
 fits fw-mnav.txt
 q "^footer manual_nav: " fw-mnav.txt
+$H --size 800x600 --footers --docs welcome --screenshot fw-docs.png > fw-docs.txt
+fits fw-docs.txt
+q "^footer docs: " fw-docs.txt
 $H --size 800x600 --footers --personal-world --screenshot fw-personal.png > fw-personal.txt
 fits fw-personal.txt
 q "^footer personal: [2-9] lines, " fw-personal.txt

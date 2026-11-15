@@ -1,0 +1,37 @@
+index: potentia settings, settings, graphics, controls, language, programs, ffmpeg, online, infinite raid, sieve-hallway.ini
+
+Potentia Settings, on the main menu, holds the settings for the whole program. While you walk, the pause menu's Settings opens the same screens over the hallway. Every choice is applied at once and saved straight away.
+
+## Its screens
+- Graphics: resolution, fullscreen and how the geometry is drawn.
+- Controls: the mouse and the keys.
+- Language: the language of the menus.
+- Programs: other programs Sieve runs.
+- Infinite RAID: your saves kept on other people's machines, and theirs on yours. Both are opt in only.
+- Game Systems: the game's own systems, each switched on or off.
+- Online: a switch, off by default.
+
+## Graphics
+- Resolution, chosen from your display's modes, and Fullscreen.
+- VSync waits for the display before showing each frame, so there is no tearing.
+- Wireframe, on by default, draws everything as lines and keeps Sieve light. Turn it off to draw the corridor with models instead.
+- Geometry Edge Glow draws a soft glow along the wireframe's edges. Turning it on turns Wireframe on.
+- Door Portals fills the doorways with moving noise in the colour of the line they lead to.
+- FPS Counter shows frames per second in the top right corner of the hallway.
+- View Distance and Picture Distance set how many rooms either side of you are drawn, and how many have pictures of their own.
+- Character Drawing and Character Voxels set how characters are drawn. See [[character-creator]].
+
+## Controls
+Mouse sensitivity, Invert mouse Y, Read menus aloud (the item chosen in a menu is spoken when it changes), Text to Voice (the AI's replies in the CHAT tab spoken as they come), and Keys. See [[keys]].
+
+## Language
+Choose a language from the list. Languages are text files in the lang folder; copy en.txt to add one. Anything a translation leaves out shows in English.
+
+## Programs
+ffmpeg, the program Sieve runs to read and write the picture, video and sound formats it does not read itself. The row shows the version found, or not found in red. Press Enter to choose the program yourself.
+
+## Online
+While Online is off, nothing in Sieve reaches another machine, whatever else is set. Sieve needs no network.
+
+## The settings file
+Settings are kept in sieve-hallway.ini next to the program. It lists every setting with a comment saying what it is, and can be edited by hand.

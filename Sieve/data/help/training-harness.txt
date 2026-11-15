@@ -1,0 +1,25 @@
+index: ai training harness, training, run, model, ai line, reproduced exactly, preset, curriculum
+
+The AI Training Harness trains models of the AI line from recorded runs, and shows that a run trained again comes out the same, bit for bit. Open it from the main menu or the pause menu.
+
+## What a run is
+A run is a folder, or a .sieve made of one. It holds the model's shape, where it starts on the AI line, the files it reads and how it reads them, and, once trained, what it became.
+
+Training uses whole-number arithmetic with every rounding fixed, so the same run gives the same model on any computer. What a model learnt from, and in what order, is on the record and can be checked.
+
+## Training a run
+The harness lists the runs in the training folder beside the programs. Choose one and press Enter to train it. It shows its progress, and how well the model has learnt to guess the next byte. For a run trained before, it says REPRODUCED EXACTLY, or where it differs.
+
+## Recording a new run
+Press N and choose a folder in your system's folder window. The new run's page has two parts, and Tab moves between them.
+- Its settings: a preset (the AI line's shape, or tiny, small, medium or large), the model's shape, the training version, its learning rate and the rest. R puts them back as they started.
+- Its files, in the order the model is to read them. Shift+Up and Shift+Down move the one chosen, so you can set a curriculum.
+
+Beside the settings it says what the run will take: its weights and steps, the memory it needs (in red past half this computer's), how long it will train, and the size of its result. The time is measured on your own computer as you change the settings.
+
+## Stopping and carrying on
+Esc while training, or closing the window, stops it and keeps its state beside the run. The run's page then says where it stopped: Enter carries on from there exactly as if it had never stopped, and S starts it over.
+
+From the pause menu, the harness's GO TO IT goes to its model on the AI line. See [[lines]].
+
+The harness's keys cannot be changed yet.

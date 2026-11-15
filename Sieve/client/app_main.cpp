@@ -17,6 +17,7 @@
 #include "cli/sieve_cache.hpp"
 #include "cipher_screen.hpp"
 #include "manual_nav.hpp"
+#include "help_library.hpp"
 #include "designer.hpp"
 #include "harness.hpp"
 #include "cli/items.hpp"
@@ -250,6 +251,8 @@ const char* kUsage =
     "                      window X (room R)\", widths in pixels (every footer wraps upwards to fit, IDEAS 19.224)\n"
     "  --text-to-voice     the CHAT tab's replies spoken for this run (not saved); with --screenshot, prints the last\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
+    "  --docs PAGE         with --screenshot: a picture of the Documentation open on PAGE (an id from help/contents.txt);\n"
+    "                      --script \"Tab,Down,Return,=words\" its keys and a search typed\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
     "                      --angle-decimals N its precision, --manual-steps OUT.csv saves the walk; --manual-logs DIR\n"
     "                      keeps a log there (none otherwise); --manual-log LOG (in place of FILE) replays a log;\n"
@@ -1621,6 +1624,37 @@ int run(const Args& a)
         if (!c.output_hex().empty()) std::cout << "output: " << c.output_hex() << "\n";
         return shot_done();
     }
+    if (shot && a.has("docs"))
+    {
+        // A picture of the Documentation (for documentation and testing): --docs PAGE opens it on that
+        // page; --script runs its keys and "=words" typed into the search.
+        HelpLibrary docs(window, renderer, HelpLibrary::folder(), a.get("docs"));
+        docs.render(); // (laid out once, so the page's links are known to its keys)
+        if (a.has("script"))
+        {
+            const std::string script = a.get("script");
+            size_t at = 0;
+            while (at <= script.size())
+            {
+                const size_t comma = script.find(',', at);
+                const std::string item = script.substr(at, comma == std::string::npos ? std::string::npos : comma - at);
+                if (!item.empty() && item[0] == '=') docs.type(item.substr(1));
+                else if (!item.empty())
+                    for (const auto& [key, mod] : parse_presses(item)) docs.press(key, mod);
+                docs.render();
+                if (comma == std::string::npos) break;
+                at = comma + 1;
+            }
+        }
+        docs.render();
+        shoot();
+        std::cout << "documentation: " << docs.summary() << "\n";
+        if (!docs.status().empty()) std::cout << "  status: " << docs.status() << "\n";
+        std::istringstream list(docs.list_text()), page(docs.page_text());
+        for (std::string l; std::getline(list, l);) std::cout << "  list: " << l << "\n";
+        for (std::string l; std::getline(page, l);) std::cout << "  page: " << l << "\n";
+        return shot_done();
+    }
     if (shot && (a.has("manual-nav") || a.has("manual-log") || a.has("manual-pick") || a.has("manual-example")))
     {
         // A picture of Manual Navigation (for documentation and testing): --manual-nav FILE loads
@@ -2478,6 +2512,13 @@ int run(const Args& a)
                 pending_replay = sieve::u8(mm.replay_chosen());
                 settings_chosen = true;
                 skip_setup = true;
+            }
+            if (r == MainMenu::Result::Docs)
+            {
+                // The Documentation, and back to the main menu from it.
+                HelpLibrary docs(window, renderer, HelpLibrary::folder());
+                if (docs.run() == HelpLibrary::Result::Quit) break;
+                continue;
             }
             if (r == MainMenu::Result::ManualNav)
             {

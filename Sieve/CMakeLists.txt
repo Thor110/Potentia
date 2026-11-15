@@ -681,6 +681,11 @@ add_custom_target(sieve_data ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/languages
             $<TARGET_FILE_DIR:sieve>/languages
+    # The Documentation's help library (IDEAS 19.201): its contents and pages, written for the person
+    # using Sieve.
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/data/help
+            $<TARGET_FILE_DIR:sieve>/help
     # Sieve's voice (tools/cli/voice.hpp): its pronunciations and alignment; its clips are found in
     # the anchors (data/anchors/public-domain/voice), above a build inside the repository.
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -743,6 +748,7 @@ if(SIEVE_BUILD_CLIENT)
         client/designer.cpp
         client/cipher_screen.cpp
         client/manual_nav.cpp
+        client/help_library.cpp
         client/harness.cpp
         client/designer_model.cpp
         client/item_faces.cpp

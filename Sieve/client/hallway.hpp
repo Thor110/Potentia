@@ -1567,22 +1567,39 @@ private:
     // whole window, scrolled both ways and zoomed
     // What the thing can be seen as, the buttons along the top: what it is (its text, pixels, notes,
     // .obj or bytes), the picture on the item, its cover, and its title.
-    // Shape: a model or a world in 3D, turned with the keys. Opened: a file shown by the viewer made for
-    // its kind (a picture's pixels, a text's text), where one is (IDEAS 19.200).
+    // Shape: a model or a world in 3D, turned with the keys (a model file too). Opened: a file shown by
+    // the viewer made for its kind (a picture's pixels, a text's text, a sound's waveform, a MIDI file's
+    // notes), where one is (IDEAS 19.200).
     enum class ViewKind { Raw, Picture, Cover, Title, Shape, Opened };
     // A file opened by its kind, made once when the viewer opens: a picture (its frames, ARGB, one after
-    // another), or text.
+    // another), text, a sound (its waveform as a picture, and itself to play), notes (their notation as
+    // text, and the sound made of them), or a model (its mesh, and its text where it is text).
     struct OpenedFile
     {
         std::string kind;     // file-kinds-v1
-        std::string viewer;   // "picture" or "text"
+        std::string viewer;   // "picture", "text", "sound", "notes" or "model"
         std::vector<uint32_t> px;
         uint32_t w = 0, h = 0, frames = 1;
         std::string text;     // UTF-8
         std::string why_not;  // where its viewer could not show it, why
+        std::string said;     // and that, as said when the viewer opens
+        // A sound or notes: what Space plays (one channel, -1..1, `rate` a second), and what it was.
+        std::vector<float> sound;
+        uint32_t rate = 0, channels = 0, bits = 0;
+        uint64_t samples = 0;  // a channel
+        uint32_t voices = 0, tempo = 0;
+        // A model: its mesh as its importer read it, and the format's name.
+        ModelSpace::AnyMesh mesh;
+        std::string format;
     };
     OpenedFile view_opened_;
     bool open_file_by_kind(const std::vector<uint8_t>& bytes);
+    bool open_sound_file(const std::vector<uint8_t>& bytes);
+    bool open_midi_file(const std::vector<uint8_t>& bytes);
+    bool open_model_file(const std::vector<uint8_t>& bytes);
+    bool view_sounding_ = false; // the opened file's sound is playing (Space)
+    Uint64 view_sound_ends_ = 0; // when it will have finished, in SDL ticks (so Space after it plays it again)
+    void view_play();
     struct ViewDoc
     {
         std::string heading;               // what is open, above it

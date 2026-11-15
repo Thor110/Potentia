@@ -23,6 +23,9 @@ aside. Look for the italic notes at the end of an entry (*Built*, *Measured*, *S
 - **Done entries moved out (12 November 2026):** entries whose every idea is done now live whole in
   [ideas/IMPLEMENTED.md](ideas/IMPLEMENTED.md), with a one-line pointer left at their number here;
   [IDEAS-TRIAGE.md](IDEAS-TRIAGE.md) gives every idea's verdict.
+- **Priority (from 15 November 2026):** new entries may carry *Priority: low*, *medium* or *high*
+  after their title (Edward: "we can start marking ideas as low/medium/high priority in the
+  future"). An entry without one has not been given one yet.
 - **The current plan** is not here: HANDOFF's plans (24 and 27 October 2026) supersede the older
   orderings in this file (§19.53). How Sieve is to be shown: SHOWCASE-PLAN.md.
 
@@ -8175,9 +8178,18 @@ be charted and fold the system in on itself to link everything from every concei
   shown as hex and its kind (file-kinds-v1) noted once in `viewers-needed.txt` beside the settings.
   Then files by their kind: a table (kind to viewer, client/viewer.cpp) sends PNG, JPEG, GIF and BMP to
   the picture viewer (sieve-view's reader, picture_source.cpp, its limits checked first) and text kinds
-  (TXT, BOOK, MANIFEST) to the text view; only kinds with neither are flagged. *Next:* sound (WAV,
-  FLAC, MP3, MID) to the audio line's player, models (.obj, glTF) to the 3D view, archives to a listing
-  of their members; and choosing a viewer or a part where an item has several.
+  (TXT, BOOK, MANIFEST) to the text view; only kinds with neither are flagged.
+- *Built, sound and models (15 November 2026, list V1):* WAV and FLAC by the table, and AIFF, Wave64,
+  .au and CAF by their first bytes, open as their waveform (read as the FLAC way reads them,
+  cli/flac_wav.hpp sound_samples), MIDI as its notes (read into notes3 as the audio line reads one, at
+  the file's first tempo); Space plays either through the music player. Models open on the 3D view as
+  the importers read them (sieve/importers.hpp): a .glb by its first bytes, a glTF or an .obj by its
+  text, which stays as the next tab. A sound of more than 2^26 samples is refused before decoding (a
+  FLAC by its STREAMINFO, so a few bytes saying hours of silence are not begun); a glTF whose buffers
+  are beside it is said to be unreadable from its bytes. Neither is flagged: their kinds have viewers.
+  *Next:* MP3 and Ogg (no decoder in the hallway yet; MP3's packMP3 reads its coefficients, not its
+  sound), archives to a listing of their members, and choosing a viewer or a part where an item has
+  several.
 
 **19.201 A documentation viewer on the main menu, laid out as a help library (Edward, 13 November 2026).
 An idea for now.** His words: "we should also add a documentation viewer to the main menu", "which would
@@ -8192,6 +8204,17 @@ in that everything is categorised".
   each under its category. The developers' documents stay as they are, beside it.
 - *Fits with:* §19.196 (menus as data: the categories and pages a data file the viewer reads), §19.200
   (a document is a data type; this is its viewer), and the existing /docs line and GO TO IT (task 98).
+- *Built, its first step (15 November 2026, list V2):* **Documentation** on the main menu
+  (client/help_library.cpp): CONTENTS, INDEX and SEARCH on the left, the page on the right, links
+  followed in place and Backspace back through the pages read; every key on the registry ("The
+  Documentation"). The library is data/help/: contents.txt (categories and pages) and a page a file,
+  each with its index terms, its links [[id]] and the keys it names as {key1:SECTION/ID|shown}, so they
+  read as set. A first 25 pages in six categories (getting started, the hallway, the systems, Sieve
+  files, the settings, the command line), written for the person using Sieve from MANUAL.md, FEATURES.md
+  and the menus' own words; tools/check_library.py (run in CI) checks the pages, links and keys against
+  the code. *Next:* more pages (the setup menu's settings one by one, the formats, the RAID, the
+  catalogue), pictures in pages, a page opened from where you are (a key on each screen for its own
+  page), and the library in the other languages beside data/lang.
 
 **19.202 Every screen and feature's screenshot made and kept up to date by itself, and each change
 tested only as far as it needs (Edward, 13 November 2026). An idea for now.** His words: "automating the
@@ -9335,6 +9358,253 @@ help people actually learn to genetically engineer things, reverse engineer the 
 ... But that is a long way off yet". The DNA dimension (§19.139: public, consented sets only) joined to
 the characters (§19.228, faces and bodies from it) so that a person can change a sequence and see what it
 makes, and learn from that. For later, alongside the other dimensions; nothing is built for it yet.
+
+**19.231 The hash viewer: the 32-byte space on a circle, each file joined to its hash (Edward, 15 November
+2026).** *Priority: low* (Edward: "mark it as a less important idea, low priority ... as it seems it could
+only truly map the entire 32 byte space which is borderline useless"): a showcase, not a tool. It began as a question: "is there not some range of ways to predict files from hashes", "take
+two files and work out the inbetween", "as it is pseudorandom there has to be a pattern to it", "mapping
+it into a circle could reveal that pattern ... we might be able to say if your hash is X it lies between 1
+and 2 degrees", and "if it changes half the output bits in a known way then it absolutely has to be
+predictable from two ends". Measured that day (SHA-256, 32-byte files, Python's hashlib):
+- files one apart differ in their hashes by 128.04 of 256 bits on average (20,000 pairs; 94 to 164);
+- the rank correlation between a file's place on the line and its hash's place is -0.006 (20,000 files);
+- the hash "between" those of 00...00 and FF...FF, as their midpoint, differs from the midpoint file's
+  real hash in 126 bits;
+- of 20,000 files, 51 had their hash in the same degree of the circle as themselves (chance: 56);
+- flipping the first bit (or the last) of 2,000 files flips a different half of the output bits each
+  time: two files' patterns differ in 128.2 (127.7) of 256 bits, and each output bit flips in 47% to 54%
+  of files, so the half that changes is not a known half;
+- walking 0, 1, 2 ... from the zero end, the hash goes up on 50.2% of steps and a step goes the same way
+  as the one before 33.5% of the time: one in three is what wholly independent numbers give, so the walk
+  has no direction to follow.
+So there is no pattern to find, and a hash cannot be walked back: about half its bits change at every
+step but which half is itself pseudorandom, and SHA-256's 64 rounds mix every bit into every other. And
+even an inverse would give little: there are 2^256 hashes and endless files, so each hash has
+astronomically many files behind it (files up to 64 bytes: about 2^256 each), and, as Edward put it,
+"reversing a hashing algorithm would be semi-useless because you wouldn't know if you needed to turn it
+back into a 32 byte file or a 64 byte file". At exactly 32 bytes, files and hashes are the same count,
+and an ideal hash would still leave about 1/e (37%) of hashes with no 32-byte file and some with two or
+more (expected for a random function; it cannot be counted at 2^256).
+- *The idea, as a showcase rather than a search:* "we could create another viewer, hash viewer which
+  shows a circle, plots the 32 byte space, then a slider value can determine the depth we hash for the
+  map and give a deterministic time calculation for how long it would take ... we can just refuse to
+  calculate if it is over a certain time". The 32-byte space as a ring; a slider sets the step (1
+  degree, 0.1, and finer); the file at each step and its hash, each at its angle, joined. The time is
+  worked out before anything is made, from this machine's hashes a second (timed once) and its points
+  drawn a frame, and anything over a set limit is refused, saying how long it would take. (Hashing is
+  cheap: 1 degree is 360 hashes, 0.0001 degrees 3.6 million; what the slider meets first is the drawing.)
+- *Chords, curved:* "plotting them as chords would be interesting, I think those chords should curve
+  around the 75% size of the inside of the circle mark, presuming we don't find a direct connection that
+  requires a straight line ... to prevent it looking so chaotic", with "a toggle for how the chart/map is
+  displayed so we can look at it from different angles": each file joined to its hash by a curve drawn
+  in towards a ring at three quarters of the radius (as bundled edges are drawn), so the lines run round
+  the inside rather than cross it; a straight chord only where a direct connection is found. The toggle:
+  curved chords, straight chords, dots alone (file angle across, hash angle up: static, or a line if
+  there were a pattern), and the hashes' angles as a histogram (flat, if the hash is fair).
+- *Dots in shades of one colour:* "we should also plot the dots as shades of a colour, presumably the
+  primary or secondary colour of the dimension (whichever doesn't contain black from the dimensions) but
+  with the option of a colour picker to temporarily shift it to a new colour space ... that way the
+  nature of its randomness would be actually visible and not just a massive series of dots". Each dot
+  (and chord) shaded by a value of its own, light to dark in one colour: the binary line's colour that is
+  not black, or one picked for the view alone (not saved, not the line's). The value shaded by a choice
+  beside the toggle: how far round the circle the hash lands from its file, or the hash's own angle, or
+  how many bits differ from the step before; a pattern would show as bands or gradients, a fair hash as
+  even grain.
+- *The pages beside it (and in the Documentation, §19.201):* how a hash works (half the bits on any
+  change, but not a known half), why many files share a hash (the counting argument), why only the
+  32-byte space can be plotted (the one length where files and hashes are the same size), and why
+  reversing one would tell you little; with the measurements above.
+- *A model small enough to count:* the same circle for 16-bit files and SHA-256 cut to 16 bits, every
+  file and hash drawn and counted, so what is said of the full space is shown measured on the small one
+  (how many hashes have no file, how many have two or more, against 1/e).
+- *Fits with:* §19.200 (a viewer for a kind of thing), the binary line's rotation (Manual Navigation's
+  circle, §19.117, is the same ring with a file's bearing on it), and the scrambled ordering, which also
+  looks like noise but is reversible by design: the contrast is worth showing beside it.
+
+**19.232 Pages of few values left to the binary line, the bits' other order, and filters for sound
+itself (Edward, 15 November 2026).** His words: "we interpret series of repeating bytes or characters or
+values with only two distinct values as binary and filter them out of all the other lines ... but I
+wonder how we interpret that is FX 01 or 10", "should we perhaps not adapt the filter to anything with
+only two values? I figured that was the point of them as automatons", and "we need to get back to working
+on new filters at some point, especially for the PCM audio state space so that it isn't just noise".
+- *As it is:* not-written's reading of two symbols as bits (core/src/written.cpp, BinaryMachine) tries
+  both ways round, the first symbol as 0 and as 1, each with its own signature matcher; it reads each
+  eight symbols most significant bit first only. And it leaves out only a page whose bits begin with a
+  known file's signature, not every page of two values: every page is some file on the binary line, so
+  "it has a place there" cannot be the rule alone, or every line would empty into binary.
+- *Two values, then 2^k:* a page of at most two distinct symbols is itself evidence of bits, and as an
+  automaton it is exact and small (its state the symbols seen). Generalised: at most 2^k distinct
+  symbols, read as k bits a symbol (4: the DNA alphabet's two bits; 16: hex, which not-written reads
+  already). One filter, k a setting, a new version so existing stacks keep their survivors. In counts it
+  is almost nothing (32-letter pages of 27 letters with at most two: about 1 in 10^34), but positional
+  order begins "aaaa", "aaab", so it changes what the start of every line looks like: measure that first,
+  then decide whether it is on by default.
+- *In part of a page:* "it could also extend to being a partial filter, such as knocking out 'welcome to
+  the sieveaaaabbbb'". Exactly, as max-run's next step: max-run caps how long one symbol may repeat; this
+  caps how long a stretch may run on at most two symbols, anywhere on the page. An automaton of the
+  stretch's two symbols and its length (with 27 letters, at most 27 x 27 x N states), so its survivors
+  are counted exactly. Real words keep bringing new letters, so the stretch keeps starting again;
+  "aaaabbbb" builds it up. N from measuring real text (stretches such as "aaa" and "abab" are short),
+  not guessed. It takes such a page away as padding, not to the binary line: a filter of its own,
+  beside max-run.
+- *The other bit order:* least significant bit first, as some hardware sends bytes; measure how many
+  pages it would catch that the present reading does not before adding it (it would be not-written-v2).
+- *Sound itself:* sound-peak, sound-step and silence-run thin the pcm line, but what survives still
+  sounds mostly like noise. Candidates, each a rule about one channel: **zero crossings** (noise crosses
+  about every other sample, tones and voices far less; a cap on the rate, an automaton of the sample
+  before's sign and the count); **the second difference** (sound-step bounds the slope; this bounds how
+  sharply it bends, which real waves do gently; an automaton of the two samples before, exact where it
+  fits, judged past that); **periodicity** (a stretch that repeats a short way on, the mark of a pitch;
+  costlier, and hard to count exactly); **spectral flatness** (noise is flat, sound has peaks; the
+  strongest, but likely a judge after the fact rather than an exact count). The first two fit the
+  machinery sound-step uses and can be built and measured as it was.
+
+**19.233 State spaces that unfold as formats are added, on a hyperbolic plane (Edward, 15 November
+2026).** His words: "should or shouldn't we make it so that the state spaces naturally unfold when we add
+'data' types or formats ... MIDI and PCM in theory should be their own state spaces within the audio
+state space", "I was thinking the state space might eventually fold out to a tiling heptagon on the non
+euclidean plane but the number of sides might differ of course", and "realistically it is all just a
+singularity".
+- *Halfway there:* the audio line's sets (notes104, notes2, notes3, pcm) are one setting of one line,
+  not places of their own; the catalogue (§19.165, the System Viewer) is already a tree of formats under
+  one root, information. Each entry with a state space could be a door into it, so a format added is a
+  room added.
+- *Why a hyperbolic tiling suits it:* a tree grows exponentially, which flat space cannot hold without
+  crowding and the hyperbolic plane can: a tiling such as {7,3} (heptagons, three at each corner) gives
+  every node room for its branches at every depth, and the sides could follow each node's branching.
+  See §19.191 (layout rulesets, the fractal dimension).
+- *The singularity:* every unit of every line is a string of bytes, so a file on the binary line; every
+  other space is a reading of that one line. The tree's root is the binary line (or information, in the
+  catalogue's words), and its branches are ways of reading it.
+- *A button to unfold them:* "perhaps we could have a button to expand the state spaces such that they
+  naturally unfold into all of their possible configurations ... the only problem with that is
+  presentation and navigation", and "audio would unfold into countless dimensions, music, then genres of
+  music etc". Two kinds of unfolding:
+  - *formats* (audio into pcm, notes3, MIDI; pictures into palettes; text into alphabets) are exact:
+    each a state space of its own, counted, the tree finite and known, so it can truly unfold;
+  - *meanings* (music, its genres, theirs) are not state spaces: no exact edge where one genre ends, they
+    overlap, and they are learned from examples. They would be maps laid over a space, as the node
+    graph's maps and anchors are (known pieces marked, regions grown round them, overlapping freely):
+    layers switched on, not doors walked through. That keeps the tree small enough to walk. Edward:
+    "that would be a meta layer of associated tags": tags attached to places in a space, from any
+    source, overlapping, changing no space's count.
+- *How many spaces:* Edward asked whether it would be "parameters^configurations per state space". It is
+  a product: parameters with k1, k2 ... kn values each make k1 x k2 x ... x kn configurations, each a
+  space of its own (k^n only where every parameter has k values). pcm's spaces are its rates (the menu
+  steps through 9) x its bit depths x its channel counts x its lengths, and each holds
+  (2^bits)^(channels x length) units: the count of spaces is a product, each space's size an
+  exponential, and the second dwarfs the first. Some parameters have no end (a length; any rate in the
+  settings file), so the configurations are endless unless those are capped. Hence the rule for the
+  unfolding: parameters of a few values (format, bit depth, channels, palette) are branches of the tree;
+  endless ones (length, rate, picture size) are axes within a space, moved along as the corridor's
+  length already is, not doors chosen between.
+- *Every configuration unfolding by itself:* "I keep wondering if we might in theory, eventually, be able
+  to point an automated system of algorithm at this idea or state space and have every possible fractal
+  configuration simply unfold ... though if it takes an AI rather than an automaton it would be
+  intractable". It is fractal by construction: in positional order units with the same beginning sit
+  together, so any region zoomed into is laid out as the whole is. The layouts themselves are endless,
+  but each one that can be described is a short rule set (an L-system, a tiling, a branching rule), and
+  rule sets can be listed by length as a line lists its units: a library of layouts, each cheap to make
+  and see, the whole as endless as any line (§19.191's fractal dimension, seen from the other side).
+  What automata can map, exactly and by themselves: the format tree (the catalogue already builds it
+  from the code, so a format added is an entry and its links added), every space's count, and which
+  spaces read into which (the cross-line filters, not-written and not-a-file, already find "this unit
+  is also that one"). What needs a model trained on examples: meaning (genres, "this sounds sad", a
+  face). Intractable over a whole space, not over where people go: tagged outward from the anchors and
+  favourites, never complete, while the structure's map is.
+- *The conclusion (Edward):* "I was less thinking of actually unfolding every way and more thinking of
+  programmatically unfolding every way ... within the confines of say the English language and data
+  itself", and "once we exclude genres and meaning as needing AI and not automatons, we get left with a
+  similar simple number or set of dimensions as we have now, with only the ability to unfold it per its
+  configurable parameters". So the unfolding is generated, not built by hand: each line declares its
+  parameters as data (§19.196), each a branch (few values) or an axis (endless), and the tree, its
+  counts, links and colours follow from the declarations, a parameter or format added being a branch
+  added with no layout code. Filters are the second kind of parameter: they carve sub-spaces rather
+  than make new ones, and that is where "the confines of the English language" live (the alphabet and
+  length make the text space; the dictionary, grammar and written filters narrow it towards English). A
+  stack is a configuration too, so it unfolds as well: text, text of words, words in grammatical order.
+  The dimensions are then the lines x their declared parameters x their filter stacks: little beyond
+  what Sieve has now, made declarative so that it unfolds by itself.
+
+**19.234 Towards the shortest program: recipes searched down to their simplest form (Edward, 15 November
+2026).** His words: "the eventual aim would be to funnel data towards the pigeonhole principle itself or
+towards kolmogorov complexity", "there simply is a natural crossover point between data and programs ...
+every possible mathematical equation boiled down to a ruleset which already exists in the CPU itself and
+as such assembly language", and "it would be fun to design this in such a way that an AI or automaton
+ruleset might be able to take a program and shuffle it down to its simplest possible form through those
+rules".
+- *How short, by kind:* no fixed share. Random data cannot shrink (its shortest description is itself);
+  English text does (guided addresses, about 2 bits a character against 4.75: about 42%); data of strong
+  structure shrinks far more. Over every file, the pigeonhole principle holds the average shortest
+  address at the files' own length: what one file gains, others pay. So the aim is to spend the length
+  well: short addresses for what has structure, the long ones left to noise.
+- *Data and programs:* a file's Kolmogorov complexity is its shortest program's length; the machine
+  chosen (x86, say) changes it by at most a constant (the invariance theorem), so "a ruleset the CPU
+  already has" is a fair place to measure it.
+- *The limit:* it cannot be computed in general (finding the shortest program would solve the halting
+  problem), so no automaton or model can always find the simplest form; it can only be approached from
+  above, each shorter program a better bound, never known to be the last.
+- *The route:* superoptimisers already search every short instruction sequence equal to a given one
+  (runs of a few to a few dozen instructions). Sieve's recipes (its ways, copy K, the rope, the shortcut
+  seed's recipe language, §19.111) are a small language of programs that make files; search them for the
+  shortest that gives a file back, and widen the language towards an instruction set. Automata search
+  short recipes exhaustively, a model guesses good ones for long files, and every candidate is checked
+  exactly by running it and comparing: only a recipe that gives the file back is ever taken, so the model
+  only ever proposes.
+- *Half stored, half addresses (Edward):* "the ultimate or true form of sieve would be 50% of all the data
+  that humans make and the remaining 50% can exist just as addresses in the navigable space". A file's
+  information costs the same stored or addressed, so the split that can be reached is shared rules and
+  short addresses: the models, dictionaries, recipe language and rules kept once for everyone, each file
+  an address relative to them, short wherever they hold its structure. Guided addressing already does
+  this for text; the ideal carries it to every kind of data, the shared half growing as more is worked
+  out.
+- *By instruction set, by hand:* "even though kolmogorov complexity is uncomputable, there is surely a way
+  to define it by instruction set and manually compute it". It is uncomputable only because a program
+  may never stop: fix a small instruction set and a bound on running time, and the shortest program is
+  found exactly by trying every program in order of length (time-bounded complexity, Levin's Kt).
+  Exact for short files and small machines, exponential in length; past that, the search for bounds
+  above.
+- *One language:* "everything should be being compiled down to a single language, assembly, rather than
+  permanently stored off in high level languages and bloat". One language to compare in, yes; but
+  machine code is not always the shortest form (a line of a high-level language is often dozens of
+  instructions), and the shortest descriptions are often a small interpreter and a dense program for it.
+  The language chosen costs at most a constant, the interpreter's size, so the language worth compiling
+  everything to is likely a small dense machine whose interpreter is itself a few hundred bytes of
+  assembly. The bloat that wastes most is the libraries, runtimes and code duplicated between programs,
+  which a store of shared rules takes out.
+- *Routes to a file (Edward):* "you might be able to go to a file by friend X -> favourite X -> sieved
+  file, or basically any other number of configurations of connections between files and statespaces,
+  be they meta tags, group links or direct walks, some would be longer than the file itself, some
+  shorter, all lead to the file". Every route is a description, measured in bits: each step costs the
+  bits to pick it among its choices (a friend of 50, about 5.6 bits; a favourite of their 200, about
+  7.6), a direct walk the file's own address; the shortest is a shortest-path search over the graph. A
+  route through a friend's favourite is short only because someone holds the file: it points into
+  shared storage, the shared half above. Tags and group links are short where they narrow much, long
+  where a tag covers millions; the direct walk is never below the file's information, and works when no
+  one else has it. Most of the parts are built (the COST tab, the node graph's maps and anchors,
+  favourites and their owners, the RAID); the step it points to is a ROUTES view on the item page: every
+  way found to the thing in hand, each with its length in bits, the shortest lit, each set against the
+  file's own size.
+- *Everyone's favourites as one index (Edward):* "with 8.3 billion people, each having a potential 200
+  favourites each... presuming we tried to stop people having the same favourites... doesn't that in and
+  of itself become a shorter address space or navigable range through all files?" Worked out: it is a
+  product, 8.3 billion x 200 = 1.66 trillion favourites, so "a person, then one of their favourites" is
+  one choice in 1.66 trillion, about 40.6 bits (just over 5 bytes). (8.3 billion^200, about 10^1984,
+  counts the ways to write a list of 200 people; 200^8.3 billion the ways for everyone to pick one slot
+  of 200: ways of arranging the lists, not files reached.) So every favourited file, however large, has
+  a route of about 41 bits, a great saving for a film or a game; keeping favourites distinct is what
+  makes all 1.66 trillion different files. But they are held somewhere: the cost moves into everyone's
+  storage, the shared half. And the index is small beside the spaces: there are 2^48 (about 281
+  trillion) files of 6 bytes alone, so 1.66 trillion favourites cover well under 1% of even those (the
+  pigeonhole again: short routes for what is chosen, long ones for the rest). Chains (a friend's
+  friend's favourite) reach no further files; they add routes to files someone holds, each step adding
+  bits. Favourites are a shared index: strong for what people care about, silent on everything else.
+- *Presenting it:* unfold one level at a time round where you stand, as the System Viewer already shows
+  one entry with its parent and children as a ring of doors; the button opens the next ring, not all of
+  it. Colour by branch, not by dimension ("before I considered shades of colours from each dimension but
+  even that could get messy fast"): a hue for each first branch from the root, each child its parent's
+  hue, lighter or darker with depth, so the branch you are in always shows and the colours never
+  outnumber the first split.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

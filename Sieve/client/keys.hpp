@@ -204,6 +204,17 @@ extern const std::string& kPaste;
 extern const std::string& kCopy;
 } // namespace cipher_keys
 
+// The Documentation's keys (IDEAS 19.201), besides the menus' (Up, Down, Left, Right, Enter, Tab, PgUp,
+// PgDn, Esc; Tab moving to the next tab on the list, or the next link on the page): the tab or the link
+// before, a search, back to the page read before, and the first and the last row or line.
+namespace help_keys {
+extern const std::string& kPrevious;
+extern const std::string& kSearch;
+extern const std::string& kHistory;
+extern const std::string& kFirst;
+extern const std::string& kLast;
+} // namespace help_keys
+
 // The CHAIN tab's keys (IDEAS 19.199), asked before the item page's (a key none of them is goes on to the
 // page): a stage up or down, moved up or down, its model the one before or the next, steered by the
 // filters, one added after it or taken away, run from CHAT, and a chain saved or opened.

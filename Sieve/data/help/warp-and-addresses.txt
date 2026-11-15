@@ -1,0 +1,30 @@
+index: warp, address, go to, percentage, navigator, bearing, random, trail, tile, paste
+
+Every unit on a line has exactly one address, and every address holds exactly one unit. So instead of walking, you can jump straight to a thing, or to a place.
+
+## Warping to content
+Press {key1:hallway.anywhere/warp|T} and type what you want to find: text on the pages line, notes on the audio line, or the path of a picture file on the image or video line. Press {key1:hallway.typing/go|Enter}. You land facing it, in the first copy of the line, and it opens in your hands.
+
+On the binary line, T takes the path of a file and warps to that file, with the file's name as its title. On the books line, T opens a book record whose shape matches the line; if it does not match, the message says what to set.
+
+{key1:hallway.typing/paste|Ctrl+V} pastes into the box and {key1:hallway.typing/erase|Backspace} takes a character back.
+
+A warp that makes several units leaves a trail: with empty hands, {key1:hallway.empty_handed/trail_next|N} and {key1:hallway.empty_handed/trail_back|B} go to the next and previous unit of it.
+
+## Going to an address
+Press {key1:hallway.anywhere/go_to|G} and type one of these:
+- an address in hex,
+- a percentage along the line, such as 50% or 36.25%,
+- @ and a tile number, such as @0, for that tile of corridor.
+
+An address or a percentage opens the book there too.
+
+## The address navigator
+{key1:hallway.anywhere/navigator|X} shows the whole address of the item you are looking at, full screen, one hex digit at a time, with the same place in decimal under it. Left and Right choose a digit; Up and Down, the wheel or the arrows turn it. You can also type 0 to 9 and a to f. Enter goes there and Esc leaves.
+
+In the navigator, Tab lets you type a bearing instead: 180 is halfway round the loop. R fills in a random place on this line, and Shift+R chooses a random line first.
+
+## Home
+{key1:hallway.anywhere/home|Home} takes you to tile 0, where every line starts together.
+
+See also [[items]] and [[lines]].

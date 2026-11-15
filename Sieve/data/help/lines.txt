@@ -1,0 +1,31 @@
+index: lines, dimensions, unit, pages, image, audio, video, books, binary, colours, doors
+
+The hallway holds several lines, or dimensions: one for each kind of content. A line holds every possible unit of one shape, and each book on its shelves is one unit. The setup menu sets each line's shape.
+
+## What a unit is on each line
+- PAGES: a page of a set number of characters, from the line's alphabet.
+- IMAGE: a picture of a set width and height, in the line's palette.
+- AUDIO: a melody of a set number of notes, or, with the pcm note set, sound itself.
+- VIDEO: a set number of frames, each a small picture.
+- BOOKS: a cover (a picture of the image line), a title and a number of pages.
+- TRACKS: a cover, a title and a number of units of audio, joined.
+- MOVIES: a cover, a title and a number of units of video, joined.
+- MODELS: a 3D mesh of a set number of corners and triangles.
+- WORLDS: a cover, a title and a few models, each placed in a grid and turned.
+- AI: a small language model of one shape. Its weights, written out as digits, are its address.
+- BINARY: every file up to a set number of bytes long, the empty file first. On its front each file shows what kind of file it is, read from its own first bytes.
+
+The pages, image, audio, video and models lines give their items titles too, and audio and video items a cover. The title length is a GLOBAL setting in the setup menu; 0 means no titles.
+
+## Colours
+Each line has a background colour and an edge colour: pages black with white edges, image blue with cyan, audio green with amber, video red with yellow, books grey with black, and binary black with green. Tracks and movies take audio's and video's colours with black edges. Doors are solid black.
+
+## The order of the lines
+Going through left-hand doors, the lines run image, pages, books, audio, tracks, video, movies, models, worlds and AI, with binary at both ends. The binary line has shelves on one wall only.
+
+## Orderings
+- Positional: the address is the content read as a number, so neighbours share their beginning.
+- Scrambled: the content is shuffled by a fixed, reversible rule first, so neighbours are unrelated.
+- Guided (pages only): likely text gets a short address and noise a long one.
+
+{key1:hallway.anywhere/ordering|M} switches between them. See also [[warp-and-addresses]] and [[filters]].

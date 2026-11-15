@@ -1,0 +1,26 @@
+index: main menu, menu, start sieve, exit sieve, documentation, potentia settings, choices
+
+The hallway opens on the main menu, Potentia : Sieve : Gallery of Babel Dimensions. Use {key1:menus/up|Up} and {key1:menus/down|Down} to choose a row and {key1:menus/choose|Enter} to open it, or use the mouse. {key1:menus/back|Esc} goes back one screen.
+
+## The rows
+- Start Sieve: set up the lines, then walk into the hallway. See [[first-walk]].
+- File Locator: weigh a file or a folder beside zip and 7z, and make Sieve instructions and installers. See [[file-locator]].
+- Media Player: the background music, its settings, filters, recent melodies and favourites. See [[media-player]].
+- Filter Designer: make a filter as nodes, test it as you go and save it. See [[filter-designer]].
+- AI Training Harness: train a model of the AI line from a recorded run. See [[training-harness]].
+- Personal Dimensions: your own dimension, other people's, and the ones made together. See [[personal-dimension]].
+- Character Creator: your character, large, with its settings and actions. See [[character-creator]].
+- Replays: your recordings of the hallway, to play back. See [[replays]].
+- Encryption Engine: encrypt with a recipe of layers, decrypt, or try to break a weak cipher. See [[encryption-engine]].
+- Manual Navigation: turn a file's bytes by hand and see where each turn puts it. See [[manual-navigation]].
+- System Viewer: the systems charted so far, walked as a ring of doors. See [[system-viewer]].
+- Documentation: this library, the pages you are reading, with its contents, index and search.
+- Potentia Settings: graphics, controls, language, the programs Sieve runs, and more. See [[settings]].
+- Exit Sieve: closes Sieve.
+
+## Good to know
+Pressing {key1:menus/back|Esc} on the main menu itself points at Exit Sieve rather than closing Sieve, so you will not leave by accident.
+
+The Media Player builds the hallway with the player open over it. Leaving the player brings you back to the main menu.
+
+Many of these systems can also be opened while you walk, from the pause menu. See [[pause-menu]].

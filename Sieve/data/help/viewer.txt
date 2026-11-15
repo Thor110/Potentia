@@ -1,0 +1,31 @@
+index: viewer, zoom, scroll, picture, cover, title, sound, midi, 3d models, viewers-needed.txt
+
+The item page draws what you hold at the page's size, so a long page stops at its foot. The viewer opens it over the whole window instead, as large as you like and scrolled both ways.
+
+## Opening and closing
+Holding something, press {key1:hallway.holding/view|Z}, or click the thing itself. Esc or Z closes the viewer, with the thing still in your hands.
+
+## What it shows
+- A page: all of it, a character to a cell.
+- A picture or a film: its pixels, one to one or as large as you like. A film plays; Space stops it, and N and B step a frame.
+- A book: the open page, with N and B to turn the pages. A track: its notes.
+- A model or a world: in 3D, turned with the arrow keys or WASD, with its .obj text as the next tab.
+
+## Files open by their kind
+A file from the binary line opens in the view made for its kind, read from its own first bytes, with its bytes as the next tab:
+- Pictures (PNG, JPEG, GIF and BMP) as the picture. A GIF's frames play.
+- Text files as their text.
+- Sound files (WAV, FLAC, AIFF and a few others) as their waveform, and MIDI files as their notes. Space plays either.
+- Models (.obj, glTF and .glb) in 3D.
+
+A kind with no viewer yet, MP3 and Ogg among them, is shown as its bytes. The viewer says so, and the kind is noted in viewers-needed.txt beside the settings file: the list of viewers still to be made.
+
+## The buttons along the top
+Tab and Shift+Tab, or the buttons, show what else was made of the thing on its way to the shelf: PICTURE, the picture on the item; COVER, a book's, track's or film's cover; and TITLE, its title. F saves what is shown.
+
+## Moving about
+- The wheel scrolls down, Shift and the wheel across, and Ctrl and the wheel zooms about the pointer. Dragging moves it too.
+- The arrows or WASD move it; PgUp and PgDn by a screen; Home and End to the top and the foot.
+- + and - zoom (with Shift, twice as far), 0 fits it to the window and 1 is one to one.
+
+See also [[items]].

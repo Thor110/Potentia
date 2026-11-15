@@ -1,0 +1,30 @@
+index: encryption engine, encrypt, decrypt, break, cipher, recipe, layers, catalogue
+
+The Encryption Engine encrypts anything with a recipe of layers, decrypts it again, or tries to break a weak cipher. Open it from the main menu or the pause menu.
+
+## Using it
+1. Type an input, as text or as bytes in hex.
+2. Type a recipe of layers, separated by semicolons, such as: vigenere lemon; feistel my key
+3. Choose to encrypt, decrypt or break.
+
+The output is shown in hex and, when it is printable, as text. Break ranks the weak ciphers' guesses; it reads at most the first 64 KB of a long input.
+
+{key1:menus/next|Tab} puts the output in as the input, so what was just encrypted can be decrypted, or broken, at once.
+
+## Files and items
+- Holding an item in the hallway, press {key1:hallway.holding/cipher|I} on its page and the engine opens with the item as its input: its bytes, as saving it would write them. {key1:cipher/item|Ctrl+I} takes the item again.
+- {key1:cipher/file|Ctrl+O} takes a file as the input instead.
+
+The INPUT row then names it and shows its first bytes. Typing there goes back to typed input.
+
+## Keeping the result
+- {key1:cipher/save|Ctrl+S} saves the output as a file.
+- GO TO IT ({key1:cipher/go|Ctrl+G}) leaves the engine on the binary line, in front of the output. From the main menu, it builds a hallway as the settings stand.
+- {key1:cipher/paste|Ctrl+V} pastes and {key1:cipher/copy|Ctrl+C} copies.
+
+A row of buttons does the same things with the mouse.
+
+## The catalogue
+CATALOGUE counts the recipes there are: the layers with keys up to a set length, the recipes of each depth, and the bits it takes to name one. The status line places your recipe among those of its depth.
+
+See also [[items]] and [[warp-and-addresses]].

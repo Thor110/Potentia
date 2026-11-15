@@ -83,6 +83,10 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 45. **Limbs** (R7): Potentia Settings > Graphics > Character Voxels > **Limbs** on, then the skin, quads or smooth drawing in the Creator: each limb becomes one smooth tube from sphere to sphere, the gaps bridged (try seed 12345, whose long limb was a row of balls). The head joins the body as a limb does, so they become one dome: say if you would rather the head stay apart. Off, the skin is exactly as before.
 - [ ] 46. **Skin Smoothing** (R8): the row after Limbs, 0 (off) to 20 rounds. The quads grow more even and the light softer; the knuckles where sphere sizes change stay. The Creator's readout gives the volume before and after (it should stay within about 1%).
 - [ ] 47. **Skin Subdivision** (R9): the row after Skin Smoothing, 0 to 3 steps, for the quads and smooth drawings: the outline goes from faceted to round. A fine skin may be given fewer steps than asked (the readout says so). In your dimension and the hallway the bound is shared by the characters in sight, so with many placed each is given fewer steps: watch the frame rate there with 1 and 2 steps. At 2 or 3 steps the quads drawing's many small edges darken it (left for later).
+- [ ] 48. **Sound files in the viewer** (V1): on the binary line, warp to a WAV, a FLAC and, if you have one, an AIFF (T, then the file's path; the line's length must be at least the file's), pick it up (E) and open it (Z): its waveform, a band a channel. **Space** plays it (through the music, which fades out under it) and again stops it; closing the viewer stops it too. Try a long one (over about 12 minutes of CD sound): it is refused and shown as its bytes, saying why. An MP3 is still shown as its bytes and noted in `viewers-needed.txt`.
+- [ ] 49. **MIDI files in the viewer** (V1): the same with a .mid: its notes, each voice on its own lines, at the tempo the file sets first; Space plays them (square tones, as the audio line plays notes). Try one with chords or many tracks: a voice plays one note at a time and there are at most 15 voices, so a chord's other notes and the tracks past the fifteenth are left out, and the foot of the screen says how many.
+- [ ] 50. **Model files in the viewer** (V1): the same with an .obj, a .glb and a glTF whose buffer is inside it: each opens on its 3D view, turned with the arrows or WASD; Tab gives the .obj's or glTF's text. A glTF whose buffer is a file beside it says it cannot be read from its bytes and opens as its text.
+- [ ] 51. **The Documentation** (V2): Main menu > **Documentation**, before Potentia Settings. Read a few pages from CONTENTS (Up/Down, Enter); follow a link (Right to the page, Tab to a link, Enter) and come back (Backspace); look a word up in INDEX (Tab on the list); type a word to search. The 25 pages were written from the manual for the person using Sieve: say where a page is wrong, unclear or missing, and which pages you would want next. Change a key the pages name (Settings > Controls > Keys) and see the page show it as set.
 
 ---
 
@@ -140,8 +144,8 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] M5. Every footer of keys wraps upwards as the viewer's does, on every screen, with a CI check that no footer line is wider than its window (19.224). *Made 14 November 2026.*
 
 ### List V: viewers `[10]` + you, one sitting with files of each kind
-- V1. Sound files to the audio player, .obj/glTF files to the 3D view (the rest of 19.200).
-- V2. The documentation viewer (19.201).
+- [x] V1. Sound files to the audio player, .obj/glTF files to the 3D view (the rest of 19.200). *Made 15 November 2026.*
+- [x] V2. The documentation viewer (19.201). *Made 15 November 2026.*
 
 ### List F: formats and grammars `[01]` + `[05]`/`[06]` (+ `[11]` where the reader changes); no sitting
 - F1. Grammars and catalogue entries for actions, replay, save-v2, personal-world v1/v2 (old A3).
@@ -164,7 +168,7 @@ run before a release package, and after each of the three reviews. Each batch is
   with list R.
 
 ### Later (in ROADMAP's final tasks)
-- Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119).
+- Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 
 ---
 

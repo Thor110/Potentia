@@ -1,0 +1,29 @@
+index: filter designer, filter plugin, nodes, custom filters, test, version, melody filter
+
+The Filter Designer makes your own filters, as nodes, and tests them as you go. Open it from the main menu or the pause menu.
+
+## What a filter is made of
+A filter you design has:
+- the filters it requires, each with the settings it pins (ticking yours ticks them too),
+- its header and parameters,
+- its rule: sets of words joined by arrows that say which may follow which, or a table.
+
+## Testing as you go
+As you build, the Designer tests the filter and shows:
+- how many units of the line survive it,
+- samples of what it keeps,
+- text you type, judged, with where it fails,
+- any other filter that is the same rule under another name.
+
+On the audio line the samples are played: the first at each test, and the next with P.
+
+## Saving
+The Designer saves each filter as a version. It is kept in the filters folder as a .sieve file, together with the word lists it reads, and checked before it is kept.
+
+## Using your filter
+Your filters appear in their own CUSTOM FILTERS tab of a line's filter list in the setup menu. They tick and take settings like the built-in filters. See [[filters]].
+
+## Melody filters
+In the [[media-player]], {key1:media/melody|M} opens the Designer on a melody filter to change as you like. Each time it is tested it plays a melody it keeps, and Esc goes back to the player.
+
+The Designer's own keys cannot be changed yet.

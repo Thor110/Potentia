@@ -83,7 +83,7 @@ std::vector<MainMenu::Item> MainMenu::items() const
     case Screen::Main:
         return {{Kind::Action, "start"},    {Kind::Action, "locator"},  {Kind::Action, "media"},      {Kind::Action, "designer"},
                 {Kind::Action, "harness"},  {Kind::Action, "personal"}, {Kind::Action, "creator"},    {Kind::Action, "replays"},
-                {Kind::Action, "cipher"},   {Kind::Action, "manual_nav"}, {Kind::Action, "systems"}, {Kind::Action, "settings"},
+                {Kind::Action, "cipher"},   {Kind::Action, "manual_nav"}, {Kind::Action, "systems"}, {Kind::Action, "docs"}, {Kind::Action, "settings"},
                 {Kind::Action, "exit"}};
     // Personal Dimensions (IDEAS 19.152, 19.157): yours, built; other people's and group dimensions to come.
     case Screen::Personal:
@@ -461,6 +461,7 @@ void MainMenu::change(int dir)
         else if (it.id == "media") { result_ = Result::Media; done_ = true; }
         else if (it.id == "cipher") { result_ = Result::Cipher; done_ = true; }
         else if (it.id == "manual_nav") { result_ = Result::ManualNav; done_ = true; }
+        else if (it.id == "docs") { result_ = Result::Docs; done_ = true; } // the Documentation (IDEAS 19.201)
         else if (it.id == "personal") { screen_ = Screen::Personal; row_ = 0; }
         else if (it.id == "personal_one") { result_ = Result::Personal; done_ = true; }
         else if (it.id == "personal_features") { screen_ = Screen::Features; row_ = 0; }

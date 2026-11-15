@@ -1,0 +1,27 @@
+index: file locator, pack, weigh, zip, 7z, sieve instructions, installer program, install, go to it, priority
+
+The File Locator weighs a file or a folder: it packs it every way Sieve has, keeps the smallest, and sets the result beside what zip and 7z would make of it. From there you can save it as Sieve instructions, make an installer program, or go to the file on the binary line. Open it from the main menu, or from the pause menu while you walk.
+
+## Reading a file or folder
+Choose a folder, or a single file; a file is handled as a folder holding just that file. While it works, a graph draws each step's best result so far, and a line says what it is doing.
+
+Stop (keep the best so far), or S, ends it with the best found so far. Pressed again, it becomes Force stop (the last finished result).
+
+## What to do with it
+- Save Sieve instructions... gives the .sieve on its own. Send this to anyone who already has Sieve.
+- Make an installer program... gives a single program that anyone can run. It asks which folder the program should offer to install into: Documents and the folder's name to begin with, which Enter keeps, or type another. Esc: not made.
+- Install from Sieve instructions... (or I) takes a .sieve or an installer program, then asks for the folder to put it in.
+- Go to it walks to the file on the binary line.
+- Use the tailored filters saves the filters tailored to these files.
+
+## The boxes
+- Compare with zip and 7z (Z): ticked unless you untick it. Unticked, the table shows Sieve's figures alone, which is quicker on a large folder. More formats (C) adds gzip, bzip2, zstd, brotli and lz4, and takes longer.
+- Priority (P): Size, Balanced or Decoding speed. Balanced is the default here.
+- Optimise Search (O): ticked unless you untick it. It chooses how hard to search for each file by its kind.
+- Try every way (E): turns the search's shortcuts off. It takes longer.
+- Archive and compressed formats: temporary (A) and permanent (U). Permanent changes what is installed, so it is never on by default.
+- Sound as FLAC (W): Temporary, Permanent or Off.
+- Keep a log (L): writes a text file for each reading and each saving, in a logs folder beside the settings file.
+- Reset to defaults (R) puts every box back as a new settings file has them.
+
+See [[sieve-files]] for installing what you made.
