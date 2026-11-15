@@ -45,3 +45,8 @@ nav a:hover, button:hover { border-color: #555; color: #ccc; background: #111; }
 .slideshow img, .slideshow .sieve-refused { max-width: 100%; min-height: 12em; border: 1px solid #2a2a3a; }
 .slideshow figcaption { margin-top: 10px; color: #666; letter-spacing: 0.05em; }
 .slideshow .controls { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; color: #666; }
+
+/* Footer: links between the three sites. */
+.footer{margin-top:40px;font-size:9px;color:#777;letter-spacing:0.1em;text-transform:uppercase;text-align:center;line-height:1.8;}
+.footer a{color:#888;}
+@media (max-width: 720px){.footer{white-space:normal;overflow-wrap:anywhere;}}
