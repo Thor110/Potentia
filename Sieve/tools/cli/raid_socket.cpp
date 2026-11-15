@@ -4,8 +4,10 @@
 // (additional term under section 7(b) of the GNU AGPL v3, docs/RAID-NOTICE.md).
 #include "raid_socket.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <cstring>
 #include <functional>
 #include <list>
 #include <memory>
@@ -97,17 +99,32 @@ void set_timeouts(socket_t s, int timeout_s)
 class SocketStream : public sieve::RaidStream
 {
 public:
-    explicit SocketStream(socket_t s) : s_(s) {}
+    explicit SocketStream(socket_t s) : s_(s), buf_(kBuffer) {}
     ~SocketStream() override { close_socket(s_); }
+    // What is buffered first; a read as large as the buffer straight into the caller's bytes; a small
+    // one refills the buffer with one recv. Lines were read a byte at a time, one recv each (17.1 us a
+    // 74-byte line against 0.6 us; OPTIMISATIONS 1). The bytes read are the same.
     bool read(char* to, size_t n) override
     {
+        const size_t had = std::min(n, end_ - at_);
+        std::memcpy(to, buf_.data() + at_, had);
+        at_ += had, to += had, n -= had;
         while (n)
         {
-            const int want = int(n > (size_t(1) << 20) ? (size_t(1) << 20) : n);
-            const auto got = recv(s_, to, want, 0);
+            if (n >= kBuffer)
+            {
+                const int want = int(n > (size_t(1) << 20) ? (size_t(1) << 20) : n);
+                const auto got = recv(s_, to, want, 0);
+                if (got <= 0) return false;
+                to += got;
+                n -= size_t(got);
+                continue;
+            }
+            const auto got = recv(s_, buf_.data(), int(kBuffer), 0);
             if (got <= 0) return false;
-            to += got;
-            n -= size_t(got);
+            at_ = std::min(n, size_t(got)), end_ = size_t(got);
+            std::memcpy(to, buf_.data(), at_);
+            to += at_, n -= at_;
         }
         return true;
     }
@@ -129,7 +146,10 @@ public:
     }
 
 private:
+    static constexpr size_t kBuffer = size_t(64) << 10;
     socket_t s_;
+    std::vector<char> buf_;
+    size_t at_ = 0, end_ = 0; // what is buffered and not yet read: buf_[at_, end_)
 };
 
 // HOST:PORT looked up, for connecting to it or (`passive`) listening on it. Throws

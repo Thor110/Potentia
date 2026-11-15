@@ -86,6 +86,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -7552,6 +7553,57 @@ void test_raid_net()
         Script lng;
         lng.in = "sieve-raid-net-v1\n" + std::string(500, 'x') + "\n";
         CHECK(held.serve(lng, "192.0.2.5") == 0);
+        // Asked together (OPTIMISATIONS 2): a peer's `has` lines go in one write, the answers read in
+        // turn; the same answers as one at a time.
+        struct Counted : Script
+        {
+            size_t writes = 0;
+            bool write(std::string_view b) override
+            {
+                ++writes;
+                return Script::write(b);
+            }
+        };
+        auto counted = std::make_unique<Counted>();
+        Counted* c = counted.get();
+        c->in = "sieve-raid-net-v1\nyes\nno\nyes\n";
+        {
+            RaidNetPeer peer(std::move(counted), "p:1");
+            const std::vector<std::string> names = {std::string(64, 'a'), std::string(64, 'b'), std::string(64, 'c')};
+            CHECK(peer.has_each(names) == std::vector<bool>({true, false, true}));
+            CHECK(c->writes == 2 && c->out == "sieve-raid-net-v1\nhas " + names[0] + "\nhas " + names[1] + "\nhas " + names[2] + "\n");
+        }
+    }
+    // Written outside the lock (OPTIMISATIONS 6): eight puts at once of one piece keep it once and say
+    // had seven times; of eight pieces with room for five, five are kept; the counts and the peers file
+    // as if one after another, and no part file left.
+    {
+        HeldLimits lim;
+        lim.space = 5000;
+        RaidHeld held(root / "together", lim);
+        const std::string same(700, 's');
+        std::vector<std::string> own;
+        for (int i = 0; i < 8; ++i) own.push_back(std::string(1000, char('A' + i)));
+        std::atomic<int> kept{0}, had{0}, own_kept{0}, own_refused{0};
+        std::vector<std::thread> ts;
+        for (int i = 0; i < 8; ++i)
+            ts.emplace_back([&, i] {
+                const auto a = held.put(sha(same), same, "192.0.2.9");
+                if (a.is == RaidHeld::Put::Is::Kept) ++kept;
+                if (a.is == RaidHeld::Put::Is::Had) ++had;
+                const auto b = held.put(sha(own[size_t(i)]), own[size_t(i)], "192.0.2." + std::to_string(i));
+                (b.is == RaidHeld::Put::Is::Kept ? own_kept : own_refused) += 1;
+            });
+        for (auto& t : ts) t.join();
+        CHECK(kept == 1 && had == 7);
+        CHECK(own_kept == 4 && own_refused == 4); // (700 + 4 x 1000 within the 5000)
+        CHECK(held.used() == 4700 && held.used_by("192.0.2.9") == 700);
+        RaidHeld again(root / "together", lim); // the peers file as the counts
+        CHECK(again.used() == 4700);
+        size_t parts = 0;
+        for (const auto& e : fs::recursive_directory_iterator(root / "together"))
+            parts += e.path().filename().string().find(".part") != std::string::npos ? 1 : 0;
+        CHECK(parts == 0);
     }
     // Shared to three peers and fetched back; a new version sends only its changed chunks.
     {

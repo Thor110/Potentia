@@ -9800,6 +9800,29 @@ about anything else using an object and a ruleset or a ruleset and a ruleset".
   enough", and "So it isn't for the Sieve dimensions itself". So the hallway's lines keep their corridor;
   a layout is a person's own arrangement of a line inside their personal dimension, and each shape needs
   rooms (models) made to suit it, the half room serving hexagons and circles. How that works is open.
+- *The half room, and a way in and out (Edward, 15 November 2026):* "I mean half of the existing hallway
+  room could be repurposed as a single wall in a hexagonal room or circular room", "The idea was that
+  people could place a dimension in their personal dimension, a hallway, but also lay it out in anyway they
+  wanted", "It would have to have a way to enter and exit it, rather than spawning and consuming the entire
+  personal dimension", and "So we might have to think about it first or move it back to work on later". So
+  one side of the corridor's room (a wall of shelves) is the piece a hexagonal or circular room is built
+  from, a line placed in a personal dimension is entered and left rather than filling the whole of it, and
+  what stands where is to be talked through before anything is built.
+- *Settled the same day (Edward's answers):*
+  - Own space or in the world: "own space": the laid-out line is a space of its own behind its door, as
+    the maze door's first switch (§19.198).
+  - The rooms: "I have updated the repository with the old models I made and planned to use for the Gallery
+    of Babel in its early form" (`Previous/models/`: `gallery-hexagon.obj`, a hexagonal room;
+    `gallery-stairwell.obj`, a stairwell; `gallery-full.obj`, the two together), the shapes to build from.
+  - What a room holds: six walls of 64 items, 384 a room, is "awkward, but technically it could be
+    adjusted to any number presuming we fit them on the shelves differently".
+  - Where it starts: "it would have to be from a placed doorway or something and it would become a sub
+    dimension": a doorway placed in the personal dimension, the line behind it a sub-dimension of it.
+  - The line's shape: "fixed and stored yes": kept with the doorway when it is placed, as a favourite keeps
+    its space, so changing the hallway's settings later does not move what is behind it.
+- *Delayed (Edward, the same day):* "I think we should delay working on it for now though as the personal
+  dimension is going to need a lot of dedicated work done for it". Nothing of the layouts is built yet;
+  `sieve-layout-v1` stays only named in SPECIFICATIONS 12.0r's `layout` line.
 - *First step proposed:* `sieve-layout-v1`, a hexagonal layout of one line in a personal dimension
   (rings of hexagons round the item you stand at), with its numbering checked against the corridor's
   order; then {7,3} in the Poincaré disc; then the grammar of the fractal dimension. *Planned only;*

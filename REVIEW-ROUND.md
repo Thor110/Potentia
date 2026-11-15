@@ -153,19 +153,26 @@ run before a release package, and after each of the three reviews. Each batch is
 - F3. v34 measured and frozen (task 118). *Frozen 12 November 2026; measured whole 15 November 2026 (results/v34-measured-2026-11-15.md).*
 
 ### List S: new spaces `[10]` + you, a sitting each
-- S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198). *Agreed 15 November 2026: the fractal dimension first, then layouts (for personal dimensions), then the maze door. Step 1 made the same day: the fractal dimension's grammar, shelves and `sieve fractal`, then reworked as the hallway's FRACTALS line (its door after AI, its index book first, a new listed kind of line any later dimension can be) (SPECIFICATIONS 12.0t).*
+- S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198). *Agreed 15 November 2026: the fractal dimension first, then layouts (for personal dimensions), then the maze door. Step 1 made the same day: the fractal dimension's grammar, shelves and `sieve fractal`, then reworked as the hallway's FRACTALS line (its door after AI, its index book first, a new listed kind of line any later dimension can be) (SPECIFICATIONS 12.0t). Step 2, layouts, talked through and delayed the same day (IDEAS 19.191: own space behind a placed doorway, a sub-dimension, its line's shape fixed and stored; the rooms from `Previous/models/`): the personal dimension needs dedicated work first.*
 
 ### List T: testing itself (its own CI change, checked by running it)
 - [x] T1. Screenshots made by a tool, and the CI runner running only the steps a change reaches (19.202). *First step made 14 November 2026: `ci/run.sh --changed`, `tools/screenshots.py`.*
   This is what makes batches cheap without picking the steps by hand, so it could go into the first batch.
 
 ### List O: optimisations left by the reviews (Sieve/docs/OPTIMISATIONS.md), each with its own CI
-- O1. RAID reads buffered `[04, 10]`; O2. sharing's questions sent together `[01, 04, 10]`; O3. the Creator's
+- O1. RAID reads buffered `[04, 10]`; O2. sharing's questions sent together `[01, 04, 10]` (*O1, O2 and O6
+  made 15 November 2026*); O3. the Creator's
   picture the size of its box `[04, 10]`; O4. recordings kept as text `[10]`; O5. edges walked only in
   their band `[04, 10]`; O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
   on a large file (a measurement, no CI).
   Each sits well with others of the same steps: O1, O2 and O6 together are one RAID batch; O3 and O5 go
   with list R.
+
+### Last on the list: the fractal dimension reviewed
+- X1. Review the fractal dimension and add as many fractals as can be tracked down (Edward, 15 November 2026:
+  "review the fractal dimension and implement as many fractals as we can track down"): each charted by hand
+  as a `sieve-fractal-v1` ruleset where the grammar can write it, and the grammar widened (a new version)
+  where a well-known fractal needs what it cannot say. `[01]` + `[10]`.
 
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).

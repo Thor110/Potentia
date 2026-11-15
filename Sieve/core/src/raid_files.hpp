@@ -29,12 +29,13 @@ inline std::optional<std::string> read_file(const fs::path& p)
     return s;
 }
 
-// Written whole or not at all: to a file beside it, then renamed over it.
-inline bool write_file(const fs::path& p, const std::string& bytes)
+// Written whole or not at all: to a file beside it (its name and `part`), then renamed over it. Two
+// writers of the same file at once each give a `part` of their own.
+inline bool write_file(const fs::path& p, const std::string& bytes, const std::string& part = ".part")
 {
     std::error_code ec;
     fs::create_directories(p.parent_path(), ec);
-    const fs::path tmp = p.string() + ".part";
+    const fs::path tmp = p.string() + part;
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         out.write(bytes.data(), std::streamsize(bytes.size()));

@@ -51,17 +51,22 @@
 //     put SHA N, N bytes ->  kept | had | refused WHY      (N at most kRaidNetMax)
 //     bye                ->  (closed)
 // A put whose bytes are not their name is refused, and so is anything not written as above, which
-// also ends the connection.
+// also ends the connection. Since the answers come in turn, requests may be written before the
+// answers to earlier ones are read (a share asks a peer about up to kRaidAskedTogether pieces in one
+// write: OPTIMISATIONS 2); the protocol is the same.
 #pragma once
 
 #include "sieve/raid.hpp"
 #include "sieve/seal.hpp"
 
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -72,6 +77,10 @@ inline constexpr const char* kRaidHeldVersion = "sieve-raid-held-v1";
 inline constexpr const char* kRaidRemoteVersion = "sieve-raid-remote-v1";
 inline constexpr size_t kRaidNetMax = (size_t(4) << 20) + kSealOverhead; // a stage 1 chunk or a long manifest, sealed
 inline constexpr size_t kRaidNetLine = 200;
+// `has` requests written at once before their answers are read: 256 of them are 17,664 bytes, their
+// answers at most 1,024, so neither side's socket buffer fills while the other is still writing (a
+// figure chosen, not measured).
+inline constexpr size_t kRaidAskedTogether = 256;
 
 // A byte stream: a socket, or anything else that carries bytes both ways.
 class RaidStream
@@ -117,7 +126,9 @@ public:
     const std::filesystem::path& folder() const { return folder_; }
 
 private:
-    void save_peers() const;
+    std::string peers_text_locked() const;
+    void save_peers(const std::string& text, uint64_t generation);
+    void count_locked(const std::string& key, int64_t bytes);
     uint64_t used_locked() const;
     uint64_t used_by_locked(const std::string& key) const;
     std::filesystem::path folder_;
@@ -125,8 +136,18 @@ private:
     std::string salt_;
     std::vector<std::pair<std::string, uint64_t>> peers_; // key, bytes; in order of key
     // Several connections are answered at once (sieve raid serve), so the count of what each address
-    // has had kept, and the check against the limits before a chunk is written, are one at a time.
+    // has had kept, and the check against the limits, are one at a time; the writing is not
+    // (OPTIMISATIONS 6). A piece's space is counted (reserved) before it is written and given back if
+    // the write fails; a piece being written is in `writing_`, and another put of the same piece waits
+    // for it, then finds it had; each write goes to a `.part` name of its own.
     mutable std::mutex mx_;
+    std::condition_variable writing_done_;
+    std::set<std::string> writing_;
+    std::atomic<uint64_t> parts_{0};
+    // The peers file written after every put, as before, outside the lock: each put's view of the
+    // counts is numbered, and one older than the file's is not written over it.
+    std::mutex peers_file_mx_;
+    uint64_t peers_made_ = 0, peers_written_ = 0;
 };
 
 // One machine keeping chunks, as the owner sees it.
@@ -136,6 +157,9 @@ public:
     virtual ~RaidPeer() = default;
     virtual std::string address() const = 0;
     virtual bool has(const std::string& name) = 0;
+    // Whether it holds each of `names`, the answers in their order: the same as asking has() of each
+    // in turn, which is what this does unless the peer can ask them together. Throws as has() does.
+    virtual std::vector<bool> has_each(const std::vector<std::string>& names);
     virtual std::optional<std::string> get(const std::string& name) = 0;
     // Empty if kept (or already had); otherwise why it was refused.
     virtual std::string put(const std::string& name, const std::string& bytes) = 0;
@@ -151,6 +175,10 @@ public:
     ~RaidNetPeer() override;
     std::string address() const override { return address_; }
     bool has(const std::string& name) override;
+    // The `has` lines written together, kRaidAskedTogether at a time, and the answers read in turn
+    // (the keeper answers each in order), so a share waits one round trip a group, not one a piece
+    // (OPTIMISATIONS 2).
+    std::vector<bool> has_each(const std::vector<std::string>& names) override;
     std::optional<std::string> get(const std::string& name) override;
     std::string put(const std::string& name, const std::string& bytes) override;
 

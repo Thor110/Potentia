@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
+#include <unordered_map>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -106,11 +108,31 @@ uint64_t RaidHeld::used_by(const std::string& peer_address) const
     return used_by_locked(k);
 }
 
-void RaidHeld::save_peers() const
+std::string RaidHeld::peers_text_locked() const
 {
     std::string t;
     for (const auto& [k, n] : peers_) t += k + " " + std::to_string(n) + "\n";
-    write_file(folder_ / "peers", t);
+    return t;
+}
+
+void RaidHeld::save_peers(const std::string& text, uint64_t generation)
+{
+    std::lock_guard<std::mutex> lock(peers_file_mx_);
+    if (generation <= peers_written_) return; // (a later view of the counts is already there)
+    write_file(folder_ / "peers", text);
+    peers_written_ = generation;
+}
+
+void RaidHeld::count_locked(const std::string& k, int64_t bytes)
+{
+    const auto at = std::lower_bound(peers_.begin(), peers_.end(), std::make_pair(k, uint64_t(0)));
+    if (at != peers_.end() && at->first == k)
+    {
+        at->second = uint64_t(int64_t(at->second) + bytes);
+        if (at->second == 0) peers_.erase(at); // (a reservation given back: as if it had never been)
+    }
+    else if (bytes > 0)
+        peers_.insert(at, {k, uint64_t(bytes)});
 }
 
 RaidHeld::Put RaidHeld::put(const std::string& name, const std::string& bytes, const std::string& peer_address)
@@ -119,18 +141,46 @@ RaidHeld::Put RaidHeld::put(const std::string& name, const std::string& bytes, c
     if (bytes.size() > kRaidNetMax) return {Put::Is::Refused, "too long"};
     if (Sha256::hex_hash(bytes) != name) return {Put::Is::Refused, "its bytes are not its name"};
     const std::string k = peer_key(peer_address);
-    std::lock_guard<std::mutex> lock(mx_); // (the same chunk, or the last of the space, asked for twice at once)
-    if (get(name)) return {Put::Is::Had, ""};
-    if (used_locked() + bytes.size() > limits_.space) return {Put::Is::Refused, "no space left that this machine gives"};
-    if (used_by_locked(k) + bytes.size() > limits_.per_peer) return {Put::Is::Refused, "this address has had as much kept as one address may"};
-    if (!write_file(blob_path(folder_, name), bytes)) return {Put::Is::Refused, "cannot write here"};
-    const auto at = std::lower_bound(peers_.begin(), peers_.end(), std::make_pair(k, uint64_t(0)));
-    if (at != peers_.end() && at->first == k)
-        at->second += bytes.size();
-    else
-        peers_.insert(at, {k, uint64_t(bytes.size())});
-    save_peers();
-    return {Put::Is::Kept, ""};
+    // The same piece asked for twice at once: the second waits for the first, then finds it had.
+    {
+        std::unique_lock<std::mutex> lock(mx_);
+        writing_done_.wait(lock, [&] { return !writing_.count(name); });
+        writing_.insert(name);
+    }
+    auto done = [&](Put p, int64_t give_back) {
+        std::string text;
+        uint64_t generation = 0;
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            if (give_back) count_locked(k, -give_back);
+            writing_.erase(name);
+            if (p.is == Put::Is::Kept || give_back)
+            {
+                text = peers_text_locked();
+                generation = ++peers_made_;
+            }
+        }
+        writing_done_.notify_all();
+        if (generation) save_peers(text, generation);
+        return p;
+    };
+    if (get(name)) return done({Put::Is::Had, ""}, 0);
+    // The space counted before the write (the last of it, asked for twice at once, goes to one).
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        const char* refused = used_locked() + bytes.size() > limits_.space ? "no space left that this machine gives"
+                              : used_by_locked(k) + bytes.size() > limits_.per_peer ? "this address has had as much kept as one address may"
+                                                                                     : nullptr;
+        if (refused)
+        {
+            writing_.erase(name);
+            writing_done_.notify_all();
+            return {Put::Is::Refused, refused};
+        }
+        count_locked(k, int64_t(bytes.size()));
+    }
+    if (!write_file(blob_path(folder_, name), bytes, ".part" + std::to_string(++parts_))) return done({Put::Is::Refused, "cannot write here"}, int64_t(bytes.size()));
+    return done({Put::Is::Kept, ""}, 0);
 }
 
 size_t RaidHeld::serve(RaidStream& s, const std::string& peer_address)
@@ -209,6 +259,34 @@ bool RaidNetPeer::has(const std::string& name)
     return a == "yes";
 }
 
+std::vector<bool> RaidPeer::has_each(const std::vector<std::string>& names)
+{
+    std::vector<bool> out;
+    out.reserve(names.size());
+    for (const auto& n : names) out.push_back(has(n));
+    return out;
+}
+
+std::vector<bool> RaidNetPeer::has_each(const std::vector<std::string>& names)
+{
+    std::vector<bool> out;
+    out.reserve(names.size());
+    for (size_t at = 0; at < names.size(); at += kRaidAskedTogether)
+    {
+        const size_t end = std::min(names.size(), at + kRaidAskedTogether);
+        std::string asks;
+        for (size_t i = at; i < end; ++i) asks += "has " + names[i] + "\n";
+        if (!s_->write(asks)) throw std::runtime_error(address_ + " closed");
+        for (size_t i = at; i < end; ++i)
+        {
+            const std::string a = line();
+            if (a != "yes" && a != "no") throw std::runtime_error(address_ + " answered out of place: " + a);
+            out.push_back(a == "yes");
+        }
+    }
+    return out;
+}
+
 std::optional<std::string> RaidNetPeer::get(const std::string& name)
 {
     if (!s_->write("get " + name + "\n")) throw std::runtime_error(address_ + " closed");
@@ -253,9 +331,47 @@ std::vector<size_t> raid_peer_homes(const std::string& name, const std::vector<R
 
 namespace {
 
+// What each peer said it holds of a group of pieces, asked of it together (has_each: OPTIMISATIONS 2),
+// so placing them asks no peer again one piece at a time. A peer that could not answer so is asked one
+// piece at a time, as before, so a peer away gives the same notes as it always has. A piece put on a
+// peer since counts as held there, as asking it again would have found.
+class Asked
+{
+public:
+    void ask(const std::vector<std::string>& names, const std::vector<RaidPeer*>& peers)
+    {
+        said_.assign(peers.size(), std::nullopt);
+        for (size_t i = 0; i < peers.size(); ++i)
+            try
+            {
+                const std::vector<bool> a = peers[i]->has_each(names);
+                std::unordered_map<std::string, bool> m;
+                for (size_t k = 0; k < names.size() && k < a.size(); ++k) m.emplace(names[k], a[k]);
+                said_[i] = std::move(m);
+            }
+            catch (const std::exception&)
+            {
+                // (asked one at a time when it comes to it, and its trouble noted then, as before)
+            }
+    }
+    // Throws as RaidPeer::has does, where the peer is asked.
+    bool has(size_t i, RaidPeer& p, const std::string& name) const
+    {
+        if (put_.count({i, name})) return true;
+        if (i < said_.size() && said_[i])
+            if (const auto it = said_[i]->find(name); it != said_[i]->end()) return it->second;
+        return p.has(name);
+    }
+    void kept(size_t i, const std::string& name) { put_.insert({i, name}); }
+
+private:
+    std::vector<std::optional<std::unordered_map<std::string, bool>>> said_;
+    std::set<std::pair<size_t, std::string>> put_;
+};
+
 // Puts one sealed piece on `want` of the peers, its homes first, going further down the ranking when
 // one refuses or fails. Returns how many hold it.
-size_t place(const std::string& name, const std::string& bytes, const std::vector<RaidPeer*>& peers, size_t want, RaidShareReport& r)
+size_t place(const std::string& name, const std::string& bytes, const std::vector<RaidPeer*>& peers, size_t want, RaidShareReport& r, Asked& asked)
 {
     size_t holding = 0;
     for (const size_t i : raid_peer_homes(name, peers))
@@ -264,7 +380,7 @@ size_t place(const std::string& name, const std::string& bytes, const std::vecto
         RaidPeer& p = *peers[i];
         try
         {
-            if (p.has(name))
+            if (asked.has(i, p, name))
             {
                 ++r.had;
                 ++holding;
@@ -276,6 +392,7 @@ size_t place(const std::string& name, const std::string& bytes, const std::vecto
                 ++r.sent;
                 r.bytes_sent += bytes.size();
                 ++holding;
+                asked.kept(i, name);
             }
             else
                 r.notes.push_back(p.address() + " refused " + name.substr(0, 12) + ": " + why);
@@ -313,21 +430,39 @@ RaidShareReport raid_share(const Raid& raid, const std::string& version, const S
     const std::string sealed_manifest = seal(key, m->text());
     const std::string manifest_name = Sha256::hex_hash(sealed_manifest);
     index += "manifest " + manifest_name + "\n";
-    size_t at = 0;
+    // The chunks sealed a group at a time (kRaidAskedTogether of them, or 64 MiB), every peer asked
+    // which of the group it holds in one go, then each placed in order as before.
+    Asked asked;
+    std::vector<std::string> names, sealed;
+    auto place_group = [&] {
+        asked.ask(names, peers);
+        for (size_t k = 0; k < names.size(); ++k)
+            if (place(names[k], sealed[k], peers, want, r, asked) < want) ++r.short_of;
+        names.clear();
+        sealed.clear();
+    };
+    size_t at = 0, group_bytes = 0;
     for (const auto& [h, n] : m->chunks)
     {
-        const std::string sealed = seal(key, std::string_view(bytes).substr(at, size_t(n)));
+        sealed.push_back(seal(key, std::string_view(bytes).substr(at, size_t(n))));
         at += size_t(n);
-        const std::string name = Sha256::hex_hash(sealed);
-        index += "blob " + name + "\n";
-        if (place(name, sealed, peers, want, r) < want) ++r.short_of;
+        group_bytes += sealed.back().size();
+        names.push_back(Sha256::hex_hash(sealed.back()));
+        index += "blob " + names.back() + "\n";
+        if (names.size() >= kRaidAskedTogether || group_bytes >= (size_t(64) << 20))
+        {
+            place_group();
+            group_bytes = 0;
+        }
     }
+    place_group();
     // The manifest and the index as every chunk is: on `copies` of its homes (13 November 2026; on
     // every peer before, which does not grow with the network).
     const std::string sealed_index = seal(key, index);
     r.remote = Sha256::hex_hash(sealed_index);
-    if (place(manifest_name, sealed_manifest, peers, want, r) < want) ++r.short_of;
-    if (place(r.remote, sealed_index, peers, want, r) < want) ++r.short_of;
+    names = {manifest_name, r.remote};
+    sealed = {sealed_manifest, sealed_index};
+    place_group();
     return r;
 }
 
@@ -408,18 +543,22 @@ RaidCheckReport raid_check(const std::string& remote, const SealKey& key, const 
         else if (l.rfind("blob ", 0) == 0 && is_sha256_hex(l.substr(5))) names.push_back(l.substr(5));
     }
     RaidCheckReport c;
+    // Every peer asked which pieces it holds in one go (OPTIMISATIONS 2), then each piece counted in
+    // order as before.
+    Asked asked;
+    asked.ask(names, peers);
     for (const std::string& name : names)
     {
         ++c.pieces;
         size_t holding = 0;
-        for (RaidPeer* p : peers)
+        for (size_t i = 0; i < peers.size(); ++i)
             try
             {
-                holding += p->has(name) ? 1 : 0;
+                holding += asked.has(i, *peers[i], name) ? 1 : 0;
             }
             catch (const std::exception& e)
             {
-                c.notes.push_back(p->address() + ": " + e.what());
+                c.notes.push_back(peers[i]->address() + ": " + e.what());
             }
         if (holding >= want)
         {
@@ -454,7 +593,7 @@ RaidCheckReport raid_check(const std::string& remote, const SealKey& key, const 
             continue;
         }
         RaidShareReport r;
-        if (place(name, *sealed, peers, want, r) >= want) ++c.repaired;
+        if (place(name, *sealed, peers, want, r, asked) >= want) ++c.repaired;
         c.bytes_sent += r.bytes_sent;
         for (auto& n : r.notes) c.notes.push_back(std::move(n));
     }
