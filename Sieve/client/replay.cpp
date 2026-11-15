@@ -4,6 +4,7 @@
 #include "sieve/hex.hpp"
 #include "sieve/text.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -34,7 +35,9 @@ bool number(const std::string& s, float& v)
     if (s.empty() || s.size() > 40) return false;
     char* end = nullptr;
     v = std::strtof(s.c_str(), &end);
-    return end && *end == '\0';
+    // (finite: "inf" and "nan" read and write back as themselves, but no place or move is infinite;
+    // list F1, 15 November 2026)
+    return end && *end == '\0' && std::isfinite(v);
 }
 
 } // namespace

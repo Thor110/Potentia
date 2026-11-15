@@ -712,11 +712,11 @@ test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
-# pages line as its alphabet. (document's 9: text and image above it; the manifest, PDF, the
-# catalogue's two record formats, the hallway's recordings (sieve-replay-v1) and favourites, as one
-# and as a dimension's list, beneath.)
+# pages line as its alphabet. (document's 10: text and image above it; the manifest, PDF, the
+# catalogue's two record formats, the hallway's recordings (sieve-replay-v1), favourites, as one
+# and as a dimension's list, and the RAID's tally of who keeps its pieces, beneath.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 9 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 10 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt

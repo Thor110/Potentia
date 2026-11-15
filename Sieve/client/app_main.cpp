@@ -251,6 +251,9 @@ const char* kUsage =
     "                      window X (room R)\", widths in pixels (every footer wraps upwards to fit, IDEAS 19.224)\n"
     "  --text-to-voice     the CHAT tab's replies spoken for this run (not saved); with --screenshot, prints the last\n"
     "  --cipher            with --screenshot: a picture of the Encryption Engine; --script \"Down,=text,Return\"\n"
+    "  --check-format KIND --in FILE  each line of FILE a whole document of KIND (replay, world), \\n a line\n"
+    "                      feed, read by its own reader (a world: read, nothing left out, written back the same);\n"
+    "                      says whether each reads (tools/check_formats.py; no window is opened)\n"
     "  --docs PAGE         with --screenshot: a picture of the Documentation open on PAGE (an id from help/contents.txt);\n"
     "                      --script \"Tab,Down,Return,=words\" its keys and a search typed\n"
     "  --manual-nav FILE   with --screenshot: a picture of Manual Navigation with FILE loaded; --script \"Up,Right,=4f\",\n"
@@ -3125,6 +3128,44 @@ int main(int argc, char** argv)
         if (a.help)
         {
             std::cout << kUsage;
+            return 0;
+        }
+        // --check-format KIND --in FILE (the formats' check, tools/check_formats.py; IDEAS 19.185): each
+        // line a whole document, escaped (\n a line feed), read by its own reader. No window is opened.
+        if (a.has("check-format"))
+        {
+            const std::string kind = a.get("check-format");
+            if (kind != "replay" && kind != "world") throw std::invalid_argument("--check-format: replay or world (actions and save: sieve catalogue --check-format)");
+            std::ifstream in(sieve::from_u8(a.get("in")), std::ios::binary);
+            if (!in) throw std::invalid_argument("cannot read " + a.get("in"));
+            const std::filesystem::path scratch = std::filesystem::temp_directory_path() / ("sieve-check-" + std::to_string(uint64_t(SDL_GetTicksNS())) + ".world");
+            size_t good = 0, bad = 0;
+            std::string l;
+            while (std::getline(in, l))
+            {
+                if (!l.empty() && l.back() == '\r') l.pop_back();
+                if (l.empty() || l[0] == '#') continue;
+                const std::string doc = sieve::unescape_line(l);
+                std::string why;
+                try
+                {
+                    if (kind == "replay") (void)hallway::read_replay(doc);
+                    else
+                    {
+                        std::ofstream(scratch, std::ios::binary) << doc;
+                        why = hallway::PersonalWorld::round_trip(scratch);
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    why = e.what();
+                }
+                (why.empty() ? good : bad)++;
+                std::cout << "read       " << (why.empty() ? "pass" : "FAIL") << "  " << doc.size() << " symbols" << (why.empty() ? "" : "  (" + why + ")") << "\n";
+            }
+            std::error_code ec;
+            std::filesystem::remove(scratch, ec);
+            std::cout << good << " read, " << bad << " not\n";
             return 0;
         }
         const int status = run(a);

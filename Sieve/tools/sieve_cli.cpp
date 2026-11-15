@@ -72,6 +72,7 @@
 #include "sieve/dimensions.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
+#include "sieve/raid_piece.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
 #include "sieve/character.hpp"
@@ -84,6 +85,8 @@
 #include "sieve/digit_histogram.hpp"
 #include "sieve/notes3.hpp"
 #include "sieve/rope_wave.hpp"
+#include "sieve/actions.hpp"
+#include "sieve/save.hpp"
 #include "sieve/sound.hpp"
 #include "sieve/training.hpp"
 #include "sieve/sha256.hpp"
@@ -1175,6 +1178,92 @@ const char* kRaidWarning =
     "!! limits shown. They are sealed: you cannot read them, and they cannot be changed unseen. The\n"
     "!! address each comes from is kept only as a salted hash, to count it against its limit.\n";
 
+// A save cut into pieces with parity, and where they would go (IDEAS 19.210): the format and the rule,
+// tried on files; nothing is sent. -1 when `what` is none of these.
+int raid_pieces_cmd(const Args& a, const std::string& what)
+{
+    if (what != "pieces" && what != "join" && what != "place" && what != "leave") return -1;
+    if (what == "join")
+    {
+        if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give the folder of pieces and --out FILE");
+        std::vector<sieve::RaidPiece> pieces;
+        std::vector<std::filesystem::path> files;
+        for (const auto& e : std::filesystem::directory_iterator(a.positional[1]))
+            if (e.is_regular_file()) files.push_back(e.path());
+        std::sort(files.begin(), files.end());
+        size_t left = 0;
+        for (const auto& f : files)
+        {
+            const std::string b = read_given_file(f.string());
+            try
+            {
+                sieve::RaidPiece p = sieve::read_raid_piece(b);
+                if (p.name() != f.filename().string()) throw std::invalid_argument("its bytes are not its name");
+                pieces.push_back(std::move(p));
+            }
+            catch (const std::invalid_argument& e)
+            {
+                std::cout << "left out " << f.filename().string() << ": " << e.what() << "\n";
+                ++left;
+            }
+        }
+        const std::string whole = sieve::raid_join(pieces);
+        std::ofstream out(a.get("out"), std::ios::binary);
+        out.write(whole.data(), std::streamsize(whole.size()));
+        if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
+        std::cout << "joined    " << pieces.size() << " pieces (" << pieces[0].k << " needed) into " << a.get("out") << " (" << whole.size() << " bytes, SHA-256 " << pieces[0].whole << ")\n";
+        return 0;
+    }
+    if (a.positional.size() < 2) throw std::invalid_argument("give the whole: the file to cut into pieces");
+    const std::string whole = read_given_file(a.positional[1]);
+    if (whole.empty()) throw std::invalid_argument("an empty file has no pieces");
+    auto [k, m] = sieve::raid_piece_shape(whole.size());
+    if (a.has("k")) k = a.get_u32("k", k);
+    if (a.has("m")) m = a.get_u32("m", m);
+    const auto pieces = sieve::raid_pieces(whole, k, m);
+    if (what == "pieces")
+    {
+        if (!a.has("out")) throw std::invalid_argument("give the folder to write the pieces in: --out DIR");
+        std::filesystem::create_directories(a.get("out"));
+        std::cout << "whole     " << whole.size() << " bytes, SHA-256 " << pieces[0].whole << ": " << k << " of data and " << m << " of parity, any " << k << " enough\n";
+        for (const auto& p : pieces)
+        {
+            const std::string b = p.bytes();
+            std::ofstream out(std::filesystem::path(a.get("out")) / p.name(), std::ios::binary);
+            out.write(b.data(), std::streamsize(b.size()));
+            if (!out) throw std::invalid_argument("cannot write in " + a.get("out"));
+            std::cout << "piece     " << p.index << " " << p.name() << " (" << b.size() << " bytes)\n";
+        }
+        return 0;
+    }
+    if (!a.has("tally")) throw std::invalid_argument("give the tally of who keeps pieces: --tally FILE");
+    sieve::RaidTally tally = sieve::read_raid_tally(read_given_file(a.get("tally")));
+    const uint64_t bytes = pieces[0].bytes().size();
+    std::string why;
+    const auto homes = sieve::raid_place(pieces[0].whole, k + m, bytes, tally, &why);
+    if (!homes)
+    {
+        std::cout << "refused   " << why << "\n";
+        return 1;
+    }
+    if (what == "place")
+    {
+        for (uint32_t i = 0; i < k + m; ++i) std::cout << "piece     " << i << " to " << tally.keepers[(*homes)[i]].address << "\n";
+        std::cout << tally.text();
+        return 0;
+    }
+    if (!a.has("address")) throw std::invalid_argument("give the machine that leaves: --address HOST:PORT");
+    const auto moves = sieve::raid_leave(pieces[0].whole, k + m, bytes, tally, *homes, a.get("address"), &why);
+    if (!moves)
+    {
+        std::cout << "refused   " << why << "\n";
+        return 1;
+    }
+    for (const auto& mv : *moves) std::cout << "move      piece " << mv.index << " from " << mv.from << " to " << mv.to << "\n";
+    std::cout << "moves     " << moves->size() << "\n";
+    return 0;
+}
+
 int raid_between_machines(const Args& a, const std::string& what)
 {
     if (what == "key")
@@ -1257,8 +1346,9 @@ int raid_between_machines(const Args& a, const std::string& what)
 
 int cmd_raid(const Args& a)
 {
-    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share, fetch or check");
+    if (a.positional.empty()) throw std::invalid_argument("give what to do: put, get, list, verify, repair, key, serve, share, fetch, check, pieces, join, place or leave");
     const std::string what = a.positional[0];
+    if (const int r = raid_pieces_cmd(a, what); r >= 0) return r;
     if (const int r = raid_between_machines(a, what); r >= 0) return r;
     if (!a.has("drives")) throw std::invalid_argument("give the folders with --drives A,B,...");
     sieve::Raid raid = raid_of(a);
@@ -1415,6 +1505,39 @@ int cmd_catalogue(const Args& a)
         }
         std::cout << good << " records, " << bad << " not\n";
         return bad ? 1 : 0;
+    }
+    // --check-format KIND --in FILE: each line a whole document of that kind, escaped (\n a line feed),
+    // read by the format's own reader and said whether it reads (tools/check_formats.py sets these
+    // beside the format's grammar's verdicts, IDEAS 19.185). KIND: actions, save. (The replay and the
+    // personal dimension's world are read by the hallway: hallway --check-format.)
+    if (a.has("check-format"))
+    {
+        const std::string kind = a.get("check-format");
+        if (kind != "actions" && kind != "save") throw std::invalid_argument("--check-format: actions or save (replay and world: hallway --check-format)");
+        std::ifstream in(sieve::from_u8(a.get("in")), std::ios::binary);
+        if (!in) throw std::invalid_argument("cannot read " + a.get("in"));
+        size_t good = 0, bad = 0;
+        std::string l;
+        while (std::getline(in, l))
+        {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            if (l.empty() || l[0] == '#') continue;
+            const std::string doc = sieve::unescape_line(l);
+            try
+            {
+                if (kind == "actions") (void)sieve::read_actions(doc);
+                else (void)sieve::read_save(doc);
+                ++good;
+                std::cout << "read       pass  " << doc.size() << " symbols\n";
+            }
+            catch (const std::exception& e)
+            {
+                ++bad;
+                std::cout << "read       FAIL  " << doc.size() << " symbols  (" << e.what() << ")\n";
+            }
+        }
+        std::cout << good << " read, " << bad << " not\n";
+        return 0;
     }
     // The code's entries and the hand-written ones (data/catalogue, or --folder DIR).
     // data/catalogue and data/languages in the Sieve folder, else beside the program (where the build
@@ -2344,6 +2467,9 @@ int cmd_filters_plugin(const Args& a)
         {
             if (!l.empty() && l.back() == '\r') l.pop_back();
             if (l.empty() || l[0] == '#') continue; // a comment
+            // --escaped: a whole document of several lines on one (\n a line feed, \\ a backslash),
+            // for the formats' grammars (tools/check_formats.py)
+            if (a.has("escaped")) l = sieve::unescape_line(l);
             std::vector<uint32_t> u;
             bool spelled = true;
             for (char32_t cp : utf8_decode(l))
@@ -2353,7 +2479,8 @@ int cmd_filters_plugin(const Args& a)
                 u.push_back(*dg);
             }
             const bool ok = spelled && (within_filter ? within_filter->passes(u) : d.accepts(u));
-            std::cout << "judge      " << (!spelled ? "unspellable" : ok ? "pass" : "FAIL") << "  " << l << "\n";
+            std::cout << "judge      " << (!spelled ? "unspellable" : ok ? "pass" : "FAIL") << "  "
+                      << (a.has("escaped") ? std::to_string(u.size()) + " symbols" : l) << "\n";
         }
     };
     if (DfaRanker::table_bytes(d.states(), d.base, within ? std::min(within, one.length) : one.length) > filter_memory())

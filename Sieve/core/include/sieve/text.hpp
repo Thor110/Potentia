@@ -107,6 +107,24 @@ inline std::string ascii_lower(std::string_view s)
     return t;
 }
 
+// A whole document written on one line, as the formats' checks give one (tools/check_formats.py,
+// `--escaped`): "\\n" a line feed and "\\\\" a backslash; any other backslash stays as it is.
+inline std::string unescape_line(std::string_view l)
+{
+    std::string out;
+    out.reserve(l.size());
+    for (size_t i = 0; i < l.size(); ++i)
+    {
+        if (l[i] == '\\' && i + 1 < l.size() && (l[i + 1] == 'n' || l[i + 1] == '\\'))
+        {
+            out += l[++i] == 'n' ? '\n' : '\\';
+            continue;
+        }
+        out += l[i];
+    }
+    return out;
+}
+
 // Whether the text is an id as the catalogue and the saves write one: 1 to `most` characters, each
 // a-z, 0-9, '-', '.' or '_'.
 inline bool is_plain_id(std::string_view s, size_t most = 128)

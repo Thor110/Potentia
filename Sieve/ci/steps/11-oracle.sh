@@ -87,6 +87,26 @@ for L in 61 62 63 70 90; do
 done
 python sieve_ref.py plugin ../data/filters/format-stat-record-v1.sfilter --length 62 | grep -c "^survivors  5931900000000$" > /dev/null
 python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for their keys' order alone$" > /dev/null
+# Sieve's own formats as grammars (list F1, IDEAS 19.185): the tables are what tools/grammars.py
+# writes; their counts the oracle's, at each format's shortest document and beyond (an action map of
+# 135 is the one with no animation; of 195, one animation named: 7 x 16^64); and every verdict on a
+# corpus of each format's documents, and of those changed by a character, its reader's own, but for
+# what a walk cannot see (a save's languages out of order, keys held out of order, numbers not a
+# float's own; in a v2 world, its ground's corners out of order, a model named twice or placed
+# unnamed, a melody past its set, and a world with nothing of v2's but its places' heights), which the
+# reader alone refuses. A v2 world of 33 characters is one kept line of one character: 10 seeds x 94.
+python ../tools/grammars.py --check
+for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60; do
+  python sieve_ref.py plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
+  $S filters --plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} | tr -d '\r' > plugin.engine
+  diff plugin.oracle plugin.engine
+done
+$S filters --plugin ../data/filters/format-actions-v1.sfilter --length 195 | tr -d '\r' | grep -c "^survivors  810544624661213367964996895060815354972889892659483948276203088055391907479552$" > /dev/null
+python ../tools/check_formats.py "$S" ../build/hallway . | tr -d '\r' > formats.txt
+$S filters --plugin ../data/filters/format-world-v2.sfilter --length 33 | tr -d '\r' | grep -c "^survivors  940$" > /dev/null
+for k in actions save replay world world-v2; do
+  grep -c "^$k: [0-9]* documents (" formats.txt > /dev/null
+done
 # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way
 # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
 # (word lists, follow, first and last, a word in two sets; whole and cut edges).

@@ -7659,6 +7659,15 @@ state space".
   records and records changed by one character, every verdict is the reader's but one kind: keys out
   of increasing order, which a walk cannot see and the reader alone refuses (403 of them). That is the
   honest limit of a grammar as a walk: a rule comparing one field with another whole field is not one.)
+  (*And four more, 15 November 2026, list F1:* the action map, the save (v1 and v2), the recording and
+  the personal world (v1), each compiled from a grammar by `tools/grammars.py` rather than written by
+  hand, each held by `tools/check_formats.py` to its reader on about 500 documents and their one-character
+  changes (FILTER-PLUGINS §23). Every verdict is the reader's but what a walk cannot see: a save's
+  languages out of order, a recording's keys held out of order, and numbers of `%.9g`'s shape that no
+  float is. The checks found two things in the readers: the recording took `inf` and `nan` as numbers
+  (now refused), and typed text holding a 00 byte can never be written back. The world's v2 followed
+  the same day, its `music` line walked as the Media Player reads it; what it leaves to its reader is
+  what needs memory or the seed's ground: corners in order, models named once, a melody within its set.)
 - *Kept on disk as .sieve, read on the spot (Edward, the same day):* "we should also be pulling sfilters
   and other sieve files like these catalogs or maps from the sieve state space in the beginning during
   installation, which I think already technically happens naturally through the process of creating a
@@ -8477,6 +8486,19 @@ start using it, there is no going back".
   `sieve-raid-piece-v1`), because once people keep pieces it cannot change without moving them all;
   a way to leave (a machine going away hands its pieces on first); and measurements of what it costs.
   Nothing switches it on by default, and the switch stays Edward's.
+- *Built, 15 November 2026 (list F2), and not switched on:* the formats fixed, `sieve-raid-piece-v1` and
+  `sieve-raid-tally-v1` (SPECIFICATIONS 12.0s, `core/include/sieve/raid_piece.hpp`). A whole (a save
+  sieved, then sealed) is cut into K pieces of data and M of parity by a Cauchy Reed-Solomon code over
+  GF(2^8), any K of them enough, the whole checked against its SHA-256 when joined; each piece goes to
+  the first machine in a ranking anyone can work out (SHA-256 of the whole's name, the piece's index
+  and the machine's address) that keeps no other piece of it, takes a piece that large and has room in
+  the tally; a whole with a piece nowhere to go is refused and said; a machine leaving hands its piece
+  on first, the others placed again by the same rule. Up to 256 KiB a whole is one piece and two copies
+  of it (three in all, as sharing keeps now); above, four and two. Those two figures are chosen, not
+  measured. Tried on files with `sieve raid pieces`, `join`, `place` and `leave` (CI step 4); the
+  piece's bytes are pinned by a unit test against an independent implementation. Still to come before
+  it is used: sending pieces instead of copies (`share`, `check` and `fetch`), the tally kept and agreed
+  between machines, and the measurements of where splitting pays.
 
 **19.211 Decentralised: no server needed, ever; servers only host (Edward, 14 November 2026). A rule for
 everything, written into the ROADMAP's rules.** His words: "I would like for us to overall aim for this

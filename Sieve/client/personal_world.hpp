@@ -167,6 +167,10 @@ public:
     // The line written into a world file as the Media Player changes it ("" takes it away), the rest of
     // the world read and written back as the world itself would write it: "" or why it was not.
     static std::string write_music(const std::filesystem::path& world, const std::string& line);
+    // Whether a world file is in its canonical form (the formats' check, IDEAS 19.185): read with
+    // nothing left out, and written back the same, byte for byte (written over itself, so given a copy).
+    // "" where it is; else why not.
+    static std::string round_trip(const std::filesystem::path& world);
     // A world file's `music` line, read without opening the world (the Media Player's PERSONAL as the
     // application starts); "" where it has none or it cannot be read.
     static std::string music_line_of(const std::filesystem::path& world);

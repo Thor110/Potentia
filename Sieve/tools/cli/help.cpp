@@ -337,6 +337,9 @@ const std::vector<Page>& pages()
           {"--measure FILE|FOLDER", "Measure a file, or every file in a folder; exit 1 if a round trip differs."},
           {"--measured", "Every entry measured so far, with its figures added up."},
           {"--check-records FILE", "Read each line of FILE as a measured-figure record (sieve-format-stat-v1) and say whether it is one, and why not."},
+          {"--check-format KIND --in FILE", "Read each line of FILE as a whole document of KIND (actions: sieve-actions-v1; save:\n"
+                                            "sieve-save-v1 or v2), \\n in it a line feed, by the format's own reader, and say whether it\n"
+                                            "reads and why not (tools/check_formats.py holds each format's grammar to it)."},
           {"--machine NAME", "What to call this machine in the records (else SIEVE_MACHINE, else unnamed)."},
           {"--stats-folder DIR", "Where the records are kept (else SIEVE_STATS, else your Sieve data folder)."},
           {"--no-stats", "Measure, but keep nothing."},
@@ -358,7 +361,11 @@ const std::vector<Page>& pages()
          "       sieve raid serve --held DIR --listen HOST:PORT [--space MIB] [--per-peer MIB] [--connections N]\n"
          "       sieve raid share NAME|ID --drives A,B,... --key KEY --peers HOST:PORT,... [--peer-copies N]\n"
          "       sieve raid fetch REMOTE --key KEY --peers HOST:PORT,... --out FILE [--drives A,B,...]\n"
-         "       sieve raid check REMOTE --key KEY --peers HOST:PORT,... [--peer-copies N] [--no-repair]",
+         "       sieve raid check REMOTE --key KEY --peers HOST:PORT,... [--peer-copies N] [--no-repair]\n"
+         "       sieve raid pieces FILE --out DIR [--k K] [--m M]\n"
+         "       sieve raid join DIR --out FILE\n"
+         "       sieve raid place FILE --tally TALLY [--k K] [--m M]\n"
+         "       sieve raid leave FILE --tally TALLY --address HOST:PORT [--k K] [--m M]",
          "Keeps any save (a game's save file, a character, a dimension's file) on several folders the\n"
          "person chooses: a spare drive, a phone's storage, a second disk (IDEAS 19.176). Each save is\n"
          "cut into chunks where its content says (16 to 256 KiB, about 80 KiB), each named by its SHA-256\n"
@@ -379,6 +386,13 @@ const std::vector<Page>& pages()
          "you give in all and the most for any one address (kept only as a salted hash). Lose the key and\n"
          "what others keep for you cannot be read by anyone, you included.\n"
          "\n"
+         "Pieces (IDEAS 19.210, the format fixed before it is used; nothing is sent): pieces cuts a file\n"
+         "(a save sieved and sealed) into K of data and M of parity, any K of them enough to make it again\n"
+         "(sieve-raid-piece-v1, docs SPECIFICATIONS 12.0s); join makes it again from a folder holding any\n"
+         "K. place says which machine of a tally (sieve-raid-tally-v1: each machine's space, largest piece\n"
+         "and what it keeps) each piece would go to, one piece of a save a machine, within its limits, or\n"
+         "refuses; leave says which pieces would move if a machine went away.\n"
+         "\n"
          "The infinite RAID save and data preservation system was designed by Edward James Gordon\n"
          "(Potentia). GNU AGPL v3 with an attribution term (docs/RAID-NOTICE.md).",
          {{"put FILE", "Keep a file (under --name NAME, else its file name); says its version id."},
@@ -392,6 +406,14 @@ const std::vector<Page>& pages()
           {"fetch REMOTE", "Bring a shared save back by its remote id to --out FILE (and into --drives, if given)."},
           {"check REMOTE", "Ask --peers which pieces of a shared save each holds, and put back any held by too few; exit 1 if not whole."},
           {"--no-repair", "check only says what is short, putting nothing back."},
+          {"pieces FILE", "Cut a file into pieces with parity, written to --out DIR, each named by its SHA-256."},
+          {"join DIR", "Make the file again from the pieces in DIR (any K of them) to --out FILE."},
+          {"place FILE", "Where each piece of a file would go among the machines of --tally, and the tally after."},
+          {"leave FILE", "Which of a file's pieces would move if the machine --address left the --tally."},
+          {"--k K", "Pieces of data (default 1 for a file up to 256 KiB, else 4)."},
+          {"--m M", "Pieces of parity (default 2); K + M at most 256."},
+          {"--tally TALLY", "The machines that keep pieces: a sieve-raid-tally-v1 file."},
+          {"--address HOST:PORT", "The machine that leaves, for leave."},
           {"--drives A,B,...", "The folders (made members the first time)."},
           {"--copies N", "How many folders each chunk goes on (default 2)."},
           {"--name NAME", "The save's name, for put."},
@@ -1033,7 +1055,9 @@ const std::vector<Page>& pages()
                               "this length; default lower27, 32). A page's file is exactly its text."},
           {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"
                            "print pass, FAIL, or unspellable (a character the line does not have) beside it. Lines\n"
-                           "starting with # are comments."}},
+                           "starting with # are comments."},
+          {"--escaped", "With --judge: each line is a whole document, \\n in it a line feed and \\\\ a backslash (for\n"
+                        "the formats' grammars on an ascii96 line); a verdict then gives the document's length."}},
          {{"sieve filters", "the text line's filters (at length 32) and what is ticked"},
           {"sieve filters --plugin data/filters/max-run-data-v1.sfilter --length 12 --params max=2", "a plugin at a setting"},
           {"sieve filters --plugin data/filters/moby-grammar-v1.sfilter --judge sentences.txt", "a grammar's verdict on each sentence"},

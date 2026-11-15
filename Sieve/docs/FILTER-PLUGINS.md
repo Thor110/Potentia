@@ -1163,3 +1163,64 @@ have to remember a whole key (up to 64 characters) to weigh the next against it.
 survivors are the reader's records with their keys in any order, and the check requires every
 disagreement to be a line the reader refuses for that reason alone (403 in the corpus).
 
+
+## 23. Sieve's own formats as grammars, written by a compiler (built 15 November 2026; list F1, IDEAS §19.185)
+
+Five more of Sieve's own formats as state spaces of their own, each a table-form plugin on an `ascii96`
+line (a line feed and printable ASCII), so a whole document of several lines is one unit, and its
+survivors at a length are the documents of that length:
+
+| Plugin | Format | States | The reader it is held to |
+| :--- | :--- | ---: | :--- |
+| `format-actions-v1` | `sieve-actions-v1` (a character's actions to animations) | 577 | `read_actions` |
+| `format-save-v1` | `sieve-save-v1` and `sieve-save-v2` (a character's save) | 457 | `read_save` |
+| `format-replay-v1` | `sieve-replay-v1` (a recording of the hallway) | 644 | `read_replay` |
+| `format-world-v1` | `sieve-personal-world-v1` (a personal dimension's world) | 284 | read, nothing left out, written back the same |
+| `format-world-v2` | `sieve-personal-world-v2` (the same in three dimensions, with its day, ground, models, music and lines kept) | 1,881 | the same |
+
+**Written by a compiler, not by hand.** `tools/grammars.py` holds each grammar as a regular expression
+built from a few helpers (a SHA-256, an id, a whole number from 0 to a bound written without a leading
+zero, a number as `%.9g` writes it), compiles it (Thompson's construction, the subset construction,
+then the smallest automaton, its states numbered in the order a walk meets them) and writes the table,
+its symbols grouped into classes that every state treats alike. `python tools/grammars.py --check`
+(CI step 11) writes nothing and fails if a table differs from what its grammar compiles to, so a
+grammar changed and not written out is caught.
+
+**Checked** (CI step 11): each plugin's counts are the oracle's at its shortest document and beyond
+(an action map of 135 characters is the one with no animation; of 195, one animation named, 7 × 16^64
+of them); and `tools/check_formats.py` judges a corpus of each format twice, by its reader
+(`sieve catalogue --check-format actions|save --in FILE`, `hallway --check-format replay|world --in
+FILE`) and by its plugin (`sieve filters --plugin ... --judge FILE --escaped`, a document a line with
+`\n` for each line feed): documents made at random (seeded), the edges of each grammar, and each changed
+by one character every way, about 500 a format. Every verdict is the reader's but the kinds a walk does
+not see, which the reader alone refuses, and the check requires each disagreement to be one of them:
+- a save's languages out of the order of their ids, or one twice (2 in the corpus);
+- a recording's keys held out of increasing order (a walk could, with a state for each of 512 last
+  keys);
+- a number with `%.9g`'s shape that no float is (`1.00000001`; 123456789, which a float keeps as
+  123456792): a float keeps about seven digits, and which nine-digit decimals are a float's own is a
+  finite set too large to walk (46 recordings and 68 worlds in the corpus);
+- in a v2 world: the ground's corners out of the order of X then Z, or one twice; a model named twice,
+  or placed with no `model` line; a kept melody's digits past its note set's base, or not a whole
+  number of units and voices (the grammar bounds them at 999 and leaves the rest); and a world with
+  nothing of v2's in it but where its places stand, which is v2 only if a place stands off the ground,
+  and the ground is the seed's (36 v2 worlds in the corpus, all of these together).
+
+**What the checks found.** The replay's reader took `inf` and `nan` as numbers (`strtof` reads them and
+`%.9g` writes them back the same): a recording with an infinite place is now refused. And a recording's
+typed text whose bytes hold a 00 can never be written back (the text is kept as SDL keeps it, ended by
+its first NUL), so the grammar refuses a 00 byte.
+
+**A world's reader is lenient** (it reads `1e5`, two spaces, and leaves out what it cannot read, saying
+so), so its grammar is the form a world is read in with nothing left out and written back byte for
+byte, which is what its check holds it to.
+
+**World v2** (made the same day) is the biggest of them: every line in the order its writer writes it
+(`seed`, `day`, `ground`, `model`, `music`, the lines kept without being read, `characters placed`,
+then what is placed), and something after the seed, since a world that needs nothing of v2 is written
+as v1. Its `music` line is the Media Player's own reading of it, walked: each key's value within its
+bounds, a note set's range within C2 to C7 and at least an octave in any spelling `note_midi_of` reads
+(the melody's set in its one spelling), its durations once each, shortest first, and a later build's
+keys kept. A line kept without being read is any line whose first word is none the reader reads, so a
+later build's lines are survivors too, as the reader keeps them. Its count at 33 characters is 940:
+the ten one-digit seeds, each with one kept line of one character.

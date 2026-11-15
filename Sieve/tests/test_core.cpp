@@ -28,6 +28,7 @@
 #include "sieve/animation.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/raid_net.hpp"
+#include "sieve/raid_piece.hpp"
 #include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
@@ -67,6 +68,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bitset>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
@@ -83,6 +85,8 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 using namespace sieve;
@@ -7299,6 +7303,112 @@ void test_raid()
 // Stage 3 of the RAID (IDEAS 19.176): sealing checked against the RFCs' vectors; a held folder's
 // limits; the protocol answered as written; a save shared to peers and fetched back, a changed
 // version sending only what changed, and anything tampered with refused.
+// The RAID's pieces (IDEAS 19.210, SPECIFICATIONS 12.0s): any K of K + M make the whole again, a damaged
+// piece is found, and placement keeps one piece of a whole a machine, within each machine's limits.
+void test_raid_pieces()
+{
+    std::mt19937 rng(210);
+    auto random_bytes = [&](size_t n) {
+        std::string b(n, '\0');
+        for (char& c : b) c = char(rng() & 0xFF);
+        return b;
+    };
+    for (const auto& [k, m, n] : std::vector<std::tuple<uint32_t, uint32_t, size_t>>{{1, 2, 1}, {1, 2, 5000}, {4, 2, 100003}, {3, 3, 7}, {5, 0, 64}, {2, 1, 2}})
+    {
+        const std::string whole = random_bytes(n);
+        const auto pieces = raid_pieces(whole, k, m);
+        CHECK(pieces.size() == k + m);
+        for (const auto& p : pieces)
+        {
+            CHECK(p.data.size() == (n + k - 1) / k);
+            const RaidPiece back = read_raid_piece(p.bytes());
+            CHECK(back.bytes() == p.bytes());
+            CHECK(back.name() == p.name());
+        }
+        // every choice of K pieces gives the whole back
+        for (uint32_t mask = 0; mask < (1u << (k + m)); ++mask)
+        {
+            if (uint32_t(std::bitset<32>(mask).count()) != k) continue;
+            std::vector<RaidPiece> some;
+            for (uint32_t i = 0; i < k + m; ++i)
+                if (mask >> i & 1) some.push_back(pieces[i]);
+            CHECK(raid_join(some) == whole);
+        }
+        if (m > 0)
+        {
+            // one too few, and a damaged one, are refused
+            std::vector<RaidPiece> few(pieces.begin(), pieces.begin() + (k - 1));
+            CHECK(throws([&] { (void)raid_join(few); }));
+            std::vector<RaidPiece> bad(pieces.begin() + 1, pieces.begin() + 1 + k);
+            bad[0].data[0] = char(bad[0].data[0] ^ 1);
+            CHECK(throws([&] { (void)raid_join(bad); }));
+        }
+    }
+    // The format pinned: this whole's pieces are these, so a change to the code or the head is caught.
+    {
+        const auto p = raid_pieces("sieve-raid-piece-v1 pinned", 4, 2);
+        // (the names an independent implementation gives, GF(2^8) multiplied bit by bit, not by tables)
+        CHECK(p[0].bytes().substr(0, 102) == "sieve-raid-piece-v1\nof 13ae1ecf1e257fabe0209ee07dc80dca26a8c483c69da7747184ebe28e50cddb 26\ncode 4 2 0\n");
+        CHECK(p[0].name() == "376e3605c67b829eb313fad410819b281b164170cb33228172af5a0952856b42");
+        CHECK(p[4].name() == "7c0f3c7dd2e27235d5b13f43d7e2fd0db4ce25a98dd013d1ba4aa8816385138a");
+        CHECK(p[5].name() == "2d57a9f063c15b46c2d277987711a4941663ab28c1a73d21e326c0f80ed7c0aa");
+    }
+    // Heads not as written are refused.
+    const std::string good = raid_pieces("abcdefg", 2, 1)[2].bytes();
+    CHECK(throws([&] { (void)read_raid_piece(good.substr(0, good.size() - 1)); }));
+    CHECK(throws([&] { (void)read_raid_piece(good + "x"); }));
+    for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{{"code 2 1 2", "code 2 1 3"}, {"code 2 1 2", "code 02 1 2"}, {"code 2 1 2", "code 0 1 2"}, {" 7\n", " 07\n"}, {"sieve-raid-piece-v1", "sieve-raid-piece-v2"}})
+    {
+        std::string b = good;
+        b.replace(b.find(from), from.size(), to);
+        CHECK(throws([&] { (void)read_raid_piece(b); }));
+    }
+    CHECK(throws([&] { (void)raid_pieces("", 1, 1); }));
+    CHECK(throws([&] { (void)raid_pieces("x", 0, 1); }));
+    CHECK(throws([&] { (void)raid_pieces("x", 200, 57); }));
+    CHECK(raid_pieces("x", 200, 56).size() == 256);
+    CHECK(raid_piece_shape(1) == std::make_pair(1u, 2u));
+    CHECK(raid_piece_shape(256 << 10) == std::make_pair(1u, 2u));
+    CHECK(raid_piece_shape((256 << 10) + 1) == std::make_pair(4u, 2u));
+
+    // The tally, and placement.
+    std::string text = "sieve-raid-tally-v1\n";
+    for (int i = 0; i < 8; ++i) text += "keeper 198.51.100." + std::to_string(10 + i) + ":47100 1000000 300000 " + std::to_string(i * 1000) + "\n";
+    RaidTally tally = read_raid_tally(text);
+    CHECK(tally.text() == text);
+    CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper b:1 10 10 0\nkeeper a:1 10 10 0\n"); })); // out of order
+    CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper a:1 10 10 11\n"); }));                  // more than it gives
+    CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper a:1 10 10 0"); }));                      // last line not ended
+    const std::string sha = Sha256::hex_hash("a whole");
+    RaidTally t1 = tally, t2 = tally;
+    const auto h1 = raid_place(sha, 6, 100000, t1), h2 = raid_place(sha, 6, 100000, t2);
+    CHECK(h1 && h2 && *h1 == *h2); // the same rule, the same homes
+    CHECK(std::set<size_t>(h1->begin(), h1->end()).size() == 6); // one piece a machine
+    uint64_t before = 0, after = 0;
+    for (const auto& k : tally.keepers) before += k.used;
+    for (const auto& k : t1.keepers) after += k.used;
+    CHECK(after == before + 600000);
+    std::string why;
+    RaidTally t3 = tally;
+    CHECK(!raid_place(sha, 6, 300001, t3, &why)); // larger than any machine keeps
+    CHECK(why.find("piece 0 of 6") == 0);
+    CHECK(t3.text() == tally.text()); // nothing counted for a whole refused
+    CHECK(!raid_place(sha, 9, 1000, t3)); // more pieces than machines
+    // A machine leaving: its piece moves first, and every piece ends on a machine still there, one each.
+    const std::string leaving = t1.keepers[(*h1)[2]].address;
+    const auto moves = raid_leave(sha, 6, 100000, t1, *h1, leaving);
+    CHECK(moves && !moves->empty() && (*moves)[0].from == leaving && (*moves)[0].index == 2);
+    std::vector<std::string> now;
+    for (size_t i = 0; i < 6; ++i) now.push_back(t1.keepers[(*h1)[i]].address);
+    for (const auto& mv : *moves)
+    {
+        CHECK(now[mv.index] == mv.from);
+        now[mv.index] = mv.to;
+    }
+    CHECK(std::set<std::string>(now.begin(), now.end()).size() == 6);
+    CHECK(std::find(now.begin(), now.end(), leaving) == now.end());
+}
+
 void test_raid_net()
 {
     namespace fs = std::filesystem;
@@ -8810,6 +8920,7 @@ void run_all(int argc, char** argv)
     RUN(test_favourites());
     RUN(test_raid());
     RUN(test_raid_net());
+    RUN(test_raid_pieces());
     RUN(test_format_stats());
     RUN(test_catalogue());
     RUN(test_save());

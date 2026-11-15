@@ -2966,6 +2966,22 @@ std::string PersonalWorld::write_music(const std::filesystem::path& world, const
     return w.note_;
 }
 
+std::string PersonalWorld::round_trip(const std::filesystem::path& world)
+{
+    std::string before;
+    {
+        std::ifstream in(world, std::ios::binary);
+        before.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    }
+    if (before.rfind("sieve-personal-world-v1\n", 0) != 0 && before.rfind("sieve-personal-world-v2\n", 0) != 0) return "not a world: its first line is not sieve-personal-world-v1 or v2";
+    PersonalWorld w(nullptr, nullptr, {}, false, world);
+    if (!w.note_.empty()) return w.note_;
+    w.save();
+    std::ifstream in(world, std::ios::binary);
+    const std::string after((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    return after == before ? std::string() : "not in its canonical form (it is written back otherwise)";
+}
+
 std::string PersonalWorld::music_line_of(const std::filesystem::path& world)
 {
     std::ifstream in(world, std::ios::binary);

@@ -1,70 +1,60 @@
-# List V: the viewers (V1 and V2)
+# List F, part two: world v2 as a grammar (F1's last piece), and the RAID's pieces (F2)
 
-Unzip at the root of the repository (this zip's folders are `Sieve/` and `REVIEW-ROUND.md`, with no
-extra `Potentia/` folder above them).
+## F1: `sieve-personal-world-v2` as a filter plugin
 
-**Files to delete by hand:** none from this zip. If not done already, delete the folder `Potentia/` at
-the root of the repository: it was left there by the first R7–R9 zip (every file one folder too deep),
-and the corrected R7–R9 zip put the same files in their right places.
+- **`data/filters/format-world-v2.sfilter`** (1,881 states), compiled by `tools/grammars.py` like the
+  other four. It holds every line in the order the writer writes them: `seed`, `day`, `ground`,
+  `model`, `music`, the lines kept without being read, `characters placed`, then what is placed. There
+  must be something after the seed, because a world that needs nothing of v2 is written as v1.
+- **Its `music` line** is walked as the Media Player reads it:
+  - each key's value within its bounds;
+  - a note set's range within C2 to C7, at least an octave, in any spelling the reader takes (a
+    melody's set in its one spelling);
+  - durations listed once each, shortest first;
+  - a later build's keys kept.
+- **Held to the reader** by `tools/check_formats.py`: 561 documents, 525 verdicts the same, and 36 of
+  the kinds a walk cannot weigh. Those kinds are:
+  - the ground's corners out of order, or one given twice;
+  - a model named twice, or placed but never named;
+  - a melody's digits past its set's base, or not a whole number of units and voices;
+  - numbers that no float is;
+  - a world with nothing of v2's but where its places stand (that needs the seed's ground).
+- The oracle's counts equal the engine's at 33 and 60 characters. At 33 there are 940 survivors: ten
+  one-digit seeds, each with a kept line of one character.
+- The catalogue's v2 entry names its grammar. FILTER-PLUGINS §23, IDEAS and REVIEW-ROUND are updated.
 
-## V1. Sound and model files open in the viewers made for them (IDEAS 19.200)
+## F2: the RAID's pieces (IDEAS 19.210), fixed and not switched on
 
-On the binary line, a file picked up and opened (Z) now goes to:
-
-- **Sound** (WAV and FLAC by their kind; AIFF, Wave64, .au and CAF by their first bytes): its waveform,
-  a band a channel, drawn as the audio line draws a unit. **Space** plays it, through the music player
-  where there is one (the music fades under it), and again stops it; closing the viewer stops it.
-- **MIDI**: its notes, each voice on its own lines, read as the audio line reads a MIDI file, at the
-  tempo the file sets first. Space plays them. A chord's other notes and tracks past the fifteenth are
-  left out, and the foot of the screen says how many.
-- **Models** (.obj, glTF with its buffers inside, .glb): its **3D** view, turned with the arrows or WASD,
-  its text the next tab where it is text.
-
-A sound of more than 2^26 samples (every channel counted) is refused before it is decoded, a FLAC by
-what its STREAMINFO says, so a few bytes claiming hours cannot fill the memory; a glTF whose buffers
-are files beside it says it cannot be read from its bytes. Neither is flagged in `viewers-needed.txt`.
-MP3 and Ogg have no decoder in the hallway yet, so they are still flagged.
-
-Code: `client/viewer.cpp`, `client/hallway.hpp`; `tools/cli/flac_wav.*` gains `sound_samples`, and its
-FLAC decoder a limit on the samples it may hold.
-
-## V2. The Documentation (IDEAS 19.201)
-
-A new main-menu row, **Documentation**, before Potentia Settings: Sieve's help library. CONTENTS,
-INDEX and SEARCH on the left, the page on the right; links followed in place (Tab to a link, Enter),
-Backspace back through the pages read, typing searches. Its keys are on Settings > Controls > Keys
-under "The Documentation", and the keys the pages name read as you have set them.
-
-The library is data: `Sieve/data/help/contents.txt` and one file a page, 25 pages in six categories,
-written for the person using Sieve from the manual and the menus' own words.
-`python tools/check_library.py` (run in CI) checks every page, link and key named against the code.
-
-Code: `client/help_library.*` (new), `client/main_menu.*`, `client/app_main.cpp` (`--docs PAGE`),
-`client/personal_world.cpp` and `client/keys.hpp` (its keys), `CMakeLists.txt` and
-`tools/make_release.py` (the help folder beside the program).
+- **`sieve-raid-piece-v1`** (SPECIFICATIONS 12.0s, `core/include/sieve/raid_piece.hpp`):
+  - A whole (a save sieved, then sealed) is cut into K pieces of data and M of parity, and any K of
+    them are enough to make it again. The code is Cauchy Reed–Solomon over GF(2^8).
+  - When pieces are joined, the whole is checked against its SHA-256, so a damaged piece is found.
+  - Each piece has a three-line head and then its bytes. It is named by its SHA-256, like every blob
+    sent between machines.
+- **`sieve-raid-tally-v1`:** a line per machine giving the space it gives, the largest piece it keeps,
+  and what it keeps now.
+- **Placement:** every machine works it out the same way, one piece of a whole per machine, within
+  each machine's limits. A whole with a piece that has nowhere to go is refused and said.
+- **Leaving:** a machine going away hands its piece on first. The other pieces are placed again by the
+  same rule.
+- **How a whole is cut:** up to 256 KiB, one piece plus two copies (three in all, as sharing keeps
+  now); above that, four of data and two of parity. **Both figures are chosen, not measured**, and
+  the spec says so.
+- **Commands to try it on files:** `sieve raid pieces FILE --out DIR`, `join DIR --out FILE`,
+  `place FILE --tally T` and `leave FILE --tally T --address A`. Nothing is sent between machines.
+- **Tests:**
+  - Unit tests: every choice of K pieces for six shapes; refusals of heads not as written, of
+    damage, and of one piece too few; placement, limits and leaving.
+  - The piece names are pinned against a separate Python implementation, which gives the same six
+    pieces byte for byte.
+  - CI step 4 checks the commands on the 2.2 MB save.
+- Catalogue entries for both formats (CI step 10's count of the "document" kind's doors goes from 9 to 10 with the tally); the `raid` help; IDEAS 19.210 "Built" note; REVIEW-ROUND F2.
+- **Still to come before it is used:**
+  - `share`, `check` and `fetch` sending pieces instead of copies;
+  - the tally kept and agreed between machines;
+  - the measurements of where splitting pays.
 
 ## Checked
 
-- CI: all 12 steps pass (01 to 09 and 11 to 12 on the changes; step 10 again after its fix below).
-  The first run of step 10 failed at the new check that Space plays a WAV: the CI machine has no sound
-  card, so it said "audio unavailable". The two play checks now play into SDL's dummy audio device.
-- New CI checks in step 10: each kind of file opened and played, the FLAC refusal, the MP3 still
-  flagged, the Documentation's link, back, index, search and missing page, its footer's width, and
-  the main menu's new row.
-- `tools/check_help.py`: 0 missing. Settings check: 141 settings match.
-
-## Ideas written down (docs/IDEAS.md)
-
-- A priority mark for new entries (*low*, *medium*, *high*), described at the top of IDEAS.
-- 19.231 The hash viewer (*priority: low*; in REVIEW-ROUND's Later list, not list V), with the
-  measurements: hashes carry no trace of their file's place.
-- 19.232 Pages of few values left to the binary line (2^k symbols), the partial filter for runs on two
-  symbols, the bits' other order, and four candidate filters for sound itself.
-- 19.233 State spaces unfolding as formats are added: formats as branches, endless parameters as axes,
-  meanings as a layer of tags, a hyperbolic layout, colour by branch.
-- 19.234 Towards the shortest program: Kolmogorov complexity, time-bounded search, recipes, routes to
-  a file in bits, and everyone's favourites as one index (1.66 trillion, about 41 bits a route).
-
-## To test (REVIEW-ROUND.md, items 48 to 51)
-
-48 sound files, 49 MIDI files, 50 model files, 51 the Documentation.
+- CI: all 12 steps passed (step 10 after its door count was updated; the other eleven on the run before, with the same code).
+- The help check: 0 missing (683 / 202). The settings check: 141 match. Catalogue: 206 of 206.
