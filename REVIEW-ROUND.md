@@ -150,7 +150,7 @@ run before a release package, and after each of the three reviews. Each batch is
 ### List F: formats and grammars `[01]` + `[05]`/`[06]` (+ `[11]` where the reader changes); no sitting
 - F1. Grammars and catalogue entries for actions, replay, save-v2, personal-world v1/v2 (old A3). *Made 15 November 2026: actions, save (v1 and v2), replay, and personal-world v1 and v2 (FILTER-PLUGINS §23).*
 - F2. The save formats fixed for the RAID's sieved saves (19.210), before anything is shared. *Made 15 November 2026: `sieve-raid-piece-v1` and `sieve-raid-tally-v1` (SPECIFICATIONS 12.0s), the code, its placement and leaving rules and their tests; not switched on.*
-- F3. v34 measured and frozen (task 118).
+- F3. v34 measured and frozen (task 118). *Frozen 12 November 2026; measured whole 15 November 2026 (results/v34-measured-2026-11-15.md).*
 
 ### List S: new spaces `[10]` + you, a sitting each
 - S1. Layouts and the fractal dimension (19.191); S2. the maze door (19.198).

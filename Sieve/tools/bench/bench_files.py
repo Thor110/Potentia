@@ -7,7 +7,7 @@ updating).
   tools\bench_files_optimise_temporary.bat      the same with Compressed formats, temporary
   tools\bench_files_optimise_permanent.bat      the same with Compressed formats, permanent
   tools\bench_light.bat                         the light bench: decode/no and size/try alone
-  python tools/bench/bench_files.py SIEVE FOLDER [--keep] [--compressed temporary|permanent] [--ways W,W]
+  python tools/bench/bench_files.py SIEVE FOLDER [--keep] [--compressed temporary|permanent] [--ways W,W] [--also FLAGS]
 
 The files of FOLDER (not its subfolders), largest first. Each is made four ways, with no search
 limit (as the File Locator's figures are made):
@@ -18,6 +18,8 @@ limit (as the File Locator's figures are made):
   decode/no    Prioritise Decoding Speed, without it
 
 and each `.sieve` is installed again (`sieve install`), its file checked against the original.
+--also adds its flags, apart by spaces, to every making (`--also=--v33` makes the older version, so two
+runs compare versions on the same files; the results folder's name then ends in them, `-v33`).
 --ways names the ones to make (the light bench: "decode/no,size/try", the two that differ; on
 Edward's 153 JPEGs and on enwik9, decode/try came to decode/no's bytes and size/no to size/try's,
 each taking longer, 2 November 2026).
@@ -215,6 +217,7 @@ def main():
     ap.add_argument("--compressed", choices=["temporary", "permanent"], help="tick a Compressed formats box for every run")
     ap.add_argument("--ways", default=",".join(m[0] for m in MODES), type=lambda v: v.split(","),
                     help="the ways to make, of size/try, size/no, decode/try, decode/no (the light bench: decode/no,size/try)")
+    ap.add_argument("--also", default="", help="more flags for every making, apart by spaces (--also=--v33: the older version)")
     a = ap.parse_args()
     if not a.ways or any(w not in [m[0] for m in MODES] for w in a.ways):
         sys.exit("--ways: of " + ", ".join(m[0] for m in MODES) + ", by commas")
@@ -228,7 +231,8 @@ def main():
     if not files:
         sys.exit(f"{folder} holds no files")
     started = datetime.datetime.now()
-    out = folder.parent / f"{folder.name}-bench-{box + '-' if box else ''}{started:%Y%m%d-%H%M%S}"
+    also = a.also.split()
+    out = folder.parent / f"{folder.name}-bench-{box + '-' if box else ''}{started:%Y%m%d-%H%M%S}{''.join('-' + f.lstrip('-') for f in also)}"
     (out / "runs").mkdir(parents=True)
     print(f"{len(files)} file(s), largest first; results in {out}")
     rows, files_info = [], {}
@@ -244,7 +248,7 @@ def main():
             tag = mode.replace("/", "-")
             made = out / f"{path.name}.{tag}.sieve"
             print(f"  {mode}: making ...", flush=True)
-            code, said, seconds = run([sieve, "locate", str(path), "--installer", str(made), "--search-per-file", "0", "--timings"] + flags + box_flags,
+            code, said, seconds = run([sieve, "locate", str(path), "--installer", str(made), "--search-per-file", "0", "--timings"] + flags + box_flags + also,
                                       out / "runs" / f"{path.name}.{tag}.make.txt")
             row = {"file": path.name, "bytes": size, "zip": zipped, "7z": seven, "mode": mode, "sieve": "", "made": f"{seconds:.1f}",
                    "decoded": "", "written": "", "same": ""}

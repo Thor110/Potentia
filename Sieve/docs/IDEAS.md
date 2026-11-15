@@ -9628,6 +9628,55 @@ rules".
   hue, lighter or darker with depth, so the branch you are in always shows and the colours never
   outnumber the first split.
 
+**19.235 The golden ratio's binary word as a filter, and the fractal dimension set up soon (Edward, 15
+November 2026).** His words: "we might be able to use Dan Shechtman's binary interpretation of the golden
+ratio as a filter, though it would only filter out a single file", "regardless though it is an algorithm
+and I think a fractal that would belong in the fractal dimension and could locate files that rely on it in
+any dimension", "the fractal dimension is something worth setting up sooner rather than later I think",
+"it would list and catalog fractals for use as rulesets in personal dimensions and elsewhere", "so it would
+need its own variant of the viewer for properly displaying fractals", "depending on how it is intrerpreted
+each fractal would initially only filter out one file, but more files as the length of the hallway is
+walked", and "fractals could also use alternating patterns to track down more data, variants of themselves
+for example".
+- *The word:* the golden ratio written in two symbols is the Fibonacci word, 0100101001001010010100...,
+  made by putting 01 for each 0 and 0 for each 1, again and again from 0. It is the one-dimensional model
+  of the quasicrystals Dan Shechtman found (1982; the Nobel Prize in Chemistry, 2011): ordered but never
+  repeating, as a quasicrystal's atoms are; its two-dimensional cousin is Penrose's tiling. Its ones stand
+  at 1/φ² of its places (0.381966 over its first 196,418 symbols, checked here), and it is self-similar:
+  the same rule at every scale, so a fractal in the sense of §19.191's rulesets (a substitution rule, one
+  line long).
+- *As a filter, one file a length:* a filter passing a unit only where it is the word's first N symbols
+  has one survivor at each length, as Edward says, and a new one each step the line grows, so walking the
+  hallway further meets the next.
+- *Variants, more files:* every window of the word, wherever it starts, is one of exactly N + 1 at length N
+  (checked here up to 12: 2, 3, 4 ... 13), the least any never-repeating sequence can have (Morse and
+  Hedlund's theorem; such words are called Sturmian). So "variants of itself" is a precise family: the
+  word's windows give N + 1 survivors at length N; the same rule for every other slope, not the golden
+  ratio's alone, gives all Sturmian windows, a count that grows about as the cube of N. Still a vanishing
+  share of the 2^N units, so a filter that small names each survivor in a handful of bits.
+- *Locating files that rely on it, in any dimension:* a file is checked for long runs that are windows of
+  the word (or of a Sturmian word): on the binary line bit by bit, on others by any two-valued reading
+  (§19.232). Where they are found, the file holds that rule and its rule is a short description of those
+  runs, which is what the shortest-program search of §19.234 looks for.
+- *The fractal dimension, sooner (Edward):* a catalogue of fractals, each a ruleset of §19.191's grammar
+  (substitutions like this one, L-systems, iterated function systems, tilings), listed, named, favourited
+  and offered as rulesets to personal dimensions and other lines; the Fibonacci word is a fitting first
+  entry, being the smallest substitution that never repeats.
+- *A viewer of its own:* a fractal is shown by drawing its rule at a depth the person chooses, deeper by a
+  key: a substitution as its word growing (and as a line of short and long tiles, the quasicrystal's
+  chain), an L-system as its drawing, an iterated function system as its attractor, a tiling as its
+  patch, each with the survivors it would pass on a line beside it.
+- *Why it is worth having though it names so few (Edward, the same day):* "While it might only filter 1
+  file every however many, it still feels like it is worthwhile having, primarily because it is fractal in
+  nature and as such any file that can be produced among any dimension from fractal patterns, doesn't need
+  to exist, just the pattern to get there does". So a file a fractal makes is kept as the fractal and how
+  far to take it (its rule, its depth, and where its window starts), never as its bytes; installed by
+  running the rule again, as Sieve's other recipes make their files again exactly. What it saves is the
+  file's length less the pattern's, which is everything for a long file a short rule makes, and nothing
+  for the files no short rule makes (most of them: §19.191's honest limits, the pigeonhole of §6).
+- *When (Edward, the same day):* "We will set it up after working through everything that is ahead of us
+  and testing etc". Planned only, after the present lists and their testing.
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non

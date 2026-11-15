@@ -19,6 +19,13 @@ on real pairs; headers modelled and BCJ2 (ROADMAP stage 14).
   (`tone.wav` as `tone.flac`, now before `tone.mp3`) left the listing out of order, and the folder was
   refused ("entries out of order"); the listing is now put back in the order of names where a sound was
   renamed, and no other listing changes. CI step 11 checks it.
+- **Measured whole, 15 November 2026** (results/v34-measured-2026-11-15.md, list F3): against v33 by the
+  same build (`--v33`), every `.sieve` installed back the same (188). On the standard benchmark (Silesia,
+  enwik8, Don Quixote, `control.py`) the same bytes but for Silesia's one program, `ooffice`, 6.6% smaller
+  made for size (`E1`): 0.998 in all. On a folder of v34's kinds with Compressed formats temporary, 0.666
+  made for size and 0.732 for decoding: GIFs 0.33 to 0.57, an LZW TIFF 0.30, the PCX 0.66, sound 0.85 to
+  0.94 (made and decoded faster), the MP3 0.89, programs 0.92 and 0.93; GIFs take the longest to make.
+  `python3`, opened as a container, was mixed without `E1`: a question for v35.
 - **What v34 holds:** the pieces below: GIFs (`gif`), sound through FLAC (`flac`, with floating point
   and the sound formats beside WAV), MP3s through packMP3 (`pmp`), TIFFs (`tiff`), PCX (`pcx`), PDFs and
   archives' members as JPEGs' brunsli form and sound, zlib streams inside files, mix-v4's `E1` (the x86

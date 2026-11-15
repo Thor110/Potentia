@@ -135,7 +135,7 @@ and built only where it pays.
 | Stage | Items | Where it stands |
 | --- | --- | --- |
 | 1. Loose ends | entry order, recipe digits, rope tie, CI pins and warnings, the repeat loop, harness sort | **Done** |
-| 2. Finish and freeze v34 | x86 filter per program; BMP RLE, AVI/MOV PCM, WAD/PAK; MPEG-2 MP3s; the freeze | x86 restart **built**; the three formats measured too small; MPEG-2 MP3s open; **frozen 12 November 2026** |
+| 2. Finish and freeze v34 | x86 filter per program; BMP RLE, AVI/MOV PCM, WAD/PAK; MPEG-2 MP3s; the freeze | x86 restart **built**; the three formats measured too small; MPEG-2 MP3s open; **frozen 12 November 2026**; measured whole 15 November (results/v34-measured-2026-11-15.md: 0.998 of v33 on the standard benchmark, 0.666 on v34's kinds) |
 | 3. Sieve's voice | read aloud everywhere; words CMUdict lacks; more recordings; prosody; a trained voice | first two **built**; three hours measured (19.8% against 23.3%), not taken; prosody and the trained voice open |
 | 4. The AI line | training speed; QK-norm; corpora; wider arithmetic; a real model | speed **built** (about twice on four threads); QK-norm measured, not built; documents as text **built**; wider arithmetic and a real model left for Edward |
 | 5. The hallway | chat commands, logs, chains; PCM filters; filter ideas; music filter designer; a game dimension | chains steered **built**; sound plugins and `pcm-quiet-ends` **built**; designer plays what it keeps, Media Player's M **built**; game dimension **designed** (GAME.md §11); chain branches open |
