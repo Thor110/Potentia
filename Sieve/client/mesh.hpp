@@ -139,7 +139,8 @@ public:
 
     // Seen square-on instead (no perspective): what is given in camera space (x right, y up, z away
     // from the eye) lands at (centre_x + x * scale, centre_y - y * scale), nearer where z is smaller.
-    // The Character Creator's and the setup menu's characters. Always laid over what is there.
+    // The Character Creator's and the setup menu's characters. Always laid over what is there, and
+    // only the rectangle what was added reaches is drawn and uploaded (the rest is clear anyway).
     void begin_ortho(float centre_x, float centre_y, float scale, int width, int height);
     // A sphere drawn as a sphere: at each pixel the depth of its surface there, so spheres cut into
     // one another, into bones and into faces exactly where they meet (Edward, 14 November 2026: "render
@@ -225,6 +226,16 @@ private:
     std::vector<uint32_t> colour_; // the image the bands draw into, uploaded in one go
     uint32_t* pixels_ = nullptr;   // colour_.data() while the bands are running
     int pitch_ = 0;                // pixels per row there
+    // The rectangle of the target drawn, in its own pixels: the whole of it, but square-on only what
+    // everything added reaches (draw(), OPTIMISATIONS 3). colour_ and depth_ hold that rectangle's
+    // pixels; every coordinate stays the target's, so each comparison is the same as drawing it whole.
+    int ox_ = 0, oy_ = 0, rw_ = 1, rh_ = 1;
+    // What the texture holds outside the rectangle must be clear, as the whole picture was: it is
+    // cleared once when made, and the part of the last rectangle drawn that the next does not cover
+    // is cleared then (the texture is always shown whole, so the window's scaling maps it as before).
+    SDL_Rect last_{0, 0, 0, 0};
+    bool tex_clear_ = false;
+    std::vector<uint32_t> zeros_;
     std::vector<float> depth_;
     SDL_Texture* texture_ = nullptr;
     SDL_Renderer* texture_owner_ = nullptr;

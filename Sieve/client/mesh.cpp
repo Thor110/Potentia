@@ -340,6 +340,8 @@ void MeshBatch::release()
     texture_ = nullptr;
     texture_owner_ = nullptr;
     tex_w_ = tex_h_ = 0;
+    tex_clear_ = false;
+    last_ = {0, 0, 0, 0};
 }
 
 void MeshBatch::begin_ortho(float centre_x, float centre_y, float scale, int width, int height)
@@ -584,9 +586,10 @@ void MeshBatch::add(const Mesh& mesh, const Placement& at)
 // pixel, and leave no gaps); 1/z is planar in screen space, so it is interpolated exactly.
 void MeshBatch::raster_band(int y0, int y1)
 {
-    const int W = w_, P = pitch_;
-    std::fill(pixels_ + std::ptrdiff_t(y0) * P, pixels_ + std::ptrdiff_t(y1) * P, bg_argb_);
-    std::fill(depth_.begin() + std::ptrdiff_t(y0) * W, depth_.begin() + std::ptrdiff_t(y1) * W, 0.0f);
+    // (rows and columns of the rectangle drawn: x from ox_ to xe - 1, its pixel at x - ox_ in its row)
+    const int W = rw_, P = pitch_, ox = ox_, xe = ox_ + rw_;
+    std::fill(pixels_ + std::ptrdiff_t(y0 - oy_) * P, pixels_ + std::ptrdiff_t(y1 - oy_) * P, bg_argb_);
+    std::fill(depth_.begin() + std::ptrdiff_t(y0 - oy_) * W, depth_.begin() + std::ptrdiff_t(y1 - oy_) * W, 0.0f);
     for (const Tri& t : tris_)
     {
         if (t.ymax < float(y0) || t.ymin > float(y1)) continue;
@@ -613,17 +616,17 @@ void MeshBatch::raster_band(int y0, int y1)
                 xr = std::max(xr, x);
             }
             if (xl > xr) continue;
-            const int xa = std::max(0, int(std::ceil(xl - 0.5f))), xb = std::min(W - 1, int(std::ceil(xr - 0.5f)) - 1);
+            const int xa = std::max(ox, int(std::ceil(xl - 0.5f))), xb = std::min(xe - 1, int(std::ceil(xr - 0.5f)) - 1);
             if (xa > xb) continue;
             const float row = B * yc + C + A * 0.5f;
-            uint32_t* cp = pixels_ + size_t(y) * size_t(P);
-            float* dp = depth_.data() + size_t(y) * size_t(W);
+            uint32_t* cp = pixels_ + size_t(y - oy_) * size_t(P);
+            float* dp = depth_.data() + size_t(y - oy_) * size_t(W);
             for (int x = xa; x <= xb; ++x)
             {
                 const float iz = A * float(x) + row; // evaluated, not accumulated: no drift on long spans
-                if (iz > dp[x])
+                if (iz > dp[x - ox])
                 {
-                    dp[x] = iz;
+                    dp[x - ox] = iz;
                     if (t.picture)
                     {
                         // (the picture's pixel there: u/z and v/z over 1/z, nearest)
@@ -633,7 +636,7 @@ void MeshBatch::raster_band(int y0, int y1)
                         const uint32_t tx = std::min(img.width - 1, uint32_t(std::max(0.0f, u) * float(img.width)));
                         const uint32_t ty = std::min(img.height - 1, uint32_t(std::max(0.0f, v) * float(img.height)));
                         const uint8_t* q = img.rgba.data() + (size_t(ty) * img.width + tx) * 4;
-                        cp[x] = 0xFF000000u | uint32_t(q[0]) << 16 | uint32_t(q[1]) << 8 | q[2];
+                        cp[x - ox] = 0xFF000000u | uint32_t(q[0]) << 16 | uint32_t(q[1]) << 8 | q[2];
                     }
                     else if (t.shaded)
                     {
@@ -642,9 +645,9 @@ void MeshBatch::raster_band(int y0, int y1)
                         uint32_t px = 0xFF000000u;
                         for (int k = 0; k < 3; ++k)
                             px |= uint32_t(std::clamp(t.Ac[k] * xc + t.Bc[k] * yc + t.Cc[k], 0.0f, 255.0f) + 0.5f) << (16 - 8 * k);
-                        cp[x] = px;
+                        cp[x - ox] = px;
                     }
-                    else cp[x] = t.colour;
+                    else cp[x - ox] = t.colour;
                 }
             }
         }
@@ -656,16 +659,27 @@ void MeshBatch::raster_band(int y0, int y1)
     {
         if (std::max(e.y0, e.y1) < float(y0) || std::min(e.y0, e.y1) >= float(y1)) continue;
         const int steps = std::max(1, int(std::ceil(std::max(std::fabs(e.x1 - e.x0), std::fabs(e.y1 - e.y0)))));
-        for (int s = 0; s <= steps; ++s)
+        // Only the steps that can land in this band's rows (OPTIMISATIONS 5): a step moves the point at
+        // most a pixel, so the steps where the line is within a row of the band, and one more either
+        // side, hold every point in it. Each is worked out and tested as before, so the pixels are the
+        // same; the band's other steps were each thrown away by that test.
+        int s_lo = 0, s_hi = steps;
+        if (const float dy = e.y1 - e.y0; dy != 0)
+        {
+            const double a = (double(y0) - 1.0 - double(e.y0)) / double(dy) * steps, b = (double(y1) + 1.0 - double(e.y0)) / double(dy) * steps;
+            s_lo = int(std::clamp(std::floor(std::min(a, b)) - 1.0, 0.0, double(steps)));
+            s_hi = int(std::clamp(std::ceil(std::max(a, b)) + 1.0, 0.0, double(steps)));
+        }
+        for (int s = s_lo; s <= s_hi; ++s)
         {
             const float u = float(s) / float(steps);
             const int x = int(e.x0 + (e.x1 - e.x0) * u), y = int(e.y0 + (e.y1 - e.y0) * u);
-            if (x < 0 || x >= W || y < y0 || y >= y1) continue;
+            if (x < ox || x >= xe || y < y0 || y >= y1) continue;
             const float n = e.n0 + (e.n1 - e.n0) * u;
-            float& d = depth_[size_t(y) * size_t(W) + size_t(x)];
+            float& d = depth_[size_t(y - oy_) * size_t(W) + size_t(x - ox)];
             // (the leeway: half a percent of the nearness with perspective; two pixels' depth square-on)
             if (n < (ortho_ ? d - 2.0f / oscale_ : d * 0.995f)) continue;
-            pixels_[size_t(y) * size_t(P) + size_t(x)] = e.colour;
+            pixels_[size_t(y - oy_) * size_t(P) + size_t(x - ox)] = e.colour;
         }
     }
 }
@@ -675,14 +689,14 @@ void MeshBatch::raster_band(int y0, int y1)
 // meets a face, the nearer surface wins pixel by pixel.
 void MeshBatch::raster_balls(int y0, int y1)
 {
-    const int W = w_, P = pitch_;
+    const int W = rw_, P = pitch_, ox = ox_;
     using Style = SphereLook::Style;
     for (const Ball& b : balls_)
     {
         const SphereLook& L = b.look;
         const float rs = b.rs;
         const int ya = std::max(y0, int(std::floor(b.sy - rs - 1))), yb = std::min(y1 - 1, int(std::ceil(b.sy + rs + 1)));
-        const int xa = std::max(0, int(std::floor(b.sx - rs - 1))), xb = std::min(W - 1, int(std::ceil(b.sx + rs + 1)));
+        const int xa = std::max(ox, int(std::floor(b.sx - rs - 1))), xb = std::min(ox + W - 1, int(std::ceil(b.sx + rs + 1)));
         const uint32_t base = L.argb;
         const float br = float((base >> 16) & 255), bg = float((base >> 8) & 255), bb = float(base & 255);
         auto scaled = [&](float light) {
@@ -698,8 +712,8 @@ void MeshBatch::raster_balls(int y0, int y1)
         for (int y = ya; y <= yb; ++y)
         {
             const float yc = float(y) + 0.5f;
-            uint32_t* cp = pixels_ + size_t(y) * size_t(P);
-            float* dp = depth_.data() + size_t(y) * size_t(W);
+            uint32_t* cp = pixels_ + size_t(y - oy_) * size_t(P);
+            float* dp = depth_.data() + size_t(y - oy_) * size_t(W);
             for (int x = xa; x <= xb; ++x)
             {
                 const float xc = float(x) + 0.5f, dx = xc - b.sx, dy = yc - b.sy, d2 = dx * dx + dy * dy;
@@ -739,10 +753,10 @@ void MeshBatch::raster_balls(int y0, int y1)
                     }
                     else colour = base;
                 }
-                if (n > dp[x])
+                if (n > dp[x - ox])
                 {
-                    dp[x] = n;
-                    cp[x] = colour;
+                    dp[x - ox] = n;
+                    cp[x - ox] = colour;
                 }
             }
         }
@@ -751,7 +765,33 @@ void MeshBatch::raster_balls(int y0, int y1)
 
 void MeshBatch::draw(SDL_Renderer* r)
 {
-    const size_t n = size_t(w_) * size_t(h_);
+    // The rectangle drawn. Square-on (the Character Creator's and the setup menu's characters, laid over
+    // what is there), only the part of the target that what was added reaches: everywhere else the
+    // picture was clear, and is left so. A character in a box drew all 1920 x 1080 pixels; drawn so, a
+    // 20-sphere scene takes 2.6 ms a frame against 3.7 (OPTIMISATIONS 3). With perspective, the whole
+    // target, as before.
+    ox_ = 0, oy_ = 0, rw_ = w_, rh_ = h_;
+    if (ortho_ && overlay_)
+    {
+        float lx = 1e30f, ly = 1e30f, hx = -1e30f, hy = -1e30f;
+        auto reach = [&](float x0, float y0, float x1, float y1) {
+            lx = std::min(lx, x0), ly = std::min(ly, y0), hx = std::max(hx, x1), hy = std::max(hy, y1);
+        };
+        for (const Tri& t : tris_) reach(std::min({t.x[0], t.x[1], t.x[2]}), t.ymin, std::max({t.x[0], t.x[1], t.x[2]}), t.ymax);
+        for (const Edge& e : edges_) reach(std::min(e.x0, e.x1), std::min(e.y0, e.y1), std::max(e.x0, e.x1), std::max(e.y0, e.y1));
+        for (const Ball& b : balls_) reach(b.sx - b.rs - 1, b.sy - b.rs - 1, b.sx + b.rs + 1, b.sy + b.rs + 1);
+        // (two pixels of margin past what any of them can write: a face's pixels lie within its corners,
+        // an edge's within its ends, a sphere's within a pixel of its disc)
+        auto clamped = [](float v, int hi) { return int(std::clamp(v, 0.0f, float(hi))); };
+        ox_ = clamped(std::floor(lx) - 2, w_), oy_ = clamped(std::floor(ly) - 2, h_);
+        rw_ = clamped(std::ceil(hx) + 3, w_) - ox_, rh_ = clamped(std::ceil(hy) + 3, h_) - oy_;
+        if (rw_ <= 0 || rh_ <= 0)
+        {
+            drawn_ = tris_.size(); // (nothing reaches the target: nothing to draw)
+            return;
+        }
+    }
+    const size_t n = size_t(rw_) * size_t(rh_);
     if (depth_.size() != n) depth_.assign(n, 0.0f);
     if (texture_ && (texture_owner_ != r || tex_w_ != w_ || tex_h_ != h_)) release();
     if (!texture_)
@@ -767,17 +807,37 @@ void MeshBatch::draw(SDL_Renderer* r)
     // measured several times slower with the software renderer, which is the slowest case anyway.
     if (colour_.size() != n) colour_.assign(n, 0);
     pixels_ = colour_.data();
-    pitch_ = w_;
+    pitch_ = rw_;
     // Bands of rows, one per thread.
     const unsigned bands = pool_->bands();
     pool_->run_all([&](unsigned b) {
-        const int y0 = int(int64_t(h_) * b / bands), y1 = int(int64_t(h_) * (b + 1) / bands);
+        const int y0 = oy_ + int(int64_t(rh_) * b / bands), y1 = oy_ + int(int64_t(rh_) * (b + 1) / bands);
         if (y1 > y0) raster_band(y0, y1);
     });
     drawn_ = tris_.size();
-    SDL_UpdateTexture(texture_, nullptr, colour_.data(), w_ * 4);
     pixels_ = nullptr;
     SDL_SetTextureBlendMode(texture_, overlay_ ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE); // (laid over what is there, or the whole screen)
+    if (rw_ == w_ && rh_ == h_)
+    {
+        SDL_UpdateTexture(texture_, nullptr, colour_.data(), w_ * 4);
+        last_ = {0, 0, w_, h_};
+    }
+    else
+    {
+        // (the texture stays the target's size, so it is not made again as the rectangle changes; only
+        // the rectangle is uploaded, after clearing what of the last one lies outside it)
+        auto clear = [&](const SDL_Rect& c) {
+            if (c.w <= 0 || c.h <= 0) return;
+            if (zeros_.size() < size_t(c.w) * size_t(c.h)) zeros_.assign(size_t(c.w) * size_t(c.h), 0u);
+            SDL_UpdateTexture(texture_, &c, zeros_.data(), c.w * 4);
+        };
+        const SDL_Rect at{ox_, oy_, rw_, rh_};
+        if (!tex_clear_) clear({0, 0, w_, h_});
+        else if (last_.x < at.x || last_.y < at.y || last_.x + last_.w > at.x + at.w || last_.y + last_.h > at.y + at.h) clear(last_);
+        tex_clear_ = true;
+        SDL_UpdateTexture(texture_, &at, colour_.data(), rw_ * 4);
+        last_ = at;
+    }
     SDL_RenderTexture(r, texture_, nullptr, nullptr);
 }
 

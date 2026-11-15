@@ -163,7 +163,7 @@ run before a release package, and after each of the three reviews. Each batch is
 - O1. RAID reads buffered `[04, 10]`; O2. sharing's questions sent together `[01, 04, 10]` (*O1, O2 and O6
   made 15 November 2026*); O3. the Creator's
   picture the size of its box `[04, 10]`; O4. recordings kept as text `[10]`; O5. edges walked only in
-  their band `[04, 10]`; O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
+  their band `[04, 10]` (*O3 and O5 made 15 November 2026*); O6. held pieces written outside the lock `[04, 10]`; O7. the trial mixers measured
   on a large file (a measurement, no CI).
   Each sits well with others of the same steps: O1, O2 and O6 together are one RAID batch; O3 and O5 go
   with list R.

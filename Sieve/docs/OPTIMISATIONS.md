@@ -16,17 +16,13 @@ Each keeps the number it was given (REVIEW-ROUND's list O names them so). Made a
 lock (15 November 2026): the share, check and fetch reports, every held folder and its peers file the same
 byte for byte before and after, four sharers at once included; a check of 35 pieces on 3 peers made 485
 `recvfrom` calls and now 14, and asks each peer once per 256 pieces rather than once a piece.
-
-## 3. The Character Creator draws a picture the size of the window
-- **Where:** `render_char_drawing` in `client/menu.cpp`: `begin_ortho` with the whole window, so `MeshBatch`
-  clears, draws and uploads every pixel for a character in a box.
-- **Costs:** 2.3 ms a frame at 1920x1080 against 0.35 ms for a 432x500 box, 1.0 ms at 1280x720 (measured,
-  20 shaded spheres, software renderer, 4 cores); paid only while the CHARACTER page or the Creator is open.
-- **Needs:** `MeshBatch` to draw into an integer sub-rectangle of the window, every coordinate still in
-  window space so each float comparison is unchanged, and the texture drawn to that rectangle. (Moving the
-  centre into the box's own coordinates would round differently and move pixels at spheres' edges.)
-- **Shown the same:** pixel for pixel, with an animated character crossing the box's edge.
-- **CI:** 10, 04.
+Made and gone, the same day: 3 and 5, the Character Creator's picture drawn and uploaded only where its
+character reaches, and each edge walked only through its band's rows. The texture is still shown whole:
+showing only the rectangle put pixels a pixel off where the menu is scaled to its window. The same pictures
+pixel for pixel: a character in its box, across its edge and off the window (a 20-sphere scene, 1920 x 1080:
+3.7 ms a frame with the window's clear, now 2.6 ms; the rest is the renderer laying the whole texture
+over the window), random edges in 1, 3, 7 and 8 bands (331,776,000 pixels, none different; 1,000 edges up
+to 400 px, 1.3 to 1.4 ms a frame on one thread, now 0.87 ms), and the screenshots of CI step 10.
 
 ## 4. A recording keeps every input event whole
 - **Where:** the recorder in `client/app_main.cpp` (`frame.events.push_back(e)`) and `ReplayFrame` in
@@ -41,17 +37,6 @@ byte for byte before and after, four sharers at once included; a check of 35 pie
 - **Shown the same:** a recording made, saved and played back, before and after: the saved text and the
   `.sieve` byte for byte, and the replay ending where it did.
 - **CI:** 10.
-
-## 5. Edges are walked once for each band
-- **Where:** `raster_band` in `client/mesh.cpp`: each edge touching a band is walked along its whole length
-  and the points outside the band thrown away; there are as many bands as threads.
-- **Costs:** 0.1 ms of CPU a frame for 300 edges up to 300 px, 0.45 ms for 1,000 edges up to 400 px (measured,
-  one thread, all bands); spread over the bands, under 0.1 ms a frame in any scene seen so far.
-- **Needs:** each edge's first and last step inside the band worked out from its slope, one step of margin
-  either side, with the same per-step formula and the same in-band test, so the pixels written are the same.
-- **Shown the same:** per-band pixel buffers against the current loop over random edges (the review's bench
-  did so), then the hallway's and your dimension's pictures.
-- **CI:** 10, 04.
 
 ## 7. To measure: the trial mixers on a large file
 - Review 1 made the trial mixers' history come as untouched zero pages, which should save one block the size
