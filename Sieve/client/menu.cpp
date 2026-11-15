@@ -1803,7 +1803,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
                 }
         for (int c = 0; c < kMapColumns; ++c)
         {
-            if (inside(magnifier_[c], mx, my)) { if (!is_listed(overlay_of_column(c))) open_filters(overlay_of_column(c)); } // (a listed line has no filters)
+            if (inside(magnifier_[c], mx, my)) open_filters(overlay_of_column(c));
             else if (inside(dots_[c], mx, my)) open_details(overlay_of_column(c));
         }
         return;
@@ -3747,8 +3747,17 @@ void Menu::render()
     // The map starts below the budget, top right; at 1920 wide it is beside the subtitle instead.
     const float map_y = std::max(80.0f, budget_bottom + 6);
     const float label = map_y + 38, top = map_y + 148, bottom = H - 60 - foot_up, span = bottom - top, min_bar = 12;
-    // Line names are drawn at double size where a column is wide enough to hold one.
-    const float name_scale = pitch >= 110 ? 2.0f : 1.0f;
+    // Line names are drawn as large as the columns hold every one (double, one and a half, or plain):
+    // the glass, the name and its dots inside the column, the longest name measured (FRACTALS is
+    // longer than the rest), so all the names are drawn at one size.
+    float name_scale = 1.0f;
+    for (const float s : {2.0f, 1.5f})
+    {
+        bool fits = true;
+        for (int c = 0; c < kMapColumns; ++c)
+            if (22 + text_width(tr(theme_of(c == 0 || c == kMapColumns - 1 ? kBinaryLine : c - 1).key), s) + 6 > pitch - 4) fits = false;
+        if (fits) { name_scale = s; break; }
+    }
     text(r_, x0, map_y, tr("map.title"), 1, white);
     text(r_, x0, map_y + 12, trf(broken_any ? "map.scale.broken" : "map.scale", {fixed(scale_bits, 0)}), 1, grey);
     for (int c = 0; c < kMapColumns; ++c)
@@ -3765,8 +3774,9 @@ void Menu::render()
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
         // Magnifying glass: opens this line's filters; both binary columns open the one binary
-        // line's filters (by its files' kinds).
+        // line's filters (by its files' kinds). A listed line has none, so it has no glass.
         magnifier_[c] = {};
+        if (!is_listed(i))
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -3778,7 +3788,7 @@ void Menu::render()
         // The details button, three dots one above another, as tall as the magnifying glass: opens
         // what this line's figures mean (as I does for the line chosen).
         {
-            const float dx = x + 22 + text_width(tr(th.key), name_scale) + 3, d = name_scale >= 2 ? 3.0f : 2.0f;
+            const float dx = x + 22 + text_width(tr(th.key), name_scale) + 3, d = name_scale >= 1.5f ? 3.0f : 2.0f;
             dots_[c] = {dx - 2, label - 2, std::max(8.0f, x + pitch - 4 - (dx - 2)), 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
             for (int k = 0; k < 3; ++k)

@@ -203,8 +203,10 @@ public:
     void open_details(int line) { details_ = line; }
     int details_open() const { return details_; }
     std::vector<std::pair<int, std::string>> details_lines();
+    // (a listed line has no filters, so nothing opens for it: its column draws no magnifying glass)
     void open_filters(int line)
     {
+        if (is_listed(line)) return;
         details_ = -1;
         overlay_ = line;
         orow_ = 0;
