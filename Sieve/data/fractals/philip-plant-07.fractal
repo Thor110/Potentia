@@ -1,5 +1,5 @@
-sieve-fractal-v2
-lsystem 25.7
+sieve-fractal-v3
+lsystem 360/14
 axiom Z
 rule X X[-FFF][+FFF]FX
 rule Z ZFX[+Z][-Z]

@@ -1,0 +1,6 @@
+sieve-fractal-v3
+lsystem 60
+axiom FL
+rule F E
+rule L FL-FR--FR+FL++FLFL+FR-
+rule R +FL-FRFR--FR-FL++FL+FR

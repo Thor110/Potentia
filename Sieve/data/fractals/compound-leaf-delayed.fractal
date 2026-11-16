@@ -1,0 +1,15 @@
+sieve-fractal-v3
+lsystem 45
+scale 0.847458
+axiom X
+rule A N
+rule B E
+rule E H
+rule F 'F"
+rule H J
+rule J Y
+rule N O
+rule O P
+rule P X
+rule X F[+A]FY
+rule Y F[-B]FX

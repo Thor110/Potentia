@@ -1,0 +1,7 @@
+sieve-fractal-v3
+lsystem 22.5
+axiom A
+rule A [&FLA]/////[&FLA]///////[&FLA]
+rule F S/////F
+rule L [^^-G+G+G-|-G+G+G]
+rule S FL

@@ -1,43 +1,55 @@
-# X2: more fractals charted, and the grammar widened
+# X3: the fractals v2 could not write
 
 ## What changed
 
-**A widened grammar (sieve-fractal-v2).** v1 could not write many well-known fractals, so v2 adds two things:
-- **Angles with a tenth of a degree**, such as 22.5 or 25.7. Many plants are drawn at these.
-- **A scaled step.** With `scale 0.707`, the symbol `"` makes every step after it 0.707 times as long, and `'` makes it longer by the same factor. `[` and `]` keep and restore the step's length, along with the turtle's place and heading.
+**sieve-fractal-v3: a third, wider grammar** for the fractals X2 had to set aside. It adds:
+- **Swapped turns.** `!` swaps what + and - turn.
+- **Exact angles.** An angle can be written as a fraction of a turn (`360/34`), or with up to six decimals.
+- **Digits defined as turns or step ratios.** A line such as `define 1 turn 42` or `define 2 scale 4.783` turns by stated degrees or makes the step that many times longer. This covers Fractint's `\` and `/` turns and its scales.
+- **Several rules for one symbol.** At each place one of them is picked from a `seed`. The same ruleset grows the same every time, and a different seed grows a different bush.
+- **Context rules.** `rule A<B C` changes B only where A comes before it, with an `ignore` line for the symbols to skip when looking. These are what Hogeweg and Hesper's trees need.
+- **Three dimensions.** `&` `^` pitch and `\` `/` roll the turtle, as The Algorithmic Beauty of Plants draws it. A 3D drawing is shown from one fixed side.
+- **Longer words:** up to 255 symbols, up from 64.
 
-This is what spirals, trees that thin out, and spider webs need. A v2 ruleset must use at least one of the two; anything else is still written as v1, so every ruleset has exactly one way to be written.
+**The whole space now includes v3 (fractal-space-v3).**
+- v3 rulesets are numbered after the v2 ones.
+- v1 addresses are unchanged. v2 and v3 addresses depend on the longest ruleset setting.
+- I checked the numbering by converting 2,003 v3 addresses, spread across the space, to their rulesets and back.
+- A new grammar filter, `format-fractal-v3`, gives the same counts as the space where they can be compared.
 
-**The whole space now includes v2 rulesets (fractal-space-v2).**
-- Every v1 ruleset keeps its old address.
-- The v2 rulesets are numbered after the last v1 one, from the shortest.
-- A new grammar filter, `format-fractal-v2`, passes v1 and v2 rulesets. Up to 52 characters its counts match the space's.
+**107 fractals charted, up from 75.** The 32 new ones:
+- **From Fractint's files:** the Cesaro and double Cesaro curves, Mandelbrot's four snowflake sweeps, the pentagram, Voderberg's spiral tiling, the two Vertigo spirals, two more Penrose tilings, Mandelbrot's dragon and flowsnake, a second island, plants, trees, Man and Lace.
+- **From The Algorithmic Beauty of Plants:** the 5 x 5 FASS curve, the Hilbert curve in 3D, a bush and a flowering plant in 3D, stochastic plants, and Hogeweg and Hesper's five trees grown by contexts.
 
-**75 fractals charted, up from 11.** Each one now has a `source` line in the chart (`sieve-fractal-chart-v2`) saying where it was transcribed from. You see it on the fractal's hover and page as "; after ...". The sources:
-- **The Algorithmic Beauty of Plants** (Prusinkiewicz and Lindenmayer): the Koch islands and variants, the islands and lakes, the quadratic Gosper curve, the FASS curves, the six plants of figure 1.24 and a branching pattern.
-- **Wikipedia:** the Sierpinski, Sierpinski square, arrowhead and Moore curves, a Peano curve, the twindragon and terdragon, a binary tree, and six substitutions: the period-doubling, Rudin-Shapiro, paperfolding, Baum-Sweet, tribonacci and Pell words.
-- **Fractint's L-system files:** Mandelbrot's islands, curves and trees, Ken Philip's plants, and Herb Savage's Penrose tilings, sphinx and spiral tiling.
-- **Three written for Sieve from a description:** an orb web (36 radii, with a spiral across them whose chords shrink by 0.985 each), the Pythagoras tree and the H tree. Their source lines say they are constructions, not transcriptions.
+The transcriber checked the 21 Fractint entries line by line against a copy of Fractint's own turtle, and the five Hogeweg and Hesper trees against the book's own system. The 3D ones were only checked by the reader. I looked over all the drawings.
 
-Where a source's notation differed, the change is noted in the chart. The only one that alters the ruleset itself: Fractint's empty rule "F=" cannot be written, so F is rewritten to an unused letter E instead. The drawing is the same.
+**Eight X2 rulesets are now exact.** X2 had rounded them; v3 writes them exactly or to six decimals:
+- Ken Philip's plant at `360/14`;
+- the Pythagoras tree, the H tree and Mandelbrot's Peano2 at 0.707107 (1/√2);
+- Penrose's kites and darts at 0.618034;
+- the branching pattern, compound leaf 2 and the spiral tiling.
 
-Every ruleset is read by the reader and was drawn and looked over. I have not compared each drawing with its source's figure one by one.
+Their addresses change because of this.
 
-**The default longest ruleset is now 208 characters (was 96).** The longest charted ruleset (Penrose's kites and darts) is 201 characters, so at 208 every charted fractal is a named place on the line. **Your saved setting stays at whatever it was** (96 if you never changed it). To see all 75 among the generated rulesets, set *longest ruleset* to 208 in Setup > FRACTALS.
+**docs/FRACTAL-SOURCES.md** is new. It has every charted fractal's rules as transcribed, every change from the source's notation, and what is still not charted and why.
 
-**Box-counting dimension.**
-- `sieve fractal show` and `sieve fractal list` now measure each L-system's dimension from its drawing. Measured values: Koch curve 1.29 (true value 1.26), Sierpinski triangle 1.58 (1.585), Hilbert curve 2.00, a straight line 1.00.
-- A new filter, **fractal-dimension-v1**, sits on the FRACTALS magnifying glass's JUDGE-ONLY tab. It keeps L-systems that measure at least the value you set (1.10 by default). Substitutions always pass.
-- In a sample of 1,000 rulesets spread across the space up to 208 characters, 391 measure 1.10 or more.
+**The default longest ruleset is now 256 characters (was 208).** At 256 every charted fractal is on the line except Voderberg's tiling (590 characters). That one needs *longest ruleset* set to 590 or more; the maximum is now 1024 (was 512). A longer setting takes longer to count when you enter the line: 0.65 s at 256, 4 s at 512 (measured here). **Your saved setting stays as it was.**
 
-**The image line's fractal filter (fractal-drawn-v1)** now draws all 75 fractals, so it finds 567 pictures at 10 x 10 in black and white (was 112) and 684 at 32 x 32 (was 125).
+**Image line:** fractal-drawn now finds 782 pictures at 10 x 10 in black and white (was 567).
+
+## Fixed while testing
+- The hallway started the fractal line at a longest ruleset of 96 characters, while everything else uses 256. It now uses 256, and its --fractal-longest help says 44 to 1024 (default 256).
+- CI: the degree sample's fractal rulesets now run to 256 characters and are stored at about their own size (74,527 of the v7 manifest's 84,225 bytes), so v7 is checked to be under a fifth of v6 rather than a tenth. The count at 44 characters is 4,083,300 (v1, v2 and v3 together).
 
 ## To try
-- Warp (T) to `orb-web`, take it (E), and step it deeper with N: the spiral winds in across its radii.
-- Warp to `pythagoras-tree`, `penrose-kites-and-darts` or `abop-plant-1-24c`.
-- `sieve fractal` lists all 75 with their dimensions and sources.
-- On the FRACTALS magnifying glass, tick fractal-dimension and mark or hide what measures below 1.10.
+- Warp to `hilbert-curve-3d` and `abop-bush-3d` and step them deeper: they are drawn from one side.
+- Warp to `cesaro-fractint`, `vertigo-spiral-46` and `hogeweg-hesper-a`.
+- Warp to `abop-stochastic-plant`. Copy its ruleset with a different `seed` and run `sieve fractal draw` on the copy to see another plant of the same kind.
+- Warp to `voderberg-spiral-tiling`: it says it is past the longest, 256.
 
-## Not done
-- Fractals that need things the grammar still lacks (listed in SPECIFICATIONS 12.0t): a symbol that swaps left and right turns (the Cesàro curve, Mandelbrot's snowflakes), turns by stated degrees, several step ratios at once, rules longer than 64 symbols, 3D, stochastic and context-sensitive rules.
-- Paul Bourke's pages and the OEIS could not be reached from here, so nothing is transcribed from them.
+## Still not charted
+- The Algorithmic Beauty of Plants' row of trees: it needs step ratios whose inverses no finite decimal holds, so its lengths would drift.
+- Its chapter 2 trees: they turn by several angles about different axes.
+- The Kolakoski sequence: it is not a substitution.
+- The Fibonacci word fractal: no published L-system text could be read.
+- Paul Bourke's pages and the OEIS were still blocked from here.

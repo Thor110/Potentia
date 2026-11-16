@@ -4,6 +4,10 @@
 #include "sieve/fractal.hpp"
 
 #include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string_view>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -61,6 +65,534 @@ BigUint FractalSpace::Family::after_header(uint32_t r) const
     return total;
 }
 
+// ---- fractal-space-v3 (list X3): v3's rulesets counted by their parts (fractal_space.hpp) ----
+
+namespace v3parts {
+
+using Poly = std::vector<BigUint>; // [length]: how many texts of that length
+
+// A part of a v3 ruleset's text: how many texts of each length it has, the one at a place, how far a
+// text of it reaches from the start of a string, and a text's place among those of its length.
+struct Part
+{
+    Poly n;
+    virtual ~Part() = default;
+    virtual void write(uint32_t len, BigUint i, std::string& out) const = 0;
+    virtual std::optional<size_t> take(std::string_view s) const = 0;
+    virtual BigUint rank(std::string_view s) const = 0;
+};
+using P = std::shared_ptr<const Part>;
+
+thread_local uint32_t g_longest = 0; // (set while one space's parts are built: every Poly has longest + 1 places)
+
+Poly zeros() { return Poly(size_t(g_longest) + 1); }
+
+struct Lit : Part
+{
+    std::string s;
+    explicit Lit(std::string t) : s(std::move(t))
+    {
+        n = zeros();
+        if (s.size() <= g_longest) n[s.size()] = BigUint(1);
+    }
+    void write(uint32_t, BigUint, std::string& out) const override { out += s; }
+    std::optional<size_t> take(std::string_view t) const override { return t.substr(0, s.size()) == s ? std::optional<size_t>(s.size()) : std::nullopt; }
+    BigUint rank(std::string_view) const override { return BigUint(); }
+};
+
+// One of a set of symbols.
+struct Chars : Part
+{
+    std::string cs; // in order of code
+    explicit Chars(std::string c) : cs(std::move(c))
+    {
+        n = zeros();
+        if (g_longest >= 1) n[1] = BigUint(uint64_t(cs.size()));
+    }
+    void write(uint32_t, BigUint i, std::string& out) const override { out += cs[i.mod_small(1u << 30)]; }
+    std::optional<size_t> take(std::string_view t) const override { return !t.empty() && cs.find(t[0]) != std::string::npos ? std::optional<size_t>(1) : std::nullopt; }
+    BigUint rank(std::string_view t) const override { return BigUint(uint64_t(cs.find(t[0]))); }
+};
+
+uint64_t pow10(uint32_t k)
+{
+    uint64_t v = 1;
+    while (k--) v *= 10;
+    return v;
+}
+uint32_t digits_in(uint64_t v) { return v < 10 ? 1 : 1 + digits_in(v / 10); }
+
+// A decimal as v3 writes them: a sign or none, a whole part of no leading zero (at most max_whole), up to
+// 6 decimals, the last not 0; more than 0; with only_zero, its whole part 0; with not_one, not 1.
+struct Num : Part
+{
+    bool signed_ = false, only_zero = false, not_one = false;
+    uint32_t max_whole = 0;
+    Num(bool sgn, uint32_t mw, bool oz, bool n1) : signed_(sgn), only_zero(oz), not_one(n1), max_whole(mw)
+    {
+        n = zeros();
+        for (int s = 0; s <= (signed_ ? 1 : 0); ++s)
+            for (uint32_t d = 0; d <= 6; ++d)
+                for (uint32_t w = 0; w <= max_whole; ++w)
+                    if (valid(w, d))
+                    {
+                        const uint32_t len = uint32_t(s) + digits_in(w) + (d ? d + 1 : 0);
+                        if (len <= g_longest) n[len] += BigUint(fracs(d));
+                    }
+    }
+    bool valid(uint32_t w, uint32_t d) const { return !(only_zero && w != 0) && !(w == 0 && d == 0) && !(not_one && w == 1 && d == 0); }
+    static uint64_t fracs(uint32_t d) { return d == 0 ? 1 : 9 * pow10(d - 1); }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        uint64_t k = std::stoull(i.to_decimal());
+        for (int s = 0; s <= (signed_ ? 1 : 0); ++s)
+            for (uint32_t d = 0; d <= 6; ++d)
+                for (uint32_t w = 0; w <= max_whole; ++w)
+                {
+                    if (!valid(w, d) || uint32_t(s) + digits_in(w) + (d ? d + 1 : 0) != len) continue;
+                    if (k >= fracs(d))
+                    {
+                        k -= fracs(d);
+                        continue;
+                    }
+                    out += (s ? "-" : "") + std::to_string(w);
+                    if (d)
+                    {
+                        const uint64_t f = (k / 9) * 10 + k % 9 + 1; // (the k-th of d digits not ending in 0)
+                        out += "." + std::to_string(pow10(d) + f).substr(1);
+                    }
+                    return;
+                }
+        throw std::logic_error("fractal-space-v3: a number's place past its length's");
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        size_t k = 0;
+        if (signed_ && !t.empty() && t[0] == '-') ++k;
+        const size_t w0 = k;
+        while (k < t.size() && t[k] >= '0' && t[k] <= '9') ++k;
+        if (k == w0 || k - w0 > 3 || (k - w0 > 1 && t[w0] == '0')) return std::nullopt;
+        const uint32_t w = uint32_t(std::stoul(std::string(t.substr(w0, k - w0))));
+        uint32_t d = 0;
+        if (k < t.size() && t[k] == '.')
+        {
+            size_t e = k + 1;
+            while (e < t.size() && t[e] >= '0' && t[e] <= '9') ++e;
+            d = uint32_t(e - k - 1);
+            if (d == 0 || d > 6 || t[e - 1] == '0') return std::nullopt;
+            k = e;
+        }
+        if (w > max_whole || !valid(w, d)) return std::nullopt;
+        return k;
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        const int sign = signed_ && t[0] == '-' ? 1 : 0;
+        const std::string_view body = t.substr(size_t(sign));
+        const size_t dot = body.find('.');
+        const uint32_t w = uint32_t(std::stoul(std::string(body.substr(0, dot)))), d = dot == std::string_view::npos ? 0 : uint32_t(body.size() - dot - 1);
+        const uint32_t len = uint32_t(t.size());
+        uint64_t k = 0;
+        for (int s = 0; s <= (signed_ ? 1 : 0); ++s)
+            for (uint32_t dd = 0; dd <= 6; ++dd)
+                for (uint32_t ww = 0; ww <= max_whole; ++ww)
+                {
+                    if (!valid(ww, dd) || uint32_t(s) + digits_in(ww) + (dd ? dd + 1 : 0) != len) continue;
+                    if (s == sign && dd == d && ww == w)
+                    {
+                        if (d)
+                        {
+                            const uint64_t f = std::stoull(std::string(body.substr(dot + 1)));
+                            k += (f / 10) * 9 + f % 10 - 1;
+                        }
+                        return BigUint(k);
+                    }
+                    k += fracs(dd);
+                }
+        throw std::logic_error("fractal-space-v3: a number not of its part");
+    }
+};
+
+// A whole number lo to hi, no leading zero, in order.
+struct Whole : Part
+{
+    uint64_t lo, hi;
+    Whole(uint64_t l, uint64_t h) : lo(l), hi(h)
+    {
+        n = zeros();
+        for (uint32_t k = 1; k <= 10; ++k)
+        {
+            const uint64_t a = std::max(lo, k == 1 ? 0 : pow10(k - 1)), b = std::min(hi, pow10(k) - 1);
+            if (a <= b && k <= g_longest) n[k] = BigUint(b - a + 1);
+        }
+    }
+    uint64_t first(uint32_t k) const { return std::max(lo, k == 1 ? 0 : pow10(k - 1)); }
+    void write(uint32_t len, BigUint i, std::string& out) const override { out += std::to_string(first(len) + std::stoull(i.to_decimal())); }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        size_t k = 0;
+        while (k < t.size() && t[k] >= '0' && t[k] <= '9') ++k;
+        if (k == 0 || k > 10 || (k > 1 && t[0] == '0')) return std::nullopt;
+        const uint64_t v = std::stoull(std::string(t.substr(0, k)));
+        return v >= lo && v <= hi ? std::optional<size_t>(k) : std::nullopt;
+    }
+    BigUint rank(std::string_view t) const override { return BigUint(std::stoull(std::string(t)) - first(uint32_t(t.size()))); }
+};
+
+// A word of 1 to `most` symbols of an alphabet (in order of code).
+struct Word : Part
+{
+    std::string a;
+    uint32_t most;
+    Word(std::string alphabet, uint32_t m) : a(std::move(alphabet)), most(m)
+    {
+        n = zeros();
+        BigUint v(1);
+        for (uint32_t k = 1; k <= std::min(most, g_longest); ++k) v.mul_small(uint32_t(a.size())), n[k] = v;
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override { out += word_at(i, len, a); }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        size_t k = 0;
+        while (k < t.size() && a.find(t[k]) != std::string::npos) ++k;
+        return k >= 1 && k <= most ? std::optional<size_t>(k) : std::nullopt;
+    }
+    BigUint rank(std::string_view t) const override { return word_rank(std::string(t), a); }
+};
+
+// One or more symbols of an alphabet, in order of code, each once: the k-symbol choices in order.
+struct Choice : Part
+{
+    std::string a;
+    std::vector<std::vector<BigUint>> c; // c[m][k]: ways to choose k of m
+    explicit Choice(std::string alphabet) : a(std::move(alphabet))
+    {
+        const size_t m = a.size();
+        c.assign(m + 1, std::vector<BigUint>(m + 1));
+        for (size_t i = 0; i <= m; ++i)
+        {
+            c[i][0] = BigUint(1);
+            for (size_t k = 1; k <= i; ++k) c[i][k] = c[i - 1][k - 1], c[i][k] += c[i - 1][k];
+        }
+        n = zeros();
+        for (size_t k = 1; k <= m && k <= g_longest; ++k) n[k] = c[m][k];
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        size_t from = 0;
+        for (uint32_t k = len; k > 0; --k)
+            for (size_t j = from;; ++j)
+            {
+                const BigUint& block = c[a.size() - j - 1][k - 1]; // (choices with symbol j first)
+                if (i >= block)
+                {
+                    i -= block;
+                    continue;
+                }
+                out += a[j], from = j + 1;
+                break;
+            }
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        size_t k = 0;
+        while (k < t.size() && a.find(t[k]) != std::string::npos && (k == 0 || t[k - 1] < t[k])) ++k;
+        return k ? std::optional<size_t>(k) : std::nullopt;
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        BigUint r;
+        size_t from = 0;
+        for (size_t p = 0; p < t.size(); ++p)
+        {
+            const size_t j = a.find(t[p]);
+            for (size_t q = from; q < j; ++q) r += c[a.size() - q - 1][t.size() - p - 1];
+            from = j + 1;
+        }
+        return r;
+    }
+};
+
+struct Seq : Part
+{
+    P a, b;
+    std::vector<uint32_t> nz; // (a's lengths with texts)
+    Seq(P x, P y) : a(std::move(x)), b(std::move(y))
+    {
+        n = zeros();
+        for (uint32_t i = 0; i <= g_longest; ++i)
+            if (!a->n[i].is_zero()) nz.push_back(i);
+        std::vector<uint32_t> nzb;
+        for (uint32_t i = 0; i <= g_longest; ++i)
+            if (!b->n[i].is_zero()) nzb.push_back(i);
+        for (const uint32_t i : nz)
+            for (const uint32_t j : nzb)
+            {
+                if (i + j > g_longest) break;
+                n[i + j] += BigUint::mul(a->n[i], b->n[j]);
+            }
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        for (const uint32_t la : nz)
+        {
+            if (la > len) break;
+            const BigUint& nb = b->n[len - la];
+            if (nb.is_zero()) continue;
+            const BigUint block = BigUint::mul(a->n[la], nb);
+            if (i >= block)
+            {
+                i -= block;
+                continue;
+            }
+            BigUint q, r;
+            BigUint::divmod(i, nb, q, r);
+            a->write(la, q, out);
+            b->write(len - la, r, out);
+            return;
+        }
+        throw std::logic_error("fractal-space-v3: a place past its length's");
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        const auto x = a->take(t);
+        if (!x) return std::nullopt;
+        const auto y = b->take(t.substr(*x));
+        if (!y) return std::nullopt;
+        return *x + *y;
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        const size_t la = *a->take(t);
+        const uint32_t len = uint32_t(t.size());
+        BigUint r;
+        for (const uint32_t l : nz)
+        {
+            if (l >= la) break;
+            r += BigUint::mul(a->n[l], b->n[len - l]);
+        }
+        r += BigUint::mul(a->rank(t.substr(0, la)), b->n[len - la]);
+        r += b->rank(t.substr(la));
+        return r;
+    }
+};
+
+P seq(std::vector<P> parts)
+{
+    P p = parts.back();
+    for (size_t k = parts.size() - 1; k-- > 0;) p = std::make_shared<const Seq>(parts[k], p);
+    return p;
+}
+P lit(std::string s) { return std::make_shared<const Lit>(std::move(s)); }
+
+// Absent, or one of its part's.
+struct Opt : Part
+{
+    P p;
+    explicit Opt(P x) : p(std::move(x))
+    {
+        n = p->n;
+        n[0] += BigUint(1);
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        if (len == 0)
+        {
+            if (i.is_zero()) return;
+            i -= BigUint(1);
+        }
+        p->write(len, i, out);
+    }
+    std::optional<size_t> take(std::string_view t) const override { return p->take(t).value_or(0); }
+    BigUint rank(std::string_view t) const override { return t.empty() ? BigUint() : p->rank(t); }
+};
+
+// One of several, the first's texts of a length first.
+struct Alt : Part
+{
+    std::vector<P> ps;
+    explicit Alt(std::vector<P> x) : ps(std::move(x))
+    {
+        n = zeros();
+        for (const P& p : ps)
+            for (uint32_t i = 0; i <= g_longest; ++i) n[i] += p->n[i];
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        for (const P& p : ps)
+        {
+            if (i >= p->n[len])
+            {
+                i -= p->n[len];
+                continue;
+            }
+            p->write(len, i, out);
+            return;
+        }
+        throw std::logic_error("fractal-space-v3: a choice's place past its length's");
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        for (const P& p : ps)
+            if (const auto k = p->take(t)) return k;
+        return std::nullopt;
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        BigUint r;
+        for (const P& p : ps)
+        {
+            if (p->take(t) == t.size())
+            {
+                r += p->rank(t);
+                return r;
+            }
+            r += p->n[t.size()];
+        }
+        throw std::logic_error("fractal-space-v3: a text none of whose choices it is");
+    }
+};
+
+// None or more of a part's, one after another (its counts shared where the part's are another's).
+struct Star : Part
+{
+    P p;
+    Star(P x, const Poly* same) : p(std::move(x))
+    {
+        if (same)
+        {
+            n = *same;
+            return;
+        }
+        n = zeros();
+        n[0] = BigUint(1);
+        for (uint32_t l = 1; l <= g_longest; ++l)
+            for (uint32_t a = 1; a <= l; ++a)
+                if (!p->n[a].is_zero() && !n[l - a].is_zero()) n[l] += BigUint::mul(p->n[a], n[l - a]);
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override
+    {
+        while (len > 0)
+        {
+            for (uint32_t a = 1;; ++a)
+            {
+                if (a > len) throw std::logic_error("fractal-space-v3: a repetition's place past its length's");
+                if (p->n[a].is_zero() || n[len - a].is_zero()) continue;
+                const BigUint block = BigUint::mul(p->n[a], n[len - a]);
+                if (i >= block)
+                {
+                    i -= block;
+                    continue;
+                }
+                BigUint q, r;
+                BigUint::divmod(i, n[len - a], q, r);
+                p->write(a, q, out);
+                i = r, len -= a;
+                break;
+            }
+        }
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        size_t k = 0;
+        while (const auto x = p->take(t.substr(k)))
+        {
+            if (*x == 0) break;
+            k += *x;
+        }
+        return k;
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        BigUint r;
+        while (!t.empty())
+        {
+            const uint32_t len = uint32_t(t.size()), la = uint32_t(*p->take(t));
+            for (uint32_t a = 1; a < la; ++a)
+                if (!p->n[a].is_zero()) r += BigUint::mul(p->n[a], n[len - a]);
+            r += BigUint::mul(p->rank(t.substr(0, la)), n[len - la]);
+            t.remove_prefix(la);
+        }
+        return r;
+    }
+};
+
+// Its part without its empty text (one rule at least).
+struct NonEmpty : Part
+{
+    P p;
+    explicit NonEmpty(P x) : p(std::move(x))
+    {
+        n = p->n;
+        n[0] = BigUint();
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override { p->write(len, i, out); }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        const auto k = p->take(t);
+        return k && *k ? k : std::nullopt;
+    }
+    BigUint rank(std::string_view t) const override { return p->rank(t); }
+};
+
+} // namespace v3parts
+
+struct FractalSpaceV3
+{
+    v3parts::P all;
+};
+
+namespace v3parts {
+
+std::shared_ptr<const FractalSpaceV3> make_v3(uint32_t longest)
+{
+    g_longest = longest;
+    const std::string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    std::string symbols; // v3's, in order of code
+    for (int c = 33; c < 127; ++c)
+    {
+        const char ch = char(c);
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || std::string("+-[]|!&^/\"'\\").find(ch) != std::string::npos) symbols += ch;
+    }
+    const P angle = std::make_shared<const Alt>(std::vector<P>{std::make_shared<const Num>(false, 359, false, false), seq({lit("360/"), std::make_shared<const Whole>(2, 9999)})});
+    const P scale = std::make_shared<const Opt>(seq({lit("scale "), std::make_shared<const Num>(false, 0, true, false), lit("\n")}));
+    const P seed = std::make_shared<const Opt>(seq({lit("seed "), std::make_shared<const Whole>(1, 4294967295ull), lit("\n")}));
+    const P ignore = std::make_shared<const Opt>(seq({lit("ignore "), std::make_shared<const Choice>(symbols), lit("\n")}));
+    const P turn = std::make_shared<const Num>(true, 359, false, false), factor = std::make_shared<const Num>(false, 999, false, true);
+    std::vector<P> defines;
+    for (char d = '0'; d <= '9'; ++d)
+        defines.push_back(std::make_shared<const Opt>(std::make_shared<const Alt>(std::vector<P>{seq({lit(std::string("define ") + d + " turn "), turn, lit("\n")}),
+                                                                                            seq({lit(std::string("define ") + d + " scale "), factor, lit("\n")})})));
+    const P word = std::make_shared<const Word>(symbols, uint32_t(kFractalWordMostV3));
+    const P letter = std::make_shared<const Chars>(letters);
+    const P left = std::make_shared<const Opt>(seq({letter, lit("<")})), right = std::make_shared<const Opt>(seq({lit(">"), letter}));
+    std::vector<P> each;
+    const Poly* same = nullptr;
+    for (const char s : letters)
+    {
+        const P rule = seq({lit("rule "), left, lit(std::string(1, s)), right, lit(" "), word, lit("\n")});
+        each.push_back(std::make_shared<const Star>(rule, same));
+        same = &each.back()->n; // (every symbol's rules counted alike)
+    }
+    const P rules = std::make_shared<const NonEmpty>(seq(each));
+    std::vector<P> parts{lit(std::string(kFractalVersion3) + "\nlsystem "), angle, lit("\n"), scale, seed, ignore};
+    parts.insert(parts.end(), defines.begin(), defines.end());
+    parts.insert(parts.end(), {lit("axiom "), word, lit("\n"), rules});
+    auto v = std::make_shared<FractalSpaceV3>();
+    v->all = seq(parts);
+    return v;
+}
+
+} // namespace v3parts
+
+BigUint FractalSpace::count_v3() const
+{
+    BigUint t = total_;
+    t -= total_v1_;
+    t -= total_v2_;
+    return t;
+}
+
 FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
 {
     if (longest < kFractalSpaceShortest || longest > kFractalSpaceLongestMost)
@@ -115,8 +647,11 @@ FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
         total_v1_ += by_length_[l];
         by_length_v2_[l] = at_length_v2(l);
     }
+    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_v2_ += by_length_v2_[l];
+    v3_ = v3parts::make_v3(longest);
     total_ = total_v1_;
-    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_ += by_length_v2_[l];
+    total_ += total_v2_;
+    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_ += v3_->all->n[l];
 }
 
 BigUint FractalSpace::at_length_v2(uint32_t l) const
@@ -157,6 +692,7 @@ BigUint FractalSpace::count_at(uint32_t length) const
     if (length >= by_length_.size()) return BigUint();
     BigUint n = by_length_[length];
     n += by_length_v2_[length];
+    n += v3_->all->n[length];
     return n;
 }
 
@@ -205,6 +741,18 @@ std::string FractalSpace::at(const BigUint& index) const
 {
     if (index >= total_) throw std::invalid_argument("past the last ruleset of " + std::to_string(longest_) + " characters or fewer");
     BigUint i = index;
+    BigUint v1v2 = total_v1_;
+    v1v2 += total_v2_;
+    if (i >= v1v2)
+    {
+        // v3's: its length, then its parts' places.
+        i -= v1v2;
+        uint32_t l = kFractalSpaceShortest;
+        while (i >= v3_->all->n[l]) i -= v3_->all->n[l++];
+        std::string text;
+        v3_->all->write(l, i, text);
+        return text;
+    }
     if (i >= total_v1_)
     {
         // v2's: its length, then its family line's group, the line in it, and its body.
@@ -287,6 +835,14 @@ std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
     if (!f || text.size() > longest_ || text.size() < kFractalSpaceShortest) return std::nullopt;
     const uint32_t l = uint32_t(text.size());
     BigUint index;
+    if (f->version == 3)
+    {
+        index = total_v1_;
+        index += total_v2_;
+        for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += v3_->all->n[k];
+        index += v3_->all->rank(text);
+        return index;
+    }
     if (f->version == 2)
     {
         index = total_v1_;

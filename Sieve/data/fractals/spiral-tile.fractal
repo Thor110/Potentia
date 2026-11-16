@@ -1,5 +1,6 @@
-sieve-fractal-v2
-lsystem 22.5 scale 0.765
+sieve-fractal-v3
+lsystem 22.5
+scale 0.765367
 axiom X++X++X++X++|f|X++X++X++X
 rule X [FX+++++"F'[-----Y]+++++F]
 rule Y [F+++++"F'[-----Y]+++++F]

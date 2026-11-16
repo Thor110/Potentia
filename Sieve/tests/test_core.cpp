@@ -7490,6 +7490,74 @@ void test_fractals()
         CHECK(line && std::fabs(line->value - 1) < 0.02);
         CHECK(!measured(fib) && !measured("sieve-fractal-v1\nlsystem 90\naxiom F\nrule A F\n"));
     }
+    // sieve-fractal-v3 (list X3): read and written back as it was, every optional line; refusals; its
+    // turtle's new symbols; several rules for a symbol chosen from the seed, the same every time;
+    // contexts; and its rulesets in the whole space after v2's.
+    {
+        const std::string full = "sieve-fractal-v3\nlsystem 360/34\nscale 0.618034\nseed 7\nignore +-F\ndefine 1 turn 42\ndefine 2 turn -84.5\ndefine 3 scale 4.783\n"
+                                 "axiom F\nrule a<F>b F12F3\nrule F F!+F--F+F\nrule F F&F^F\\F/F\nrule G G\n";
+        const auto f = read_fractal(full);
+        CHECK(f && f->version == 3 && f->text() == full && f->rules.size() == 4 && f->defines.size() == 3 && f->seed == 7 && f->ignore == "+-F");
+        CHECK(f && std::fabs(f->angle_degrees - 360.0 / 34) < 1e-12 && std::fabs(f->scale_ratio - 0.618034) < 1e-12 && f->contexts[0] == std::make_pair('a', 'b'));
+        CHECK(f && f->defines[1].value == -84.5 && !f->defines[2].turn && f->angle_written() == "360/34" && f->scale_written() == "0.618034");
+        for (const std::string bad : {std::string("sieve-fractal-v3\nlsystem 360\naxiom F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 360/1\naxiom F\nrule F F\n"),
+                                      std::string("sieve-fractal-v3\nlsystem 22.50\naxiom F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 90\nseed 0\naxiom F\nrule F F\n"),
+                                      std::string("sieve-fractal-v3\nlsystem 90\nignore F+\naxiom F\nrule F F\n"),
+                                      std::string("sieve-fractal-v3\nlsystem 90\ndefine 2 turn 1\ndefine 1 turn 1\naxiom F\nrule F F\n"),
+                                      std::string("sieve-fractal-v3\nlsystem 90\ndefine 1 scale 1\naxiom F\nrule F F\n"),
+                                      std::string("sieve-fractal-v3\nlsystem 90\naxiom F\nrule G F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 90\naxiom F\nrule F ") + std::string(256, 'F') + "\n",
+                                      std::string("sieve-fractal-v3\nlsystem 90\nseed 3\nscale 0.5\naxiom F\nrule F F\n")})
+        {
+            std::string why;
+            CHECK(!read_fractal(bad, &why) && !why.empty());
+        }
+        auto lines_of = [](const std::string& t, uint32_t depth) { const auto g = read_fractal(t); return fractal_lines(*g, *g->grow(depth)); };
+        auto same = [](const std::vector<std::array<double, 4>>& a, const std::vector<std::array<double, 4>>& b) {
+            if (a.size() != b.size()) return false;
+            for (size_t k = 0; k < a.size(); ++k)
+                for (size_t j = 0; j < 4; ++j)
+                    if (std::fabs(a[k][j] - b[k][j]) > 1e-9) return false;
+            return true;
+        };
+        // A digit turning 60 draws as + at 60; ! swaps + and - (so the Koch curve swapped is its mirror,
+        // y turned over); v3 at 60 draws the Koch curve as v1 does.
+        const std::string koch1 = "sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n";
+        CHECK(same(lines_of("sieve-fractal-v3\nlsystem 60\naxiom F\nrule F F+F--F+F\n", 3), lines_of(koch1, 3)));
+        CHECK(same(lines_of("sieve-fractal-v3\nlsystem 7\ndefine 1 turn 60\ndefine 2 turn -60\naxiom F\nrule F F1F22F1F\n", 3), lines_of(koch1, 3)));
+        {
+            auto mirror = lines_of(koch1, 3);
+            for (auto& l : mirror) l[1] = -l[1], l[3] = -l[3];
+            CHECK(same(lines_of("sieve-fractal-v3\nlsystem 60\naxiom !F\nrule F F+F--F+F\n", 3), mirror));
+        }
+        // Out of the plane: & pitches the next step out of it, so it is drawn seen from the side.
+        const auto bent = lines_of("sieve-fractal-v3\nlsystem 90\naxiom F&F\nrule A A\n", 0);
+        CHECK(bent.size() == 2 && std::fabs(bent[1][2] - bent[1][0]) > 1e-3 && std::fabs(bent[1][3] - bent[1][1]) > 1e-3);
+        // Several rules: the same word every time from one seed, another from another, each place one of them.
+        const std::string bush = "sieve-fractal-v3\nlsystem 22.5\nseed 1\naxiom F\nrule F F[+F]F\nrule F F[-F]F\nrule F FF\n";
+        const auto b1 = read_fractal(bush);
+        CHECK(b1 && *b1->grow(5) == *b1->grow(5));
+        auto b2 = *b1;
+        b2.seed = 2;
+        CHECK(*b2.grow(5) != *b1->grow(5));
+        CHECK(b1->deepest() >= 8); // (sized by the longest rule: 7 symbols a step at most)
+        // A context: B becomes C only where A stands before it (the branch passed over), else stays.
+        const auto ctx = read_fractal("sieve-fractal-v3\nlsystem 90\nignore +\naxiom A[X]+B[A]B\nrule A<B C\n");
+        CHECK(ctx && *ctx->grow(1) == "A[X]+C[A]B");
+        // In the whole space: after every v1 and v2 ruleset, read back from its address.
+        const FractalSpace space(96);
+        BigUint first3 = space.count();
+        first3 -= space.count_v3();
+        // (the rules symbol by symbol, an earlier symbol's shorter first: so the first has its rule for z)
+        CHECK(space.at(first3) == "sieve-fractal-v3\nlsystem 1\naxiom !\nrule z !\n");
+        const FractalSpace whole(kFractalSpaceLongestDefault);
+        BigUint first3w = whole.count();
+        first3w -= whole.count_v3();
+        for (const std::string t : {full, bush, std::string("sieve-fractal-v3\nlsystem 0.000001\naxiom A\nrule A A\n")})
+        {
+            const auto i = whole.index_of(t);
+            CHECK(i && *i >= first3w && whole.at(*i) == t);
+        }
+    }
     // The shelves as charted in the repository: every entry read, and each grows at least a step.
     const auto chart = read_fractal_chart(std::filesystem::path(g_data) / "fractals");
     // A v2 chart: each fractal's "source" line after it, once; a fractal without one refused.
@@ -7510,7 +7578,7 @@ void test_fractals()
         std::filesystem::remove_all(dir);
     }
     // (list X2: 75, each with where it was transcribed from; the first 11 as they were)
-    CHECK(chart.size() == 75 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant");
+    CHECK(chart.size() == 107 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant"); // (X3: 107)
     for (const auto& c : chart) CHECK(c.fractal.deepest() >= 3 && c.fractal.text() == c.text && !c.source.empty());
     // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at an address of its
     // own. Up to 52 characters a ruleset has one rule, so the count is format-fractal-v1's exactly; at 53
@@ -7522,7 +7590,7 @@ void test_fractals()
         const Alphabet& a96 = alphabet_by_id("ascii96");
         // (fractal-space-v2, list X2: v1's first, at the addresses v1 gave them, then v2's; the grammar
         // format-fractal-v2 passes both)
-        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v2.sfilter");
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v3.sfilter"); // (v3's too, list X3)
         static const TestResources none(nullptr, nullptr);
         for (uint32_t l = kFractalSpaceShortest; l <= 52; ++l)
         {
@@ -7544,7 +7612,7 @@ void test_fractals()
             ours += extra;
             CHECK(ours == grammar);
         }
-        CHECK(space.count_at(44) == BigUint(1520532));
+        CHECK(space.count_at(44) == BigUint(4083300)); // (v1's 1,520,532 and v3's 2,562,768)
         CHECK(space.at(BigUint(0)) == "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n");
         CHECK(space.at(space.count_v1()) == "sieve-fractal-v2\nlsystem 0.1\naxiom +\nrule A +\n");
         {
@@ -7552,22 +7620,29 @@ void test_fractals()
             last -= BigUint(1);
             CHECK(read_fractal(space.at(last)) && space.at(last).size() == 96 && space.index_of(space.at(last)) == last);
         }
-        // Every charted fractal is in it at the default longest (208: the longest charted is 201), and its
+        // Every charted fractal but one is in it at the default longest (256), and its
         // address gives it back; a v1 one's address is the same whatever the longest, a v2 one's follows
         // every v1 ruleset to the longest, so moves with it.
         {
             const FractalSpace whole(kFractalSpaceLongestDefault);
             for (const auto& c : chart)
             {
+                if (c.text.size() > kFractalSpaceLongestDefault)
+                {
+                    CHECK(c.id == "voderberg-spiral-tiling"); // (590 characters: the one past the default)
+                    continue;
+                }
                 const auto i = whole.index_of(c.text);
-                CHECK(i && whole.at(*i) == c.text && (c.text.size() > 96 || c.fractal.version == 2 || space.index_of(c.text) == i));
+                CHECK(i && whole.at(*i) == c.text && (c.text.size() > 96 || c.fractal.version >= 2 || space.index_of(c.text) == i));
             }
         }
         // Addresses across the space read back the same, each a ruleset the reader takes, the shorter
         // first; and texts it does not hold have none.
         std::mt19937_64 g(7);
         size_t last_length = 0;
-        bool v2_met = false;
+        bool v2_met = false, v3_met = false;
+        BigUint v3_from = space.count();
+        v3_from -= space.count_v3();
         BigUint step = space.count();
         step.divmod_small(997);
         BigUint at;
@@ -7578,6 +7653,7 @@ void test_fractals()
             if (i >= space.count()) break;
             const std::string t = space.at(i);
             if (!v2_met && i >= space.count_v1()) v2_met = true, last_length = 0; // (v2's begin again from the shortest)
+            if (!v3_met && i >= v3_from) v3_met = true, last_length = 0;          // (and v3's)
             CHECK(read_fractal(t).has_value() && space.index_of(t) == i && t.size() >= last_length);
             last_length = t.size();
         }
@@ -7634,7 +7710,7 @@ void test_fractals()
         const BigUint kept = in.ranker()->count();
         BigUint rest = BigUint::pow(2, 100);
         rest -= kept;
-        CHECK(kept == BigUint(567) && out.ranker()->count() == rest); // (112 with X1's 11 charted)
+        CHECK(kept == BigUint(782) && out.ranker()->count() == rest); // (112 with X1's 11 charted, 567 with X2's 75)
         // The Koch curve at depth 2, drawn and fitted, is one of them; stripes are not. (A picture all of
         // one colour is: a substitution's axiom of one symbol fills it.)
         const auto koch = std::find_if(chart.begin(), chart.end(), [](const ChartedFractal& c) { return c.id == "koch-curve"; });
@@ -7646,7 +7722,7 @@ void test_fractals()
         CHECK(in.passes(std::vector<uint32_t>(100, 1)));
         // Each survivor's rank gives it back, in address order.
         std::vector<uint32_t> last;
-        for (uint64_t k = 0; k < 567; ++k)
+        for (uint64_t k = 0; k < 782; ++k)
         {
             const auto u = in.ranker()->unrank(BigUint(k));
             CHECK(in.passes(u) && in.ranker()->rank(u) == BigUint(k) && (k == 0 || last < u));

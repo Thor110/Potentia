@@ -1,0 +1,4 @@
+sieve-fractal-v3
+lsystem 30
+axiom F
+rule F F[+F[+F][-F]F][-F[+F][-F]F]F[+F][-F]F

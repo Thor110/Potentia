@@ -564,6 +564,67 @@ def fractal2_edges(r):
     ]
 
 
+def fractal3_doc(r):
+    """v1's, v2's and v3's: a v3 with some of its optional lines, contexts and several rules a symbol."""
+    if r.random() < 0.4:
+        return fractal2_doc(r)
+    syms = "FGXYABfz+-[]|!\"'&^\\/0123"
+    word = lambda: "".join(r.choice(syms) for _ in range(r.randint(1, r.choice([4, 12, 255]))))
+    frac = lambda: "." + "".join(r.choice("0123456789") for _ in range(r.randint(0, 5))) + r.choice("123456789")
+    t = "sieve-fractal-v3\nlsystem " + r.choice([f"360/{r.randint(2, 9999)}", f"{r.randint(1, 359)}", f"{r.randint(0, 359)}{frac()}"]) + "\n"
+    if r.random() < 0.3:
+        t += "scale 0" + frac() + "\n"
+    if r.random() < 0.3:
+        t += f"seed {r.randint(1, 4294967295)}\n"
+    if r.random() < 0.3:
+        t += "ignore " + "".join(sorted(set(r.sample(syms, r.randint(1, 4))))) + "\n"
+    for d in "0123456789":
+        if r.random() < 0.15:
+            t += f"define {d} turn {r.choice(['', '-'])}{r.randint(1, 359)}\n" if r.random() < 0.5 else f"define {d} scale {r.choice(['0' + frac(), str(r.randint(2, 999))])}\n"
+    t += "axiom " + word() + "\n"
+    for s in sorted(r.choices("FGXYAB", k=r.randint(1, 4))):
+        head = (r.choice("ab") + "<" if r.random() < 0.2 else "") + s + (">" + r.choice("ab") if r.random() < 0.2 else "")
+        t += f"rule {head} {word()}\n"
+    return t
+
+
+def fractal3_edges(r):
+    h = "sieve-fractal-v3\nlsystem "
+    return fractal2_edges(r) + [
+        h + "90\naxiom F\nrule F FF\n",  # what v1 says, as v3: another text
+        h + "360/34\naxiom F\nrule F F!+F\n",
+        h + "360/1\naxiom F\nrule F F\n",
+        h + "360/10000\naxiom F\nrule F F\n",
+        h + "360\naxiom F\nrule F F\n",
+        h + "0\naxiom F\nrule F F\n",
+        h + "0.000001\naxiom F\nrule F F\n",
+        h + "0.0000001\naxiom F\nrule F F\n",
+        h + "22.50\naxiom F\nrule F F\n",
+        h + "90\nscale 0.618034\naxiom F\nrule F F\"F\n",
+        h + "90\nscale 1.5\naxiom F\nrule F F\n",
+        h + "90\nseed 0\naxiom F\nrule F F\n",
+        h + "90\nseed 4294967295\naxiom F\nrule F F\nrule F G\n",
+        h + "90\nseed 4294967296\naxiom F\nrule F F\n",
+        h + "90\nignore +-F\naxiom F\nrule a<F>b F\n",
+        h + "90\nignore F-+\naxiom F\nrule F F\n",  # out of order: refused
+        h + "90\nignore ++\naxiom F\nrule F F\n",
+        h + "90\ndefine 1 turn 42\ndefine 2 turn -84\ndefine 3 scale 4.783\naxiom F\nrule F F12F3\n",
+        h + "90\ndefine 2 turn 42\ndefine 1 turn 84\naxiom F\nrule F F\n",  # digits out of order
+        h + "90\ndefine 1 turn 0\naxiom F\nrule F F\n",
+        h + "90\ndefine 1 turn 360\naxiom F\nrule F F\n",
+        h + "90\ndefine 1 scale 1\naxiom F\nrule F F\n",
+        h + "90\ndefine 1 scale 1.5\naxiom F\nrule F F\n",
+        h + "90\ndefine 1 scale 1000\naxiom F\nrule F F\n",
+        h + "90\naxiom F\nrule F " + "F" * 255 + "\n",
+        h + "90\naxiom F\nrule F " + "F" * 256 + "\n",
+        h + "90\naxiom F\nrule F&F^F\\F/F\n",
+        h + "90\naxiom F\nrule + F\n",
+        h + "90\naxiom F\nrule a<+ F\n",
+        h + "90\naxiom F\nrule G F\nrule F F\n",  # out of order: beyond a walk
+        h + "90\nseed 3\nscale 0.5\naxiom F\nrule F F\n",  # lines out of order
+    ]
+
+
 def fractal_beyond_walk(doc, why):
     """A ruleset the reader refuses only because its rules are out of order or one is given twice."""
     return "in the order of their symbols" in why
@@ -578,6 +639,7 @@ FORMATS = [
     ("world-v2", "hallway", "world", "format-world-v2.sfilter", world2_doc, world2_edges, world2_beyond_walk),
     ("fractal", "sieve", "fractal", "format-fractal-v1.sfilter", fractal_doc, fractal_edges, fractal_beyond_walk),
     ("fractal-v2", "sieve", "fractal", "format-fractal-v2.sfilter", fractal2_doc, fractal2_edges, fractal_beyond_walk),
+    ("fractal-v3", "sieve", "fractal", "format-fractal-v3.sfilter", fractal3_doc, fractal3_edges, fractal_beyond_walk),
 ]
 
 OTHERS = ["", "a", "0", " ", "\n", "-", "Z", ".", "\r"]

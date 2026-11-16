@@ -1,4 +1,5 @@
-sieve-fractal-v2
-lsystem 90 scale 0.707
+sieve-fractal-v3
+lsystem 90
+scale 0.707107
 axiom [A]|A
 rule A F"[+A][-A]

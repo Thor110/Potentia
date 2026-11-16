@@ -99,7 +99,7 @@ public:
         if (!f) return "";
         const std::string axiom = f->axiom.size() > 12 ? f->axiom.substr(0, 12) + ".." : f->axiom;
         return f->family == sieve::Fractal::Family::Substitution ? trf("fractals.generated.substitution", {axiom})
-                                                                 : trf("fractals.generated.lsystem", {sieve::fractal_angle_text(f->angle_tenths), axiom});
+                                                                 : trf("fractals.generated.lsystem", {f->angle_written(), axiom});
     }
     std::string summary(const BigUint& i) const override
     {
@@ -107,8 +107,8 @@ public:
         const auto f = sieve::read_fractal(ruleset(i));
         if (!f) return "";
         const std::string family = f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution")
-                                   : f->scale ? trf("fractals.lsystem.scale", {sieve::fractal_angle_text(f->angle_tenths), sieve::fractal_scale_text(f->scale)})
-                                              : trf("fractals.lsystem.angle", {sieve::fractal_angle_text(f->angle_tenths)});
+                                   : !f->scale_written().empty() ? trf("fractals.lsystem.scale", {f->angle_written(), f->scale_written()})
+                                                                 : trf("fractals.lsystem.angle", {f->angle_written()});
         // (a charted one says where it was transcribed from)
         if (const auto k = charted(i); k && !chart_[*k].source.empty()) return family + trf("fractals.source", {chart_[*k].source});
         return family;
@@ -254,9 +254,13 @@ private:
         BigUint j = i;
         if (index_) j -= BigUint(1);
         if (known_ == "exclude")
+        {
             for (const auto& [c, k] : charted_at_)
-                if (c <= j) j.add_small(1);
-                else break;
+            {
+                if (c > j) break;
+                j.add_small(1);
+            }
+        }
         return j;
     }
     // The charted fractal an item is, if it is one.

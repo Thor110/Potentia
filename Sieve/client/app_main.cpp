@@ -116,7 +116,7 @@ const char* kUsage =
     "  --video-width W  --video-height H  --video-frames F  --video-palette ID   video (5, 5, 8, mono)\n"
     "  --title-length T    every line's titles: characters (default 32; 0: no titles; books keep a page)\n"
     "  --binary-length N   binary: every file of up to N bytes (default 32)\n"
-    "  --fractal-longest N fractals: the whole space's longest ruleset, 44 to 512 characters (default 96)\n"
+    "  --fractal-longest N fractals: the whole space's longest ruleset, 44 to 1024 characters (default 256)\n"
     "  --fractal-known K   fractals: the charted ones, include (marked where they stand; the default),\n"
     "                      exclude, or only\n"
     "  --book-pages N      books: pages per book (default 4); a book is a cover (an image of the\n"
@@ -951,7 +951,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                                     a.has("ai-width") ? a.get_positive("ai-width", 16) : 16u,
                                     a.has("ai-heads") ? a.get_positive("ai-heads", 2) : 2u,
                                     a.has("ai-bits") ? a.get_positive("ai-bits", 4) : 4u,
-                                    ListedOptions{a.has("fractal-longest") ? std::clamp(a.get_u32("fractal-longest", 96), sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost) : 96u,
+                                    ListedOptions{a.has("fractal-longest") ? std::clamp(a.get_u32("fractal-longest", sieve::kFractalSpaceLongestDefault), sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost) : sieve::kFractalSpaceLongestDefault,
                                                   a.get("fractal-known", "include")}};
     sieve::AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}.check(); // a shape the AI line can have, or say why not
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,

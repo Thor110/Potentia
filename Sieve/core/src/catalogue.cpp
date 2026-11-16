@@ -229,6 +229,9 @@ std::vector<FormatEntry> gather()
     own(kFractalVersion2, "A fractal's ruleset widened: an L-system whose angle has a tenth, or whose step is scaled", "document",
         std::string("first line \"") + kFractalVersion2 + "\", then \"lsystem ANGLE\" or \"lsystem ANGLE scale RATIO\", \"axiom WORD\" and \"rule SYMBOL WORD\" lines",
         "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list X2); its grammar data/filters/format-fractal-v2.sfilter, v1's and v2's together");
+    own(kFractalVersion3, "A fractal's ruleset widened again: turns swapped and by stated degrees, several step ratios, several rules a symbol, contexts, three dimensions", "document",
+        std::string("first line \"") + kFractalVersion3 + "\", then \"lsystem ANGLE\", optional \"scale\", \"seed\", \"ignore\" and \"define\" lines, \"axiom WORD\" and \"rule [L<]SYMBOL[>R] WORD\" lines",
+        "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list X3); its grammar data/filters/format-fractal-v3.sfilter, v1's, v2's and v3's together");
     own(kFractalChartVersion, "The fractal dimension's shelves: the fractals charted by hand, each named with its ruleset", "document",
         std::string("first line \"") + kFractalChartVersion + "\", then \"fractal ID TITLE\" lines; each ruleset ID.fractal beside it",
         "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; IDEAS 19.235)");

@@ -1,0 +1,10 @@
+sieve-fractal-v3
+lsystem 18
+axiom P
+rule B [&&&D/W////W////W////W////W]
+rule D FF
+rule I FS[//&&L][//^^L]FS
+rule L [+G-GG-G+|+G-GG-G]
+rule P I+[P+B]--//[--L]I[++L]-[PB]++PB
+rule S SFS
+rule W [^F][&&&&-G+G|-G+G]

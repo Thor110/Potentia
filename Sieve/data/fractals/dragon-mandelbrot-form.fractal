@@ -1,0 +1,6 @@
+sieve-fractal-v3
+lsystem 45
+axiom FX
+rule F E
+rule X -FX++FY-
+rule Y +FX--FY+

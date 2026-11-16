@@ -1,0 +1,7 @@
+sieve-fractal-v3
+lsystem 30
+scale 0.57735
+axiom FR
+rule F E
+rule R ++!FRFU++FU++FU!---'FU|-"!FRFU!
+rule U !FRFU!|+'FR"+++!FR--FR--FRFU!--

@@ -44,8 +44,8 @@ std::optional<Fractal> fractal_of(std::span<const uint32_t> unit)
 // (breadth first: the axiom left to right, then each symbol's word in the order the symbols were met).
 std::vector<char> reach(const Fractal& f)
 {
-    std::map<char, const std::string*> rule;
-    for (const auto& [c, w] : f.rules) rule[c] = &w;
+    std::map<char, std::vector<const std::string*>> rule; // (v3: several for one symbol, each reached)
+    for (const auto& [c, w] : f.rules) rule[c].push_back(&w);
     std::vector<char> met;
     std::set<char> seen;
     auto meet = [&](const std::string& w) {
@@ -54,7 +54,8 @@ std::vector<char> reach(const Fractal& f)
     };
     meet(f.axiom);
     for (size_t k = 0; k < met.size(); ++k)
-        if (const auto it = rule.find(met[k]); it != rule.end()) meet(*it->second);
+        if (const auto it = rule.find(met[k]); it != rule.end())
+            for (const std::string* w : it->second) meet(*w);
     return met;
 }
 
@@ -326,7 +327,7 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                       "than 16 lines, or under three grids). The Koch curve measures 1.29, the Sierpinski triangle "
                       "1.58, the Hilbert curve 2.00. A substitution, whose rows are a sequence and not a figure, "
                       "passes.";
-    dim.params = {{"least", "the least box-counting dimension passed, in hundredths (110: 1.10)", FilterParam::Kind::Integer, "110", 0, 200, 5}};
+    dim.params = {{"least", "the least box-counting dimension passed, in hundredths (110: 1.10)", FilterParam::Kind::Integer, "110", 0, 200, 5, {}}};
     dim.applies = is_fractals;
     dim.judge_only = true;
     dim.make = [own = dim.name()](const FilterLine&, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {

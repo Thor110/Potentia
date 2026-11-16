@@ -1,5 +1,6 @@
-sieve-fractal-v2
-lsystem 45 scale 0.707
+sieve-fractal-v3
+lsystem 45
+scale 0.707107
 axiom FXY++F++FXY++F
 rule X XY'-F"-FXY++F++FXY
 rule Y -'F-"FXY

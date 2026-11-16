@@ -1,4 +1,5 @@
-sieve-fractal-v2
-lsystem 45 scale 0.707
+sieve-fractal-v3
+lsystem 45
+scale 0.707107
 axiom P
 rule P F++F++F++F++[++f--+"P][++f--+"f--P]

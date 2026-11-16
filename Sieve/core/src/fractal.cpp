@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -26,6 +27,12 @@ bool substitution_symbol(char c) { return (c >= '0' && c <= '9') || (c >= 'a' &&
 bool letter(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 bool lsystem_symbol(char c) { return letter(c) || c == '+' || c == '-' || c == '[' || c == ']' || c == '|'; }
 bool scaled_symbol(char c) { return lsystem_symbol(c) || c == '"' || c == '\''; }
+bool digit(char c) { return c >= '0' && c <= '9'; }
+// v3's symbols: v2's with a scale, digits, ! (swap the turns) and & ^ \ / (pitch and roll).
+bool v3_symbol(char c)
+{
+    return scaled_symbol(c) || digit(c) || c == '!' || c == '&' || c == '^' || c == '\\' || c == '/';
+}
 
 // A whole number written in decimal with no sign or leading zero, from lo to hi.
 std::optional<uint32_t> decimal(std::string_view s, uint32_t lo, uint32_t hi)
@@ -124,7 +131,221 @@ std::optional<uint32_t> scale_of(std::string_view s)
     return v;
 }
 
+// A decimal written with no leading zero (a lone 0 before the point), at most `most` decimals, the
+// last not 0, at most 3 digits before the point; its value in millionths.
+std::optional<int64_t> millionths(std::string_view s, size_t most)
+{
+    const size_t dot = s.find('.');
+    const std::string_view whole = s.substr(0, dot);
+    if (whole.empty() || whole.size() > 3 || (whole.size() > 1 && whole[0] == '0') || !std::all_of(whole.begin(), whole.end(), digit)) return std::nullopt;
+    int64_t v = 0;
+    for (const char c : whole) v = v * 10 + (c - '0');
+    v *= 1000000;
+    if (dot == std::string_view::npos) return v;
+    const std::string_view frac = s.substr(dot + 1);
+    if (frac.empty() || frac.size() > most || frac.back() == '0' || !std::all_of(frac.begin(), frac.end(), digit)) return std::nullopt;
+    int64_t f = 0;
+    for (size_t k = 0; k < 6; ++k) f = f * 10 + (k < frac.size() ? frac[k] - '0' : 0);
+    return v + f;
+}
+
+// A whole number with no leading zero, lo to hi.
+std::optional<uint64_t> whole_number(std::string_view s, uint64_t lo, uint64_t hi)
+{
+    if (s.empty() || s.size() > 10 || (s.size() > 1 && s[0] == '0') || !std::all_of(s.begin(), s.end(), digit)) return std::nullopt;
+    uint64_t v = 0;
+    for (const char c : s) v = v * 10 + uint64_t(c - '0');
+    if (v < lo || v > hi) return std::nullopt;
+    return v;
+}
+
+// The lines after the version line of a v3 ruleset (sieve/fractal.hpp).
+std::optional<Fractal> read_v3(const std::vector<std::string>& lines, const std::function<std::optional<Fractal>(const std::string&)>& bad)
+{
+    Fractal f;
+    f.version = 3, f.family = Fractal::Family::LSystem;
+    if (lines.size() < 4 || lines[1].rfind("lsystem ", 0) != 0) return bad("a v3 ruleset's second line is \"lsystem ANGLE\"");
+    f.angle_text = lines[1].substr(8);
+    if (f.angle_text.rfind("360/", 0) == 0)
+    {
+        const auto n = whole_number(std::string_view(f.angle_text).substr(4), 2, 9999);
+        if (!n) return bad("an angle 360/N has N from 2 to 9999");
+        f.angle_degrees = 360.0 / double(*n);
+    }
+    else
+    {
+        const auto a = millionths(f.angle_text, 6);
+        if (!a || *a <= 0 || *a >= 360000000) return bad("a v3 angle is more than 0 and less than 360, at most 6 decimals with no 0 at the end, or 360/N");
+        f.angle_degrees = double(*a) / 1e6;
+    }
+    size_t i = 2;
+    if (lines[i].rfind("scale ", 0) == 0)
+    {
+        f.scale_text = lines[i].substr(6);
+        const auto r = millionths(f.scale_text, 6);
+        if (!r || *r <= 0 || *r >= 1000000) return bad("a v3 scale is 0.d, 1 to 6 decimals with no 0 at the end (as 0.618034)");
+        f.scale_ratio = double(*r) / 1e6;
+        ++i;
+    }
+    if (i < lines.size() && lines[i].rfind("seed ", 0) == 0)
+    {
+        const auto n = whole_number(std::string_view(lines[i]).substr(5), 1, 4294967295ull);
+        if (!n) return bad("a seed is 1 to 4294967295, no leading zero");
+        f.seed = uint32_t(*n);
+        ++i;
+    }
+    if (i < lines.size() && lines[i].rfind("ignore ", 0) == 0)
+    {
+        f.ignore = lines[i].substr(7);
+        if (f.ignore.empty() || !std::all_of(f.ignore.begin(), f.ignore.end(), v3_symbol)) return bad("ignore lists symbols of the ruleset's");
+        for (size_t k = 1; k < f.ignore.size(); ++k)
+            if (!(f.ignore[k - 1] < f.ignore[k])) return bad("ignore lists its symbols in the order of their codes, each once");
+        ++i;
+    }
+    for (; i < lines.size() && lines[i].rfind("define ", 0) == 0; ++i)
+    {
+        const std::string& l = lines[i];
+        Fractal::Define d;
+        if (l.size() < 10 || !digit(l[7]) || l[8] != ' ') return bad("line " + std::to_string(i + 1) + " is not \"define DIGIT turn DEGREES\" or \"define DIGIT scale FACTOR\"");
+        d.digit = l[7];
+        if (!f.defines.empty() && !(f.defines.back().digit < d.digit)) return bad("line " + std::to_string(i + 1) + ": the digits are defined in order, each once");
+        if (l.compare(9, 5, "turn ") == 0)
+        {
+            d.turn = true, d.text = l.substr(14);
+            const bool negative = !d.text.empty() && d.text[0] == '-';
+            const auto v = millionths(std::string_view(d.text).substr(negative ? 1 : 0), 6);
+            if (!v || *v <= 0 || *v >= 360000000) return bad("line " + std::to_string(i + 1) + ": a turn is more than 0 and less than 360 degrees either way, at most 6 decimals with no 0 at the end");
+            d.value = (negative ? -1.0 : 1.0) * double(*v) / 1e6;
+        }
+        else if (l.compare(9, 6, "scale ") == 0)
+        {
+            d.turn = false, d.text = l.substr(15);
+            const auto v = millionths(d.text, 6);
+            if (!v || *v <= 0 || *v >= 1000000000 || *v == 1000000) return bad("line " + std::to_string(i + 1) + ": a factor is more than 0 and less than 1000, not 1, at most 6 decimals with no 0 at the end");
+            d.value = double(*v) / 1e6;
+        }
+        else return bad("line " + std::to_string(i + 1) + " is not \"define DIGIT turn DEGREES\" or \"define DIGIT scale FACTOR\"");
+        f.defines.push_back(d);
+    }
+    auto word_ok = [](std::string_view w) { return !w.empty() && w.size() <= kFractalWordMostV3 && std::all_of(w.begin(), w.end(), v3_symbol); };
+    if (i >= lines.size() || lines[i].rfind("axiom ", 0) != 0 || !word_ok(std::string_view(lines[i]).substr(6))) return bad("line " + std::to_string(i + 1) + " is not \"axiom WORD\" (1 to 255 of its symbols)");
+    f.axiom = lines[i].substr(6);
+    if (++i >= lines.size()) return bad("it has no rule");
+    for (; i < lines.size(); ++i)
+    {
+        const std::string& l = lines[i];
+        const size_t sp = l.find(' ', 5);
+        if (l.rfind("rule ", 0) != 0 || sp == std::string::npos) return bad("line " + std::to_string(i + 1) + " is not \"rule [L<]SYMBOL[>R] WORD\"");
+        std::string_view head = std::string_view(l).substr(5, sp - 5);
+        char left = 0, right = 0;
+        if (head.size() >= 3 && head[1] == '<') left = head[0], head.remove_prefix(2);
+        if (head.size() >= 3 && head[1] == '>') right = head[2], head.remove_suffix(2);
+        if (head.size() != 1 || !letter(head[0]) || (left && !letter(left)) || (right && !letter(right)))
+            return bad("line " + std::to_string(i + 1) + " is not \"rule [L<]SYMBOL[>R] WORD\" (letters)");
+        if (!word_ok(std::string_view(l).substr(sp + 1))) return bad("line " + std::to_string(i + 1) + "'s word is not 1 to 255 of its symbols");
+        if (!f.rules.empty() && head[0] < f.rules.back().first) return bad("line " + std::to_string(i + 1) + ": the rules are in the order of their symbols");
+        f.rules.push_back({head[0], l.substr(sp + 1)});
+        f.contexts.push_back({left, right});
+    }
+    return f;
+}
+
+uint64_t mix64(uint64_t z)
+{
+    z += 0x9E3779B97F4A7C15ull;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+    return z ^ (z >> 31);
+}
+
+// A v3 ruleset grown a step: each place's rule chosen among those that apply (sieve/fractal.hpp).
+std::optional<std::string> grow_v3(const Fractal& f, const std::string& word, uint32_t step)
+{
+    std::array<std::vector<size_t>, 256> by{};
+    bool contexts = false;
+    for (size_t r = 0; r < f.rules.size(); ++r)
+    {
+        by[uint8_t(f.rules[r].first)].push_back(r);
+        contexts = contexts || f.contexts[r].first || f.contexts[r].second;
+    }
+    std::array<bool, 256> ignored{};
+    for (const char c : f.ignore) ignored[uint8_t(c)] = true;
+    auto skipped = [&](char c) { return ignored[uint8_t(c)] || c == '[' || c == ']'; };
+    // Each place's context: the symbol before it on its path (whole branches passed over, a branch's
+    // start leading back to its parent) and the one after it (whole branches passed over, a branch's end
+    // ending it).
+    std::vector<char> before, after;
+    if (contexts)
+    {
+        before.assign(word.size(), 0), after.assign(word.size(), 0);
+        std::vector<char> kept;
+        char last = 0;
+        for (size_t i = 0; i < word.size(); ++i)
+        {
+            const char c = word[i];
+            before[i] = last;
+            if (c == '[') kept.push_back(last);
+            else if (c == ']')
+            {
+                last = kept.empty() ? 0 : kept.back();
+                if (!kept.empty()) kept.pop_back();
+            }
+            else if (!skipped(c)) last = c;
+        }
+        kept.clear();
+        char next = 0;
+        for (size_t i = word.size(); i-- > 0;)
+        {
+            const char c = word[i];
+            after[i] = next;
+            if (c == ']') kept.push_back(next), next = 0;
+            else if (c == '[')
+            {
+                next = kept.empty() ? 0 : kept.back();
+                if (!kept.empty()) kept.pop_back();
+            }
+            else if (!skipped(c)) next = c;
+        }
+    }
+    std::string out;
+    std::vector<size_t> fit, plain;
+    for (size_t i = 0; i < word.size(); ++i)
+    {
+        const char c = word[i];
+        const auto& rs = by[uint8_t(c)];
+        if (rs.empty())
+        {
+            out += c;
+            continue;
+        }
+        fit.clear(), plain.clear();
+        for (const size_t r : rs)
+        {
+            const auto [l, rr] = f.contexts[r];
+            if (!l && !rr) plain.push_back(r);
+            else if ((!l || before[i] == l) && (!rr || after[i] == rr)) fit.push_back(r);
+        }
+        const auto& from = fit.empty() ? plain : fit;
+        if (from.empty()) out += c;
+        else
+        {
+            const size_t k = from.size() == 1 ? 0 : size_t(mix64(mix64(uint64_t(f.seed) * 0x100000001ull + step) ^ uint64_t(i)) % from.size());
+            out += f.rules[from[k]].second;
+        }
+        if (out.size() > kFractalMost) return std::nullopt;
+    }
+    return out;
+}
+
 } // namespace
+
+std::string Fractal::angle_written() const { return version == 3 ? angle_text : fractal_angle_text(angle_tenths); }
+
+std::string Fractal::scale_written() const
+{
+    if (version == 3) return scale_ratio > 0 ? scale_text : std::string();
+    return scale ? fractal_scale_text(scale) : std::string();
+}
 
 std::string fractal_angle_text(uint32_t tenths) { return std::to_string(tenths / 10) + (tenths % 10 ? "." + std::to_string(tenths % 10) : ""); }
 
@@ -137,6 +358,24 @@ std::string fractal_scale_text(uint32_t thousandths)
 
 std::string Fractal::text() const
 {
+    if (version == 3)
+    {
+        std::string t = std::string(kFractalVersion3) + "\nlsystem " + angle_text + "\n";
+        if (scale_ratio > 0) t += "scale " + scale_text + "\n";
+        if (seed) t += "seed " + std::to_string(seed) + "\n";
+        if (!ignore.empty()) t += "ignore " + ignore + "\n";
+        for (const Define& d : defines) t += std::string("define ") + d.digit + (d.turn ? " turn " : " scale ") + d.text + "\n";
+        t += "axiom " + axiom + "\n";
+        for (size_t r = 0; r < rules.size(); ++r)
+        {
+            t += "rule ";
+            if (contexts[r].first) t += std::string(1, contexts[r].first) + "<";
+            t += rules[r].first;
+            if (contexts[r].second) t += std::string(">") + contexts[r].second;
+            t += " " + rules[r].second + "\n";
+        }
+        return t;
+    }
     std::string t = std::string(version == 2 ? kFractalVersion2 : kFractalVersion) + "\n";
     t += family == Family::Substitution ? std::string("substitution\n")
                                         : "lsystem " + fractal_angle_text(angle_tenths) + (scale ? " scale " + fractal_scale_text(scale) : std::string()) + "\n";
@@ -147,6 +386,17 @@ std::string Fractal::text() const
 
 std::optional<std::string> Fractal::grow(uint32_t depth) const
 {
+    if (version == 3)
+    {
+        std::string word = axiom;
+        for (uint32_t d = 0; d < depth; ++d)
+        {
+            auto next = grow_v3(*this, word, d);
+            if (!next) return std::nullopt;
+            word = std::move(*next);
+        }
+        return word;
+    }
     std::array<const std::string*, 256> rule{};
     for (const auto& [s, w] : rules) rule[uint8_t(s)] = &w;
     std::string word = axiom;
@@ -177,12 +427,19 @@ uint32_t fractal_deepest_within(const Fractal& f, size_t most)
     uint32_t d = 0;
     for (; d < kFractalDepthMost; ++d)
     {
+        // (a symbol with several rules, v3's, as long as the longest of them, or as itself where its
+        // rules have contexts and none may apply)
         std::array<uint64_t, 256> next = size;
-        for (const auto& [s, w] : rules)
+        std::array<bool, 256> met{};
+        for (size_t r = 0; r < rules.size(); ++r)
         {
+            const auto& [s, w] = rules[r];
             uint64_t n = 0;
             for (const char c : w) n = std::min<uint64_t>(n + size[uint8_t(c)], limit + 1);
-            next[uint8_t(s)] = n;
+            const bool context = r < f.contexts.size() && (f.contexts[r].first || f.contexts[r].second);
+            uint64_t& to = next[uint8_t(s)];
+            to = met[uint8_t(s)] ? std::max(to, n) : context ? std::max(size[uint8_t(s)], n) : n;
+            met[uint8_t(s)] = true;
         }
         uint64_t total = 0;
         for (const char c : axiom) total = std::min<uint64_t>(total + next[uint8_t(c)], limit + 1);
@@ -200,8 +457,9 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
     };
     std::vector<std::string> lines;
     if (!lf_lines(text, lines)) return bad("its last line does not end in a line feed");
+    if (!lines.empty() && lines[0] == kFractalVersion3) return read_v3(lines, bad);
     if (lines.size() < 4 || (lines[0] != kFractalVersion && lines[0] != kFractalVersion2))
-        return bad(std::string("its first line is not ") + kFractalVersion + " or " + kFractalVersion2 + ", or it has no axiom and rule");
+        return bad(std::string("its first line is not ") + kFractalVersion + ", " + kFractalVersion2 + " or " + kFractalVersion3 + ", or it has no axiom and rule");
     Fractal f;
     f.version = lines[0] == kFractalVersion2 ? 2 : 1;
     if (lines[1] == "substitution")
@@ -258,25 +516,95 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word)
 {
     std::vector<std::array<double, 4>> out;
-    const double turn = double(f.angle_tenths) * 3.14159265358979323846 / 1800.0, ratio = double(f.scale) / 1000.0;
-    double x = 0, y = 0, a = 0, step = 1;
-    std::vector<std::array<double, 4>> kept;
+    constexpr double kPi = 3.14159265358979323846;
+    if (f.version != 3)
+    {
+        // v1 and v2: in the plane, the heading an angle (so their drawings are as they always were).
+        const double turn = double(f.angle_tenths) * kPi / 1800.0, ratio = double(f.scale) / 1000.0;
+        double x = 0, y = 0, a = 0, step = 1;
+        std::vector<std::array<double, 4>> kept;
+        for (const char c : word)
+        {
+            if (c == 'F' || c == 'G' || c == 'f')
+            {
+                const double nx = x + step * std::cos(a), ny = y + step * std::sin(a);
+                if (c != 'f') out.push_back({x, y, nx, ny});
+                x = nx, y = ny;
+            }
+            else if (c == '+') a += turn;
+            else if (c == '-') a -= turn;
+            else if (c == '|') a += kPi;
+            // (held within 10^-60 and 10^60, so a word of a million ' still draws: a bound chosen)
+            else if (c == '"' && ratio > 0) step = std::max(step * ratio, 1e-60);
+            else if (c == '\'' && ratio > 0) step = std::min(step / ratio, 1e60);
+            else if (c == '[') kept.push_back({x, y, a, step});
+            else if (c == ']' && !kept.empty()) x = kept.back()[0], y = kept.back()[1], a = kept.back()[2], step = kept.back()[3], kept.pop_back();
+        }
+        return out;
+    }
+    const double turn = f.turn_degrees() * kPi / 180.0, ratio = f.scale_ratio;
+    // v3's digits, each a turn (radians) or a factor.
+    std::array<double, 10> digit_value{};
+    std::array<int, 10> digit_kind{}; // 0 none, 1 turn, 2 scale
+    for (const auto& d : f.defines) digit_value[size_t(d.digit - '0')] = d.turn ? d.value * kPi / 180.0 : d.value, digit_kind[size_t(d.digit - '0')] = d.turn ? 1 : 2;
+    // The turtle in three dimensions: its place, its heading H, left L and up U (v1 and v2 stay in the
+    // plane of H and L, and are drawn as before); the step's length; whether + and - are swapped.
+    using V = std::array<double, 3>;
+    struct Turtle
+    {
+        V p{0, 0, 0}, h{1, 0, 0}, l{0, 1, 0}, u{0, 0, 1};
+        double step = 1;
+        bool swapped = false;
+    } t;
+    auto turn_in = [](V& a, V& b, double angle) { // a towards b by angle
+        const double c = std::cos(angle), s = std::sin(angle);
+        const V na{a[0] * c + b[0] * s, a[1] * c + b[1] * s, a[2] * c + b[2] * s}, nb{b[0] * c - a[0] * s, b[1] * c - a[1] * s, b[2] * c - a[2] * s};
+        a = na, b = nb;
+    };
+    std::vector<Turtle> kept;
+    std::vector<std::array<double, 6>> lines3;
+    bool solid = false; // (whether it left the plane)
     for (const char c : word)
     {
         if (c == 'F' || c == 'G' || c == 'f')
         {
-            const double nx = x + step * std::cos(a), ny = y + step * std::sin(a);
-            if (c != 'f') out.push_back({x, y, nx, ny});
-            x = nx, y = ny;
+            const V np{t.p[0] + t.step * t.h[0], t.p[1] + t.step * t.h[1], t.p[2] + t.step * t.h[2]};
+            if (c != 'f') lines3.push_back({t.p[0], t.p[1], t.p[2], np[0], np[1], np[2]});
+            t.p = np;
         }
-        else if (c == '+') a += turn;
-        else if (c == '-') a -= turn;
-        else if (c == '|') a += 3.14159265358979323846;
+        else if (c == '+') turn_in(t.h, t.l, t.swapped ? -turn : turn);
+        else if (c == '-') turn_in(t.h, t.l, t.swapped ? turn : -turn);
+        else if (c == '|') turn_in(t.h, t.l, kPi);
+        else if (c == '!') t.swapped = !t.swapped;
+        else if (c == '&') turn_in(t.h, t.u, -turn), solid = true; // pitch down
+        else if (c == '^') turn_in(t.h, t.u, turn), solid = true;  // pitch up
+        else if (c == '\\') turn_in(t.l, t.u, turn), solid = true; // roll left
+        else if (c == '/') turn_in(t.l, t.u, -turn), solid = true; // roll right
         // (held within 10^-60 and 10^60, so a word of a million ' still draws: a bound chosen)
-        else if (c == '"' && ratio > 0) step = std::max(step * ratio, 1e-60);
-        else if (c == '\'' && ratio > 0) step = std::min(step / ratio, 1e60);
-        else if (c == '[') kept.push_back({x, y, a, step});
-        else if (c == ']' && !kept.empty()) x = kept.back()[0], y = kept.back()[1], a = kept.back()[2], step = kept.back()[3], kept.pop_back();
+        else if (c == '"' && ratio > 0) t.step = std::max(t.step * ratio, 1e-60);
+        else if (c == '\'' && ratio > 0) t.step = std::min(t.step / ratio, 1e60);
+        else if (c >= '0' && c <= '9')
+        {
+            const size_t k = size_t(c - '0');
+            if (digit_kind[k] == 1) turn_in(t.h, t.l, digit_value[k]);
+            else if (digit_kind[k] == 2) t.step = std::clamp(t.step * digit_value[k], 1e-60, 1e60);
+        }
+        else if (c == '[') kept.push_back(t);
+        else if (c == ']' && !kept.empty()) t = kept.back(), kept.pop_back();
+    }
+    // Drawn in the plane as it is; out of it, seen from a fixed side (turned 30 degrees about the first
+    // heading, then 20 about the first up), the same on every machine.
+    const double cx = std::cos(30 * kPi / 180), sx = std::sin(30 * kPi / 180), cz = std::cos(20 * kPi / 180), sz = std::sin(20 * kPi / 180);
+    auto seen = [&](double x, double y, double z) -> std::array<double, 2> {
+        if (!solid) return {x, y};
+        const double y1 = y * cx - z * sx, z1 = y * sx + z * cx;
+        return {x * cz + z1 * sz, y1};
+    };
+    out.reserve(lines3.size());
+    for (const auto& l : lines3)
+    {
+        const auto a = seen(l[0], l[1], l[2]), b = seen(l[3], l[4], l[5]);
+        out.push_back({a[0], a[1], b[0], b[1]});
     }
     return out;
 }

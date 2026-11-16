@@ -96,7 +96,7 @@ python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for
 # unnamed, a melody past its set, and a world with nothing of v2's but its places' heights), which the
 # reader alone refuses. A v2 world of 33 characters is one kept line of one character: 10 seeds x 94.
 python ../tools/grammars.py --check
-for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60 format-fractal-v2:46 format-fractal-v2:60; do
+for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60 format-fractal-v2:46 format-fractal-v2:60 format-fractal-v3:44 format-fractal-v3:60; do
   python sieve_ref.py plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
   $S filters --plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
@@ -108,10 +108,13 @@ $S filters --plugin ../data/filters/format-world-v2.sfilter --length 33 | tr -d 
 # one digit's angle, one symbol's axiom and one rule of one symbol: 9 x 57 x 52 x 57.
 $S filters --plugin ../data/filters/format-fractal-v1.sfilter --length 44 | tr -d '\r' | grep -c "^survivors  1520532$" > /dev/null
 # With v2 (list X2): at 46 characters, v1's and v2's together (v2's shortest is an angle of 0.1 to 9.9
-# with a tenth: 90 of them), as many as fractal-space-v2 counts at 46.
+# with a tenth: 90 of them). With v3 (list X3), v3's too, as many as fractal-space-v3 counts at 46; at
+# 44, v1's and v3's (9 angles of one digit, 74 axioms, 52 rule symbols, 74 words: 2,562,768).
 $S filters --plugin ../data/filters/format-fractal-v2.sfilter --length 46 | tr -d '\r' | grep -c "^survivors  16613163684$" > /dev/null
-$S fractal count | tr -d '\r' | grep -c "^  46 characters: 16613163684$" > /dev/null
-for k in actions save replay world world-v2 fractal fractal-v2; do
+$S filters --plugin ../data/filters/format-fractal-v3.sfilter --length 46 | tr -d '\r' | grep -c "^survivors  62873404100$" > /dev/null
+$S filters --plugin ../data/filters/format-fractal-v3.sfilter --length 44 | tr -d '\r' | grep -c "^survivors  4083300$" > /dev/null
+$S fractal count | tr -d '\r' | grep -c "^  46 characters: 62873404100$" > /dev/null
+for k in actions save replay world world-v2 fractal fractal-v2 fractal-v3; do
   grep -c "^$k: [0-9]* documents (" formats.txt > /dev/null
 done
 # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way

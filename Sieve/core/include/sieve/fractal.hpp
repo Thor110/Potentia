@@ -28,6 +28,28 @@
 // its angle has a tenth, or it has a scale (anything else is written as v1, so each ruleset is written
 // one way). Substitutions are v1's alone.
 //
+// "sieve-fractal-v3" (list X3) widens it again for the fractals v2 cannot write (Edward, 16 November 2026:
+// "we should work towards the fractals that cant be written also"). Its lines, in this order:
+//     sieve-fractal-v3
+//     lsystem ANGLE             (0 < ANGLE < 360, at most 6 decimals, no 0 at the end; or 360/N, N 2-9999)
+//     scale RATIO               (optional: 0.d, 1 to 6 decimals, the last not 0; " and ' as v2's)
+//     seed N                    (optional, 1 to 4294967295: which of several rules each symbol takes)
+//     ignore SYMBOLS            (optional: skipped when a context is matched; in order of code, each once)
+//     define D turn DEGREES     (optional, a digit each, in digit order, each once: D turns DEGREES,
+//     define D scale FACTOR      -359.999999 to 359.999999, not 0, left if more than 0; or D makes the
+//                                step FACTOR times as long, 0 < FACTOR < 1000, not 1; at most 6 decimals)
+//     axiom WORD
+//     rule [L<]S[>R] WORD       (one or more, in the order of S's code; several for one S allowed)
+// S, L and R are letters. A WORD is 1 to 255 symbols: letters, digits and + - [ ] | ! " ' & ^ \ /.
+// Drawn as v2, and: ! swaps what + and - turn (kept by [ ]); & and ^ pitch down and up, \ and / roll
+// left and right, by ANGLE (the turtle in three dimensions, as The Algorithmic Beauty of Plants
+// draws); a digit defined turns or scales, one not defined does nothing. Where a symbol has several
+// rules, at each step each place takes one of those that apply, chosen from the seed, the step and the
+// place (so the same ruleset grows the same everywhere); a rule with a context (L before S, R after it,
+// on its path, skipping the ignored symbols and whole branches) applies only where it matches, and
+// where one does, the rules without a context for that symbol are not used. A v3 ruleset may say what
+// v1 or v2 says: it is then another text, at an address of its own.
+//
 // Drawing: a substitution as its words one under another, depth 0 at the top, each row stretched to
 // the picture's width and each symbol a colour of its own, so its self-similarity is seen as the rows
 // repeat; an L-system as the turtle's path at that depth, fitted to the picture. A word is grown only
@@ -53,7 +75,9 @@ inline constexpr const char* kFractalVersion = "sieve-fractal-v1";
 inline constexpr const char* kFractalVersion2 = "sieve-fractal-v2";
 inline constexpr const char* kFractalChartVersion = "sieve-fractal-chart-v1";
 inline constexpr const char* kFractalChartVersion2 = "sieve-fractal-chart-v2";
-inline constexpr size_t kFractalWordMost = 64;           // a word's symbols at most
+inline constexpr const char* kFractalVersion3 = "sieve-fractal-v3";
+inline constexpr size_t kFractalWordMost = 64;           // a word's symbols at most (v1, v2)
+inline constexpr size_t kFractalWordMostV3 = 255;        // and in v3
 inline constexpr size_t kFractalMost = size_t(1) << 21;  // symbols a ruleset is grown to at most
 inline constexpr uint32_t kFractalDepthMost = 64;        // steps at most
 
@@ -63,8 +87,26 @@ struct Fractal
     uint32_t version = 1;      // sieve-fractal-v1 or v2
     uint32_t angle_tenths = 0; // an L-system's turn, in tenths of a degree (v1: whole degrees, so a multiple of 10)
     uint32_t scale = 0;        // v2: the step's ratio for " and ', in thousandths (0: none)
+    // v3: each number as written (the text is made again from them) and its value.
+    std::string angle_text, scale_text;
+    double angle_degrees = 0, scale_ratio = 0; // (scale_ratio 0: none)
+    uint32_t seed = 0;                         // (0: no seed line)
+    std::string ignore;                        // symbols skipped when matching a context
+    struct Define
+    {
+        char digit = '0';
+        bool turn = true;  // turn by `value` degrees, or scale the step by it
+        std::string text;  // the number as written
+        double value = 0;
+    };
+    std::vector<Define> defines; // in digit order
     std::string axiom;
-    std::vector<std::pair<char, std::string>> rules; // in order of symbol
+    std::vector<std::pair<char, std::string>> rules; // in order of symbol (v3: several for one symbol may follow each other)
+    std::vector<std::pair<char, char>> contexts;     // v3: each rule's left and right context (0 for none), as rules
+
+    double turn_degrees() const { return version == 3 ? angle_degrees : double(angle_tenths) / 10.0; }
+    std::string angle_written() const; // the angle as its text writes it
+    std::string scale_written() const; // its scale for " and ' as written ("" for none)
 
     std::string text() const; // as written above
     // Its word after `depth` steps; nothing if longer than kFractalMost.

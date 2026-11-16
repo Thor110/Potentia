@@ -189,6 +189,14 @@ run before a release package, and after each of the three reviews. Each batch is
   with where it was transcribed from (The Algorithmic Beauty of Plants, Wikipedia, Fractint's files), an
   orb web, the Pythagoras tree and the H tree written for Sieve; the box-counting dimension measured, and
   a filter by it*). `[01]` + `[10]`.
+- X3. The fractals v2 cannot write (Edward, 16 November 2026: "we should work towards the fractals that cant
+  be written also"): a grammar widened again (sieve-fractal-v3) for those X2 set aside (a swap of left and
+  right turns, turns by stated degrees and several step ratios, angles as fractions of a turn, longer
+  rules, stochastic and context-sensitive rules, the turtle in three dimensions), its rulesets in the
+  whole space after v2's, and those fractals charted (*made 16 November 2026: sieve-fractal-v3 and
+  fractal-space-v3; 32 more charted, 107 in all, from Fractint's files and The Algorithmic Beauty of
+  Plants, eight of X2's written again exactly; their notes in Sieve/docs/FRACTAL-SOURCES.md; still not:
+  ABOP's row of trees and chapter 2 trees, the Kolakoski sequence, the Fibonacci word fractal*). `[01]` + `[10]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

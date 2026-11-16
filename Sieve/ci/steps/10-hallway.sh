@@ -713,12 +713,12 @@ test -f raidn-held2/sieve-raid-held
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the
-# pages line as its alphabet. (document's 14: text and image above it; the manifest, PDF, the
+# pages line as its alphabet. (document's 15: text and image above it; the manifest, PDF, the
 # catalogue's two record formats, the hallway's recordings (sieve-replay-v1), favourites, as one
 # and as a dimension's list, the RAID's tally of who keeps its pieces, and the fractal dimension's
-# rulesets and chart, each in v1 and v2, beneath.)
+# rulesets (v1 to v3) and chart (v1 and v2), beneath.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 14 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 15 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
@@ -862,7 +862,7 @@ diff -r tests/manifest_fixture located_force
 # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
 # .sieve, the same on every machine; installing it gives every file back, and a bearing
 # typed in the navigator (X, Tab) is the same item again. (4,320: 360 a line for all twelve, the fractal
-# dimension's being every ruleset to 208 characters, v1's and v2's, since list X2.)
+# dimension's being every ruleset to 256 characters, v1's, v2's and v3's, since list X3.)
 $H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 4320 items"
 $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
 diff -r degrees degrees2
@@ -872,7 +872,7 @@ diff -r degrees deg_inst
 # the reader takes (the index as text); no picture of one is stored.
 test "$(find degrees/fractals -name '*.fractal' | wc -l)" = 359
 find degrees/fractals -name '*.fractal' -print0 | xargs -0 -n 1 build/sieve fractal check > fractal-checks.txt
-test "$(grep -c '^a sieve-fractal-v[12] ruleset' fractal-checks.txt)" = 359
+test "$(grep -c '^a sieve-fractal-v[123] ruleset' fractal-checks.txt)" = 359
 test -s "degrees/fractals/Index of the fractal dimension.txt"
 test "$(find degrees/fractals -name '*.png' | wc -l)" = 0
 # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
@@ -905,11 +905,13 @@ diff -r degrees deg_inst6b
 # sieve-manifest-v7 (--items now): v6 with what the rest gives left out (every file's own
 # SHA-256 among it, the tree's covering them all), items listed "i K path", and the listing
 # carried as LZMA2 where that is smaller (the sample's paths repeat themselves). Far smaller
-# than v6; every file back, by sieve install, sieve-install and the oracle. --file-hashes keeps every file's own SHA-256, and installs the same.
+# than v6, under a fifth of it (a tenth before list X3: the fractal dimension's 360 rulesets, up to
+# 256 characters since then, are carried as places of about their own size, 74,527 bytes of the
+# 84,225 measured on 16 November 2026, the rest 9,671); every file back, by sieve install, sieve-install and the oracle. --file-hashes keeps every file's own SHA-256, and installs the same.
 build/sieve locate degrees --installer degrees-v7.sieve --items --v15 --manifest degrees-v7.manifest | tr -d '\r' > d7.txt
 q "^items     1368 file(s) carried as items of Sieve's lines (.* sieve-manifest-v7" d7.txt
 q "^listing   [0-9]* bytes, carried as LZMA2 in " d7.txt
-[ "$(wc -c < degrees-v7.sieve)" -lt "$(( $(wc -c < degrees-v6.sieve) / 10 ))" ]
+[ "$(wc -c < degrees-v7.sieve)" -lt "$(( $(wc -c < degrees-v6.sieve) / 5 ))" ]
 build/sieve install degrees-v7.sieve --to deg_inst7 > /dev/null
 diff -r degrees deg_inst7
 python reference/sieve_ref.py unpack degrees-v7.manifest --items-from degrees --to deg_oracle7 > /dev/null
@@ -1513,10 +1515,10 @@ $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst 
 $H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | tr -d '\r' | q "^cipher: the recipe has 2 layer(s): one of the recipes of its depth, named by 260 bits$"
 # The completion estimate (IDEAS §19.49; the setup menu's map since 9 November 2026, the main menu's
 # before): a line for each of the twelve dimensions, binary first, each with its size and the time to
-# walk it at one a second (the fractal dimension's every ruleset to 208 characters, v1's and v2's, list X2).
+# walk it at one a second (the fractal dimension's every ruleset to 256 characters, v1's, v2's and v3's, list X3).
 $H --menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
 test "$(grep -c '^estimate: ' main-estimate.txt)" = 12
-q "^estimate: FRACTALS  rulesets<=208 chars = ~10^284.4  ->  ~10^276.9 years$" main-estimate.txt
+q "^estimate: FRACTALS  rulesets<=256 chars = ~10^405.1  ->  ~10^397.6 years$" main-estimate.txt
 q "^estimate: BINARY  title\*files<=" main-estimate.txt
 # A line's details (I, or the dots after its name in the map; 9 November 2026): what its figures
 # mean, in words; I again closes it.
@@ -1897,9 +1899,12 @@ $H --no-menu --line fractals --walk "0,0" --warp nosuch --screenshot fractals-no
 # The whole space (list X1, fractal-space-v1): every ruleset the reader takes, the shorter first, each
 # charted fractal at its address there, named (the known fractals included, the default); excluded, a
 # charted one is not on the line, nor the index, and Warp says which setting keeps it off and where it
-# is changed; only they, the shelves are the chart's 75 after the index. And sieve fractal gives the
-# same: the first ruleset of all, and each charted one back from its address (v2's among them, list X2).
-$H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 76 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 76 items"
+# is changed; only they, the shelves are the chart's 107 after the index. And sieve fractal gives the
+# same: the first ruleset of all, and each charted one back from its address (v2's and v3's among them,
+# lists X2 and X3), but Voderberg's tiling, 590 characters, past the default longest (256).
+$H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 108 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 108 items"
+$H --no-menu --line fractals --walk "0,0" --warp voderberg-spiral-tiling --screenshot fractals-long.png | tr -d '\r' | q "voderberg-spiral-tiling is 590 characters, past the longest ruleset on this line, 256 "
+$H --no-menu --line fractals --walk "0,0" --warp hilbert-curve-3d --take --screenshot fractals-3d.png | tr -d '\r' | q "| went to hilbert-curve-3d$"
 $H --no-menu --line fractals --walk "0,0" --warp orb-web --take --screenshot fractals-web.png | tr -d '\r' | q "| went to orb-web$"
 $H --no-menu --line fractals --fractal-known only --walk "0,0" --warp dragon-curve --take --screenshot fractals-only.png | tr -d '\r' | q "| went to dragon-curve$"
 $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp dragon-curve --screenshot fractals-excluded.png | tr -d '\r' | q "dragon-curve is a known fractal, set aside: \"known fractals\" is set to exclude (Setup > FRACTALS, or the command line: --fractal-known)\.$"
@@ -1912,25 +1917,26 @@ printf '[fractals]\nmode = mark\nfilters = fractal-draws-v1, fractal-grows-v1\n'
 $H --no-menu --filters fractals-mark.ini --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-marked.png | tr -d '\r' | q "^FRACTALS line, positional, filters: 2 mark, "
 printf '[fractals]\nmode = hide\nfilters = fractal-draws-v1, fractal-grows-v1, fractal-no-idle-v1\n' > fractals-three.ini
 build/sieve filters --line fractals --filters fractals-three.ini --sample 1000 | tr -d '\r' > fractal-sample.txt
-q "^  fractal-draws-v1 passes 968 of 1000 (96.80%)$" fractal-sample.txt
-q "^  fractal-dimension-v1 passes 391 of 1000 (39.10%)$" fractal-sample.txt
-q "^  the ticked stack passes 660 of 1000 (66.00%)$" fractal-sample.txt
+q "^  fractal-draws-v1 passes 895 of 1000 (89.50%)$" fractal-sample.txt
+q "^  fractal-dimension-v1 passes 179 of 1000 (17.90%)$" fractal-sample.txt
+q "^  the ticked stack passes 671 of 1000 (67.10%)$" fractal-sample.txt
 q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
 # In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
-# fitted as a picture warped in is (fractal-drawn-v1): 567 at 10 x 10 in black and white, counted and
+# fitted as a picture warped in is (fractal-drawn-v1): 782 at 10 x 10 in black and white, counted and
 # ranked exactly, so the line compacts to them (include) or closes up without them (exclude).
 printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = include\n' > drawn-in.ini
 printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = exclude\n' > drawn-out.ini
-build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    567 (exact; compact mode available)$"
-build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     567 (exact)$"
-$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (567 survivors), "
+build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    782 (exact; compact mode available)$"
+build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     782 (exact)$"
+$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (782 survivors), "
 dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
 test -n "$dragon"
 $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"
 build/sieve fractal at 0 | tr -d '\r' > fractal-first.txt
 printf 'sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n' | cmp - fractal-first.txt
-build/sieve fractal count | tr -d '\r' | q "^  44 characters: 1520532$"
+build/sieve fractal count | tr -d '\r' | q "^  44 characters: 4083300$"
 for f in data/fractals/*.fractal; do
+    if [ "$(wc -c < "$f")" -gt 256 ]; then continue; fi
     a=$(build/sieve fractal index "$f" | tr -d '\r' | sed -n 's/^address   \([0-9]*\) .*/\1/p')
     build/sieve fractal at "$a" | tr -d '\r' | cmp - "$f"
 done

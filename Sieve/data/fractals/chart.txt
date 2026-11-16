@@ -146,6 +146,70 @@ source Wikipedia, Ammann-Beenker tiling, "Pell and silver ratio features"
 fractal orb-web Orb web (36 radii and a spiral)
 source Sieve's own construction (list X2), not a transcription: an orb web's radii from its hub and a logarithmic spiral wound across them, each chord 0.985 of the last (IDEAS 19.235)
 fractal pythagoras-tree Pythagoras tree
-source written for Sieve from the construction in Wikipedia, Pythagoras tree (Albert E. Bosman, 1942): on each square two squares 1/root 2 its side (0.707), at 45 degrees
+source written for Sieve from the construction in Wikipedia, Pythagoras tree (Albert E. Bosman, 1942): on each square two squares 1/root 2 its side (0.707107), at 45 degrees
 fractal h-tree H tree
-source written for Sieve from the construction in Wikipedia, H tree: at each end of a segment one at right angles, 1/root 2 as long (0.707), its middle there
+source written for Sieve from the construction in Wikipedia, H tree: at each end of a segment one at right angles, 1/root 2 as long (0.707107), its middle there
+fractal cesaro-fractint Cesaro curve (Fractint Cesaro, after Mandelbrot)
+source Fractint fractint.l, "Cesaro" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal double-cesaro-fractint Double Cesaro curve (Fractint DoubleCesaro, after Mandelbrot)
+source Fractint fractint.l, "DoubleCesaro" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-snowflake-sweep-1 Mandelbrot snowflake sweep 1 (Fractint SnowFlake1)
+source Fractint fractint.l, "SnowFlake1" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-snowflake-sweep-2 Mandelbrot snowflake sweep 2 (Fractint Snowflake2)
+source Fractint fractint.l, "Snowflake2" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-snowflake-sweep-3 Mandelbrot snowflake sweep 3 (Fractint SnowFlake3)
+source Fractint fractint.l, "SnowFlake3" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-snowflake-sweep-color Mandelbrot snowflake sweep, colour version, geometry only (Fractint SnowflakeColor)
+source Fractint fractint.l, "SnowflakeColor" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal pentagram-fractint Pentagram fractal (Fractint Pentagram)
+source Fractint fractint.l, "Pentagram" (created by Adrian Mariano)
+fractal compound-leaf-delayed Compound leaf with alternating branches and delay (ABOP 5.12b, Fractint Leaf1)
+source Fractint fractint.l, "Leaf1" (Adrian Mariano), from Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants, fig. 5.12b p.130
+fractal dragon-mandelbrot-form Heighway dragon, Mandelbrot's form (Fractint Dragon)
+source Fractint fractint.l, "Dragon" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature); also the sample L-system in Fractint's help text
+fractal flowsnake-mandelbrot-form Flowsnake (Gosper curve), Mandelbrot's form (Fractint FlowSnake)
+source Fractint fractint.l, "FlowSnake" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-island-2 Island with lakes, 6-scale moves (Fractint Island2, after Mandelbrot)
+source Fractint fractint.l, "Island2" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal penrose-rhomb-tiling-2 Penrose rhomb tiling, second start (Fractint Penrose2, Herb Savage)
+source Fractint fractint.l, "Penrose2" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers")
+fractal double-penrose Double Penrose (Penrose3 and Penrose4 superimposed, Herb Savage)
+source Fractint fractint.l, "DoublePenrose" (Herb Savage)
+fractal fractint-plant-10 Plant with paired branches (Fractint Plant10)
+source Fractint fractint.l, "Plant10" (Adrian Mariano)
+fractal fractint-plant-11 Plant with nested branches (Fractint Plant11)
+source Fractint fractint.l, "Plant11" (Adrian Mariano)
+fractal fractint-mytree Zigzag-branch tree (Fractint MyTree)
+source Fractint fractint.l, "MyTree" (Adrian Mariano)
+fractal daunis-man Man (Fractint Man, Ivan Daunis)
+source Fractint fractint.l, "Man" (from Ivan Daunis; "looks like man with an odd number of iterations")
+fractal daunis-lace Lace (Fractint Lace, Ivan Daunis)
+source Fractint fractint.l, "Lace" (from Ivan Daunis)
+fractal voderberg-spiral-tiling Voderberg spiral tiling (Herb Savage)
+source Iterated Dynamics tiling.l, "VoderbergTile" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers"; a spiral tiling by Heinz Voderberg)
+fractal vertigo-spiral-46 Vertigo spiral, 46 steps a turn (Morgan Savage)
+source Iterated Dynamics tiling.l, "Vertigo1" (by Morgan Savage)
+fractal vertigo-spiral-49 Vertigo spiral, 49 steps a turn (Morgan Savage)
+source Iterated Dynamics tiling.l, "Vertigo2" (by Morgan Savage)
+fractal fass-curve-5x5 FASS curve, 5x5 diagonal macrotile
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.17b
+fractal hilbert-curve-3d Three-dimensional Hilbert curve
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.19 (after Sharp et al. [139])
+fractal abop-bush-3d Three-dimensional bush-like structure
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.25
+fractal abop-plant-3d-flowers Three-dimensional plant with flowers
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.26
+fractal abop-stochastic-plant Stochastic branching structure
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), section 1.7, fig. 1.27
+fractal abop-flower-field-plant Stochastic flowering plant (one plant of the flower field)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), section 1.7, fig. 1.28 (stochastic modification of fig. 1.26)
+fractal hogeweg-hesper-a Hogeweg and Hesper context-sensitive tree (a)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31a (L-systems based on Hogeweg & Hesper 1974)
+fractal hogeweg-hesper-b Hogeweg and Hesper context-sensitive tree (b)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31b (L-systems based on Hogeweg & Hesper 1974)
+fractal hogeweg-hesper-c Hogeweg and Hesper context-sensitive tree (c)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31c (L-systems based on Hogeweg & Hesper 1974)
+fractal hogeweg-hesper-d Hogeweg and Hesper context-sensitive tree (d)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31d (L-systems based on Hogeweg & Hesper 1974)
+fractal hogeweg-hesper-e Hogeweg and Hesper context-sensitive tree (e)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31e (L-systems based on Hogeweg & Hesper 1974)

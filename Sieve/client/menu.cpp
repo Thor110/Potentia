@@ -565,7 +565,7 @@ constexpr SetupKey kSetupKeys[] = {
     {"ai-heads", "AI: attention heads"},
     {"ai-bits", "AI: bits a weight, 1 to 8"},
     {"binary-length", "binary: every file of 0 to this many bytes"},
-    {"fractal-longest", "fractals: the whole space's longest ruleset, 44 to 512 characters"},
+    {"fractal-longest", "fractals: the whole space's longest ruleset, 44 to 1024 characters"},
     {"fractal-known", "fractals: the charted ones, include (marked where they stand), exclude, or only"},
 };
 

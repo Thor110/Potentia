@@ -1,0 +1,13 @@
+sieve-fractal-v3
+lsystem 22.5
+ignore !+-FQ
+axiom FbFbFb
+rule Q !Q
+rule a<a>a b
+rule a<a>b b[Q-QFbFb]
+rule b<a>a a
+rule b<a>b bFb
+rule a<b>a b
+rule a<b>b b
+rule b<b>a b
+rule b<b>b a

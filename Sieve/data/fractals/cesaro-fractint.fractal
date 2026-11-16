@@ -1,0 +1,5 @@
+sieve-fractal-v3
+lsystem 360/34
+axiom FX
+rule F E
+rule X ----F!X!++++++++F!X!----

@@ -1,5 +1,6 @@
-sieve-fractal-v2
-lsystem 45 scale 0.735
+sieve-fractal-v3
+lsystem 45
+scale 0.735294
 axiom A
 rule A F[+X]FB
 rule B F[-Y]FA

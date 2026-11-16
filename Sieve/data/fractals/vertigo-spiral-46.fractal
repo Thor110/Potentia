@@ -1,0 +1,5 @@
+sieve-fractal-v3
+lsystem 360/46
+scale 0.9997
+axiom X
+rule X XF+"X

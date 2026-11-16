@@ -1370,7 +1370,7 @@ int cmd_fractal(const Args& a)
     if (what == "count")
     {
         const sieve::FractalSpace space(longest);
-        std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, then every v2, " << sieve::kFractalSpaceShortest
+        std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, then every v2 and v3, " << sieve::kFractalSpaceShortest
                   << " to " << longest << " characters\n"
                   << "rulesets  " << space.count().to_decimal() << " (about 10^" << std::fixed << std::setprecision(1)
                   << double(space.count().bit_length()) * 0.30103 << ")\n"
@@ -1401,13 +1401,13 @@ int cmd_fractal(const Args& a)
     {
         if (!f)
         {
-            std::cout << "not a " << sieve::kFractalVersion << " or v2 ruleset: " << why << "\n";
+            std::cout << "not a " << sieve::kFractalVersion << ", v2 or v3 ruleset: " << why << "\n";
             return 1;
         }
-        std::cout << "a " << (f->version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
+        std::cout << "a " << (f->version == 3 ? sieve::kFractalVersion3 : f->version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
         return 0;
     }
-    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + " or v2 ruleset: " + why);
+    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2 or v3 ruleset: " + why);
     if (what == "index")
     {
         const sieve::FractalSpace space(longest);
@@ -1424,8 +1424,8 @@ int cmd_fractal(const Args& a)
     if (what == "show")
     {
         std::cout << "fractal   " << name << "\n"
-                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + sieve::fractal_angle_text(f->angle_tenths) + " degrees" + (f->scale ? ", step scaled by " + sieve::fractal_scale_text(f->scale) : std::string())) << "\n"
-                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v2 passes)\n"
+                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + f->angle_written() + " degrees" + (f->scale_written().empty() ? std::string() : ", step scaled by " + f->scale_written())) << "\n"
+                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v3 passes)\n"
                   << "depth     " << depth << " of " << f->deepest() << ": " << word.size() << " symbols\n";
         if (f->family == sieve::Fractal::Family::Substitution) std::cout << "word      " << word.substr(0, 80) << (word.size() > 80 ? "..." : "") << "\n";
         else std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";

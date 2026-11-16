@@ -586,6 +586,34 @@ def fractal_v2():
     return alt(fractal_v1(), v2)
 
 
+def fractal_v3():
+    """Every v1 and v2 ruleset, and every sieve-fractal-v3 (list X3): "lsystem ANGLE" (more than 0 and less
+    than 360, at most 6 decimals, the last not 0; or 360/N, N 2 to 9999), then optional "scale RATIO",
+    "seed N" (1 to 4294967295), "ignore SYMBOLS" (in order of code, each once) and "define D turn DEGREES"
+    or "define D scale FACTOR" lines (in digit order, each digit once), "axiom WORD" and one or more
+    "rule [L<]S[>R] WORD", every word 1 to 255 of v3's 74 symbols. The rules' order is the reader's alone."""
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    symbols = "".join(sorted(letters + DIGITS + "+-[]|!&^/\"'\\"))
+    nz = "123456789"
+    frac = seq(".", rep(chars(DIGITS), 0, 5), chars(nz))
+    up_to_359 = alt(seq("0", frac), seq(decimal_between(1, 359), opt(frac)))
+    angle = alt(up_to_359, seq("360/", alt(chars("23456789"), seq(chars(nz), rep(chars(DIGITS), 1, 3)))))
+    ratio = seq("0", frac)
+    not_one = alt(chars("23456789"), seq(chars(nz), chars(DIGITS)), seq(chars(nz), chars(DIGITS), chars(DIGITS)))
+    factor = alt(seq("0", frac), seq("1", frac), seq(not_one, opt(frac)))
+    word = rep(chars(symbols), 1, 255)
+    defines = seq(*[opt(seq("define " + d + " ", alt(seq("turn ", opt("-"), up_to_359), seq("scale ", factor)), "\n")) for d in DIGITS])
+    rule = seq("rule ", opt(seq(chars(letters), "<")), chars(letters), opt(seq(">", chars(letters))), " ", word, "\n")
+    v3 = seq("sieve-fractal-v3\nlsystem ", angle, "\n", opt(seq("scale ", ratio, "\n")), opt(seq("seed ", decimal_between(1, 4294967295), "\n")),
+             opt(seq("ignore ", nonempty_ascending(symbols), "\n")), defines, "axiom ", word, "\n", rep(rule, 1, None))
+    return alt(fractal_v2(), v3)
+
+
+def nonempty_ascending(symbols):
+    """One or more of the symbols, in their order, each once."""
+    return alt(*[seq(lit(c), *[opt(lit(d)) for d in symbols[k + 1:]]) for k, c in enumerate(symbols)])
+
+
 PLUGINS = [
     ("format-actions", 1, actions_v1,
      "One sieve-actions-v1 map exactly: an action's animation for each of the seven actions, in order (IDEAS 19.185, 19.186).",
@@ -642,6 +670,16 @@ PLUGINS = [
       "WORD\" as v1's. As format-fractal-v1, the rules' order by symbol is the reader's alone, so its",
       "survivors are the reader's rulesets with their rules in any order; tools/check_formats.py checks",
       "every other verdict."]),
+    ("format-fractal", 3, fractal_v3,
+     "One sieve-fractal-v1, v2 or v3 ruleset (its rules' order aside): the fractal dimension's line, each ruleset at its address in fractal-space-v3 (list X3).",
+     ["A fractal's ruleset (sieve-fractal-v1, v2 or v3, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp)",
+      "written as a filter: v1's and v2's as format-fractal-v2 passes them, and v3's: \"sieve-fractal-v3\",",
+      "\"lsystem ANGLE\" (more than 0, less than 360, at most 6 decimals, or 360/N), then if it has them",
+      "\"scale RATIO\", \"seed N\", \"ignore SYMBOLS\" (in order of code, each once) and \"define D turn DEGREES\" or",
+      "\"define D scale FACTOR\" (in digit order, each once), \"axiom WORD\" and one or more \"rule [L<]S[>R] WORD\",",
+      "every word 1 to 255 of its symbols (letters, digits and + - [ ] | ! \" ' & ^ \\ /). As format-fractal-v1,",
+      "the rules' order by symbol is the reader's alone, so its survivors are the reader's rulesets with",
+      "their rules in any order; tools/check_formats.py checks every other verdict."]),
     ("format-world", 1, world_v1,
      "One sieve-personal-world-v1 exactly as it is written (the numbers a float's own aside): a personal dimension's seed and what is placed (IDEAS 19.185, 19.187).",
      ["A personal dimension's world (sieve-personal-world-v1, SPECIFICATIONS 12.0r, client/personal_world.cpp)",

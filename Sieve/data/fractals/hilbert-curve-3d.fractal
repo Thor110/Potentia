@@ -1,0 +1,7 @@
+sieve-fractal-v3
+lsystem 90
+axiom A
+rule A B-F+CFC+F-D&F^D-F+&&CFC+F+B//
+rule B A&F^CFB^F^D^^-F-D^|F^B|FC^F^A//
+rule C |D^|F^B-F+C^F^A&&FA&F^C+F+B^F^D//
+rule D |CFB-F+B|FA&F^A&&FB-F+B|FC//

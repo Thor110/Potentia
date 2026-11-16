@@ -12,6 +12,18 @@
 // its axiom and rules as below, with " and ' among the symbols where there is a scale (in the order of
 // their character codes).
 //
+// "fractal-space-v3" (list X3): fractal-space-v2's, then every v3 ruleset (sieve-fractal-v3) of 44 to
+// `longest` characters, the shorter first; within a length, by its parts in the order they are written,
+// each part's texts counted by their lengths: the first part's shorter texts first, then by its text's
+// place among those of its length, then the rest alike (so a ruleset's address is its parts' places
+// read as the digits of one number). A part's texts of one length are in this order: a number, its
+// sign (none first), then the fewer decimals, then its whole part's value, then its decimals' value; an
+// angle, the decimals first, then 360/N; an optional line, absent first, then each of its texts; a word,
+// its symbols in the order of their codes, the first the most significant; ignore's symbols, as a
+// choice of them in order of code, the earlier choices first; a digit's definition, none, then a turn,
+// then a scale; the rules, symbol by symbol from A to z, each symbol's rules in the order written, a
+// rule's context left absent first, then each letter.
+//
 // "fractal-space-v1", the numbering:
 //   - every ruleset of 44 to `longest` characters (44 is the shortest there is: "lsystem 1", an axiom of
 //     one symbol and one rule of one); the shorter first;
@@ -30,20 +42,24 @@
 #include "sieve/biguint.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace sieve {
 
-inline constexpr const char* kFractalSpaceVersion = "fractal-space-v2";
+inline constexpr const char* kFractalSpaceVersion = "fractal-space-v3";
 inline constexpr uint32_t kFractalSpaceShortest = 44;
-inline constexpr uint32_t kFractalSpaceLongestMost = 512; // a longest beyond this is refused (its tables grow with it)
-// The longest charted ruleset (Penrose's kites and darts) is 201 characters, so every charted one is on
-// the line at the default (list X2, 16 November 2026; it was 96 in X1, the Gosper curve's 82 the longest).
-inline constexpr uint32_t kFractalSpaceLongestDefault = 208;
+// A longest beyond this is refused (its tables grow with it: the space is counted in 0.65 s to 256
+// characters and 4.0 s to 512, measured 16 November 2026; Voderberg's tiling, charted, is 590).
+inline constexpr uint32_t kFractalSpaceLongestMost = 1024;
+// Every charted ruleset but Voderberg's tiling (590 characters) is 256 or fewer (the 5 x 5 FASS curve, 246,
+// the longest of them), so all but it are on the line at the default (list X3; it was 208 in X2, 96 in X1).
+inline constexpr uint32_t kFractalSpaceLongestDefault = 256;
 
 struct Fractal;
+struct FractalSpaceV3; // (v3's counting, fractal_space.cpp)
 
 class FractalSpace
 {
@@ -54,6 +70,7 @@ public:
     uint32_t longest() const { return longest_; }
     const BigUint& count() const { return total_; }   // all of them
     const BigUint& count_v1() const { return total_v1_; } // v1's, the first of them
+    BigUint count_v3() const;                             // v3's, the last of them
     BigUint count_at(uint32_t length) const;           // those of exactly `length` characters (v1 and v2)
     // The ruleset at an address (below count()). Throws std::invalid_argument past the end.
     std::string at(const BigUint& index) const;
@@ -93,7 +110,8 @@ private:
     std::vector<Group> groups_;      // v2's, in order
     std::vector<BigUint> by_length_; // [length]: v1 rulesets of exactly that many characters
     std::vector<BigUint> by_length_v2_;
-    BigUint total_v1_, total_;
+    std::shared_ptr<const FractalSpaceV3> v3_;
+    BigUint total_v1_, total_v2_, total_;
 };
 
 } // namespace sieve
