@@ -111,6 +111,13 @@ if(MSVC)
 else()
     target_compile_options(sieve_core PUBLIC -Wall -Wextra -Wpedantic)
 endif()
+# The fractals' formulas (core/src/fractal.cpp, list X4) are followed in plain IEEE arithmetic of Sieve's
+# own, so a picture is the same on every machine; a multiply and an add fused into one (rounded once, not
+# twice) would undo that, so none are: GCC fuses across lines where the processor can (ARM; x86 with
+# -march), Clang within one, MSVC's /fp:precise not at all.
+if(NOT MSVC)
+    set_source_files_properties(core/src/fractal.cpp PROPERTIES COMPILE_OPTIONS -ffp-contract=off)
+endif()
 # Warnings in Sieve's own code as errors (review, 9 November 2026: nothing failed a build on a new
 # warning). Off unless asked; the Linux CI asks (GCC, where the build is clean of them).
 option(SIEVE_WERROR "Warnings in Sieve's own code are errors" OFF)

@@ -5,12 +5,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -359,13 +359,147 @@ std::optional<Fractal> read_v4(const std::vector<std::string>& lines, const std:
     return f;
 }
 
+// A v4 formula's arithmetic, Sieve's own (list X4): only + - * / and sqrt, which IEEE 754 rounds the same
+// on every machine, and floor, ldexp, frexp and fmod, which are exact. The system's complex numbers and
+// its exp, log, sin, cos, pow and atan2 differ in their last bit between libraries (Microsoft's and GNU's,
+// measured 16 November 2026: 1,057 charted pictures at 10x10 on one, another count on the other), and a
+// point followed 4,096 times grows that bit until it escapes on one machine and not on the other; so a
+// picture, and every count made of pictures, would be the machine's and not the ruleset's.
+struct Cx
+{
+    double re = 0, im = 0;
+};
+Cx operator+(Cx a, Cx b) { return {a.re + b.re, a.im + b.im}; }
+Cx operator-(Cx a, Cx b) { return {a.re - b.re, a.im - b.im}; }
+Cx operator*(Cx a, Cx b)
+{
+    const double rr = a.re * b.re, ii = a.im * b.im, ri = a.re * b.im, ir = a.im * b.re;
+    return {rr - ii, ri + ir};
+}
+Cx operator/(Cx a, Cx b)
+{
+    // (Smith's way: the smaller part of b divided by the larger, so neither square overflows)
+    if (std::fabs(b.re) >= std::fabs(b.im))
+    {
+        const double r = b.im / b.re, d = b.re + b.im * r;
+        return {(a.re + a.im * r) / d, (a.im - a.re * r) / d};
+    }
+    const double r = b.re / b.im, d = b.re * r + b.im;
+    return {(a.re * r + a.im) / d, (a.im * r - a.re) / d};
+}
+double norm(Cx a) { return a.re * a.re + a.im * a.im; }
+
+constexpr double kLn2Hi = 6.93147180369123816490e-01, kLn2Lo = 1.90821492927058770002e-10; // (ln 2 in two parts)
+constexpr double kHalfPi1 = 1.57079632673412561417e+00, kHalfPi2 = 6.07710050650619224932e-11, kHalfPi3 = 2.02226624879595063154e-21;
+
+double own_exp(double x)
+{
+    if (x != x) return x;
+    if (x > 709.78) return HUGE_VAL;
+    if (x < -745.2) return 0;
+    const double k = std::floor(x / (kLn2Hi + kLn2Lo) + 0.5);
+    const double r = (x - k * kLn2Hi) - k * kLn2Lo; // (|r| at most about ln 2 / 2)
+    double s = 1;
+    for (int t = 17; t >= 1; --t) s = 1 + s * r / t; // (Taylor's series to r^17, from the far end)
+    return std::ldexp(s, int(k));
+}
+double own_log(double x)
+{
+    if (x != x || x < 0) return std::numeric_limits<double>::quiet_NaN();
+    if (x == 0) return -HUGE_VAL;
+    if (x == HUGE_VAL) return x;
+    int e = 0;
+    double m = std::frexp(x, &e); // (x = m 2^e, m in [0.5, 1))
+    if (m < 0.70710678118654752) m *= 2, --e;
+    const double s = (m - 1) / (m + 1), s2 = s * s; // (|s| at most 0.172: ln m = 2 (s + s^3/3 + ...))
+    double sum = 0;
+    for (int t = 25; t >= 1; t -= 2) sum = 1.0 / t + s2 * sum;
+    return (double(e) * kLn2Hi + 2 * s * sum) + double(e) * kLn2Lo;
+}
+// sin and cos of x at once: x less a whole number k of quarter turns (pi/2 in three parts), then each by
+// Taylor's series on what is left (at most pi/4), turned by k.
+void own_sin_cos(double x, double& sn, double& cs)
+{
+    if (!std::isfinite(x)) { sn = cs = std::numeric_limits<double>::quiet_NaN(); return; }
+    const double k = std::floor(x / (kHalfPi1 + kHalfPi2) + 0.5);
+    const double r = ((x - k * kHalfPi1) - k * kHalfPi2) - k * kHalfPi3, r2 = r * r;
+    double s = 0, c = 0;
+    for (int t = 21; t >= 3; t -= 2) s = (1 - s) * r2 / (double(t) * double(t - 1)); // (1 - r^2/3! (1 - r^2/(4 5) ...))
+    for (int t = 22; t >= 2; t -= 2) c = (1 - c) * r2 / (double(t) * double(t - 1));
+    s = r * (1 - s), c = 1 - c;
+    double q = std::fmod(k, 4.0);
+    if (q < 0) q += 4;
+    if (q == 0) sn = s, cs = c;
+    else if (q == 1) sn = c, cs = -s;
+    else if (q == 2) sn = -s, cs = -c;
+    else sn = -c, cs = s;
+}
+double own_atan2(double y, double x)
+{
+    if (x != x || y != y) return std::numeric_limits<double>::quiet_NaN();
+    if (y == 0 && x == 0) return std::signbit(x) ? std::copysign(2 * (kHalfPi1 + kHalfPi2), y) : y;
+    const double ax = std::fabs(x), ay = std::fabs(y);
+    const bool swap = ay > ax;
+    double t = swap ? ax / ay : ay / ax; // (at most 1; NaN for two infinities, as the point is lost there)
+    // (atan t = 2 atan(t / (1 + sqrt(1 + t^2))), twice: t at most 0.199, then its series to t^41)
+    t = t / (1 + std::sqrt(1 + t * t));
+    t = t / (1 + std::sqrt(1 + t * t));
+    const double t2 = t * t;
+    double sum = 0;
+    for (int n = 41; n >= 1; n -= 2) sum = 1.0 / n - t2 * sum;
+    double a = 4 * t * sum;
+    const double half_pi = kHalfPi1 + kHalfPi2, pi = 2 * half_pi;
+    if (swap) a = half_pi - a;
+    if (x < 0) a = pi - a;
+    return std::signbit(y) ? -a : a;
+}
+double own_sinh(double y)
+{
+    if (std::fabs(y) < 0.5)
+    {
+        // (its series, as e^y - e^-y would lose the small y)
+        const double y2 = y * y;
+        double s = 0;
+        for (int t = 17; t >= 3; t -= 2) s = (1 + s) * y2 / (double(t) * double(t - 1));
+        return y * (1 + s);
+    }
+    const double e = own_exp(y);
+    return (e - 1 / e) / 2;
+}
+double own_cosh(double y)
+{
+    const double e = own_exp(y);
+    return (e + 1 / e) / 2;
+}
+Cx cx_exp(Cx a)
+{
+    const double m = own_exp(a.re);
+    if (a.im == 0) return {m, a.im};
+    double s, c;
+    own_sin_cos(a.im, s, c);
+    return {m * c, m * s};
+}
+Cx cx_log(Cx a) { return {own_log(norm(a)) / 2, own_atan2(a.im, a.re)}; }
+Cx cx_sin(Cx a)
+{
+    double s, c;
+    own_sin_cos(a.re, s, c);
+    return {s * own_cosh(a.im), c * own_sinh(a.im)};
+}
+Cx cx_cos(Cx a)
+{
+    double s, c;
+    own_sin_cos(a.re, s, c);
+    return {c * own_cosh(a.im), -(s * own_sinh(a.im))};
+}
+
 // A v4 formula made ready to follow a point: its tokens as operations, read from the right.
 struct Program
 {
     struct Op
     {
         char kind; // + - * / ^, a (abs) j (conj) C (cos) e (exp) l (log) s (sin), z c, n (a number)
-        std::complex<double> value;
+        Cx value;
     };
     std::vector<Op> ops; // (in reverse, so a stack takes them as they come)
     explicit Program(const std::vector<std::string>& tokens)
@@ -381,31 +515,33 @@ struct Program
             else if (t == "log") o.kind = 'l';
             else if (t == "sin") o.kind = 's';
             else if (t == "i") o.kind = 'n', o.value = {0, 1};
-            else if (t.size() > 1 || (t[0] >= '0' && t[0] <= '9')) o.kind = 'n', o.value = *v4_number(t, false);
+            else if (t.size() > 1 || (t[0] >= '0' && t[0] <= '9')) o.kind = 'n', o.value = {*v4_number(t, false), 0};
             ops.push_back(o);
         }
     }
-    static std::complex<double> power(std::complex<double> a, std::complex<double> b)
+    static Cx power(Cx a, Cx b)
     {
-        // (a whole exponent by multiplying, so z^2 is z z exactly; any other as exp(b log a))
-        if (b.imag() == 0 && b.real() == std::floor(b.real()) && std::abs(b.real()) <= 64)
+        // (a whole exponent by multiplying, so z^2 is z z exactly; any other as exp(b log a), 0 to any
+        // other 0 where b's real part is above 0, and not a number where it is not)
+        if (b.im == 0 && b.re == std::floor(b.re) && std::fabs(b.re) <= 64)
         {
-            int n = int(b.real());
+            int n = int(b.re);
             const bool inverse = n < 0;
             n = std::abs(n);
-            std::complex<double> r(1, 0), x = a;
+            Cx r{1, 0}, x = a;
             while (n)
             {
-                if (n & 1) r *= x;
-                x *= x, n >>= 1;
+                if (n & 1) r = r * x;
+                x = x * x, n >>= 1;
             }
-            return inverse ? 1.0 / r : r;
+            return inverse ? Cx{1, 0} / r : r;
         }
-        return std::pow(a, b);
+        if (a.re == 0 && a.im == 0) return b.re > 0 ? Cx{0, 0} : Cx{std::numeric_limits<double>::quiet_NaN(), 0};
+        return cx_exp(b * cx_log(a));
     }
-    std::complex<double> operator()(std::complex<double> z, std::complex<double> c) const
+    Cx operator()(Cx z, Cx c) const
     {
-        std::array<std::complex<double>, kFractalAwaitedMost + 1> st;
+        std::array<Cx, kFractalAwaitedMost + 1> st;
         size_t n = 0;
         for (const Op& o : ops)
             switch (o.kind)
@@ -413,16 +549,16 @@ struct Program
             case 'z': st[n++] = z; break;
             case 'c': st[n++] = c; break;
             case 'n': st[n++] = o.value; break;
-            case 'a': st[n - 1] = {std::abs(st[n - 1].real()), std::abs(st[n - 1].imag())}; break;
-            case 'j': st[n - 1] = std::conj(st[n - 1]); break;
-            case 'C': st[n - 1] = std::cos(st[n - 1]); break;
-            case 'e': st[n - 1] = std::exp(st[n - 1]); break;
-            case 'l': st[n - 1] = std::log(st[n - 1]); break;
-            case 's': st[n - 1] = std::sin(st[n - 1]); break;
+            case 'a': st[n - 1] = {std::fabs(st[n - 1].re), std::fabs(st[n - 1].im)}; break;
+            case 'j': st[n - 1].im = -st[n - 1].im; break;
+            case 'C': st[n - 1] = cx_cos(st[n - 1]); break;
+            case 'e': st[n - 1] = cx_exp(st[n - 1]); break;
+            case 'l': st[n - 1] = cx_log(st[n - 1]); break;
+            case 's': st[n - 1] = cx_sin(st[n - 1]); break;
             default:
             {
                 // (the top the first, left, value)
-                const std::complex<double> a = st[n - 1], b = st[n - 2];
+                const Cx a = st[n - 1], b = st[n - 2];
                 --n;
                 st[n - 1] = o.kind == '+' ? a + b : o.kind == '-' ? a - b : o.kind == '*' ? a * b : o.kind == '/' ? a / b : power(a, b);
             }
@@ -856,7 +992,7 @@ std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& 
 namespace {
 
 // A point's place on the picture of an escape or converge ruleset: centre and span from its view (y up).
-std::complex<double> view_point(const Fractal& f, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+Cx view_point(const Fractal& f, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
 {
     const double unit = f.view_value[2] / double(std::min(width, height));
     return {f.view_value[0] + (double(x) + 0.5 - double(width) / 2) * unit, f.view_value[1] - (double(y) + 0.5 - double(height) / 2) * unit};
@@ -864,16 +1000,16 @@ std::complex<double> view_point(const Fractal& f, uint32_t x, uint32_t y, uint32
 
 // Follows one point: the steps it took to escape (or settle), and where z ended; steps == the most for
 // one that did neither.
-std::pair<uint32_t, std::complex<double>> follow(const Fractal& f, const Program& prog, std::complex<double> point, uint32_t most)
+std::pair<uint32_t, Cx> follow(const Fractal& f, const Program& prog, Cx point, uint32_t most)
 {
-    std::complex<double> z = f.julia ? point : std::complex<double>(0, 0);
-    const std::complex<double> c = f.julia ? std::complex<double>(f.julia_value[0], f.julia_value[1]) : point;
+    Cx z = f.julia ? point : Cx{0, 0};
+    const Cx c = f.julia ? Cx{f.julia_value[0], f.julia_value[1]} : point;
     const bool escape = f.family == Fractal::Family::Escape;
     for (uint32_t n = 0; n < most; ++n)
     {
-        const std::complex<double> next = prog(z, c);
-        if (!std::isfinite(next.real()) || !std::isfinite(next.imag())) return {escape ? n : most, z};
-        if (escape ? std::norm(next) > kFractalEscapeRadius * kFractalEscapeRadius : std::abs(next - z) < kFractalSettled) return {n, next};
+        const Cx next = prog(z, c);
+        if (!std::isfinite(next.re) || !std::isfinite(next.im)) return {escape ? n : most, z};
+        if (escape ? norm(next) > kFractalEscapeRadius * kFractalEscapeRadius : norm(next - z) < kFractalSettled * kFractalSettled) return {n, next};
         z = next;
     }
     return {most, z};
@@ -901,7 +1037,7 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
                 if (f.family == Fractal::Family::Escape) put(img, int(x), int(y), hue(n % 48, 48));
                 else
                 {
-                    const double turn = std::arg(z) / (2 * 3.141592653589793) + 0.5;
+                    const double turn = own_atan2(z.im, z.re) / (2 * 3.141592653589793) + 0.5;
                     auto col = hue(size_t(std::min(0.999999, std::max(0.0, turn)) * 360), 360);
                     const double shade = 1.0 / (1.0 + double(n) / 16.0);
                     for (auto& ch : col) ch = uint8_t(double(kGround[0]) + (double(ch) - double(kGround[0])) * shade);
