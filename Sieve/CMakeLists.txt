@@ -59,6 +59,7 @@ add_library(sieve_core STATIC
     core/src/raid_net.cpp
     core/src/raid_piece.cpp
     core/src/fractal.cpp
+    core/src/fractal_space.cpp
     core/src/format_stats.cpp
     core/src/json.cpp
     core/src/safetensors.cpp

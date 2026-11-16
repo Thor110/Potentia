@@ -156,7 +156,7 @@ constexpr int setup_rows_of(Media m)
     case Media::Worlds: return 2; // models per world, grid
     case Media::Ai: return 6;     // layers, width, heads, bits a weight; the text and picture model files
     case Media::Binary: return 1; // length
-    case Media::Fractals: return 0; // (a listed line: no shape to set)
+    case Media::Fractals: return 2; // the longest ruleset; the known fractals (include, exclude, only)
     }
     return 0;
 }
@@ -273,7 +273,8 @@ private:
                          kBooksRow = setup_row_of(Media::Books), kTracksRow = setup_row_of(Media::Tracks),
                          kMoviesRow = setup_row_of(Media::Movies), kModelsRows = setup_row_of(Media::Models),
                          kWorldsRows = setup_row_of(Media::Worlds),
-                         kAiRows = setup_row_of(Media::Ai), kBinaryRow = setup_row_of(Media::Binary);
+                         kAiRows = setup_row_of(Media::Ai), kFractalRows = setup_row_of(Media::Fractals),
+                         kBinaryRow = setup_row_of(Media::Binary);
     static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
     int row_count() const;
     // The AI line's weights: the embedding (256 by the width) and, in each layer, 16 times the width squared.

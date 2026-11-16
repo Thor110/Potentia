@@ -861,16 +861,19 @@ build/sieve install located-force.sieve --to located_force > /dev/null
 diff -r tests/manifest_fixture located_force
 # The demonstration (IDEAS 16.9): every dimension's item at each whole degree, as one
 # .sieve, the same on every machine; installing it gives every file back, and a bearing
-# typed in the navigator (X, Tab) is the same item again. (3,972: 360 a line for eleven lines, and the
-# fractal dimension's 12 items once each, a listed line being fewer items than degrees.)
-$H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 3972 items"
+# typed in the navigator (X, Tab) is the same item again. (4,320: 360 a line for all twelve, the fractal
+# dimension's being every ruleset to 96 characters since list X1.)
+$H --no-menu --sample-degrees degrees --screenshot deg.png | tee deg.txt | q "^sample: 4320 items"
 $H --no-menu --sample-degrees degrees2 --sample-out degrees2.sieve --screenshot deg2.png > /dev/null
 diff -r degrees degrees2
 build/sieve install degrees.sieve --to deg_inst > /dev/null
 diff -r degrees deg_inst
-# The fractal line's items are written as their rulesets, the steps that make them, byte for byte as
-# the chart holds them; no picture of one is stored.
-cmp "degrees/fractals/Dragon curve.fractal" data/fractals/dragon-curve.fractal
+# The fractal line's items are written as their rulesets, the steps that make them, every one a ruleset
+# the reader takes (the index as text); no picture of one is stored.
+test "$(find degrees/fractals -name '*.fractal' | wc -l)" = 359
+find degrees/fractals -name '*.fractal' -print0 | xargs -0 -n 1 build/sieve fractal check > fractal-checks.txt
+test "$(grep -c '^a sieve-fractal-v1 ruleset' fractal-checks.txt)" = 359
+test -s "degrees/fractals/Index of the fractal dimension.txt"
 test "$(find degrees/fractals -name '*.png' | wc -l)" = 0
 # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
 # their lines and places, made again on installing, every file the same; smaller than v4;
@@ -1509,10 +1512,10 @@ $H --cipher --script "Ctrl+Backspace,=It was the best of times it was the worst 
 $H --cipher --script "Down,Down,Down,Left" --screenshot cipher-catalogue.png | tr -d '\r' | q "^cipher: the recipe has 2 layer(s): one of the recipes of its depth, named by 260 bits$"
 # The completion estimate (IDEAS §19.49; the setup menu's map since 9 November 2026, the main menu's
 # before): a line for each of the twelve dimensions, binary first, each with its size and the time to
-# walk it at one a second (the fractal dimension's, a listed line, its count of items charted).
+# walk it at one a second (the fractal dimension's every ruleset to 96 characters, list X1).
 $H --menu --screenshot main-estimate.png | tr -d '\r' > main-estimate.txt
 test "$(grep -c '^estimate: ' main-estimate.txt)" = 12
-q "^estimate: FRACTALS  12 listed = 12 charted  ->  12 seconds$" main-estimate.txt
+q "^estimate: FRACTALS  rulesets<=96 chars = ~10^99.3  ->  ~10^91.8 years$" main-estimate.txt
 q "^estimate: BINARY  title\*files<=" main-estimate.txt
 # A line's details (I, or the dots after its name in the map; 9 November 2026): what its figures
 # mean, in words; I again closes it.
@@ -1890,7 +1893,23 @@ $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --take --screensho
 $H --no-menu --line fractals --warp dragon-curve --take --press N,N --screenshot fractals-deeper.png | tr -d '\r' | q "| Depth 7 of 16.$"
 $H --no-menu --line fractals --warp fibonacci-word --take --press B,B,B,B,B,B --screenshot fractals-first.png | tr -d '\r' | q "| It is at its first step, its axiom.$"
 $H --no-menu --line fractals --walk "0,0" --warp nosuch --screenshot fractals-none.png | tr -d '\r' | q "No item on this line is called nosuch"
-$H --no-menu --line fractals --walk "0,0" --goto 12 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 12 items"
+# The whole space (list X1, fractal-space-v1): every ruleset the reader takes, the shorter first, each
+# charted fractal at its address there, named (the known fractals included, the default); excluded, a
+# charted one is not on the line; only they, the shelves are the chart's 11 after the index. And sieve
+# fractal gives the same: the first ruleset of all, and each charted one back from its address.
+$H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 12 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 12 items"
+$H --no-menu --line fractals --fractal-known only --walk "0,0" --warp dragon-curve --take --screenshot fractals-only.png | tr -d '\r' | q "| went to dragon-curve$"
+$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp dragon-curve --screenshot fractals-excluded.png | tr -d '\r' | q "No item on this line is called dragon-curve"
+dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
+test -n "$dragon"
+$H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"
+build/sieve fractal at 0 | tr -d '\r' > fractal-first.txt
+printf 'sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n' | cmp - fractal-first.txt
+build/sieve fractal count | tr -d '\r' | q "^  44 characters: 1520532$"
+for f in data/fractals/*.fractal; do
+    a=$(build/sieve fractal index "$f" | tr -d '\r' | sed -n 's/^address   \([0-9]*\) .*/\1/p')
+    build/sieve fractal at "$a" | tr -d '\r' | cmp - "$f"
+done
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what
 # is beneath them: a page dropped over the case lands on its top, one dropped inside on a shelf.
 $H --personal-world --world-file pw/bc.world --press "Tab,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Down,Return" --screenshot pworld-case.png > /dev/null

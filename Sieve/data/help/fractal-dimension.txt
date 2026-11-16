@@ -1,6 +1,6 @@
 index: fractal dimension, fractals, FRACTALS line, rulesets, Fibonacci word, golden ratio, L-system, substitution, Koch, dragon curve, index book
 
-The fractal dimension is a line of the hallway, its door after AI, in light purple. Its books are the fractals charted by hand, each named with its ruleset; its first book is the index of them all. (Every ruleset of its grammar is on a line too, the text line with the format-fractal-v1 filter ticked; the shelves hold the charted ones.)
+The fractal dimension is a line of the hallway, its door after AI, in light purple. Its books are every ruleset there is, from the shortest, each at an address of its own; the fractals charted by hand stand among them, named. Its first book is the index of the charted ones, saying where each stands.
 
 ## Walking it
 Go left through AI's far door, or choose FRACTALS as the line to start on. Hover over a book to see its name; take it with {key1:hallway.anywhere/take|E}, as any item. Warp ({key1:hallway.anywhere/warp|T}) to a fractal by its id, such as dragon-curve, or "index" for the first book.
@@ -12,8 +12,11 @@ It shows what it is, its picture at the depth you hold it at, and its ruleset. {
 - A substitution: at every step each symbol becomes its word (0 becomes 01, 1 becomes 0, for the Fibonacci word). Drawn as its words one under another, each stretched across, so the pattern is seen repeating at every scale.
 - An L-system: drawn as a turtle draws. F and G draw a line forward, f moves without one, + and - turn by its angle, [ and ] keep a place and come back to it.
 
-## The shelves
+## The known fractals
+On the setup page, the FRACTALS rows: the longest ruleset on the line (44 to 512 characters, 96 at first), and the known fractals: include (every ruleset, the charted ones named where they stand), exclude (every ruleset but the charted ones) or only (the charted ones alone, after the index). Most rulesets draw little or nothing; the charted ones are the landmarks.
+
+## The charted fractals
 The index, then the Fibonacci word (the golden ratio in two symbols), the Thue-Morse sequence, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the dragon curve, the Hilbert, Levy C and Gosper curves, and a fractal plant. More are charted by adding them to fractals/chart.txt beside the program, each as its own .fractal file.
 
 ## On the command line
-sieve fractal lists the shelves; sieve fractal show and draw grow one to a depth and draw it as a picture. See [[command-line|the command line]].
+sieve fractal lists the charted fractals; sieve fractal show and draw grow one to a depth and draw it as a picture; sieve fractal count, at and index count the whole space, give the ruleset at an address, and the address of one. See [[command-line|the command line]].

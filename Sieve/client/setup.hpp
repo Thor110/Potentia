@@ -66,6 +66,10 @@ struct Settings
     uint32_t letters_px = 8;   // the letter size item displays are drawn for; smaller letters are dashes
     uint32_t closeup_px = kCloseUpScreen; // the widest close-up display (0: none; display.hpp)
     uint32_t binary_bytes = 32; // the binary line: every file up to this many bytes
+    // The fractal dimension (list X1): its whole space's longest ruleset, in characters, and its known
+    // fractals: included (marked where they stand), excluded, or only they (listed_shelf.hpp).
+    uint32_t fractal_longest = 96;
+    std::string fractal_known = "include";
     // Which line FIND MY LIMITS grows: "all", or one line's name, the others left as they are.
     std::string limits_focus = "all";
 

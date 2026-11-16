@@ -30,6 +30,7 @@
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
 #include "sieve/fractal.hpp"
+#include "sieve/fractal_space.hpp"
 #include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
@@ -7451,6 +7452,58 @@ void test_fractals()
     const auto chart = read_fractal_chart(std::filesystem::path(g_data) / "fractals");
     CHECK(chart.size() == 11 && chart[0].id == "fibonacci-word");
     for (const auto& c : chart) CHECK(c.fractal.deepest() >= 5 && c.fractal.text() == c.text);
+    // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at an address of its
+    // own. Up to 52 characters a ruleset has one rule, so the count is format-fractal-v1's exactly; at 53
+    // two rules first fit, and the grammar also counts each pair the other way round and a symbol twice
+    // (52 x 52 pairs against the reader's 52 x 51 / 2), with one-symbol words, a one-symbol axiom and a
+    // one-digit angle.
+    {
+        const FractalSpace space(96);
+        const Alphabet& a96 = alphabet_by_id("ascii96");
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v1.sfilter");
+        static const TestResources none(nullptr, nullptr);
+        for (uint32_t l = kFractalSpaceShortest; l <= 53; ++l)
+        {
+            const Dfa d = compile_plugin(*plugin, FilterLine{"text", "ascii96", 96, l, &a96, 0, 0, 0}, {}, none);
+            const BigUint grammar = DfaRanker(d, l).count();
+            if (l <= 52) CHECK(space.count_at(l) == grammar);
+            else
+            {
+                BigUint extra = BigUint::pow(57, 3);
+                extra.mul_small(9 * (52 * 52 - 52 * 51 / 2));
+                BigUint ours = space.count_at(l);
+                ours += extra;
+                CHECK(ours == grammar);
+            }
+        }
+        CHECK(space.count_at(44) == BigUint(1520532));
+        CHECK(space.at(BigUint(0)) == "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n");
+        // Every charted fractal is in it, and its address gives it back.
+        for (const auto& c : chart)
+        {
+            const auto i = space.index_of(c.text);
+            CHECK(i && space.at(*i) == c.text);
+        }
+        // Addresses across the space read back the same, each a ruleset the reader takes, the shorter
+        // first; and texts it does not hold have none.
+        std::mt19937_64 g(7);
+        size_t last_length = 0;
+        BigUint step = space.count();
+        step.divmod_small(997);
+        BigUint at;
+        for (int k = 0; k < 997; ++k, at += step)
+        {
+            BigUint i = at;
+            i.add_small(uint32_t(g() % 1000));
+            if (i >= space.count()) break;
+            const std::string t = space.at(i);
+            CHECK(read_fractal(t).has_value() && space.index_of(t) == i && t.size() >= last_length);
+            last_length = t.size();
+        }
+        CHECK(!space.index_of("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 1 0\nrule 0 01\n")); // (rules out of order)
+        CHECK(!space.index_of(std::string("sieve-fractal-v1\nlsystem 90\naxiom F\nrule F ") + std::string(64, 'F') + "\n" + "rule G " + std::string(30, 'G') + "\n")); // (longer than 96)
+        CHECK(throws([&] { (void)space.at(space.count()); }) && throws([] { FractalSpace(43); }));
+    }
 }
 
 void test_raid_net()

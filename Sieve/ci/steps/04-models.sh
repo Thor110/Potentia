@@ -535,9 +535,9 @@ diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' res.ini) > /d
 # line's list. Each row here ticks a mode and the saved file says which line it was.
 # Closing the overlay is what writes it, which also covers that path.
 # The lines' rows follow the doors (image, pages, books, audio, tracks, video, movies,
-# models, worlds, AI, binary); the audio rows are six: its notes, its note set, and notes2's
-# range, durations and voices. (AI has no filters yet, so F on its rows opens none.)
-for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 binary"; do
+# models, worlds, AI, fractals, binary); the audio rows are six: its notes, its note set, and notes2's
+# range, durations and voices. (AI and fractals have no filters yet, so F on their rows opens none.)
+for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "49 binary"; do
   set -- $pair
   rm -f row$1.ini
   downs=$(python -c "print(','.join(['Down']*$1))")

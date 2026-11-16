@@ -9745,6 +9745,33 @@ for example".
   every step is the same length and a spiral needs each turn shorter than the last; a symbol that scales
   the step (as many L-system tools have, `"` or `'`) would let a web, and logarithmic spirals generally, be
   charted. Sheet and funnel webs, being irregular, are rulesets with a seed, not one fixed word. For X2.
+  Find or knock out, set from the fractal dimension (Edward, 16 November 2026): "another setting or filter
+  for the fractal dimension could determine whether it finds things in the state spaces or knocks them
+  out", "as many things generated with fractals might be worth finding, images of fractals, 3d models made
+  using fractal rules and more", and "so a second filter would also have an exclude / include setting that
+  turns on or off its cross dimensional filtering from that specific dimension". So the fractal line has two
+  filters of its own: the first, the known fractals (exclude, include, only), says which rulesets are in
+  play; the second, cross-dimensional, says what those rulesets do to the other lines: off (nothing), include
+  (each line finds and charts what they make: a fractal's picture on the image line, a model grown by its
+  rules on the models line, and the rest of the ways above) or exclude (each line knocks it out). The
+  per-line include/exclude of the fractal filter noted above is then set once, from the fractal dimension,
+  for every line at once, and each line can still be set on its own.
+  The index book and warping under the same setting, and the glass back (Edward, 16 November 2026, after the
+  whole space was built): "I would presume you warped from the index book? That should also be under the
+  exclude/include/only setting", "That way you can't warp to known ones unless maybe going through file
+  locator, but having a warning that it isn't there is a great idea as well, perhaps it could mention filter
+  settings if it doesnt already", and "Returning the magnifying glass is probably worthwhile as it looks like
+  there are a lot of fractals that aren't going to be worth looking at and figuring out a way to filter some
+  of the noise there would also be useful in the long run". So with the known fractals excluded the index
+  book goes with them, a warp to one says it is set aside by that setting and where it is changed, and the
+  FRACTALS column gets its magnifying glass again, its filters cutting the noise (rulesets that draw nothing,
+  never grow, or rewrite symbols never met).
+  Discovering fractals not yet known (Edward, the same day): "I wonder if we can discover unknown fractals
+  this way", "though I would imagine someone has looked at procedurally generating fractals, but I don't
+  know of anyone having a hallway to walk through in which they can see them all at a glance!". The noise
+  filters make walking for them possible; a measure of how fractal a drawing is (its box-counting
+  dimension, worked out from the picture) could rank what is left, and a ruleset found and favourited can be
+  charted by hand (X2), named, and become a landmark of the line.
 - *Plants and decorations grown by fractals (Edward, the same day):* "we could also use fractals as rulesets
   to generate plants and other decorations for personal dimensions, though that is partially noted
   already but plants specifically". So a charted L-system (the fractal plant is the first) is grown into

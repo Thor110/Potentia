@@ -119,7 +119,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         for (int li = 0; li < kLines; ++li)
             if (is_listed(li))
             {
-                listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media);
+                listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media, shape.listed);
                 modes_[li] = FilterMode::Off;
                 if (listed_[size_t(li)] && !listed_[size_t(li)]->trouble().empty()) std::cerr << kDimensions[li].id << ": " << listed_[size_t(li)]->trouble() << "\n";
             }
@@ -485,7 +485,7 @@ BigUint Hallway::units_of(int i) const
         return effective_mode(i) == FilterMode::Compact ? comps_[size_t(i)].sieve->count() : comps_[size_t(i)].space->size();
     if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
     if (i == kAiLine) return effective_mode(i) == FilterMode::Compact ? ai_compact_->count() : ai_space_->size();
-    if (is_listed(i)) return BigUint(uint64_t(listed_[size_t(i)] ? listed_[size_t(i)]->size() : 0));
+    if (is_listed(i)) return listed_[size_t(i)] ? listed_[size_t(i)]->size() : BigUint();
     if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
@@ -619,9 +619,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
         {
             // A listed item: its place in its shelf's list is its address.
             const ListedShelf& sh = listed_shelf();
-            b.listed = b.index.is_zero() ? 0u : uint32_t(b.index.limbs()[0]);
+            b.listed = b.index;
             b.hex = b.index.to_hex();
-            b.fraction = sh.size() > 1 ? double(*b.listed) / double(sh.size()) : 0.0;
+            // (how far along, from the top bits of each: the list may be longer than a double counts exactly)
+            const size_t shift = sh.size().bit_length() > 53 ? sh.size().bit_length() - 53 : 0;
+            BigUint at = b.index, all = sh.size();
+            at >>= shift, all >>= shift;
+            b.fraction = all.is_zero() ? 0.0 : std::stod(at.to_decimal()) / std::stod(all.to_decimal());
         }
         else if (on_books())
         {
@@ -1347,7 +1351,7 @@ bool Hallway::warp(const std::string& input)
             const auto at = listed_shelf().find(input);
             if (!at) throw std::invalid_argument(trf("msg.warp.listed", {input}));
             trail_.clear();
-            place(BigUint(uint64_t(*at)), true);
+            place(*at, true);
             message(trf("msg.goto.done", {input}));
             return true;
         }
@@ -1488,9 +1492,9 @@ bool Hallway::go_to(std::string input)
         else if (on_listed())
         {
             // Its place in the list, in hex as the shelves show it, or its name.
-            if (const auto at = listed_shelf().find(input)) index = BigUint(uint64_t(*at));
+            if (const auto at = listed_shelf().find(input)) index = *at;
             else index = BigUint::from_hex(input);
-            if (index >= BigUint(uint64_t(listed_shelf().size()))) throw std::invalid_argument(trf("msg.goto.listed_past", {std::to_string(listed_shelf().size())}));
+            if (index >= listed_shelf().size()) throw std::invalid_argument(trf("msg.goto.listed_past", {listed_shelf().size().to_decimal()}));
         }
         else if (effective_mode() == FilterMode::Compact) // a compact address, as the books show (full: with its title and cover)
             index = full_here(li_) ? full_[size_t(li_)]->parse(input) : compact().parse(input);
@@ -2023,7 +2027,7 @@ void Hallway::keep_favourite()
     }
     else if (in_hand_->world) f.index = world_space_->index_of(*in_hand_->world, AddressMode::Positional).to_hex();
     else if (in_hand_->parts && books_) f.index = books_->index_of(*in_hand_->parts, AddressMode::Positional).to_hex();
-    else if (in_hand_->listed) f.index = BigUint(uint64_t(*in_hand_->listed)).to_hex();
+    else if (in_hand_->listed) f.index = in_hand_->listed->to_hex();
     else if (!in_hand_->unit.empty() && !on_binary() && !on_ai()) f.digits = in_hand_->unit;
     else
     {

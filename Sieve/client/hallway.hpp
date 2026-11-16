@@ -357,6 +357,7 @@ public:
         uint32_t track_units = 4, movie_units = 4; // units of audio a track, of video a movie
         uint32_t world_models = 4, world_grid = 8;  // models a world, and cells along each of its axes
         uint32_t ai_layers = 1, ai_width = 16, ai_heads = 2, ai_bits = 4; // the AI line's shape (sieve/aispace.hpp)
+        ListedOptions listed;                                              // the listed lines' (the fractal dimension's)
     };
 
     Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
@@ -396,7 +397,7 @@ public:
     // The depth a listed item in hand (and in the viewer) is shown at: its shelf's first for the item
     // until stepped, however it came into your hands (held_depth()).
     uint32_t listed_depth_ = 0;
-    mutable std::optional<uint32_t> listed_depth_for_; // the item listed_depth_ belongs to
+    mutable std::optional<sieve::BigUint> listed_depth_for_; // the item listed_depth_ belongs to
     uint32_t held_depth() const
     {
         if (!in_hand_ || !in_hand_->listed || !on_listed()) return 0;
@@ -473,7 +474,7 @@ public:
         std::optional<ModelSpace::Parts> model;      // the models line: vertices and faces
         std::optional<WorldSpace::Parts> world;      // the worlds line: cover, title and placed models
         std::optional<AiSpace::Digits> ai;           // the AI line: the model's weights, as digits
-        std::optional<uint32_t> listed;              // a listed line: the item's place in its shelf's list
+        std::optional<sieve::BigUint> listed;              // a listed line: the item's place in its shelf's list
         // The binary line: a file. Only its place, title and cover are kept on the shelf; its bytes
         // and its address in hex (each as large as the file) are worked out when something asks,
         // for the one item looked at or held (file_of, hex_of below).

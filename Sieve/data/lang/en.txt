@@ -2023,7 +2023,24 @@ docs.footer = Up/Down: a row, or scroll the page    Enter / Right: open it    Le
 
 ; ---- The fractal dimension, a listed line (listed_shelf.cpp, IDEAS 19.191, 19.235)
 fractals.index = Index of the fractal dimension
-fractals.index.summary = The fractals charted by hand: {0}, each a book after this one.
+fractals.index.summary = The fractals charted by hand: {0}. The known fractals here: {1}.
+fractals.known.include = included, each named where it stands among every ruleset
+fractals.known.exclude = excluded, every other ruleset on the shelves
+fractals.known.only = only they, each a book after this one
+fractals.at = at {0}
+fractals.set_aside = set aside (the known fractals are excluded)
+fractals.too_long = not on this line ({0} characters, past the longest, {1})
+fractals.generated.substitution = substitution, {0}
+fractals.generated.lsystem = L-system {0}, {1}
+fractals.units.include = rulesets<={0} chars
+fractals.units.exclude = rulesets<={0} chars, known set aside
+fractals.units.only = {0} charted
+setup.fractal_longest = longest ruleset
+setup.fractal_longest.value = {0} characters (every ruleset from 44)
+setup.fractal_known = known fractals
+setup.fractal_known.include = include (named where they stand)
+setup.fractal_known.exclude = exclude (set aside)
+setup.fractal_known.only = only (the charted alone)
 fractals.substitution = a substitution
 fractals.lsystem.angle = an L-system, turning {0} degrees
 fractals.unreadable = The shelves could not be read: {0}

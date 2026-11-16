@@ -1,45 +1,16 @@
-# List O: O4 made, O7 measured (list O done)
+X1, part 1: the fractal dimension's whole space
 
-## What changed
+- core/fractal_space: every ruleset the reader takes (fractal-space-v1), 44 to a longest
+  (default 96, at most 512) characters, each at one address; exact counts; at() and index_of().
+- sieve fractal count | at ADDRESS | index ID|FILE [--longest N].
+- The FRACTALS line stands on the whole space: the index first, then every ruleset, the charted
+  ones named where they stand. Addresses are BigUint.
+- Setup > FRACTALS: two rows, longest ruleset and known fractals (include / exclude / only);
+  --fractal-longest and --fractal-known.
+- Tests: counts checked against the format-fractal-v1 DFA for 44-53 characters; charted and
+  997 spread addresses round-trip.
+- CI 10: sample 4,320 items, whole-space checks; CI 04: binary's setup row is now 49.
+- Docs: SPECIFICATIONS 12.0t, fractal-dimension help page, MANUAL, DIMENSIONS, SETTINGS,
+  IDEAS 19.235 (your notes on the next steps), REVIEW-ROUND X1.
 
-- **O4, a recording kept as its text** (`client/replay.hpp`, `client/app_main.cpp`).
-  - A recording being made (F12, or `--record`) now keeps each frame as the line it is saved as, appended
-    as the frame is taken (`Recording`). Before, it kept every input event whole, at 128 bytes each.
-  - 30 minutes at 60 frames a second, with a 1,000 Hz mouse (17 moves a frame), held 451.9 MB before.
-    It holds 49.8 MB now: 30.2 MB of text, and room the string keeps for growing.
-  - The text is the same either way.
-  - The recording is still packed each time the hallway is left, so a crash or a menu visit leaves the
-    file on disk.
-  - Playing back is unchanged: a recording is read as before.
-- **O7, the trial mixers on a large file** (a measurement, nothing changed). enwik8 (100,000,000 bytes)
-  was packed twice:
-  - by the build as it is: peak 3,020 MiB, 317 s;
-  - by one whose trial history touches every page, as before review 1: peak 3,018 MiB, 336 s.
-
-  The `.sieve` was the same (24,768,406 bytes). Review 1's untouched pages save nothing at the peak here:
-  the peak comes later, from the whole file's mixing. The change stays, as it costs nothing.
-
-## How O4 was shown the same
-
-- **The same text:** a 30-minute recording was built both ways from the same frames, and the text matched.
-- **A live recording:** one was made in the running hallway, stopped and written. It reads back, replays,
-  and is written again the same, byte for byte.
-- **CI step 10:** its recordings are replayed and written again the same, and the step passes.
-
-## Also, noted from today's messages
-
-- **X1 and X2 split** (REVIEW-ROUND):
-  - X1: the fractal line as every ruleset of the grammar, generated, with the charted fractals as its first
-    filter (exclude, include, only) and the index book still naming them.
-  - X2: then as many known fractals charted as can be tracked down, spider webs among them. An orb web's
-    spiral needs a step that shrinks, so the grammar will need widening for it.
-- **Fractals as data in other dimensions** (IDEAS 19.235, in your words): each dimension's ways of reading
-  a ruleset as its kind of item, so fractals can be filtered out of it.
-- **HANDOFF:** two standing questions for anything new.
-  - It becomes its own line, added dynamically.
-  - It says what its fractal ways are.
-- **OPTIMISATIONS.md:** empty now. Every entry is made or measured.
-
-## Files to delete by hand
-
-None.
+Files to delete by hand: none.

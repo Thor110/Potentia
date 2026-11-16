@@ -211,6 +211,8 @@ file for the run they are given in. An empty default is written empty.
 | `ai_heads` | `2` | AI: attention heads |
 | `ai_bits` | `4` | AI: bits a weight, 1 to 8 |
 | `binary_length` | `32` | binary: every file of 0 to this many bytes |
+| `fractal_longest` | `96` | fractals: the whole space's longest ruleset, 44 to 512 characters |
+| `fractal_known` | `include` | fractals: the charted ones, include (marked where they stand), exclude, or only |
 
 ## [paths]
 

@@ -243,7 +243,7 @@ Hallway::Painter Hallway::face_painter(const Book& b) const
         // A listed item's front: its title on a band across the top, its picture below, drawn at the
         // depth it is held at (the shelf's own first depth on the shelf).
         const ListedShelf* shelf = &listed_shelf();
-        const size_t i = *b.listed;
+        const sieve::BigUint i = *b.listed;
         const uint32_t depth = in_hand_ && in_hand_->listed == b.listed ? held_depth() : shelf->first_depth(i);
         const std::u32string title = utf8_decode(shelf->title(i));
         const Theme& th = theme();

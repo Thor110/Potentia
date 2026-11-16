@@ -42,12 +42,15 @@ units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the ki
   second, 256 steps a number, so every animation is an address; played on any character. The roof:
   64 bones, 300 frames. `sieve-animation-v2` (13 November 2026) adds each bone's move per frame, so
   a glTF's translation channels (a body walking forward) come in too.
-- *The fractal dimension* (partly built, 15 November 2026, §19.191, §19.235): a line of the hallway,
-  its door after AI, light purple. Its first book is the index of every fractal charted by hand, each
-  book after it one fractal (`sieve-fractal-v1`: substitutions and L-systems), taken in hand and grown a
-  step at a time. Its rulesets are also units of the pages line over `ascii96` that `format-fractal-v1`
-  passes; `sieve fractal` lists, shows and draws them. Next: layouts (a layout is a tiling taken from
-  it, for your personal dimension), then the maze door.
+- *The fractal dimension* (partly built, 15 and 16 November 2026, §19.191, §19.235): a line of the
+  hallway, its door after AI, light purple. Its first book is the index of every fractal charted by hand;
+  after it, every ruleset there is (`sieve-fractal-v1`: substitutions and L-systems), generated from the
+  shortest (`fractal-space-v1`, about 10^99.3 to 96 characters), the charted ones named where they stand,
+  each taken in hand and grown a step at a time. The known fractals are included, excluded or the only
+  ones shown (the setup page's FRACTALS rows). `sieve fractal` lists, shows and draws them, and counts the
+  space, gives the ruleset at an address and the address of one. Next: what fractals make in the other
+  lines (list X1's second filter), more charted (X2); layouts for your personal dimension, the maze
+  door, later.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try
   `sieve warp --alphabet dna4 --length 12 GATTACA`. A reader of FASTA files, which would skip the

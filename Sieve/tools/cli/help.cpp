@@ -437,7 +437,10 @@ const std::vector<Page>& pages()
          "sieve fractal [list] [--folder DIR]\n"
          "       sieve fractal show ID|FILE [--depth N]\n"
          "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX]\n"
-         "       sieve fractal check FILE",
+         "       sieve fractal check FILE\n"
+         "       sieve fractal count [--longest N]\n"
+         "       sieve fractal at ADDRESS [--longest N]\n"
+         "       sieve fractal index ID|FILE [--longest N]",
          "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"
          "grammar (sieve-fractal-v1, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96 that\n"
          "the format-fractal-v1 filter passes, so its survivor number is its address. Its shelves show the\n"
@@ -447,17 +450,25 @@ const std::vector<Page>& pages()
          "L-system (drawn as a turtle draws: F and G a line forward, + and - turns of its angle, [ and ] a\n"
          "place kept and taken back). In the hallway it is the FRACTALS line, its door after AI: its first\n"
          "book the index of them all, each book after it one fractal, taken in hand and grown a step at\n"
-         "a time with N and B (or = and -).",
+         "a time with N and B (or = and -). The whole space (fractal-space-v1, list X1) is every ruleset the\n"
+         "reader takes, 44 characters and longer, each at an address of its own, the shorter first: count\n"
+         "says how many there are, at gives the ruleset at an address, and index the address of one.",
          {{"list", "The charted fractals: id, family, size, how deep each grows, and its name (the default)."},
           {"show ID|FILE", "A ruleset at a depth: its family, its size, and its word (or how many lines it draws)."},
           {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},
           {"check FILE", "Whether a file is a sieve-fractal-v1 ruleset, and if not why; exit 1 if not."},
+          {"count", "How many rulesets the whole space holds, and how many of its shortest lengths."},
+          {"at ADDRESS", "The ruleset at an address of the whole space (decimal, or hex after 0x)."},
+          {"index ID|FILE", "A charted fractal's or a ruleset's address in the whole space."},
+          {"--longest N", "The whole space's longest ruleset, 44 to 512 characters (default 96)."},
           {"--depth N", "How many steps to grow it (default: 6, or as deep as it goes under its limit)."},
           {"--size PX", "The picture's width and height (default 512)."},
           {"--folder DIR", "Read the chart from DIR instead of the one beside the program."}},
          {{"sieve fractal", "the shelves"},
           {"sieve fractal show fibonacci-word --depth 8", "the golden ratio's word, 55 symbols"},
-          {"sieve fractal draw dragon-curve --depth 12 --out dragon.png", "a picture of it"}}},
+          {"sieve fractal draw dragon-curve --depth 12 --out dragon.png", "a picture of it"},
+          {"sieve fractal index dragon-curve", "where the dragon curve is in the whole space"},
+          {"sieve fractal at 0", "the first ruleset of all"}}},
 
         {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
          "sieve dimensions [ID]",

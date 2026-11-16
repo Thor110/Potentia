@@ -537,7 +537,7 @@ float Hallway::draw_listed(const Book& bk, float x, float y, float pw, float bot
 {
     const SDL_Color ink = theme().edge, dim = mix(theme().edge, theme().bg, 0.45f);
     const ListedShelf& sh = listed_shelf();
-    const size_t i = *bk.listed;
+    const sieve::BigUint& i = *bk.listed;
     text(x + 14, y, sh.summary(i), 1, dim);
     y += 16;
     const std::vector<std::string> lines = sh.text(i);
@@ -545,7 +545,7 @@ float Hallway::draw_listed(const Book& bk, float x, float y, float pw, float bot
     const float room = bottom - y - 26 - float(lines.size()) * 14;
     const int side = int(std::max(48.0f, std::min(pw - 28, room)));
     const uint32_t depth = held_depth();
-    const std::string key = std::to_string(i) + "/" + std::to_string(depth) + "/" + std::to_string(side);
+    const std::string key = i.to_hex() + "/" + std::to_string(depth) + "/" + std::to_string(side);
     if (key != listed_tex_key_)
     {
         if (listed_tex_) SDL_DestroyTexture(listed_tex_), listed_tex_ = nullptr;
@@ -859,7 +859,7 @@ void Hallway::draw_cost(const Book& bk, float x, float cy, float pw, float botto
 {
     const Theme& th = theme();
     const SDL_Color ink = th.edge, dim = mix(th.edge, th.bg, 0.45f);
-    const BigUint listed_n(uint64_t(on_listed() ? listed_shelf().size() : 0));
+    const BigUint listed_n = on_listed() ? listed_shelf().size() : BigUint();
     const BigUint& n = on_listed()        ? listed_n
                        : on_books()       ? books_->size()
                        : on_composition() ? comp().space->size()

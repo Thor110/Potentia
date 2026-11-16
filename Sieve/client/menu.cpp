@@ -56,6 +56,7 @@
 #include "sieve/text.hpp"
 #include "sieve/fractal.hpp"
 #include "listed_shelf.hpp"
+#include "sieve/fractal_space.hpp"
 #include "sieve/importers.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/character_voxels.hpp"
@@ -428,6 +429,10 @@ Settings Settings::from_args(const sieve::cli::Args& a, const Settings& base)
     s.limits_focus = a.get("limits-focus", s.limits_focus);
     if (s.limits_focus == "pages") s.limits_focus = "text";
     s.binary_bytes = parse_u32(a, "binary-length", s.binary_bytes);
+    s.fractal_longest = std::clamp(parse_u32(a, "fractal-longest", s.fractal_longest), sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost);
+    if (const std::string k = a.get("fractal-known", s.fractal_known);
+        std::find(fractal_known_settings().begin(), fractal_known_settings().end(), k) != fractal_known_settings().end())
+        s.fractal_known = k;
     s.ffmpeg = a.get("ffmpeg", s.ffmpeg);
     s.video_fps = parse_u32(a, "video-fps", s.video_fps);
     return s;
@@ -488,6 +493,8 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["item-letters"] = std::to_string(letters_px);
     a.opts["close-up"] = closeup_text(closeup_px);
     a.opts["binary-length"] = std::to_string(binary_bytes);
+    a.opts["fractal-longest"] = std::to_string(fractal_longest);
+    a.opts["fractal-known"] = fractal_known;
     a.opts["limits-focus"] = limits_focus;
     a.opts["video-fps"] = std::to_string(video_fps);
     if (ffmpeg.empty()) a.opts.erase("ffmpeg");
@@ -558,6 +565,8 @@ constexpr SetupKey kSetupKeys[] = {
     {"ai-heads", "AI: attention heads"},
     {"ai-bits", "AI: bits a weight, 1 to 8"},
     {"binary-length", "binary: every file of 0 to this many bytes"},
+    {"fractal-longest", "fractals: the whole space's longest ruleset, 44 to 512 characters"},
+    {"fractal-known", "fractals: the charted ones, include (marked where they stand), exclude, or only"},
 };
 
 std::string setup_key(const char* option)
@@ -771,22 +780,26 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
     out[size_t(kModelsLine)] = titled(models, false);
     out[size_t(kWorldsLine)] = worlds;
     out[size_t(kBinaryLine)] = binary;
-    // A listed line: as many units as its shelf lists (read once: a chart of a few lines).
+    // A listed line: as many units as its shelf lists, at the settings as they stand (a shelf made
+    // again only when they change).
     for (int li = 0; li < kLines; ++li)
         if (is_listed(li))
         {
-            static std::array<int, kLines> listed_n = [] {
-                std::array<int, kLines> n{};
-                for (int l = 0; l < kLines; ++l)
-                    if (is_listed(l))
-                        if (const auto shelf = make_listed_shelf(kDimensions[l].media)) n[size_t(l)] = int(shelf->size());
-                return n;
-            }();
+            static std::map<std::string, std::pair<sieve::BigUint, std::string>> shelves;
+            const ListedOptions o{s_.fractal_longest, s_.fractal_known};
+            const std::string k = std::to_string(li) + "/" + std::to_string(o.fractal_longest) + "/" + o.fractal_known;
+            if (!shelves.count(k))
+                if (const auto shelf = make_listed_shelf(kDimensions[li].media, o)) shelves[k] = {shelf->size(), shelf->units_text()};
+            const auto& [n, words] = shelves[k];
             const uint64_t per = uint64_t(sieve::books_per_tile());
             LineSize z;
-            z.bits = listed_n[size_t(li)] > 0 ? std::log2(double(listed_n[size_t(li)])) : 0;
-            z.padding = uint32_t((per - uint64_t(listed_n[size_t(li)]) % per) % per);
-            z.units = std::to_string(listed_n[size_t(li)]) + " listed = " + std::to_string(listed_n[size_t(li)]) + " charted";
+            // (log2 of a count past a double's exactness: its top 53 bits, and the rest as a shift)
+            const size_t shift = n.bit_length() > 53 ? n.bit_length() - 53 : 0;
+            sieve::BigUint top = n;
+            top >>= shift;
+            z.bits = n.is_zero() ? 0 : std::log2(std::stod(top.to_decimal())) + double(shift);
+            z.padding = uint32_t((per - n.mod_small(uint32_t(per))) % per);
+            z.units = words + " = ~10^" + fixed(z.bits * std::log10(2.0), 1);
             out[size_t(li)] = z;
         }
     // A unit has at most 2^32 - 1 positions: a larger picture cannot be opened at all.
@@ -1571,6 +1584,19 @@ void Menu::adjust(int dir, int step)
         num(s_.ai_bits);
         s_.ai_bits = std::clamp(s_.ai_bits, 1u, 8u);
         break;
+    // The fractal dimension (list X1): its longest ruleset, and its known fractals in turn.
+    case kFractalRows:
+        num(s_.fractal_longest);
+        s_.fractal_longest = std::clamp(s_.fractal_longest, sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost);
+        break;
+    case kFractalRows + 1:
+    {
+        const auto& k = fractal_known_settings();
+        const auto at = std::find(k.begin(), k.end(), s_.fractal_known);
+        const int i = at == k.end() ? 0 : int(at - k.begin()), n = int(k.size());
+        s_.fractal_known = k[size_t(((i + dir) % n + n) % n)];
+        break;
+    }
     case kAiRows + 4:
         // The text model: Left goes back to the model in hand, Right chooses a folder (as Enter).
         if (!app_) break;
@@ -3596,7 +3622,10 @@ void Menu::render()
             {-1, tr("setup.ai_text_model"), text_model_value()},
             {-1, tr("setup.ai_picture_model"), picture_model_value()},
         };
-        case Media::Fractals: return {}; // (a listed line: no shape to set)
+        case Media::Fractals: return {
+            {line_of(Media::Fractals), tr("setup.fractal_longest"), trf("setup.fractal_longest.value", {n(s_.fractal_longest)})},
+            {-1, tr("setup.fractal_known"), tr("setup.fractal_known." + s_.fractal_known)},
+        };
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
         };

@@ -5,6 +5,7 @@
 
 #include "cli/dictionaries.hpp" // find_data_folder
 #include "sieve/fractal.hpp"
+#include "sieve/fractal_space.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
@@ -12,7 +13,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,18 +24,39 @@ namespace hallway {
 
 namespace {
 
+using sieve::BigUint;
+
 // The deepest a fractal is drawn on a shelf, in the hands or in the viewer: past this many symbols a
 // word takes too long to draw a frame (a limit chosen, not measured; `sieve fractal draw` goes as deep
 // as a ruleset grows).
 constexpr size_t kDrawnMost = size_t(1) << 18;
+// How many rulesets' texts and depths are kept once worked out (a tile's shelves, and some to spare).
+constexpr size_t kKept = 4096;
 
-// The fractal dimension: item 0 the index of every fractal charted, items 1 on the fractals in the
-// chart's order (data/fractals/chart.txt).
+uint32_t drawn_deepest(const sieve::Fractal& f)
+{
+    uint32_t d = 0;
+    while (d < f.deepest())
+    {
+        const auto w = f.grow(d + 1);
+        if (!w || w->size() > kDrawnMost) break;
+        ++d;
+    }
+    return d;
+}
+
+// The fractal dimension (list X1): its first book the index of every fractal charted; after it, with the
+// known fractals included (the default), every ruleset of the whole space (fractal-space-v1) up to the
+// longest set, the charted ones named where they stand; excluded, the same without the charted ones;
+// only, the charted ones alone, in the chart's order (data/fractals/chart.txt), as the shelves were
+// before the space was generated (Edward, 15 November 2026: "the known fractals would be the first
+// possible filter for its state space, with exclude/include/only options").
 class FractalShelf : public ListedShelf
 {
 public:
-    FractalShelf()
+    explicit FractalShelf(const ListedOptions& o) : known_(o.fractal_known), space_(std::clamp(o.fractal_longest, sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost))
     {
+        if (known_ != "exclude" && known_ != "only") known_ = "include";
         try
         {
             chart_ = sieve::read_fractal_chart(sieve::cli::find_data_folder("fractals", "chart.txt"));
@@ -42,33 +66,51 @@ public:
             trouble_ = e.what();
         }
         std::string all;
-        for (const auto& c : chart_)
+        for (size_t k = 0; k < chart_.size(); ++k)
         {
+            const auto& c = chart_[k];
             all += c.id + "\n" + c.text;
-            uint32_t d = 0;
-            while (d < c.fractal.deepest())
+            chart_deepest_.push_back(drawn_deepest(c.fractal));
+            if (const auto i = space_.index_of(c.text))
             {
-                const auto w = c.fractal.grow(d + 1);
-                if (!w || w->size() > kDrawnMost) break;
-                ++d;
+                charted_at_.emplace(*i, k);
+                chart_index_.push_back(*i);
             }
-            deepest_.push_back(d);
+            else chart_index_.push_back(std::nullopt);
         }
-        // (named by what it holds, so a chart changed is a shelf of its own and its favourites stay apart)
-        id_ = "fractals/" + sieve::Sha256::hex_hash(all).substr(0, 16) + "/fractal-chart-v1";
+        // (named by what it holds, so a chart or a shape changed is a shelf of its own and its
+        // favourites stay apart)
+        id_ = "fractals/" + sieve::Sha256::hex_hash(all).substr(0, 16) + "/" + known_ + "/" + sieve::kFractalSpaceVersion + "-" + std::to_string(space_.longest());
+        if (known_ == "only") size_ = BigUint(uint64_t(chart_.size()) + 1);
+        else
+        {
+            size_ = space_.count();
+            size_.add_small(1);
+            if (known_ == "exclude") size_ -= BigUint(uint64_t(charted_at_.size()));
+        }
     }
-    size_t size() const override { return chart_.size() + 1; }
+    BigUint size() const override { return size_; }
     std::string id() const override { return id_; }
-    std::string title(size_t i) const override { return i == 0 ? tr("fractals.index") : chart_.at(i - 1).title; }
-    std::string summary(size_t i) const override
+    std::string title(const BigUint& i) const override
     {
-        if (i == 0) return trf("fractals.index.summary", {std::to_string(chart_.size())});
-        const auto& f = chart_.at(i - 1).fractal;
-        return f.family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution") : trf("fractals.lsystem.angle", {std::to_string(f.angle)});
+        if (i.is_zero()) return tr("fractals.index");
+        if (const auto k = charted(i)) return chart_[*k].title;
+        const auto f = sieve::read_fractal(ruleset(i));
+        if (!f) return "";
+        const std::string axiom = f->axiom.size() > 12 ? f->axiom.substr(0, 12) + ".." : f->axiom;
+        return f->family == sieve::Fractal::Family::Substitution ? trf("fractals.generated.substitution", {axiom})
+                                                                 : trf("fractals.generated.lsystem", {std::to_string(f->angle), axiom});
     }
-    std::optional<sieve::RgbaImage> picture(size_t i, uint32_t depth, uint32_t width, uint32_t height) const override
+    std::string summary(const BigUint& i) const override
     {
-        if (i == 0)
+        if (i.is_zero()) return trf("fractals.index.summary", {std::to_string(chart_.size()), tr("fractals.known." + known_)});
+        const auto f = sieve::read_fractal(ruleset(i));
+        if (!f) return "";
+        return f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution") : trf("fractals.lsystem.angle", {std::to_string(f->angle)});
+    }
+    std::optional<sieve::RgbaImage> picture(const BigUint& i, uint32_t depth, uint32_t width, uint32_t height) const override
+    {
+        if (i.is_zero())
         {
             // The index: a small drawing of each fractal charted, in rows.
             if (chart_.empty() || width == 0 || height == 0) return std::nullopt;
@@ -81,7 +123,7 @@ public:
             const uint32_t cw = width / uint32_t(cols), ch = height / uint32_t(rows), s = std::max<uint32_t>(1, std::min(cw, ch));
             for (size_t k = 0; k < n; ++k)
             {
-                const auto t = sieve::draw_fractal(chart_[k].fractal, std::min<uint32_t>(deepest_[k], 4), s, s);
+                const auto t = sieve::draw_fractal(chart_[k].fractal, std::min<uint32_t>(chart_deepest_[k], 4), s, s);
                 if (!t) continue;
                 const uint32_t ox = uint32_t(k % cols) * cw + (cw - s) / 2, oy = uint32_t(k / cols) * ch + (ch - s) / 2;
                 for (uint32_t y = 0; y < s; ++y)
@@ -89,19 +131,34 @@ public:
             }
             return img;
         }
-        return sieve::draw_fractal(chart_.at(i - 1).fractal, std::min(depth, deepest_.at(i - 1)), width, height);
+        const auto f = sieve::read_fractal(ruleset(i));
+        if (!f) return std::nullopt;
+        return sieve::draw_fractal(*f, std::min(depth, deepest(i)), width, height);
     }
-    std::vector<std::string> text(size_t i) const override
+    std::vector<std::string> text(const BigUint& i) const override
     {
         std::vector<std::string> out;
-        if (i == 0)
+        if (i.is_zero())
         {
+            // Each charted fractal, its name, its id and where it stands on this line.
             for (size_t k = 0; k < chart_.size(); ++k)
-                out.push_back(std::to_string(k + 1) + ". " + chart_[k].title + " (" + chart_[k].id + ")");
+            {
+                std::string where;
+                if (known_ == "only") where = trf("fractals.at", {BigUint(uint64_t(k) + 1).to_hex()});
+                else if (known_ == "exclude") where = tr("fractals.set_aside");
+                else if (chart_index_[k])
+                {
+                    BigUint p = *chart_index_[k];
+                    p.add_small(1);
+                    where = trf("fractals.at", {p.to_hex()});
+                }
+                else where = trf("fractals.too_long", {std::to_string(chart_[k].text.size()), std::to_string(space_.longest())});
+                out.push_back(std::to_string(k + 1) + ". " + chart_[k].title + " (" + chart_[k].id + "), " + where);
+            }
             if (!trouble_.empty()) out.push_back(trf("fractals.unreadable", {trouble_}));
             return out;
         }
-        const std::string& t = chart_.at(i - 1).text;
+        const std::string t = ruleset(i);
         for (size_t at = 0; at < t.size();)
         {
             const size_t lf = t.find('\n', at);
@@ -110,30 +167,101 @@ public:
         }
         return out;
     }
-    // (a fractal as its ruleset, sieve-fractal-v1, as its file in data/fractals holds it; the index as text)
-    std::string file_ext(size_t i) const override { return i == 0 ? ".txt" : ".fractal"; }
-    uint32_t deepest(size_t i) const override { return i == 0 ? 0 : deepest_.at(i - 1); }
-    uint32_t first_depth(size_t i) const override { return i == 0 ? 0 : std::min<uint32_t>(deepest_.at(i - 1), 5); }
-    std::optional<size_t> find(const std::string& name) const override
+    std::string file_ext(const BigUint& i) const override { return i.is_zero() ? ".txt" : ".fractal"; } // (a ruleset as sieve-fractal-v1; the index as text)
+    uint32_t deepest(const BigUint& i) const override
     {
-        if (name == "index") return size_t(0);
+        if (i.is_zero()) return 0;
+        if (const auto k = charted(i)) return chart_deepest_[*k];
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            if (const auto it = deepest_.find(i); it != deepest_.end()) return it->second;
+        }
+        const auto f = sieve::read_fractal(ruleset(i));
+        const uint32_t d = f ? drawn_deepest(*f) : 0;
+        std::lock_guard<std::mutex> lock(mx_);
+        if (deepest_.size() >= kKept) deepest_.clear();
+        deepest_.emplace(i, d);
+        return d;
+    }
+    uint32_t first_depth(const BigUint& i) const override { return std::min<uint32_t>(deepest(i), 5); }
+    std::optional<BigUint> find(const std::string& name) const override
+    {
+        if (name == "index") return BigUint();
         for (size_t k = 0; k < chart_.size(); ++k)
-            if (chart_[k].id == name) return k + 1;
+            if (chart_[k].id == name)
+            {
+                if (known_ == "only") return BigUint(uint64_t(k) + 1);
+                if (known_ == "exclude" || !chart_index_[k]) return std::nullopt; // (set aside, or longer than the longest)
+                BigUint p = *chart_index_[k];
+                p.add_small(1);
+                return p;
+            }
         return std::nullopt;
     }
     std::string trouble() const override { return trouble_; }
+    std::string units_text() const override
+    {
+        if (known_ == "only") return trf("fractals.units.only", {std::to_string(chart_.size())});
+        return trf(known_ == "exclude" ? "fractals.units.exclude" : "fractals.units.include", {std::to_string(space_.longest())});
+    }
 
 private:
+    // The ruleset an item (1 on) holds: a charted one's text, or the whole space's at its address.
+    std::string ruleset(const BigUint& i) const
+    {
+        if (known_ == "only") return i.is_zero() || i > BigUint(uint64_t(chart_.size())) ? std::string() : chart_[size_t(i.mod_small(1u << 31)) - 1].text;
+        const BigUint j = space_index(i);
+        {
+            std::lock_guard<std::mutex> lock(mx_);
+            if (const auto it = texts_.find(j); it != texts_.end()) return it->second;
+        }
+        std::string t = j < space_.count() ? space_.at(j) : std::string();
+        std::lock_guard<std::mutex> lock(mx_);
+        if (texts_.size() >= kKept) texts_.clear();
+        texts_.emplace(j, t);
+        return t;
+    }
+    // An item's address in the whole space (included: one less; excluded: past every charted one at or
+    // before it, the charted ones' addresses in order).
+    BigUint space_index(const BigUint& i) const
+    {
+        BigUint j = i;
+        j -= BigUint(1);
+        if (known_ == "exclude")
+            for (const auto& [c, k] : charted_at_)
+                if (c <= j) j.add_small(1);
+                else break;
+        return j;
+    }
+    // The charted fractal an item is, if it is one.
+    std::optional<size_t> charted(const BigUint& i) const
+    {
+        if (i.is_zero()) return std::nullopt;
+        if (known_ == "only") return i > BigUint(uint64_t(chart_.size())) ? std::nullopt : std::optional<size_t>(size_t(i.mod_small(1u << 31)) - 1);
+        if (known_ == "exclude") return std::nullopt;
+        const auto it = charted_at_.find(space_index(i));
+        return it == charted_at_.end() ? std::nullopt : std::optional<size_t>(it->second);
+    }
+
+    std::string known_;
+    sieve::FractalSpace space_;
     std::vector<sieve::ChartedFractal> chart_;
-    std::vector<uint32_t> deepest_;
+    std::vector<uint32_t> chart_deepest_;
+    std::vector<std::optional<BigUint>> chart_index_; // each charted one's address in the space (none: longer than the longest)
+    std::map<BigUint, size_t> charted_at_;              // and by address, in order
+    BigUint size_;
     std::string id_, trouble_;
+    // (kept as worked out; the shelves' faces are painted on worker threads, so under a lock)
+    mutable std::mutex mx_;
+    mutable std::map<BigUint, std::string> texts_;
+    mutable std::map<BigUint, uint32_t> deepest_;
 };
 
 } // namespace
 
-std::unique_ptr<ListedShelf> make_listed_shelf(Media m)
+std::unique_ptr<ListedShelf> make_listed_shelf(Media m, const ListedOptions& options)
 {
-    if (m == Media::Fractals) return std::make_unique<FractalShelf>();
+    if (m == Media::Fractals) return std::make_unique<FractalShelf>(options);
     return nullptr;
 }
 

@@ -74,6 +74,7 @@
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
 #include "sieve/fractal.hpp"
+#include "sieve/fractal_space.hpp"
 #include "sieve/catalogue.hpp"
 #include "sieve/format_stats.hpp"
 #include "sieve/character.hpp"
@@ -1360,6 +1361,27 @@ int cmd_fractal(const Args& a)
                       << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest() << ": " << c.title << "\n";
         return 0;
     }
+    // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at its address.
+    const uint32_t longest = a.has("longest") ? a.get_u32("longest", sieve::kFractalSpaceLongestDefault) : sieve::kFractalSpaceLongestDefault;
+    if (what == "count")
+    {
+        const sieve::FractalSpace space(longest);
+        std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, " << sieve::kFractalSpaceShortest << " to "
+                  << longest << " characters\n"
+                  << "rulesets  " << space.count().to_decimal() << " (about 10^" << std::fixed << std::setprecision(1)
+                  << double(space.count().bit_length()) * 0.30103 << ")\n";
+        for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
+            std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
+        return 0;
+    }
+    if (what == "at")
+    {
+        if (a.positional.size() < 2) throw std::invalid_argument("give an address: decimal, or hex after 0x");
+        const std::string s = a.positional[1];
+        const sieve::BigUint i = s.rfind("0x", 0) == 0 ? sieve::BigUint::from_hex(s.substr(2)) : sieve::BigUint::from_decimal(s);
+        std::cout << sieve::FractalSpace(longest).at(i);
+        return 0;
+    }
     if (a.positional.size() < 2) throw std::invalid_argument("give a charted fractal's id, or a .fractal file");
     // A charted id, else a file.
     std::string text, name = a.positional[1];
@@ -1381,6 +1403,16 @@ int cmd_fractal(const Args& a)
         return 0;
     }
     if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ": " + why);
+    if (what == "index")
+    {
+        const sieve::FractalSpace space(longest);
+        const auto i = space.index_of(text);
+        if (!i) throw std::invalid_argument(name + " is longer than " + std::to_string(longest) + " characters (--longest)");
+        std::cout << "fractal   " << name << "\n"
+                  << "address   " << i->to_decimal() << " (0x" << i->to_hex() << ") of " << space.count().to_decimal() << ", in " << sieve::kFractalSpaceVersion << " to "
+                  << longest << " characters\n";
+        return 0;
+    }
     const uint32_t depth = a.has("depth") ? a.get_u32("depth", 0) : std::min<uint32_t>(f->deepest(), 6);
     if (depth > f->deepest()) throw std::invalid_argument("it grows to depth " + std::to_string(f->deepest()) + " at most (" + std::to_string(sieve::kFractalMost) + " symbols)");
     const std::string word = *f->grow(depth);
@@ -1406,7 +1438,7 @@ int cmd_fractal(const Args& a)
         std::cout << "drew      " << name << " at depth " << depth << " (" << word.size() << " symbols) to " << a.get("out") << " (" << size << " x " << size << ")\n";
         return 0;
     }
-    throw std::invalid_argument("give what to do: list, show, draw or check");
+    throw std::invalid_argument("give what to do: list, show, draw, check, count, at or index");
 }
 
 int cmd_raid(const Args& a)
