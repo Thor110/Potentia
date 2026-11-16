@@ -24,6 +24,13 @@
 // then a scale; the rules, symbol by symbol from A to z, each symbol's rules in the order written, a
 // rule's context left absent first, then each letter.
 //
+// "fractal-space-v4" (list X4): fractal-space-v3's, then every v4 ruleset (sieve-fractal-v4: an IFS, an
+// escape or a converge formula) of `longest` characters or fewer, from the shortest there is (26:
+// "escape z"), the shorter first; within a length by its parts as v3's are, and: an IFS before a formula;
+// a number that may be 0, 0 first (its sign none); "escape" before "converge"; a formula's texts of one
+// length by its first token's kind (+ - * / ^, then abs conj cos exp log sin, then c i z, then a
+// number), then that token's length, its place among those, then the rest alike.
+//
 // "fractal-space-v1", the numbering:
 //   - every ruleset of 44 to `longest` characters (44 is the shortest there is: "lsystem 1", an axiom of
 //     one symbol and one rule of one); the shorter first;
@@ -49,13 +56,14 @@
 
 namespace sieve {
 
-inline constexpr const char* kFractalSpaceVersion = "fractal-space-v3";
+inline constexpr const char* kFractalSpaceVersion = "fractal-space-v4";
 inline constexpr uint32_t kFractalSpaceShortest = 44;
 // A longest beyond this is refused (its tables grow with it: the space is counted in 0.65 s to 256
 // characters and 4.0 s to 512, measured 16 November 2026; Voderberg's tiling, charted, is 590).
 inline constexpr uint32_t kFractalSpaceLongestMost = 1024;
-// Every charted ruleset but Voderberg's tiling (590 characters) is 256 or fewer (the 5 x 5 FASS curve, 246,
-// the longest of them), so all but it are on the line at the default (list X3; it was 208 in X2, 96 in X1).
+// Every charted ruleset but four is 256 or fewer, so all but those are on the line at the default (list X3;
+// it was 208 in X2, 96 in X1): Voderberg's tiling (590 characters), and X4's Fractint Koch3 (272), the
+// Sierpinski carpet as an IFS (331) and Fractint's name in 22 maps (690).
 inline constexpr uint32_t kFractalSpaceLongestDefault = 256;
 
 struct Fractal;
@@ -70,7 +78,8 @@ public:
     uint32_t longest() const { return longest_; }
     const BigUint& count() const { return total_; }   // all of them
     const BigUint& count_v1() const { return total_v1_; } // v1's, the first of them
-    BigUint count_v3() const;                             // v3's, the last of them
+    BigUint count_v3() const;                             // v3's
+    const BigUint& count_v4() const { return total_v4_; } // v4's, the last of them
     BigUint count_at(uint32_t length) const;           // those of exactly `length` characters (v1 and v2)
     // The ruleset at an address (below count()). Throws std::invalid_argument past the end.
     std::string at(const BigUint& index) const;
@@ -110,8 +119,8 @@ private:
     std::vector<Group> groups_;      // v2's, in order
     std::vector<BigUint> by_length_; // [length]: v1 rulesets of exactly that many characters
     std::vector<BigUint> by_length_v2_;
-    std::shared_ptr<const FractalSpaceV3> v3_;
-    BigUint total_v1_, total_v2_, total_;
+    std::shared_ptr<const FractalSpaceV3> v3_, v4_; // (v4's counted by the same parts)
+    BigUint total_v1_, total_v2_, total_v3_, total_v4_, total_;
 };
 
 } // namespace sieve

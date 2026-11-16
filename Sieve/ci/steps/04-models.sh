@@ -216,7 +216,7 @@ $exe dimensions research | tr -d '\r' | q "^linked by .*dna"
 # The fractal dimension (list S, IDEAS 19.191, 19.235): its shelves charted by hand, a ruleset grown
 # (the Fibonacci word's lengths are Fibonacci numbers), drawn, and one not as written refused.
 $exe dimensions fractals | tr -d '\r' | q "^linked by pages$"
-$exe fractal | tr -d '\r' | q "^shelves   107 fractals, charted by hand "
+$exe fractal | tr -d '\r' | q "^shelves   155 fractals, charted by hand "
 $exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19, dimension 1.73: Dragon curve (after Wikipedia, Dragon curve, Heighway dragon as an L-system)$"
 # Widened (sieve-fractal-v2, list X2): an orb web, its step 0.985 as long at each chord, read as v2, its
 # box-counting dimension measured; and a v2 ruleset that says nothing v1 cannot is refused (each
@@ -226,6 +226,17 @@ $exe fractal show orb-web --depth 8 | tr -d '\r' | q "^dimension 1.341 (box-coun
 printf 'sieve-fractal-v2\nlsystem 90\naxiom F\nrule F FF\n' > plain-v2.fractal
 if $exe fractal check plain-v2.fractal > fractal-check2.txt; then exit 1; fi
 tr -d '\r' < fractal-check2.txt | q "a v2 ruleset has an angle with a tenth or a scale"
+# Beyond rewriting (sieve-fractal-v4, list X4): Barnsley's fern as an IFS, its points measured; the
+# Mandelbrot set as an escape-time formula; Sierpinski's triangle as an IFS, near log 3 / log 2; and a
+# formula that awaits a value refused.
+$exe fractal check data/fractals/barnsley-fern.fractal | tr -d '\r' | q "^a sieve-fractal-v4 ruleset, 133 characters; it grows to depth 10$"
+$exe fractal show barnsley-fern | tr -d '\r' | q "^dimension 1.279 (box-counting, measured at depth 9 on 9 grids)$"
+$exe fractal show mandelbrot-set | tr -d '\r' | q "^family    escape-time, viewed at -0.5 0 4$"
+$exe fractal | tr -d '\r' | q "^  sierpinski-triangle-ifs  IFS, 93 characters, grows to depth 12, dimension 1.60: "
+$exe fractal draw mandelbrot-set --size 64 --out mandelbrot.png | tr -d '\r' | q "^drew      mandelbrot-set: Mandelbrot set at depth 6 (256 steps a point at most) to mandelbrot.png (64 x 64)$"
+printf 'sieve-fractal-v4\nescape + z\n' > awaits.fractal
+if $exe fractal check awaits.fractal > fractal-check4.txt; then exit 1; fi
+tr -d '\r' < fractal-check4.txt | q "the formula awaits 1 more value(s)"
 # Widened again (sieve-fractal-v3, list X3): the Cesaro curve, its angle 360/34 and its turns swapped by
 # !; the Hilbert curve in three dimensions, measured; and a v3 ruleset with its rules out of order refused.
 $exe fractal check data/fractals/cesaro-fractint.fractal | tr -d '\r' | q "^a sieve-fractal-v3 ruleset, 82 characters; it grows to depth 16$"

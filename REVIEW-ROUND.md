@@ -197,6 +197,16 @@ run before a release package, and after each of the three reviews. Each batch is
   fractal-space-v3; 32 more charted, 107 in all, from Fractint's files and The Algorithmic Beauty of
   Plants, eight of X2's written again exactly; their notes in Sieve/docs/FRACTAL-SOURCES.md; still not:
   ABOP's row of trees and chapter 2 trees, the Kolakoski sequence, the Fibonacci word fractal*). `[01]` + `[10]`.
+- X4. Every fractal ever found, known or theorised (Edward, 16 November 2026: "we should seek to include every
+  possible fractal ever found, known or even theorised, including charting ones with larger character
+  lengths"; IDEAS 19.235): the families beyond rewriting, a family at a time, each charted from its sources.
+  First (X4): iterated function systems, escape-time formulas (Mandelbrot and Julia sets, the Burning Ship,
+  the tricorn, Multibrots, magnets, Collatz) and convergence formulas (Newton's), as sieve-fractal-v4, its
+  rulesets in the whole space after v3's (fractal-space-v4) with a grammar that passes them exactly (*made 16
+  November 2026: sieve-fractal-v4, fractal-space-v4 and format-fractal-v4; 48 more charted, 155 in all, from
+  Fractint's fractint.ifs and built-in types and from Wikipedia, their notes in Sieve/docs/FRACTAL-SOURCES.md*). Then
+  (X5) parametric L-systems for ABOP's trees, strange attractors, circle inversion, three-dimensional sets
+  and random ones. `[01]` + `[10]` + `[11]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

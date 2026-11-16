@@ -9804,6 +9804,16 @@ for example".
   use various adjustments and rulesets to knock themselves out across the state space dimensions". A
   charted fractal, with its adjustments (its depth, where its window starts, its variants), is a filter
   any line can run: what it makes passes, everything else is knocked out.
+- *Every fractal ever found, known or theorised (Edward, 16 November 2026):* "we should seek to include
+  every possible fractal ever found, known or even theorised, including charting ones with larger
+  character lengths". So the fractal dimension's grammar grows family by family until each kind of fractal
+  has a way to be written: rewriting (L-systems and substitutions, v1 to v3), then iterated function
+  systems and escape-time and convergence formulas (sieve-fractal-v4, list X4), then those still without
+  one (parametric L-systems for The Algorithmic Beauty of Plants' trees, strange attractors, circle
+  inversion such as the Apollonian gasket, three-dimensional sets such as the Mandelbulb, and random ones
+  such as diffusion-limited aggregation); and each one found in a source is charted with where it came
+  from, however long its ruleset (the longest charted ones lie past the line's default longest, and are on
+  it when the longest is raised).
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

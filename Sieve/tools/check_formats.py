@@ -625,6 +625,68 @@ def fractal3_edges(r):
     ]
 
 
+def fractal4_doc(r):
+    """v1's to v3's, and v4's: an IFS of a few maps, or an escape or converge formula grown at random."""
+    if r.random() < 0.4:
+        return fractal3_doc(r)
+    frac = lambda: "." + "".join(r.choice("0123456789") for _ in range(r.randint(0, 5))) + r.choice("123456789")
+    num = lambda zero: (r.choice(["0"]) if zero and r.random() < 0.3 else r.choice(["", "-"]) + r.choice([str(r.randint(1, 999)), "0" + frac(), str(r.randint(1, 999)) + frac()]))
+    if r.random() < 0.4:
+        return "sieve-fractal-v4\nifs\n" + "".join("map " + " ".join(num(True) for _ in range(6)) + "\n" for _ in range(r.randint(1, 4)))
+
+    def term(depth):
+        k = r.random()
+        if depth > 3 or k < 0.4:
+            return [r.choice(["z", "c", "i", num(False)])]
+        if k < 0.6:
+            return [r.choice(["abs", "conj", "cos", "exp", "log", "sin"])] + term(depth + 1)
+        return [r.choice("+-*/^")] + term(depth + 1) + term(depth + 1)
+
+    t = "sieve-fractal-v4\n" + r.choice(["escape ", "converge "]) + " ".join(term(0)) + "\n"
+    if r.random() < 0.4:
+        t += f"julia {num(True)} {num(True)}\n"
+    if r.random() < 0.4:
+        t += f"view {num(True)} {num(True)} {num(False).lstrip('-')}\n"
+    return t
+
+
+def fractal4_edges(r):
+    h = "sieve-fractal-v4\n"
+    return fractal3_edges(r) + [
+        h + "escape z\n",
+        h + "escape + ^ z 2 c\nview -0.5 0 3\n",
+        h + "converge - z / - ^ z 3 1 * 3 ^ z 2\njulia 0 0\n",
+        h + "escape + ^ abs z 2 c\n",
+        h + "escape + + + + + + + z z z z z z z z\n",  # 8 awaited after the seventh +: the most
+        h + "escape + + + + + + + + z z z z z z z z z\n",  # 9: refused
+        h + "escape + z\n",  # awaits one more
+        h + "escape z z\n",  # whole before its last
+        h + "escape  z\n",
+        h + "escape 0\n",  # a formula's number is not 0
+        h + "escape -0.5\n",
+        h + "escape -0\n",
+        h + "escape 1000\n",
+        h + "escape 0.1234567\n",
+        h + "escape 1.50\n",
+        h + "escape tan z\n",
+        h + "escape z\nview 0 0 0\n",
+        h + "escape z\nview 0 0 -1\n",
+        h + "escape z\nview -0 0 1\n",
+        h + "escape z\nview 0 0 1\njulia 0 0\n",  # out of order
+        h + "escape z\njulia 0 0\njulia 0 0\n",
+        h + "ifs\nmap 0 0 0 0 0 0\n",
+        h + "ifs\nmap 0.5 0 0 0.5 0 0\nmap 0.5 0 0 0.5 0.5 0\n",
+        h + "ifs\n",
+        h + "ifs\nmap 0 0 0 0 0\n",
+        h + "ifs\nmap 0 0 0 0 0 0 0\n",
+        h + "ifs\nmap 00 0 0 0 0 0\n",
+        h + "ifs\nmap 999.999999 -999.999999 0 0 0 0\n",
+        h + "ifs\nmap 1000 0 0 0 0 0\n",
+        h + "ifs\nescape z\n",
+        h + "lsystem 90\naxiom F\nrule F FF\n",
+    ]
+
+
 def fractal_beyond_walk(doc, why):
     """A ruleset the reader refuses only because its rules are out of order or one is given twice."""
     return "in the order of their symbols" in why
@@ -640,6 +702,7 @@ FORMATS = [
     ("fractal", "sieve", "fractal", "format-fractal-v1.sfilter", fractal_doc, fractal_edges, fractal_beyond_walk),
     ("fractal-v2", "sieve", "fractal", "format-fractal-v2.sfilter", fractal2_doc, fractal2_edges, fractal_beyond_walk),
     ("fractal-v3", "sieve", "fractal", "format-fractal-v3.sfilter", fractal3_doc, fractal3_edges, fractal_beyond_walk),
+    ("fractal-v4", "sieve", "fractal", "format-fractal-v4.sfilter", fractal4_doc, fractal4_edges, fractal_beyond_walk),
 ]
 
 OTHERS = ["", "a", "0", " ", "\n", "-", "Z", ".", "\r"]

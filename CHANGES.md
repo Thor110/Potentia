@@ -1,55 +1,42 @@
-# X3: the fractals v2 could not write
+# X4: fractals beyond rewriting (sieve-fractal-v4)
 
-## What changed
+You asked to include every fractal ever found, known or theorised, and to chart longer ones. Most known fractals are not L-systems, so this batch adds the next families. The rest follow in X5 (below).
 
-**sieve-fractal-v3: a third, wider grammar** for the fractals X2 had to set aside. It adds:
-- **Swapped turns.** `!` swaps what + and - turn.
-- **Exact angles.** An angle can be written as a fraction of a turn (`360/34`), or with up to six decimals.
-- **Digits defined as turns or step ratios.** A line such as `define 1 turn 42` or `define 2 scale 4.783` turns by stated degrees or makes the step that many times longer. This covers Fractint's `\` and `/` turns and its scales.
-- **Several rules for one symbol.** At each place one of them is picked from a `seed`. The same ruleset grows the same every time, and a different seed grows a different bush.
-- **Context rules.** `rule A<B C` changes B only where A comes before it, with an `ignore` line for the symbols to skip when looking. These are what Hogeweg and Hesper's trees need.
-- **Three dimensions.** `&` `^` pitch and `\` `/` roll the turtle, as The Algorithmic Beauty of Plants draws it. A 3D drawing is shown from one fixed side.
-- **Longer words:** up to 255 symbols, up from 64.
+## New ruleset format: sieve-fractal-v4
+- **IFS** (iterated function system): `ifs`, then one or more `map A B C D E F` lines. Each map takes (x, y) to (A x + B y + E, C x + D y + F), as Fractint's IFS files write them. It is drawn as the points reached by every sequence of maps, starting from the first map's fixed point; N goes a level deeper.
+- **Escape-time**: `escape FORMULA`, for example `escape + ^ z 2 c` (the Mandelbrot set). The formula is z's next value written operator first: `+ - * / ^`, `abs conj cos exp log sin`, `z c i` and numbers. An optional `julia RE IM` line fixes c and starts z at the point; an optional `view X Y SPAN` line sets the window. N follows each point for twice as many steps.
+- **Convergence**: `converge FORMULA` (Newton's method). Each point is coloured by where it settles.
+- **The whole space** is now fractal-space-v4: every v4 ruleset comes after v3's. The shortest is 26 characters (`escape c` is the first).
+- **The grammar** format-fractal-v4 (2,059 states) passes exactly the v4 rulesets the reader takes. It checks against the reader and against the space's counts (12 at 26 characters, 28,770 at 30).
 
-**The whole space now includes v3 (fractal-space-v3).**
-- v3 rulesets are numbered after the v2 ones.
-- v1 addresses are unchanged. v2 and v3 addresses depend on the longest ruleset setting.
-- I checked the numbering by converting 2,003 v3 addresses, spread across the space, to their rulesets and back.
-- A new grammar filter, `format-fractal-v3`, gives the same counts as the space where they can be compared.
+## Charted: 48 more, 155 in all
+- **From Fractint's `fractint.ifs`**: Binary, Coral, Crystal, Dragon, Floor, Koch3, Spiral, Swirl5, Tree, Triangle, Zigzag2, and "Fractint" (the program's name in 22 maps, 690 characters).
+- **From Fractint's built-in types**, with its default parameters and windows: the Mandelbrot set, its default Julia set, z^4 + c and its Julia set, the lambda set, two magnet fractals of type 1 and type 2's Mandelbrot set, and Newton's method for z^3 - 1 and z^4 - 1.
+- **From Wikipedia**:
+  - Barnsley's fern and its Cyclosorus variety.
+  - The Heighway dragon, twindragon, terdragon and Lévy C curve as IFS.
+  - The Cantor set, and the Sierpinski triangle and carpet, the Vicsek fractal and the Koch curve as IFS. The last four are written from each article's construction, and their source lines say so.
+  - The Burning Ship, the tricorn and the Multibrot of degree 3.
+  - Nine Julia sets from its galleries, the Douady rabbit and corabbit, and the Collatz fractal.
+- Every entry's source, numbers and roundings are in docs/FRACTAL-SOURCES.md, under X4.
 
-**107 fractals charted, up from 75.** The 32 new ones:
-- **From Fractint's files:** the Cesaro and double Cesaro curves, Mandelbrot's four snowflake sweeps, the pentagram, Voderberg's spiral tiling, the two Vertigo spirals, two more Penrose tilings, Mandelbrot's dragon and flowsnake, a second island, plants, trees, Man and Lace.
-- **From The Algorithmic Beauty of Plants:** the 5 x 5 FASS curve, the Hilbert curve in 3D, a bush and a flowering plant in 3D, stochastic plants, and Hogeweg and Hesper's five trees grown by contexts.
-
-The transcriber checked the 21 Fractint entries line by line against a copy of Fractint's own turtle, and the five Hogeweg and Hesper trees against the book's own system. The 3D ones were only checked by the reader. I looked over all the drawings.
-
-**Eight X2 rulesets are now exact.** X2 had rounded them; v3 writes them exactly or to six decimals:
-- Ken Philip's plant at `360/14`;
-- the Pythagoras tree, the H tree and Mandelbrot's Peano2 at 0.707107 (1/√2);
-- Penrose's kites and darts at 0.618034;
-- the branching pattern, compound leaf 2 and the spiral tiling.
-
-Their addresses change because of this.
-
-**docs/FRACTAL-SOURCES.md** is new. It has every charted fractal's rules as transcribed, every change from the source's notation, and what is still not charted and why.
-
-**The default longest ruleset is now 256 characters (was 208).** At 256 every charted fractal is on the line except Voderberg's tiling (590 characters). That one needs *longest ruleset* set to 590 or more; the maximum is now 1024 (was 512). A longer setting takes longer to count when you enter the line: 0.65 s at 256, 4 s at 512 (measured here). **Your saved setting stays as it was.**
-
-**Image line:** fractal-drawn now finds 782 pictures at 10 x 10 in black and white (was 567).
-
-## Fixed while testing
-- The hallway started the fractal line at a longest ruleset of 96 characters, while everything else uses 256. It now uses 256, and its --fractal-longest help says 44 to 1024 (default 256).
-- CI: the degree sample's fractal rulesets now run to 256 characters and are stored at about their own size (74,527 of the v7 manifest's 84,225 bytes), so v7 is checked to be under a fifth of v6 rather than a tenth. The count at 44 characters is 4,083,300 (v1, v2 and v3 together).
+## Measured
+- Image line: 1,057 charted pictures at 10 × 10 (was 782).
+- A sample of 1,000 across the space: 894 draw, 691 grow, 700 have no idle rule, 180 pass the dimension filter, 688 pass the stack.
+- Sierpinski's triangle as an IFS measures 1.60, close to the exact 1.585. Barnsley's fern measures 1.28: its points crowd where its maps shrink least.
 
 ## To try
-- Warp to `hilbert-curve-3d` and `abop-bush-3d` and step them deeper: they are drawn from one side.
-- Warp to `cesaro-fractint`, `vertigo-spiral-46` and `hogeweg-hesper-a`.
-- Warp to `abop-stochastic-plant`. Copy its ruleset with a different `seed` and run `sieve fractal draw` on the copy to see another plant of the same kind.
-- Warp to `voderberg-spiral-tiling`: it says it is past the longest, 256.
+- Warp to `mandelbrot-set`, `barnsley-fern`, `newton-z3-minus-1` and `douady-rabbit`, take them, and press N to go deeper.
+- `sieve fractal draw burning-ship --out ship.png`
+- Warp to `fractint-ifs-fractint`: it says it is past the longest (690 against 256). Four charted ones are past 256 now (with Fractint's Koch3, 272, and the Sierpinski carpet, 331); raise the longest to 690 to see them all on the line.
 
-## Still not charted
-- The Algorithmic Beauty of Plants' row of trees: it needs step ratios whose inverses no finite decimal holds, so its lengths would drift.
-- Its chapter 2 trees: they turn by several angles about different axes.
-- The Kolakoski sequence: it is not a substitution.
-- The Fibonacci word fractal: no published L-system text could be read.
-- Paul Bourke's pages and the OEIS were still blocked from here.
+## Not yet (X5)
+- Parametric L-systems, for The Algorithmic Beauty of Plants' trees.
+- Strange attractors (Lorenz, Hénon, Martin).
+- Circle inversion (the Apollonian gasket).
+- Three-dimensional sets (the Mandelbulb, Fractint's 3D IFS).
+- Random fractals (diffusion-limited aggregation).
+- Formulas that need z's earlier value (phoenix) or a test inside the step (Fractint's barnsley types).
+- Magnet type 2's Julia set: drawn as an escape picture it was noise, so it is not charted.
+
+Files to delete by hand: none.

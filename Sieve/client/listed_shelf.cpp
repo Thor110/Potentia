@@ -97,6 +97,14 @@ public:
         if (const auto k = charted(i)) return chart_[*k].title;
         const auto f = sieve::read_fractal(ruleset(i));
         if (!f) return "";
+        if (!f->rewrites())
+        {
+            if (f->family == sieve::Fractal::Family::Ifs) return trf("fractals.generated.ifs", {std::to_string(f->maps.size())});
+            std::string formula;
+            for (const std::string& t : f->formula) formula += (formula.empty() ? "" : " ") + t;
+            if (formula.size() > 16) formula = formula.substr(0, 16) + "..";
+            return trf(f->family == sieve::Fractal::Family::Escape ? "fractals.generated.escape" : "fractals.generated.converge", {formula});
+        }
         const std::string axiom = f->axiom.size() > 12 ? f->axiom.substr(0, 12) + ".." : f->axiom;
         return f->family == sieve::Fractal::Family::Substitution ? trf("fractals.generated.substitution", {axiom})
                                                                  : trf("fractals.generated.lsystem", {f->angle_written(), axiom});
@@ -106,7 +114,13 @@ public:
         if (is_index(i)) return trf("fractals.index.summary", {std::to_string(chart_.size()), tr("fractals.known." + known_)});
         const auto f = sieve::read_fractal(ruleset(i));
         if (!f) return "";
-        const std::string family = f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution")
+        std::string formula;
+        for (const std::string& t : f->formula) formula += (formula.empty() ? "" : " ") + t;
+        const std::string family = f->family == sieve::Fractal::Family::Ifs ? trf("fractals.ifs", {std::to_string(f->maps.size())})
+                                   : f->family == sieve::Fractal::Family::Escape || f->family == sieve::Fractal::Family::Converge
+                                       ? trf(f->family == sieve::Fractal::Family::Escape ? "fractals.escape" : "fractals.converge", {formula}) +
+                                             (f->julia ? trf("fractals.julia", {f->julia_text[0] + " " + f->julia_text[1]}) : std::string())
+                                   : f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution")
                                    : !f->scale_written().empty() ? trf("fractals.lsystem.scale", {f->angle_written(), f->scale_written()})
                                                                  : trf("fractals.lsystem.angle", {f->angle_written()});
         // (a charted one says where it was transcribed from)

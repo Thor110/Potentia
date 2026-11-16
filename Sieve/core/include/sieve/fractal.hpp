@@ -50,6 +50,35 @@
 // where one does, the rules without a context for that symbol are not used. A v3 ruleset may say what
 // v1 or v2 says: it is then another text, at an address of its own.
 //
+// "sieve-fractal-v4" (list X4) adds the families beyond the L-system, the fractals no rewriting draws
+// (Edward, 16 November 2026: "we should seek to include every possible fractal ever found, known or
+// even theorised"). Its second line names the family:
+//     sieve-fractal-v4
+//     ifs                       an iterated function system: one or more lines
+//     map A B C D E F           each a map of the plane, (x, y) to (A x + B y + E, C x + D y + F)
+// or
+//     sieve-fractal-v4
+//     escape FORMULA            or   converge FORMULA
+//     julia RE IM               (optional)
+//     view X Y SPAN             (optional: the picture's centre and the width its shorter side shows;
+//                                without it 0 0 4)
+// A NUMBER is a decimal: an optional -, a whole part of 0 to 999 with no leading zero, and up to 6
+// decimals, the last not 0; never -0. A map's numbers and julia's and view's centre may be 0; SPAN is
+// more than 0. A FORMULA is z's next value, written in prefix (Polish) notation, its tokens one space
+// apart: + - * / ^ take two (the first the left); abs (each part's absolute value, as the Burning Ship
+// takes), conj (the conjugate), cos, exp, log (its principal value) and sin take one; z, c, i and a NUMBER
+// (not 0) take none. Read from the left, never more than 8 values are awaited at once (a bound chosen:
+// the formulas charted await 4 at most). escape: without julia, c is the point and z starts at 0; with
+// it, c is julia's RE + IM i and z starts at the point; a point has escaped once |z| passes 1000.
+// converge: the same, and a point has settled once z moves less than 10^-9 in a step (Newton's method
+// written out, as z - (z^3 - 1) / (3 z^2), settles on a root). The maps of an IFS in another order, or
+// the same formula written another way, are other texts at addresses of their own.
+//
+// Depth: an IFS's at depth d is its first map's fixed point (where the map shrinks, so it is on the
+// figure; (0, 0) where there is none) with every sequence of up to d maps applied to it (1 + n + ... + n^d
+// points for n maps); an escape or converge picture's at depth d is each point followed for at most
+// 4 x 2^d steps (fractal_iterations).
+//
 // Drawing: a substitution as its words one under another, depth 0 at the top, each row stretched to
 // the picture's width and each symbol a colour of its own, so its self-similarity is seen as the rows
 // repeat; an L-system as the turtle's path at that depth, fitted to the picture. A word is grown only
@@ -76,6 +105,11 @@ inline constexpr const char* kFractalVersion2 = "sieve-fractal-v2";
 inline constexpr const char* kFractalChartVersion = "sieve-fractal-chart-v1";
 inline constexpr const char* kFractalChartVersion2 = "sieve-fractal-chart-v2";
 inline constexpr const char* kFractalVersion3 = "sieve-fractal-v3";
+inline constexpr const char* kFractalVersion4 = "sieve-fractal-v4";
+inline constexpr uint32_t kFractalAwaitedMost = 8;      // a v4 formula's values awaited at once, at most
+inline constexpr uint32_t kFractalEscapeDeepest = 10;   // an escape or converge picture's depth at most
+inline constexpr double kFractalEscapeRadius = 1000;    // |z| past this has escaped
+inline constexpr double kFractalSettled = 1e-9;         // a step shorter than this has settled
 inline constexpr size_t kFractalWordMost = 64;           // a word's symbols at most (v1, v2)
 inline constexpr size_t kFractalWordMostV3 = 255;        // and in v3
 inline constexpr size_t kFractalMost = size_t(1) << 21;  // symbols a ruleset is grown to at most
@@ -83,8 +117,8 @@ inline constexpr uint32_t kFractalDepthMost = 64;        // steps at most
 
 struct Fractal
 {
-    enum class Family { Substitution, LSystem } family = Family::Substitution;
-    uint32_t version = 1;      // sieve-fractal-v1 or v2
+    enum class Family { Substitution, LSystem, Ifs, Escape, Converge } family = Family::Substitution;
+    uint32_t version = 1;      // sieve-fractal-v1 to v4
     uint32_t angle_tenths = 0; // an L-system's turn, in tenths of a degree (v1: whole degrees, so a multiple of 10)
     uint32_t scale = 0;        // v2: the step's ratio for " and ', in thousandths (0: none)
     // v3: each number as written (the text is made again from them) and its value.
@@ -103,13 +137,31 @@ struct Fractal
     std::string axiom;
     std::vector<std::pair<char, std::string>> rules; // in order of symbol (v3: several for one symbol may follow each other)
     std::vector<std::pair<char, char>> contexts;     // v3: each rule's left and right context (0 for none), as rules
+    // v4: an IFS's maps; an escape or converge formula's tokens; julia's and view's numbers. Each
+    // number as written and its value.
+    struct Map
+    {
+        std::array<std::string, 6> text;
+        std::array<double, 6> value{};
+    };
+    std::vector<Map> maps;
+    std::vector<std::string> formula;
+    bool julia = false, view = false;
+    std::array<std::string, 2> julia_text;
+    std::array<double, 2> julia_value{};
+    std::array<std::string, 3> view_text;
+    std::array<double, 3> view_value{0, 0, 4};
+
+    std::string view_value_text() const { return view_text[0].empty() ? "0 0 4" : view_text[0] + " " + view_text[1] + " " + view_text[2]; }
+    // A substitution or L-system: grown as a word (the others are not).
+    bool rewrites() const { return family == Family::Substitution || family == Family::LSystem; }
 
     double turn_degrees() const { return version == 3 ? angle_degrees : double(angle_tenths) / 10.0; }
     std::string angle_written() const; // the angle as its text writes it
     std::string scale_written() const; // its scale for " and ' as written ("" for none)
 
     std::string text() const; // as written above
-    // Its word after `depth` steps; nothing if longer than kFractalMost.
+    // Its word after `depth` steps; nothing if longer than kFractalMost, or for a v4 family (not grown).
     std::optional<std::string> grow(uint32_t depth) const;
     // The deepest it grows to within kFractalMost (at most kFractalDepthMost).
     uint32_t deepest() const;
@@ -126,6 +178,10 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
 
 // An L-system's turtle path at a depth: the lines drawn, as (x1, y1, x2, y2), in turtle steps.
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word);
+// An IFS's points at a depth, as (x, y, the last map applied); nothing past kFractalMost points.
+std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& f, uint32_t depth);
+// The steps an escape or converge picture follows a point for at a depth: 4 x 2^depth.
+inline uint32_t fractal_iterations(uint32_t depth) { return uint32_t(4) << depth; }
 
 // The shelves, charted by hand: "sieve-fractal-chart-v1", then "fractal ID TITLE" a line; each
 // ruleset is ID.fractal beside the chart. ID is 1 to 64 of a-z, 0-9 and '-'. "sieve-fractal-chart-v2"
@@ -143,14 +199,18 @@ struct ChartedFractal
 // first entry that is not as written.
 std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& folder);
 
-// An L-system's box-counting dimension, measured on its drawing (list X2; IDEAS 19.235: "a measure of how
+// An L-system's or an IFS's box-counting dimension, measured on its drawing (list X2; IDEAS 19.235: "a measure of how
 // fractal a drawing is ... could rank what is left"): grown as deep as it goes within
 // kFractalDimensionSymbols, its lines laid on grids of 4, 8, 16 ... cells a side over the square that holds
 // them, down to cells no smaller than its median line (and at most 1024 a side), the cells they touch
 // counted, and the slope of log(cells) against log(cells a side) fitted by least squares. A line is 1, a
 // filled square 2, the Koch curve about 1.26 (log 4 / log 3). Nothing for a substitution (its rows are a
-// sequence, not a figure), or where fewer than three grids fit.
+// sequence, not a figure), nor for an escape or converge picture (not measured), or where fewer than three
+// grids fit. An IFS's points (as many as kFractalDimensionPoints: its points crowd where its maps shrink
+// least, so it takes more than a path's lines) are laid on grids alike, down to the one where the cells
+// they touch pass a quarter of the points.
 inline constexpr size_t kFractalDimensionSymbols = size_t(1) << 16;
+inline constexpr size_t kFractalDimensionPoints = size_t(1) << 20;
 struct FractalDimension
 {
     double value = 0;

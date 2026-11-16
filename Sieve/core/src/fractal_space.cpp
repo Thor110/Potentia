@@ -123,24 +123,28 @@ uint64_t pow10(uint32_t k)
 uint32_t digits_in(uint64_t v) { return v < 10 ? 1 : 1 + digits_in(v / 10); }
 
 // A decimal as v3 writes them: a sign or none, a whole part of no leading zero (at most max_whole), up to
-// 6 decimals, the last not 0; more than 0; with only_zero, its whole part 0; with not_one, not 1.
+// 6 decimals, the last not 0; more than 0; with only_zero, its whole part 0; with not_one, not 1. With
+// zero_ok (v4's), 0 itself too (unsigned).
 struct Num : Part
 {
-    bool signed_ = false, only_zero = false, not_one = false;
+    bool signed_ = false, only_zero = false, not_one = false, zero_ok = false;
     uint32_t max_whole = 0;
-    Num(bool sgn, uint32_t mw, bool oz, bool n1) : signed_(sgn), only_zero(oz), not_one(n1), max_whole(mw)
+    Num(bool sgn, uint32_t mw, bool oz, bool n1, bool z0 = false) : signed_(sgn), only_zero(oz), not_one(n1), zero_ok(z0), max_whole(mw)
     {
         n = zeros();
         for (int s = 0; s <= (signed_ ? 1 : 0); ++s)
             for (uint32_t d = 0; d <= 6; ++d)
                 for (uint32_t w = 0; w <= max_whole; ++w)
-                    if (valid(w, d))
+                    if (valid(s, w, d))
                     {
                         const uint32_t len = uint32_t(s) + digits_in(w) + (d ? d + 1 : 0);
                         if (len <= g_longest) n[len] += BigUint(fracs(d));
                     }
     }
-    bool valid(uint32_t w, uint32_t d) const { return !(only_zero && w != 0) && !(w == 0 && d == 0) && !(not_one && w == 1 && d == 0); }
+    bool valid(int s, uint32_t w, uint32_t d) const
+    {
+        return !(only_zero && w != 0) && !(w == 0 && d == 0 && !(zero_ok && s == 0)) && !(not_one && w == 1 && d == 0);
+    }
     static uint64_t fracs(uint32_t d) { return d == 0 ? 1 : 9 * pow10(d - 1); }
     void write(uint32_t len, BigUint i, std::string& out) const override
     {
@@ -149,7 +153,7 @@ struct Num : Part
             for (uint32_t d = 0; d <= 6; ++d)
                 for (uint32_t w = 0; w <= max_whole; ++w)
                 {
-                    if (!valid(w, d) || uint32_t(s) + digits_in(w) + (d ? d + 1 : 0) != len) continue;
+                    if (!valid(s, w, d) || uint32_t(s) + digits_in(w) + (d ? d + 1 : 0) != len) continue;
                     if (k >= fracs(d))
                     {
                         k -= fracs(d);
@@ -182,7 +186,7 @@ struct Num : Part
             if (d == 0 || d > 6 || t[e - 1] == '0') return std::nullopt;
             k = e;
         }
-        if (w > max_whole || !valid(w, d)) return std::nullopt;
+        if (w > max_whole || !valid(signed_ && t[0] == '-' ? 1 : 0, w, d)) return std::nullopt;
         return k;
     }
     BigUint rank(std::string_view t) const override
@@ -197,7 +201,7 @@ struct Num : Part
             for (uint32_t dd = 0; dd <= 6; ++dd)
                 for (uint32_t ww = 0; ww <= max_whole; ++ww)
                 {
-                    if (!valid(ww, dd) || uint32_t(s) + digits_in(ww) + (dd ? dd + 1 : 0) != len) continue;
+                    if (!valid(s, ww, dd) || uint32_t(s) + digits_in(ww) + (dd ? dd + 1 : 0) != len) continue;
                     if (s == sign && dd == d && ww == w)
                     {
                         if (d)
@@ -535,6 +539,129 @@ struct NonEmpty : Part
     BigUint rank(std::string_view t) const override { return p->rank(t); }
 };
 
+// A v4 formula (sieve/fractal.hpp): tokens one space apart, in prefix, never more than
+// kFractalAwaitedMost values awaited. g[p][len]: the texts of len characters that end what p awaited.
+// Its texts of one length in this order: by the first token's kind (+ - * / ^ in the order of their
+// codes, then abs conj cos exp log sin, then c i z, then a number), that token's length, its place among
+// those, then the rest alike.
+struct Formula : Part
+{
+    struct Tok
+    {
+        P part;
+        uint32_t takes;
+    };
+    std::vector<Tok> toks;
+    std::vector<Poly> g;
+    explicit Formula(P number)
+    {
+        for (const char* b : {"*", "+", "-", "/", "^"}) toks.push_back({std::make_shared<const Lit>(b), 2});
+        for (const char* u : {"abs", "conj", "cos", "exp", "log", "sin"}) toks.push_back({std::make_shared<const Lit>(u), 1});
+        for (const char* l : {"c", "i", "z"}) toks.push_back({std::make_shared<const Lit>(l), 0});
+        toks.push_back({std::move(number), 0});
+        g.assign(kFractalAwaitedMost + 1, zeros());
+        for (uint32_t len = 1; len <= g_longest; ++len)
+            for (uint32_t p = 1; p <= kFractalAwaitedMost; ++p)
+                for (const Tok& t : toks)
+                {
+                    const uint32_t np = p - 1 + t.takes;
+                    if (np > kFractalAwaitedMost) continue;
+                    for (uint32_t lt = 1; lt <= len; ++lt)
+                    {
+                        if (t.part->n[lt].is_zero()) continue;
+                        if (np == 0)
+                        {
+                            if (lt == len) g[p][len] += t.part->n[lt];
+                        }
+                        else if (len >= lt + 2 && !g[np][len - lt - 1].is_zero()) g[p][len] += BigUint::mul(t.part->n[lt], g[np][len - lt - 1]);
+                    }
+                }
+        n = g[1];
+    }
+    BigUint rest(uint32_t np, uint32_t len, uint32_t lt) const
+    {
+        if (np == 0) return lt == len ? BigUint(1) : BigUint();
+        return len >= lt + 2 ? g[np][len - lt - 1] : BigUint();
+    }
+    void write_from(uint32_t p, uint32_t len, BigUint i, std::string& out) const
+    {
+        for (const Tok& t : toks)
+        {
+            const uint32_t np = p - 1 + t.takes;
+            if (np > kFractalAwaitedMost) continue;
+            for (uint32_t lt = 1; lt <= len; ++lt)
+            {
+                if (t.part->n[lt].is_zero()) continue;
+                const BigUint r = rest(np, len, lt);
+                if (r.is_zero()) continue;
+                const BigUint block = BigUint::mul(t.part->n[lt], r);
+                if (i >= block)
+                {
+                    i -= block;
+                    continue;
+                }
+                BigUint q, rem;
+                BigUint::divmod(i, r, q, rem);
+                t.part->write(lt, q, out);
+                if (np == 0) return;
+                out += ' ';
+                write_from(np, len - lt - 1, rem, out);
+                return;
+            }
+        }
+        throw std::logic_error("fractal-space-v4: a formula's place past its length's");
+    }
+    void write(uint32_t len, BigUint i, std::string& out) const override { write_from(1, len, std::move(i), out); }
+    // The kind a token is (its whole text one of a kind's).
+    std::optional<size_t> kind_of(std::string_view tk) const
+    {
+        for (size_t k = 0; k < toks.size(); ++k)
+            if (toks[k].part->take(tk) == tk.size()) return k;
+        return std::nullopt;
+    }
+    std::optional<size_t> take(std::string_view t) const override
+    {
+        uint32_t awaited = 1;
+        size_t pos = 0;
+        for (;;)
+        {
+            size_t end = pos;
+            while (end < t.size() && t[end] != ' ' && t[end] != '\n') ++end;
+            const auto k = kind_of(t.substr(pos, end - pos));
+            if (end == pos || !k) return std::nullopt;
+            awaited = awaited - 1 + toks[*k].takes;
+            if (awaited == 0) return end;
+            if (awaited > kFractalAwaitedMost || end >= t.size() || t[end] != ' ') return std::nullopt;
+            pos = end + 1;
+        }
+    }
+    BigUint rank(std::string_view t) const override
+    {
+        BigUint r;
+        uint32_t p = 1;
+        for (;;)
+        {
+            const uint32_t len = uint32_t(t.size());
+            const size_t sp = t.find(' ');
+            const std::string_view tk = t.substr(0, sp);
+            const size_t kind = *kind_of(tk);
+            const uint32_t ltk = uint32_t(tk.size());
+            for (size_t k = 0; k <= kind; ++k)
+            {
+                const Tok& o = toks[k];
+                const uint32_t np = p - 1 + o.takes;
+                if (np > kFractalAwaitedMost) continue;
+                for (uint32_t lt = 1; lt <= len && (k < kind || lt < ltk); ++lt)
+                    if (!o.part->n[lt].is_zero()) r += BigUint::mul(o.part->n[lt], rest(np, len, lt));
+            }
+            const uint32_t np = p - 1 + toks[kind].takes;
+            r += BigUint::mul(toks[kind].part->rank(tk), rest(np, len, ltk));
+            if (np == 0) return r;
+            t.remove_prefix(sp + 1), p = np;
+        }
+    }
+};
+
 } // namespace v3parts
 
 struct FractalSpaceV3
@@ -583,15 +710,33 @@ std::shared_ptr<const FractalSpaceV3> make_v3(uint32_t longest)
     return v;
 }
 
+// fractal-space-v4's v4 rulesets (list X4): an IFS's, then the escape and converge formulas'.
+std::shared_ptr<const FractalSpaceV3> make_v4(uint32_t longest)
+{
+    g_longest = longest;
+    const P coef = std::make_shared<const Num>(true, 999, false, false, true);
+    std::vector<P> map{lit("map ")};
+    for (int k = 0; k < 6; ++k)
+    {
+        if (k) map.push_back(lit(" "));
+        map.push_back(coef);
+    }
+    map.push_back(lit("\n"));
+    const P ifs = seq({lit(std::string(kFractalVersion4) + "\nifs\n"), std::make_shared<const NonEmpty>(std::make_shared<const Star>(seq(map), nullptr))});
+    const P formula = std::make_shared<const Formula>(std::make_shared<const Num>(true, 999, false, false));
+    const P span = std::make_shared<const Num>(false, 999, false, false);
+    const P julia = std::make_shared<const Opt>(seq({lit("julia "), coef, lit(" "), coef, lit("\n")}));
+    const P view = std::make_shared<const Opt>(seq({lit("view "), coef, lit(" "), coef, lit(" "), span, lit("\n")}));
+    const P kind = std::make_shared<const Alt>(std::vector<P>{lit("escape "), lit("converge ")});
+    const P esc = seq({lit(std::string(kFractalVersion4) + "\n"), kind, formula, lit("\n"), julia, view});
+    auto v = std::make_shared<FractalSpaceV3>();
+    v->all = std::make_shared<const Alt>(std::vector<P>{ifs, esc});
+    return v;
+}
+
 } // namespace v3parts
 
-BigUint FractalSpace::count_v3() const
-{
-    BigUint t = total_;
-    t -= total_v1_;
-    t -= total_v2_;
-    return t;
-}
+BigUint FractalSpace::count_v3() const { return total_v3_; }
 
 FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
 {
@@ -649,9 +794,13 @@ FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
     }
     for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_v2_ += by_length_v2_[l];
     v3_ = v3parts::make_v3(longest);
+    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_v3_ += v3_->all->n[l];
+    v4_ = v3parts::make_v4(longest);
+    for (uint32_t l = 0; l <= longest; ++l) total_v4_ += v4_->all->n[l];
     total_ = total_v1_;
     total_ += total_v2_;
-    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_ += v3_->all->n[l];
+    total_ += total_v3_;
+    total_ += total_v4_;
 }
 
 BigUint FractalSpace::at_length_v2(uint32_t l) const
@@ -693,6 +842,7 @@ BigUint FractalSpace::count_at(uint32_t length) const
     BigUint n = by_length_[length];
     n += by_length_v2_[length];
     n += v3_->all->n[length];
+    n += v4_->all->n[length];
     return n;
 }
 
@@ -743,6 +893,18 @@ std::string FractalSpace::at(const BigUint& index) const
     BigUint i = index;
     BigUint v1v2 = total_v1_;
     v1v2 += total_v2_;
+    BigUint v1v3 = v1v2;
+    v1v3 += total_v3_;
+    if (i >= v1v3)
+    {
+        // v4's: its length (from the shortest it has), then its parts' places.
+        i -= v1v3;
+        uint32_t l = 0;
+        while (i >= v4_->all->n[l]) i -= v4_->all->n[l++];
+        std::string text;
+        v4_->all->write(l, i, text);
+        return text;
+    }
     if (i >= v1v2)
     {
         // v3's: its length, then its parts' places.
@@ -832,9 +994,19 @@ BigUint FractalSpace::body_index(const Family& fam, uint32_t r, const Fractal& f
 std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
 {
     const auto f = read_fractal(text);
-    if (!f || text.size() > longest_ || text.size() < kFractalSpaceShortest) return std::nullopt;
+    if (!f || text.size() > longest_) return std::nullopt;
     const uint32_t l = uint32_t(text.size());
     BigUint index;
+    if (f->version == 4)
+    {
+        index = total_v1_;
+        index += total_v2_;
+        index += total_v3_;
+        for (uint32_t k = 0; k < l; ++k) index += v4_->all->n[k];
+        index += v4_->all->rank(text);
+        return index;
+    }
+    if (text.size() < kFractalSpaceShortest) return std::nullopt;
     if (f->version == 3)
     {
         index = total_v1_;

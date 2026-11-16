@@ -91,7 +91,7 @@ public:
     {
         const auto f = fractal_of(unit);
         if (!f) return false;
-        if (f->family == Fractal::Family::Substitution) return true;
+        if (f->family == Fractal::Family::Substitution || f->family == Fractal::Family::Escape || f->family == Fractal::Family::Converge) return true;
         const auto d = fractal_box_dimension(*f);
         return d && d->value >= least_;
     }
@@ -100,8 +100,21 @@ private:
     double least_;
 };
 
+// A v4 formula mentions a token.
+bool mentions(const Fractal& f, const char* t)
+{
+    for (const std::string& k : f.formula)
+        if (k == t) return true;
+    return false;
+}
+// What changes from one point of an escape or converge picture to the next: z (with julia, where z starts
+// at the point) or c (without it, where c is the point).
+bool varies(const Fractal& f) { return f.julia ? mentions(f, "z") : mentions(f, "c"); }
+
 bool draws(const Fractal& f)
 {
+    if (f.family == Fractal::Family::Ifs) return true;
+    if (!f.rewrites()) return varies(f);
     const std::vector<char> m = reach(f);
     if (f.family == Fractal::Family::Substitution) return m.size() >= 2;
     for (const char c : m)
@@ -111,6 +124,8 @@ bool draws(const Fractal& f)
 
 bool grows(const Fractal& f)
 {
+    if (f.family == Fractal::Family::Ifs) return f.maps.size() >= 2;
+    if (!f.rewrites()) return mentions(f, "z");
     const std::vector<char> m = reach(f);
     const std::set<char> met(m.begin(), m.end());
     for (const auto& [c, w] : f.rules)
@@ -118,8 +133,31 @@ bool grows(const Fractal& f)
     return false;
 }
 
+// An IFS's maps in the order of their texts, each once (a reordering of them draws the same).
+bool maps_in_order(const Fractal& f)
+{
+    std::string last;
+    for (size_t k = 0; k < f.maps.size(); ++k)
+    {
+        std::string t;
+        for (const std::string& n : f.maps[k].text) t += n + " ";
+        if (k && !(last < t)) return false;
+        last = t;
+    }
+    return true;
+}
+
 bool no_idle(const Fractal& f)
 {
+    if (f.family == Fractal::Family::Ifs)
+    {
+        // (a map given twice adds no point)
+        for (size_t a = 0; a < f.maps.size(); ++a)
+            for (size_t b = a + 1; b < f.maps.size(); ++b)
+                if (f.maps[a].text == f.maps[b].text) return false;
+        return true;
+    }
+    if (!f.rewrites()) return true;
     const std::vector<char> m = reach(f);
     const std::set<char> met(m.begin(), m.end());
     for (const auto& [c, w] : f.rules)
@@ -131,6 +169,8 @@ bool canonical(const Fractal& f)
 {
     // Renamable symbols take their names in the order they are met, the first of the names free to
     // them first; and every rule is for a symbol met (a rule for one never met could be named anything).
+    if (f.family == Fractal::Family::Ifs) return maps_in_order(f);
+    if (!f.rewrites()) return true;
     std::string names;
     if (f.family == Fractal::Family::Substitution) names = "0123456789abcdefghijklmnopqrstuvwxyz";
     else
@@ -296,24 +336,28 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
 {
     out.push_back(judge("fractal-draws",
                         "Draws something: an L-system whose axiom reaches F or G (a line drawn) at some depth; a "
-                        "substitution whose axiom reaches two symbols or more (two colours). A ruleset that draws "
-                        "nothing is a blank picture at every depth.",
+                        "substitution whose axiom reaches two symbols or more (two colours); every IFS; an escape or "
+                        "converge formula that mentions what differs from point to point (c, or z for a Julia set). A "
+                        "ruleset that draws nothing is a blank picture at every depth.",
                         draws));
     out.push_back(judge("fractal-grows",
                         "Grows: a symbol the axiom reaches has a rule of two symbols or more, so its word is longer at "
                         "every depth. One that does not is the same length at every depth, a picture that never "
-                        "changes size.",
+                        "changes size. An IFS grows with two maps or more; an escape or converge formula, where it "
+                        "mentions z.",
                         grows));
     out.push_back(judge("fractal-no-idle",
                         "No idle rules: no rule for a symbol the axiom never reaches, and no rule that rewrites a "
                         "symbol to itself. Either draws what the ruleset without that rule draws, which is at an "
-                        "address of its own.",
+                        "address of its own. An IFS: no map given twice. Every escape or converge formula passes.",
                         no_idle));
     out.push_back(judge("fractal-canonical",
                         "One ruleset of each renaming: the symbols whose names change nothing drawn (an L-system's "
                         "letters but F, G and f) or only a colour (every substitution symbol) take the first names "
                         "free in the order the axiom reaches them, and every rule is for a symbol reached. Of the "
-                        "charted fractals, the dragon curve (X and Y) is a renaming of A and B.",
+                        "charted fractals, the dragon curve (X and Y) is a renaming of A and B. An IFS: its maps in the "
+                        "order of their texts, each once (another order draws the same). Every escape or converge "
+                        "formula passes.",
                         canonical));
 
     // How fractal a drawing is (list X2; IDEAS 19.235: "a measure of how fractal a drawing is (its
@@ -326,7 +370,8 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                       "straight lines (1), the curves that are hardly bent and those too small to measure (fewer "
                       "than 16 lines, or under three grids). The Koch curve measures 1.29, the Sierpinski triangle "
                       "1.58, the Hilbert curve 2.00. A substitution, whose rows are a sequence and not a figure, "
-                      "passes.";
+                      "passes, and so does an escape or converge picture (not measured); an IFS is measured on its "
+                      "points.";
     dim.params = {{"least", "the least box-counting dimension passed, in hundredths (110: 1.10)", FilterParam::Kind::Integer, "110", 0, 200, 5, {}}};
     dim.applies = is_fractals;
     dim.judge_only = true;

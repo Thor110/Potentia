@@ -62,6 +62,13 @@ class Empty(Re):
     pass
 
 
+class Linear(Re):
+    """A right-linear grammar: prods maps each name to [(Re, next name or None to end)], start its first.
+    (A language a regular expression could write, but only at length: a v4 formula's awaited values.)"""
+    def __init__(self, prods, start):
+        self.prods, self.start = prods, start
+
+
 def lit(s):
     return Seq([Sym([c]) for c in s]) if len(s) != 1 else Sym([s])
 
@@ -211,6 +218,15 @@ def nfa(r):
                 eps[a].append(x)
                 eps[y].append(b)
             return a, b
+        if isinstance(r, Linear):
+            entry = {k: new() for k in r.prods}
+            out = new()
+            for k, ps in r.prods.items():
+                for p, nk in ps:
+                    a, b = build(p)
+                    eps[entry[k]].append(a)
+                    eps[b].append(entry[nk] if nk is not None else out)
+            return entry[r.start], out
         if isinstance(r, Star):
             a, b = new(), new()
             x, y = build(r.inner)
@@ -609,6 +625,36 @@ def fractal_v3():
     return alt(fractal_v2(), v3)
 
 
+def fractal_v4():
+    """Every v1, v2 and v3 ruleset, and every sieve-fractal-v4 (list X4): "ifs" and one or more "map A B C D E
+    F", or "escape FORMULA" or "converge FORMULA" then, if it has them, "julia RE IM" and "view X Y SPAN". A
+    number: an optional -, 0 to 999 with no leading zero, up to 6 decimals, the last not 0, never -0 (a
+    formula's never 0; SPAN more than 0). A formula: tokens one space apart in prefix (+ - * / ^ take two;
+    abs conj cos exp log sin one; c i z and a number none), never more than 8 values awaited, which a walk
+    keeps count of as its state. So its v4 survivors are exactly the reader's."""
+    nz = "123456789"
+    frac = seq(".", rep(chars(DIGITS), 0, 5), chars(nz))
+    positive = alt(seq("0", frac), seq(decimal_between(1, 999), opt(frac)))
+    nonzero = seq(opt("-"), positive)
+    coef = alt(lit("0"), nonzero)
+    sp = lambda *ps: seq(*[x for k, p in enumerate(ps) for x in ([" "] if k else []) + [p]])
+    ifs = seq("ifs\n", rep(seq("map ", sp(*[coef] * 6), "\n"), 1, None))
+    most = 8
+    kinds = [(chars("*+-/^"), 2), (alt("abs", "conj", "cos", "exp", "log", "sin"), 1), (alt(chars("ciz"), nonzero), 0)]
+    prods = {}
+    for p in range(1, most + 1):
+        prods[p] = []
+        for tok, takes in kinds:
+            np = p - 1 + takes
+            if np == 0:
+                prods[p].append((tok, None))
+            elif np <= most:
+                prods[p].append((seq(tok, " "), np))
+    formula = Linear(prods, 1)
+    esc = seq(alt("escape ", "converge "), formula, "\n", opt(seq("julia ", coef, " ", coef, "\n")), opt(seq("view ", coef, " ", coef, " ", positive, "\n")))
+    return alt(fractal_v3(), seq("sieve-fractal-v4\n", alt(ifs, esc)))
+
+
 def nonempty_ascending(symbols):
     """One or more of the symbols, in their order, each once."""
     return alt(*[seq(lit(c), *[opt(lit(d)) for d in symbols[k + 1:]]) for k, c in enumerate(symbols)])
@@ -680,6 +726,16 @@ PLUGINS = [
       "every word 1 to 255 of its symbols (letters, digits and + - [ ] | ! \" ' & ^ \\ /). As format-fractal-v1,",
       "the rules' order by symbol is the reader's alone, so its survivors are the reader's rulesets with",
       "their rules in any order; tools/check_formats.py checks every other verdict."]),
+    ("format-fractal", 4, fractal_v4,
+     "One sieve-fractal-v1, v2, v3 or v4 ruleset (v1 to v3's rules' order aside): the fractal dimension's line, each ruleset at its address in fractal-space-v4 (list X4).",
+     ["A fractal's ruleset (sieve-fractal-v1 to v4, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp) written",
+      "as a filter: v1's, v2's and v3's as format-fractal-v3 passes them, and v4's, the families beyond",
+      "rewriting: \"sieve-fractal-v4\", then \"ifs\" and one or more \"map A B C D E F\" (an iterated function",
+      "system), or \"escape FORMULA\" or \"converge FORMULA\" (z's next value in prefix, tokens one space apart,",
+      "never more than 8 values awaited) and if it has them \"julia RE IM\" and \"view X Y SPAN\"; a number an",
+      "optional -, 0 to 999 and up to 6 decimals with no 0 at the end, never -0. A v4 ruleset passes exactly",
+      "when the reader takes it (the values a formula awaits are a walk's state); the rules' order of v1 to",
+      "v3 is still the reader's alone. tools/check_formats.py checks every other verdict."]),
     ("format-world", 1, world_v1,
      "One sieve-personal-world-v1 exactly as it is written (the numbers a float's own aside): a personal dimension's seed and what is placed (IDEAS 19.185, 19.187).",
      ["A personal dimension's world (sieve-personal-world-v1, SPECIFICATIONS 12.0r, client/personal_world.cpp)",

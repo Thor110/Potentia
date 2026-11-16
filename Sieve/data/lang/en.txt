@@ -2032,6 +2032,9 @@ fractals.at = at {0}
 fractals.too_long = not on this line ({0} characters, past the longest, {1})
 fractals.generated.substitution = substitution, {0}
 fractals.generated.lsystem = L-system {0}, {1}
+fractals.generated.ifs = IFS, {0} map(s)
+fractals.generated.escape = escape-time, {0}
+fractals.generated.converge = convergence, {0}
 fractals.units.include = rulesets<={0} chars
 fractals.units.exclude = rulesets<={0} chars, known set aside
 fractals.units.only = {0} charted
@@ -2048,6 +2051,10 @@ setup.fractal_elsewhere.exclude = exclude (image line: fractals drawn set aside)
 setup.fractal_elsewhere.mode_off = , its mode off
 fractals.substitution = a substitution
 fractals.lsystem.angle = an L-system, turning {0} degrees
+fractals.ifs = an iterated function system of {0} map(s)
+fractals.escape = an escape-time set of z -> {0}
+fractals.converge = a convergence picture of z -> {0}
+fractals.julia = , a Julia set at {0}
 fractals.lsystem.scale = an L-system, turning {0} degrees, its step {1} times as long at each "
 fractals.source = ; after {0}
 fractals.unreadable = The shelves could not be read: {0}

@@ -213,3 +213,99 @@ fractal hogeweg-hesper-d Hogeweg and Hesper context-sensitive tree (d)
 source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31d (L-systems based on Hogeweg & Hesper 1974)
 fractal hogeweg-hesper-e Hogeweg and Hesper context-sensitive tree (e)
 source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.31e (L-systems based on Hogeweg & Hesper 1974)
+fractal fractint-ifs-binary Binary (Fractint IFS)
+source Fractint, fractint.ifs, "binary"
+fractal fractint-ifs-coral Coral (Fractint IFS)
+source Fractint, fractint.ifs, "coral"
+fractal fractint-ifs-crystal Crystal (Fractint IFS)
+source Fractint, fractint.ifs, "crystal"
+fractal fractint-ifs-dragon Dragon (Fractint IFS)
+source Fractint, fractint.ifs, "dragon"
+fractal fractint-ifs-floor Floor (Fractint IFS)
+source Fractint, fractint.ifs, "floor"
+fractal fractint-ifs-koch3 Koch3 (Fractint IFS)
+source Fractint, fractint.ifs, "koch3"
+fractal fractint-ifs-spiral Spiral (Fractint IFS)
+source Fractint, fractint.ifs, "spiral"
+fractal fractint-ifs-swirl5 Swirl5 (Fractint IFS)
+source Fractint, fractint.ifs, "swirl5"
+fractal fractint-ifs-tree Tree (Fractint IFS)
+source Fractint, fractint.ifs, "tree"
+fractal fractint-ifs-triangle Triangle (Fractint IFS)
+source Fractint, fractint.ifs, "triangle"
+fractal fractint-ifs-zigzag2 Zigzag2 (Fractint IFS)
+source Fractint, fractint.ifs, "zigzag2"
+fractal fractint-ifs-fractint Fractint (the program's name, by Pieter Branderhorst) (Fractint IFS)
+source Fractint, fractint.ifs, "fractint"
+fractal barnsley-fern Barnsley fern
+source Wikipedia, Barnsley fern (Barnsley, Fractals Everywhere); also Fractint's fractint.ifs "fern"
+fractal cyclosorus-fern Barnsley fern, mutated: Cyclosorus
+source Wikipedia, Barnsley fern, "Mutant varieties" (Cyclosorus or Thelypteridaceae)
+fractal heighway-dragon-ifs Heighway dragon, as an IFS
+source Wikipedia, Dragon curve, "[Heighway dragon] as an IFS": f1(z) = (1+i)z/2, f2(z) = 1 - (1-i)z/2
+fractal twindragon-ifs Twindragon (Davis-Knuth dragon), as an IFS
+source Wikipedia, Dragon curve, "Twindragon": f1(z) = (1+i)z/2, f2(z) = 1 - (1+i)z/2
+fractal terdragon-ifs Terdragon, as an IFS
+source Wikipedia, Dragon curve, "Terdragon": f1 = lz, f2 = (i/sqrt 3)z + l, f3 = lz + l*, l = 1/2 - i/(2 sqrt 3)
+fractal levy-c-curve-ifs Levy C curve, as an IFS
+source Wikipedia, Levy C curve, "IFS": f1(z) = (1-i)z/2, f2(z) = 1 + (1+i)(z-1)/2
+fractal cantor-set-ifs Cantor set, as an IFS
+source Wikipedia, Cantor set, "Self-similarity": T_L(x) = x/3, T_R(x) = (2+x)/3
+fractal sierpinski-triangle-ifs Sierpinski triangle, as an IFS
+source Wikipedia, Sierpinski triangle: three copies of itself, each of ratio 1/2
+fractal sierpinski-carpet-ifs Sierpinski carpet, as an IFS
+source Wikipedia, Sierpinski carpet: the square cut into nine, the centre taken away, and so on in each of the eight left
+fractal vicsek-fractal-ifs Vicsek fractal (cross form), as an IFS
+source Wikipedia, Vicsek fractal: the square cut into nine, the centre and the four beside it kept (the cross form)
+fractal koch-curve-ifs Koch curve, as an IFS
+source Wikipedia, Koch snowflake: von Koch's curve on a segment, its middle third replaced by two sides of a triangle
+fractal mandelbrot-set Mandelbrot set
+source Fractint, type mandel (z(n+1) = z(n)^2 + c), its default corners; Wikipedia, Mandelbrot set
+fractal fractint-julia Julia set, Fractint's default (c = 0.3 + 0.6i)
+source Fractint, type julia, its default parameters 0.3 0.6 and corners
+fractal multibrot-4 Multibrot set of degree 4
+source Fractint, type mandel4 (z(n+1) = z(n)^4 + c), its default corners; Wikipedia, Multibrot set
+fractal fractint-julia4 Julia set of z^4 + c, Fractint's default (c = 0.6 + 0.55i)
+source Fractint, type julia4, its default parameters 0.6 0.55
+fractal fractint-lambda Lambda set, Fractint's default (lambda = 0.85 + 0.6i)
+source Fractint, type lambda (z(n+1) = lambda z(n) (1 - z(n))), its default parameters 0.85 0.6 and corners
+fractal magnet-1-mandelbrot Magnet fractal, type 1 (its Mandelbrot set)
+source Fractint, type magnet1m (z(n+1) = ((z^2 + c - 1) / (2z + c - 2))^2, z(0) = 0), its default corners
+fractal magnet-1-julia Magnet fractal, type 1 (Julia set, c = 0)
+source Fractint, type magnet1j, its default parameters 0 0 and corners
+fractal magnet-2-mandelbrot Magnet fractal, type 2 (its Mandelbrot set)
+source Fractint, type magnet2m (z(n+1) = ((z^3 + 3(c-1)z + (c-1)(c-2)) / (3z^2 + 3(c-2)z + (c-1)(c-2) + 1))^2), its default corners
+fractal newton-z3-minus-1 Newton fractal of z^3 - 1
+source Fractint, type newton (degree 3, its default; z(0) = the point); Wikipedia, Newton fractal (z^3 - 1)
+fractal newton-z4-minus-1 Newton fractal of z^4 - 1
+source Fractint, type newton with degree 4 (its parameter: z^n - 1)
+fractal burning-ship Burning Ship fractal
+source Wikipedia, Burning Ship fractal (z(n+1) = (|Re z| + i|Im z|)^2 + c, z(0) = 0)
+fractal tricorn Tricorn (Mandelbar set)
+source Wikipedia, Tricorn (z -> conj(z)^2 + c)
+fractal multibrot-3 Multibrot set of degree 3
+source Wikipedia, Multibrot set (z -> z^d + c, d = 3)
+fractal julia-0-4p0-6i Julia set, c = -0.4 + 0.6i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.4 + 0.6i)
+fractal julia-0-285 Julia set, c = 0.285
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = 0.285)
+fractal julia-0-285p0-01i Julia set, c = 0.285 + 0.01i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = 0.285 + 0.01i)
+fractal julia-0-70176-0-3842i Julia set, c = -0.70176 - 0.3842i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.70176 - 0.3842i)
+fractal julia-0-835-0-2321i Julia set, c = -0.835 - 0.2321i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.835 - 0.2321i)
+fractal julia-0-8p0-156i Julia set, c = -0.8 + 0.156i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.8 + 0.156i)
+fractal julia-0-7269p0-1889i Julia set, c = -0.7269 + 0.1889i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.7269 + 0.1889i)
+fractal julia-0-8i Julia set, c = -0.8i
+source Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.8i)
+fractal douady-corabbit Douady corabbit (the rabbit's mirror image)
+source Wikipedia, Douady rabbit, "corabbit": c ~ -0.1226 - 0.7449i
+fractal douady-rabbit Douady rabbit
+source Wikipedia, Douady rabbit: the corabbit is its mirror image (c ~ -0.1226 - 0.7449i), so the rabbit's c is that one's conjugate
+fractal julia-san-marco-dem Julia set, c = -0.75 + 0.11i
+source Wikipedia, Julia set, its distance-estimation gallery (c = -0.75 + 0.11i)
+fractal collatz-fractal Collatz fractal
+source Wikipedia, Collatz conjecture, "Iterating on real or complex numbers" (Letherman, Schleicher and Wood's f with h(z) = 0), centred at 0 with real parts -5 to 5

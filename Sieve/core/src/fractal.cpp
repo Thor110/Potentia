@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <complex>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -250,6 +251,186 @@ std::optional<Fractal> read_v3(const std::vector<std::string>& lines, const std:
     return f;
 }
 
+// A v4 number (sieve/fractal.hpp): an optional -, a whole part of 0 to 999, up to 6 decimals, the last
+// not 0, never -0; 0 itself only where zero_ok.
+std::optional<double> v4_number(std::string_view s, bool zero_ok)
+{
+    const bool negative = !s.empty() && s[0] == '-';
+    const std::string_view body = s.substr(negative ? 1 : 0);
+    const auto v = millionths(body, 6);
+    if (!v) return std::nullopt;
+    if (*v == 0) return zero_ok && !negative && body == "0" ? std::optional<double>(0.0) : std::nullopt;
+    return (negative ? -1.0 : 1.0) * double(*v) / 1e6;
+}
+
+// A v4 formula's token: how many values it takes (2, 1 or 0); nothing for one that is none.
+std::optional<int> v4_token(std::string_view t)
+{
+    if (t == "+" || t == "-" || t == "*" || t == "/" || t == "^") return 2;
+    if (t == "abs" || t == "conj" || t == "cos" || t == "exp" || t == "log" || t == "sin") return 1;
+    if (t == "z" || t == "c" || t == "i" || v4_number(t, false)) return 0;
+    return std::nullopt;
+}
+
+// Splits "WORD WORD ..." at single spaces: nothing where a word is empty.
+std::optional<std::vector<std::string>> words_of(std::string_view s)
+{
+    std::vector<std::string> out;
+    size_t from = 0;
+    for (;;)
+    {
+        const size_t sp = s.find(' ', from);
+        const std::string_view w = s.substr(from, sp == std::string_view::npos ? std::string_view::npos : sp - from);
+        if (w.empty()) return std::nullopt;
+        out.emplace_back(w);
+        if (sp == std::string_view::npos) return out;
+        from = sp + 1;
+    }
+}
+
+// The lines after the version line of a v4 ruleset (sieve/fractal.hpp).
+std::optional<Fractal> read_v4(const std::vector<std::string>& lines, const std::function<std::optional<Fractal>(const std::string&)>& bad)
+{
+    Fractal f;
+    f.version = 4;
+    if (lines.size() < 2) return bad("a v4 ruleset's second line is \"ifs\", \"escape FORMULA\" or \"converge FORMULA\"");
+    if (lines[1] == "ifs")
+    {
+        f.family = Fractal::Family::Ifs;
+        if (lines.size() < 3) return bad("an IFS has one map at least");
+        for (size_t i = 2; i < lines.size(); ++i)
+        {
+            const std::string& l = lines[i];
+            const auto w = l.rfind("map ", 0) == 0 ? words_of(std::string_view(l).substr(4)) : std::nullopt;
+            if (!w || w->size() != 6) return bad("line " + std::to_string(i + 1) + " is not \"map A B C D E F\"");
+            Fractal::Map m;
+            for (size_t k = 0; k < 6; ++k)
+            {
+                const auto v = v4_number((*w)[k], true);
+                if (!v) return bad("line " + std::to_string(i + 1) + ": a number is an optional -, 0 to 999 and up to 6 decimals with no 0 at the end (not -0)");
+                m.text[k] = (*w)[k], m.value[k] = *v;
+            }
+            f.maps.push_back(m);
+        }
+        return f;
+    }
+    const bool escape = lines[1].rfind("escape ", 0) == 0, converge = lines[1].rfind("converge ", 0) == 0;
+    if (!escape && !converge) return bad("a v4 ruleset's second line is \"ifs\", \"escape FORMULA\" or \"converge FORMULA\"");
+    f.family = escape ? Fractal::Family::Escape : Fractal::Family::Converge;
+    const auto tokens = words_of(std::string_view(lines[1]).substr(escape ? 7 : 9));
+    if (!tokens) return bad("a formula's tokens are one space apart");
+    uint32_t awaited = 1;
+    for (size_t k = 0; k < tokens->size(); ++k)
+    {
+        const auto takes = v4_token((*tokens)[k]);
+        if (!takes) return bad("\"" + (*tokens)[k] + "\" is not a token of a formula (+ - * / ^, abs conj cos exp log sin, z c i, or a number not 0)");
+        if (awaited == 0) return bad("the formula is whole before its last token");
+        awaited = awaited - 1 + uint32_t(*takes);
+        if (awaited > kFractalAwaitedMost) return bad("a formula awaits " + std::to_string(kFractalAwaitedMost) + " values at most at once");
+    }
+    if (awaited != 0) return bad("the formula awaits " + std::to_string(awaited) + " more value(s)");
+    f.formula = *tokens;
+    size_t i = 2;
+    if (i < lines.size() && lines[i].rfind("julia ", 0) == 0)
+    {
+        const auto w = words_of(std::string_view(lines[i]).substr(6));
+        if (!w || w->size() != 2) return bad("line 3 is not \"julia RE IM\"");
+        for (size_t k = 0; k < 2; ++k)
+        {
+            const auto v = v4_number((*w)[k], true);
+            if (!v) return bad("julia's numbers are each an optional -, 0 to 999 and up to 6 decimals with no 0 at the end (not -0)");
+            f.julia_text[k] = (*w)[k], f.julia_value[k] = *v;
+        }
+        f.julia = true, ++i;
+    }
+    if (i < lines.size() && lines[i].rfind("view ", 0) == 0)
+    {
+        const auto w = words_of(std::string_view(lines[i]).substr(5));
+        if (!w || w->size() != 3) return bad("line " + std::to_string(i + 1) + " is not \"view X Y SPAN\"");
+        for (size_t k = 0; k < 3; ++k)
+        {
+            const auto v = v4_number((*w)[k], k < 2);
+            if (!v || (k == 2 && *v <= 0)) return bad("view's numbers are each an optional -, 0 to 999 and up to 6 decimals with no 0 at the end (not -0), its span more than 0");
+            f.view_text[k] = (*w)[k], f.view_value[k] = *v;
+        }
+        f.view = true, ++i;
+    }
+    if (i != lines.size()) return bad("line " + std::to_string(i + 1) + " is not \"julia RE IM\" or \"view X Y SPAN\" in that order, each once");
+    return f;
+}
+
+// A v4 formula made ready to follow a point: its tokens as operations, read from the right.
+struct Program
+{
+    struct Op
+    {
+        char kind; // + - * / ^, a (abs) j (conj) C (cos) e (exp) l (log) s (sin), z c, n (a number)
+        std::complex<double> value;
+    };
+    std::vector<Op> ops; // (in reverse, so a stack takes them as they come)
+    explicit Program(const std::vector<std::string>& tokens)
+    {
+        for (size_t k = tokens.size(); k-- > 0;)
+        {
+            const std::string& t = tokens[k];
+            Op o{t[0], {}};
+            if (t == "abs") o.kind = 'a';
+            else if (t == "conj") o.kind = 'j';
+            else if (t == "cos") o.kind = 'C';
+            else if (t == "exp") o.kind = 'e';
+            else if (t == "log") o.kind = 'l';
+            else if (t == "sin") o.kind = 's';
+            else if (t == "i") o.kind = 'n', o.value = {0, 1};
+            else if (t.size() > 1 || (t[0] >= '0' && t[0] <= '9')) o.kind = 'n', o.value = *v4_number(t, false);
+            ops.push_back(o);
+        }
+    }
+    static std::complex<double> power(std::complex<double> a, std::complex<double> b)
+    {
+        // (a whole exponent by multiplying, so z^2 is z z exactly; any other as exp(b log a))
+        if (b.imag() == 0 && b.real() == std::floor(b.real()) && std::abs(b.real()) <= 64)
+        {
+            int n = int(b.real());
+            const bool inverse = n < 0;
+            n = std::abs(n);
+            std::complex<double> r(1, 0), x = a;
+            while (n)
+            {
+                if (n & 1) r *= x;
+                x *= x, n >>= 1;
+            }
+            return inverse ? 1.0 / r : r;
+        }
+        return std::pow(a, b);
+    }
+    std::complex<double> operator()(std::complex<double> z, std::complex<double> c) const
+    {
+        std::array<std::complex<double>, kFractalAwaitedMost + 1> st;
+        size_t n = 0;
+        for (const Op& o : ops)
+            switch (o.kind)
+            {
+            case 'z': st[n++] = z; break;
+            case 'c': st[n++] = c; break;
+            case 'n': st[n++] = o.value; break;
+            case 'a': st[n - 1] = {std::abs(st[n - 1].real()), std::abs(st[n - 1].imag())}; break;
+            case 'j': st[n - 1] = std::conj(st[n - 1]); break;
+            case 'C': st[n - 1] = std::cos(st[n - 1]); break;
+            case 'e': st[n - 1] = std::exp(st[n - 1]); break;
+            case 'l': st[n - 1] = std::log(st[n - 1]); break;
+            case 's': st[n - 1] = std::sin(st[n - 1]); break;
+            default:
+            {
+                // (the top the first, left, value)
+                const std::complex<double> a = st[n - 1], b = st[n - 2];
+                --n;
+                st[n - 1] = o.kind == '+' ? a + b : o.kind == '-' ? a - b : o.kind == '*' ? a * b : o.kind == '/' ? a / b : power(a, b);
+            }
+            }
+        return st[0];
+    }
+};
+
 uint64_t mix64(uint64_t z)
 {
     z += 0x9E3779B97F4A7C15ull;
@@ -358,6 +539,27 @@ std::string fractal_scale_text(uint32_t thousandths)
 
 std::string Fractal::text() const
 {
+    if (version == 4)
+    {
+        std::string t = std::string(kFractalVersion4) + "\n";
+        if (family == Family::Ifs)
+        {
+            t += "ifs\n";
+            for (const Map& m : maps)
+            {
+                t += "map";
+                for (const std::string& n : m.text) t += " " + n;
+                t += "\n";
+            }
+            return t;
+        }
+        t += family == Family::Escape ? "escape" : "converge";
+        for (const std::string& k : formula) t += " " + k;
+        t += "\n";
+        if (julia) t += "julia " + julia_text[0] + " " + julia_text[1] + "\n";
+        if (view) t += "view " + view_text[0] + " " + view_text[1] + " " + view_text[2] + "\n";
+        return t;
+    }
     if (version == 3)
     {
         std::string t = std::string(kFractalVersion3) + "\nlsystem " + angle_text + "\n";
@@ -386,6 +588,7 @@ std::string Fractal::text() const
 
 std::optional<std::string> Fractal::grow(uint32_t depth) const
 {
+    if (!rewrites()) return std::nullopt;
     if (version == 3)
     {
         std::string word = axiom;
@@ -420,6 +623,20 @@ uint32_t fractal_deepest_within(const Fractal& f, size_t most)
 {
     // (each step grows the word by at most the longest rule, so the sizes are worked out, not grown)
     const uint64_t limit = std::min<uint64_t>(most, kFractalMost);
+    if (f.family == Fractal::Family::Ifs)
+    {
+        // (1 + n + n^2 + ... + n^d points)
+        uint32_t d = 0;
+        for (uint64_t level = 1, points = 1; d < kFractalDepthMost && points + level * f.maps.size() <= limit; ++d) level *= f.maps.size(), points += level;
+        return d;
+    }
+    if (!f.rewrites())
+    {
+        // (a picture's points followed for fractal_iterations steps each: counted as 256 symbols a step)
+        uint32_t d = 0;
+        while (d < kFractalEscapeDeepest && uint64_t(fractal_iterations(d + 1)) * 256 <= limit) ++d;
+        return d;
+    }
     const auto& rules = f.rules;
     const auto& axiom = f.axiom;
     std::array<uint64_t, 256> size{};
@@ -458,8 +675,9 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
     std::vector<std::string> lines;
     if (!lf_lines(text, lines)) return bad("its last line does not end in a line feed");
     if (!lines.empty() && lines[0] == kFractalVersion3) return read_v3(lines, bad);
+    if (!lines.empty() && lines[0] == kFractalVersion4) return read_v4(lines, bad);
     if (lines.size() < 4 || (lines[0] != kFractalVersion && lines[0] != kFractalVersion2))
-        return bad(std::string("its first line is not ") + kFractalVersion + ", " + kFractalVersion2 + " or " + kFractalVersion3 + ", or it has no axiom and rule");
+        return bad(std::string("its first line is not ") + kFractalVersion + ", " + kFractalVersion2 + ", " + kFractalVersion3 + " or " + kFractalVersion4 + ", or it has no axiom and rule");
     Fractal f;
     f.version = lines[0] == kFractalVersion2 ? 2 : 1;
     if (lines[1] == "substitution")
@@ -609,10 +827,105 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
     return out;
 }
 
+std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& f, uint32_t depth)
+{
+    if (f.family != Fractal::Family::Ifs || depth > fractal_deepest_within(f, kFractalMost)) return std::nullopt;
+    // The first map's fixed point (on the figure, where the map shrinks), or (0, 0) where it has none;
+    // then level by level, each map applied to every point of the level before (the last applied the
+    // outermost), every level kept.
+    const auto& m0 = f.maps[0].value;
+    const double det = (1 - m0[0]) * (1 - m0[3]) - m0[1] * m0[2];
+    std::array<double, 3> start{0, 0, 0};
+    if (std::abs(det) > 1e-12) start = {((1 - m0[3]) * m0[4] + m0[1] * m0[5]) / det, (m0[2] * m0[4] + (1 - m0[0]) * m0[5]) / det, 0};
+    std::vector<std::array<double, 3>> all{start}, level{start}, next;
+    for (uint32_t d = 0; d < depth; ++d)
+    {
+        next.clear();
+        next.reserve(level.size() * f.maps.size());
+        for (size_t k = 0; k < f.maps.size(); ++k)
+        {
+            const auto& m = f.maps[k].value;
+            for (const auto& q : level) next.push_back({m[0] * q[0] + m[1] * q[1] + m[4], m[2] * q[0] + m[3] * q[1] + m[5], double(k)});
+        }
+        level.swap(next);
+        all.insert(all.end(), level.begin(), level.end());
+    }
+    return all;
+}
+
+namespace {
+
+// A point's place on the picture of an escape or converge ruleset: centre and span from its view (y up).
+std::complex<double> view_point(const Fractal& f, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+{
+    const double unit = f.view_value[2] / double(std::min(width, height));
+    return {f.view_value[0] + (double(x) + 0.5 - double(width) / 2) * unit, f.view_value[1] - (double(y) + 0.5 - double(height) / 2) * unit};
+}
+
+// Follows one point: the steps it took to escape (or settle), and where z ended; steps == the most for
+// one that did neither.
+std::pair<uint32_t, std::complex<double>> follow(const Fractal& f, const Program& prog, std::complex<double> point, uint32_t most)
+{
+    std::complex<double> z = f.julia ? point : std::complex<double>(0, 0);
+    const std::complex<double> c = f.julia ? std::complex<double>(f.julia_value[0], f.julia_value[1]) : point;
+    const bool escape = f.family == Fractal::Family::Escape;
+    for (uint32_t n = 0; n < most; ++n)
+    {
+        const std::complex<double> next = prog(z, c);
+        if (!std::isfinite(next.real()) || !std::isfinite(next.imag())) return {escape ? n : most, z};
+        if (escape ? std::norm(next) > kFractalEscapeRadius * kFractalEscapeRadius : std::abs(next - z) < kFractalSettled) return {n, next};
+        z = next;
+    }
+    return {most, z};
+}
+
+} // namespace
+
 std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t width, uint32_t height)
 {
     if (width == 0 || height == 0 || width > 8192 || height > 8192) return std::nullopt;
     RgbaImage img = blank(width, height);
+    if (f.family == Fractal::Family::Escape || f.family == Fractal::Family::Converge)
+    {
+        // Each pixel's point followed: an escaped one coloured by how soon it escaped, round the wheel; a
+        // settled one by where it settled (the angle of z, so each root its hue), darker the longer it took;
+        // the rest the ground.
+        if (depth > fractal_deepest_within(f, kFractalMost)) return std::nullopt;
+        const Program prog(f.formula);
+        const uint32_t most = fractal_iterations(depth);
+        for (uint32_t y = 0; y < height; ++y)
+            for (uint32_t x = 0; x < width; ++x)
+            {
+                const auto [n, z] = follow(f, prog, view_point(f, x, y, width, height), most);
+                if (n >= most) continue;
+                if (f.family == Fractal::Family::Escape) put(img, int(x), int(y), hue(n % 48, 48));
+                else
+                {
+                    const double turn = std::arg(z) / (2 * 3.141592653589793) + 0.5;
+                    auto col = hue(size_t(std::min(0.999999, std::max(0.0, turn)) * 360), 360);
+                    const double shade = 1.0 / (1.0 + double(n) / 16.0);
+                    for (auto& ch : col) ch = uint8_t(double(kGround[0]) + (double(ch) - double(kGround[0])) * shade);
+                    put(img, int(x), int(y), col);
+                }
+            }
+        return img;
+    }
+    if (f.family == Fractal::Family::Ifs)
+    {
+        // The points fitted to the picture as a path is, each coloured by the map that placed it.
+        const auto pts = fractal_points(f, depth);
+        if (!pts) return std::nullopt;
+        double lx = (*pts)[0][0], hx = lx, ly = (*pts)[0][1], hy = ly;
+        for (const auto& q : *pts)
+            if (std::isfinite(q[0]) && std::isfinite(q[1])) lx = std::min(lx, q[0]), hx = std::max(hx, q[0]), ly = std::min(ly, q[1]), hy = std::max(hy, q[1]);
+        const double margin = 0.05, span = std::max(hx - lx, hy - ly);
+        const double s = (1 - 2 * margin) * double(std::min(width, height)) / std::max(span, 1e-9);
+        const double ox = (double(width) - (hx - lx) * s) / 2, oy = (double(height) - (hy - ly) * s) / 2;
+        for (const auto& q : *pts)
+            if (std::isfinite(q[0]) && std::isfinite(q[1]))
+                put(img, int(std::lround(ox + (q[0] - lx) * s)), int(std::lround(double(height) - oy - (q[1] - ly) * s)), hue(size_t(q[2]), f.maps.size()));
+        return img;
+    }
     if (f.family == Fractal::Family::Substitution)
     {
         // Each depth a row, stretched to the width; each symbol its colour.
@@ -661,6 +974,40 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
 
 std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
 {
+    if (f.family == Fractal::Family::Ifs)
+    {
+        const uint32_t depth = fractal_deepest_within(f, kFractalDimensionPoints);
+        const auto pts = fractal_points(f, depth);
+        if (!pts || pts->size() < 16) return std::nullopt;
+        double lx = (*pts)[0][0], hx = lx, ly = (*pts)[0][1], hy = ly;
+        for (const auto& q : *pts) lx = std::min(lx, q[0]), hx = std::max(hx, q[0]), ly = std::min(ly, q[1]), hy = std::max(hy, q[1]);
+        const double span = std::max(hx - lx, hy - ly) * (1 + 1e-9);
+        if (!(span > 0) || !std::isfinite(span)) return std::nullopt;
+        std::vector<double> xs, ys;
+        std::vector<uint8_t> cells;
+        for (uint32_t n = 4; n <= 1024; n *= 2)
+        {
+            const double cell = span / n;
+            cells.assign(size_t(n) * n, 0);
+            size_t count = 0;
+            for (const auto& q : *pts)
+            {
+                const size_t cx = std::min<size_t>(n - 1, size_t(std::max(0.0, (q[0] - lx) / cell))), cy = std::min<size_t>(n - 1, size_t(std::max(0.0, (q[1] - ly) / cell)));
+                uint8_t& c = cells[cy * n + cx];
+                count += c == 0, c = 1;
+            }
+            // (past a quarter of the points, the cells count the points more than the figure)
+            if (count * 4 > pts->size()) break;
+            xs.push_back(std::log(double(n))), ys.push_back(std::log(double(count)));
+        }
+        if (xs.size() < 3) return std::nullopt;
+        double mx = 0, my = 0;
+        for (size_t k = 0; k < xs.size(); ++k) mx += xs[k], my += ys[k];
+        mx /= double(xs.size()), my /= double(xs.size());
+        double num = 0, den = 0;
+        for (size_t k = 0; k < xs.size(); ++k) num += (xs[k] - mx) * (ys[k] - my), den += (xs[k] - mx) * (xs[k] - mx);
+        return FractalDimension{num / den, depth, uint32_t(xs.size())};
+    }
     if (f.family != Fractal::Family::LSystem) return std::nullopt;
     const uint32_t depth = fractal_deepest_within(f, kFractalDimensionSymbols);
     const auto word = f.grow(depth);

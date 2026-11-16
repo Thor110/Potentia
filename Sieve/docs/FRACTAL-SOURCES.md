@@ -1,7 +1,7 @@
 # The fractal dimension's sources
 
 Where each charted fractal (`data/fractals/chart.txt`, SPECIFICATIONS 12.0t) was transcribed from, and how its
-source's notation was mapped onto `sieve-fractal-v1`, `-v2` or `-v3`: lists X2 and X3, 16 November 2026. The
+source's notation was mapped onto `sieve-fractal-v1`, `-v2`, `-v3` or `-v4`: lists X2, X3 and X4, 16 November 2026. The
 chart's `source` line names the source; the entries below give the rules as transcribed and every change made.
 The three written for Sieve from a construction (the orb web, the Pythagoras tree and the H tree) are in
 the chart alone. Eight X2 entries were written again in v3 by X3, exactly or to six decimals where X2 had
@@ -1270,6 +1270,634 @@ rule b<b>b: a
 mapping: ABOP's letters 0 and 1 -> a and b (rule symbols must be letters; a and b draw nothing, as 0 and 1 do in the source). The source's #ignore: +-F becomes ignore !+-FQ (adding the two helper symbols below; ignore is written in ASCII order). The source also rewrites the turn symbols every step, * < + > * -> - and * < - > * -> +, which our grammar cannot do (only letters have rules). This is emulated exactly: each + or - written in a successor becomes Q+Q or Q-Q, and Q -> !Q, so after k further steps each Q has k ! in front of it. The first group of k ! flips the turn k times (k odd: + acts as -), and the second group, with the same number of !, restores the swap state, so the branch content and later turns are unaffected. Q and ! are ignored when contexts are matched, so the 2L context matches are the source's. The word contains extra Q and ! symbols but draws the same lines. The source's identity rules (e.g. 0<0>0 -> 0) are kept. n=26 in the source.
 known dimension: 
 
+## X4: those sieve-fractal-v4 can write
+
+Sources read for X4 (16 November 2026): Fractint's `ifs/fractint.ifs` (its IFS, each map "a b c d e f p" with
+x' = a x + b y + e and y' = c x + d y + f, as v4's maps are; p, a probability for the chaos game, is not used,
+since a v4 IFS draws every sequence of maps), its `common/fractalp.c` (each built-in type's default
+parameters and corners) and `dos_help/help2.src` (each type's formula), from
+https://raw.githubusercontent.com/jhol/fractint/master/; and Wikipedia, as raw wikitext. Conventions: a
+number written as v4 writes it (a leading 0 added to ".5", trailing 0s dropped, "-0" and "0.00" as 0); a
+complex map z -> a z + b as six numbers, x' = Re(a) x - Im(a) y + Re(b), y' = Im(a) x + Re(a) y + Im(b); a
+Fractint view the centre of its default corners and their width (its pictures are 4:3, a v4 view square,
+so a little more is seen above and below); a formula in prefix, its tokens in the order the source's
+formula reads. Irrational numbers (1/3, sqrt 3 / 2, pi) are rounded to 6 decimals, each said in its
+entry. Each entry was read by the reader and drawn, and the drawings looked over.
+
+id: fractint-ifs-binary
+title: Binary (Fractint IFS)
+source: Fractint, fractint.ifs, "binary"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (127 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 0 0 0.5 -2.563477 -0.000003
+    map 0.5 0 0 0.5 2.436544 -0.000003
+    map 0 -0.5 0.5 0 4.873085 7.563492
+
+mapping: 3 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-coral
+title: Coral (Fractint IFS)
+source: Fractint, fractint.ifs, "coral"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (195 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.307692 -0.531469 -0.461538 -0.293706 5.401953 8.655175
+    map 0.307692 -0.076923 0.153846 -0.447552 -1.295248 4.15299
+    map 0 0.545455 0.692308 -0.195804 -4.893637 7.269794
+
+mapping: 3 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-crystal
+title: Crystal (Fractint IFS)
+source: Fractint, fractint.ifs, "crystal"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (142 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.69697 -0.481061 -0.393939 -0.662879 2.147003 10.310288
+    map 0.090909 -0.443182 0.515152 -0.094697 4.286558 2.925762
+
+mapping: 2 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-dragon
+title: Dragon (Fractint IFS)
+source: Fractint, fractint.ifs, "dragon"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (140 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.824074 0.281482 -0.212346 0.864198 -1.88229 -0.110607
+    map 0.088272 0.520988 -0.463889 -0.377778 0.78536 8.095795
+
+mapping: 2 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-floor
+title: Floor (Fractint IFS)
+source: Fractint, fractint.ifs, "floor"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (127 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0 -0.5 0.5 0 -1.732366 3.366182
+    map 0.5 0 0 0.5 -0.027891 5.014877
+    map 0 0.5 -0.5 0 1.620804 3.310401
+
+mapping: 3 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-koch3
+title: Koch3 (Fractint IFS)
+source: Fractint, fractint.ifs, "koch3"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (272 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.307692 0 0 0.294118 4.119164 1.604278
+    map 0.192308 -0.205882 0.653846 0.088235 -0.68884 5.978916
+    map 0.192308 0.205882 -0.653846 0.088235 0.66858 5.962514
+    map 0.307692 0 0 0.294118 -4.13653 1.604278
+    map 0.384615 0 0 -0.294118 -0.007718 2.941176
+
+mapping: 5 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-spiral
+title: Spiral (Fractint IFS)
+source: Fractint, fractint.ifs, "spiral"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (198 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.787879 -0.424242 0.242424 0.859848 1.758647 1.408065
+    map -0.121212 0.257576 0.151515 0.05303 -6.721654 1.377236
+    map 0.181818 -0.136364 0.090909 0.181818 6.086107 1.568035
+
+mapping: 3 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-swirl5
+title: Swirl5 (Fractint IFS)
+source: Fractint, fractint.ifs, "swirl5"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (142 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.745455 -0.459091 0.406061 0.887121 1.460279 0.691072
+    map -0.424242 -0.065152 -0.175758 -0.218182 3.809567 6.741476
+
+mapping: 2 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-tree
+title: Tree (Fractint IFS)
+source: Fractint, fractint.ifs, "tree"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (123 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0 0 0 0.5 0 0
+    map 0.42 -0.42 0.42 0.42 0 0.2
+    map 0.42 0.42 -0.42 0.42 0 0.2
+    map 0.1 0 0 0.1 0 0.2
+
+mapping: 4 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-triangle
+title: Triangle (Fractint IFS)
+source: Fractint, fractint.ifs, "triangle"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (81 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 0 0 0.5 0 0
+    map 0.5 0 0 0.5 0 1
+    map 0.5 0 0 0.5 1 1
+
+mapping: 3 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-zigzag2
+title: Zigzag2 (Fractint IFS)
+source: Fractint, fractint.ifs, "zigzag2"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (140 characters):
+
+    sieve-fractal-v4
+    ifs
+    map -0.632407 -0.614815 -0.54537 0.659259 3.840822 1.282321
+    map -0.036111 0.444444 0.210185 0.037037 2.071081 8.330552
+
+mapping: 2 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: fractint-ifs-fractint
+title: Fractint (the program's name, by Pieter Branderhorst) (Fractint IFS)
+source: Fractint, fractint.ifs, "fractint"
+url: https://raw.githubusercontent.com/jhol/fractint/master/ifs/fractint.ifs
+ruleset (690 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0 -0.11 0.22 0 -6.25 4.84
+    map 0.11 0.02 0 0.11 -6.3 5.99
+    map 0.06 0.02 0 0.1 -6.25 4.51
+    map 0 -0.11 0.22 0 -4.34 4.84
+    map 0.08 0 0 0.11 -4.5 5.99
+    map 0 0.11 -0.08 0 -4.3 6.15
+    map -0.09 0 -0.01 -0.13 -4.15 5.94
+    map 0.06 0.11 -0.13 0 -4.69 4.15
+    map 0.03 -0.11 0.23 0.11 -2.26 4.43
+    map 0.03 0.11 -0.25 0 -2.57 4.99
+    map 0.06 0 0 0.11 -2.4 4.46
+    map 0 0.11 -0.19 0 -1.62 4.99
+    map 0.09 -0.01 0 0.1 -0.58 2.96
+    map -0.09 0 0 -0.11 -0.65 7.1
+    map 0.12 0 0 0.11 1.24 6
+    map 0 0.11 -0.22 0 0.68 4.8
+    map -0.12 0 0 -0.13 6.17 7.18
+    map 0 -0.11 0.22 0 6.78 4.84
+    map 0 0.08 -0.25 0.02 2.21 4.95
+    map 0 -0.11 0.22 0 4.1 4.84
+    map 0 -0.11 0.22 0 5.25 5.23
+    map 0.08 0.11 -0.25 0 3.57 4.99
+
+mapping: 22 maps as written (a b c d e f; the seventh number, a probability for the chaos game, is not used: every sequence of maps is drawn)
+
+id: barnsley-fern
+title: Barnsley fern
+source: Wikipedia, Barnsley fern (Barnsley, Fractals Everywhere); also Fractint's fractint.ifs "fern"
+url: https://en.wikipedia.org/wiki/Barnsley_fern
+ruleset (133 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0 0 0 0.16 0 0
+    map 0.85 0.04 -0.04 0.85 0 1.6
+    map 0.2 -0.26 0.23 0.22 0 1.6
+    map -0.15 0.28 0.26 0.24 0 0.44
+
+mapping: the table's numbers as written (0.00 as 0); probabilities not used
+
+id: cyclosorus-fern
+title: Barnsley fern, mutated: Cyclosorus
+source: Wikipedia, Barnsley fern, "Mutant varieties" (Cyclosorus or Thelypteridaceae)
+url: https://en.wikipedia.org/wiki/Barnsley_fern
+ruleset (152 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0 0 0 0.25 0 -0.4
+    map 0.95 0.005 -0.005 0.93 -0.002 0.5
+    map 0.035 -0.2 0.16 0.04 -0.09 0.02
+    map -0.04 0.2 0.16 0.04 0.083 0.12
+
+mapping: the table's a b c d e g (g its f) as written
+
+id: heighway-dragon-ifs
+title: Heighway dragon, as an IFS
+source: Wikipedia, Dragon curve, "[Heighway dragon] as an IFS": f1(z) = (1+i)z/2, f2(z) = 1 - (1-i)z/2
+url: https://en.wikipedia.org/wiki/Dragon_curve
+ruleset (73 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 -0.5 0.5 0.5 0 0
+    map -0.5 -0.5 0.5 -0.5 1 0
+
+mapping: each complex map z -> a z + b written as x' = Re(a) x - Im(a) y + Re(b), y' = Im(a) x + Re(a) y + Im(b)
+
+id: twindragon-ifs
+title: Twindragon (Davis-Knuth dragon), as an IFS
+source: Wikipedia, Dragon curve, "Twindragon": f1(z) = (1+i)z/2, f2(z) = 1 - (1+i)z/2
+url: https://en.wikipedia.org/wiki/Dragon_curve
+ruleset (73 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 -0.5 0.5 0.5 0 0
+    map -0.5 0.5 -0.5 -0.5 1 0
+
+mapping: complex maps written as above
+
+id: terdragon-ifs
+title: Terdragon, as an IFS
+source: Wikipedia, Dragon curve, "Terdragon": f1 = lz, f2 = (i/sqrt 3)z + l, f3 = lz + l*, l = 1/2 - i/(2 sqrt 3)
+url: https://en.wikipedia.org/wiki/Dragon_curve
+ruleset (139 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 0.288675 -0.288675 0.5 0 0
+    map 0 -0.57735 0.57735 0 0.5 -0.288675
+    map 0.5 0.288675 -0.288675 0.5 0.5 0.288675
+
+mapping: complex maps written as above; 1/(2 sqrt 3) and 1/sqrt 3 rounded to 6 decimals (0.288675, 0.57735)
+
+id: levy-c-curve-ifs
+title: Levy C curve, as an IFS
+source: Wikipedia, Levy C curve, "IFS": f1(z) = (1-i)z/2, f2(z) = 1 + (1+i)(z-1)/2
+url: https://en.wikipedia.org/wiki/L%C3%A9vy_C_curve
+ruleset (76 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 0.5 -0.5 0.5 0 0
+    map 0.5 -0.5 0.5 0.5 0.5 -0.5
+
+mapping: complex maps written as above (f2 = (1+i)/2 z + (1-i)/2)
+
+id: cantor-set-ifs
+title: Cantor set, as an IFS
+source: Wikipedia, Cantor set, "Self-similarity": T_L(x) = x/3, T_R(x) = (2+x)/3
+url: https://en.wikipedia.org/wiki/Cantor_set
+ruleset (74 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.333333 0 0 0 0 0
+    map 0.333333 0 0 0 0.666667 0
+
+mapping: on the line y = 0 (y' = 0); 1/3 and 2/3 rounded to 6 decimals
+
+id: sierpinski-triangle-ifs
+title: Sierpinski triangle, as an IFS
+source: Wikipedia, Sierpinski triangle: three copies of itself, each of ratio 1/2
+url: https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle
+ruleset (93 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.5 0 0 0.5 0 0
+    map 0.5 0 0 0.5 0.5 0
+    map 0.5 0 0 0.5 0.25 0.433013
+
+mapping: written from that construction on the equilateral triangle with corners (0, 0), (1, 0), (1/2, sqrt 3 / 2); sqrt 3 / 4 rounded to 6 decimals
+
+id: sierpinski-carpet-ifs
+title: Sierpinski carpet, as an IFS
+source: Wikipedia, Sierpinski carpet: the square cut into nine, the centre taken away, and so on in each of the eight left
+url: https://en.wikipedia.org/wiki/Sierpi%C5%84ski_carpet
+ruleset (331 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.333333 0 0 0.333333 0 0
+    map 0.333333 0 0 0.333333 0 0.333333
+    map 0.333333 0 0 0.333333 0 0.666667
+    map 0.333333 0 0 0.333333 0.333333 0
+    map 0.333333 0 0 0.333333 0.333333 0.666667
+    map 0.333333 0 0 0.333333 0.666667 0
+    map 0.333333 0 0 0.333333 0.666667 0.333333
+    map 0.333333 0 0 0.333333 0.666667 0.666667
+
+mapping: written from that construction on the unit square; 1/3 and 2/3 rounded to 6 decimals
+
+id: vicsek-fractal-ifs
+title: Vicsek fractal (cross form), as an IFS
+source: Wikipedia, Vicsek fractal: the square cut into nine, the centre and the four beside it kept (the cross form)
+url: https://en.wikipedia.org/wiki/Vicsek_fractal
+ruleset (227 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.333333 0 0 0.333333 0.333333 0.333333
+    map 0.333333 0 0 0.333333 0 0.333333
+    map 0.333333 0 0 0.333333 0.666667 0.333333
+    map 0.333333 0 0 0.333333 0.333333 0
+    map 0.333333 0 0 0.333333 0.333333 0.666667
+
+mapping: written from that construction on the unit square; rounded as above
+
+id: koch-curve-ifs
+title: Koch curve, as an IFS
+source: Wikipedia, Koch snowflake: von Koch's curve on a segment, its middle third replaced by two sides of a triangle
+url: https://en.wikipedia.org/wiki/Koch_snowflake
+ruleset (194 characters):
+
+    sieve-fractal-v4
+    ifs
+    map 0.333333 0 0 0.333333 0 0
+    map 0.166667 -0.288675 0.288675 0.166667 0.333333 0
+    map 0.166667 0.288675 -0.288675 0.166667 0.5 0.288675
+    map 0.333333 0 0 0.333333 0.666667 0
+
+mapping: written from that construction on the segment (0, 0) to (1, 0): four maps of ratio 1/3, the middle two turned by 60 degrees each way; rounded to 6 decimals
+
+id: mandelbrot-set
+title: Mandelbrot set
+source: Fractint, type mandel (z(n+1) = z(n)^2 + c), its default corners; Wikipedia, Mandelbrot set
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (48 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    view -0.5 0 4
+
+mapping: z starts at 0 (Fractint starts at c, one step on: the same set)
+
+id: fractint-julia
+title: Julia set, Fractint's default (c = 0.3 + 0.6i)
+source: Fractint, type julia, its default parameters 0.3 0.6 and corners
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (48 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia 0.3 0.6
+
+id: multibrot-4
+title: Multibrot set of degree 4
+source: Fractint, type mandel4 (z(n+1) = z(n)^4 + c), its default corners; Wikipedia, Multibrot set
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (34 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 4 c
+
+id: fractint-julia4
+title: Julia set of z^4 + c, Fractint's default (c = 0.6 + 0.55i)
+source: Fractint, type julia4, its default parameters 0.6 0.55
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (49 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 4 c
+    julia 0.6 0.55
+
+id: fractint-lambda
+title: Lambda set, Fractint's default (lambda = 0.85 + 0.6i)
+source: Fractint, type lambda (z(n+1) = lambda z(n) (1 - z(n))), its default parameters 0.85 0.6 and corners
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (66 characters):
+
+    sieve-fractal-v4
+    escape * * c z - 1 z
+    julia 0.85 0.6
+    view 0.5 0 4
+
+mapping: lambda written as c (fixed by the julia line)
+
+id: magnet-1-mandelbrot
+title: Magnet fractal, type 1 (its Mandelbrot set)
+source: Fractint, type magnet1m (z(n+1) = ((z^2 + c - 1) / (2z + c - 2))^2, z(0) = 0), its default corners
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (69 characters):
+
+    sieve-fractal-v4
+    escape ^ / + ^ z 2 - c 1 + * 2 z - c 2 2
+    view 0 0 8
+
+mapping: Fractint also colours the points that settle on 1; an escape picture colours only those that escape
+
+id: magnet-1-julia
+title: Magnet fractal, type 1 (Julia set, c = 0)
+source: Fractint, type magnet1j, its default parameters 0 0 and corners
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (80 characters):
+
+    sieve-fractal-v4
+    escape ^ / + ^ z 2 - c 1 + * 2 z - c 2 2
+    julia 0 0
+    view 0 0 16
+
+id: magnet-2-mandelbrot
+title: Magnet fractal, type 2 (its Mandelbrot set)
+source: Fractint, type magnet2m (z(n+1) = ((z^3 + 3(c-1)z + (c-1)(c-2)) / (3z^2 + 3(c-2)z + (c-1)(c-2) + 1))^2), its default corners
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (129 characters):
+
+    sieve-fractal-v4
+    escape ^ / + + ^ z 3 * * 3 - c 1 z * - c 1 - c 2 + + + * 3 ^ z 2 * * 3 - c 2 z * - c 1 - c 2 1 2
+    view 1.1 0 5.2
+
+mapping: Fractint also colours the points that settle on 1; an escape picture colours only those that escape, so the settled ones are the ground here
+
+id: newton-z3-minus-1
+title: Newton fractal of z^3 - 1
+source: Fractint, type newton (degree 3, its default; z(0) = the point); Wikipedia, Newton fractal (z^3 - 1)
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (62 characters):
+
+    sieve-fractal-v4
+    converge - z / - ^ z 3 1 * 3 ^ z 2
+    julia 0 0
+
+mapping: Newton's step z - p(z)/p'(z) written out; julia 0 0 makes z start at the point (c is not used)
+
+id: newton-z4-minus-1
+title: Newton fractal of z^4 - 1
+source: Fractint, type newton with degree 4 (its parameter: z^n - 1)
+url: https://raw.githubusercontent.com/jhol/fractint/master/common/fractalp.c (defaults) and dos_help/help2.src (formulas)
+ruleset (62 characters):
+
+    sieve-fractal-v4
+    converge - z / - ^ z 4 1 * 4 ^ z 3
+    julia 0 0
+
+mapping: as above
+
+id: burning-ship
+title: Burning Ship fractal
+source: Wikipedia, Burning Ship fractal (z(n+1) = (|Re z| + i|Im z|)^2 + c, z(0) = 0)
+url: https://en.wikipedia.org/wiki/Burning_Ship_fractal
+ruleset (57 characters):
+
+    sieve-fractal-v4
+    escape + ^ abs z 2 c
+    view -0.5 -0.5 3.5
+
+mapping: drawn with y up, as every escape picture here is (it is often shown upside down)
+
+id: tricorn
+title: Tricorn (Mandelbar set)
+source: Wikipedia, Tricorn (z -> conj(z)^2 + c)
+url: https://en.wikipedia.org/wiki/Tricorn_(mathematics)
+ruleset (39 characters):
+
+    sieve-fractal-v4
+    escape + ^ conj z 2 c
+
+id: multibrot-3
+title: Multibrot set of degree 3
+source: Wikipedia, Multibrot set (z -> z^d + c, d = 3)
+url: https://en.wikipedia.org/wiki/Multibrot_set
+ruleset (34 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 3 c
+
+id: julia-0-4p0-6i
+title: Julia set, c = -0.4 + 0.6i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.4 + 0.6i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (49 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.4 0.6
+
+id: julia-0-285
+title: Julia set, c = 0.285
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = 0.285)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (48 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia 0.285 0
+
+id: julia-0-285p0-01i
+title: Julia set, c = 0.285 + 0.01i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = 0.285 + 0.01i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (51 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia 0.285 0.01
+
+id: julia-0-70176-0-3842i
+title: Julia set, c = -0.70176 - 0.3842i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.70176 - 0.3842i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (57 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.70176 -0.3842
+
+id: julia-0-835-0-2321i
+title: Julia set, c = -0.835 - 0.2321i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.835 - 0.2321i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (55 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.835 -0.2321
+
+id: julia-0-8p0-156i
+title: Julia set, c = -0.8 + 0.156i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.8 + 0.156i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (51 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.8 0.156
+
+id: julia-0-7269p0-1889i
+title: Julia set, c = -0.7269 + 0.1889i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.7269 + 0.1889i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (55 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.7269 0.1889
+
+id: julia-0-8i
+title: Julia set, c = -0.8i
+source: Wikipedia, Julia set, its gallery (f_c(z) = z^2 + c, c = -0.8i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (47 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia 0 -0.8
+
+id: douady-corabbit
+title: Douady corabbit (the rabbit's mirror image)
+source: Wikipedia, Douady rabbit, "corabbit": c ~ -0.1226 - 0.7449i
+url: https://en.wikipedia.org/wiki/Douady_rabbit
+ruleset (56 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.1226 -0.7449
+
+id: douady-rabbit
+title: Douady rabbit
+source: Wikipedia, Douady rabbit: the corabbit is its mirror image (c ~ -0.1226 - 0.7449i), so the rabbit's c is that one's conjugate
+url: https://en.wikipedia.org/wiki/Douady_rabbit
+ruleset (55 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.1226 0.7449
+
+mapping: c = -0.1226 + 0.7449i, the conjugate of the corabbit's
+
+id: julia-san-marco-dem
+title: Julia set, c = -0.75 + 0.11i
+source: Wikipedia, Julia set, its distance-estimation gallery (c = -0.75 + 0.11i)
+url: https://en.wikipedia.org/wiki/Julia_set
+ruleset (51 characters):
+
+    sieve-fractal-v4
+    escape + ^ z 2 c
+    julia -0.75 0.11
+
+id: collatz-fractal
+title: Collatz fractal
+source: Wikipedia, Collatz conjecture, "Iterating on real or complex numbers" (Letherman, Schleicher and Wood's f with h(z) = 0), centred at 0 with real parts -5 to 5
+url: https://en.wikipedia.org/wiki/Collatz_conjecture
+ruleset (168 characters):
+
+    sieve-fractal-v4
+    escape + + * / z 2 ^ cos * 1.570796 z 2 * / + * 3 z 1 2 ^ sin * 1.570796 z 2 * * 0.31831 - 0.5 cos * 3.141593 z sin * 3.141593 z
+    julia 0 0
+    view 0 0 10
+
+mapping: pi/2, pi and 1/pi rounded to 6 decimals (1.570796, 3.141593, 0.31831); z starts at the point (julia 0 0; c is not used)
+
 ## Looked at and not charted
 
 - Bourke's L-system pages (Crystal, Board, Rings, Tiles, Krishna anklets, Mango leaf, his trees): paulbourke.net is still blocked (DNS refused by the network policy). The archive.org API reports a Wayback snapshot of 2026-10-11, but web.archive.org itself resets the connection. Nothing was transcribed; third-party copies were not used.
@@ -1282,3 +1910,5 @@ known dimension:
 - Fractint "Bush" (fig. 1.24c rotated by ++++), "Plant09" (Plant07 with z renamed y), "Lars2" (Lars1 turned 45 degrees), "Curve2" (ABOP 1.9c), "Koch6" (mirror of ABOP 1.7a), "Koch1"/"KochCurve" (Koch), "DragonCurve", "Hilbert", "Peano3", "Square", the Penrose colour variants (ColorPenrose1, Penrose1Color, Penrose1Forced, KitesAndDartsColor, Lars1Color, Lars2Color): duplicates, rotations, mirror images or colour-only variants of entries already charted, so skipped. The old, commented-out PentaPlexity in fractint.l is not an active entry.
 - Exact angles for earlier rounded entries: X2 wrote Fractint "angle 14" as 25.7 (philip-plant-07). v3 can write it exactly as 360/14. ABOP's own figures 1.24a/e print 25.7, so those stay. Written again so in X3.
 - Every entry from fractint.l and tiling.l that is not in X2 or above is now charted. Nothing in those two files is still unwritable.
+- X4, Fractint's types v4 cannot write yet: its 3D IFS (3dfern and Alex Matulich's polyhedra: 12 numbers a map, three dimensions; list X5), mandelfn and mandellambda (z starts at c, or at 0.5, where a v4 escape starts it at 0 or at the point), lambdafn (its default function is not in the files read), the phoenix types (z's value a step before), the barnsley types and the fn||fn types (a test inside the step), the orbit types (Henon, Lorenz, Martin, kamtorus: strange attractors, list X5) and diffusion-limited aggregation (random, list X5). The magnet fractal of type 2's Julia set was drawn and was noise (Fractint also colours the points that settle on 1, which an escape picture does not), so it is not charted; type 2's Mandelbrot set is, showing only the points that escape.
+- X4, Wikipedia's: the Celtic and Buffalo variants of the Burning Ship (abs of the real part of z^2 alone, which `abs` cannot say), Siegel discs (no c given), Nova fractals (z starts at 1), and the Mandelbulb, Apollonian gasket and Rauzy fractal (three dimensions, circle inversion, a substitution's projection: list X5).

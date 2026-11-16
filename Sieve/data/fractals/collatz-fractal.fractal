@@ -1,0 +1,4 @@
+sieve-fractal-v4
+escape + + * / z 2 ^ cos * 1.570796 z 2 * / + * 3 z 1 2 ^ sin * 1.570796 z 2 * * 0.31831 - 0.5 cos * 3.141593 z sin * 3.141593 z
+julia 0 0
+view 0 0 10

@@ -7547,16 +7547,68 @@ void test_fractals()
         const FractalSpace space(96);
         BigUint first3 = space.count();
         first3 -= space.count_v3();
+        first3 -= space.count_v4(); // (v4's after v3's, list X4)
         // (the rules symbol by symbol, an earlier symbol's shorter first: so the first has its rule for z)
         CHECK(space.at(first3) == "sieve-fractal-v3\nlsystem 1\naxiom !\nrule z !\n");
         const FractalSpace whole(kFractalSpaceLongestDefault);
         BigUint first3w = whole.count();
         first3w -= whole.count_v3();
+        first3w -= whole.count_v4();
         for (const std::string t : {full, bush, std::string("sieve-fractal-v3\nlsystem 0.000001\naxiom A\nrule A A\n")})
         {
             const auto i = whole.index_of(t);
             CHECK(i && *i >= first3w && whole.at(*i) == t);
         }
+    }
+    // sieve-fractal-v4 (list X4): an IFS, an escape-time and a convergence formula, read and written back;
+    // refusals; drawn; and their rulesets in the whole space after v3's.
+    {
+        const std::string fern = "sieve-fractal-v4\nifs\nmap 0 0 0 0.16 0 0\nmap 0.85 0.04 -0.04 0.85 0 1.6\nmap 0.2 -0.26 0.23 0.22 0 1.6\nmap -0.15 0.28 0.26 0.24 0 0.44\n";
+        const std::string mandel = "sieve-fractal-v4\nescape + ^ z 2 c\nview -0.5 0 3\n";
+        const std::string newton = "sieve-fractal-v4\nconverge - z / - ^ z 3 1 * 3 ^ z 2\njulia 0 0\n";
+        const auto f = read_fractal(fern), m = read_fractal(mandel), n = read_fractal(newton);
+        CHECK(f && f->family == Fractal::Family::Ifs && f->maps.size() == 4 && f->maps[1].value[5] == 1.6 && f->text() == fern && !f->grow(1));
+        CHECK(m && m->family == Fractal::Family::Escape && m->formula.size() == 5 && m->view && m->view_value[0] == -0.5 && m->text() == mandel);
+        CHECK(n && n->family == Fractal::Family::Converge && n->julia && n->text() == newton);
+        for (const std::string bad : {std::string("sieve-fractal-v4\nifs\n"), std::string("sieve-fractal-v4\nifs\nmap 0 0 0 0 0\n"),
+                                      std::string("sieve-fractal-v4\nifs\nmap -0 0 0 0 0 0\n"), std::string("sieve-fractal-v4\nifs\nmap 1000 0 0 0 0 0\n"),
+                                      std::string("sieve-fractal-v4\nescape + z\n"), std::string("sieve-fractal-v4\nescape z z\n"),
+                                      std::string("sieve-fractal-v4\nescape 0\n"), std::string("sieve-fractal-v4\nescape tan z\n"),
+                                      std::string("sieve-fractal-v4\nescape  z\n"), std::string("sieve-fractal-v4\nescape z\nview 0 0 0\n"),
+                                      std::string("sieve-fractal-v4\nescape z\nview 0 0 1\njulia 0 0\n"),
+                                      std::string("sieve-fractal-v4\nescape + + + + + + + + z z z z z z z z z\n")})
+            CHECK(!read_fractal(bad));
+        CHECK(read_fractal("sieve-fractal-v4\nescape + + + + + + + z z z z z z z z\n")); // (8 awaited after the seventh +: the most)
+        // Drawn: the fern's points with every level kept, from its first map's fixed point (0, 0); the
+        // Mandelbrot set's centre (-0.5, 0) inside it, its corner (-2, 1.5) escaped at once.
+        const auto pts = fractal_points(*f, 2);
+        CHECK(pts && pts->size() == 1 + 4 + 16 && (*pts)[0][0] == 0 && (*pts)[0][1] == 0);
+        const auto img = draw_fractal(*m, 4, 33, 33);
+        auto pixel = [&](uint32_t x, uint32_t y) { return std::array<uint8_t, 3>{img->rgba[(y * 33 + x) * 4], img->rgba[(y * 33 + x) * 4 + 1], img->rgba[(y * 33 + x) * 4 + 2]}; };
+        CHECK(img && pixel(16, 16) == pixel(16, 17) && pixel(0, 0) != pixel(16, 16) && m->deepest() == 10 && fractal_iterations(4) == 64);
+        const auto sierpinski = read_fractal("sieve-fractal-v4\nifs\nmap 0.5 0 0 0.5 0 0\nmap 0.5 0 0 0.5 0.5 0\nmap 0.5 0 0 0.5 0.25 0.433013\n");
+        const auto dim = fractal_box_dimension(*sierpinski);
+        CHECK(dim && std::fabs(dim->value - std::log(3.0) / std::log(2.0)) < 0.03 && !fractal_box_dimension(*m));
+        // In the whole space: after v3's, from the shortest (26 characters: escape and one token), each
+        // read back from its address; the first of them "escape c" (the leaves c i z, then a number).
+        const FractalSpace space(96);
+        BigUint first4 = space.count();
+        first4 -= space.count_v4();
+        CHECK(space.at(first4) == "sieve-fractal-v4\nescape c\n" && space.count_at(26) == BigUint(12) && space.count_at(30) == BigUint(28770));
+        const FractalSpace whole(kFractalSpaceLongestDefault); // (the fern is 133 characters)
+        BigUint first4w = whole.count();
+        first4w -= whole.count_v4();
+        for (const std::string& t : {fern, mandel, newton, std::string("sieve-fractal-v4\nescape c\n")})
+        {
+            const auto i = whole.index_of(t);
+            CHECK(i && *i >= first4w && whole.at(*i) == t);
+        }
+        // Against format-fractal-v4: at 26 to 30 characters v4's alone, which the grammar passes exactly.
+        const Alphabet& a96 = alphabet_by_id("ascii96");
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v4.sfilter");
+        static const TestResources none(nullptr, nullptr);
+        for (uint32_t l = 26; l <= 30; ++l)
+            CHECK(space.count_at(l) == DfaRanker(compile_plugin(*plugin, FilterLine{"text", "ascii96", 96, l, &a96, 0, 0, 0}, {}, none), l).count());
     }
     // The shelves as charted in the repository: every entry read, and each grows at least a step.
     const auto chart = read_fractal_chart(std::filesystem::path(g_data) / "fractals");
@@ -7578,7 +7630,7 @@ void test_fractals()
         std::filesystem::remove_all(dir);
     }
     // (list X2: 75, each with where it was transcribed from; the first 11 as they were)
-    CHECK(chart.size() == 107 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant"); // (X3: 107)
+    CHECK(chart.size() == 155 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant"); // (X3: 107; X4: 155)
     for (const auto& c : chart) CHECK(c.fractal.deepest() >= 3 && c.fractal.text() == c.text && !c.source.empty());
     // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at an address of its
     // own. Up to 52 characters a ruleset has one rule, so the count is format-fractal-v1's exactly; at 53
@@ -7590,7 +7642,7 @@ void test_fractals()
         const Alphabet& a96 = alphabet_by_id("ascii96");
         // (fractal-space-v2, list X2: v1's first, at the addresses v1 gave them, then v2's; the grammar
         // format-fractal-v2 passes both)
-        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v3.sfilter"); // (v3's too, list X3)
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v4.sfilter"); // (v3's and v4's too, lists X3 and X4)
         static const TestResources none(nullptr, nullptr);
         for (uint32_t l = kFractalSpaceShortest; l <= 52; ++l)
         {
@@ -7612,7 +7664,7 @@ void test_fractals()
             ours += extra;
             CHECK(ours == grammar);
         }
-        CHECK(space.count_at(44) == BigUint(4083300)); // (v1's 1,520,532 and v3's 2,562,768)
+        CHECK(space.count_at(44) == BigUint::from_decimal("19972340341540161")); // (v1's 1,520,532, v3's 2,562,768 and v4's)
         CHECK(space.at(BigUint(0)) == "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n");
         CHECK(space.at(space.count_v1()) == "sieve-fractal-v2\nlsystem 0.1\naxiom +\nrule A +\n");
         {
@@ -7620,7 +7672,7 @@ void test_fractals()
             last -= BigUint(1);
             CHECK(read_fractal(space.at(last)) && space.at(last).size() == 96 && space.index_of(space.at(last)) == last);
         }
-        // Every charted fractal but one is in it at the default longest (256), and its
+        // Every charted fractal but four is in it at the default longest (256), and its
         // address gives it back; a v1 one's address is the same whatever the longest, a v2 one's follows
         // every v1 ruleset to the longest, so moves with it.
         {
@@ -7629,7 +7681,9 @@ void test_fractals()
             {
                 if (c.text.size() > kFractalSpaceLongestDefault)
                 {
-                    CHECK(c.id == "voderberg-spiral-tiling"); // (590 characters: the one past the default)
+                    // (Voderberg's tiling 590 characters, and X4's Fractint koch3 272, the Sierpinski carpet 331 and
+                    // Fractint's own name 690: the four past the default)
+                    CHECK(c.id == "voderberg-spiral-tiling" || c.id == "fractint-ifs-fractint" || c.id == "fractint-ifs-koch3" || c.id == "sierpinski-carpet-ifs");
                     continue;
                 }
                 const auto i = whole.index_of(c.text);
@@ -7640,8 +7694,10 @@ void test_fractals()
         // first; and texts it does not hold have none.
         std::mt19937_64 g(7);
         size_t last_length = 0;
-        bool v2_met = false, v3_met = false;
-        BigUint v3_from = space.count();
+        bool v2_met = false, v3_met = false, v4_met = false;
+        BigUint v4_from = space.count();
+        v4_from -= space.count_v4();
+        BigUint v3_from = v4_from;
         v3_from -= space.count_v3();
         BigUint step = space.count();
         step.divmod_small(997);
@@ -7654,6 +7710,7 @@ void test_fractals()
             const std::string t = space.at(i);
             if (!v2_met && i >= space.count_v1()) v2_met = true, last_length = 0; // (v2's begin again from the shortest)
             if (!v3_met && i >= v3_from) v3_met = true, last_length = 0;          // (and v3's)
+            if (!v4_met && i >= v4_from) v4_met = true, last_length = 0;          // (and v4's)
             CHECK(read_fractal(t).has_value() && space.index_of(t) == i && t.size() >= last_length);
             last_length = t.size();
         }
@@ -7710,7 +7767,7 @@ void test_fractals()
         const BigUint kept = in.ranker()->count();
         BigUint rest = BigUint::pow(2, 100);
         rest -= kept;
-        CHECK(kept == BigUint(782) && out.ranker()->count() == rest); // (112 with X1's 11 charted, 567 with X2's 75)
+        CHECK(kept == BigUint(1057) && out.ranker()->count() == rest); // (112 with X1's 11 charted, 567 with X2's 75, 782 with X3's 107)
         // The Koch curve at depth 2, drawn and fitted, is one of them; stripes are not. (A picture all of
         // one colour is: a substitution's axiom of one symbol fills it.)
         const auto koch = std::find_if(chart.begin(), chart.end(), [](const ChartedFractal& c) { return c.id == "koch-curve"; });

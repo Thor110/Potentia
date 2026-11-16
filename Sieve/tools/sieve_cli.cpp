@@ -1346,6 +1346,28 @@ int raid_between_machines(const Args& a, const std::string& what)
 
 } // namespace
 
+namespace {
+
+// A ruleset's family and version, as the commands below name them.
+std::string fractal_family_name(const sieve::Fractal& f)
+{
+    switch (f.family)
+    {
+    case sieve::Fractal::Family::Substitution: return "substitution";
+    case sieve::Fractal::Family::LSystem: return "L-system";
+    case sieve::Fractal::Family::Ifs: return "IFS";
+    case sieve::Fractal::Family::Escape: return "escape-time";
+    case sieve::Fractal::Family::Converge: return "convergence";
+    }
+    return "";
+}
+const char* fractal_version_name(const sieve::Fractal& f)
+{
+    return f.version == 4 ? sieve::kFractalVersion4 : f.version == 3 ? sieve::kFractalVersion3 : f.version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion;
+}
+
+} // namespace
+
 // The fractal dimension (IDEAS 19.191, 19.235; list S, step 1): its shelves, charted by hand, and any
 // ruleset grown, drawn and checked.
 int cmd_fractal(const Args& a)
@@ -1358,8 +1380,7 @@ int cmd_fractal(const Args& a)
         std::cout << "shelves   " << chart.size() << " fractals, charted by hand (" << sieve::u8(folder / "chart.txt") << ")\n";
         for (const auto& c : chart)
         {
-            std::cout << "  " << c.id << "  " << (c.fractal.family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system")
-                      << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest();
+            std::cout << "  " << c.id << "  " << fractal_family_name(c.fractal) << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest();
             if (const auto d = sieve::fractal_box_dimension(c.fractal)) std::cout << ", dimension " << std::fixed << std::setprecision(2) << d->value;
             std::cout << ": " << c.title << (c.source.empty() ? "" : " (after " + c.source + ")") << "\n";
         }
@@ -1371,10 +1392,13 @@ int cmd_fractal(const Args& a)
     {
         const sieve::FractalSpace space(longest);
         std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, then every v2 and v3, " << sieve::kFractalSpaceShortest
-                  << " to " << longest << " characters\n"
+                  << " to " << longest << " characters, then every v4 to " << longest << "\n"
                   << "rulesets  " << space.count().to_decimal() << " (about 10^" << std::fixed << std::setprecision(1)
                   << double(space.count().bit_length()) * 0.30103 << ")\n"
-                  << "v1        " << space.count_v1().to_decimal() << " of them, the first\n";
+                  << "v1        " << space.count_v1().to_decimal() << " of them, the first\n"
+                  << "v4        " << space.count_v4().to_decimal() << " of them, the last (IFS, escape-time and convergence; the shortest 26 characters)\n";
+        // (v4's shortest first, 26 to 30 characters, where it is alone; then 44 on, where every version is)
+        for (uint32_t l = 26; l <= 30; ++l) std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
             std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         return 0;
@@ -1401,13 +1425,13 @@ int cmd_fractal(const Args& a)
     {
         if (!f)
         {
-            std::cout << "not a " << sieve::kFractalVersion << ", v2 or v3 ruleset: " << why << "\n";
+            std::cout << "not a " << sieve::kFractalVersion << ", v2, v3 or v4 ruleset: " << why << "\n";
             return 1;
         }
-        std::cout << "a " << (f->version == 3 ? sieve::kFractalVersion3 : f->version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
+        std::cout << "a " << fractal_version_name(*f) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
         return 0;
     }
-    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2 or v3 ruleset: " + why);
+    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2, v3 or v4 ruleset: " + why);
     if (what == "index")
     {
         const sieve::FractalSpace space(longest);
@@ -1420,18 +1444,27 @@ int cmd_fractal(const Args& a)
     }
     const uint32_t depth = a.has("depth") ? a.get_u32("depth", 0) : std::min<uint32_t>(f->deepest(), 6);
     if (depth > f->deepest()) throw std::invalid_argument("it grows to depth " + std::to_string(f->deepest()) + " at most (" + std::to_string(sieve::kFractalMost) + " symbols)");
-    const std::string word = *f->grow(depth);
+    const std::string word = f->rewrites() ? *f->grow(depth) : std::string();
+    // (what a depth holds: a word's symbols, an IFS's points, or the steps each point is followed for)
+    const std::string held = f->family == sieve::Fractal::Family::Ifs ? std::to_string(sieve::fractal_points(*f, depth)->size()) + " points"
+                             : f->rewrites()                         ? std::to_string(word.size()) + " symbols"
+                                                                     : std::to_string(sieve::fractal_iterations(depth)) + " steps a point at most";
     if (what == "show")
     {
+        std::string family = fractal_family_name(*f);
+        if (f->family == sieve::Fractal::Family::LSystem) family += ", " + f->angle_written() + " degrees" + (f->scale_written().empty() ? std::string() : ", step scaled by " + f->scale_written());
+        if (f->family == sieve::Fractal::Family::Ifs) family += ", " + std::to_string(f->maps.size()) + " map(s)";
+        if (!f->rewrites() && f->family != sieve::Fractal::Family::Ifs) family += std::string(f->julia ? ", a Julia set" : "") + ", viewed at " + f->view_value_text();
         std::cout << "fractal   " << name << "\n"
-                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + f->angle_written() + " degrees" + (f->scale_written().empty() ? std::string() : ", step scaled by " + f->scale_written())) << "\n"
-                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v3 passes)\n"
-                  << "depth     " << depth << " of " << f->deepest() << ": " << word.size() << " symbols\n";
+                  << "family    " << family << "\n"
+                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v4 passes)\n"
+                  << "depth     " << depth << " of " << f->deepest() << ": " << held << "\n";
         if (f->family == sieve::Fractal::Family::Substitution) std::cout << "word      " << word.substr(0, 80) << (word.size() > 80 ? "..." : "") << "\n";
-        else std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";
+        else if (f->family == sieve::Fractal::Family::LSystem) std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";
         if (const auto d = sieve::fractal_box_dimension(*f))
             std::cout << "dimension " << std::fixed << std::setprecision(3) << d->value << " (box-counting, measured at depth " << d->depth << " on " << d->grids << " grids)\n";
-        else if (f->family == sieve::Fractal::Family::LSystem) std::cout << "dimension not measured (too few lines, or too small to lay three grids over)\n";
+        else if (f->family == sieve::Fractal::Family::LSystem || f->family == sieve::Fractal::Family::Ifs)
+            std::cout << "dimension not measured (too few lines or points, or too small to lay three grids over)\n";
         return 0;
     }
     if (what == "draw")
@@ -1443,7 +1476,7 @@ int cmd_fractal(const Args& a)
         std::vector<sieve::Rgb> rgb(size_t(img->width) * img->height);
         for (size_t i = 0; i < rgb.size(); ++i) rgb[i] = {img->rgba[i * 4], img->rgba[i * 4 + 1], img->rgba[i * 4 + 2]};
         write_png(a.get("out"), img->width, img->height, rgb, 1);
-        std::cout << "drew      " << name << " at depth " << depth << " (" << word.size() << " symbols) to " << a.get("out") << " (" << size << " x " << size << ")\n";
+        std::cout << "drew      " << name << " at depth " << depth << " (" << held << ") to " << a.get("out") << " (" << size << " x " << size << ")\n";
         return 0;
     }
     throw std::invalid_argument("give what to do: list, show, draw, check, count, at or index");

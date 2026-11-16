@@ -1,0 +1,3 @@
+sieve-fractal-v4
+converge - z / - ^ z 4 1 * 4 ^ z 3
+julia 0 0
