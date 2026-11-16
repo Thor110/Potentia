@@ -362,9 +362,11 @@ std::optional<Fractal> read_v4(const std::vector<std::string>& lines, const std:
 // A v4 formula's arithmetic, Sieve's own (list X4): only + - * / and sqrt, which IEEE 754 rounds the same
 // on every machine, and floor, ldexp, frexp and fmod, which are exact. The system's complex numbers and
 // its exp, log, sin, cos, pow and atan2 differ in their last bit between libraries (Microsoft's and GNU's,
-// measured 16 November 2026: 1,057 charted pictures at 10x10 on one, another count on the other), and a
-// point followed 4,096 times grows that bit until it escapes on one machine and not on the other; so a
-// picture, and every count made of pictures, would be the machine's and not the ruleset's.
+// measured 16 November 2026: 1,057 charted pictures at 10x10 on one, 1,056 on the other), and a point
+// followed 4,096 times grows that bit until it escapes on one machine and not on the other, as a turtle's
+// line can end on either side of a pixel's edge (gosper-curve and lars-cross-tree did); so a picture, and
+// every count made of pictures, would be the machine's and not the ruleset's. The turtle, the formulas and
+// the box-counting dimension all use these.
 struct Cx
 {
     double re = 0, im = 0;
@@ -881,7 +883,9 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
         {
             if (c == 'F' || c == 'G' || c == 'f')
             {
-                const double nx = x + step * std::cos(a), ny = y + step * std::sin(a);
+                double sn, cs;
+                own_sin_cos(a, sn, cs); // (Sieve's own, as the formulas': a line's end the same on every machine)
+                const double nx = x + step * cs, ny = y + step * sn;
                 if (c != 'f') out.push_back({x, y, nx, ny});
                 x = nx, y = ny;
             }
@@ -911,7 +915,8 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
         bool swapped = false;
     } t;
     auto turn_in = [](V& a, V& b, double angle) { // a towards b by angle
-        const double c = std::cos(angle), s = std::sin(angle);
+        double s, c;
+        own_sin_cos(angle, s, c);
         const V na{a[0] * c + b[0] * s, a[1] * c + b[1] * s, a[2] * c + b[2] * s}, nb{b[0] * c - a[0] * s, b[1] * c - a[1] * s, b[2] * c - a[2] * s};
         a = na, b = nb;
     };
@@ -948,7 +953,9 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
     }
     // Drawn in the plane as it is; out of it, seen from a fixed side (turned 30 degrees about the first
     // heading, then 20 about the first up), the same on every machine.
-    const double cx = std::cos(30 * kPi / 180), sx = std::sin(30 * kPi / 180), cz = std::cos(20 * kPi / 180), sz = std::sin(20 * kPi / 180);
+    double sx, cx, sz, cz;
+    own_sin_cos(30 * kPi / 180, sx, cx);
+    own_sin_cos(20 * kPi / 180, sz, cz);
     auto seen = [&](double x, double y, double z) -> std::array<double, 2> {
         if (!solid) return {x, y};
         const double y1 = y * cx - z * sx, z1 = y * sx + z * cx;
@@ -1108,6 +1115,15 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
     return img;
 }
 
+namespace {
+// A line's length by a square root alone (hypot's last bit is the library's).
+double length_of(const std::array<double, 4>& l)
+{
+    const double dx = l[2] - l[0], dy = l[3] - l[1];
+    return std::sqrt(dx * dx + dy * dy);
+}
+} // namespace
+
 std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
 {
     if (f.family == Fractal::Family::Ifs)
@@ -1134,7 +1150,7 @@ std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
             }
             // (past a quarter of the points, the cells count the points more than the figure)
             if (count * 4 > pts->size()) break;
-            xs.push_back(std::log(double(n))), ys.push_back(std::log(double(count)));
+            xs.push_back(own_log(double(n))), ys.push_back(own_log(double(count))); // (Sieve's own log: a filter's threshold reads the slope)
         }
         if (xs.size() < 3) return std::nullopt;
         double mx = 0, my = 0;
@@ -1156,7 +1172,7 @@ std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
     for (const auto& l : lines)
     {
         for (int k = 0; k < 2; ++k) lx = std::min(lx, l[size_t(2 * k)]), hx = std::max(hx, l[size_t(2 * k)]), ly = std::min(ly, l[size_t(2 * k + 1)]), hy = std::max(hy, l[size_t(2 * k + 1)]);
-        lengths.push_back(std::hypot(l[2] - l[0], l[3] - l[1]));
+        lengths.push_back(length_of(l));
     }
     const double span = std::max(hx - lx, hy - ly) * (1 + 1e-9);
     if (!(span > 0) || !std::isfinite(span)) return std::nullopt;
@@ -1170,7 +1186,7 @@ std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
         // (a grid whose points along the lines would pass 2^22 is not laid: a bound chosen, so a ruleset of
         // many long lines is measured in a moment, on the coarser grids)
         double points = 0;
-        for (const auto& l : lines) points += std::ceil(std::hypot(l[2] - l[0], l[3] - l[1]) / (cell / 2)) + 1;
+        for (const auto& l : lines) points += std::ceil(length_of(l) / (cell / 2)) + 1;
         if (points > double(1 << 22)) break;
         cells.assign(size_t(n) * n, 0);
         size_t count = 0;
@@ -1182,14 +1198,14 @@ std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
         for (const auto& l : lines)
         {
             // (points along it no further apart than half a cell, so every cell it crosses is met)
-            const size_t steps = size_t(std::ceil(std::hypot(l[2] - l[0], l[3] - l[1]) / (cell / 2)));
+            const size_t steps = size_t(std::ceil(length_of(l) / (cell / 2)));
             for (size_t s = 0; s <= steps; ++s)
             {
                 const double t = steps ? double(s) / double(steps) : 0;
                 mark(l[0] + (l[2] - l[0]) * t, l[1] + (l[3] - l[1]) * t);
             }
         }
-        xs.push_back(std::log2(double(n))), ys.push_back(std::log2(double(count)));
+        xs.push_back(own_log(double(n))), ys.push_back(own_log(double(count))); // (the slope as with log 2; Sieve's own log)
     }
     if (xs.size() < 3) return std::nullopt;
     double mx = 0, my = 0;
