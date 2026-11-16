@@ -1,17 +1,9 @@
-# X4 fix: fractal formulas drawn the same on every machine
+# X4 fix, second step: name the fractals whose pictures differ
 
-CI step 01 failed on Windows (test_core.cpp:7770): the charted fractals drawn at 10x10 counted other than
-1,057 under Microsoft's C library. A v4 formula is followed thousands of times a point with the system's
-complex numbers and exp, log, sin, cos, pow and atan2, whose last bit differs between libraries; a chaotic
-iteration grows that bit until a point escapes on one machine and not on another.
+CI step 01 still fails under MSVC at test_core.cpp:7770 (the charted pictures at 10x10, 1,057 here)
+after the formulas' own arithmetic (95e4054). Nothing left on the drawing path reads as machine-dependent,
+so the test now measures it: where the count is not 1,057 (or SIEVE_FRACTAL_DIGEST is set) it prints
+the count and, for each charted fractal, one hash of its pictures at every depth, drawn and fitted as
+fractal-drawn-v1 draws them. Compared with this machine's list, it names the fractals that differ.
 
-- core/src/fractal.cpp: the formulas' arithmetic is Sieve's own: complex + - * / (Smith's division), and
-  exp, log, sin, cos, sinh, cosh and atan2 built from + - * /, sqrt, floor, ldexp, frexp and fmod only,
-  which IEEE 754 makes the same everywhere. Measured against GNU's library over 2,000,000 random
-  arguments: within 4.9e-16 (relative) at most. The settled test compares squares (no hypot).
-- CMakeLists.txt: fractal.cpp compiled with -ffp-contract=off on GCC and Clang, so no multiply and add
-  are fused (MSVC's /fp:precise fuses none).
-- docs/SPECIFICATIONS.md: the v4 bullet says so.
-
-Here (GCC, Linux) every figure is as it was: 1,057 drawn; the sample's 894 / 180 / 688; the fern's 1.279;
-the core tests pass (12,813,492 checks, 0 failures).
+- tests/test_core.cpp: the digest (and <cstdlib> for std::getenv).

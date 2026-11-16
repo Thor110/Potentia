@@ -76,6 +76,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -7768,6 +7769,26 @@ void test_fractals()
         BigUint rest = BigUint::pow(2, 100);
         rest -= kept;
         CHECK(kept == BigUint(1057) && out.ranker()->count() == rest); // (112 with X1's 11 charted, 567 with X2's 75, 782 with X3's 107)
+        if (!(kept == BigUint(1057)) || std::getenv("SIEVE_FRACTAL_DIGEST"))
+        {
+            // (where the count differs from machine to machine, each charted fractal's pictures as one hash,
+            // drawn and fitted as fractal-drawn-v1 draws and fits them, to compare against another machine's)
+            std::cout << "fractal-drawn-v1 at 10x10: " << kept.to_decimal() << " pictures; each fractal's, depth by depth:\n";
+            for (const auto& c : chart)
+            {
+                std::string frames;
+                const uint32_t deepest = fractal_deepest_within(c.fractal, size_t(1) << 18);
+                for (uint32_t d = 0; d <= deepest; ++d)
+                    if (const auto img = draw_fractal(c.fractal, d, 40, 40))
+                    {
+                        const auto u = canonicalise_frame(*img, fmt);
+                        frames += std::to_string(d) + ":";
+                        for (const uint32_t p : u) frames += char('0' + p);
+                        frames += "\n";
+                    }
+                std::cout << "  " << c.id << " " << Sha256::hex_hash(frames).substr(0, 12) << "\n";
+            }
+        }
         // The Koch curve at depth 2, drawn and fitted, is one of them; stripes are not. (A picture all of
         // one colour is: a substitution's axiom of one symbol fills it.)
         const auto koch = std::find_if(chart.begin(), chart.end(), [](const ChartedFractal& c) { return c.id == "koch-curve"; });
