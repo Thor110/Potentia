@@ -1,0 +1,5 @@
+sieve-fractal-v2
+lsystem 22.5
+axiom X
+rule F FF
+rule X F-[[X]+X]+F[+FX]-X

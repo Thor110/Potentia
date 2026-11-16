@@ -99,14 +99,19 @@ public:
         if (!f) return "";
         const std::string axiom = f->axiom.size() > 12 ? f->axiom.substr(0, 12) + ".." : f->axiom;
         return f->family == sieve::Fractal::Family::Substitution ? trf("fractals.generated.substitution", {axiom})
-                                                                 : trf("fractals.generated.lsystem", {std::to_string(f->angle), axiom});
+                                                                 : trf("fractals.generated.lsystem", {sieve::fractal_angle_text(f->angle_tenths), axiom});
     }
     std::string summary(const BigUint& i) const override
     {
         if (is_index(i)) return trf("fractals.index.summary", {std::to_string(chart_.size()), tr("fractals.known." + known_)});
         const auto f = sieve::read_fractal(ruleset(i));
         if (!f) return "";
-        return f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution") : trf("fractals.lsystem.angle", {std::to_string(f->angle)});
+        const std::string family = f->family == sieve::Fractal::Family::Substitution ? tr("fractals.substitution")
+                                   : f->scale ? trf("fractals.lsystem.scale", {sieve::fractal_angle_text(f->angle_tenths), sieve::fractal_scale_text(f->scale)})
+                                              : trf("fractals.lsystem.angle", {sieve::fractal_angle_text(f->angle_tenths)});
+        // (a charted one says where it was transcribed from)
+        if (const auto k = charted(i); k && !chart_[*k].source.empty()) return family + trf("fractals.source", {chart_[*k].source});
+        return family;
     }
     std::optional<sieve::RgbaImage> picture(const BigUint& i, uint32_t depth, uint32_t width, uint32_t height) const override
     {

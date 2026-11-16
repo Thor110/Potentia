@@ -184,7 +184,11 @@ run before a release package, and after each of the three reviews. Each batch is
   done"): each a `sieve-fractal-v1` ruleset where the grammar can write it, the grammar widened (a new
   version) where a well-known fractal needs what it cannot say; each one charted becomes another named place
   in X1's generated line. Spider webs among them if they can be (Edward, the same day; IDEAS 19.235: an orb
-  web's spiral needs a step that shrinks, a widened grammar). `[01]` + `[10]`.
+  web's spiral needs a step that shrinks, a widened grammar) (*made 16 November 2026: sieve-fractal-v2,
+  an angle with a tenth or a scaled step, its rulesets after v1's in fractal-space-v2; 75 charted, each
+  with where it was transcribed from (The Algorithmic Beauty of Plants, Wikipedia, Fractint's files), an
+  orb web, the Pythagoras tree and the H tree written for Sieve; the box-counting dimension measured, and
+  a filter by it*). `[01]` + `[10]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

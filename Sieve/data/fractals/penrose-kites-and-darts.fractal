@@ -1,0 +1,8 @@
+sieve-fractal-v2
+lsystem 36 scale 0.618
+axiom Wf+Xf+Wf+Xf+Wf+Xf+Wf+Xf+Wf+X
+rule F E
+rule W [F][++'F][++f---"f|X-Y|f|W]
+rule X [F+++'F][++"fZ|X|-f|W]
+rule Y [+F]['F][+f"|Y+X]
+rule Z [-F]['F]["f--Wf|+Z]

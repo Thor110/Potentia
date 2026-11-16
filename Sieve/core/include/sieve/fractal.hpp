@@ -15,6 +15,19 @@
 // line, f a step forward without one, + a turn of ANGLE to the left, - to the right, | a half turn,
 // [ the turtle's place and heading kept, ] the last kept taken back; other letters draw nothing.
 //
+// "sieve-fractal-v2" (list X2) widens the L-system for the fractals v1 cannot write (Edward, 15 November
+// 2026: "implement as many fractals as we can track down"; IDEAS 19.235's spider webs):
+//     sieve-fractal-v2
+//     lsystem ANGLE             or   lsystem ANGLE scale RATIO
+//     axiom WORD
+//     rule SYMBOL WORD
+// ANGLE is whole degrees (1 to 359) or degrees and one tenth (0.1 to 359.9, its tenth not 0: 22.5, 25.7);
+// RATIO is 0.001 to 0.999, written with one to three decimals and no 0 at the end (0.5, 0.707). Its
+// symbols are v1's, and with a scale also " (the step from here on RATIO times as long) and ' (RATIO
+// times as short, so longer); [ keeps the step's length too. A v2 ruleset says something v1 cannot:
+// its angle has a tenth, or it has a scale (anything else is written as v1, so each ruleset is written
+// one way). Substitutions are v1's alone.
+//
 // Drawing: a substitution as its words one under another, depth 0 at the top, each row stretched to
 // the picture's width and each symbol a colour of its own, so its self-similarity is seen as the rows
 // repeat; an L-system as the turtle's path at that depth, fitted to the picture. A word is grown only
@@ -37,7 +50,9 @@
 namespace sieve {
 
 inline constexpr const char* kFractalVersion = "sieve-fractal-v1";
+inline constexpr const char* kFractalVersion2 = "sieve-fractal-v2";
 inline constexpr const char* kFractalChartVersion = "sieve-fractal-chart-v1";
+inline constexpr const char* kFractalChartVersion2 = "sieve-fractal-chart-v2";
 inline constexpr size_t kFractalWordMost = 64;           // a word's symbols at most
 inline constexpr size_t kFractalMost = size_t(1) << 21;  // symbols a ruleset is grown to at most
 inline constexpr uint32_t kFractalDepthMost = 64;        // steps at most
@@ -45,7 +60,9 @@ inline constexpr uint32_t kFractalDepthMost = 64;        // steps at most
 struct Fractal
 {
     enum class Family { Substitution, LSystem } family = Family::Substitution;
-    uint32_t angle = 0; // an L-system's turn, whole degrees
+    uint32_t version = 1;      // sieve-fractal-v1 or v2
+    uint32_t angle_tenths = 0; // an L-system's turn, in tenths of a degree (v1: whole degrees, so a multiple of 10)
+    uint32_t scale = 0;        // v2: the step's ratio for " and ', in thousandths (0: none)
     std::string axiom;
     std::vector<std::pair<char, std::string>> rules; // in order of symbol
 
@@ -55,7 +72,10 @@ struct Fractal
     // The deepest it grows to within kFractalMost (at most kFractalDepthMost).
     uint32_t deepest() const;
 };
-// Reads a ruleset, checked: nothing where it is not written as above, `why` saying what.
+// An angle in tenths of a degree as a ruleset writes it ("90", "22.5"); a ratio in thousandths ("0.707").
+std::string fractal_angle_text(uint32_t tenths);
+std::string fractal_scale_text(uint32_t thousandths);
+// Reads a ruleset (v1 or v2), checked: nothing where it is not written as above, `why` saying what.
 std::optional<Fractal> read_fractal(const std::string& text, std::string* why = nullptr);
 
 // The ruleset at `depth` drawn on a picture of width x height (RGBA; a dark ground, lines or tiles in
@@ -66,16 +86,35 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word);
 
 // The shelves, charted by hand: "sieve-fractal-chart-v1", then "fractal ID TITLE" a line; each
-// ruleset is ID.fractal beside the chart. ID is 1 to 64 of a-z, 0-9 and '-'.
+// ruleset is ID.fractal beside the chart. ID is 1 to 64 of a-z, 0-9 and '-'. "sieve-fractal-chart-v2"
+// (list X2) says where each was transcribed from: after each "fractal" line, "source TEXT" (who it is
+// after and where it was read: a book's figure, a page; Edward: each charted individually, with its
+// attribution).
 struct ChartedFractal
 {
     std::string id, title;
+    std::string source; // where it was transcribed from (v2's charts; "" in a v1 chart)
     Fractal fractal;
     std::string text; // the ruleset as its file holds it
 };
 // Reads the chart in `folder` and every ruleset it names. Throws std::invalid_argument naming the
 // first entry that is not as written.
 std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& folder);
+
+// An L-system's box-counting dimension, measured on its drawing (list X2; IDEAS 19.235: "a measure of how
+// fractal a drawing is ... could rank what is left"): grown as deep as it goes within
+// kFractalDimensionSymbols, its lines laid on grids of 4, 8, 16 ... cells a side over the square that holds
+// them, down to cells no smaller than its median line (and at most 1024 a side), the cells they touch
+// counted, and the slope of log(cells) against log(cells a side) fitted by least squares. A line is 1, a
+// filled square 2, the Koch curve about 1.26 (log 4 / log 3). Nothing for a substitution (its rows are a
+// sequence, not a figure), or where fewer than three grids fit.
+inline constexpr size_t kFractalDimensionSymbols = size_t(1) << 16;
+struct FractalDimension
+{
+    double value = 0;
+    uint32_t depth = 0, grids = 0; // the depth drawn, and how many grids the slope was fitted over
+};
+std::optional<FractalDimension> fractal_box_dimension(const Fractal& f);
 
 // The deepest a ruleset grows to within `symbols` symbols (at most deepest()): how deep the hallway draws
 // one, and how deep fractal-drawn-v1 draws the charted ones.

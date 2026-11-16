@@ -1,12 +1,151 @@
-sieve-fractal-chart-v1
+sieve-fractal-chart-v2
 fractal fibonacci-word Fibonacci word (the golden ratio)
+source Wikipedia, Fibonacci word (0 -> 01, 1 -> 0)
 fractal thue-morse Thue-Morse sequence
+source Wikipedia, Thue-Morse sequence (0 -> 01, 1 -> 10)
 fractal cantor-set Cantor set
+source Wikipedia, L-system, Example 3: Cantor set (A -> ABA, B -> BBB, written as 1 and 0)
 fractal koch-curve Koch curve
+source Wikipedia, Koch snowflake, Representation as Lindenmayer system
 fractal koch-snowflake Koch snowflake
+source Wikipedia, Koch snowflake, Representation as Lindenmayer system (the axiom F--F--F)
 fractal sierpinski-triangle Sierpinski triangle
+source Wikipedia, L-system, Example 5: Sierpinski triangle
 fractal dragon-curve Dragon curve
+source Wikipedia, Dragon curve, Heighway dragon as an L-system
 fractal hilbert-curve Hilbert curve
+source Wikipedia, Hilbert curve, Representation as Lindenmayer system
 fractal levy-c-curve Levy C curve
+source Wikipedia, Levy C curve, L-system construction
 fractal gosper-curve Gosper curve
+source Wikipedia, Gosper curve, its L-system (A and B, both drawn, written as F and G)
 fractal fractal-plant Fractal plant
+source Wikipedia, L-system, Example 7: Fractal plant
+fractal quadratic-koch-island Quadratic Koch island (Mandelbrot p.51)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), section 1.3, fig. 1.6
+fractal quadratic-koch-island-18 Quadratic Koch island, 18-segment generator (Mandelbrot p.52)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.7a
+fractal quadratic-koch-curve-type1 Quadratic Koch curve, type 1 (quadratic modification of the snowflake curve)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.7b
+fractal islands-and-lakes Combination of islands and lakes (Mandelbrot p.121)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.8
+fractal abop-koch-1-9a Koch curve variant (ABOP 1.9a)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9a
+fractal abop-koch-1-9b Koch curve variant (ABOP 1.9b)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9b
+fractal abop-koch-1-9c Koch curve variant (ABOP 1.9c)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9c
+fractal abop-koch-1-9d Koch curve variant (ABOP 1.9d)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9d
+fractal abop-koch-1-9e Koch curve variant (ABOP 1.9e)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9e
+fractal abop-koch-1-9f Koch curve variant (ABOP 1.9f)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.9f
+fractal quadratic-gosper-e-curve Quadratic Gosper curve (McKenna's E-curve)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.11b
+fractal fass-curve-3x3 FASS curve, 3x3 macrotile
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.16a
+fractal fass-curve-4x4 FASS curve, 4x4 macrotile
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.16b
+fractal peano-curve Peano curve (FASS, 3x3 diagonal tiles)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.17a
+fractal abop-plant-1-24a Plant-like structure (ABOP 1.24a)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24a
+fractal abop-plant-1-24b Plant-like structure (ABOP 1.24b)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24b
+fractal abop-plant-1-24c Plant-like structure / bush (ABOP 1.24c)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24c
+fractal abop-plant-1-24d Plant-like structure (ABOP 1.24d)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24d
+fractal abop-plant-1-24e Plant-like structure (ABOP 1.24e)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24e
+fractal abop-plant-1-24f Plant-like structure (ABOP 1.24f)
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), fig. 1.24f
+fractal abop-branching-pattern Space-filling branching pattern (H-tree-like), ABOP eq. 1.9
+source Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants (1990), section 1.10.3, eq. (1.9), fig. 1.39
+fractal compound-leaf-alternating Compound leaf with alternating branches (ABOP 5.12a)
+source Fractint fractint.l "Leaf2" (Adrian Mariano), from Prusinkiewicz & Lindenmayer, The Algorithmic Beauty of Plants, fig. 5.12a p.130
+fractal sierpinski-curve Sierpinski curve
+source Wikipedia, Sierpinski curve, "Representation as Lindenmayer system"
+fractal sierpinski-square-curve Sierpinski square curve
+source Wikipedia, Sierpinski curve, "Representation as Lindenmayer system" (square curve)
+fractal sierpinski-arrowhead Sierpinski arrowhead curve
+source Wikipedia, Sierpinski curve, "Arrowhead curve: Representation as Lindenmayer system"
+fractal moore-curve Moore curve
+source Wikipedia, Moore curve, "Representation as Lindenmayer system"
+fractal peano-curve-switchback Peano curve (generator form, "construction" variant)
+source Wikipedia, Peano curve, "L-system construction" (second system)
+fractal twindragon Twindragon (Davis-Knuth dragon)
+source Wikipedia, Dragon curve, "Twindragon"
+fractal terdragon Terdragon
+source Wikipedia, Dragon curve, "Terdragon"
+fractal fractal-binary-tree Fractal (binary) tree
+source Wikipedia, L-system, "Example 2: fractal (binary) tree"
+fractal cantor-set-lsystem Cantor set (L-system form)
+source Wikipedia, L-system, "Example 3: Cantor set"
+fractal koch-30-degree-island Koch island at 30 degrees (Fractint Koch2, after Mandelbrot)
+source Fractint fractint.l, "Koch2" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal koch-30-degree-triangle Koch curve on a 30 degrees lattice (Fractint Koch4, after Mandelbrot)
+source Fractint fractint.l, "Koch4" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal koch5-quadratic Quadratic Koch variant (Fractint Koch5)
+source Fractint fractint.l, "Koch5"
+fractal peano-mandelbrot-1 Peano curve (Mandelbrot form, Fractint Peano1)
+source Fractint fractint.l, "Peano1" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal peano-mandelbrot-2 Peano-type curve with root 2 steps (Fractint Peano2, after Mandelbrot)
+source Fractint fractint.l, "Peano2" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-island-1 Island with lakes (Fractint Island1, after Mandelbrot)
+source Fractint fractint.l, "Island1" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal mandelbrot-quartet Quartet curve (Fractint Quartet, after Mandelbrot)
+source Fractint fractint.l, "Quartet" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal fractint-tree1 Binary tree with 0.6 scaling (Fractint Tree1, after Mandelbrot)
+source Fractint fractint.l, "Tree1" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal sierpinski-gasket-node Sierpinski gasket, node-rewriting form (Fractint Sierpinski1)
+source Fractint fractint.l, "Sierpinski1" (Adrian Mariano, from Mandelbrot, The Fractal Geometry of Nature)
+fractal sierpinski-gasket-sfi Sierpinski gasket (The Science of Fractal Images form, Fractint Sierpinski2)
+source Fractint fractint.l, "Sierpinski2" (from The Science of Fractal Images)
+fractal sierpinski-gasket-branching Sierpinski gasket by branching (Fractint Sierpinski3)
+source Fractint fractint.l, "Sierpinski3" (from Jim Hanan via Corbit)
+fractal sierpinski-square Square Sierpinski (Fractint SierpinskiSquare / Square)
+source Fractint fractint.l, "SierpinskiSquare" (also "Square", Adrian Mariano)
+fractal square-gasket Square gasket (Fractint SquareGasket)
+source Fractint fractint.l, "SquareGasket" (Adrian Mariano)
+fractal triangular-gasket Triangular gasket (Fractint ColorTriangGasket)
+source Fractint fractint.l, "ColorTriangGasket" (Adrian Mariano)
+fractal philip-plant-07 Plant (Ken Philip, The Science of Fractal Images p.285b)
+source Fractint fractint.l, "Plant07" (Ken Philip, from The Science of Fractal Images p.285)
+fractal philip-plant-08 Plant (Ken Philip, The Science of Fractal Images p.286)
+source Fractint fractint.l, "Plant08" (Ken Philip, from The Science of Fractal Images p.286)
+fractal penrose-rhomb-tiling Penrose tiling, P3 rhombs (Herb Savage)
+source Fractint fractint.l, "Penrose1" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers")
+fractal penrose-rhomb-star Penrose rhomb tiling, five-fold star start (Herb Savage)
+source Fractint fractint.l, "Penrose3" (Herb Savage)
+fractal penrose-kites-and-darts Penrose kites and darts, P2 (Herb Savage)
+source Iterated Dynamics tiling.l, "KitesAndDarts" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers")
+fractal spiral-tile Spiral tiling (Herb Savage, after Gardner)
+source Iterated Dynamics tiling.l, "SpiralTile" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers")
+fractal sphinx-reptile Sphinx rep-tile (Herb Savage)
+source Fractint fractint.l, "Sphinx" (Herb Savage, based on Martin Gardner's "Penrose Tiles to Trapdoor Ciphers")
+fractal pentaplexity Pentaplexity (Penrose)
+source Fractint fractint.l, "PentaPlexity" (Penrose's construction translated to an L-system by Joe Saverino)
+fractal circular-tile Circular tile (Fractint CircularTile)
+source Fractint fractint.l, "CircularTile" (Adrian Mariano)
+fractal lars-cross-tree Four-way binary branching (Fractint Lars1)
+source Fractint fractint.l, "Lars1" (Jonathan Osuch, after Lars Vangsgaard)
+fractal period-doubling Period-doubling sequence
+source Wikipedia, Automatic sequence, "Period-doubling sequence" (OEIS A096268; Allouche & Shallit 2003 p.176)
+fractal rudin-shapiro Rudin-Shapiro sequence
+source Wikipedia, Rudin-Shapiro sequence and Morphic word (Lothaire 2005 p.525); OEIS A020985
+fractal regular-paperfolding Regular paperfolding (dragon curve) sequence
+source Wikipedia, Morphic word (Lothaire 2005 p.526); OEIS A014577 (cited on Wikipedia, Regular paperfolding sequence)
+fractal baum-sweet Baum-Sweet sequence
+source Wikipedia, Baum-Sweet sequence (Allouche & Shallit 2003 p.176); OEIS A086747
+fractal tribonacci-word Tribonacci word (Rauzy map)
+source Wikipedia, Rauzy fractal, "Tribonacci word" (Lothaire 2005 p.525; Pytheas Fogg 2002 p.232)
+fractal pell-silver-word Pell (silver-ratio) word
+source Wikipedia, Ammann-Beenker tiling, "Pell and silver ratio features"
+fractal orb-web Orb web (36 radii and a spiral)
+source Sieve's own construction (list X2), not a transcription: an orb web's radii from its hub and a logarithmic spiral wound across them, each chord 0.985 of the last (IDEAS 19.235)
+fractal pythagoras-tree Pythagoras tree
+source written for Sieve from the construction in Wikipedia, Pythagoras tree (Albert E. Bosman, 1942): on each square two squares 1/root 2 its side (0.707), at 45 degrees
+fractal h-tree H tree
+source written for Sieve from the construction in Wikipedia, H tree: at each end of a segment one at right angles, 1/root 2 as long (0.707), its middle there

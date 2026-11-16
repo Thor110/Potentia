@@ -226,9 +226,15 @@ std::vector<FormatEntry> gather()
     own(kFractalVersion, "A fractal's ruleset: a substitution or an L-system, grown to a depth and drawn", "document",
         std::string("first line \"") + kFractalVersion + "\", then \"substitution\" or \"lsystem ANGLE\", \"axiom WORD\" and \"rule SYMBOL WORD\" lines",
         "the fractal dimension: sieve fractal, and the hallway's FRACTALS line (SPECIFICATIONS 12.0t; IDEAS 19.191, 19.235); its grammar data/filters/format-fractal-v1.sfilter (IDEAS 19.185)");
+    own(kFractalVersion2, "A fractal's ruleset widened: an L-system whose angle has a tenth, or whose step is scaled", "document",
+        std::string("first line \"") + kFractalVersion2 + "\", then \"lsystem ANGLE\" or \"lsystem ANGLE scale RATIO\", \"axiom WORD\" and \"rule SYMBOL WORD\" lines",
+        "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list X2); its grammar data/filters/format-fractal-v2.sfilter, v1's and v2's together");
     own(kFractalChartVersion, "The fractal dimension's shelves: the fractals charted by hand, each named with its ruleset", "document",
         std::string("first line \"") + kFractalChartVersion + "\", then \"fractal ID TITLE\" lines; each ruleset ID.fractal beside it",
         "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; IDEAS 19.235)");
+    own(kFractalChartVersion2, "The fractal dimension's shelves, each fractal with where it was transcribed from", "document",
+        std::string("first line \"") + kFractalChartVersion2 + "\", then \"fractal ID TITLE\" lines, each followed by \"source TEXT\"; each ruleset ID.fractal beside it",
+        "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; list X2)");
     own(kRaidTallyVersion, "Who keeps the RAID's pieces: each machine's space, largest piece and what it keeps", "document",
         std::string("first line \"") + kRaidTallyVersion + "\", then \"keeper ADDRESS SPACE LARGEST USED\" lines",
         "sieve raid place and leave (SPECIFICATIONS 12.0s; IDEAS 19.210)");

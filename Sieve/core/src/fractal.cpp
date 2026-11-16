@@ -25,6 +25,7 @@ namespace {
 bool substitution_symbol(char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z'); }
 bool letter(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 bool lsystem_symbol(char c) { return letter(c) || c == '+' || c == '-' || c == '[' || c == ']' || c == '|'; }
+bool scaled_symbol(char c) { return lsystem_symbol(c) || c == '"' || c == '\''; }
 
 // A whole number written in decimal with no sign or leading zero, from lo to hi.
 std::optional<uint32_t> decimal(std::string_view s, uint32_t lo, uint32_t hi)
@@ -95,12 +96,50 @@ void line(RgbaImage& img, int x0, int y0, int x1, int y1, const std::array<uint8
     }
 }
 
+// An angle as v2 writes it: whole degrees (1 to 359), or degrees and a tenth not 0 (0.1 to 359.9); in tenths.
+std::optional<uint32_t> angle_tenths_of(std::string_view s)
+{
+    const size_t dot = s.find('.');
+    if (dot == std::string_view::npos)
+    {
+        const auto a = decimal(s, 1, 359);
+        return a ? std::optional<uint32_t>(*a * 10) : std::nullopt;
+    }
+    const auto whole = decimal(s.substr(0, dot), 0, 359);
+    if (!whole || s.size() != dot + 2 || s[dot + 1] < '1' || s[dot + 1] > '9') return std::nullopt;
+    return *whole * 10 + uint32_t(s[dot + 1] - '0');
+}
+
+// A ratio: "0." and one to three digits, the last not 0; in thousandths.
+std::optional<uint32_t> scale_of(std::string_view s)
+{
+    if (s.size() < 3 || s.size() > 5 || s.substr(0, 2) != "0." || s.back() == '0') return std::nullopt;
+    uint32_t v = 0;
+    for (size_t k = 2; k < 5; ++k)
+    {
+        const char c = k < s.size() ? s[k] : '0';
+        if (c < '0' || c > '9') return std::nullopt;
+        v = v * 10 + uint32_t(c - '0');
+    }
+    return v;
+}
+
 } // namespace
+
+std::string fractal_angle_text(uint32_t tenths) { return std::to_string(tenths / 10) + (tenths % 10 ? "." + std::to_string(tenths % 10) : ""); }
+
+std::string fractal_scale_text(uint32_t thousandths)
+{
+    std::string t = std::to_string(1000 + thousandths % 1000).substr(1);
+    while (!t.empty() && t.back() == '0') t.pop_back();
+    return "0." + t;
+}
 
 std::string Fractal::text() const
 {
-    std::string t = std::string(kFractalVersion) + "\n";
-    t += family == Family::Substitution ? std::string("substitution\n") : "lsystem " + std::to_string(angle) + "\n";
+    std::string t = std::string(version == 2 ? kFractalVersion2 : kFractalVersion) + "\n";
+    t += family == Family::Substitution ? std::string("substitution\n")
+                                        : "lsystem " + fractal_angle_text(angle_tenths) + (scale ? " scale " + fractal_scale_text(scale) : std::string()) + "\n";
     t += "axiom " + axiom + "\n";
     for (const auto& [s, w] : rules) t += std::string("rule ") + s + " " + w + "\n";
     return t;
@@ -161,20 +200,45 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
     };
     std::vector<std::string> lines;
     if (!lf_lines(text, lines)) return bad("its last line does not end in a line feed");
-    if (lines.size() < 4 || lines[0] != kFractalVersion) return bad(std::string("its first line is not ") + kFractalVersion + ", or it has no axiom and rule");
+    if (lines.size() < 4 || (lines[0] != kFractalVersion && lines[0] != kFractalVersion2))
+        return bad(std::string("its first line is not ") + kFractalVersion + " or " + kFractalVersion2 + ", or it has no axiom and rule");
     Fractal f;
-    if (lines[1] == "substitution") f.family = Fractal::Family::Substitution;
+    f.version = lines[0] == kFractalVersion2 ? 2 : 1;
+    if (lines[1] == "substitution")
+    {
+        if (f.version == 2) return bad("a substitution is written as sieve-fractal-v1 (v2 widens the L-system alone)");
+        f.family = Fractal::Family::Substitution;
+    }
     else if (lines[1].rfind("lsystem ", 0) == 0)
     {
-        const auto a = decimal(std::string_view(lines[1]).substr(8), 1, 359);
-        if (!a) return bad("an L-system's angle is whole degrees, 1 to 359");
-        f.family = Fractal::Family::LSystem, f.angle = *a;
+        f.family = Fractal::Family::LSystem;
+        std::string_view rest = std::string_view(lines[1]).substr(8);
+        if (f.version == 1)
+        {
+            const auto a = decimal(rest, 1, 359);
+            if (!a) return bad("an L-system's angle is whole degrees, 1 to 359");
+            f.angle_tenths = *a * 10;
+        }
+        else
+        {
+            const size_t sp = rest.find(" scale ");
+            const auto a = angle_tenths_of(rest.substr(0, sp));
+            if (!a) return bad("a v2 L-system's angle is whole degrees (1 to 359) or degrees and a tenth (0.1 to 359.9, as 22.5)");
+            f.angle_tenths = *a;
+            if (sp != std::string_view::npos)
+            {
+                const auto s = scale_of(rest.substr(sp + 7));
+                if (!s) return bad("a scale is 0.001 to 0.999, one to three decimals with no 0 at the end (as 0.5 or 0.707)");
+                f.scale = *s;
+            }
+            if (f.angle_tenths % 10 == 0 && f.scale == 0) return bad("a v2 ruleset has an angle with a tenth or a scale (anything else is written as sieve-fractal-v1)");
+        }
     }
     else return bad("its second line is neither \"substitution\" nor \"lsystem ANGLE\"");
     const bool sub = f.family == Fractal::Family::Substitution;
     auto word_ok = [&](std::string_view w) {
         if (w.empty() || w.size() > kFractalWordMost) return false;
-        return std::all_of(w.begin(), w.end(), [&](char c) { return sub ? substitution_symbol(c) : lsystem_symbol(c); });
+        return std::all_of(w.begin(), w.end(), [&](char c) { return sub ? substitution_symbol(c) : f.scale ? scaled_symbol(c) : lsystem_symbol(c); });
     };
     if (lines[2].rfind("axiom ", 0) != 0 || !word_ok(std::string_view(lines[2]).substr(6))) return bad("its third line is not \"axiom WORD\" (1 to 64 of its symbols)");
     f.axiom = lines[2].substr(6);
@@ -194,22 +258,25 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word)
 {
     std::vector<std::array<double, 4>> out;
-    const double turn = double(f.angle) * 3.14159265358979323846 / 180.0;
-    double x = 0, y = 0, a = 0;
-    std::vector<std::array<double, 3>> kept;
+    const double turn = double(f.angle_tenths) * 3.14159265358979323846 / 1800.0, ratio = double(f.scale) / 1000.0;
+    double x = 0, y = 0, a = 0, step = 1;
+    std::vector<std::array<double, 4>> kept;
     for (const char c : word)
     {
         if (c == 'F' || c == 'G' || c == 'f')
         {
-            const double nx = x + std::cos(a), ny = y + std::sin(a);
+            const double nx = x + step * std::cos(a), ny = y + step * std::sin(a);
             if (c != 'f') out.push_back({x, y, nx, ny});
             x = nx, y = ny;
         }
         else if (c == '+') a += turn;
         else if (c == '-') a -= turn;
         else if (c == '|') a += 3.14159265358979323846;
-        else if (c == '[') kept.push_back({x, y, a});
-        else if (c == ']' && !kept.empty()) x = kept.back()[0], y = kept.back()[1], a = kept.back()[2], kept.pop_back();
+        // (held within 10^-60 and 10^60, so a word of a million ' still draws: a bound chosen)
+        else if (c == '"' && ratio > 0) step = std::max(step * ratio, 1e-60);
+        else if (c == '\'' && ratio > 0) step = std::min(step / ratio, 1e60);
+        else if (c == '[') kept.push_back({x, y, a, step});
+        else if (c == ']' && !kept.empty()) x = kept.back()[0], y = kept.back()[1], a = kept.back()[2], step = kept.back()[3], kept.pop_back();
     }
     return out;
 }
@@ -264,6 +331,64 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
     return img;
 }
 
+std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
+{
+    if (f.family != Fractal::Family::LSystem) return std::nullopt;
+    const uint32_t depth = fractal_deepest_within(f, kFractalDimensionSymbols);
+    const auto word = f.grow(depth);
+    if (!word) return std::nullopt;
+    const auto lines = fractal_lines(f, *word);
+    if (lines.size() < 16) return std::nullopt;
+    double lx = lines[0][0], hx = lx, ly = lines[0][1], hy = ly;
+    std::vector<double> lengths; // (each line's, for their median)
+    lengths.reserve(lines.size());
+    for (const auto& l : lines)
+    {
+        for (int k = 0; k < 2; ++k) lx = std::min(lx, l[size_t(2 * k)]), hx = std::max(hx, l[size_t(2 * k)]), ly = std::min(ly, l[size_t(2 * k + 1)]), hy = std::max(hy, l[size_t(2 * k + 1)]);
+        lengths.push_back(std::hypot(l[2] - l[0], l[3] - l[1]));
+    }
+    const double span = std::max(hx - lx, hy - ly) * (1 + 1e-9);
+    if (!(span > 0) || !std::isfinite(span)) return std::nullopt;
+    std::nth_element(lengths.begin(), lengths.begin() + std::ptrdiff_t(lengths.size() / 2), lengths.end());
+    const double median = lengths[lengths.size() / 2];
+    std::vector<double> xs, ys;
+    std::vector<uint8_t> cells;
+    for (uint32_t n = 4; n <= 1024 && span / n >= median; n *= 2)
+    {
+        const double cell = span / n;
+        // (a grid whose points along the lines would pass 2^22 is not laid: a bound chosen, so a ruleset of
+        // many long lines is measured in a moment, on the coarser grids)
+        double points = 0;
+        for (const auto& l : lines) points += std::ceil(std::hypot(l[2] - l[0], l[3] - l[1]) / (cell / 2)) + 1;
+        if (points > double(1 << 22)) break;
+        cells.assign(size_t(n) * n, 0);
+        size_t count = 0;
+        auto mark = [&](double x, double y) {
+            const size_t cx = std::min<size_t>(n - 1, size_t(std::max(0.0, (x - lx) / cell))), cy = std::min<size_t>(n - 1, size_t(std::max(0.0, (y - ly) / cell)));
+            uint8_t& c = cells[cy * n + cx];
+            count += c == 0, c = 1;
+        };
+        for (const auto& l : lines)
+        {
+            // (points along it no further apart than half a cell, so every cell it crosses is met)
+            const size_t steps = size_t(std::ceil(std::hypot(l[2] - l[0], l[3] - l[1]) / (cell / 2)));
+            for (size_t s = 0; s <= steps; ++s)
+            {
+                const double t = steps ? double(s) / double(steps) : 0;
+                mark(l[0] + (l[2] - l[0]) * t, l[1] + (l[3] - l[1]) * t);
+            }
+        }
+        xs.push_back(std::log2(double(n))), ys.push_back(std::log2(double(count)));
+    }
+    if (xs.size() < 3) return std::nullopt;
+    double mx = 0, my = 0;
+    for (size_t k = 0; k < xs.size(); ++k) mx += xs[k], my += ys[k];
+    mx /= double(xs.size()), my /= double(xs.size());
+    double sxy = 0, sxx = 0;
+    for (size_t k = 0; k < xs.size(); ++k) sxy += (xs[k] - mx) * (ys[k] - my), sxx += (xs[k] - mx) * (xs[k] - mx);
+    return FractalDimension{sxy / sxx, depth, uint32_t(xs.size())};
+}
+
 std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& folder)
 {
     auto read = [](const std::filesystem::path& p) {
@@ -272,12 +397,20 @@ std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& fold
         return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
     };
     std::vector<std::string> lines;
-    if (!lf_lines(read(folder / "chart.txt"), lines) || lines.empty() || lines[0] != kFractalChartVersion)
-        throw std::invalid_argument(std::string("the chart is not a ") + kFractalChartVersion + " with every line ended");
+    if (!lf_lines(read(folder / "chart.txt"), lines) || lines.empty() || (lines[0] != kFractalChartVersion && lines[0] != kFractalChartVersion2))
+        throw std::invalid_argument(std::string("the chart is not a ") + kFractalChartVersion + " or v2 with every line ended");
+    const bool sourced = lines[0] == kFractalChartVersion2;
     std::vector<ChartedFractal> out;
     for (size_t i = 1; i < lines.size(); ++i)
     {
         const std::string& l = lines[i];
+        if (sourced && l.rfind("source ", 0) == 0)
+        {
+            if (out.empty() || !out.back().source.empty() || l.size() == 7) throw std::invalid_argument("chart line " + std::to_string(i + 1) + ": a \"source TEXT\" line follows its fractal's, once");
+            out.back().source = l.substr(7);
+            continue;
+        }
+        if (sourced && !out.empty() && out.back().source.empty()) throw std::invalid_argument(out.back().id + " has no \"source TEXT\" line after it");
         const size_t sp = l.find(' ', 8);
         if (l.rfind("fractal ", 0) != 0 || sp == std::string::npos || sp + 1 >= l.size()) throw std::invalid_argument("chart line " + std::to_string(i + 1) + " is not \"fractal ID TITLE\"");
         ChartedFractal c;
@@ -293,6 +426,7 @@ std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& fold
         c.fractal = *f;
         out.push_back(std::move(c));
     }
+    if (sourced && !out.empty() && out.back().source.empty()) throw std::invalid_argument(out.back().id + " has no \"source TEXT\" line after it");
     return out;
 }
 

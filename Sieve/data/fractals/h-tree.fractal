@@ -1,0 +1,4 @@
+sieve-fractal-v2
+lsystem 90 scale 0.707
+axiom [A]|A
+rule A F"[+A][-A]

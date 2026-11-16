@@ -1,0 +1,4 @@
+sieve-fractal-v2
+lsystem 45 scale 0.707
+axiom P
+rule P F++F++F++F++[++f--+"P][++f--+"f--P]

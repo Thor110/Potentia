@@ -1357,8 +1357,12 @@ int cmd_fractal(const Args& a)
         const auto chart = sieve::read_fractal_chart(folder);
         std::cout << "shelves   " << chart.size() << " fractals, charted by hand (" << sieve::u8(folder / "chart.txt") << ")\n";
         for (const auto& c : chart)
+        {
             std::cout << "  " << c.id << "  " << (c.fractal.family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system")
-                      << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest() << ": " << c.title << "\n";
+                      << ", " << c.text.size() << " characters, grows to depth " << c.fractal.deepest();
+            if (const auto d = sieve::fractal_box_dimension(c.fractal)) std::cout << ", dimension " << std::fixed << std::setprecision(2) << d->value;
+            std::cout << ": " << c.title << (c.source.empty() ? "" : " (after " + c.source + ")") << "\n";
+        }
         return 0;
     }
     // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at its address.
@@ -1366,10 +1370,11 @@ int cmd_fractal(const Args& a)
     if (what == "count")
     {
         const sieve::FractalSpace space(longest);
-        std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, " << sieve::kFractalSpaceShortest << " to "
-                  << longest << " characters\n"
+        std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, then every v2, " << sieve::kFractalSpaceShortest
+                  << " to " << longest << " characters\n"
                   << "rulesets  " << space.count().to_decimal() << " (about 10^" << std::fixed << std::setprecision(1)
-                  << double(space.count().bit_length()) * 0.30103 << ")\n";
+                  << double(space.count().bit_length()) * 0.30103 << ")\n"
+                  << "v1        " << space.count_v1().to_decimal() << " of them, the first\n";
         for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
             std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         return 0;
@@ -1396,13 +1401,13 @@ int cmd_fractal(const Args& a)
     {
         if (!f)
         {
-            std::cout << "not a " << sieve::kFractalVersion << ": " << why << "\n";
+            std::cout << "not a " << sieve::kFractalVersion << " or v2 ruleset: " << why << "\n";
             return 1;
         }
-        std::cout << "a " << sieve::kFractalVersion << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
+        std::cout << "a " << (f->version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
         return 0;
     }
-    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ": " + why);
+    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + " or v2 ruleset: " + why);
     if (what == "index")
     {
         const sieve::FractalSpace space(longest);
@@ -1419,11 +1424,14 @@ int cmd_fractal(const Args& a)
     if (what == "show")
     {
         std::cout << "fractal   " << name << "\n"
-                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + std::to_string(f->angle) + " degrees") << "\n"
-                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v1 passes)\n"
+                  << "family    " << (f->family == sieve::Fractal::Family::Substitution ? "substitution" : "L-system, " + sieve::fractal_angle_text(f->angle_tenths) + " degrees" + (f->scale ? ", step scaled by " + sieve::fractal_scale_text(f->scale) : std::string())) << "\n"
+                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v2 passes)\n"
                   << "depth     " << depth << " of " << f->deepest() << ": " << word.size() << " symbols\n";
         if (f->family == sieve::Fractal::Family::Substitution) std::cout << "word      " << word.substr(0, 80) << (word.size() > 80 ? "..." : "") << "\n";
         else std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";
+        if (const auto d = sieve::fractal_box_dimension(*f))
+            std::cout << "dimension " << std::fixed << std::setprecision(3) << d->value << " (box-counting, measured at depth " << d->depth << " on " << d->grids << " grids)\n";
+        else if (f->family == sieve::Fractal::Family::LSystem) std::cout << "dimension not measured (too few lines, or too small to lay three grids over)\n";
         return 0;
     }
     if (what == "draw")

@@ -1,0 +1,5 @@
+sieve-fractal-v1
+lsystem 90
+axiom LFL+F+LFL
+rule L -RF+LFL+FR-
+rule R +LF-RFR-FL+

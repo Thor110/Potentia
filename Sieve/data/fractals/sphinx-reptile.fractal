@@ -1,0 +1,7 @@
+sieve-fractal-v1
+lsystem 60
+axiom X
+rule F ff
+rule X +FF-YFF+FF--FFF|X|F--YFFFYFFF|
+rule Y -FF+XFF-FF++FFF|Y|F++XFFFXFFF|
+rule f ff

@@ -3,6 +3,7 @@
 
 #include "sieve/fractal.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -15,6 +16,7 @@ namespace {
 constexpr uint32_t kAxiomOverhead = 7; // "axiom " and the line feed
 constexpr uint32_t kRuleOverhead = 8;  // "rule X " and the line feed
 constexpr uint32_t kSubHeader = 30;    // "sieve-fractal-v1\n" and "substitution\n"
+static_assert(sizeof("sieve-fractal-v2") == sizeof("sieve-fractal-v1")); // (v2's lines' lengths below count on it)
 
 uint32_t digits_of(uint32_t a) { return a < 10 ? 1 : a < 100 ? 2 : 3; }
 // The angles written with d digits: the first of them and how many there are (1-9, 10-99, 100-359).
@@ -88,12 +90,46 @@ FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
     make(sub_, digits_letters, digits_letters);
     const std::string letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     make(ls_, "+-ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz|", letters);
+    make(scaled_, "\"'+-ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz|", letters);
+    // v2's angles and scales by the width they are written in, each in order of value.
+    for (uint32_t t = 1; t <= 3599; ++t)
+    {
+        const size_t w = fractal_angle_text(t).size();
+        if (t % 10) tenths_[w].push_back(t), angles_[w].push_back(t);
+        else angles_[w].push_back(t);
+    }
+    for (uint32_t s = 1; s <= 999; ++s) scales_[fractal_scale_text(s).size()].push_back(s);
+    for (size_t w = 1; w < 6; ++w)
+        std::sort(angles_[w].begin(), angles_[w].end()), std::sort(tenths_[w].begin(), tenths_[w].end()), std::sort(scales_[w].begin(), scales_[w].end());
+    // "sieve-fractal-v2\n" and "lsystem " and the angle, " scale " and the ratio, "\n"
+    for (uint32_t w = 1; w < 6; ++w)
+        if (!tenths_[w].empty()) groups_.push_back({&ls_, 26 + w, &tenths_[w], nullptr});
+    for (uint32_t w = 1; w < 6; ++w)
+        for (uint32_t m = 1; m < 6; ++m)
+            if (!angles_[w].empty() && !scales_[m].empty()) groups_.push_back({&scaled_, 33 + w + m, &angles_[w], &scales_[m]});
     by_length_.assign(longest + 1, BigUint());
+    by_length_v2_.assign(longest + 1, BigUint());
     for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l)
     {
         by_length_[l] = at_length(l, nullptr);
-        total_ += by_length_[l];
+        total_v1_ += by_length_[l];
+        by_length_v2_[l] = at_length_v2(l);
     }
+    total_ = total_v1_;
+    for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_ += by_length_v2_[l];
+}
+
+BigUint FractalSpace::at_length_v2(uint32_t l) const
+{
+    BigUint total;
+    for (const Group& g : groups_)
+    {
+        if (l < g.header) continue;
+        BigUint one = g.family->after_header(l - g.header);
+        if (one.is_zero()) continue;
+        total += times(one, BigUint(g.lines()));
+    }
+    return total;
 }
 
 // The rulesets of one length: the substitutions, then the L-systems, angle by angle (the angles of
@@ -116,47 +152,22 @@ BigUint FractalSpace::at_length(uint32_t l, std::vector<BigUint>* per_angle_bloc
     return total;
 }
 
-BigUint FractalSpace::count_at(uint32_t length) const { return length < by_length_.size() ? by_length_[length] : BigUint(); }
-
-std::string FractalSpace::at(const BigUint& index) const
+BigUint FractalSpace::count_at(uint32_t length) const
 {
-    if (index >= total_) throw std::invalid_argument("past the last ruleset of " + std::to_string(longest_) + " characters or fewer");
-    BigUint i = index;
-    uint32_t l = kFractalSpaceShortest;
-    while (i >= by_length_[l]) i -= by_length_[l++];
-    std::vector<BigUint> blocks;
-    at_length(l, &blocks);
-    const Family* f = nullptr;
-    std::string text = std::string(kFractalVersion) + "\n";
-    uint32_t r = 0;
-    if (i < blocks[0])
-    {
-        f = &sub_, text += "substitution\n", r = l - kSubHeader;
-    }
-    else
-    {
-        i -= blocks[0];
-        for (uint32_t d = 1; d <= 3 && !f; ++d)
-        {
-            if (blocks[d].is_zero()) continue;
-            BigUint all = blocks[d];
-            all.mul_small(angles_with(d));
-            if (i >= all)
-            {
-                i -= all;
-                continue;
-            }
-            BigUint q, rem;
-            BigUint::divmod(i, blocks[d], q, rem);
-            i = rem;
-            f = &ls_, text += "lsystem " + std::to_string(first_angle(d) + q.mod_small(1u << 31)) + "\n", r = l - ls_header(d);
-        }
-    }
+    if (length >= by_length_.size()) return BigUint();
+    BigUint n = by_length_[length];
+    n += by_length_v2_[length];
+    return n;
+}
+
+std::string FractalSpace::body_at(const Family& f, uint32_t r, BigUint i) const
+{
+    std::string text;
     // The axiom: the shorter first, then its word.
     for (uint32_t n = 1; n <= kFractalWordMost && kAxiomOverhead + n <= r; ++n)
     {
-        const BigUint rest = f->rules(0, r - kAxiomOverhead - n, false);
-        const BigUint block = times(f->words[n], rest);
+        const BigUint rest = f.rules(0, r - kAxiomOverhead - n, false);
+        const BigUint block = times(f.words[n], rest);
         if (i >= block)
         {
             i -= block;
@@ -164,18 +175,17 @@ std::string FractalSpace::at(const BigUint& index) const
         }
         BigUint q, rem;
         BigUint::divmod(i, rest, q, rem);
-        text += "axiom " + word_at(q, n, f->symbols) + "\n";
+        text += "axiom " + word_at(q, n, f.symbols) + "\n";
         i = rem, r -= kAxiomOverhead + n;
         break;
     }
     // Its rules, symbol by symbol: a rule for it first (the shorter word first), then none.
-    bool any = false;
-    for (size_t j = 0; j < f->rule_symbols.size(); ++j)
+    for (size_t j = 0; j < f.rule_symbols.size(); ++j)
     {
         for (uint32_t n = 1; n <= kFractalWordMost && kRuleOverhead + n <= r; ++n)
         {
-            const BigUint rest = f->rules(j + 1, r - kRuleOverhead - n, true);
-            const BigUint block = times(f->words[n], rest);
+            const BigUint rest = f.rules(j + 1, r - kRuleOverhead - n, true);
+            const BigUint block = times(f.words[n], rest);
             if (i >= block)
             {
                 i -= block;
@@ -183,12 +193,92 @@ std::string FractalSpace::at(const BigUint& index) const
             }
             BigUint q, rem;
             BigUint::divmod(i, rest, q, rem);
-            text += std::string("rule ") + f->rule_symbols[j] + " " + word_at(q, n, f->symbols) + "\n";
-            i = rem, r -= kRuleOverhead + n, any = true;
+            text += std::string("rule ") + f.rule_symbols[j] + " " + word_at(q, n, f.symbols) + "\n";
+            i = rem, r -= kRuleOverhead + n;
             break;
         }
     }
     return text;
+}
+
+std::string FractalSpace::at(const BigUint& index) const
+{
+    if (index >= total_) throw std::invalid_argument("past the last ruleset of " + std::to_string(longest_) + " characters or fewer");
+    BigUint i = index;
+    if (i >= total_v1_)
+    {
+        // v2's: its length, then its family line's group, the line in it, and its body.
+        i -= total_v1_;
+        uint32_t l = kFractalSpaceShortest;
+        while (i >= by_length_v2_[l]) i -= by_length_v2_[l++];
+        for (const Group& g : groups_)
+        {
+            if (l < g.header) continue;
+            const BigUint one = g.family->after_header(l - g.header);
+            const BigUint all = times(one, BigUint(g.lines()));
+            if (i >= all)
+            {
+                i -= all;
+                continue;
+            }
+            BigUint q, rem;
+            BigUint::divmod(i, one, q, rem);
+            const uint64_t line = q.mod_small(1u << 31); // (below 2^22: 3,599 angles by 999 scales at most)
+            const size_t per = g.scales ? g.scales->size() : 1;
+            std::string text = std::string(kFractalVersion2) + "\nlsystem " + fractal_angle_text((*g.angles)[size_t(line / per)]);
+            if (g.scales) text += " scale " + fractal_scale_text((*g.scales)[size_t(line % per)]);
+            return text + "\n" + body_at(*g.family, l - g.header, rem);
+        }
+        throw std::logic_error("fractal-space-v2: an address past its groups");
+    }
+    uint32_t l = kFractalSpaceShortest;
+    while (i >= by_length_[l]) i -= by_length_[l++];
+    std::vector<BigUint> blocks;
+    at_length(l, &blocks);
+    std::string text = std::string(kFractalVersion) + "\n";
+    if (i < blocks[0]) return text + "substitution\n" + body_at(sub_, l - kSubHeader, i);
+    i -= blocks[0];
+    for (uint32_t d = 1; d <= 3; ++d)
+    {
+        if (blocks[d].is_zero()) continue;
+        BigUint all = blocks[d];
+        all.mul_small(angles_with(d));
+        if (i >= all)
+        {
+            i -= all;
+            continue;
+        }
+        BigUint q, rem;
+        BigUint::divmod(i, blocks[d], q, rem);
+        text += "lsystem " + std::to_string(first_angle(d) + q.mod_small(1u << 31)) + "\n";
+        return text + body_at(ls_, l - ls_header(d), rem);
+    }
+    throw std::logic_error("fractal-space-v1: an address past its angles");
+}
+
+BigUint FractalSpace::body_index(const Family& fam, uint32_t r, const Fractal& f) const
+{
+    BigUint index;
+    const uint32_t an = uint32_t(f.axiom.size());
+    for (uint32_t n = 1; n < an; ++n) index += times(fam.words[n], fam.rules(0, r - kAxiomOverhead - n, false));
+    index += times(word_rank(f.axiom, fam.symbols), fam.rules(0, r - kAxiomOverhead - an, false));
+    r -= kAxiomOverhead + an;
+    size_t next = 0; // the next rule of the ruleset's
+    for (size_t j = 0; j < fam.rule_symbols.size() && next < f.rules.size(); ++j)
+    {
+        if (f.rules[next].first != fam.rule_symbols[j])
+        {
+            // (no rule for it: after every ruleset with one)
+            for (uint32_t n = 1; n <= kFractalWordMost && kRuleOverhead + n <= r; ++n) index += times(fam.words[n], fam.rules(j + 1, r - kRuleOverhead - n, true));
+            continue;
+        }
+        const std::string& w = f.rules[next].second;
+        const uint32_t wn = uint32_t(w.size());
+        for (uint32_t n = 1; n < wn; ++n) index += times(fam.words[n], fam.rules(j + 1, r - kRuleOverhead - n, true));
+        index += times(word_rank(w, fam.symbols), fam.rules(j + 1, r - kRuleOverhead - wn, true));
+        r -= kRuleOverhead + wn, ++next;
+    }
+    return index;
 }
 
 std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
@@ -197,17 +287,41 @@ std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
     if (!f || text.size() > longest_ || text.size() < kFractalSpaceShortest) return std::nullopt;
     const uint32_t l = uint32_t(text.size());
     BigUint index;
+    if (f->version == 2)
+    {
+        index = total_v1_;
+        for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += by_length_v2_[k];
+        const uint32_t aw = uint32_t(fractal_angle_text(f->angle_tenths).size()), sw = f->scale ? uint32_t(fractal_scale_text(f->scale).size()) : 0;
+        for (const Group& g : groups_)
+        {
+            if (l < g.header) continue;
+            const BigUint one = g.family->after_header(l - g.header);
+            const bool mine = (g.scales != nullptr) == (f->scale != 0) && fractal_angle_text(g.angles->front()).size() == aw &&
+                              (!g.scales || fractal_scale_text(g.scales->front()).size() == sw);
+            if (!mine)
+            {
+                index += times(one, BigUint(g.lines()));
+                continue;
+            }
+            const auto a = std::lower_bound(g.angles->begin(), g.angles->end(), f->angle_tenths);
+            uint64_t line = uint64_t(a - g.angles->begin());
+            if (g.scales) line = line * g.scales->size() + uint64_t(std::lower_bound(g.scales->begin(), g.scales->end(), f->scale) - g.scales->begin());
+            index += times(one, BigUint(line));
+            index += body_index(*g.family, l - g.header, *f);
+            return index;
+        }
+        return std::nullopt;
+    }
     for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += by_length_[k];
     std::vector<BigUint> blocks;
     at_length(l, &blocks);
     const bool sub = f->family == Fractal::Family::Substitution;
-    const Family& fam = sub ? sub_ : ls_;
     uint32_t r = 0;
     if (sub) r = l - kSubHeader;
     else
     {
         index += blocks[0];
-        const uint32_t d = digits_of(f->angle);
+        const uint32_t angle = f->angle_tenths / 10, d = digits_of(angle);
         for (uint32_t e = 1; e < d; ++e)
         {
             BigUint all = blocks[e];
@@ -215,30 +329,11 @@ std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
             index += all;
         }
         BigUint before = blocks[d];
-        before.mul_small(f->angle - first_angle(d));
+        before.mul_small(angle - first_angle(d));
         index += before;
         r = l - ls_header(d);
     }
-    const uint32_t an = uint32_t(f->axiom.size());
-    for (uint32_t n = 1; n < an; ++n) index += times(fam.words[n], fam.rules(0, r - kAxiomOverhead - n, false));
-    index += times(word_rank(f->axiom, fam.symbols), fam.rules(0, r - kAxiomOverhead - an, false));
-    r -= kAxiomOverhead + an;
-    bool any = false;
-    size_t next = 0; // the next rule of the ruleset's
-    for (size_t j = 0; j < fam.rule_symbols.size() && next < f->rules.size(); ++j)
-    {
-        if (f->rules[next].first != fam.rule_symbols[j])
-        {
-            // (no rule for it: after every ruleset with one)
-            for (uint32_t n = 1; n <= kFractalWordMost && kRuleOverhead + n <= r; ++n) index += times(fam.words[n], fam.rules(j + 1, r - kRuleOverhead - n, true));
-            continue;
-        }
-        const std::string& w = f->rules[next].second;
-        const uint32_t wn = uint32_t(w.size());
-        for (uint32_t n = 1; n < wn; ++n) index += times(fam.words[n], fam.rules(j + 1, r - kRuleOverhead - n, true));
-        index += times(word_rank(w, fam.symbols), fam.rules(j + 1, r - kRuleOverhead - wn, true));
-        r -= kRuleOverhead + wn, any = true, ++next;
-    }
+    index += body_index(sub ? sub_ : ls_, r, *f);
     return index;
 }
 

@@ -1,0 +1,8 @@
+sieve-fractal-v2
+lsystem 45 scale 0.735
+axiom A
+rule A F[+X]FB
+rule B F[-Y]FA
+rule F 'F"
+rule X A
+rule Y B

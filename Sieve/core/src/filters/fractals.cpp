@@ -1,12 +1,12 @@
 // The fractal dimension's filters (list X, X1; IDEAS 19.235): rules that set aside the noise of the
-// whole space (fractal-space-v1), every ruleset the reader takes. Most of it draws nothing, or never
+// whole space (fractal-space-v2), every ruleset the reader takes. Most of it draws nothing, or never
 // changes, or is another ruleset under other names (Edward, 16 November 2026: "it looks like there are a
 // lot of fractals that aren't going to be worth looking at and figuring out a way to filter some of the
 // noise there would also be useful in the long run").
 //
-// A unit is a ruleset's text (sieve-fractal-v1), a byte a symbol; a text the reader refuses fails every
-// one of them. Each judges a ruleset by the symbols its axiom reaches, rule after rule, at any depth
-// (its "reach"), without growing it. None of them can yet count how many of the space pass, so each
+// A unit is a ruleset's text (sieve-fractal-v1 or v2), a byte a symbol; a text the reader refuses fails
+// every one of them. Each judges a ruleset by the symbols its axiom reaches, rule after rule, at any
+// depth (its "reach"), without growing it, but fractal-dimension (list X2), which draws it and measures. None of them can yet count how many of the space pass, so each
 // judges only and the line has no compact mode.
 #include "sieve/filter.hpp"
 #include "sieve/fractal.hpp"
@@ -79,6 +79,24 @@ public:
 
 private:
     Test test_;
+};
+
+// Passes an L-system measured at least `least` hundredths (fractal_box_dimension), and every substitution.
+class AtLeast : public Filter
+{
+public:
+    explicit AtLeast(int least) : least_(double(least) / 100.0) {}
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const auto f = fractal_of(unit);
+        if (!f) return false;
+        if (f->family == Fractal::Family::Substitution) return true;
+        const auto d = fractal_box_dimension(*f);
+        return d && d->value >= least_;
+    }
+
+private:
+    double least_;
 };
 
 bool draws(const Fractal& f)
@@ -296,6 +314,25 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                         "free in the order the axiom reaches them, and every rule is for a symbol reached. Of the "
                         "charted fractals, the dragon curve (X and Y) is a renaming of A and B.",
                         canonical));
+
+    // How fractal a drawing is (list X2; IDEAS 19.235: "a measure of how fractal a drawing is (its
+    // box-counting dimension, worked out from the picture) could rank what is left").
+    FilterSpec dim;
+    dim.id = "fractal-dimension";
+    dim.title = "fractal-dimension";
+    dim.description = "An L-system whose drawing's box-counting dimension, measured (sieve fractal show), is at least "
+                      "the least set, in hundredths: 110 passes those measured at 1.10 or more, setting aside the "
+                      "straight lines (1), the curves that are hardly bent and those too small to measure (fewer "
+                      "than 16 lines, or under three grids). The Koch curve measures 1.29, the Sierpinski triangle "
+                      "1.58, the Hilbert curve 2.00. A substitution, whose rows are a sequence and not a figure, "
+                      "passes.";
+    dim.params = {{"least", "the least box-counting dimension passed, in hundredths (110: 1.10)", FilterParam::Kind::Integer, "110", 0, 200, 5}};
+    dim.applies = is_fractals;
+    dim.judge_only = true;
+    dim.make = [own = dim.name()](const FilterLine&, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        return std::make_unique<AtLeast>(std::stoi(param_value(*find_filter(own), v, "least")));
+    };
+    out.push_back(dim);
 
     FilterSpec drawn;
     drawn.id = "fractal-drawn";

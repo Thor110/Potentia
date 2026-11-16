@@ -570,6 +570,22 @@ def fractal_v1():
     return seq("sieve-fractal-v1\n", alt(sub, ls))
 
 
+def fractal_v2():
+    """Every sieve-fractal-v1 ruleset, and every sieve-fractal-v2 (list X2): an L-system whose angle has a
+    tenth (0.1 to 359.9: degrees with no leading zero, a dot, a digit 1 to 9), or that has a scale (any
+    angle; " scale 0." and one to three digits, the last not 0), with " and ' among its symbols where it
+    has a scale. The rules' order is the reader's alone, as in v1."""
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    word = lambda s: rep(chars(s), 1, 64)
+    body = lambda s: seq("\naxiom ", word(s), "\n", rep(seq("rule ", chars(letters), " ", word(s), "\n"), 1, None))
+    tenth = seq(alt(lit("0"), decimal_between(1, 359)), ".", chars("123456789"))
+    digit = chars("0123456789")
+    ratio = seq("0.", alt(chars("123456789"), seq(digit, chars("123456789")), seq(digit, digit, chars("123456789"))))
+    plain = letters + "+-[]|"
+    v2 = seq("sieve-fractal-v2\nlsystem ", alt(seq(tenth, body(plain)), seq(alt(decimal_between(1, 359), tenth), " scale ", ratio, body(plain + "\"'"))))
+    return alt(fractal_v1(), v2)
+
+
 PLUGINS = [
     ("format-actions", 1, actions_v1,
      "One sieve-actions-v1 map exactly: an action's animation for each of the seven actions, in order (IDEAS 19.185, 19.186).",
@@ -616,6 +632,16 @@ PLUGINS = [
       "symbols and every line ending in a line feed. One thing the reader asks and a walk does not: that the",
       "rules stand in the order of their symbols, each once. So its survivors are the reader's rulesets with",
       "their rules in any order; tools/check_formats.py checks every other verdict."]),
+    ("format-fractal", 2, fractal_v2,
+     "One sieve-fractal-v1 or sieve-fractal-v2 ruleset (its rules' order aside): the fractal dimension's line, each ruleset at its address in fractal-space-v2 (IDEAS 19.235, list X2).",
+     ["A fractal's ruleset (sieve-fractal-v1 or v2, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp) written",
+      "as a filter: v1's rulesets as format-fractal-v1 passes them, and v2's, the L-systems v1 cannot write:",
+      "\"sieve-fractal-v2\", then \"lsystem ANGLE\" with an angle that has a tenth (0.1 to 359.9, as 22.5), or",
+      "\"lsystem ANGLE scale RATIO\" (any angle; RATIO 0.001 to 0.999, no 0 at its end) with \" and ' among the",
+      "symbols (the step RATIO times as long, or as short), then \"axiom WORD\" and one or more \"rule SYMBOL",
+      "WORD\" as v1's. As format-fractal-v1, the rules' order by symbol is the reader's alone, so its",
+      "survivors are the reader's rulesets with their rules in any order; tools/check_formats.py checks",
+      "every other verdict."]),
     ("format-world", 1, world_v1,
      "One sieve-personal-world-v1 exactly as it is written (the numbers a float's own aside): a personal dimension's seed and what is placed (IDEAS 19.185, 19.187).",
      ["A personal dimension's world (sieve-personal-world-v1, SPECIFICATIONS 12.0r, client/personal_world.cpp)",

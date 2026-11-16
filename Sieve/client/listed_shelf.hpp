@@ -16,6 +16,7 @@
 
 #include "sieve/biguint.hpp"
 #include "sieve/filter.hpp"
+#include "sieve/fractal_space.hpp"
 #include "sieve/image.hpp"
 
 #include <cstdint>
@@ -68,7 +69,7 @@ public:
 // --fractal-known).
 struct ListedOptions
 {
-    uint32_t fractal_longest = 96;      // the whole space's longest ruleset, in characters
+    uint32_t fractal_longest = sieve::kFractalSpaceLongestDefault; // the whole space's longest ruleset, in characters
     std::string fractal_known = "include"; // the known fractals: include (marked), exclude, or only
 };
 // The words fractal_known takes, in the order the setup menu steps through them.

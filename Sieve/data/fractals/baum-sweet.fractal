@@ -1,0 +1,7 @@
+sieve-fractal-v1
+substitution
+axiom a
+rule a ab
+rule b cb
+rule c bd
+rule d dd

@@ -1,0 +1,4 @@
+sieve-fractal-v2
+lsystem 30 scale 0.6
+axiom +++FX
+rule X "[-FX]+FX

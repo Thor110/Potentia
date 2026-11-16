@@ -1177,6 +1177,7 @@ survivors at a length are the documents of that length:
 | `format-replay-v1` | `sieve-replay-v1` (a recording of the hallway) | 644 | `read_replay` |
 | `format-world-v1` | `sieve-personal-world-v1` (a personal dimension's world) | 284 | read, nothing left out, written back the same |
 | `format-fractal-v1` | `sieve-fractal-v1` (a fractal's ruleset: the fractal dimension's line, SPECIFICATIONS 12.0t) | 330 | `read_fractal` |
+| `format-fractal-v2` | `sieve-fractal-v1` and `sieve-fractal-v2` (v2: an L-system with a tenth of a degree or a scaled step; list X2) | 505 | `read_fractal` |
 | `format-world-v2` | `sieve-personal-world-v2` (the same in three dimensions, with its day, ground, models, music and lines kept) | 1,881 | the same |
 
 **Written by a compiler, not by hand.** `tools/grammars.py` holds each grammar as a regular expression

@@ -1,0 +1,4 @@
+sieve-fractal-v2
+lsystem 25.7
+axiom F
+rule F F[+F]F[-F]F

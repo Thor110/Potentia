@@ -1,0 +1,8 @@
+sieve-fractal-v1
+lsystem 18
+axiom SLFFF
+rule H -Z[+H]L
+rule L [-FFF][+FFF]F
+rule S [+++Z][---Z]TS
+rule T TL
+rule Z +H[-Z]L

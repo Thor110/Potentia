@@ -7,6 +7,7 @@
 #include "display.hpp"     // kCloseUpScreen
 #include "cli/args.hpp"
 #include "cli/lines.hpp"   // kDefaultExportFps
+#include "sieve/fractal_space.hpp" // kFractalSpaceLongestDefault
 
 #include <cstdint>
 #include <string>
@@ -68,7 +69,7 @@ struct Settings
     uint32_t binary_bytes = 32; // the binary line: every file up to this many bytes
     // The fractal dimension (list X1): its whole space's longest ruleset, in characters, and its known
     // fractals: included (marked where they stand), excluded, or only they (listed_shelf.hpp).
-    uint32_t fractal_longest = 96;
+    uint32_t fractal_longest = sieve::kFractalSpaceLongestDefault;
     std::string fractal_known = "include";
     // Which line FIND MY LIMITS grows: "all", or one line's name, the others left as they are.
     std::string limits_focus = "all";

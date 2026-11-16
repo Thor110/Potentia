@@ -44,16 +44,19 @@ units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the ki
   a glTF's translation channels (a body walking forward) come in too.
 - *The fractal dimension* (partly built, 15 and 16 November 2026, §19.191, §19.235): a line of the
   hallway, its door after AI, light purple. Its first book is the index of every fractal charted by hand;
-  after it, every ruleset there is (`sieve-fractal-v1`: substitutions and L-systems), generated from the
-  shortest (`fractal-space-v1`, about 10^99.3 to 96 characters), the charted ones named where they stand,
+  after it, every ruleset there is (`sieve-fractal-v1`: substitutions and L-systems; `sieve-fractal-v2`:
+  L-systems with a tenth of a degree or a scaled step), generated from the shortest (`fractal-space-v2`,
+  v1's first, about 10^284.5 to 208 characters), the 75 charted ones named where they stand, each with
+  where it was transcribed from,
   each taken in hand and grown a step at a time. The known fractals are included, excluded or the only
   ones shown (the setup page's FRACTALS rows; excluded, the index goes too). Its noise filters, behind
   the magnifying glass, mark or hide rulesets that draw nothing, never grow, have idle rules, or are a
-  renaming of another (`[fractals]`, `sieve filters --line fractals`). In other lines (the third
-  FRACTALS row): the image line finds the charted fractals drawn, or sets them aside (`fractal-drawn-v1`;
-  112 pictures at 10 x 10 black and white, compact). `sieve fractal` lists, shows and draws them, and counts the
+  renaming of another, or measure a box-counting dimension below the least set (`[fractals]`, `sieve
+  filters --line fractals`). In other lines (the third FRACTALS row): the image line finds the charted
+  fractals drawn, or sets them aside (`fractal-drawn-v1`; 567 pictures at 10 x 10 black and white,
+  compact). `sieve fractal` lists, shows and draws them, and counts the
   space, gives the ruleset at an address and the address of one. Next: the other lines as further ways,
-  more charted (X2); layouts for your personal dimension, the maze
+  more charted as they are found; layouts for your personal dimension, the maze
   door, later.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try

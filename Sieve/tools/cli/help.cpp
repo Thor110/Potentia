@@ -442,25 +442,27 @@ const std::vector<Page>& pages()
          "       sieve fractal at ADDRESS [--longest N]\n"
          "       sieve fractal index ID|FILE [--longest N]",
          "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"
-         "grammar (sieve-fractal-v1, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96 that\n"
-         "the format-fractal-v1 filter passes, so its survivor number is its address. Its shelves show the\n"
+         "grammar (sieve-fractal-v1 and v2, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96\n"
+         "that the format-fractal-v2 filter passes, so its survivor number is its address. Its shelves show the\n"
          "fractals charted by hand (fractals/chart.txt beside the program: the Fibonacci word, Koch's\n"
          "snowflake, the dragon curve and more), each named with its ruleset. A ruleset is a substitution\n"
          "(each symbol replaced by its word at every step, drawn as its words one under another) or an\n"
          "L-system (drawn as a turtle draws: F and G a line forward, + and - turns of its angle, [ and ] a\n"
-         "place kept and taken back). In the hallway it is the FRACTALS line, its door after AI: its first\n"
+         "place kept and taken back; v2's angles may have a tenth of a degree, and with a scale \" and ' make\n"
+         "the step shorter or longer). In the hallway it is the FRACTALS line, its door after AI: its first\n"
          "book the index of them all, each book after it one fractal, taken in hand and grown a step at\n"
-         "a time with N and B (or = and -). The whole space (fractal-space-v1, list X1) is every ruleset the\n"
-         "reader takes, 44 characters and longer, each at an address of its own, the shorter first: count\n"
-         "says how many there are, at gives the ruleset at an address, and index the address of one.",
+         "a time with N and B (or = and -). The whole space (fractal-space-v2, lists X1 and X2) is every\n"
+         "ruleset the reader takes, 44 characters and longer, each at an address of its own, the shorter\n"
+         "first, v1's and then v2's: count says how many there are, at gives the ruleset at an address, and\n"
+         "index the address of one. show also measures an L-system's box-counting dimension.",
          {{"list", "The charted fractals: id, family, size, how deep each grows, and its name (the default)."},
-          {"show ID|FILE", "A ruleset at a depth: its family, its size, and its word (or how many lines it draws)."},
+          {"show ID|FILE", "A ruleset at a depth: its family, its size, its word (or how many lines it draws), and an L-system's box-counting dimension."},
           {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},
-          {"check FILE", "Whether a file is a sieve-fractal-v1 ruleset, and if not why; exit 1 if not."},
+          {"check FILE", "Whether a file is a sieve-fractal-v1 or v2 ruleset, and if not why; exit 1 if not."},
           {"count", "How many rulesets the whole space holds, and how many of its shortest lengths."},
           {"at ADDRESS", "The ruleset at an address of the whole space (decimal, or hex after 0x)."},
           {"index ID|FILE", "A charted fractal's or a ruleset's address in the whole space."},
-          {"--longest N", "The whole space's longest ruleset, 44 to 512 characters (default 96)."},
+          {"--longest N", "The whole space's longest ruleset, 44 to 512 characters (default 208)."},
           {"--depth N", "How many steps to grow it (default: 6, or as deep as it goes under its limit)."},
           {"--size PX", "The picture's width and height (default 512)."},
           {"--folder DIR", "Read the chart from DIR instead of the one beside the program."}},
@@ -1077,7 +1079,9 @@ const std::vector<Page>& pages()
          "The fractal dimension (--line fractals) has its own stack, [fractals], on a ruleset's text, to\n"
          "set aside the noise of the whole space: fractal-draws-v1 (it draws a line, or two colours),\n"
          "fractal-grows-v1 (its word grows with depth), fractal-no-idle-v1 (no rule for a symbol never met,\n"
-         "none rewriting a symbol to itself) and fractal-canonical-v1 (one of each renaming). Each judges;\n"
+         "none rewriting a symbol to itself), fractal-canonical-v1 (one of each renaming) and\n"
+         "fractal-dimension-v1 (an L-system whose drawing's box-counting dimension, measured, is at least\n"
+         "least, in hundredths: 110 at first; a substitution passes). Each judges;\n"
          "the known fractals are never judged (the setup menu's known fractals row rules them). In the image\n"
          "line, fractal-drawn-v1 keeps (keep = include) or sets aside (exclude) the pictures that are a charted\n"
          "fractal drawn at any depth, counted and ranked exactly (the setup menu's in other lines row).",
@@ -1095,7 +1099,7 @@ const std::vector<Page>& pages()
           {"--exact", "With --line binary: every kind's count in full, beside its share of the line. With\n"
                       "--line ai: the stack's survivors in full."},
           {"--ai-layers L, --ai-width H, --ai-heads A, --ai-bits B", "With --line ai: the line's shape (1, 16, 2, 4)."},
-          {"--longest N", "With --line fractals: the whole space's longest ruleset, in characters (44 to 512; default 96)."},
+          {"--longest N", "With --line fractals: the whole space's longest ruleset, in characters (44 to 512; default 208)."},
           {"--sample N", "With --line fractals: judge N rulesets spread evenly over the space, and say how many each\n"
                          "filter passes, all of them together, and the ticked stack."},
           {"--page-length N", "With --line binary: the pages line not-an-item-v1 compares with (its --alphabet and\n"

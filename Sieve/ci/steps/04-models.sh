@@ -216,8 +216,16 @@ $exe dimensions research | tr -d '\r' | q "^linked by .*dna"
 # The fractal dimension (list S, IDEAS 19.191, 19.235): its shelves charted by hand, a ruleset grown
 # (the Fibonacci word's lengths are Fibonacci numbers), drawn, and one not as written refused.
 $exe dimensions fractals | tr -d '\r' | q "^linked by pages$"
-$exe fractal | tr -d '\r' | q "^shelves   11 fractals, charted by hand "
-$exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19: Dragon curve$"
+$exe fractal | tr -d '\r' | q "^shelves   75 fractals, charted by hand "
+$exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19, dimension 1.73: Dragon curve (after Wikipedia, Dragon curve, Heighway dragon as an L-system)$"
+# Widened (sieve-fractal-v2, list X2): an orb web, its step 0.985 as long at each chord, read as v2, its
+# box-counting dimension measured; and a v2 ruleset that says nothing v1 cannot is refused (each
+# ruleset written one way).
+$exe fractal check data/fractals/orb-web.fractal | tr -d '\r' | q "^a sieve-fractal-v2 ruleset, 92 characters; it grows to depth 16$"
+$exe fractal show orb-web --depth 8 | tr -d '\r' | q "^dimension 1.341 (box-counting, measured at depth 11 on 9 grids)$"
+printf 'sieve-fractal-v2\nlsystem 90\naxiom F\nrule F FF\n' > plain-v2.fractal
+if $exe fractal check plain-v2.fractal > fractal-check2.txt; then exit 1; fi
+tr -d '\r' < fractal-check2.txt | q "a v2 ruleset has an angle with a tenth or a scale"
 $exe fractal show fibonacci-word --depth 8 | tr -d '\r' | q "^word      0100101001001010010100100101001001010010100100101001010$"
 $exe fractal show dragon-curve --depth 10 | tr -d '\r' | q "^lines     1024 drawn$"
 $exe fractal draw koch-snowflake --depth 4 --size 256 --out snowflake.png | tr -d '\r' | q "^drew      koch-snowflake: Koch snowflake at depth 4 (1792 symbols) to snowflake.png (256 x 256)$"

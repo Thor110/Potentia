@@ -519,6 +519,51 @@ def fractal_edges(r):
     ]
 
 
+def fractal2_doc(r):
+    """v1's rulesets and v2's, half each: an angle with a tenth, a scale, or both."""
+    if r.random() < 0.5:
+        return fractal_doc(r)
+    letters = "FGXYABfz"
+    scale = r.random() < 0.6
+    sym = letters + "+-[]|" + ("\"'" if scale else "")
+    used = sorted(r.sample(letters, r.randint(1, 3)))
+    word = lambda: "".join(r.choice(sym) for _ in range(r.randint(1, r.choice([4, 12, 64]))))
+    tenth = f"{r.choice([0, 22, 25, 137, 359, r.randint(0, 359)])}.{r.randint(1, 9)}"
+    angle = r.choice([tenth, str(r.randint(1, 359))]) if scale else tenth
+    t = "sieve-fractal-v2\nlsystem " + angle
+    if scale:
+        t += " scale 0." + r.choice([str(r.randint(1, 9)), f"{r.randint(0, 9)}{r.randint(1, 9)}", f"{r.randint(0, 99):02d}{r.randint(1, 9)}"])
+    t += "\naxiom " + word() + "\n"
+    for s in used:
+        t += f"rule {s} {word()}\n"
+    return t
+
+
+def fractal2_edges(r):
+    h = "sieve-fractal-v2\nlsystem "
+    return fractal_edges(r) + [
+        "sieve-fractal-v2\nsubstitution\naxiom 0\nrule 0 01\n",  # substitutions are v1's
+        h + "90\naxiom F\nrule F FF\n",  # nothing v1 cannot write
+        h + "22.5\naxiom F\nrule F F[+F]F\n",
+        h + "22.0\naxiom F\nrule F FF\n",  # a tenth of 0
+        h + "0.5\naxiom F\nrule F FF\n",
+        h + "00.5\naxiom F\nrule F FF\n",
+        h + "360.5\naxiom F\nrule F FF\n",
+        h + "359.9\naxiom F\nrule F FF\n",
+        h + "22.55\naxiom F\nrule F FF\n",
+        h + "90 scale 0.5\naxiom F\nrule F F\"F\n",
+        h + "90 scale 0.707\naxiom F\nrule F F'F\n",
+        h + "90 scale 0.70\naxiom F\nrule F FF\n",  # a 0 at its end
+        h + "90 scale 0.0\naxiom F\nrule F FF\n",
+        h + "90 scale 1.5\naxiom F\nrule F FF\n",
+        h + "90 scale 0.7071\naxiom F\nrule F FF\n",
+        h + "90 scale .5\naxiom F\nrule F FF\n",
+        h + "22.5\naxiom F\nrule F F\"F\n",  # " without a scale
+        h + "22.5 scale 0.9\naxiom F\nrule \" FF\n",  # only letters have rules
+        "sieve-fractal-v1\nlsystem 90\naxiom F\nrule F F\"F\n",
+    ]
+
+
 def fractal_beyond_walk(doc, why):
     """A ruleset the reader refuses only because its rules are out of order or one is given twice."""
     return "in the order of their symbols" in why
@@ -532,6 +577,7 @@ FORMATS = [
     ("world", "hallway", "world", "format-world-v1.sfilter", world_doc, world_edges, world_beyond_walk),
     ("world-v2", "hallway", "world", "format-world-v2.sfilter", world2_doc, world2_edges, world2_beyond_walk),
     ("fractal", "sieve", "fractal", "format-fractal-v1.sfilter", fractal_doc, fractal_edges, fractal_beyond_walk),
+    ("fractal-v2", "sieve", "fractal", "format-fractal-v2.sfilter", fractal2_doc, fractal2_edges, fractal_beyond_walk),
 ]
 
 OTHERS = ["", "a", "0", " ", "\n", "-", "Z", ".", "\r"]

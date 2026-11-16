@@ -1,0 +1,8 @@
+sieve-fractal-v1
+lsystem 36
+axiom [X]++[X]++[X]++[X]++[X]
+rule F E
+rule W YF++ZF----XF[-YF----WF]++
+rule X +YF--ZF[---WF--XF]+
+rule Y -WF++XF[+++YF++ZF]-
+rule Z --YF++++WF[+ZF++++XF]--XF
