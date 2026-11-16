@@ -203,10 +203,10 @@ public:
     void open_details(int line) { details_ = line; }
     int details_open() const { return details_; }
     std::vector<std::pair<int, std::string>> details_lines();
-    // (a listed line has no filters, so nothing opens for it: its column draws no magnifying glass)
+    // (a listed line without filters opens nothing: its column draws no magnifying glass)
     void open_filters(int line)
     {
-        if (is_listed(line)) return;
+        if (is_listed(line) && !listed_has_filters(line)) return;
         details_ = -1;
         overlay_ = line;
         orow_ = 0;
@@ -431,7 +431,11 @@ private:
     Settings s_;
     int row_ = 0;
     sieve::cli::FilterConfig cfg_;
-    sieve::cli::LineFilters listed_filters_; // a listed line's: none, and never ticked (dimensions.hpp `listed`)
+    sieve::cli::LineFilters listed_filters_; // a listed line's that has none: never ticked (dimensions.hpp `listed`)
+    // A listed line's filters: the fractals' [fractals]; any other's none (listed_filters_).
+    static bool listed_has_filters(int line) { return is_listed(line) && kDimensions[line].media == Media::Fractals; }
+    sieve::cli::LineFilters& listed_filters(int line) { return listed_has_filters(line) ? cfg_.fractals : listed_filters_; }
+    const sieve::cli::LineFilters& listed_filters(int line) const { return listed_has_filters(line) ? cfg_.fractals : listed_filters_; }
     std::string cfg_path_;
     AppSettings* app_ = nullptr;
     std::filesystem::path app_path_;

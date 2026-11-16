@@ -7504,6 +7504,41 @@ void test_fractals()
         CHECK(!space.index_of(std::string("sieve-fractal-v1\nlsystem 90\naxiom F\nrule F ") + std::string(64, 'F') + "\n" + "rule G " + std::string(30, 'G') + "\n")); // (longer than 96)
         CHECK(throws([&] { (void)space.at(space.count()); }) && throws([] { FractalSpace(43); }));
     }
+    // Its noise filters (core/src/filters/fractals.cpp): each judges a ruleset's text, of any length up
+    // to the line's, by what its axiom reaches.
+    {
+        FilterLine fl;
+        fl.kind = "fractals", fl.symbols_id = "fractals/96", fl.base = 128, fl.length = 96, fl.up_to_length = true;
+        static const TestResources none(nullptr, nullptr);
+        const char* names[] = {"fractal-draws-v1", "fractal-grows-v1", "fractal-no-idle-v1", "fractal-canonical-v1"};
+        // Which of the four a ruleset passes, as four characters (1 passes, 0 fails).
+        auto judged = [&](const std::string& t) {
+            std::string r;
+            const std::vector<uint32_t> u(t.begin(), t.end());
+            for (const char* n : names) r += FilterStack(fl, {{find_filter(n), {}}}, none).passes(u) ? '1' : '0';
+            return r;
+        };
+        auto text_of = [&](const std::string& id) {
+            for (const auto& c : chart)
+                if (c.id == id) return c.text;
+            return std::string();
+        };
+        CHECK(judged(text_of("koch-curve")) == "1111");
+        CHECK(judged(text_of("hilbert-curve")) == "1111");
+        CHECK(judged(text_of("dragon-curve")) == "1110"); // (X and Y: a renaming of A and B)
+        CHECK(judged("sieve-fractal-v1\nlsystem 90\naxiom FA\nrule A A+BF+\nrule B -FA-B\n") == "1111");
+        CHECK(judged(text_of("cantor-set")) == "1110"); // (1 met first: a renaming of 0)
+        CHECK(judged(text_of("thue-morse")) == "1111");
+        CHECK(judged("sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n") == "0000"); // (draws nothing; A never met)
+        CHECK(judged("sieve-fractal-v1\nlsystem 90\naxiom F\nrule F F\n") == "1001"); // (never grows; F to itself)
+        CHECK(judged("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 00\n") == "0111"); // (one colour)
+        CHECK(judged("not a ruleset") == "0000");
+        const FilterStack all(fl, {{find_filter(names[0]), {}}, {find_filter(names[1]), {}}}, none);
+        const std::string draws_not = "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n";
+        CHECK(all.first_failure(std::vector<uint32_t>(draws_not.begin(), draws_not.end())) == 0);
+        CHECK(throws([&] { (void)all.first_failure(std::vector<uint32_t>(97, 'F')); })); // (longer than the line)
+        for (const char* n : names) CHECK(find_filter(n)->category == "hard" && find_filter(n)->judge_only);
+    }
 }
 
 void test_raid_net()

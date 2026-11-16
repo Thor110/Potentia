@@ -173,7 +173,9 @@ run before a release package, and after each of the three reviews. Each batch is
 - X1. The fractal dimension reviewed, and its line made every ruleset of the grammar, generated (Edward, 15
   November 2026, IDEAS 19.235): the charted ones found in it by address, the index book still naming them,
   and the known fractals as its first filter, with exclude, include and only (*made 16 November 2026:
-  fractal-space-v1, SPECIFICATIONS 12.0t*); a second filter, set from the
+  fractal-space-v1, SPECIFICATIONS 12.0t*; *then the index under the setting too, Warp naming the setting
+  that keeps a fractal off the line, and the magnifying glass back with noise filters, 16 November 2026*);
+  a second filter, set from the
   fractal line, turning its cross-dimensional filtering off, on to find what the fractals make in the other
   lines (include), or on to knock it out (exclude) (Edward, 16 November 2026). `[01]` + `[10]`.
 - X2. Then as many known fractals charted as can be tracked down (Edward, the same day: "implement as many

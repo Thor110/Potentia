@@ -45,6 +45,9 @@ struct FilterLine
     const Alphabet* alphabet = nullptr; // text only
     uint32_t width = 0, height = 0, frames = 0; // image and video
     const AiSpace* ai = nullptr; // the AI line (kind "ai"): its shape, its tensors' rows
+    // Units of any length up to `length`, each judged whole (kind "fractals": a ruleset's text); a
+    // filter for such a line judges whatever length it is given.
+    bool up_to_length = false;
 };
 
 // Pinned data a filter may need, provided by the application (registries, hash checks).
@@ -283,6 +286,7 @@ private:
     std::vector<std::unique_ptr<Filter>> filters_;
     std::vector<std::string> names_;
     uint32_t length_ = 0, voices_ = 1;
+    bool up_to_length_ = false; // (FilterLine::up_to_length)
     // Compact, worked out once, when first asked for (settle()).
     std::vector<Entry> entries_;
     uint32_t unit_length_ = 0;

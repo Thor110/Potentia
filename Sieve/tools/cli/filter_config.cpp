@@ -253,9 +253,13 @@ FilterConfig FilterConfig::load(const fs::path& path)
             continue;
         }
         const auto li = std::find(std::begin(kSections), std::end(kSections), line_name) - std::begin(kSections);
-        if (li >= 4 && line_name != "models" && line_name != "binary" && line_name != "ai")
+        if (li >= 4 && line_name != "models" && line_name != "binary" && line_name != "ai" && line_name != "fractals")
             throw std::runtime_error(path.string() + ": unknown section [" + section + "]");
-        LineFilters& lf = line_name == "models" ? c.models : line_name == "binary" ? c.binary : line_name == "ai" ? c.ai : c.lines[li];
+        LineFilters& lf = line_name == "models"     ? c.models
+                          : line_name == "binary"   ? c.binary
+                          : line_name == "ai"       ? c.ai
+                          : line_name == "fractals" ? c.fractals
+                                                    : c.lines[li];
         if (dot == std::string::npos)
         {
             if (key == "mode") lf.mode = mode_at(value, path, line_no);
@@ -272,6 +276,7 @@ FilterConfig FilterConfig::load(const fs::path& path)
     canonicalise(c.models);
     canonicalise(c.binary);
     canonicalise(c.ai);
+    canonicalise(c.fractals);
     return c;
 }
 
@@ -325,8 +330,10 @@ void FilterConfig::save(const fs::path& path) const
     }
     o << "\n; The models line: its own rules (distinct-vertices-v1, canonical-mesh-v1, ...). The binary line\n"
       << "; (one line, met at both ends) has its files' kinds: binary-kind-v1. The AI line judges a model's\n"
-      << "; weights: weight-rows-v1, canonical-model-v1.\n";
-    for (const auto& [name, lf] : {std::pair<const char*, const LineFilters*>{"models", &models}, {"binary", &binary}, {"ai", &ai}})
+      << "; weights: weight-rows-v1, canonical-model-v1. The fractals line judges a ruleset's text\n"
+      << "; (fractal-draws-v1, ...); the known fractals are never judged (the FRACTALS setup rows set them).\n";
+    for (const auto& [name, lf] :
+         {std::pair<const char*, const LineFilters*>{"models", &models}, {"binary", &binary}, {"ai", &ai}, {"fractals", &fractals}})
     {
         o << "\n[" << name << "]\nmode = " << to_string(lf->mode) << "\n";
         write_filters(o, *lf);
@@ -632,6 +639,17 @@ FilterLine ai_filter_line(const AiSpace& space)
     f.base = 1u << space.shape().bits;
     f.length = uint32_t(std::min<uint64_t>(space.weights(), UINT32_MAX));
     f.ai = &space;
+    return f;
+}
+
+FilterLine fractal_filter_line(uint32_t longest)
+{
+    FilterLine f;
+    f.kind = "fractals";
+    f.symbols_id = "fractals/" + std::to_string(longest);
+    f.base = 128;
+    f.length = longest;
+    f.up_to_length = true;
     return f;
 }
 

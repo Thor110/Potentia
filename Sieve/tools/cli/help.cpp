@@ -1073,7 +1073,12 @@ const std::vector<Page>& pages()
          "beside the programs, or data/training): near-model-v1 keeps the models within `changes` digits\n"
          "of the model the run trained (exact, with compact orderings), and language-v1 the models whose\n"
          "mean probability of each next byte of the run's text is at least min_permille thousandths\n"
-         "(exact, on training-v1's integer forward pass; it judges).",
+         "(exact, on training-v1's integer forward pass; it judges).\n"
+         "The fractal dimension (--line fractals) has its own stack, [fractals], on a ruleset's text, to\n"
+         "set aside the noise of the whole space: fractal-draws-v1 (it draws a line, or two colours),\n"
+         "fractal-grows-v1 (its word grows with depth), fractal-no-idle-v1 (no rule for a symbol never met,\n"
+         "none rewriting a symbol to itself) and fractal-canonical-v1 (one of each renaming). Each judges;\n"
+         "the known fractals are never judged (the setup menu's known fractals row rules them).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},
@@ -1088,6 +1093,9 @@ const std::vector<Page>& pages()
           {"--exact", "With --line binary: every kind's count in full, beside its share of the line. With\n"
                       "--line ai: the stack's survivors in full."},
           {"--ai-layers L, --ai-width H, --ai-heads A, --ai-bits B", "With --line ai: the line's shape (1, 16, 2, 4)."},
+          {"--longest N", "With --line fractals: the whole space's longest ruleset, in characters (44 to 512; default 96)."},
+          {"--sample N", "With --line fractals: judge N rulesets spread evenly over the space, and say how many each\n"
+                         "filter passes, all of them together, and the ticked stack."},
           {"--page-length N", "With --line binary: the pages line not-an-item-v1 compares with (its --alphabet and\n"
                               "this length; default lower27, 32). A page's file is exactly its text."},
           {"--judge FILE", "With --plugin: judge each line of a UTF-8 text file as one unit of its own length, and\n"
@@ -1101,6 +1109,7 @@ const std::vector<Page>& pages()
           {"sieve filters --length 1000", "the same stack judged at paragraph scale"},
           {"sieve filters --line image", "the filters the image line offers"},
           {"sieve filters --line binary --length 32", "the binary line's filters, and every kind's share of it"},
+          {"sieve filters --line fractals --sample 10000", "the fractal filters, and how many of 10,000 rulesets each passes"},
           {"sieve filters --line books --length 400 --book-pages 3", "the books line's three stacks and surviving books"}}},
 
         {"check", "Run content through every filter and show which pass.",

@@ -47,7 +47,9 @@ units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the ki
   after it, every ruleset there is (`sieve-fractal-v1`: substitutions and L-systems), generated from the
   shortest (`fractal-space-v1`, about 10^99.3 to 96 characters), the charted ones named where they stand,
   each taken in hand and grown a step at a time. The known fractals are included, excluded or the only
-  ones shown (the setup page's FRACTALS rows). `sieve fractal` lists, shows and draws them, and counts the
+  ones shown (the setup page's FRACTALS rows; excluded, the index goes too). Its noise filters, behind
+  the magnifying glass, mark or hide rulesets that draw nothing, never grow, have idle rules, or are a
+  renaming of another (`[fractals]`, `sieve filters --line fractals`). `sieve fractal` lists, shows and draws them, and counts the
   space, gives the ruleset at an address and the address of one. Next: what fractals make in the other
   lines (list X1's second filter), more charted (X2); layouts for your personal dimension, the maze
   door, later.

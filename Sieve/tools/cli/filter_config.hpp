@@ -94,8 +94,9 @@ struct FilterConfig
     // The models, binary and AI lines: a mode and a stack each. The models line has its own rules
     // (sieve/modelsieve.hpp); the binary line has binary-kind-v1 (sieve/filekind.hpp), and is one
     // line, met at both ends of the corridor, so it has one section; the AI line judges a model's
-    // weights (weight-rows-v1, canonical-model-v1; sieve/aispace.hpp).
-    LineFilters models, binary, ai;
+    // weights (weight-rows-v1, canonical-model-v1; sieve/aispace.hpp). The fractal dimension judges a
+    // ruleset's text (fractal-draws-v1, ...; core/src/filters/fractals.cpp).
+    LineFilters models, binary, ai, fractals;
     LineFilters& of(LineKind k) { return lines[int(k)]; }
     const LineFilters& of(LineKind k) const { return lines[int(k)]; }
 
@@ -148,6 +149,9 @@ std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t len
 BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings, const BinaryItems* items = nullptr);
 // The AI line's shape as filters see it (kind "ai", the weights its digits): the space must outlive it.
 FilterLine ai_filter_line(const AiSpace& space);
+// The fractal dimension's shape as filters see it (kind "fractals"): a ruleset's text, a byte a symbol,
+// at most `longest` of them (sieve/fractal_space.hpp).
+FilterLine fractal_filter_line(uint32_t longest);
 // The models line: its FilterLine (kind "models", for listing the filters it offers) and its stack.
 FilterLine models_filter_line(uint32_t vertices, uint32_t faces, uint32_t coords);
 ModelSieve build_model_sieve(const ModelSpace& space, const LineFilters& settings);

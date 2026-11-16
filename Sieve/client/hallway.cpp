@@ -115,13 +115,27 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         }
         // AI: every language model of one shape (aispace-v1), judged by its weights ([ai]); its byte
         // tokenizer is the same for every shape.
-        // The listed lines (dimensions.hpp `listed`): each its shelf, no filters.
+        // The listed lines (dimensions.hpp `listed`): each its shelf, and its filters judging what the
+        // shelf says they judge of an item ([fractals]: they judge only, so compact hides).
         for (int li = 0; li < kLines; ++li)
             if (is_listed(li))
             {
                 listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media, shape.listed);
                 modes_[li] = FilterMode::Off;
-                if (listed_[size_t(li)] && !listed_[size_t(li)]->trouble().empty()) std::cerr << kDimensions[li].id << ": " << listed_[size_t(li)]->trouble() << "\n";
+                if (!listed_[size_t(li)]) continue;
+                if (!listed_[size_t(li)]->trouble().empty()) std::cerr << kDimensions[li].id << ": " << listed_[size_t(li)]->trouble() << "\n";
+                if (kDimensions[li].media != Media::Fractals) continue;
+                try
+                {
+                    stacks_[li] = build_stack(listed_[size_t(li)]->filter_line(), filters.fractals);
+                    const FilterMode m = filters.fractals.mode;
+                    modes_[li] = m == FilterMode::Compact || m == FilterMode::Full ? FilterMode::Hide : m;
+                }
+                catch (const std::exception& e)
+                {
+                    std::cerr << "filters for the " << kDimensions[li].id << " line: " << e.what() << "\n";
+                    stacks_[li] = FilterStack();
+                }
             }
         ai_space_ = std::make_unique<AiSpace>(AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}, key);
         ai_tokenizer_ = std::make_unique<sieve::llm::Tokenizer>(sieve::json::parse(AiSpace::tokenizer_json()));
@@ -296,7 +310,6 @@ void Hallway::move_tiles(int64_t d)
 // survivors; otherwise the line hides instead.
 FilterMode Hallway::effective_mode(int i) const
 {
-    if (is_listed(i)) return FilterMode::Off; // (a listed line has no filters)
     if (i == kAiLine)
     {
         if (!ai_stack_ || ai_stack_->empty()) return FilterMode::Off;
@@ -626,6 +639,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             BigUint at = b.index, all = sh.size();
             at >>= shift, all >>= shift;
             b.fraction = all.is_zero() ? 0.0 : std::stod(at.to_decimal()) / std::stod(all.to_decimal());
+            if (!stack().empty())
+                if (const auto u = sh.unit(b.index))
+                {
+                    const int fail = stack().first_failure(*u);
+                    b.passes = fail < 0;
+                    if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
+                }
         }
         else if (on_books())
         {
@@ -1349,7 +1369,12 @@ bool Hallway::warp(const std::string& input)
         {
             // A listed item by its name (a fractal's id; "index" for the first book).
             const auto at = listed_shelf().find(input);
-            if (!at) throw std::invalid_argument(trf("msg.warp.listed", {input}));
+            if (!at)
+            {
+                // (where a setting keeps it off the line, the setting and where it is changed)
+                const std::string why = listed_shelf().not_found(input);
+                throw std::invalid_argument(why.empty() ? trf("msg.warp.listed", {input}) : why);
+            }
             trail_.clear();
             place(*at, true);
             message(trf("msg.goto.done", {input}));
@@ -1493,6 +1518,7 @@ bool Hallway::go_to(std::string input)
         {
             // Its place in the list, in hex as the shelves show it, or its name.
             if (const auto at = listed_shelf().find(input)) index = *at;
+            else if (const std::string why = listed_shelf().not_found(input); !why.empty()) throw std::invalid_argument(why);
             else index = BigUint::from_hex(input);
             if (index >= listed_shelf().size()) throw std::invalid_argument(trf("msg.goto.listed_past", {listed_shelf().size().to_decimal()}));
         }

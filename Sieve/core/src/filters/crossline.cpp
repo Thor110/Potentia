@@ -157,7 +157,7 @@ void add_crossline_filters(std::vector<FilterSpec>& out)
     f.counts_as = "arithmetic";
     // Not the AI line: its numbers run to millions of digits, past the powers this ranker keeps (a
     // table that grows as the square of the length), and its own filters judge the weights.
-    f.applies = [](const FilterLine& l) { return l.kind == "models" || (l.kind != "binary" && l.kind != "ai" && l.base >= 2 && l.length >= 1); };
+    f.applies = [](const FilterLine& l) { return l.kind == "models" || (l.kind != "binary" && l.kind != "ai" && !l.up_to_length && l.base >= 2 && l.length >= 1); };
     f.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         if (l.kind == "models") throw std::invalid_argument("the models line is sieved by its own stack (sieve/modelsieve.hpp)");
         return std::make_unique<NotAFile>(l.base, l.length);

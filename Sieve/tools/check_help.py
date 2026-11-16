@@ -25,7 +25,7 @@ PAGE_OF = {"sieve": "sift"}
 # Functions that read options for a command other than the one their name says.
 HELPERS = {"cmd_check_binary": "check", "cmd_check_book": "check", "cmd_filters_binary": "filters",
            "cmd_filters_books": "filters", "cmd_filters_plugin": "filters", "cmd_filters_models": "filters",
-           "cmd_filters_ai": "filters"}
+           "cmd_filters_ai": "filters", "cmd_filters_fractals": "filters"}
 # Files whose options belong to one command's page.
 FILES = {"diffuse.cpp": "diffuse", "ai.cpp": ("ai", "filters"),  # filters --line ai is in ai.cpp
          "train_cmd.cpp": "ai-train", "rope.cpp": ("rope", "mix"),  # sieve mix is in rope.cpp

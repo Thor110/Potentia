@@ -6,7 +6,8 @@
 //
 // The first such line is the fractal dimension (IDEAS 19.191, 19.235; list X1): its first book the index
 // of every fractal charted (Edward: "a single first page book that lists all of them and then the
-// individuals"), each book after it a ruleset of the whole space (fractal-space-v1), drawn at a depth.
+// individuals"; none with the known fractals excluded), each book after it a ruleset of the whole space
+// (fractal-space-v1), drawn at a depth, and judged by its noise filters ([fractals]).
 // Its list may be far too long to count in a machine word, so a place in it is a BigUint, as every
 // other line's address is.
 #pragma once
@@ -14,6 +15,7 @@
 #include "dimensions.hpp"
 
 #include "sieve/biguint.hpp"
+#include "sieve/filter.hpp"
 #include "sieve/image.hpp"
 
 #include <cstdint>
@@ -49,6 +51,13 @@ public:
     // An item by a name typed (a charted fractal's id; "index" for the first), for Warp: nothing if no
     // item is called that.
     virtual std::optional<sieve::BigUint> find(const std::string& name) const = 0;
+    // Why a name find() finds nothing for is not on the line, where a setting keeps it off (naming the
+    // setting and where it is changed); "" where nothing is called that.
+    virtual std::string not_found(const std::string& name) const = 0;
+    // What the line's filters judge of an item, a symbol at a time, on filter_line(): nothing for an item
+    // they never judge (the fractals' index, and the known fractals, which their own setting rules).
+    virtual std::optional<std::vector<uint32_t>> unit(const sieve::BigUint& i) const = 0;
+    virtual sieve::FilterLine filter_line() const = 0;
     // Why it is empty, where it could not be read ("" when it is not).
     virtual std::string trouble() const = 0;
     // What the line's figures in the setup menu's map say of it: its units in words.

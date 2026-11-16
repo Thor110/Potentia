@@ -2645,6 +2645,58 @@ struct OtherLines
 
 // The models line's filters: what it offers, what is ticked ([models] in the settings), and the
 // stack's survivors, exact (sieve/modelsieve.hpp).
+// The fractal dimension's filters ([fractals]): each listed, and with --sample N, how many of N rulesets
+// spread evenly over the whole space (address k x count / N) each passes, and the ticked stack.
+int cmd_filters_fractals(const Args& a)
+{
+    const uint32_t longest = a.has("longest") ? a.get_u32("longest", sieve::kFractalSpaceLongestDefault) : sieve::kFractalSpaceLongestDefault;
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.fractals;
+    const FilterLine fl = fractal_filter_line(longest);
+    std::cout << "line         fractals  (" << sieve::kFractalSpaceVersion << ", 44 to " << longest << " characters)\n"
+              << "settings     " << filters_path(a) << "\n"
+              << "mode         " << to_string(lf.mode) << "\n\n";
+    const auto list = filters_for(fl);
+    for (const FilterSpec* f : list)
+    {
+        std::cout << (lf.is_enabled(f->name()) ? "[x] " : "[ ] ") << f->name() << (f->category.empty() ? "" : "   (" + f->category + (f->judge_only ? ", judge-only" : "") + ")") << "\n";
+        print_indented(f->description, "      ");
+    }
+    const FilterStack st = build_stack(fl, lf);
+    if (!st.empty()) std::cout << "\nstack        " << st.id().substr(0, 16) << "...  " << st.provenance() << "\n";
+    if (!a.has("sample")) return 0;
+    const uint32_t n = a.get_positive("sample", 1000);
+    const sieve::FractalSpace space(longest);
+    std::vector<FilterStack> one;
+    for (const FilterSpec* f : list) one.emplace_back(fl, std::vector<FilterStack::Entry>{{f, lf.values_of(f->name())}}, AppResources());
+    std::vector<uint64_t> passed(list.size(), 0);
+    uint64_t stack_passed = 0, all_passed = 0;
+    for (uint32_t k = 0; k < n; ++k)
+    {
+        sieve::BigUint i = space.count();
+        i.mul_small(k);
+        i.divmod_small(n);
+        const std::string t = space.at(i);
+        const std::vector<uint32_t> u(t.begin(), t.end());
+        bool all = true;
+        for (size_t j = 0; j < list.size(); ++j)
+            if (one[j].passes(u)) ++passed[j];
+            else all = false;
+        all_passed += all;
+        if (!st.empty() && st.passes(u)) ++stack_passed;
+    }
+    auto pct = [n](uint64_t c) {
+        std::ostringstream o;
+        o << c << " of " << n << " (" << std::fixed << std::setprecision(2) << 100.0 * double(c) / double(n) << "%)";
+        return o.str();
+    };
+    std::cout << "\nsample       " << n << " rulesets spread evenly over the space's " << space.count().to_decimal() << " (address k x count / " << n << ")\n";
+    for (size_t j = 0; j < list.size(); ++j) std::cout << "  " << list[j]->name() << " passes " << pct(passed[j]) << "\n";
+    std::cout << "  all of them pass " << pct(all_passed) << "\n";
+    if (!st.empty()) std::cout << "  the ticked stack passes " << pct(stack_passed) << "\n";
+    return 0;
+}
+
 int cmd_filters_models(const Args& a)
 {
     const ModelSpace space = make_model_space(a);
@@ -2816,6 +2868,7 @@ int cmd_filters(const Args& a)
     if (a.get("line", "text") == "binary") return cmd_filters_binary(a);
     if (a.get("line", "text") == "models") return cmd_filters_models(a);
     if (a.get("line", "text") == "ai") return cmd_filters_ai(a);
+    if (a.get("line", "text") == "fractals") return cmd_filters_fractals(a);
     const Line line = make_line(a.has("length") || line_from_string(a.get("line", "text")) != LineKind::Text ? a : [&] {
         Args b = a;
         b.opts["length"] = "32";

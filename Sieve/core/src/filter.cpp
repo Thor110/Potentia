@@ -524,7 +524,7 @@ std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, cons
 } // namespace
 
 FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entries, const FilterResources& resources)
-    : length_(whole.length)
+    : length_(whole.length), up_to_length_(whole.up_to_length)
 {
     provenance_ = whole.kind + "/" + whole.symbols_id + "/L" + std::to_string(whole.length);
     symbols_id_ = whole.kind + "/" + whole.symbols_id;
@@ -653,6 +653,13 @@ void FilterStack::settle_now() const
 int FilterStack::first_failure(std::span<const uint32_t> unit) const
 {
     if (filters_.empty()) return -1;
+    if (up_to_length_)
+    {
+        if (unit.size() > length_) throw std::invalid_argument("unit is longer than this filter stack's line");
+        for (size_t i = 0; i < filters_.size(); ++i)
+            if (!filters_[i]->passes(unit)) return int(i);
+        return -1;
+    }
     if (unit.size() != length_) throw std::invalid_argument("unit has the wrong length for this filter stack");
     const size_t per = length_ / voices_;
     for (size_t i = 0; i < filters_.size(); ++i)

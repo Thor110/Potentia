@@ -1,6 +1,6 @@
 // The compiled-in filters, in the order they are listed. To add a filter: write it in its own
 // file (see text_m1.cpp, statistics.cpp, media.cpp, picture.cpp, audio.cpp, sound.cpp,
-// written.cpp, crossline.cpp, binary.cpp, weights.cpp), give it an id and version, and add its
+// written.cpp, crossline.cpp, binary.cpp, weights.cpp, fractals.cpp), give it an id and version, and add its
 // registration call here. To change a filter, register it again with a new version and keep
 // the old one, so earlier results stay reproducible.
 
@@ -22,6 +22,7 @@ void add_picture_filters(std::vector<FilterSpec>& out);
 void add_figure_filters(std::vector<FilterSpec>& out);
 void add_sound_filters(std::vector<FilterSpec>& out);
 void add_weight_filters(std::vector<FilterSpec>& out);
+void add_fractal_filters(std::vector<FilterSpec>& out);
 
 std::vector<FilterSpec> builtin_filters()
 {
@@ -40,9 +41,11 @@ std::vector<FilterSpec> builtin_filters()
     add_figure_filters(out);
     add_sound_filters(out);
     add_weight_filters(out);
+    add_fractal_filters(out);
     // Hard and soft, in one place (FilterSpec::category).
     static const char* const kHard[] = {"not-written", "not-a-file", "not-other-line", "not-packed", "not-an-item", "binary-kind",
-                                        "distinct-vertices", "distinct-indices", "max-run", "not-a-pattern", "canonical-mesh", "canonical-model"};
+                                        "distinct-vertices", "distinct-indices", "max-run", "not-a-pattern", "canonical-mesh", "canonical-model",
+                                        "fractal-draws", "fractal-grows", "fractal-no-idle", "fractal-canonical"};
     for (FilterSpec& f : out)
     {
         f.category = "soft";

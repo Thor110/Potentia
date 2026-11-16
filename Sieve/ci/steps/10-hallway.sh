@@ -24,11 +24,11 @@ python tools/settings_doc.py "$H" --check
 test -s hallway.png
 # The metrics list (hallway --metrics, no window): every line under the reference filters,
 # as the setup menu counts them; the binary line's binary-kind-v1 removes 99.9954% (the names padded
-# to the longest, Fractals; a listed line has no filters, so no Kept).
+# to the longest, Fractals; it has its noise filters, none of them ticked there, so it keeps it all).
 $H --metrics metrics.txt --filters data/metrics/reference-filters.ini > /dev/null
 q "^Binary *: 99.9954%" metrics.txt
 q "^Models *: 99.999999999999...% *( Kept : 10^-21.47 )" metrics.txt
-[ "$(grep -c ' : .*Kept : ' metrics.txt)" = 11 ]
+[ "$(grep -c ' : .*Kept : ' metrics.txt)" = 12 ]
 # ...and what each ordering saves: nothing in positional or scrambled order, what the
 # filters remove off every survivor in compact order, and the guided ordering's bound and
 # what it did on the reference text (Dickens, which the model was not trained on).
@@ -1895,11 +1895,24 @@ $H --no-menu --line fractals --warp fibonacci-word --take --press B,B,B,B,B,B --
 $H --no-menu --line fractals --walk "0,0" --warp nosuch --screenshot fractals-none.png | tr -d '\r' | q "No item on this line is called nosuch"
 # The whole space (list X1, fractal-space-v1): every ruleset the reader takes, the shorter first, each
 # charted fractal at its address there, named (the known fractals included, the default); excluded, a
-# charted one is not on the line; only they, the shelves are the chart's 11 after the index. And sieve
-# fractal gives the same: the first ruleset of all, and each charted one back from its address.
+# charted one is not on the line, nor the index, and Warp says which setting keeps it off and where it
+# is changed; only they, the shelves are the chart's 11 after the index. And sieve fractal gives the
+# same: the first ruleset of all, and each charted one back from its address.
 $H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 12 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 12 items"
 $H --no-menu --line fractals --fractal-known only --walk "0,0" --warp dragon-curve --take --screenshot fractals-only.png | tr -d '\r' | q "| went to dragon-curve$"
-$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp dragon-curve --screenshot fractals-excluded.png | tr -d '\r' | q "No item on this line is called dragon-curve"
+$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp dragon-curve --screenshot fractals-excluded.png | tr -d '\r' | q "dragon-curve is a known fractal, set aside: \"known fractals\" is set to exclude (Setup > FRACTALS, or the command line: --fractal-known)\.$"
+$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp index --screenshot fractals-excluded-index.png | tr -d '\r' | q "The index is set aside with the known fractals"
+$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-excluded-first.png | tr -d '\r' | q "first book 0 \"L-system 1, +\""
+$H --no-menu --line fractals --fractal-longest 60 --walk "0,0" --warp gosper-curve --screenshot fractals-short.png | tr -d '\r' | q "gosper-curve is 82 characters, past the longest ruleset on this line, 60 (Setup > FRACTALS, or the command line: --fractal-longest)\.$"
+# Its noise filters ([fractals], judge-only): a ruleset that draws nothing fails fractal-draws-v1, marked
+# where it stands; and sieve filters judges rulesets spread over the space, the same on every machine.
+printf '[fractals]\nmode = mark\nfilters = fractal-draws-v1, fractal-grows-v1\n' > fractals-mark.ini
+$H --no-menu --filters fractals-mark.ini --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-marked.png | tr -d '\r' | q "^FRACTALS line, positional, filters: 2 mark, "
+printf '[fractals]\nmode = hide\nfilters = fractal-draws-v1, fractal-grows-v1, fractal-no-idle-v1\n' > fractals-three.ini
+build/sieve filters --line fractals --filters fractals-three.ini --sample 1000 | tr -d '\r' > fractal-sample.txt
+q "^  fractal-draws-v1 passes 635 of 1000 (63.50%)$" fractal-sample.txt
+q "^  the ticked stack passes 302 of 1000 (30.20%)$" fractal-sample.txt
+q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
 dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
 test -n "$dragon"
 $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"
