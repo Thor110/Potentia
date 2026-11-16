@@ -1917,6 +1917,10 @@ $H --no-menu --line fractals --fractal-known only --walk "0,0" --warp dragon-cur
 $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp dragon-curve --screenshot fractals-excluded.png | tr -d '\r' | q "dragon-curve is a known fractal, set aside: \"known fractals\" is set to exclude (Setup > FRACTALS, or the command line: --fractal-known)\.$"
 $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --warp index --screenshot fractals-excluded-index.png | tr -d '\r' | q "The index is set aside with the known fractals"
 $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-excluded-first.png | tr -d '\r' | q "first book 0 \"L-system 1, +\""
+# Started on, the line opens at its index (IDEAS 19.243), not halfway along its space; with the known
+# fractals excluded there is no index, and it opens halfway along.
+$H --no-menu --line fractals --walk "0,0" --screenshot fractals-start.png | tr -d '\r' | q "first book 0 \"Index of the fractal dimension\".*went to index$"
+$H --no-menu --line fractals --fractal-known exclude --walk "0,0" --screenshot fractals-start-excluded.png | tr -d '\r' | q "50\.0000000000% along.*went to 50%$"
 $H --no-menu --line fractals --fractal-longest 60 --walk "0,0" --warp gosper-curve --screenshot fractals-short.png | tr -d '\r' | q "gosper-curve is 82 characters, past the longest ruleset on this line, 60 (Setup > FRACTALS, or the command line: --fractal-longest)\.$"
 # Its noise filters ([fractals], judge-only): a ruleset that draws nothing fails fractal-draws-v1, marked
 # where it stands; and sieve filters judges rulesets spread over the space, the same on every machine.

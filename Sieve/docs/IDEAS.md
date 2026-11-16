@@ -9815,6 +9815,81 @@ for example".
   from, however long its ruleset (the longest charted ones lie past the line's default longest, and are on
   it when the longest is raised).
 
+**19.236 The CI's steps split further, 1a, 1b and so on (Edward, 16 November 2026).** His words: "perhaps we
+could start splitting the test scripts down even further than the current 11 odd steps into step 1a,b etc",
+"that way we can more easily pinpoint what is going wrong". Step 01 is one ctest of the whole core suite (about
+ten minutes on Edward's machine), so one failed check stops the step and the rest of its log is read by hand,
+as the fractal picture count was on 16 November; steps 04, 10 and 11 run for half an hour or more each. Split
+by what they test (step 01 by the suite's sections, run as their own ctest entries; step 10 by line), a red
+step would name its part, and a part could be run again alone. *Planned only.*
+
+**19.237 Tilings, aperiodic and regular, as a dimension as fractals are (Edward, 16 November 2026).** His
+words: "we could also look at aperiodic and regular tiling in a similar way as fractals", "they can not only
+create images, but they could create 3D maps, colour gradients and much more". A tiling written as a ruleset
+(its tiles and how they meet: substitution rules for Penrose's and the hat's, a wallpaper group and a cell for
+the regular ones), generated and numbered as the fractal space is, charted where known; and, as the fractals'
+filters reach other lines, its drawings as pictures, as height maps for worlds, and as gradients. (Some are
+charted already as L-systems: the Penrose tilings, the Voderberg spiral, the sphinx.) *Planned only.*
+
+**19.238 A large model found by its shape, and an existing model plugged in (Edward, 16 November 2026).**
+His words: "couldn't we just store the initial parameters of the state space", "IE : Size/length/number of
+weights/layers/depth etc", "And still find a multi gigabyte or larger model at an exact integer interval in
+rotation", "Could the state space itself not be adjusted via its parameters to generate that", "an exact
+integer interval rotation might not produce a coherent model but I still feel like it is worth looking at as
+if an even semi-coherent model can be found it could be worthwhile", and "We also still haven't plugged an
+existing model into the state space for exploration purposes". The shape is a few numbers and fixes the space
+exactly (the AI line already takes one, §15); the models in it are every setting of its weights, so the
+address of one model is as long as its weights are (a multi-gigabyte model's address is multi-gigabyte), and
+models reached by a fixed step from 0 are an evenly spread sample, almost all noise. What can be looked at:
+an existing model's own address as a starting place (its weights read into the space of its shape), and the
+models near it (a few weights changed, a step along the loop), measured as the AI line's are (loss on a fixed
+text), to see how far from a trained model coherence lasts. *Planned only.*
+
+**19.239 A cellular automata dimension, for the video line (Edward, 16 November 2026).** His words: "we
+discussed the game of life but a cellular automata dimension could lead to the creation of patterns and shapes
+to be filtered out of the video dimension", "they can be used to create many fascinating and very detailed
+animations", "this could lead to content that could be found in the video dimension or filtered from in the
+same way our fractal filters work". Every rule of a family (the elementary rules, the life-like birth and
+survival sets, then wider neighbourhoods) with its starting field, numbered as the fractal space is; each
+drawn as frames, and those frames, fitted to the video line, a filter there (include, exclude), as
+fractal-drawn-v1 is on the image line (§19.235). The Game of Life's gliders filter (GAME-OF-LIFE) is one rule
+of it already. *Planned only.*
+
+**19.240 Replays' name, and the main menu's rows of two words in a neat shape (Edward, 16 November 2026).**
+His words: "Replays should be called Active Replays or perhaps Video Replay, thoughts?", "Most options in the
+main menu are two words, I also think we should try and arrange them into a neat pattern so that no option is
+suddenly thinner", "Start Sieve / Replays / Exit Game", "However we shouldn't stray from functionality as a
+part of the ordering process as well". *Planned only.*
+
+**19.241 Rooms between the hallway's rooms for the devices: arcade cabinets, record players, VHS players
+(Edward, 16 November 2026).** His words: "I was thinking about the video games dimension and it being planned
+to have arcade cabinets", "But maybe we will have to stick to boxes for games on the shelf, I was thinking it
+could be fun to add another room that sits inbetween each room in the hallway with things like arcade
+cabinets, record players, VHS players and more", "Like with personal dimensions, players should be able to
+pick up a single item with O off of a shelf", "Then they would walk to the extra room and plug it in to the
+arcade cabinet or whatever device is necessary for that dimension", "This might not be required for all
+dimensions", "Or we could just have a play button right there on the item viewer", "I figure having these
+extra rooms could be an on/off toggle in the graphics settings as well for people that want that fun
+experience and those that dont", "I would expect these arcade cabinets to not have a design on it until you
+plug a game into it", "Then its glow and textures could be game specific", "I also see no reason it couldn't
+just store which game was loaded until you change or restart hallway.exe", "even when transitioning between
+dimensions, same as the way direction through portals is already preserved", and "this would be the same for
+all forms of media, but that could also end up caching a lot of data, so I suppose one type of media loaded
+at a time throughout all dimensions would make the most sense". *Planned only.*
+
+**19.242 Vaulting over the wall at the edge, from binary to binary (Edward, 16 November 2026).** His words: "I
+want to add a fun feature to vault over the wall at the edge and then have you vault from binary to binary
+maybe, thoughts? maybe not maybe I dunno". *Planned only.*
+
+**19.243 The fractal index book first, where the line starts (Edward, 16 November 2026).** His words: "I also
+noticed that I can't find the index book of known fractals, that should be the first entry unless it is
+disabled by a filter, which we don't have yet". It was there (item 0, "Index of the fractal dimension"), but
+the hallway starts every line halfway along, and since list X4 halfway along the FRACTALS line is some 10^400
+rulesets from it. *Built 16 November 2026:* a listed line whose first book is its index starts at the index
+(client/app_main.cpp); with the known fractals excluded there is no index, and it starts halfway along as
+before. A door into the line still takes you to the same angle you left the last one at (Home, or T and
+"index", goes to it from anywhere on the line).
+
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow
 users to lay out the line of each dimension according to their own rules, hexagons, septagons, non

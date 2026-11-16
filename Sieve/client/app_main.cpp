@@ -984,7 +984,12 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
     {
         // Halfway along, and on the shelf: going to an address hands you the unit, and holding
         // one holds you still, so starting a line holding a record would start it unable to move.
-        hall->go_to("50%");
+        // A listed line whose first book is its index (the FRACTALS line, unless the known fractals
+        // are excluded) starts at the index instead: halfway along its space, some 10^400 rulesets
+        // since list X4, the index was out of reach (Edward, 16 November 2026: "I can't find the
+        // index book of known fractals, that should be the first entry unless it is disabled by a
+        // filter").
+        if (!(hall->on_listed() && hall->listed_shelf().find("index") && hall->warp("index"))) hall->go_to("50%");
         hall->put_back();
     }
     if (!scripted) return hall;

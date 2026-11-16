@@ -1,6 +1,6 @@
 index: fractal dimension, fractals, FRACTALS line, rulesets, Fibonacci word, golden ratio, L-system, substitution, Koch, dragon curve, index book, spider web, Penrose tiling, Pythagoras tree, box-counting dimension, IFS, Barnsley fern, Mandelbrot set, Julia set, Newton fractal
 
-The fractal dimension is a line of the hallway, its door after AI, in light purple. Its books are every ruleset there is, from the shortest, each at an address of its own; the fractals charted by hand stand among them, named. Its first book is the index of the charted ones, saying where each stands.
+The fractal dimension is a line of the hallway, its door after AI, in light purple. Its books are every ruleset there is, from the shortest, each at an address of its own; the fractals charted by hand stand among them, named. Its first book is the index of the charted ones, saying where each stands; starting on the line, you start at it (the line is far too long to walk back to it from halfway along, where the other lines start), and {key1:hallway.anywhere/home|Home} goes back to it.
 
 ## Walking it
 Go left through AI's far door, or choose FRACTALS as the line to start on. Hover over a book to see its name; take it with {key1:hallway.anywhere/take|E}, as any item. Warp ({key1:hallway.anywhere/warp|T}) to a fractal by its id, such as dragon-curve, or "index" for the first book.
