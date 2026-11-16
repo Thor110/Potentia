@@ -10,11 +10,14 @@
 // judges only and the line has no compact mode.
 #include "sieve/filter.hpp"
 #include "sieve/fractal.hpp"
+#include "sieve/image.hpp"
+#include "sieve/sha256.hpp"
 
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <span>
 #include <string>
 #include <vector>
@@ -136,6 +139,138 @@ FilterSpec judge(const char* id, const char* description, Judge::Test t)
     return s;
 }
 
+// ---------------------------------------------------------------- fractal-drawn (the image line)
+//
+// The fractal dimension's first way into another line (list X1c; Edward, 16 November 2026: "a second
+// filter or setting ... that turns on or off its cross dimensional filtering from that specific
+// dimension", include to find what the fractals make, exclude to knock it out): the image line's units
+// that are a charted fractal drawn. Each charted fractal (fractal_chart()) at each depth it grows to
+// within kDrawnMost symbols, drawn as the hallway draws it (draw_fractal) on a picture kScale times the
+// unit's size a side (at most kSideMost), then fitted to the line as any picture warped in is
+// (canon-image-v2). keep = include passes those pictures alone; exclude passes every other.
+
+constexpr size_t kDrawnMost = size_t(1) << 18; // (as the hallway's shelves draw)
+constexpr uint32_t kScale = 4, kSideMost = 512;
+
+bool is_image(const FilterLine& l)
+{
+    return l.kind == "image" && l.width && l.height && l.length == l.width * l.height && l.symbols_id.rfind("image/", 0) == 0;
+}
+
+// The pictures as a trie, walked a pixel at a time: include, the units in the trie; exclude, every unit
+// but those (a state off the trie is free from there on). So both count and rank exactly, and the line
+// compacts to the fractals drawn, or closes up without them.
+class DrawnRanker : public Ranker
+{
+public:
+    DrawnRanker(const std::set<std::vector<uint32_t>>& units, uint32_t base, uint32_t length, bool keep)
+        : base_(base), length_(length), keep_(keep)
+    {
+        node_.push_back({});
+        under_.push_back(0);
+        for (const auto& u : units)
+        {
+            size_t at = 0;
+            ++under_[0];
+            for (const uint32_t c : u)
+            {
+                auto it = node_[at].find(c);
+                if (it == node_[at].end())
+                {
+                    it = node_[at].emplace(c, node_.size()).first;
+                    node_.push_back({});
+                    under_.push_back(0);
+                }
+                at = it->second;
+                ++under_[at];
+            }
+        }
+        free_ = node_.size();
+        pow_.assign(length + 1, BigUint(1));
+        for (uint32_t r = 1; r <= length; ++r)
+        {
+            pow_[r] = pow_[r - 1];
+            pow_[r].mul_small(base);
+        }
+        set_count();
+    }
+    uint32_t length() const override { return length_; }
+    uint32_t base() const override { return base_; }
+    State start() const override { return 0; }
+    State next(State s, uint32_t symbol) const override
+    {
+        if (s == free_) return free_;
+        const auto it = node_[size_t(s)].find(symbol);
+        if (it != node_[size_t(s)].end()) return it->second;
+        return keep_ ? kDead : free_;
+    }
+    BigUint completions(State s, uint32_t remaining) const override
+    {
+        if (s == free_) return pow_[remaining];
+        if (keep_) return BigUint(uint64_t(under_[size_t(s)]));
+        BigUint all = pow_[remaining];
+        all -= BigUint(uint64_t(under_[size_t(s)]));
+        return all;
+    }
+
+private:
+    uint32_t base_, length_;
+    bool keep_;
+    std::vector<std::map<uint32_t, size_t>> node_;
+    std::vector<uint64_t> under_; // pictures under each node
+    State free_ = 0;
+    std::vector<BigUint> pow_;
+};
+
+// (ranked on palettes of 256 colours or fewer: a walk tries each colour in turn)
+constexpr uint32_t kRankedColoursMost = 256;
+
+class Drawn : public Filter
+{
+public:
+    Drawn(const FilterLine& l, bool keep)
+        : keep_(keep)
+    {
+        // (the palette from the line's symbols: "image/PALETTE/WxH")
+        const std::string& id = l.symbols_id;
+        const size_t a = id.find('/'), b = id.find('/', a + 1);
+        ImageFormat fmt;
+        fmt.width = l.width, fmt.height = l.height, fmt.frames = 1;
+        fmt.palette = &palette_by_id(id.substr(a + 1, b - a - 1));
+        const auto chart = fractal_chart();
+        std::string all;
+        for (const auto& c : *chart)
+        {
+            all += c.id + "\n" + c.text;
+            const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
+            for (uint32_t d = 0; d <= deepest; ++d)
+                if (const auto img = draw_fractal(c.fractal, d, std::min(l.width * kScale, kSideMost), std::min(l.height * kScale, kSideMost)))
+                    units_.insert(canonicalise_frame(*img, fmt));
+        }
+        if (l.base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, l.base, l.length, keep_);
+        else
+        {
+            survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(l.base, l.length);
+            if (!keep_) survivors_ -= BigUint(uint64_t(units_.size()));
+        }
+        provenance_ = std::string("keep=") + (keep_ ? "include" : "exclude") + " chart=" + Sha256::hex_hash(all).substr(0, 16) + " fractals=" +
+                      std::to_string(chart->size()) + " pictures=" + std::to_string(units_.size());
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const bool drawn = units_.count(std::vector<uint32_t>(unit.begin(), unit.end())) > 0;
+        return drawn == keep_;
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+    const BigUint* survivors() const override { return ranker_ ? nullptr : &survivors_; }
+
+private:
+    bool keep_;
+    std::set<std::vector<uint32_t>> units_;
+    std::unique_ptr<DrawnRanker> ranker_;
+    BigUint survivors_;
+};
+
 } // namespace
 
 void add_fractal_filters(std::vector<FilterSpec>& out)
@@ -161,6 +296,24 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                         "free in the order the axiom reaches them, and every rule is for a symbol reached. Of the "
                         "charted fractals, the dragon curve (X and Y) is a renaming of A and B.",
                         canonical));
+
+    FilterSpec drawn;
+    drawn.id = "fractal-drawn";
+    drawn.title = "fractal-drawn";
+    drawn.description = "The fractal dimension in the image line: a picture that is a charted fractal drawn, at any depth it "
+                        "grows to (within 2^18 symbols), on a picture four times the unit's size a side (at most 512) "
+                        "and fitted to the line as a picture warped in is (canon-image-v2). keep = include passes those "
+                        "pictures alone (find what the fractals make); exclude passes every other (knock them out). Set "
+                        "from the FRACTALS rows of the setup page. Exact: counts and ranks (compact) on palettes of 256 "
+                        "colours or fewer; on rgb24, counted exactly and judged.";
+    drawn.params = {{"keep", "include: only the fractals drawn; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
+                     {"include", "exclude"}}};
+    drawn.applies = is_image;
+    drawn.counts_as = "own"; // (a trie of its pictures, not merged with other automata)
+    drawn.make = [own = drawn.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        return std::make_unique<Drawn>(l, param_value(*find_filter(own), v, "keep") == "include");
+    };
+    out.push_back(drawn);
 }
 
 } // namespace sieve

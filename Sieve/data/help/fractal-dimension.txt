@@ -18,6 +18,9 @@ On the setup page, the FRACTALS rows: the longest ruleset on the line (44 to 512
 ## Filtering the noise
 The magnifying glass beside FRACTALS on the setup page opens its filters, on the JUDGE-ONLY FILTERS tab: draws something (a line, or two colours), grows (longer at every depth), no idle rules (none for a symbol never met, none rewriting a symbol to itself), and canonical (one ruleset of each renaming of its symbols). Ticked, a ruleset that fails is marked or hidden, as on any line; the index and the known fractals are never judged. sieve filters --line fractals --sample 1000 says how many of 1,000 rulesets across the space each passes.
 
+## In other lines
+The third FRACTALS row, in other lines, judges the image line by the fractals: include keeps only the pictures that are a charted fractal drawn (at any depth, fitted as a picture warped in is), exclude sets those aside, off leaves the image line alone. It is the image line's fractal-drawn filter, ticked or not, so the image line's magnifying glass shows it too. With the image line compact, its shelves hold just the fractals drawn: 112 of them at 10 x 10 in black and white.
+
 ## The charted fractals
 The index, then the Fibonacci word (the golden ratio in two symbols), the Thue-Morse sequence, the Cantor set, the Koch curve and snowflake, Sierpinski's triangle, the dragon curve, the Hilbert, Levy C and Gosper curves, and a fractal plant. More are charted by adding them to fractals/chart.txt beside the program, each as its own .fractal file.
 

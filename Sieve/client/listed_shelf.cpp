@@ -34,17 +34,7 @@ constexpr size_t kDrawnMost = size_t(1) << 18;
 // How many rulesets' texts and depths are kept once worked out (a tile's shelves, and some to spare).
 constexpr size_t kKept = 4096;
 
-uint32_t drawn_deepest(const sieve::Fractal& f)
-{
-    uint32_t d = 0;
-    while (d < f.deepest())
-    {
-        const auto w = f.grow(d + 1);
-        if (!w || w->size() > kDrawnMost) break;
-        ++d;
-    }
-    return d;
-}
+uint32_t drawn_deepest(const sieve::Fractal& f) { return sieve::fractal_deepest_within(f, kDrawnMost); }
 
 // The fractal dimension (list X1): with the known fractals included (the default), its first book the
 // index of every fractal charted and after it every ruleset of the whole space (fractal-space-v1) up to

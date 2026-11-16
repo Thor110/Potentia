@@ -538,13 +538,25 @@ diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' res.ini) > /d
 # models, worlds, AI, fractals, binary); the audio rows are six: its notes, its note set, and notes2's
 # range, durations and voices. (AI has no filters yet, so F on its rows opens none; the fractals' first
 # row opens their noise filters, [fractals].)
-for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 fractals" "49 binary"; do
+for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 fractals" "50 binary"; do
   set -- $pair
   rm -f row$1.ini
   downs=$(python -c "print(','.join(['Down']*$1))")
   $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
   grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
 done
+# The third FRACTALS row, in other lines (list X1c), is fractal-drawn-v1 on the image line: Right
+# turns it to include (and the image line's mode from off to mark), again to exclude, again off.
+rm -f elsewhere.ini
+downs=$(python -c "print(','.join(['Down']*49))")
+$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere.png > /dev/null
+grep -A2 "^\[image\]" elsewhere.ini | q "filters = fractal-drawn-v1"
+grep -A1 "^\[image.fractal-drawn-v1\]" elsewhere.ini | q "keep = include"
+grep -A1 "^\[image\]" elsewhere.ini | q "mode = mark"
+$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere2.png > /dev/null
+grep -A1 "^\[image.fractal-drawn-v1\]" elsewhere.ini | q "keep = exclude"
+$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere3.png > /dev/null
+test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" = 0
 # On the rows that belong to no line, F opens the filters of the line you start on: pages
 # by default, and models once the "line" row (the first) is turned to models.
 rm -f start.ini start2.ini

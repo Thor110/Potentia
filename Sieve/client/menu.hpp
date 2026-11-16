@@ -156,7 +156,7 @@ constexpr int setup_rows_of(Media m)
     case Media::Worlds: return 2; // models per world, grid
     case Media::Ai: return 6;     // layers, width, heads, bits a weight; the text and picture model files
     case Media::Binary: return 1; // length
-    case Media::Fractals: return 2; // the longest ruleset; the known fractals (include, exclude, only)
+    case Media::Fractals: return 3; // the longest ruleset; the known fractals (include, exclude, only); in other lines
     }
     return 0;
 }
@@ -433,6 +433,11 @@ private:
     sieve::cli::FilterConfig cfg_;
     sieve::cli::LineFilters listed_filters_; // a listed line's that has none: never ticked (dimensions.hpp `listed`)
     // A listed line's filters: the fractals' [fractals]; any other's none (listed_filters_).
+    // The fractal dimension in other lines (list X1c; the third FRACTALS row): "off", "include" or
+    // "exclude", read from and written to fractal-drawn-v1 on the image line's filters (ticked on, the
+    // image line's mode turned from off to mark so that it shows).
+    std::string fractal_elsewhere() const;
+    void set_fractal_elsewhere(const std::string& way);
     static bool listed_has_filters(int line) { return is_listed(line) && kDimensions[line].media == Media::Fractals; }
     sieve::cli::LineFilters& listed_filters(int line) { return listed_has_filters(line) ? cfg_.fractals : listed_filters_; }
     const sieve::cli::LineFilters& listed_filters(int line) const { return listed_has_filters(line) ? cfg_.fractals : listed_filters_; }

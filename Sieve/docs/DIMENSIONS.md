@@ -49,9 +49,11 @@ units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the ki
   each taken in hand and grown a step at a time. The known fractals are included, excluded or the only
   ones shown (the setup page's FRACTALS rows; excluded, the index goes too). Its noise filters, behind
   the magnifying glass, mark or hide rulesets that draw nothing, never grow, have idle rules, or are a
-  renaming of another (`[fractals]`, `sieve filters --line fractals`). `sieve fractal` lists, shows and draws them, and counts the
-  space, gives the ruleset at an address and the address of one. Next: what fractals make in the other
-  lines (list X1's second filter), more charted (X2); layouts for your personal dimension, the maze
+  renaming of another (`[fractals]`, `sieve filters --line fractals`). In other lines (the third
+  FRACTALS row): the image line finds the charted fractals drawn, or sets them aside (`fractal-drawn-v1`;
+  112 pictures at 10 x 10 black and white, compact). `sieve fractal` lists, shows and draws them, and counts the
+  space, gives the ruleset at an address and the address of one. Next: the other lines as further ways,
+  more charted (X2); layouts for your personal dimension, the maze
   door, later.
 - *DNA* (partly built): a sequence of the four bases is a unit of the pages line over the `dna4`
   alphabet (`a c g t`; capitals read as these, anything else dropped). Try

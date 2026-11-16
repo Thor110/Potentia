@@ -6,6 +6,7 @@
 #include "keys.hpp"
 #include "press_names.hpp"
 #include "replay.hpp"
+#include "sieve/fractal.hpp"
 #include "sieve/fractal_space.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
@@ -1324,6 +1325,14 @@ int run(const Args& a)
     // folder, then data/training (running from the repository).
     sieve::cli::use_training_runs({a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(),
                                    std::filesystem::path("data") / "training"});
+    // The fractal chart the other lines' filters judge by (fractal-drawn-v1), where there is one.
+    try
+    {
+        sieve::set_fractal_chart_folder(sieve::cli::find_data_folder("fractals", "chart.txt"));
+    }
+    catch (const std::exception&)
+    {
+    }
     // Sieve instructions that carry items of Sieve's lines (sieve-manifest-v5) are made again here.
     sieve::cli::use_item_maker();
     // Sieve's own files kept as .sieve, decoded now and cached ahead of their first use (IDEAS 19.185):

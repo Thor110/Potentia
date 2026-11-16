@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <fstream>
 #include <iterator>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -123,9 +125,14 @@ std::optional<std::string> Fractal::grow(uint32_t depth) const
     return word;
 }
 
-uint32_t Fractal::deepest() const
+uint32_t Fractal::deepest() const { return fractal_deepest_within(*this, kFractalMost); }
+
+uint32_t fractal_deepest_within(const Fractal& f, size_t most)
 {
     // (each step grows the word by at most the longest rule, so the sizes are worked out, not grown)
+    const uint64_t limit = std::min<uint64_t>(most, kFractalMost);
+    const auto& rules = f.rules;
+    const auto& axiom = f.axiom;
     std::array<uint64_t, 256> size{};
     for (int c = 0; c < 256; ++c) size[size_t(c)] = 1;
     uint32_t d = 0;
@@ -135,12 +142,12 @@ uint32_t Fractal::deepest() const
         for (const auto& [s, w] : rules)
         {
             uint64_t n = 0;
-            for (const char c : w) n = std::min<uint64_t>(n + size[uint8_t(c)], uint64_t(kFractalMost) + 1);
+            for (const char c : w) n = std::min<uint64_t>(n + size[uint8_t(c)], limit + 1);
             next[uint8_t(s)] = n;
         }
         uint64_t total = 0;
-        for (const char c : axiom) total = std::min<uint64_t>(total + next[uint8_t(c)], uint64_t(kFractalMost) + 1);
-        if (total > kFractalMost) break;
+        for (const char c : axiom) total = std::min<uint64_t>(total + next[uint8_t(c)], limit + 1);
+        if (total > limit) break;
         size = next;
     }
     return d;
@@ -287,6 +294,42 @@ std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& fold
         out.push_back(std::move(c));
     }
     return out;
+}
+
+namespace {
+std::mutex& chart_mutex()
+{
+    static std::mutex m;
+    return m;
+}
+std::filesystem::path& chart_folder()
+{
+    static std::filesystem::path p;
+    return p;
+}
+std::shared_ptr<const std::vector<ChartedFractal>>& chart_read()
+{
+    static std::shared_ptr<const std::vector<ChartedFractal>> c;
+    return c;
+}
+} // namespace
+
+void set_fractal_chart_folder(const std::filesystem::path& folder)
+{
+    std::lock_guard<std::mutex> lock(chart_mutex());
+    chart_folder() = folder;
+    chart_read().reset();
+}
+
+std::shared_ptr<const std::vector<ChartedFractal>> fractal_chart()
+{
+    std::lock_guard<std::mutex> lock(chart_mutex());
+    if (!chart_read())
+    {
+        if (chart_folder().empty()) throw std::invalid_argument("no fractal chart is known here (the fractals folder)");
+        chart_read() = std::make_shared<const std::vector<ChartedFractal>>(read_fractal_chart(chart_folder()));
+    }
+    return chart_read();
 }
 
 } // namespace sieve

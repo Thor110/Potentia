@@ -1598,6 +1598,17 @@ void Menu::adjust(int dir, int step)
         s_.fractal_known = k[size_t(((i + dir) % n + n) % n)];
         break;
     }
+    case kFractalRows + 2:
+    {
+        // In other lines (list X1c): off, include or exclude, in turn; kept as fractal-drawn-v1 ticked
+        // on the image line, so it is the one setting there and here.
+        static const char* const ways[] = {"off", "include", "exclude"};
+        const std::string now = fractal_elsewhere();
+        int i = 0;
+        while (i < 3 && now != ways[i]) ++i;
+        set_fractal_elsewhere(ways[((i % 3 + dir) % 3 + 3) % 3]);
+        break;
+    }
     case kAiRows + 4:
         // The text model: Left goes back to the model in hand, Right chooses a folder (as Enter).
         if (!app_) break;
@@ -3626,6 +3637,9 @@ void Menu::render()
         case Media::Fractals: return {
             {line_of(Media::Fractals), tr("setup.fractal_longest"), trf("setup.fractal_longest.value", {n(s_.fractal_longest)})},
             {-1, tr("setup.fractal_known"), tr("setup.fractal_known." + s_.fractal_known)},
+            {-1, tr("setup.fractal_elsewhere"),
+             tr("setup.fractal_elsewhere." + fractal_elsewhere()) +
+                 (fractal_elsewhere() != "off" && cfg_.lines[size_t(LineKind::Image)].mode == sieve::cli::FilterMode::Off ? tr("setup.fractal_elsewhere.mode_off") : "")},
         };
         case Media::Binary: return {
             {kBinaryLine, tr("setup.binary_length"), trf("setup.binary_length.value", {n(s_.binary_bytes)})},
@@ -4376,6 +4390,26 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
 }
 
 // ---------------------------------------------------------------- filters overlay
+
+std::string Menu::fractal_elsewhere() const
+{
+    const sieve::cli::LineFilters& lf = cfg_.lines[size_t(LineKind::Image)];
+    if (!lf.is_enabled("fractal-drawn-v1")) return "off";
+    return sieve::param_value(*sieve::find_filter("fractal-drawn-v1"), lf.values_of("fractal-drawn-v1"), "keep");
+}
+
+void Menu::set_fractal_elsewhere(const std::string& way)
+{
+    sieve::cli::LineFilters& lf = cfg_.lines[size_t(LineKind::Image)];
+    if (way == "off") (void)sieve::cli::tick_filter(lf, "fractal-drawn-v1", false);
+    else
+    {
+        if (!lf.is_enabled("fractal-drawn-v1")) (void)sieve::cli::tick_filter(lf, "fractal-drawn-v1", true);
+        lf.values["fractal-drawn-v1"]["keep"] = way;
+        if (lf.mode == sieve::cli::FilterMode::Off) lf.mode = sieve::cli::FilterMode::Mark;
+    }
+    save_filters();
+}
 
 sieve::FilterLine Menu::filter_line_of(int i) const
 {

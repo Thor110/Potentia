@@ -2478,8 +2478,8 @@ void test_filters(const std::string& dir)
     CHECK(filters_for(text_line(8)).size() == 16); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 9); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
-                                           // not-a-pattern, palette-size, row-runs, figure
+    CHECK(filters_for(image).size() == 10); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -7538,6 +7538,41 @@ void test_fractals()
         CHECK(all.first_failure(std::vector<uint32_t>(draws_not.begin(), draws_not.end())) == 0);
         CHECK(throws([&] { (void)all.first_failure(std::vector<uint32_t>(97, 'F')); })); // (longer than the line)
         for (const char* n : names) CHECK(find_filter(n)->category == "hard" && find_filter(n)->judge_only);
+    }
+    // In other lines (list X1c): fractal-drawn-v1 on the image line, the charted fractals drawn at each
+    // depth and fitted as a picture is. Counted and ranked exactly, both ways round.
+    {
+        set_fractal_chart_folder(std::string(g_data) + "/fractals");
+        static const TestResources none(nullptr, nullptr);
+        ImageFormat fmt;
+        fmt.width = 10, fmt.height = 10, fmt.palette = &palette_by_id("mono");
+        FilterLine il{"image", fmt.symbols_id(), 2, 100, nullptr, 10, 10, 1};
+        const FilterSpec* spec = find_filter("fractal-drawn-v1");
+        const FilterStack in(il, {{spec, {{"keep", "include"}}}}, none), out(il, {{spec, {{"keep", "exclude"}}}}, none);
+        CHECK(in.ranker() && out.ranker());
+        const BigUint kept = in.ranker()->count();
+        BigUint rest = BigUint::pow(2, 100);
+        rest -= kept;
+        CHECK(kept == BigUint(112) && out.ranker()->count() == rest);
+        // The Koch curve at depth 2, drawn and fitted, is one of them; stripes are not. (A picture all of
+        // one colour is: a substitution's axiom of one symbol fills it.)
+        const auto koch = std::find_if(chart.begin(), chart.end(), [](const ChartedFractal& c) { return c.id == "koch-curve"; });
+        const auto drawn = canonicalise_frame(*draw_fractal(koch->fractal, 2, 40, 40), fmt);
+        CHECK(in.passes(drawn) && !out.passes(drawn));
+        std::vector<uint32_t> stripes(100);
+        for (size_t p = 0; p < 100; ++p) stripes[p] = uint32_t(p % 2);
+        CHECK(!in.passes(stripes) && out.passes(stripes));
+        CHECK(in.passes(std::vector<uint32_t>(100, 1)));
+        // Each survivor's rank gives it back, in address order.
+        std::vector<uint32_t> last;
+        for (uint64_t k = 0; k < 112; ++k)
+        {
+            const auto u = in.ranker()->unrank(BigUint(k));
+            CHECK(in.passes(u) && in.ranker()->rank(u) == BigUint(k) && (k == 0 || last < u));
+            last = u;
+        }
+        const auto u = out.ranker()->unrank(BigUint(5));
+        CHECK(out.passes(u) && out.ranker()->rank(u) == BigUint(5));
     }
 }
 

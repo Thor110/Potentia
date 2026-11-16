@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -75,5 +76,14 @@ struct ChartedFractal
 // Reads the chart in `folder` and every ruleset it names. Throws std::invalid_argument naming the
 // first entry that is not as written.
 std::vector<ChartedFractal> read_fractal_chart(const std::filesystem::path& folder);
+
+// The deepest a ruleset grows to within `symbols` symbols (at most deepest()): how deep the hallway draws
+// one, and how deep fractal-drawn-v1 draws the charted ones.
+uint32_t fractal_deepest_within(const Fractal& f, size_t symbols);
+// The chart the other lines' filters judge by (fractal-drawn-v1): the programs say where it is (the
+// fractals folder beside them, or data/fractals), and it is read once. Throws std::invalid_argument
+// where no folder was set or the chart cannot be read.
+void set_fractal_chart_folder(const std::filesystem::path& folder);
+std::shared_ptr<const std::vector<ChartedFractal>> fractal_chart();
 
 } // namespace sieve

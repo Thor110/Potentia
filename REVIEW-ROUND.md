@@ -177,7 +177,8 @@ run before a release package, and after each of the three reviews. Each batch is
   that keeps a fractal off the line, and the magnifying glass back with noise filters, 16 November 2026*);
   a second filter, set from the
   fractal line, turning its cross-dimensional filtering off, on to find what the fractals make in the other
-  lines (include), or on to knock it out (exclude) (Edward, 16 November 2026). `[01]` + `[10]`.
+  lines (include), or on to knock it out (exclude) (Edward, 16 November 2026; *made for the image line, 16
+  November 2026: fractal-drawn-v1 and the in other lines row; the other lines to follow*). `[01]` + `[10]`.
 - X2. Then as many known fractals charted as can be tracked down (Edward, the same day: "implement as many
   fractals as we can track down", and "X1/X2 can also include charting more known fractals when we are
   done"): each a `sieve-fractal-v1` ruleset where the grammar can write it, the grammar widened (a new

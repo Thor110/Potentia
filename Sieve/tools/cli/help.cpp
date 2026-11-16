@@ -1078,7 +1078,9 @@ const std::vector<Page>& pages()
          "set aside the noise of the whole space: fractal-draws-v1 (it draws a line, or two colours),\n"
          "fractal-grows-v1 (its word grows with depth), fractal-no-idle-v1 (no rule for a symbol never met,\n"
          "none rewriting a symbol to itself) and fractal-canonical-v1 (one of each renaming). Each judges;\n"
-         "the known fractals are never judged (the setup menu's known fractals row rules them).",
+         "the known fractals are never judged (the setup menu's known fractals row rules them). In the image\n"
+         "line, fractal-drawn-v1 keeps (keep = include) or sets aside (exclude) the pictures that are a charted\n"
+         "fractal drawn at any depth, counted and ranked exactly (the setup menu's in other lines row).",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},

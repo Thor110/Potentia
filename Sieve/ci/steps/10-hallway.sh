@@ -1913,6 +1913,14 @@ build/sieve filters --line fractals --filters fractals-three.ini --sample 1000 |
 q "^  fractal-draws-v1 passes 635 of 1000 (63.50%)$" fractal-sample.txt
 q "^  the ticked stack passes 302 of 1000 (30.20%)$" fractal-sample.txt
 q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
+# In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
+# fitted as a picture warped in is (fractal-drawn-v1): 112 at 10 x 10 in black and white, counted and
+# ranked exactly, so the line compacts to them (include) or closes up without them (exclude).
+printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = include\n' > drawn-in.ini
+printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = exclude\n' > drawn-out.ini
+build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    112 (exact; compact mode available)$"
+build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     112 (exact)$"
+$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (112 survivors), "
 dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
 test -n "$dragon"
 $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"
