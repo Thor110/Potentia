@@ -115,7 +115,9 @@ printf '' > none.ini
 out=$($exe tailor --line audio --length 8 --filters none.ini --out ta.ini "$M" | tr -d '\r')
 echo "$out"
 echo "$out" | q "^\[x\] key-data-v2 .* scale=major-pentatonic"
-echo "$out" | q "^survivor     46327 of 204994, route b4f7"
+# (204,991: since list W3 fractal-scored-v1 merges with the melody plugins, and sets aside the three
+# fractal melodies among their 204,994)
+echo "$out" | q "^survivor     46327 of 204991, route b4f7"
 out=$($exe warp --line audio --length 8 --filters ta.ini --compact "$M" 2>/dev/null | tr -d '\r')
 a=$(echo "$out" | awk '/compact/ {seen = 1; next} seen && $1 == "positional" {print $2; exit}')
 test "$a" = "0b4f7"

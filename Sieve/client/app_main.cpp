@@ -309,7 +309,7 @@ const char* kUsage =
     "  --save-view PATH    with the viewer open (--press E,Z,Tab...): save what it shows (F), to PATH\n"
     "  --walk DX,DZ;...    walk these distances in metres first (doors work as when walking)\n"
     "  --press K,K,...     then press these keys (e.g. M,M,-,Shift+=; Click: a left click where the\n"
-    "                      crosshair is; Item:ID: the main or pause menu's row named ID, as Up/Down would\n"
+    "                      crosshair is; Item:ID: the main, pause or setup menu's row named ID, as Up/Down would\n"
     "                      reach it), printing where you are\n"
     "  --edge-glow         draw with Geometry Edge Glow (or --settings a file that has it on)\n"
     "  --wireframe on|off  draw everything as lines (on), or with the models in the meshes folder\n"

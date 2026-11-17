@@ -10118,3 +10118,74 @@ antidisestablishmentarianism".
   its default. Edward: "perhaps the cap should be an adjustable setting for that filter instead, default
   28, maximum 100, minimum maybe 5". *Built (17 November 2026)*: word-length-v2, 28 at first, 5 to 100;
   v1 (20, 1 to 64) retired, kept so earlier stacks reproduce.
+
+**19.247 Filters that count together: a review round (Edward, 17 November 2026).** His words: "I think the
+primary issue is that many filters say they need merging", "we also have lots of not countable crossovers
+such as fractal drawn v2 with image mirror v1", "we need to do a review round to update filters, resolve
+merge conflicts and try to do away with filters that aren't countable, which should be moved to judge only
+filters", "Z/X/C triggers the recalculation with the filters page open ... it should just say it needs to
+be recalculated", and of a FILTER AS MUCH AS POSSIBLE row: "X for optimise all filters all dimensions
+already does this with the filter page open ... adding >>OPTIMISE FILTERS<< under find my limits which just
+calls the same function".
+- *What had happened:* X weighs two filters that cannot be counted together by how much each removes on
+  its own, and keeps the stronger. The fractals' filters in other lines (keep = include, which keeps
+  almost nothing) and the filters counted but never ranked (a picture against its mirror, a frame against
+  the one before) won every such clash, so ticking all left the image line with fractal-drawn and
+  image-mirror alone, and every line much as weakly filtered. With them out of its way (below) the
+  optimised lines measured, at the default shapes: binary 10^-14.59, image 10^-18.19, pages 10^-20.38,
+  books 10^-115.95, audio 10^-13.63, tracks 10^-93.08, video 10^-1.12, movies 10^-43.05, models 10^-21.48,
+  worlds 10^-124.49, AI 10^-9854.27.
+- *Built (list W1 and W2, and W4's first part):* OPTIMISE FILTERS under FIND MY LIMITS, X's function made
+  to end with every filter ticked, and each stack kept within the filter memory (the weakest unticked
+  until it counts again: the books' pages needed 1.4 GB with twenty-one); the filters compared within a
+  unit (image-mirror, life-causal, video-pan, video-moves, video-smooth, golden-word, melody-motif,
+  sound-periodic) moved to the judge-only tab; the fractals' filters in other lines marked as set from
+  the FRACTALS rows, so ticking all leaves them as they are; and a filters page that no longer counts at
+  every tick.
+- *Built (W3 to W5, the same day):* the fractals' lists made automata where their tables fit the filter
+  memory: each sorted list built straight into its smallest automaton (Daciuk, Mihov, Watson and Watson,
+  2000), the same survivors in the same order, so no version changes. The words on the pages line make
+  7,496 states (ascii96, 32 characters) and the melodies on the audio line 18,829 (notes104, 16 notes):
+  both now merge with the other automata (of the 531 fractal pages, 389 also have their brackets in
+  order, and leave the line together with brackets-v1). The pictures and videos do not fit: 1,031,932
+  states and a table of 1.9 GB for fractal-drawn-v2's 62,356 pictures at 10 x 10 in black and white,
+  5,903,640 and 87.6 GB for fractal-moving-v2's 23,830 videos, so their tries still count them, and
+  they stay "needs merging". The other filters with rankers of their own, looked at: neighbour-agreement
+  counts by a table that depends on the cell (a pixel against the one above it), which as an automaton
+  would carry the position and multiply past any table; key-v1 is retired already for key-data-v2, an
+  automaton; utf8-valid is the binary line's, whose files have lengths of their own and are counted by
+  their own machinery; palette-size, row-runs and figure on rgb24 have 2^24 symbols, more than an
+  automaton's table takes. And where the merged automata overfill the filter memory, the reason now
+  names the largest of them ("the largest automaton is brackets-v1's (121 states)"), the one to leave
+  out first.
+
+**19.248 Always countable (Edward, 17 November 2026).** His words: "we need to aim for it to always be
+calculable otherwise we have no idea how much is filtered", "I know some filters don't allow for that so we
+need to try and convert them into automatons or move them to judge only filters in general", "we should keep
+track of what filters work what ways in the filters document and make sure we work through them", and of
+memory: "honestly the amount of memory used to count is partially inconsequential, not entirely irrelevant
+but with the amount of memory available to the average system these days, gigabytes should almost always be
+there to spare", "of course we should still aim to use as little as possible in every calculation so that the
+more we have the better the results".
+- *Where it is kept:* docs/FILTERS-CONFLICTS.md, "Working through: every filter countable", a list of the
+  filters that do not yet count together with the rest, each with its way forward (an automaton, a smaller
+  table, or the judge-only tab), ticked off as each is done.
+- *The filter memory's default stays at 512 MB.* Asked whether to raise it, Edward: "no, we just leave that to
+  the find my limits calculation to work out what is free, as well as the user to specify."
+
+**19.249 Every script by name (Edward, 17 November 2026).** His words, when adding OPTIMISE FILTERS moved FIND
+MY LIMITS and broke a CI step that counted Up presses to it: "I thought we had optimised the CI to navigate
+by tag rather than however many up/down presses are required? If that isn't done yet we should definitely
+look to do that as well when we expand the CI to more individual steps so that we can run less at a time
+when and where necessary".
+- *What was so:* `Item:ID` (19.188's first step, 13 November 2026) reached the main menu's and the pause
+  menu's rows only; the setup menu's list was still reached by counting.
+- *Built the same day:* `Item:ID` on the setup menu's list (`Menu::row_named`): a GLOBAL row by its setting
+  (`filter_memory`, `item_memory`, ...), a line's first row by its id (`image`) and its others by number from
+  1 (`fractals:3`, `ai:6`), and `limits`, `optimise`, `reset`, `enter`; an unknown name, or one given while
+  a window is open over the list, is refused. Steps 04 and 10 reach every setup row they set by name now.
+- *Still counted:* rows inside the windows (the filters page, the right-hand panel's CHARACTER and Read
+  aloud pages, the personal dimension's catalogue, the harness, the designer and the cipher), and the
+  tests of the Up and Down keys themselves, which count on purpose. Each window gets names as its scripts
+  are next touched, with the CI split into more individual steps (so that a change runs only the parts it
+  touches).

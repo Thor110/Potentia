@@ -502,8 +502,7 @@ $H --no-menu --line models --model-cache 8 --walk "0,0" --bench 12 --screenshot 
 # in steps of 8 MB, and saved with the application's settings. From a settings file that
 # does not exist yet, so it starts at its default.
 rm -f mc.ini
-downs=$(python -c "print(','.join(['Down']*8))")
-$H --menu --settings mc.ini --press "$downs,Right,Right" --screenshot mc.png > /dev/null
+$H --menu --settings mc.ini --press "Item:display_cache,Right,Right" --screenshot mc.png > /dev/null
 grep -q "^model_cache_mb = 80" mc.ini
 # The settings panel slides out with Tab (the map takes the width), and back with a move.
 $H --menu --press "Tab" --screenshot panel-out.png | q "saved panel-out.png"
@@ -511,27 +510,23 @@ $H --menu --press "Tab,Down" --screenshot panel-back.png | q "saved panel-back.p
 # The filter memory (GLOBAL row 11): what one count's tables may take, in steps of 256 MB
 # from 512, saved with the application's settings.
 rm -f fm.ini
-downs=$(python -c "print(','.join(['Down']*11))")
-$H --menu --settings fm.ini --press "$downs,Right" --screenshot fm.png > /dev/null
+$H --menu --settings fm.ini --press "Item:filter_memory,Right" --screenshot fm.png > /dev/null
 grep -q "^filter_memory_mb = 768" fm.ini
 # The counting memory and the merge cache, GLOBAL rows 12 and 13: percentages, 5 a
 # step from 50, saved with the application's settings.
 rm -f cm.ini
-downs=$(python -c "print(','.join(['Down']*12))")
-$H --menu --settings cm.ini --press "$downs,Right,Down,Left,Left" --screenshot cm.png > /dev/null
+$H --menu --settings cm.ini --press "Item:counting_memory,Right,Item:merge_cache,Left,Left" --screenshot cm.png > /dev/null
 grep -q "^counting_memory_pct = 55" cm.ini
 grep -q "^merge_cache_pct = 40" cm.ini
 # The time budget, GLOBAL row 14: 5 ms a step from 50, saved with the application's
 # settings; the menu says it is waiting for X.
 rm -f tb.ini
-downs=$(python -c "print(','.join(['Down']*14))")
-$H --menu --settings tb.ini --press "$downs,Right,Right" --screenshot tb.png > /dev/null
+$H --menu --settings tb.ini --press "Item:time_budget,Right,Right" --screenshot tb.png > /dev/null
 grep -q "^unit_time_ms = 60" tb.ini
 # The item memory, the last GLOBAL row (15): percent of installed memory, 5 a step from 25,
 # saved with the application's settings.
 rm -f im.ini
-downs=$(python -c "print(','.join(['Down']*15))")
-$H --menu --settings im.ini --press "$downs,Right" --screenshot im.png > /dev/null
+$H --menu --settings im.ini --press "Item:item_memory,Right" --screenshot im.png > /dev/null
 grep -q "^item_memory_pct = 30" im.ini
 # ...and Graphics Memory, which the setup menu's budget keeps it within, is a graphics
 # setting: Settings, Graphics, then the seventh row.
@@ -563,17 +558,14 @@ $H --no-menu --line models --vertices 12 --faces 20 --coords 64 --walk "0,0" --s
 $H --menu --vertices 12 --faces 20 --coords 64 --screenshot map6.png | q "saved map6.png"
 # The setup menu's last three rows: find my limits, reset, and the way in. Finding the
 # limits changes every shape; resetting puts them all back.
-# Up from the first row wraps to the last, so three Ups land on find-my-limits whatever
-# else is in the list: the last three rows are always find-my-limits, reset, the way in.
-toend="Up,Up,Up"
 # Finding the limits changes the shapes; resetting puts them back exactly as they were. The
 # settings each run saves are compared, not screenshots: the menu also shows how long a
 # unit took to open, measured each time, which a busy machine changes. (The window's size
 # is saved too, once the hallway has opened.)
 rm -f lim.ini res.ini dflt.ini
 $H --write-settings dflt.ini > /dev/null
-$H --menu --settings lim.ini --press "$toend,Return" --screenshot lim.png > /dev/null
-$H --menu --settings res.ini --press "$toend,Return,Down,Return,Up" --screenshot res.png > /dev/null
+$H --menu --settings lim.ini --press "Item:limits,Return" --screenshot lim.png > /dev/null
+$H --menu --settings res.ini --press "Item:limits,Return,Item:reset,Return,Item:limits" --screenshot res.png > /dev/null
 if diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' lim.ini) > /dev/null; then exit 1; fi
 awk '$1 == "ai_layers" { found = 1; if ($3 < 1 || $3 > 64) exit 1 } END { if (!found) exit 1 }' lim.ini # aispace-v1's 1 to 64, on any machine
 diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' res.ini) > /dev/null
@@ -585,30 +577,40 @@ diff <(grep -v '^resolution =' dflt.ini) <(grep -v '^resolution =' res.ini) > /d
 # models, worlds, AI, fractals, binary); the audio rows are six: its notes, its note set, and notes2's
 # range, durations and voices. (AI has no filters yet, so F on its rows opens none; the fractals' first
 # row opens their noise filters, [fractals].)
-for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "31 video" "35 movies" "36 models" "39 worlds" "47 fractals" "50 binary"; do
+# (Each row by its name, Item:ID: a line's first row by the line's id, its others by number from 1.)
+for pair in "image image" "pages text" "books books" "audio audio" "audio:4 audio" "tracks tracks" "video video" "movies movies" "models models" "worlds worlds" "fractals fractals" "binary binary"; do
   set -- $pair
-  rm -f row$1.ini
-  downs=$(python -c "print(','.join(['Down']*$1))")
-  $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
-  grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
+  f=row-$(echo "$1" | tr ':' '-')
+  rm -f $f.ini
+  $H --menu --filters $f.ini --press "Item:$1,F,Space,Escape" --screenshot $f.png > /dev/null
+  grep -A1 "^\[$2\]" $f.ini | q "mode = mark"
 done
 # The third FRACTALS row, in other lines (list X1c), is fractal-drawn-v2 on the image line: Right
 # turns it to include (and the image line's mode from off to mark), again to exclude, again off.
 rm -f elsewhere.ini
-downs=$(python -c "print(','.join(['Down']*49))")
-$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere.png > /dev/null
+$H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot elsewhere.png > /dev/null
 grep -A2 "^\[image\]" elsewhere.ini | q "filters = fractal-drawn-v2"
 grep -A1 "^\[image.fractal-drawn-v2\]" elsewhere.ini | q "keep = include"
 grep -A1 "^\[image\]" elsewhere.ini | q "mode = mark"
-$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere2.png > /dev/null
+$H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot elsewhere2.png > /dev/null
 grep -A1 "^\[image.fractal-drawn-v2\]" elsewhere.ini | q "keep = exclude"
-$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere3.png > /dev/null
+$H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot elsewhere3.png > /dev/null
+# OPTIMISE FILTERS (list W1, below FIND MY LIMITS): every filter of every line
+# ticked as X ticks them, the judge-only ones and those set from the FRACTALS rows left alone, and each
+# stack kept within the filter memory, so that every line counts (the books' pages too).
+rm -f optimise.ini
+$H --menu --filters optimise.ini --press "Item:optimise,Return" --screenshot optimise.png > /dev/null
+test "$(grep -c 'image-mirror\|fractal-drawn\|golden-word' optimise.ini || true)" = 0
+grep -A2 "^\[image\]" optimise.ini | q "palette-size-v1"
+$H --metrics optimised.txt --filters optimise.ini > /dev/null
+q "^Books    : 99.999999999999...%   ( Kept : 10^-115.95 )$" optimised.txt
+q "^Image    : 99.999999999999...%   ( Kept : 10^-18.19 )$" optimised.txt
 test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" = 0
 # The same row sets the models line's fractal-modelled-v1 (list Z2): the charted fractals' lines as meshes,
 # found (include) or culled (exclude): 69 fitted at 8 vertices and 12 faces, each twice (its lacking faces
 # as the line fills them, and as its own lines again), 3,216 in the 24 turns, 7,008 at 16 and 32; with
 # distinct-vertices-v1, culled from its survivors and still ranked.
-$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere4.png > /dev/null
+$H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot elsewhere4.png > /dev/null
 grep -A2 "^\[models\]" elsewhere.ini | q "filters = fractal-modelled-v1"
 grep -A2 "^\[models.fractal-modelled-v1\]" elsewhere.ini | q "keep = include"
 # And the pages' and the audio line's (list Z4).

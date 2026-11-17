@@ -17,13 +17,13 @@ counts (`FilterSpec::counts_as`):
 
 | Counts as | Filters | Combines with |
 | :--- | :--- | :--- |
-| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters; not title-data, which has `within`), `max-run-v1`, `not-other-line-v1`, `not-packed-v1`, on a small palette `palette-size-v1`, `row-runs-v1` and `figure-v1`, and on sound (`pcm`) `sound-peak-v1` (to 24 bits), `sound-step-v1` (to 11 bits), `silence-run-v1` (while its run fits), `sound-crossings-v1` (while its count fits) and `sound-bend-v1` (to 7 bits), and on pages `few-values-v1`, `two-symbol-run-v1`, `brackets-v1` (while they fit), `pronounceable-v1`, `letter-case-v1` and `word-length-v2` (and v1, retired) | other automata, and `not-written-v1` |
+| automaton | every custom filter (the `.sfilter` plugins: clean-data, max-run-data, tidy-data, window-data, words-data, the Moby grammars, key-data, the melody filters; not title-data, which has `within`), `max-run-v1`, `not-other-line-v1`, `not-packed-v1`, on a small palette `palette-size-v1`, `row-runs-v1` and `figure-v1`, and on sound (`pcm`) `sound-peak-v1` (to 24 bits), `sound-step-v1` (to 11 bits), `silence-run-v1` (while its run fits), `sound-crossings-v1` (while its count fits) and `sound-bend-v1` (to 7 bits), and on pages `few-values-v1`, `two-symbol-run-v1`, `brackets-v1` (while they fit), `pronounceable-v1`, `letter-case-v1` and `word-length-v2` (and v1, retired); and the fractals' lists on pages and notes, `fractal-written-v1` and `fractal-scored-v1` (list W3: the sorted list built straight into its smallest automaton, 7,496 states for the pages at 32 characters, 18,829 for the melodies of 16 notes), and `fractal-drawn-v2` and `fractal-moving-v2` where the filter memory holds their table | other automata, and `not-written-v1` |
 | written | `not-written-v1` | automata |
-| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, on a large palette (rgb24) `palette-size-v1`, `row-runs-v1` and `figure-v1`, and `sound-peak-v1` past 24 bits; the fractal dimension's lists in other lines, `fractal-drawn-v2`, `fractal-moving-v2`, `fractal-written-v1` and `fractal-scored-v1` (to 256 symbols) | only a filter it implies, or that implies it |
+| own ranker | `clean-v1`, `window-v1`, `words-v1`, `clean-v2`, `window-v2`, `words-v2`, `title-v1`, `title-data-v1` (all but the last retired), `neighbour-agreement-v1`, `key-v1`, `utf8-valid-v1`, on a large palette (rgb24) `palette-size-v1`, `row-runs-v1` and `figure-v1`, and `sound-peak-v1` past 24 bits; the fractal dimension's lists of pictures and videos, `fractal-drawn-v2` and `fractal-moving-v2` (to 256 colours), whose automata outgrow the filter memory (1,031,932 states and a table of 1.9 GB for the 62,356 pictures at 10 x 10 in black and white; 5,903,640 and 87.6 GB for the 23,830 videos of 4 frames), so their own tries count and rank them | only a filter it implies, or that implies it |
 | arithmetic | `not-a-file-v1`, `not-a-pattern-v1` | nothing |
 | model rule | `distinct-vertices-v1`, `distinct-indices-v1`, `every-vertex-used-v1`, `canonical-mesh-v1` | each other (canonical-mesh implies the first two and counts with every-vertex-used) |
-| counted, judged | `video-moves-v1`, `video-smooth-v1`, `video-pan-v1`, `life-causal-v1`, `image-mirror-v1`, `golden-word-v1`, and past where they are automata `few-values-v1`; any colouring of `fractal-drawn-v2` past 65,536 pictures: each counts its survivors alone (a stack of it alone says how many) but ranks none | nothing (judged, mark or hide) |
-| judges only | `symbol-entropy-v1` and `-v2`, `model-information-v1` and `-v2`, `melody-motif-v1`, `sound-periodic-v1`, the fractal line's noise filters; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
+| counted, judged | past where they are automata `few-values-v1`; any colouring of `fractal-drawn-v2` past 65,536 pictures: each counts its survivors alone (a stack of it alone says how many) but ranks none | nothing (judged, mark or hide) |
+| judges only | `symbol-entropy-v1` and `-v2`, `model-information-v1` and `-v2`, `melody-motif-v1`, `sound-periodic-v1`, the fractal line's noise filters; on the judge-only tab since list W (17 November 2026), counting alone as they did but merging with nothing, `video-moves-v1`, `video-smooth-v1`, `video-pan-v1`, `life-causal-v1`, `image-mirror-v1` and `golden-word-v1`; on the binary line `binary-kind-v1` and `not-an-item-v1` | not part of this rule (see below) |
 
 A filter never conflicts with one it implies, or that implies it: `words-v1` implies `clean-v1`
 and `window-v1`, `window-v1` implies `clean-v1`, the v2 versions the same, and `title-v1` implies
@@ -174,6 +174,37 @@ what stands in the way of each:
   or 5x5x8, so there is nothing to merge.
 - **Arithmetic** (`not-a-file-v1`, `not-a-pattern-v1`) conflicts with everything that counts; that
   is in their nature (they test the unit's number, not its symbols) and is not a merge to make.
+
+## Working through: every filter countable
+
+Edward, 17 November 2026 (IDEAS 19.248): "we need to aim for it to always be calculable otherwise we have
+no idea how much is filtered". Every filter should count together with the rest of its line: as an
+automaton where it can be, otherwise on the judge-only tab. Memory is less of a bar than it was ("gigabytes
+should almost always be there to spare"), but each count should still use as little as it can, since the
+less one takes the more can be counted with it. What is left, and the way forward for each:
+
+- [x] The filters compared within a unit (`image-mirror-v1`, `life-causal-v1`, `video-pan-v1`,
+  `video-moves-v1`, `video-smooth-v1`, `golden-word-v1`, `melody-motif-v1`, `sound-periodic-v1`): on the
+  judge-only tab (list W, 17 November 2026).
+- [x] `fractal-written-v1` and `fractal-scored-v1`: automata, merging (list W3).
+- [ ] `fractal-drawn-v2` and `fractal-moving-v2`: automata only where the filter memory holds their table
+  (1.9 GB and 87.6 GB at the default shapes). The way forward: a smaller table for a list (a list's
+  automaton is mostly single paths, whose counts are 1 and need no row of their own), so the pictures
+  fit as they are and merge.
+- [ ] `neighbour-agreement-v1`: its own transfer matrix, which depends on the cell. The way forward: an
+  automaton for the rows (the last row and the disagreements so far, its states the same as the matrix's)
+  where it fits, otherwise judge-only.
+- [ ] On rgb24, `palette-size-v1`, `row-runs-v1` and `figure-v1`, and `sound-peak-v1` past 24 bits: their
+  own rankers, since an automaton's table of 2^24 symbols does not fit. The way forward: automata over
+  symbol classes (the colours a picture has used so far, not the colours themselves), which count the same.
+- [ ] `utf8-valid-v1` with the binary line's kind filters: judged file by file. The way forward: the
+  kinds as automata over a file's first bytes, so the two count together.
+- [ ] `not-a-file-v1` and `not-a-pattern-v1` (arithmetic): count alone, conflict with every other. To look
+  at: not-a-pattern as an automaton, which has to remember the block it repeats, so its states grow as
+  the symbols to the power of the period, and fit only for short periods on small alphabets; not-a-file
+  stays arithmetic, and is weighed against the rest as now.
+- [ ] Retired filters with rankers of their own (the word filters v1/v2, `title-v1`, `key-v1`): replaced
+  by automata already; nothing to do but keep them loadable.
 
 ## Ticking many at once
 

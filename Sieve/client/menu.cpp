@@ -29,6 +29,7 @@
 #include "theme.hpp"
 #include "world.hpp"
 #include "keys.hpp"
+#include "press_names.hpp"
 
 #include "cli/dictionaries.hpp"
 #include "cli/plugins.hpp"
@@ -82,6 +83,9 @@
 #include <cstdio>
 #include <utility>
 #include <vector>
+#include <iterator>
+#include <stdexcept>
+#include <string>
 
 namespace hallway {
 
@@ -1656,8 +1660,46 @@ void Menu::adjust(int dir, int step)
     }
 }
 
+int Menu::row_named(const std::string& id)
+{
+    static const char* const kGlobal[] = {"start_line", "mode", "key", "items_per_wall", "angle", "title", "letters", "display_size",
+                                          "display_cache", "close_up", "focus", "filter_memory", "counting_memory", "merge_cache",
+                                          "time_budget", "item_memory"};
+    static_assert(std::size(kGlobal) == kFirstLineRow, "a GLOBAL row added needs its name here");
+    for (int r = 0; r < kFirstLineRow; ++r)
+        if (id == kGlobal[r]) return r;
+    if (id == "limits") return kLimitsRow;
+    if (id == "optimise") return kOptimiseRow;
+    if (id == "reset") return kResetRow;
+    if (id == "enter") return kEnterRow;
+    const size_t colon = id.find(':');
+    const std::string line = id.substr(0, colon);
+    int n = 1;
+    if (colon != std::string::npos)
+    {
+        const std::string num = id.substr(colon + 1);
+        if (num.empty() || num.size() > 2 || num.find_first_not_of("0123456789") != std::string::npos) return -1;
+        n = std::stoi(num);
+    }
+    for (const Dimension& d : kDimensions)
+        if (line == d.id) return n >= 1 && n <= setup_rows_of(d.media) ? setup_row_of(d.media) + n - 1 : -1;
+    return -1;
+}
+
 void Menu::press(SDL_Keycode key, SDL_Keymod mod)
 {
+    // Item:ID (scripts and CI): the row of that name chosen, as Up/Down would (row_named).
+    if (const std::string* id = item_press_id(key))
+    {
+        if (viewer_ || creator_ || alpha_open_ || overlay_ >= 0 || details_ >= 0)
+            throw std::invalid_argument("--press: Item:" + *id + " names a row of the setup menu's list, and a window is open over it");
+        const int r = row_named(*id);
+        if (r < 0) throw std::invalid_argument("--press: no row '" + *id + "' on the setup menu");
+        go_anyway_armed_ = false;
+        row_ = r;
+        if (!panel_.open && !panel_auto_) toggle_panel(); // (as moving through the settings brings it back)
+        return;
+    }
     SDL_Event e{};
     e.type = SDL_EVENT_KEY_DOWN;
     e.key.key = key;
@@ -1985,6 +2027,7 @@ void Menu::handle(const SDL_Event& event, bool& done, Result& result)
         // so a stray Return while setting a line up never drops you into the hallway.
         // Find my limits and Reset act where they stand; only the last row is the way in.
         if (row_ == kLimitsRow) { find_limits(); return; }
+        if (row_ == kOptimiseRow) { optimise_filters(); return; }
         if (row_ == kAiRows + 4 || row_ == kAiRows + 5) { choose_model_folder(row_ - kAiRows - 4); return; }
         if (row_ == kResetRow) { reset_settings(); return; }
         if (row_ != kEnterRow) return;
@@ -3655,6 +3698,7 @@ void Menu::render()
     }
     rows.insert(rows.end(), {
         {-2, tr("setup.limits"), ""},
+        {-1, tr("setup.optimise"), ""},
         {-1, tr("setup.reset"), ""},
         {-1, tr("setup.enter"), ""},
     });
@@ -5464,6 +5508,15 @@ const Menu::StackInfo& Menu::resolve(int i, const std::string& key, std::functio
 {
     StackInfo& info = info_[i];
     if (info.key == key) return info;
+    // While the filters page is open, a stack its ticks have changed is not counted again: each tick (and
+    // Z, X, C) would start a count only to be overtaken by the next. It says it needs recalculating, and is
+    // counted once, when the page is closed (Edward, 17 November 2026: "it should just say it needs to be
+    // recalculated").
+    if (overlay_ >= 0)
+    {
+        waiting_[size_t(i)] = StackInfo{"", tr("status.recalculate"), -1, ""};
+        return waiting_[size_t(i)];
+    }
     Pending& p = pending_[size_t(i)];
     if (p.key != key || !p.job)
     {
@@ -5537,7 +5590,7 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
             // The title filters (title-v1, title-data-v1) are for a book's title page (words, then
             // SPACEs): ticking all ticks them only there, never on pages, where they would leave
             // little but short lines.
-            if ((both_tabs ? tab_of(*f) < 2 : tab_of(*f) == tab) && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
+            if ((both_tabs ? tab_of(*f) < 2 : tab_of(*f) == tab) && !f->set_elsewhere && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
                 in_reach.push_back({st.lf, st.li, st.part, f->name()});
     // Which of them clash with another in reach on the same stack: those are weighed.
     for (Reach& r : in_reach)
@@ -5593,6 +5646,19 @@ void Menu::toggle_all_filters(ToggleScope scope)
     poll_toggle();
 }
 
+void Menu::optimise_filters()
+{
+    // Every filter in reach on every line unticked, then X's toggle ticks them all again with the
+    // clashes weighed (and the filter memory and time budget brought up to their settings, as X does).
+    if (memory_pending() || time_pending())
+    {
+        sieve::set_filter_memory(filter_memory_setting());
+        if (app_) sieve::set_unit_time_ms(app_->unit_time_ms);
+    }
+    for (const Reach& r : reach_of(ToggleScope::EveryLine, overlay_, otab_)) (void)sieve::cli::tick_filter(*r.lf, r.name, false);
+    toggle_all_filters(ToggleScope::EveryLine);
+}
+
 void Menu::poll_toggle()
 {
     if (!toggling_) return;
@@ -5631,6 +5697,24 @@ void Menu::poll_toggle()
                 a && b && !sieve::filter_conflict(*a, *b, &line, &r.lf->values_of(r.name), &r.lf->values_of(other)).empty())
                 clash = true;
         if (!clash) (void)sieve::cli::tick_filter(*r.lf, r.name, true);
+    }
+    // And each stack kept within the filter memory, so that it still counts: where the ticked filters'
+    // combined table would need more, the weakest of them (the last in the order above) is unticked,
+    // then the next, until it fits (17 November 2026: twenty-one filters on the books' pages needed 1.4 GB).
+    std::vector<const sieve::cli::LineFilters*> seen;
+    for (auto r = in_reach.begin(); r != in_reach.end(); ++r)
+    {
+        if (std::find(seen.begin(), seen.end(), r->lf) != seen.end()) continue;
+        seen.push_back(r->lf);
+        if (r->li == kModelsLine || r->li == kBinaryLine || (r->li == kWorldsLine && r->part == 2)) continue; // (their own stacks)
+        const sieve::FilterLine line = r->part >= 0 ? part_line(r->li, r->part) : filter_line_of(r->li);
+        for (auto weakest = in_reach.rbegin(); weakest != in_reach.rend(); ++weakest)
+        {
+            const sieve::FilterStack st = sieve::cli::build_stack(line, *r->lf);
+            // (counting, or kept from it by something other than the memory: a clash, a judge)
+            if (st.empty() || st.ranker() || st.compact_blocker().find("memory") == std::string::npos) break;
+            if (weakest->lf == r->lf && r->lf->is_enabled(weakest->name)) (void)sieve::cli::tick_filter(*r->lf, weakest->name, false);
+        }
     }
     save_filters();
 }
@@ -5937,11 +6021,14 @@ void Menu::render_overlay(float W, float H)
     const size_t cols = size_t((box_.w - 60) / 8);
     const std::string title = trf("filters.title", {tr(th.key)});
     text(r_, x, box_.y + 10, title, 2, title_ink);
-    // The tally: how much of this line the ticked filters remove, live as they change.
+    // The tally: how much of this line the ticked filters remove, as last counted (a change while the page
+    // is open is counted when it closes: Menu::resolve).
     {
         const StackInfo& tally = stack_info(overlay_);
+        const bool waiting = tally.status == tr("status.recalculate");
         text(r_, x + text_width(title, 2) + 24, box_.y + 16,
-             trf("filters.filtered", {tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1, white);
+             trf("filters.filtered", {waiting ? tr("filters.filtered.later") : tally.filtered.empty() ? tr("filters.filtered.unknown") : tally.filtered}), 1,
+             white);
     }
     text(r_, x, box_.y + 32, (is_composition(overlay_) ? trf("filters.intro.composition", {tr(theme_of(overlay_).key)})
                                     : tr(overlay_ == kBooksLine ? "filters.intro.books" : overlay_ == kWorldsLine ? "filters.intro.worlds" : overlay_ == kBinaryLine ? "filters.intro.binary" : overlay_ == kModelsLine ? "filters.intro.models" : overlay_ == kAiLine ? "filters.intro.ai" : "filters.intro")), 1, grey);

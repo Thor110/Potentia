@@ -193,6 +193,11 @@ struct FilterSpec
     // its own (the menus' JUDGE-ONLY FILTERS), to the right of the retired filters: the counting
     // filters at one end of the list and these at the other. A retired filter is listed as retired.
     bool judge_only = false; // the filter that does the same, when that is why it is retired
+    // Set from another row of the setup page (the FRACTALS rows: what the fractals make in this line,
+    // found or set aside), so ticking every filter at once (Z, X, C, OPTIMISE FILTERS) leaves it as it is:
+    // it finds a dimension's content rather than setting aside noise, and as "include" it would win
+    // every clash by keeping almost nothing.
+    bool set_elsewhere = false;
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a

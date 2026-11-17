@@ -204,6 +204,7 @@ void add_audio_filters(std::vector<FilterSpec>& out)
         const FilterSpec& spec = *find_filter(own);
         return std::make_unique<Motif>(l, uint32_t(param_int(spec, v, "notes")), uint32_t(param_int(spec, v, "times")));
     };
+    motif.judge_only = true;
     out.push_back(motif);
 }
 

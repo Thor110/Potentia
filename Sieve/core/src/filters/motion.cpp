@@ -247,6 +247,7 @@ void add_motion_filters(std::vector<FilterSpec>& out)
                     "compares each frame with the one before.";
     m.applies = video_line;
     m.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> { return std::make_unique<Moves>(l); };
+    m.judge_only = true; // (it compares a unit with another part of itself: counted, never ranked)
     out.push_back(m);
 
     FilterSpec s;
@@ -261,6 +262,7 @@ void add_motion_filters(std::vector<FilterSpec>& out)
     s.make = [own = s.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         return std::make_unique<Smooth>(l, param_int(*find_filter(own), v, "percent"));
     };
+    s.judge_only = true; // (it compares a unit with another part of itself: counted, never ranked)
     out.push_back(s);
 
     FilterSpec life;
@@ -276,6 +278,7 @@ void add_motion_filters(std::vector<FilterSpec>& out)
     life.make = [own = life.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         return std::make_unique<LifeCausal>(l, param_value(*find_filter(own), v, "rule"));
     };
+    life.judge_only = true; // (it compares a unit with another part of itself: counted, never ranked)
     out.push_back(life);
 
     FilterSpec pan;
@@ -288,6 +291,7 @@ void add_motion_filters(std::vector<FilterSpec>& out)
     pan.make = [own = pan.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         return std::make_unique<Pan>(l, param_value(*find_filter(own), v, "direction"));
     };
+    pan.judge_only = true; // (it compares a unit with another part of itself: counted, never ranked)
     out.push_back(pan);
 
     FilterSpec mirror;
@@ -301,6 +305,7 @@ void add_motion_filters(std::vector<FilterSpec>& out)
     mirror.make = [own = mirror.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         return std::make_unique<Mirror>(l, param_value(*find_filter(own), v, "axis"));
     };
+    mirror.judge_only = true; // (it compares a unit with another part of itself: counted, never ranked)
     out.push_back(mirror);
 }
 

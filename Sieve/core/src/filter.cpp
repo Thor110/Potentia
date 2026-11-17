@@ -15,6 +15,7 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <string>
 
 namespace sieve {
 
@@ -603,6 +604,16 @@ void FilterStack::settle_now() const
                 ++written_count;
             }
             else if (!plugin_dfa(*f)) all_plugins = false;
+        // Which filter overfills the filter memory, where the merge does (list W5): the one whose own
+        // automaton is the largest, by states, since the merged automaton's states are at most the
+        // product of theirs and it is the one to leave out first.
+        const auto largest = [&]() -> std::string {
+            size_t best = filters_.size(), most = 0;
+            for (size_t i = 0; i < filters_.size(); ++i)
+                if (const Dfa* d = plugin_dfa(*filters_[i]); d && d->states() > most) most = d->states(), best = i;
+            if (best == filters_.size()) return "";
+            return "; the largest automaton is " + names_[best] + "'s (" + std::to_string(most) + " states)";
+        };
         if (all_plugins && written_count == 1)
         {
             std::string key;
@@ -611,7 +622,7 @@ void FilterStack::settle_now() const
             own_ranker_ = written_ranker(written, keep.get(), line.length, why, &table_bytes_,
                                          [&] { return shared_table(key, keep, line.length); });
             if (own_ranker_) compact_ = own_ranker_.get();
-            else blocker_ = why;
+            else blocker_ = why.find("memory") != std::string::npos ? why + largest() : why;
         }
         else if (all_plugins && written_count == 0)
         {
@@ -624,7 +635,7 @@ void FilterStack::settle_now() const
                 shared_ranker_ = shared_table(key, d, line.length);
                 compact_ = shared_ranker_.get();
             }
-            else blocker_ = over_table_limit("the plugins' combined table", bytes) + ": they judge only";
+            else blocker_ = over_table_limit("the plugins' combined table", bytes) + largest() + ": they judge only";
         }
     }
     if (compact_ && voices_ > 1)

@@ -318,18 +318,17 @@ $H --no-menu --line ai --walk "0,0" --take --chain --chain-press "Down,F" --chai
 printf 'sieve-chain-v2\nrun universalbibliothek\nsteer figures-2x32\ndraw melodies-2x64\ndraw type-2x32\n' | cmp - chain2.chain
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/figures-2x32 --chat-draw 1 --training-dir data/training --screenshot chat-pm.png | tr -d '\r' | q "^figure 1 by figures-2x32: fff0fc2f0de8f01c3fdbe6fff"
 printf '[models]\ntext_model =\npicture_model =\n' > models.ini
-downs=$(python -c "print(','.join(['Down']*46))")
 # Empty means the first trained run (figures-2x32); Right steps to the next (melodies-2x64), Left back.
-$H --menu --settings models.ini --training-dir data/training --press "$downs,Right" --screenshot menu-models.png | q "saved menu-models.png"
+$H --menu --settings models.ini --training-dir data/training --press "Item:ai:6,Right" --screenshot menu-models.png | q "saved menu-models.png"
 q "^picture_model = .*melodies-2x64" models.ini
-$H --menu --settings models.ini --training-dir data/training --press "$downs,Left" --screenshot menu-models.png | q "saved menu-models.png"
+$H --menu --settings models.ini --training-dir data/training --press "Item:ai:6,Left" --screenshot menu-models.png | q "saved menu-models.png"
 q "^picture_model = .*figures-2x32" models.ini
 # The right-hand panel (IDEAS 19.148): the key left of 1, read by its place, opens it and closes it,
 # and on the key's row (where letters are typed) it still opens it.
 $H --menu --press "\`" --screenshot side-open.png | tr -d '\r' | q "^right-hand panel: open (CHARACTER)"
 $H --menu --press "\`,\`" --screenshot side-closed.png | tr -d '\r' > side.txt
 if grep -q "right-hand panel" side.txt; then exit 1; fi
-$H --menu --press "Down,Down,\`" --screenshot side-key-row.png | tr -d '\r' | q "^right-hand panel: open (CHARACTER)"
+$H --menu --press "Item:key,\`" --screenshot side-key-row.png | tr -d '\r' | q "^right-hand panel: open (CHARACTER)"
 # Its CHARACTER page (sieve-character-v1): the default character (seed 0, four limbs of three joints,
 # bilateral, a head), and with six limbs of four joints, each named by its SHA-256.
 $H --menu --press "\`" --screenshot char-default.png | tr -d '\r' | q "^character: e5ba98461383a7fae83b0e070885b593653c80e1a5e17d79982abc26a12cfcb7"
@@ -779,8 +778,10 @@ $H --menu --press "\`,Down,Right,Right,Down,Right,Down,Down,Down,Down,Right,Righ
 # (/random), and GO TO IT on a melody holds it on AUDIO.
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --talk "/random melody" --training-dir data/training --screenshot chat-mel.png | tr -d '\r' > chatmel.txt
 q "^melody 1 by melodies-2x64: 8ac6f76023e45b65ccb9d8e98b4" chatmel.txt
-q "^a random melody: " chatmel.txt
-$H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --training-dir data/training --screenshot chat-rand.png | tr -d '\r' | q "^a random picture: "
+# (Drawn from the filters' survivors where the line's default stack counts, and from the whole line where
+# it does not: which, here, depends on the filters the steps run before it have left set in this folder.)
+q -E "^a random melody(, kept by the filters)?: " chatmel.txt
+$H --no-menu --line ai --walk "0,0" --take --chat --talk "/random picture" --training-dir data/training --screenshot chat-rand.png | tr -d '\r' | q -E "^a random picture(, kept by the filters)?: "
 # A random place on another line (6 November 2026): a book's card, and GO TO IT on a page's goes
 # through the door to it.
 $H --no-menu --line ai --walk "0,0" --take --chat --talk "/random book" --training-dir data/training --screenshot chat-rbook.png | tr -d '\r' | q "^a random book, on the BOOKS line: [0-9a-f]*$"
@@ -797,8 +798,7 @@ $H --no-menu --line ai --walk "0,0" --take --chat --talk "/docs ideas 19.48" --c
 $H --no-menu --line ai --walk "0,0" --take --chat --picture-model data/training/melodies-2x64 --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-mgo.png | tr -d '\r' | q "^AUDIO line, .*on the audio line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-draw 1 --chat-press "Ctrl+G" --training-dir data/training --screenshot chat-go.png | tr -d '\r' | q "^IMAGE line, .*the figure, on the image line, in hand"
 $H --no-menu --line ai --walk "0,0" --take --chat --chat-attach tests/training_corpus.txt --chat-press "Ctrl+J" --training-dir data/training --screenshot chat-j.png | tr -d '\r' | q "^PAGES line, .*a TXT file, opened on the PAGES line"
-downs=$(python -c "print(','.join(['Down']*41))")
-$H --menu --press "$downs" --screenshot menu-ai.png | q "saved menu-ai.png"
+$H --menu --press "Item:ai" --screenshot menu-ai.png | q "saved menu-ai.png"
 # The AI Training Harness (main menu): the run shipped with Sieve, trained again, comes out the
 # same; a run recorded there from a folder, its second file moved first and read in order, is
 # trained and its result written; and GO TO IT stands on the AI line with the model in hand.
@@ -1547,7 +1547,7 @@ $H --main-menu --read-aloud --press "Down,Down,Down,Down,Down" --screenshot ra-m
 $H --main-menu --read-aloud --press "Down,Down,Down,Down,Down,Down,Down,Down" --screenshot ra-main-order2.png | tr -d '\r' | q "^read aloud: Encryption Engine$"
 $H --main-menu --read-aloud --press "Up,Up" --screenshot ra-main-order3.png | tr -d '\r' | q "^read aloud: Potentia Settings$"
 $H --main-menu --read-aloud --press "Item:settings" --screenshot ra-main-settings.png | tr -d '\r' | q "^read aloud: Potentia Settings$"
-$H --menu --read-aloud --press "Down,Down,Down" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
+$H --menu --read-aloud --press "Item:items_per_wall" --screenshot ra-setup.png | tr -d '\r' | q "^read aloud: GLOBAL, number of items per wall, "
 $H --menu --read-aloud --press "F,Down,Down" --screenshot ra-filters.png | tr -d '\r' | q -E "^read aloud: max-run-v1, (On|Off), Filtered: "
 $H --main-menu --read-aloud --locate tests/manifest_fixture/a.txt --press O --screenshot ra-locator.png | tr -d '\r' | q "^read aloud: Optimise Search, Off$"
 # Sound as FLAC (v34): its button, W, shown and said (once only while the v34 draft was on; v34 frozen
@@ -1980,6 +1980,14 @@ build/sieve filters --line text --filters few.ini | tr -d '\r' | q "^excluded   
 build/sieve filters --line text --filters golden.ini | tr -d '\r' | q "^survivors    23166 (exact; judged)$"
 build/sieve filters --line text --alphabet ascii96 --filters written.ini | tr -d '\r' | q "^survivors    531 (exact; compact mode available)$"
 build/sieve filters --line audio --filters scored.ini | tr -d '\r' | q "^survivors    3548 (exact; compact mode available)$"
+# List W3: the fractals' words are an automaton (their sorted list built straight into its smallest one),
+# so they merge with the pages' other automata and count with them: of the 531 pages, 389 have their
+# brackets in order too, and leave the line together.
+printf '[text]\nmode = compact\nfilters = fractal-written-v1, brackets-v1\n[text.fractal-written-v1]\nkeep = exclude\n' > written-merged.ini
+build/sieve filters --line text --alphabet ascii96 --filters written-merged.ini | tr -d '\r' | q "^survivors    409913950129853462218187708951460373029279554876293367773816945 (exact; compact mode available)$"
+# List W5: where the merged automata overfill the filter memory, the reason names the largest of them.
+printf '[text]\nmode = compact\nfilters = brackets-v1, pronounceable-v1, letter-case-v1\n' > overfilled.ini
+build/sieve filters --line text --alphabet ascii96 --filter-memory 1 --filters overfilled.ini | tr -d '\r' | q "over the filter memory (1 MB); the largest automaton is brackets-v1's (121 states): they judge only$"
 # Lists Z8 and Z9: pages said aloud, capitals and brackets where writing puts them, words of a length;
 # pictures their own mirror image; films of the Game of Life and of a camera panning.
 printf '[text]\nmode = mark\nfilters = pronounceable-v1\n' > spoken.ini
@@ -2295,7 +2303,7 @@ build/sieve info --length 2 | q "39 empty slots"
 build/sieve info --line image | q "fills whole tiles exactly"
 # The setup menu renders at ordinary and enormous sizes, and scripted keys reach it.
 $H --menu --screenshot menu.png | q "saved menu.png"
-$H --menu --press "Down,Down,Down,Right,PageUp" --screenshot menu2.png | q "saved menu2.png"
+$H --menu --press "Item:items_per_wall,Right,PageUp" --screenshot menu2.png | q "saved menu2.png"
 $H --menu --length 4000000000 --video-width 100000 --video-frames 100000 --screenshot menu3.png | q "saved menu3.png"
 test -s menu.png
 test -s menu2.png

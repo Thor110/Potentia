@@ -3,7 +3,8 @@
 // A script (the CI steps, a picture's --press) used to reach a menu's row by counting Down presses
 // from the top, so moving or adding a row changed every script that passed it. `Item:ID` chooses the
 // row of that name instead, as Up/Down would, wherever it stands: on the main menu's screens (the ids
-// of MainMenu::items) and on the hallway's pause menu (pause.cpp's). Each name is given a key code of
+// of MainMenu::items), on the hallway's pause menu (pause.cpp's), and on the setup menu's list
+// (Menu::row_named: a setting's name, a line's id and its rows by number, limits, optimise, reset, enter). Each name is given a key code of
 // its own past every real key's, so it travels through --press like any other key; a menu that does
 // not know the name refuses it, saying so.
 #pragma once

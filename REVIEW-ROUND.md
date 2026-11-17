@@ -243,6 +243,16 @@ run before a release package, and after each of the three reviews. Each batch is
   - Z8. From the documents: life-causal-v1 (video) and image-mirror-v1 (pictures). `[01]` + `[10]`.
   - Z9. Designed: pronounceable-v1, letter-case-v1, brackets-v1 and word-length-v1 (pages), video-pan-v1, melody-motif-v1
     and sound-periodic-v1; the next round's designs listed in IDEAS 19.245. `[01]` + `[10]`.
+
+### List W: filters that count together (Edward, 17 November 2026; IDEAS 19.247)
+
+- [x] W1. >> OPTIMISE FILTERS << under FIND MY LIMITS: X's function, ending with every filter ticked, and
+  each stack kept within the filter memory. `[04]` + `[10]`.
+- [x] W2. A filters page no longer counts at every tick: "counted when this page is closed". `[10]`.
+- [x] W3. The fractals' lists in other lines as automata, so that they merge. `[01]` + `[10]`.
+- [x] W4. Every filter with a ranker of its own looked at; those that cannot count moved to the
+  judge-only tab (*all done 17 November 2026: the pages' and melodies' fractal lists merge; the pictures', videos', neighbour-agreement's, utf8-valid's and rgb24's stay their own, with reasons in IDEAS 19.247*). `[01]`.
+- [x] W5. The filter that overfills the filter memory named. `[10]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

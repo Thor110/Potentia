@@ -610,6 +610,7 @@ void add_page_filters(std::vector<FilterSpec>& out)
         const FilterSpec& spec = *find_filter(own);
         return std::make_unique<GoldenFilter>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "slopes") == "every");
     };
+    g.judge_only = true; // (counted, never ranked: on the judge-only tab, out of tick-all's way)
     out.push_back(g);
 
     FilterSpec sp;

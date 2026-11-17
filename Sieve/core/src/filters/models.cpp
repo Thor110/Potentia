@@ -57,6 +57,7 @@ void add_model_filters(std::vector<FilterSpec>& out)
                              "FRACTALS rows of the setup page, with fractal-drawn-v2. Exact: counts and ranks where the "
                              "line's other filters do, and with include always (a list).");
     FilterSpec& fm = out.back();
+    fm.set_elsewhere = true;
     fm.params = {{"keep", "include: only the fractals' models; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
                   {"include", "exclude"}},
                  {"turns", "drawn: each model as fitted; every: also in each of the 24 turns of a cube", FilterParam::Kind::Text, "every", 0,

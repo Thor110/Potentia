@@ -10,11 +10,14 @@
 // judges only and the line has no compact mode.
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
+#include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/fractal.hpp"
 #include "sieve/image.hpp"
+#include "sieve/plugin.hpp" // make_dfa_filter
 #include "sieve/sha256.hpp"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
@@ -559,6 +562,10 @@ constexpr uint64_t kAnyWrittenMost = uint64_t(1) << 16;
 // A filter that keeps (include) or sets aside (exclude) a list of units the fractals make in a line, or
 // with `any`, every renaming of their symbols (each unit's shape); a trie ranks the list exactly on
 // alphabets of 256 symbols or fewer, and any is written out as units while it is small (kAnyWrittenMost).
+// The most symbols a line may have for a list to be an automaton (Listed::as_dfa): past it, a table of
+// even a few states would not fit the bound every automaton here keeps (2^24 cells).
+constexpr uint32_t kListedAutomatonBaseMost = uint32_t(1) << 16;
+
 class Listed : public Filter
 {
 public:
@@ -569,6 +576,79 @@ public:
     }
     const Ranker* ranker() const override { return ranker_.get(); }
     const BigUint* survivors() const override { return ranker_ ? nullptr : &survivors_; }
+
+    // The list as an automaton (list W3: so that it merges with the line's other automata and counts with
+    // them), where it is one (not `any`) and fits: the smallest automaton of the sorted list, built a unit
+    // at a time (Daciuk, Mihov, Watson and Watson, "Incremental construction of minimal acyclic finite-state
+    // automata", 2000); for exclude, with one state more that every unit leaving the list goes to and stays
+    // in, accepting. It passes exactly what this filter passes, and ranks them in the same order.
+    std::optional<Dfa> as_dfa(uint32_t base, uint32_t length) const
+    {
+        if (any_ || units_.empty()) return std::nullopt;
+        struct Node
+        {
+            std::vector<std::pair<uint32_t, int32_t>> next; // (symbol, node), symbols increasing
+            bool final = false;
+        };
+        std::vector<Node> nodes(1);
+        std::map<std::pair<bool, std::vector<std::pair<uint32_t, int32_t>>>, int32_t> registry;
+        // (a node's last child, made minimal: an equal one already registered takes its place)
+        std::function<void(int32_t)> settle = [&](int32_t s) {
+            const int32_t child = nodes[size_t(s)].next.back().second;
+            if (!nodes[size_t(child)].next.empty()) settle(child);
+            const auto key = std::make_pair(nodes[size_t(child)].final, nodes[size_t(child)].next);
+            const auto [it, added] = registry.emplace(key, child);
+            if (!added) nodes[size_t(s)].next.back().second = it->second;
+        };
+        for (const auto& u : units_) // (in order: a std::set)
+        {
+            // Only the units the line can hold: one of another length, or with a symbol past the
+            // line's, is never met, and in the automaton would leave a path of the line's length
+            // unfinished (exclude would then set aside units the list does not hold).
+            if (u.size() != length || std::any_of(u.begin(), u.end(), [base](uint32_t c) { return c >= base; })) continue;
+            int32_t s = 0;
+            size_t i = 0;
+            while (i < u.size() && !nodes[size_t(s)].next.empty() && nodes[size_t(s)].next.back().first == u[i])
+                s = nodes[size_t(s)].next.back().second, ++i;
+            if (!nodes[size_t(s)].next.empty()) settle(s);
+            for (; i < u.size(); ++i)
+            {
+                nodes.push_back({});
+                const int32_t n = int32_t(nodes.size() - 1);
+                nodes[size_t(s)].next.push_back({u[i], n});
+                s = n;
+            }
+            nodes[size_t(s)].final = true;
+        }
+        if (!nodes[0].next.empty()) settle(0);
+        // Numbered from the root as they are reached, the orphans of the merging left out.
+        std::vector<int32_t> number(nodes.size(), -1), order{0};
+        number[0] = 0;
+        for (size_t k = 0; k < order.size(); ++k)
+            for (const auto& [c, n] : nodes[size_t(order[k])].next)
+                if (number[size_t(n)] < 0) number[size_t(n)] = int32_t(order.size()), order.push_back(n);
+        const size_t states = order.size() + (keep_ ? 0 : 1);
+        if (states > (uint64_t(1) << 24) / base) return std::nullopt; // (as the other filters bound their automata)
+        Dfa d;
+        d.base = base;
+        d.start = 0;
+        const int32_t free = keep_ ? Dfa::kDead : int32_t(order.size());
+        d.next.assign(states * base, free);
+        d.accept.assign(states, 0);
+        for (size_t k = 0; k < order.size(); ++k)
+        {
+            const Node& node = nodes[size_t(order[k])];
+            for (const auto& [c, n] : node.next)
+                if (c < base) d.next[k * base + c] = number[size_t(n)];
+            d.accept[k] = keep_ ? node.final : 0;
+        }
+        if (!keep_)
+        {
+            for (uint32_t c = 0; c < base; ++c) d.next[size_t(free) * base + c] = free;
+            d.accept[size_t(free)] = 1;
+        }
+        return minimise(d);
+    }
 
 protected:
     Listed(bool keep, bool any) : keep_(keep), any_(any) {}
@@ -875,6 +955,16 @@ public:
     }
 };
 
+// A list filter as an automaton where it is one (Listed::as_dfa) and its counting table fits the filter
+// memory, else as it is: a long list's automaton has about a state a symbol of each unit, and its table
+// a row of counts for each, where the list's own trie counts and ranks in far less.
+std::unique_ptr<Filter> as_automaton(std::unique_ptr<Listed> f, const FilterLine& l)
+{
+    if (auto d = f->as_dfa(l.base, l.length); d && DfaRanker::table_bytes(d->states(), d->base, l.length) <= filter_memory())
+        return make_dfa_filter(std::move(*d), l.length, f->provenance());
+    return f;
+}
+
 Variants variants_of(const FilterSpec& spec, const FilterValues& v)
 {
     Variants out;
@@ -979,13 +1069,18 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     drawn.params = {{"keep", "include: only the fractals drawn; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
                      {"include", "exclude"}}};
     drawn.applies = is_image;
-    drawn.counts_as = "own"; // (a trie of its pictures, not merged with other automata)
+    // Its own trie of the pictures: as an automaton (Listed::as_dfa) the 62,356 pictures of fractal-drawn-v2 at
+    // 10 x 10 in black and white make 1,031,932 states, whose counting table (1.9 GB) is past the filter
+    // memory, and fractal-moving-v2's 23,830 videos 5,903,640 (87.6 GB); the trie counts and ranks them in far
+    // less. (Where the filter memory is set high enough to hold the table, it is made the automaton, and merges.)
+    drawn.counts_as = "own";
     drawn.retired = true;
     drawn.replaced_by = "fractal-drawn-v2";
     drawn.make = [own = drawn.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+        return as_automaton(std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v)), l);
     };
+    drawn.set_elsewhere = true;
     out.push_back(drawn);
 
     // Version 2 (IDEAS 19.244): the same pictures turned, mirrored and coloured other ways.
@@ -1011,8 +1106,9 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     drawn2.params.push_back(colours);
     drawn2.make = [own = drawn2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+        return as_automaton(std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v)), l);
     };
+    drawn2.set_elsewhere = true;
     out.push_back(drawn2);
 
     // In the video line (list Y4; IDEAS 19.239: "every frame of cellular automata simulations could become
@@ -1031,8 +1127,9 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     moving.replaced_by = "fractal-moving-v2";
     moving.make = [own = moving.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+        return as_automaton(std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v)), l);
     };
+    moving.set_elsewhere = true;
     out.push_back(moving);
 
     FilterSpec moving2 = moving;
@@ -1049,11 +1146,18 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     moving2.params.push_back(colours);
     moving2.make = [own = moving2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+        return as_automaton(std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v)), l);
     };
+    moving2.set_elsewhere = true;
     out.push_back(moving2);
 
     // In the pages and audio lines (list Z4).
+    // As an automaton the fractals' words make 7,496 states on the pages line (ascii96, 32 characters) and
+    // their melodies 18,829 on the audio line (notes104, 16 notes), tables of a few megabytes; on a line of more symbols than an
+    // automaton's table takes (kListedAutomatonBaseMost), the list's own trie or a count.
+    const auto listed_counts_as = [](const FilterLine& l, const FilterValues*) {
+        return std::string(l.base > kListedAutomatonBaseMost ? "own" : "automaton");
+    };
     FilterSpec written;
     written.id = "fractal-written";
     written.title = "fractal-written";
@@ -1069,11 +1173,13 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                       {"symbols", "written: as the word writes them; any: every renaming of its characters", FilterParam::Kind::Text, "written", 0,
                        0, 1, {"written", "any"}}};
     written.applies = is_text;
-    written.counts_as = "own";
+    written.counts_as = "automaton"; // (Listed::as_dfa: so it merges with the line's other automata)
+    written.counts_as_on = listed_counts_as;
     written.make = [own = written.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Written>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "symbols") == "any");
+        return as_automaton(std::make_unique<Written>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "symbols") == "any"), l);
     };
+    written.set_elsewhere = true;
     out.push_back(written);
 
     FilterSpec scored;
@@ -1093,11 +1199,13 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                      {"transpose", "drawn: from the line's first C; every: at every pitch it fits", FilterParam::Kind::Text, "every", 0, 0, 1,
                       {"drawn", "every"}}};
     scored.applies = is_notes;
-    scored.counts_as = "own";
+    scored.counts_as = "automaton"; // (Listed::as_dfa: so it merges with the line's other automata)
+    scored.counts_as_on = listed_counts_as;
     scored.make = [own = scored.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own);
-        return std::make_unique<Scored>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "transpose") == "every");
+        return as_automaton(std::make_unique<Scored>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "transpose") == "every"), l);
     };
+    scored.set_elsewhere = true;
     out.push_back(scored);
 }
 

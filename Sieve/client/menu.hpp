@@ -275,8 +275,16 @@ private:
                          kWorldsRows = setup_row_of(Media::Worlds),
                          kAiRows = setup_row_of(Media::Ai), kFractalRows = setup_row_of(Media::Fractals),
                          kBinaryRow = setup_row_of(Media::Binary);
-    static constexpr int kLimitsRow = setup_row_of(std::nullopt), kResetRow = kLimitsRow + 1, kEnterRow = kLimitsRow + 2;
+    static constexpr int kLimitsRow = setup_row_of(std::nullopt), kOptimiseRow = kLimitsRow + 1, kResetRow = kLimitsRow + 2,
+                         kEnterRow = kLimitsRow + 3;
     int row_count() const;
+    // The row an `Item:ID` press names (scripts and CI; press_names.hpp), or -1: the GLOBAL rows by their
+    // setting (start_line, mode, key, items_per_wall, angle, title, letters, display_size, display_cache,
+    // close_up, focus, filter_memory, counting_memory, merge_cache, time_budget, item_memory); a line's
+    // first row by its id (image) and its others by number from 1 (image:2, its height); and the action
+    // rows, limits, optimise, reset and enter. So a script names the row it means, and a row added above
+    // it changes nothing.
+    static int row_named(const std::string& id);
     // The AI line's weights: the embedding (256 by the width) and, in each layer, 16 times the width squared.
     uint64_t ai_weights() const { return ai_weights_of(s_); }
 
@@ -307,6 +315,10 @@ private:
     // Z: this tab of this line; C: both tabs of this line; X: both tabs of every line.
     enum class ToggleScope { ThisTab, BothTabs, EveryLine };
     void toggle_all_filters(ToggleScope scope);
+    // OPTIMISE FILTERS (below FIND MY LIMITS; Edward, 17 November 2026): X's optimising of every line,
+    // always ending with every filter in reach ticked, the clashes weighed (X itself unticks them all
+    // where any is ticked).
+    void optimise_filters();
     bool memory_pending() const; // the filter memory setting is not yet the limit the tallies use
     bool time_pending() const;   // nor the time budget (X applies both)
     double filter_memory_setting() const; // the setting, in bytes

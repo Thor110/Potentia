@@ -505,6 +505,7 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         return std::make_unique<PeriodicFilter>(f, step_limit(f.bits, tol), share,
                                                 "tolerance=" + std::to_string(tol) + " share=" + std::to_string(share));
     };
+    per.judge_only = true;
     out.push_back(per);
 }
 
