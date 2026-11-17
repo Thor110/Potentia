@@ -1,0 +1,17 @@
+# sieve bench-make, 2026-11-17, Intel64 Family 6 Model 167 Stepping 1, GenuineIntel, 12 threads, Windows 10, sieve.exe
+search	name	kind	bytes	sieve_bytes	version	seconds	mb_per_s	pack.rope.search	pack.pieces.rope	pack.pieces.cut	pack.pieces.blocks	pack.pieces.boundaries	pack.rope.code	pack.lzma2.quick	pack.lzma2.settings-trial	pack.lzma2.first-pass	pack.lzma2.tuned-pass	pack.lzma2.7zip-pass	pack.archives.recipe	pack.mix
+1.000	prose.md	prose	867040	206190	sieve-manifest-v33	4.603	0.188	0.000	0.000	0.000	0.000	0.000	0.000	0.080	0.002	0.001	0.001	0.001	0.000	2.633
+1.000	code.cpp	code	231994	40246	sieve-manifest-v33	1.432	0.162	0.000	0.000	0.000	0.000	0.000	0.000	0.067	0.002	0.000	0.001	0.001	0.000	0.936
+1.000	oracle.py	code	535980	104557	sieve-manifest-v33	2.789	0.192	0.000	0.000	0.000	0.000	0.000	0.000	0.065	0.003	0.001	0.001	0.001	0.000	1.735
+1.000	table.csv	table	17831	7249	sieve-manifest-v32	2.831	0.006	0.499	0.098	0.691	0.048	0.643	0.000	0.207	0.251	0.000	0.000	0.000	0.000	0.975
+1.000	words.txt	word list	2921105	287033	sieve-manifest-v33	14.506	0.201	0.140	0.000	0.068	0.064	0.000	0.081	0.760	0.261	0.000	0.000	0.000	0.000	4.537
+1.000	rope.txt	prose	11440	3293	sieve-manifest-v32	1.201	0.010	0.029	0.000	0.000	0.000	0.000	0.000	0.003	0.265	0.000	0.000	0.000	0.000	0.689
+1.000	screenshot.png	picture (PNG)	92628	80502	sieve-manifest-v32	2.052	0.045	0.004	0.018	0.311	0.070	0.241	0.002	0.289	0.219	0.004	0.066	0.017	0.000	0.872
+1.000	vitruvian.jpg	picture (JPEG)	207500	206946	sieve-manifest-v32	1.064	0.195	0.008	0.014	0.024	0.015	0.009	0.003	0.055	0.004	0.001	0.002	0.001	0.000	0.876
+1.000	door.jpg	picture (JPEG)	69298	63856	sieve-manifest-v32	0.572	0.121	0.002	0.000	0.005	0.005	0.000	0.001	0.025	0.026	0.001	0.026	0.009	0.000	0.342
+1.000	spitfire.obj	mesh	469717	53137	sieve-manifest-v33	2.581	0.182	0.000	0.000	0.000	0.000	0.000	0.000	0.084	0.003	0.001	0.001	0.001	0.000	1.650
+1.000	hymn.mid	melody (MIDI)	1377	221	sieve-manifest-v32	0.026	0.053	0.012	0.000	0.000	0.000	0.000	0.000	0.000	0.003	0.000	0.002	0.001	0.000	0.000
+1.000	film.mp4	video (MP4)	234633	233863	sieve-manifest-v32	1.418	0.165	0.009	0.010	0.013	0.007	0.005	0.003	0.107	0.071	0.000	0.081	0.037	0.000	0.827
+1.000	sound.wav	sound (WAV)	88244	3233	sieve-manifest-v32	2.000	0.044	1.281	0.131	0.079	0.004	0.075	0.004	0.426	0.002	0.001	0.001	0.001	0.000	0.144
+1.000	program.exe	program (Windows)	5337607	4223640	sieve-manifest-v34	21.411	0.249	0.000	0.000	0.000	0.000	0.000	0.000	1.578	0.002	0.001	0.001	0.001	0.000	10.558
+1.000	folder.tar	tar	5765120	1311355	sieve-manifest-v33	16.230	0.355	0.000	0.000	0.000	0.000	0.000	0.000	0.054	0.003	0.000	0.000	0.000	0.000	7.769
