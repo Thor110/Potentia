@@ -1102,7 +1102,10 @@ const std::vector<Page>& pages()
          "inverted) or in any colouring of its shape (colours = any), counted exactly (the setup menu's in\n"
          "other lines row); in the video line, fractal-moving-v2 the videos that are one growing, its frames\n"
          "its depths in turn; in the models line, fractal-modelled-v1 the models that are one's lines, a line\n"
-         "a face naming its two ends.",
+         "a face naming its two ends; in the pages line, fractal-written-v1 its words; in the audio line,\n"
+         "fractal-scored-v1 its melodies, as Prusinkiewicz scored L-systems. And fractal-strange-v1 (an\n"
+         "attractor or flow that two starts a billionth apart leave apart) and fractal-lasts-v1 (an automaton\n"
+         "still alive and changing at a generation) judge the families most of whose space is noise.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},

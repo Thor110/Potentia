@@ -271,6 +271,9 @@ public:
     // filter (so its survivors are exactly the stack's survivors). Otherwise nullptr.
     // Worked out on first use (see filter.cpp), so a stack that only judges costs nothing for it.
     const Ranker* ranker() const;
+    // Where the stack is one filter that counts its survivors without ranking them (Filter::survivors: the
+    // fractals' any colouring, the video line's motion filters) and the unit is one voice: that count.
+    const BigUint* counted() const { return filters_.size() == 1 && voices_ == 1 ? filters_[0]->survivors() : nullptr; }
     std::string compact_blocker() const; // why there is no ranker ("" if there is one)
     // The memory the stack's count needs for its tables (the plugins' combined automaton's, not-written
     // with them, or the one filter that ranks it): what the filter memory must hold for it to count.

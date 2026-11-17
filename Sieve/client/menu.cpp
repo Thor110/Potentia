@@ -4402,11 +4402,15 @@ std::string Menu::fractal_elsewhere() const
 void Menu::set_fractal_elsewhere(const std::string& way)
 {
     // The image line's pictures (fractal-drawn-v2), the video line's videos of them growing, depth being
-    // time (fractal-moving-v2, list Y4), and the models line's models of their lines (fractal-modelled-v1,
-    // list Z2), set together.
+    // time (fractal-moving-v2, list Y4), the models line's models of their lines (fractal-modelled-v1,
+    // list Z2), and the pages' words and the audio line's melodies (fractal-written-v1, fractal-scored-v1,
+    // list Z4), set together. (A filter that does not apply to its line as set up, the sound line's
+    // samples for instance, is skipped there.)
     for (const auto& [lfp, id] : {std::pair<sieve::cli::LineFilters*, const char*>{&cfg_.lines[size_t(LineKind::Image)], "fractal-drawn-v2"},
                                   {&cfg_.lines[size_t(LineKind::Video)], "fractal-moving-v2"},
-                                  {&cfg_.models, "fractal-modelled-v1"}})
+                                  {&cfg_.models, "fractal-modelled-v1"},
+                                  {&cfg_.lines[size_t(LineKind::Text)], "fractal-written-v1"},
+                                  {&cfg_.lines[size_t(LineKind::Audio)], "fractal-scored-v1"}})
     {
         sieve::cli::LineFilters& lf = *lfp;
         if (way == "off") (void)sieve::cli::tick_filter(lf, id, false);

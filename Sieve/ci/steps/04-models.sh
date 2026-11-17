@@ -611,6 +611,9 @@ test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" 
 $H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere4.png > /dev/null
 grep -A2 "^\[models\]" elsewhere.ini | q "filters = fractal-modelled-v1"
 grep -A2 "^\[models.fractal-modelled-v1\]" elsewhere.ini | q "keep = include"
+# And the pages' and the audio line's (list Z4).
+grep -A2 "^\[text\]" elsewhere.ini | q "filters = fractal-written-v1"
+grep -A2 "^\[audio\]" elsewhere.ini | q "filters = fractal-scored-v1"
 printf '[models]\nmode = compact\nfilters = fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = include\n' > modelled-in.ini
 printf '[models]\nmode = compact\nfilters = fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = include\nturns = drawn\n' > modelled-drawn.ini
 printf '[models]\nmode = compact\nfilters = distinct-vertices-v1, fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = exclude\n' > modelled-out.ini

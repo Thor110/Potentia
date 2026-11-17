@@ -2448,6 +2448,193 @@ void test_notes2(const std::string& dir)
     std::cout << "notes2 checked\n";
 }
 
+// List Z: the filters added on 17 November 2026: the pages' few-values, two-symbol-run and golden-word
+// (Z7), the sound line's sound-crossings and sound-bend (Z6), the video line's video-moves and video-smooth
+// (Z5), and the fractals in the pages and audio lines, fractal-written and fractal-scored (Z4).
+extern std::string g_data; // (the data folder: defined below)
+void test_z_filters()
+{
+    static const TestResources none(nullptr, nullptr);
+    auto count = [&](const FilterLine& l, const char* name, const FilterValues& v = {}) {
+        const FilterStack st(l, {{find_filter(name), v}}, none);
+        if (st.ranker()) return st.ranker()->count().to_decimal();
+        if (const BigUint* n = st.counted()) return n->to_decimal() + " judged";
+        return std::string("none");
+    };
+    auto unit_of = [](const Alphabet& a, const std::string& t) {
+        std::vector<uint32_t> u;
+        for (const char c : t) u.push_back(*a.digit_of(char32_t(uint8_t(c))));
+        return u;
+    };
+    const Alphabet& a27 = alphabet_by_id("lower27");
+    const FilterLine page{"text", "lower27", 27, 32, &a27, 0, 0, 0};
+    // few-values: 27 pages of one letter and 351 x (2^32 - 2) of two set aside, as an automaton.
+    {
+        BigUint few(351);
+        few = BigUint::mul(few, BigUint::pow(2, 32));
+        few -= BigUint(702 - 27);
+        BigUint kept = BigUint::pow(27, 32);
+        kept -= few;
+        CHECK(count(page, "few-values-v1") == kept.to_decimal());
+        const FilterStack st(page, {{find_filter("few-values-v1"), {}}}, none);
+        CHECK(!st.passes(unit_of(a27, "abababababababababababababababab")) && st.passes(unit_of(a27, "the quick brown fox jumps over t")));
+        // (k = 4, sixteen values: past what an automaton holds at 27 letters, counted exactly all the same)
+        CHECK(count(page, "few-values-v1", {{"bits", "4"}}).find("judged") != std::string::npos);
+    }
+    // two-symbol-run: English passes, padding does not.
+    {
+        const FilterStack st(page, {{find_filter("two-symbol-run-v1"), {}}}, none);
+        CHECK(st.ranker() != nullptr);
+        CHECK(st.passes(unit_of(a27, "welcome to the sieve and its lin")));
+        CHECK(!st.passes(unit_of(a27, "welcome to the sieaaaaabbbbbaaaa"))); // (14 on a and b)
+        CHECK(!st.passes(unit_of(a27, "xyz ababababababababababababab q")));
+    }
+    // golden-word: 33 windows at length 32, each either way round, over 351 pairs; every Sturmian word, 3,648.
+    {
+        CHECK(count(page, "golden-word-v1") == "23166 judged");
+        CHECK(count(page, "golden-word-v1", {{"slopes", "every"}}) == "1280448 judged");
+        const FilterStack st(page, {{find_filter("golden-word-v1"), {}}}, none), every(page, {{find_filter("golden-word-v1"), {{"slopes", "every"}}}}, none);
+        // (the Fibonacci word's first 32 symbols, 0 as a and 1 as b; then as 1 and 0; then a balanced word of another slope)
+        CHECK(st.passes(unit_of(a27, "abaababaabaababaababaabaababaaba")) && st.passes(unit_of(a27, "babbababbabbababbababbabbababbab")));
+        CHECK(!st.passes(unit_of(a27, "aabaabaabaabaabaabaabaabaabaabaa")) && every.passes(unit_of(a27, "aabaabaabaabaabaabaabaabaabaabaa")));
+        CHECK(!every.passes(unit_of(a27, "aabbaabbaabbaabbaabbaabbaabbaabb")));
+    }
+    // The sound line: a 440 Hz tone passes both, noise neither.
+    {
+        const PcmFormat f = make_pcm_format(8000, 8, 1);
+        const FilterLine sound{"audio", f.id(), f.base(), 800, nullptr, 0, 0, 0};
+        std::vector<uint32_t> tone, noise;
+        uint64_t r = 12345;
+        for (int i = 0; i < 800; ++i)
+        {
+            tone.push_back(pcm_digit(f, int32_t(std::lround(100 * std::sin(2 * 3.14159265358979 * 440 * i / 8000.0)))));
+            r = r * 6364136223846793005ull + 1442695040888963407ull;
+            noise.push_back(uint32_t(r >> 56));
+        }
+        const FilterStack cross(sound, {{find_filter("sound-crossings-v1"), {}}}, none), bend(sound, {{find_filter("sound-bend-v1"), {}}}, none);
+        CHECK(cross.ranker() != nullptr); // (8 bits, 800 samples: the last sign and 159 crossings, an automaton)
+        CHECK(cross.passes(tone) && bend.passes(tone) && !cross.passes(noise) && !bend.passes(noise));
+        const PcmFormat f4 = make_pcm_format(8000, 4, 1);
+        const FilterLine small{"audio", f4.id(), f4.base(), 64, nullptr, 0, 0, 0};
+        CHECK(count(small, "sound-bend-v1") == "22739424633651186841132108843799674201872012366146772");
+    }
+    // The video line: still videos set aside, and frames that change a little kept, counted exactly.
+    {
+        ImageFormat vf;
+        vf.width = 10, vf.height = 10, vf.frames = 4, vf.palette = &palette_by_id("mono");
+        const FilterLine video{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
+        BigUint moving = BigUint::pow(2, 400);
+        moving -= BigUint::pow(2, 100);
+        CHECK(count(video, "video-moves-v1") == moving.to_decimal() + " judged");
+        // (5%: five pixels a frame; within five of one frame, 1 + 100 + ... + C(100, 5) = 79,375,496)
+        BigUint smooth = BigUint::mul(BigUint::pow(2, 100), BigUint::pow(BigUint(79375496), 3));
+        CHECK(count(video, "video-smooth-v1", {{"percent", "5"}}) == smooth.to_decimal() + " judged");
+        std::vector<uint32_t> still(400, 0), flicker(400, 0);
+        for (size_t i = 100; i < 200; ++i) flicker[i] = 1;
+        still[5] = still[105] = still[205] = still[305] = 1;
+        const FilterStack mv(video, {{find_filter("video-moves-v1"), {}}}, none), sm(video, {{find_filter("video-smooth-v1"), {}}}, none);
+        CHECK(!mv.passes(still) && mv.passes(flicker) && sm.passes(still) && !sm.passes(flicker));
+    }
+    // The fractals in the pages and audio lines (list Z4): counted and ranked exactly.
+    {
+        set_fractal_chart_folder(std::string(g_data) + "/fractals");
+        CHECK(count(page, "fractal-written-v1") == "43");
+        const Alphabet& a96 = alphabet_by_id("ascii96");
+        const FilterLine page96{"text", "ascii96", 96, 32, &a96, 0, 0, 0};
+        CHECK(count(page96, "fractal-written-v1") == "531");
+        const FilterLine notes{"audio", kNotesSymbolsId, kNoteSymbols, 16, nullptr, 0, 0, 0};
+        CHECK(count(notes, "fractal-scored-v1") == "3548");
+        // (the Fibonacci word's first symbols as a page: 0 and 1 are not lower27's, but are ascii96's)
+        const FilterStack w96(page96, {{find_filter("fractal-written-v1"), {}}}, none);
+        std::string fib = "01001010010010100101001001010010";
+        CHECK(w96.passes(unit_of(a96, fib)));
+    }
+    // List Z8 and Z9: pronounceable pages (an automaton, counted and ranked), mirror-image pictures, films of
+    // the Game of Life and of a camera panning (counted, judged), melodies that bring a figure back, and
+    // sound with a pitch (judged).
+    {
+        const FilterStack sp(page, {{find_filter("pronounceable-v1"), {}}}, none);
+        CHECK(sp.ranker() != nullptr);
+        CHECK(sp.passes(unit_of(a27, "strengths and queueing are words")));
+        CHECK(!sp.passes(unit_of(a27, "xqzk wrtp mnbv cxzl kjhg fdsa qw")));
+        CHECK(!sp.passes(unit_of(a27, "rhythms are fine but strrrngths ")));
+        const BigUint n = sp.ranker()->count();
+        CHECK(sp.ranker()->accepts(sp.ranker()->unrank(BigUint(12345))));
+        CHECK(!(n < BigUint::pow(10, 44)) && n < BigUint::pow(27, 32));
+    }
+    {
+        // letter-case and brackets, on ascii96 (both cases, and brackets to close)
+        const Alphabet& a96 = alphabet_by_id("ascii96");
+        const FilterLine page96{"text", "ascii96", 96, 32, &a96, 0, 0, 0};
+        CHECK(!find_filter("letter-case-v1")->applies(page) && !find_filter("brackets-v1")->applies(page));
+        const FilterStack lc(page96, {{find_filter("letter-case-v1"), {}}}, none), br(page96, {{find_filter("brackets-v1"), {}}}, none);
+        CHECK(lc.ranker() && br.ranker());
+        CHECK(lc.passes(unit_of(a96, "Sieve reads NASA files. It works")));
+        CHECK(!lc.passes(unit_of(a96, "Sieve reads NASA files. it works")));
+        CHECK(!lc.passes(unit_of(a96, "sIeve reads nasa files, it works")));
+        CHECK(br.passes(unit_of(a96, "f(x) = [a (b {c}) d] and (e) ok.")));
+        CHECK(!br.passes(unit_of(a96, "f(x) = [a (b {c)} d] and (e) ok.")));
+        CHECK(!br.passes(unit_of(a96, "f(x) = [a (b {c}) d] and (e ok..")));
+        CHECK(!br.passes(unit_of(a96, ")(x) = [a (b {c}) d] and (e) ok.")));
+    }
+    {
+        const FilterStack wl(page, {{find_filter("word-length-v1"), {{"longest", "10"}}}}, none);
+        CHECK(wl.ranker() && wl.passes(unit_of(a27, "words of ordinary lengths pass i")) && !wl.passes(unit_of(a27, "antidisestablishmentarianism ok ")));
+        // (lower27, 32 letters, no word past 20: every page but those with a run of 21 letters or more)
+        CHECK(count(page, "word-length-v1") != "none");
+    }
+    {
+        ImageFormat f;
+        f.width = 10, f.height = 10, f.palette = &palette_by_id("mono");
+        const FilterLine pic{"image", f.symbols_id(), 2, 100, nullptr, 10, 10, 1};
+        CHECK(count(pic, "image-mirror-v1") == BigUint::pow(2, 50).to_decimal() + " judged");
+        CHECK(count(pic, "image-mirror-v1", {{"axis", "both"}}) == BigUint::pow(2, 25).to_decimal() + " judged");
+        CHECK(count(pic, "image-mirror-v1", {{"axis", "turn"}}) == BigUint::pow(2, 50).to_decimal() + " judged");
+        std::vector<uint32_t> face(100, 0);
+        face[2 * 10 + 3] = face[2 * 10 + 6] = 1; // (two eyes, a mouth)
+        for (int x = 3; x <= 6; ++x) face[7 * 10 + x] = 1;
+        const FilterStack across(pic, {{find_filter("image-mirror-v1"), {}}}, none), down(pic, {{find_filter("image-mirror-v1"), {{"axis", "down"}}}}, none);
+        CHECK(across.passes(face) && !down.passes(face));
+        ImageFormat vf = f;
+        vf.frames = 4;
+        const FilterLine video{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
+        CHECK(count(video, "life-causal-v1") == BigUint::pow(2, 100).to_decimal() + " judged");
+        CHECK(count(video, "video-pan-v1") == BigUint::pow(2, 130).to_decimal() + " judged");
+        // (a blinker: three across, then three down, then across again)
+        std::vector<uint32_t> blink(400, 0);
+        for (int k = 0; k < 4; ++k)
+            for (int j = -1; j <= 1; ++j) blink[size_t(k) * 100 + (k % 2 ? size_t(5 + j) * 10 + 5 : 5 * 10 + size_t(5 + j))] = 1;
+        const FilterStack life(video, {{find_filter("life-causal-v1"), {}}}, none), pan(video, {{find_filter("video-pan-v1"), {}}}, none);
+        CHECK(life.passes(blink) && !pan.passes(blink));
+        // (a bar moving left a pixel a frame, the column coming in black)
+        std::vector<uint32_t> bar(400, 0);
+        for (int k = 0; k < 4; ++k)
+            for (int y = 0; y < 10; ++y) bar[size_t(k) * 100 + size_t(y) * 10 + size_t(7 - k)] = 1;
+        CHECK(pan.passes(bar) && !life.passes(bar));
+        CHECK(throws([&] { (void)FilterStack(video, {{find_filter("life-causal-v1"), {{"rule", "B3S23"}}}}, none); }));
+    }
+    {
+        const FilterLine notes{"audio", kNotesSymbolsId, kNoteSymbols, 16, nullptr, 0, 0, 0};
+        const FilterStack motif(notes, {{find_filter("melody-motif-v1"), {}}}, none);
+        auto melody = [](const char* text) { return canonicalise_notes(text, 16).units.at(0); };
+        // (a figure, then the same figure a fifth higher: one motif twice)
+        CHECK(motif.passes(melody("C4q D4q E4q C4q G4q A4q B4q G4q C5q C5q C5q C5q C5q C5q C5q C5q")));
+        CHECK(!motif.passes(melody("C4q D4e F4h E4q G#4e A4w B4q C5e D#4h F#4q C4e B4h D5q A#4e G4w E5q")));
+        const PcmFormat f = make_pcm_format(8000, 8, 1);
+        const FilterLine sound{"audio", f.id(), f.base(), 800, nullptr, 0, 0, 0};
+        const FilterStack periodic(sound, {{find_filter("sound-periodic-v1"), {}}}, none);
+        std::vector<uint32_t> tone, noise, quiet(800, pcm_digit(f, 0));
+        uint64_t r = 99;
+        for (int i = 0; i < 800; ++i)
+        {
+            tone.push_back(pcm_digit(f, int32_t(std::lround(100 * std::sin(2 * 3.14159265358979 * 220 * i / 8000.0)))));
+            r = r * 6364136223846793005ull + 1442695040888963407ull;
+            noise.push_back(uint32_t(r >> 56));
+        }
+        CHECK(periodic.passes(tone) && !periodic.passes(noise) && !periodic.passes(quiet));
+    }
+}
+
 void test_filters(const std::string& dir)
 {
     // Exact logarithms.
@@ -2476,11 +2663,12 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 16); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
-                                                    // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those
+    CHECK(filters_for(text_line(8)).size() == 22); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
+                                                    // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
+                                                    // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 11); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
-                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2)
+    CHECK(filters_for(image).size() == 12); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -7848,6 +8036,52 @@ void test_fractals()
         CHECK(all.first_failure(std::vector<uint32_t>(draws_not.begin(), draws_not.end())) == 0);
         CHECK(throws([&] { (void)all.first_failure(std::vector<uint32_t>(97, 'F')); })); // (longer than the line)
         for (const char* n : names) CHECK(find_filter(n)->category == "hard" && find_filter(n)->judge_only);
+        {
+            // List Z3: fractal-strange-v1 (attractors and flows) and fractal-lasts-v1 (automata), on the charted
+            // ones and on generated ones from the v5 and v6 blocks.
+            FilterLine wide = fl;
+            wide.symbols_id = "fractals/256", wide.length = 256;
+            const FilterStack strange_st(wide, {{find_filter("fractal-strange-v1"), {}}}, none), lasts_st(wide, {{find_filter("fractal-lasts-v1"), {}}}, none);
+            auto passes = [](const FilterStack& st, const std::string& t) { return st.passes(std::vector<uint32_t>(t.begin(), t.end())); };
+            std::string strange_out, lasts_out;
+            for (const auto& c : chart)
+            {
+                if (c.text.size() > 256) continue; // (past the line: charted, not generated)
+                if (!passes(strange_st, c.text)) strange_out += c.id + " ";
+                if (!passes(lasts_st, c.text)) lasts_out += c.id + " ";
+            }
+            // (Bogdanov's map at the charted settings traces loops, not chaos; the Game of Life's oscillators,
+            // gliders and spaceship, rule 184's traffic and the charted starts that settle do not last)
+            CHECK(strange_out == "bogdanov-attractor ");
+            CHECK(lasts_out == "rule-184 life-glider life-blinker life-toad life-beacon life-pulsar life-lwss diamoeba morley two-by-two anneal ");
+            const FractalSpace big(256);
+            BigUint v6_from = big.count();
+            v6_from -= big.count_v6();
+            BigUint v5_from = v6_from;
+            v5_from -= big.count_v5();
+            uint64_t state = 1;
+            for (const auto& [from, span, st, name] : {std::tuple{v5_from, big.count_v5(), &lasts_st, "v5"}, std::tuple{v6_from, big.count_v6(), &strange_st, "v6"}})
+            {
+                size_t kept = 0, paths = 0, n = 0;
+                for (int k = 0; k < 300; ++k)
+                {
+                    // (a spread of the block: a 60-bit number scaled to it)
+                    state = state * 6364136223846793005ull + 1442695040888963407ull;
+                    BigUint i = span;
+                    i.mul_small(uint32_t(state >> 40));
+                    i >>= 24;
+                    i += from;
+                    const std::string t = big.at(i);
+                    const auto f = read_fractal(t);
+                    if (!f) continue;
+                    if (std::string(name) == "v6" && !f->is_path()) continue;
+                    ++n, ++paths;
+                    if (passes(*st, t)) ++kept;
+                }
+                // (of 300 spread over each block: v5's automata, 195 last; v6's attractors and flows, none strange)
+                CHECK(n == 300 && kept == (std::string(name) == "v5" ? 195u : 0u));
+            }
+        }
     }
     // In other lines (list X1c): fractal-drawn-v1 on the image line, the charted fractals drawn at each
     // depth and fitted as a picture is. Counted and ranked exactly, both ways round.
@@ -9637,6 +9871,7 @@ void run_all(int argc, char** argv)
         RUN(test_guided_vectors(dir));
         PART("filters");
         RUN(test_filters(dir));
+        RUN(test_z_filters());
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

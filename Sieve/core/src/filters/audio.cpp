@@ -1,9 +1,17 @@
-// Filters for melodies (the notes104 audio line): key.
+// Filters for melodies (the notes104 audio line): key; and (list Z9) melody-motif, for every notes set: a
+// melody that brings a figure back. A figure is k notes in a row (rests left out), heard as its steps (the
+// intervals between them) and its lengths, so a figure moved up or down is the same figure; a melody passes
+// where some figure comes back, not overlapping itself, at least `times` times. Music is mostly repetition,
+// a motif stated and stated again (Beethoven's fifth's four notes, a nursery rhyme's phrases); noise almost
+// never repeats one. Judged: whether a figure recurs is not a rule an automaton of a few states holds.
 
 #include "sieve/audio.hpp"
 #include "sieve/filter.hpp"
 
 #include <array>
+#include <map>
+#include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -119,6 +127,46 @@ private:
     std::unique_ptr<Ranker> ranker_;
 };
 
+class Motif : public Filter
+{
+public:
+    Motif(const FilterLine& l, uint32_t notes, uint32_t times) : set_(note_set_of(l.symbols_id)), notes_(notes), times_(times)
+    {
+        provenance_ = "notes=" + std::to_string(notes) + " times=" + std::to_string(times);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        // Each voice on its own (the stack hands a filter one voice at a time): its notes, rests left out.
+        std::vector<std::pair<int, uint32_t>> played; // (MIDI, sixteenths)
+        for (const uint32_t d : unit)
+            if (const uint32_t m = set_.midi(d)) played.push_back({int(m), set_.sixteenths(d)});
+        if (played.size() < size_t(notes_) * times_) return false;
+        // Each figure: its steps and lengths, where it was last met, and how many times so far (not overlapping).
+        std::map<std::vector<int>, std::pair<size_t, uint32_t>> seen;
+        for (size_t i = 0; i + notes_ <= played.size(); ++i)
+        {
+            std::vector<int> key;
+            for (size_t j = 0; j < notes_; ++j)
+            {
+                if (j) key.push_back(played[i + j].first - played[i + j - 1].first);
+                key.push_back(int(played[i + j].second));
+            }
+            auto [it, fresh] = seen.emplace(std::move(key), std::make_pair(i, 1u));
+            if (fresh) continue;
+            if (i >= it->second.first + notes_)
+            {
+                it->second.first = i;
+                if (++it->second.second >= times_) return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    NoteSet set_;
+    uint32_t notes_, times_;
+};
+
 } // namespace
 
 void add_audio_filters(std::vector<FilterSpec>& out)
@@ -142,6 +190,21 @@ void add_audio_filters(std::vector<FilterSpec>& out)
         return std::make_unique<Key>(param_value(s, v, "tonic"), param_value(s, v, "scale"), l.length);
     };
     out.push_back(key);
+
+    FilterSpec motif;
+    motif.id = "melody-motif";
+    motif.title = "melody-motif";
+    motif.description = "Melodies: a figure of k notes in a row (rests left out), heard as its steps and lengths, so moved up or "
+                        "down it is the same figure, comes back at least `times` times without overlapping itself: a motif stated "
+                        "and stated again, as music mostly is and noise almost never. Each voice on its own. Judged.";
+    motif.params = {{"notes", "the notes in a figure", FilterParam::Kind::Integer, "4", 2, 16, 1, {}},
+                    {"times", "how many times a figure is heard", FilterParam::Kind::Integer, "2", 2, 8, 1, {}}};
+    motif.applies = [](const FilterLine& l) { return l.kind == "audio" && is_note_symbols(l.symbols_id); };
+    motif.make = [own = motif.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Motif>(l, uint32_t(param_int(spec, v, "notes")), uint32_t(param_int(spec, v, "times")));
+    };
+    out.push_back(motif);
 }
 
 } // namespace sieve

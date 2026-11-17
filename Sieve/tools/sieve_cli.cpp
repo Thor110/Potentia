@@ -3021,7 +3021,17 @@ int cmd_filters(const Args& a)
             };
             std::cout << "share        the stack keeps " << share(st.ranker()->count()) << " of the line and sets aside " << share(excluded) << "\n";
         }
-        else std::cout << "compact      unavailable: " << st.compact_blocker() << "\n";
+        else
+        {
+            if (const BigUint* n = st.counted())
+            {
+                BigUint excluded = line.space.size();
+                excluded -= *n;
+                std::cout << "survivors    " << n->to_decimal() << " (exact; judged)\n"
+                          << "excluded     " << excluded.to_decimal() << " (exact)\n";
+            }
+            std::cout << "compact      unavailable: " << st.compact_blocker() << "\n";
+        }
     }
     return 0;
 }

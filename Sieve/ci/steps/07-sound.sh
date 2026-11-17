@@ -34,6 +34,13 @@ echo "$out" | tr -d '\r' | q "there is no ffmpeg at"
 # Its filters judge each channel; the three of them merge and count exactly at 800 samples.
 printf '[audio]\nmode = mark\nfilters = sound-peak-v1, sound-step-v1, silence-run-v1\n[audio.silence-run-v1]\nsamples = 800\n' > sound.ini
 $exe filters --line audio --note-set pcm --length 800 --filters sound.ini | tr -d '\r' | q "keeps 10^-102.20"
+# List Z6 (IDEAS 19.232): zero crossings capped (an automaton of the last sign and the crossings so far) and
+# the second difference bounded (an automaton of the two samples before, to 7 bits; judged at 8).
+printf '[audio]\nmode = mark\nfilters = sound-crossings-v1\n' > crossings.ini
+printf '[audio]\nmode = mark\nfilters = sound-bend-v1\n' > bend.ini
+$exe filters --line audio --note-set pcm --length 800 --filters crossings.ini | tr -d '\r' | q "keeps 10^-67.87"
+$exe filters --line audio --note-set pcm --bits 4 --length 800 --filters bend.ini | tr -d '\r' | q "keeps 10^-315.44"
+$exe filters --line audio --note-set pcm --length 800 --filters bend.ini | tr -d '\r' | q "^compact      unavailable"
 # Open-ended notes (notes3): ticks and levels, and a MIDI file that reads back as the same music.
 o="--line audio --note-set notes3 --voices 2 --length 4 --instruments 0,40 --mode positional"
 $exe warp $o "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2" | tr -d '\r' | q "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2"

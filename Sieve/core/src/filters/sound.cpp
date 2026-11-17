@@ -15,6 +15,19 @@
 //   silence-run-v1   no run of more than N silent samples (digit 0): units that are mostly
 //                    silence, which the start of the line in positional order is full of. An
 //                    automaton whose state is the run so far, where it fits; judged past that.
+//   sound-crossings-v1  at most a share of the neighbouring pairs cross zero (one sample above it,
+//                    the next below, or the other way; IDEAS 19.232): noise crosses about every other
+//                    sample, tones and voices far less. An automaton whose state is the last sample's
+//                    sign (none, above, below; silence keeps the last) and the crossings so far, where
+//                    it fits; judged past that.
+//   sound-bend-v1    the second difference, s[i] - 2 s[i-1] + s[i-2], at most a share of the range
+//                    (IDEAS 19.232): sound-step bounds the slope, this how sharply it bends, which
+//                    real waves do gently. An automaton whose state is the two samples before, where
+//                    it fits (to 7 bits a sample); judged past that.
+//   sound-periodic-v1  the sound repeats itself a short way on (list Z9; IDEAS 19.232's "periodicity, the
+//                    mark of a pitch"): for some period from the rate / 1,000 to the rate / 50 samples (a
+//                    pitch of 50 Hz to 1 kHz), most samples are within a share of the range of the one a
+//                    period before. A voice, an instrument, a hum pass; noise does not. Judged.
 
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
@@ -24,6 +37,8 @@
 #include <algorithm>
 #include <mutex>
 #include <optional>
+#include <span>
+#include <vector>
 #include <stdexcept>
 
 namespace sieve {
@@ -216,6 +231,140 @@ private:
     uint64_t most_;
 };
 
+// ---------------------------------------------------------------- sound-crossings
+
+// A sample's sign: 0 silent, 1 above, 2 below.
+uint32_t sign_of(const PcmFormat& f, uint32_t digit)
+{
+    const int32_t v = pcm_sample(f, digit);
+    return v > 0 ? 1 : v < 0 ? 2 : 0;
+}
+
+uint64_t crossings_allowed(uint32_t length, int64_t permille) { return length < 2 ? 0 : uint64_t(length - 1) * uint64_t(permille) / 1000; }
+
+std::optional<Dfa> crossings_dfa(const PcmFormat& f, uint64_t most)
+{
+    const uint64_t B = f.base();
+    // State 3 k + s: k crossings so far, the last sign that was not silence s (0: none yet).
+    const uint64_t states = 3 * (most + 1);
+    if (!cells_fit(states, B)) return std::nullopt;
+    Dfa d;
+    d.base = uint32_t(B);
+    d.start = 0;
+    d.accept.assign(size_t(states), 1);
+    d.next.assign(size_t(states * B), Dfa::kDead);
+    std::vector<uint32_t> sign(static_cast<size_t>(B));
+    for (uint64_t c = 0; c < B; ++c) sign[size_t(c)] = sign_of(f, uint32_t(c));
+    for (uint64_t k = 0; k <= most; ++k)
+        for (uint64_t last = 0; last < 3; ++last)
+            for (uint64_t c = 0; c < B; ++c)
+            {
+                const uint32_t now = sign[size_t(c)];
+                if (now == 0) d.next[size_t((3 * k + last) * B + c)] = int32_t(3 * k + last); // (silence keeps the last sign)
+                else if (last == 0 || now == last) d.next[size_t((3 * k + last) * B + c)] = int32_t(3 * k + now);
+                else if (k + 1 <= most) d.next[size_t((3 * k + last) * B + c)] = int32_t(3 * (k + 1) + now);
+            }
+    return minimise(d);
+}
+
+class CrossingsFilter : public Filter
+{
+public:
+    CrossingsFilter(const PcmFormat& f, uint64_t most, std::string prov) : f_(f), most_(most) { provenance_ = std::move(prov); }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        uint32_t last = 0;
+        uint64_t k = 0;
+        for (const uint32_t d : unit)
+        {
+            const uint32_t now = sign_of(f_, d);
+            if (now == 0) continue;
+            if (last != 0 && now != last && ++k > most_) return false;
+            last = now;
+        }
+        return true;
+    }
+
+private:
+    PcmFormat f_;
+    uint64_t most_;
+};
+
+// ---------------------------------------------------------------- sound-bend
+
+std::optional<Dfa> bend_dfa(const PcmFormat& f, int64_t limit)
+{
+    const uint64_t B = f.base();
+    // State 0: nothing yet; 1 + a: one sample, a; 1 + B + a B + b: the last two, a then b.
+    const uint64_t states = 1 + B + B * B;
+    if (!cells_fit(states, B)) return std::nullopt;
+    Dfa d;
+    d.base = uint32_t(B);
+    d.start = 0;
+    d.accept.assign(size_t(states), 1);
+    d.next.assign(size_t(states * B), Dfa::kDead);
+    for (uint64_t c = 0; c < B; ++c) d.next[size_t(c)] = int32_t(1 + c);
+    for (uint64_t a = 0; a < B; ++a)
+        for (uint64_t c = 0; c < B; ++c) d.next[size_t((1 + a) * B + c)] = int32_t(1 + B + a * B + c);
+    for (uint64_t a = 0; a < B; ++a)
+        for (uint64_t b = 0; b < B; ++b)
+        {
+            const int64_t sa = pcm_sample(f, uint32_t(a)), sb = pcm_sample(f, uint32_t(b));
+            for (uint64_t c = 0; c < B; ++c)
+                if (std::abs(int64_t(pcm_sample(f, uint32_t(c))) - 2 * sb + sa) <= limit)
+                    d.next[size_t((1 + B + a * B + b) * B + c)] = int32_t(1 + B + b * B + c);
+        }
+    return minimise(d);
+}
+
+class BendFilter : public Filter
+{
+public:
+    BendFilter(const PcmFormat& f, int64_t limit, std::string prov) : f_(f), limit_(limit) { provenance_ = std::move(prov); }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        for (size_t i = 2; i < unit.size(); ++i)
+            if (std::abs(int64_t(pcm_sample(f_, unit[i])) - 2 * int64_t(pcm_sample(f_, unit[i - 1])) + int64_t(pcm_sample(f_, unit[i - 2]))) > limit_)
+                return false;
+        return true;
+    }
+
+private:
+    PcmFormat f_;
+    int64_t limit_;
+};
+
+// ---------------------------------------------------------------- sound-periodic
+
+class PeriodicFilter : public Filter
+{
+public:
+    PeriodicFilter(const PcmFormat& f, int64_t tolerance, int64_t share, std::string prov) : f_(f), tolerance_(tolerance), share_(share)
+    {
+        provenance_ = std::move(prov);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const size_t lo = std::max<size_t>(2, f_.rate / 1000), hi = std::max<size_t>(lo, f_.rate / 50);
+        std::vector<int32_t> s(unit.size());
+        for (size_t i = 0; i < unit.size(); ++i) s[i] = pcm_sample(f_, unit[i]);
+        bool loud = false; // (silence repeats at every period: it is not a pitch)
+        for (const int32_t v : s) loud = loud || std::abs(int64_t(v)) > tolerance_;
+        if (!loud) return false;
+        for (size_t p = lo; p <= hi && p * 2 <= s.size(); ++p)
+        {
+            size_t close = 0;
+            for (size_t i = p; i < s.size(); ++i) close += std::abs(int64_t(s[i]) - s[i - p]) <= tolerance_;
+            if (int64_t(close) * 100 >= share_ * int64_t(s.size() - p)) return true;
+        }
+        return false;
+    }
+
+private:
+    PcmFormat f_;
+    int64_t tolerance_, share_;
+};
+
 } // namespace
 
 void add_sound_filters(std::vector<FilterSpec>& out)
@@ -285,6 +434,78 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         return cells_fit(run + 1, l.base) ? "automaton" : "";
     };
     out.push_back(r);
+
+    FilterSpec x;
+    x.id = "sound-crossings";
+    x.title = "sound-crossings";
+    x.description = "Sound: at most so many of each thousand neighbouring pairs cross zero (one sample above silence, the next "
+                    "below, or the other way; a silent sample keeps the sign before it). Noise crosses about every other sample; "
+                    "a tone or a voice far less (a 440 Hz tone at 8,000 samples a second, 110 a thousand). Each channel on its own. "
+                    "Counted as an automaton (the last sign and the crossings so far) while it fits; judged past that.";
+    x.params = {{"permille", "the most crossings allowed, a thousandth of the neighbouring pairs each", FilterParam::Kind::Integer, "200", 0,
+                 1000, 10, {}}};
+    x.applies = sound_line;
+    x.counts_as = "automaton";
+    x.make = [own = x.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const PcmFormat f = pcm_format_of(l.symbols_id);
+        const int64_t pm = param_int(*find_filter(own), v, "permille");
+        const uint64_t most = crossings_allowed(l.length, pm);
+        const std::string prov = "permille=" + std::to_string(pm) + " crossings=" + std::to_string(most);
+        if (auto dfa = crossings_dfa(f, most)) return make_dfa_filter(std::move(*dfa), l.length, prov);
+        return std::make_unique<CrossingsFilter>(f, most, prov);
+    };
+    x.counts_as_on = [own = x.name()](const FilterLine& l, const FilterValues* v) -> std::string {
+        int64_t pm = 1000;
+        if (v)
+            try { pm = param_int(*find_filter(own), *v, "permille"); }
+            catch (const std::exception&) {} // a malformed setting: as without one
+        return cells_fit(3 * (crossings_allowed(l.length, pm) + 1), l.base) ? "automaton" : "";
+    };
+    out.push_back(x);
+
+    FilterSpec b;
+    b.id = "sound-bend";
+    b.title = "sound-bend";
+    b.description = "Sound: the second difference (a sample, less twice the one before, plus the one before that) at most a share of "
+                    "the range: sound-step bounds how steeply a wave moves, this how sharply it turns, which real waves do gently "
+                    "and noise does not. Each channel on its own. Counted as an automaton (the two samples before) to 7 bits a "
+                    "sample; judged past that.";
+    b.params = {{"percent", "the largest second difference, as a percentage of the range", FilterParam::Kind::Integer, "25", 1, 200, 1, {}}};
+    b.applies = sound_line;
+    b.counts_as = "automaton";
+    b.make = [own = b.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const PcmFormat f = pcm_format_of(l.symbols_id);
+        const int64_t pct = param_int(*find_filter(own), v, "percent");
+        const int64_t limit = step_limit(f.bits, pct);
+        const std::string prov = "percent=" + std::to_string(pct) + " bend=" + std::to_string(limit);
+        if (auto dfa = bend_dfa(f, limit)) return make_dfa_filter(std::move(*dfa), l.length, prov);
+        return std::make_unique<BendFilter>(f, limit, prov);
+    };
+    b.counts_as_on = [](const FilterLine& l, const FilterValues*) -> std::string {
+        const uint64_t B = l.base;
+        return cells_fit(1 + B + B * B, B) ? "automaton" : "";
+    };
+    out.push_back(b);
+
+    FilterSpec per;
+    per.id = "sound-periodic";
+    per.title = "sound-periodic";
+    per.description = "Sound: it repeats itself a short way on, the mark of a pitch. For some period from the rate / 1,000 to the rate / "
+                      "50 samples (a pitch of 50 Hz to 1 kHz), at least `share` percent of the samples are within `tolerance` "
+                      "percent of the range of the one a period before; silence alone does not pass. A voice, an instrument, a "
+                      "hum pass; noise does not. Each channel on its own. Judged.";
+    per.params = {{"tolerance", "how close a sample must be to the one a period before, as a percentage of the range", FilterParam::Kind::Integer,
+                   "10", 1, 100, 1, {}},
+                  {"share", "the percentage of samples that must be that close", FilterParam::Kind::Integer, "80", 1, 100, 5, {}}};
+    per.applies = sound_line;
+    per.make = [own = per.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const PcmFormat f = pcm_format_of(l.symbols_id);
+        const FilterSpec& spec = *find_filter(own);
+        const int64_t tol = param_int(spec, v, "tolerance"), share = param_int(spec, v, "share");
+        return std::make_unique<PeriodicFilter>(f, step_limit(f.bits, tol), share,
+                                                "tolerance=" + std::to_string(tol) + " share=" + std::to_string(share));
+    };
+    out.push_back(per);
 }
 
 } // namespace sieve

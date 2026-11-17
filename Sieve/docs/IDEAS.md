@@ -9479,7 +9479,7 @@ on new filters at some point, especially for the PCM audio state space so that i
   fits, judged past that); **periodicity** (a stretch that repeats a short way on, the mark of a pitch;
   costlier, and hard to count exactly); **spectral flatness** (noise is flat, sound has peaks; the
   strongest, but likely a judge after the fact rather than an exact count). The first two fit the
-  machinery sound-step uses and can be built and measured as it was.
+  machinery sound-step uses and can be built and measured as it was. *Built (list Z, 17 November 2026)*: few-values-v1 (more than 2^k distinct symbols, k a setting from 1; an automaton of the symbols seen where it fits, counted exactly past that), two-symbol-run-v1 (no stretch of more than N on at most two symbols; N = 12 from 1,304 pages of English prose, the longest 3 to 7 on all but 11 and 15 at most), sound-crossings-v1 and sound-bend-v1 (the first two sound candidates, automata where they fit). Not yet: the bits' other order (not-written-v2), still to be measured before it is added, and periodicity and spectral flatness for sound.
 
 **19.233 State spaces that unfold as formats are added, on a hyperbolic plane (Edward, 15 November
 2026).** His words: "should or shouldn't we make it so that the state spaces naturally unfold when we add
@@ -9820,7 +9820,7 @@ for example".
   three-dimensional sets are left. The box-counting dimension's error (the equilateral Sierpinski
   triangle at 1.595 against 1.585, Edward's question of 16 November) was measured with the grid shifted
   by 1/2, 1/4 and 1/8 of a cell and the fewest cells taken: 1.594 to 1.596, the fern 1.278 throughout, so
-  the error is in how the count bends across the grids, not where the grid lies, and the measure stays. *The models line (list Z2, 17 November 2026)*: Edward, asked whether that meant adding the fractals to the models line or culling them: "in theory those fractals are already there, so culling would make the most sense". fractal-modelled-v1 finds or culls the charted fractals' lines as meshes (3,216 models at 8 vertices and 12 faces, in every turn of a cube); only the shallow depths fit so few vertices.
+  the error is in how the count bends across the grids, not where the grid lies, and the measure stays. *The models line (list Z2, 17 November 2026)*: Edward, asked whether that meant adding the fractals to the models line or culling them: "in theory those fractals are already there, so culling would make the most sense". fractal-modelled-v1 finds or culls the charted fractals' lines as meshes (3,216 models at 8 vertices and 12 faces, in every turn of a cube); only the shallow depths fit so few vertices. *The word as a filter (list Z7, 17 November 2026)*: golden-word-v1, a page of two symbols that is a window of the Fibonacci word either way round (N + 1 windows at length N, over each pair of symbols: 23,166 pages of 32 on lower27), and with slopes = every, of any Sturmian (balanced) word (1,280,448), counted exactly and judged.
 
 **19.236 The CI's steps split further, 1a, 1b and so on (Edward, 16 November 2026).** His words: "perhaps we
 could start splitting the test scripts down even further than the current 11 odd steps into step 1a,b etc",
@@ -10053,3 +10053,39 @@ eventually and Settings should be renamed Potentia Settings so that it can fit a
   thirteen rows of 44 pixels still run under the footer, as before (now Potentia Settings and Exit
   Sieve, where Replays and Exit Sieve were), to be fitted as Settings > Graphics' rows are.
 
+**19.245 Filters for meaning, the second round (Edward, 17 November 2026).** His words: "go through the
+documentation and look for any more ideas for filters that are lying around and work on those", then
+"design as many as you can that you think would be worth implementing yourself, as impossible a task as
+it is we should be aiming to make meaningful content pop out of the walls in the long run".
+- *The approach:* each line's noise is the rule; meaning is the exception, and each filter names one
+  mark that meaning leaves and noise almost never does, measured on real material before its default is
+  set. The best of them are automata, which count and rank exactly, so the line compacts to what they
+  keep and every shelf shows it; those that compare a unit with another part of itself (a frame with the
+  one before, a picture with its mirror) are counted exactly and judged.
+- *Built from the documents (list Z8):* life-causal-v1, a film of a life-like automaton (19.141's
+  causal variant of noise); image-mirror-v1, the picture its own mirror image (the figure symmetry of
+  §1512).
+- *Designed and built (list Z9):* pronounceable-v1 (every word could be said aloud: pages of 1,000
+  lower27 letters keep 10^-29.07 of the line, and English passes); letter-case-v1 (capitals where
+  writing puts them: 10^-42.46 of ascii96 pages of 1,000); brackets-v1 (asides and blocks closed in
+  order: 10^-14.87); video-pan-v1 (a camera panning across a scene); melody-motif-v1 (a figure stated and
+  stated again: about 1 in 100,000 random melodies); sound-periodic-v1 (a pitch: a period of 50 Hz to
+  1 kHz repeating); word-length-v1 (no word past 20 letters).
+- *Designed, still to build (the next round):*
+  - Pages: word lengths shaped as a language's (most words 2 to 8 letters; their cap, word-length-v1,
+    built: 10^-24.23 of lower27 pages of 1,000); a sentence's length bounded (its words between ends); punctuation followed by a space;
+    digits grouped as numbers are (no "1a2b"); a page that is a line of verse (stresses alternating, a
+    rhyme at the end), judged.
+  - Pictures: a horizon (a row above which the colours differ from those below, an automaton of the
+    rows); a frame or border of one colour; colour shared in regions of at least k pixels (no lone
+    specks), an automaton of two rows; a gradient across the picture in one direction.
+  - Video: a scene cut (one frame changes nearly all, the rest little); a sprite moving (a shape the same
+    from frame to frame, moved); a fade (each frame nearer one colour).
+  - Sound: an envelope (loudness rising then falling, as a note's attack and decay); two notes' pitches
+    at a musical interval; speech's rhythm (loud and quiet syllables, 3 to 7 a second).
+  - Melodies: a phrase ending on the key's home note after a step; a rhythm that keeps one metre's bar;
+    two voices that move against each other (contrary motion).
+  - Models: one solid (every face reached from every other through shared edges), watertight (each
+    edge in two faces), judged on the models line's own stack.
+  - Across lines: a page whose words name the picture beside it, a melody that fits its title's
+    syllables: the cross-dimensional filters of §19.235's "every line by every other".

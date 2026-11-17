@@ -225,8 +225,24 @@ run before a release package, and after each of the three reviews. Each batch is
   fractal-moving-v2, each picture and video also turned, mirrored and inverted, or in any colouring of its
   shape (*made 17 November 2026*). `[01]` + `[04]` + `[10]`.
 - Z2. The models line (Edward, 17 November 2026: "in theory those fractals are already there, so culling
-  would make the most sense"): the charted fractals' meshes found on the models line, or culled from it.
-  `[01]` + `[04]`.
+  would make the most sense"): the charted fractals' meshes found on the models line, or culled from it
+  (*made 17 November 2026*). `[01]` + `[04]`.
+- Z3 to Z7 (Edward, 17 November 2026: "go ahead with 1 through 5 next"; "the filters dictate what we get and
+  how we find it so the more the better"), *made 17 November 2026*:
+  - Z3. Noise filters for the new families: fractal-strange-v1 (attractors and flows) and fractal-lasts-v1
+    (automata). `[01]`.
+  - Z4. The fractals in the pages and audio lines: fractal-written-v1 and fractal-scored-v1 (as Prusinkiewicz
+    scored L-systems), set by the third FRACTALS row. `[01]` + `[04]` + `[10]`.
+  - Z5. The video line's own: video-moves-v1 and video-smooth-v1, counted exactly and judged. `[01]` + `[10]`.
+  - Z6. The sound line's: sound-crossings-v1 and sound-bend-v1 (IDEAS 19.232). `[01]` + `[07]`.
+  - Z7. The pages': few-values-v1, two-symbol-run-v1 and golden-word-v1 (IDEAS 19.232, 19.235); the bits'
+    other order left to be measured. `[01]` + `[10]`.
+- Z8 and Z9 (Edward, 17 November 2026: "look for any more ideas for filters that are lying around and work on
+  those", then "design as many as you can ... make meaningful content pop out of the walls"), *made 17
+  November 2026* (IDEAS 19.245):
+  - Z8. From the documents: life-causal-v1 (video) and image-mirror-v1 (pictures). `[01]` + `[10]`.
+  - Z9. Designed: pronounceable-v1, letter-case-v1, brackets-v1 and word-length-v1 (pages), video-pan-v1, melody-motif-v1
+    and sound-periodic-v1; the next round's designs listed in IDEAS 19.245. `[01]` + `[10]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

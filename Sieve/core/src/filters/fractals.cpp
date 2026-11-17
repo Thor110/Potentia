@@ -8,6 +8,8 @@
 // every one of them. Each judges a ruleset by the symbols its axiom reaches, rule after rule, at any
 // depth (its "reach"), without growing it, but fractal-dimension (list X2), which draws it and measures. None of them can yet count how many of the space pass, so each
 // judges only and the line has no compact mode.
+#include "sieve/alphabet.hpp"
+#include "sieve/audio.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/fractal.hpp"
 #include "sieve/image.hpp"
@@ -268,6 +270,123 @@ bool canonical(const Fractal& f)
     return true;
 }
 
+// ---------------------------------------------------------------- fractal-strange, fractal-lasts (list Z3)
+//
+// The noise of the families X5 and Y2 brought (Edward, 17 November 2026: "the filters dictate what we get
+// and how we find it so the more the better"): most attractors and flows of the space settle on a point or
+// a loop, or fly off; most automata die out, freeze or repeat.
+
+// A path's points at a depth long enough for two starts a billionth apart to part on a strange attractor:
+// a map's fourth (8,192 points), a flow's sixth (32,768 steps, as its steps are short: Rossler's, 0.02 of
+// a time unit, part a billionth to a hundredth in about 330 units), or nothing where it does not stay
+// finite that long.
+constexpr uint32_t kStrangeMapDepth = 3, kStrangeFlowDepth = 5;
+std::optional<std::vector<std::array<double, 3>>> whole_path(const Fractal& f)
+{
+    const uint32_t want = f.family == Fractal::Family::Flow ? kStrangeFlowDepth : kStrangeMapDepth;
+    const uint32_t d = std::min(want, fractal_deepest_within(f, kFractalMost));
+    auto p = fractal_path(f, d);
+    // (the path a depth holds when every point is finite: its points less the 64 left out)
+    if (!p || p->size() + 64 < (size_t(1024) << d)) return std::nullopt;
+    return p;
+}
+
+// Strange: its path stays finite, and a start a billionth away (x moved) ends further from it than a
+// thousandth of the path's extent: sensitive to where it starts, as a chaotic attractor is and a point, a
+// loop or a torus is not.
+bool strange(const Fractal& f)
+{
+    if (!f.is_path()) return true;
+    const auto a = whole_path(f);
+    if (!a || a->empty()) return false;
+    Fractal g = f;
+    g.from = true;
+    g.from_value[0] += 1e-9;
+    const auto b = whole_path(g);
+    if (!b || b->size() != a->size()) return false;
+    double extent = 0;
+    for (int k = 0; k < 3; ++k)
+    {
+        double lo = (*a)[0][size_t(k)], hi = lo;
+        for (const auto& q : *a) lo = std::min(lo, q[size_t(k)]), hi = std::max(hi, q[size_t(k)]);
+        extent = std::max(extent, hi - lo);
+    }
+    if (!(extent > 1e-6)) return false;
+    double apart = 0;
+    for (int k = 0; k < 3; ++k) apart = std::max(apart, std::abs(a->back()[size_t(k)] - b->back()[size_t(k)]));
+    return apart > extent * 1e-3;
+}
+
+// An automaton's live part at a generation, apart from where it stands: the field with its rows and
+// columns of only the field beyond taken off (an elementary one's newest row), and the beyond.
+std::vector<uint8_t> live_part(const AutomatonCells& c, bool newest_row)
+{
+    const uint32_t y0 = newest_row ? c.height - 1 : 0;
+    uint32_t lx = c.width, hx = 0, ly = c.height, hy = 0;
+    for (uint32_t y = y0; y < c.height; ++y)
+        for (uint32_t x = 0; x < c.width; ++x)
+            if (c.cells[size_t(y) * c.width + x] != c.beyond) lx = std::min(lx, x), hx = std::max(hx, x), ly = std::min(ly, y), hy = std::max(hy, y);
+    std::vector<uint8_t> out{c.beyond};
+    if (lx > hx) return out; // (nothing but the beyond: died out, or every cell the same)
+    out.push_back(uint8_t(hx - lx + 1));
+    for (uint32_t y = ly; y <= hy; ++y)
+        for (uint32_t x = lx; x <= hx; ++x) out.push_back(c.cells[size_t(y) * c.width + x]);
+    return out;
+}
+
+// Lasts: at generation G it is alive (some cell not the beyond), and its live part, wherever it stands,
+// is none of the last kLastsLooked generations' (not frozen, not repeating with a short period, not a
+// glider moving on). Every other family passes.
+constexpr uint32_t kLastsLooked = 8;
+bool lasts_at(const Fractal& f, uint32_t generations)
+{
+    if (!f.is_automaton()) return true;
+    const uint32_t g = std::min(generations, fractal_deepest_within(f, kFractalMost));
+    if (g < kLastsLooked) return false;
+    const bool elementary = f.family == Fractal::Family::Elementary;
+    std::vector<std::vector<uint8_t>> parts;
+    if (elementary)
+    {
+        // (one call holds every generation's row: each row's own beyond is the cell at its left, outside
+        // the window it had then, but for the newest, whose beyond is the field's)
+        const auto c = fractal_cells(f, g);
+        if (!c) return false;
+        for (uint32_t k = g - kLastsLooked; k <= g; ++k)
+        {
+            AutomatonCells row;
+            row.width = c->width, row.height = 1;
+            row.cells.assign(c->cells.begin() + std::ptrdiff_t(size_t(k) * c->width), c->cells.begin() + std::ptrdiff_t(size_t(k + 1) * c->width));
+            row.beyond = k == g ? c->beyond : c->cells[size_t(k) * c->width];
+            parts.push_back(live_part(row, true));
+        }
+    }
+    else
+        for (uint32_t k = g - kLastsLooked; k <= g; ++k)
+        {
+            const auto c = fractal_cells(f, k);
+            if (!c) return false;
+            parts.push_back(live_part(*c, false));
+        }
+    if (parts.back().size() <= 1) return false;
+    for (size_t k = 0; k + 1 < parts.size(); ++k)
+        if (parts[k] == parts.back()) return false;
+    return true;
+}
+
+class Lasts : public Filter
+{
+public:
+    explicit Lasts(uint32_t generations) : generations_(generations) {}
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const auto f = fractal_of(unit);
+        return f && lasts_at(*f, generations_);
+    }
+
+private:
+    uint32_t generations_;
+};
+
 FilterSpec judge(const char* id, const char* description, Judge::Test t)
 {
     FilterSpec s;
@@ -437,56 +556,25 @@ std::vector<uint32_t> shape_of(std::span<const uint32_t> digits, uint32_t* class
 // exactly and judged)
 constexpr uint64_t kAnyWrittenMost = uint64_t(1) << 16;
 
-class Drawn : public Filter
+// A filter that keeps (include) or sets aside (exclude) a list of units the fractals make in a line, or
+// with `any`, every renaming of their symbols (each unit's shape); a trie ranks the list exactly on
+// alphabets of 256 symbols or fewer, and any is written out as units while it is small (kAnyWrittenMost).
+class Listed : public Filter
 {
 public:
-    Drawn(const FilterLine& l, bool keep, Variants v)
-        : keep_(keep), any_(v.colours == Colours::Any)
+    bool passes(std::span<const uint32_t> unit) const override
     {
-        // (the palette from the line's symbols: "image/PALETTE/WxH")
-        const std::string& id = l.symbols_id;
-        const size_t a = id.find('/'), b = id.find('/', a + 1);
-        ImageFormat fmt;
-        const bool video = l.kind == "video";
-        fmt.width = l.width, fmt.height = l.height, fmt.frames = video ? l.frames : 1;
-        fmt.palette = &palette_by_id(id.substr(a + 1, b - a - 1));
-        const auto chart = fractal_chart();
-        std::string all;
-        std::set<std::vector<uint32_t>> drawn;
-        for (const auto& c : *chart)
-        {
-            all += c.id + "\n" + c.text;
-            const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
-            const uint32_t w = std::min(l.width * kScale, kSideMost), h = std::min(l.height * kScale, kSideMost);
-            if (!video)
-            {
-                for (uint32_t d = 0; d <= deepest; ++d)
-                    if (const auto img = draw_fractal(c.fractal, d, w, h)) drawn.insert(canonicalise_frame(*img, fmt));
-                continue;
-            }
-            // (a video: the frames from depth s on, one a depth, for each s that leaves room for them all;
-            // each depth drawn once)
-            if (deepest + 1 < fmt.frames) continue;
-            std::vector<std::optional<RgbaImage>> pictures(deepest + 1);
-            for (uint32_t d = 0; d <= deepest && d < kMovingStartsMost + fmt.frames; ++d) pictures[d] = draw_fractal(c.fractal, d, w, h);
-            for (uint32_t s0 = 0; s0 + fmt.frames - 1 <= deepest && s0 <= kMovingStartsMost; ++s0)
-            {
-                std::vector<RgbaImage> frames;
-                for (uint32_t d = s0; d < s0 + fmt.frames; ++d)
-                    if (pictures[d]) frames.push_back(*pictures[d]);
-                if (frames.size() == fmt.frames) drawn.insert(canonicalise_image(frames, fmt));
-            }
-        }
-        // The variants: turned, then (inverted, any) coloured.
-        const uint32_t turns = !v.turns ? 1 : l.width == l.height ? 8 : 4;
-        for (const auto& u : drawn)
-            for (uint32_t t = 0; t < turns; ++t)
-            {
-                auto turned_unit = turned(u, l.width, l.height, fmt.frames, t);
-                if (v.colours != Colours::Drawn) units_.insert(inverted(turned_unit, *fmt.palette));
-                units_.insert(std::move(turned_unit));
-            }
-        const uint32_t base = l.base;
+        const bool listed = any_ ? shapes_.count(shape_of(unit)) > 0 : units_.count(std::vector<uint32_t>(unit.begin(), unit.end())) > 0;
+        return listed == keep_;
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+    const BigUint* survivors() const override { return ranker_ ? nullptr : &survivors_; }
+
+protected:
+    Listed(bool keep, bool any) : keep_(keep), any_(any) {}
+    // Once units_ holds the list: counted, and ranked where it can be.
+    void settle(uint32_t base, uint32_t length)
+    {
         if (any_)
         {
             // Every colouring of each shape: k colours on a shape of k, base x (base - 1) x ... ways.
@@ -535,39 +623,256 @@ public:
             else
             {
                 for (const auto& [s, k] : shapes) shapes_.insert(s);
-                survivors_ = keep_ ? total : BigUint::pow(base, l.length);
+                survivors_ = keep_ ? total : BigUint::pow(base, length);
                 if (!keep_) survivors_ -= total;
             }
         }
         if (!any_)
         {
-            if (base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, base, l.length, keep_);
+            if (base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, base, length, keep_);
             else
             {
-                survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(base, l.length);
+                survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(base, length);
                 if (!keep_) survivors_ -= BigUint(uint64_t(units_.size()));
             }
         }
+    }
+    std::string variants() const { return any_ ? std::to_string(shapes_.size()) + " shapes" : std::to_string(units_.size()); }
+
+    bool keep_, any_;
+    std::set<std::vector<uint32_t>> units_, shapes_;
+    std::unique_ptr<DrawnRanker> ranker_;
+    BigUint survivors_;
+};
+
+class Drawn : public Listed
+{
+public:
+    Drawn(const FilterLine& l, bool keep, Variants v)
+        : Listed(keep, v.colours == Colours::Any)
+    {
+        // (the palette from the line's symbols: "image/PALETTE/WxH")
+        const std::string& id = l.symbols_id;
+        const size_t a = id.find('/'), b = id.find('/', a + 1);
+        ImageFormat fmt;
+        const bool video = l.kind == "video";
+        fmt.width = l.width, fmt.height = l.height, fmt.frames = video ? l.frames : 1;
+        fmt.palette = &palette_by_id(id.substr(a + 1, b - a - 1));
+        const auto chart = fractal_chart();
+        std::string all;
+        std::set<std::vector<uint32_t>> drawn;
+        for (const auto& c : *chart)
+        {
+            all += c.id + "\n" + c.text;
+            const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
+            const uint32_t w = std::min(l.width * kScale, kSideMost), h = std::min(l.height * kScale, kSideMost);
+            if (!video)
+            {
+                for (uint32_t d = 0; d <= deepest; ++d)
+                    if (const auto img = draw_fractal(c.fractal, d, w, h)) drawn.insert(canonicalise_frame(*img, fmt));
+                continue;
+            }
+            // (a video: the frames from depth s on, one a depth, for each s that leaves room for them all;
+            // each depth drawn once)
+            if (deepest + 1 < fmt.frames) continue;
+            std::vector<std::optional<RgbaImage>> pictures(deepest + 1);
+            for (uint32_t d = 0; d <= deepest && d < kMovingStartsMost + fmt.frames; ++d) pictures[d] = draw_fractal(c.fractal, d, w, h);
+            for (uint32_t s0 = 0; s0 + fmt.frames - 1 <= deepest && s0 <= kMovingStartsMost; ++s0)
+            {
+                std::vector<RgbaImage> frames;
+                for (uint32_t d = s0; d < s0 + fmt.frames; ++d)
+                    if (pictures[d]) frames.push_back(*pictures[d]);
+                if (frames.size() == fmt.frames) drawn.insert(canonicalise_image(frames, fmt));
+            }
+        }
+        // The variants: turned, then (inverted, any) coloured.
+        const uint32_t turns = !v.turns ? 1 : l.width == l.height ? 8 : 4;
+        for (const auto& u : drawn)
+            for (uint32_t t = 0; t < turns; ++t)
+            {
+                auto turned_unit = turned(u, l.width, l.height, fmt.frames, t);
+                if (v.colours != Colours::Drawn) units_.insert(inverted(turned_unit, *fmt.palette));
+                units_.insert(std::move(turned_unit));
+            }
+        settle(l.base, l.length);
         provenance_ = std::string("keep=") + (keep_ ? "include" : "exclude") + " chart=" + Sha256::hex_hash(all).substr(0, 16) + " fractals=" +
                       std::to_string(chart->size()) + " pictures=" + std::to_string(drawn.size());
         if (v.turns || v.colours != Colours::Drawn)
             provenance_ += std::string(" turns=") + (v.turns ? "every" : "drawn") + " colours=" +
                            (v.colours == Colours::Drawn ? "drawn" : v.colours == Colours::Inverted ? "inverted" : "any") + " variants=" +
-                           (any_ ? std::to_string(shapes_.size()) + " shapes" : std::to_string(units_.size()));
+                           variants();
     }
-    bool passes(std::span<const uint32_t> unit) const override
-    {
-        const bool drawn = any_ ? shapes_.count(shape_of(unit)) > 0 : units_.count(std::vector<uint32_t>(unit.begin(), unit.end())) > 0;
-        return drawn == keep_;
-    }
-    const Ranker* ranker() const override { return ranker_.get(); }
-    const BigUint* survivors() const override { return ranker_ ? nullptr : &survivors_; }
+};
 
-private:
-    bool keep_, any_;
-    std::set<std::vector<uint32_t>> units_, shapes_;
-    std::unique_ptr<DrawnRanker> ranker_;
-    BigUint survivors_;
+// ---------------------------------------------------------------- fractal-written, fractal-scored (list Z4)
+//
+// The fractal dimension in the pages and audio lines (list X1's "the other lines as further ways"). A
+// ruleset's word at a depth is text already: on the pages line, a page that is a charted fractal's word,
+// its first L characters (or the whole word and spaces after it), each character as the line's alphabet
+// writes it (an upper-case letter as its lower case where the alphabet has none); with symbols = any,
+// every renaming of its characters into the alphabet. On the audio line (notes), a melody that is a
+// charted fractal's, as Prusinkiewicz made scores of L-systems (Score generation with L-systems, 1986):
+// the turtle's lines across, left to right, each a note, its height the step of the major scale from the
+// line's lowest note, its length the note's (a step an eighth; the nearest the line has), lines one after
+// another at one height one note; a substitution's word as one note a symbol, each symbol (in the order
+// met) a step of the scale, a quarter each. With transpose = every, at every pitch the line holds it.
+
+bool is_text(const FilterLine& l) { return l.kind == "text" && l.alphabet && !l.up_to_length && l.length >= 1; }
+bool is_notes(const FilterLine& l) { return l.kind == "audio" && is_note_symbols(l.symbols_id) && l.length >= 1; }
+
+class Written : public Listed
+{
+public:
+    Written(const FilterLine& l, bool keep, bool any) : Listed(keep, any)
+    {
+        const Alphabet& a = *l.alphabet;
+        const auto space = a.digit_of(U' ');
+        const auto chart = fractal_chart();
+        std::string all;
+        for (const auto& c : *chart)
+        {
+            all += c.id + "\n" + c.text;
+            if (!c.fractal.rewrites()) continue;
+            const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
+            for (uint32_t d = 0; d <= deepest; ++d)
+            {
+                const auto w = c.fractal.grow(d);
+                if (!w) break;
+                std::vector<uint32_t> unit;
+                bool fits = true;
+                for (size_t i = 0; i < w->size() && unit.size() < l.length; ++i)
+                {
+                    char ch = (*w)[i];
+                    if (!a.has_uppercase() && ch >= 'A' && ch <= 'Z') ch = char(ch - 'A' + 'a');
+                    const auto digit = a.digit_of(char32_t(uint8_t(ch)));
+                    if (!digit)
+                    {
+                        fits = false;
+                        break;
+                    }
+                    unit.push_back(*digit);
+                }
+                if (!fits) continue;
+                if (unit.size() < l.length)
+                {
+                    if (!space) continue;
+                    unit.resize(l.length, *space);
+                }
+                units_.insert(std::move(unit));
+            }
+        }
+        settle(l.base, l.length);
+        provenance_ = std::string("keep=") + (keep_ ? "include" : "exclude") + " symbols=" + (any ? "any" : "written") + " chart=" +
+                      Sha256::hex_hash(all).substr(0, 16) + " fractals=" + std::to_string(chart->size()) + " pages=" + variants();
+    }
+};
+
+// A melody as (MIDI number, 0 a rest; sixteenths) events.
+using Melody = std::vector<std::pair<uint32_t, uint32_t>>;
+constexpr uint32_t kMajorSteps[7] = {0, 2, 4, 5, 7, 9, 11};
+uint32_t scale_midi(uint32_t tonic, uint32_t step) { return tonic + 12 * (step / 7) + kMajorSteps[step % 7]; }
+
+std::optional<Melody> score_of(const Fractal& f, uint32_t depth, uint32_t tonic)
+{
+    const auto w = f.grow(depth);
+    if (!w) return std::nullopt;
+    Melody out;
+    if (f.family == Fractal::Family::Substitution)
+    {
+        std::map<char, uint32_t> step;
+        for (const char ch : *w)
+        {
+            const uint32_t k = step.emplace(ch, uint32_t(step.size())).first->second;
+            out.push_back({scale_midi(tonic, k), 4});
+        }
+        return out;
+    }
+    // The lines across (left to right, level to a millionth of a step), joined where one carries on another.
+    struct Across
+    {
+        double x0, x1, y;
+    };
+    std::vector<Across> notes;
+    for (const auto& ln : fractal_lines(f, *w))
+    {
+        const double dx = ln[2] - ln[0], dy = ln[3] - ln[1];
+        if (!(dx > 1e-6) || std::abs(dy) > 1e-6 * dx) continue;
+        if (!notes.empty() && std::abs(notes.back().x1 - ln[0]) < 1e-6 && std::abs(notes.back().y - ln[1]) < 1e-6) notes.back().x1 = ln[2];
+        else notes.push_back({ln[0], ln[2], ln[1]});
+    }
+    if (notes.empty()) return out;
+    double low = notes[0].y;
+    for (const auto& n : notes) low = std::min(low, n.y);
+    for (const auto& n : notes)
+    {
+        const double step = std::round(n.y - low), length = std::round(n.x1 - n.x0);
+        if (step > 64 || length < 1) return std::nullopt; // (heights or lengths that are not whole steps: not a score)
+        out.push_back({scale_midi(tonic, uint32_t(step)), uint32_t(length) * 2});
+    }
+    return out;
+}
+
+class Scored : public Listed
+{
+public:
+    Scored(const FilterLine& l, bool keep, bool every_pitch) : Listed(keep, false)
+    {
+        const NoteSet set = note_set_of(l.symbols_id);
+        // (the line's first C at or above its lowest note: the tonic)
+        const uint32_t tonic = set.low + (12 - set.low % 12) % 12;
+        std::vector<uint32_t> lengths; // each of the set's durations, in sixteenths
+        for (const char code : set.durations)
+        {
+            static const uint32_t kSixteenths[] = {1, 2, 3, 4, 6, 8, 12, 16};
+            lengths.push_back(kSixteenths[std::string_view(kNoteDurationCodes).find(code)]);
+        }
+        auto nearest = [&](uint32_t sixteenths) {
+            uint32_t best = 0;
+            for (uint32_t i = 1; i < lengths.size(); ++i)
+            {
+                const uint32_t d = uint32_t(std::abs(int(lengths[i]) - int(sixteenths))), b = uint32_t(std::abs(int(lengths[best]) - int(sixteenths)));
+                if (d < b || (d == b && lengths[i] > lengths[best])) best = i; // (a tie to the longer, as canon-notes-v2)
+            }
+            return best;
+        };
+        const auto chart = fractal_chart();
+        std::string all;
+        for (const auto& c : *chart)
+        {
+            all += c.id + "\n" + c.text;
+            if (!c.fractal.rewrites() || c.fractal.version == 3) continue;
+            const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
+            for (uint32_t d = 0; d <= deepest; ++d)
+            {
+                const auto m = score_of(c.fractal, d, tonic);
+                if (!m) break;
+                if (m->empty()) continue;
+                // Its first notes, as digits (pitch index, then duration), voice 1; the rest rests.
+                std::vector<int> pitch;
+                std::vector<uint32_t> dur;
+                for (size_t i = 0; i < m->size() && pitch.size() < l.length / set.voices; ++i)
+                    pitch.push_back((*m)[i].first ? int((*m)[i].first) - int(set.low) + 1 : 0), dur.push_back(nearest((*m)[i].second));
+                int lo = 1 << 30, hi = -1;
+                for (const int p : pitch)
+                    if (p) lo = std::min(lo, p), hi = std::max(hi, p);
+                for (int shift = every_pitch ? 1 - lo : 0; shift <= (every_pitch ? int(set.pitches()) - hi : 0); ++shift)
+                {
+                    std::vector<uint32_t> unit(l.length, 0);
+                    bool fits = true;
+                    for (size_t i = 0; i < pitch.size(); ++i)
+                    {
+                        const int p = pitch[i] ? pitch[i] + shift : 0;
+                        if (p < 0 || p > int(set.pitches())) fits = false;
+                        unit[i] = uint32_t(p) * set.duration_count() + dur[i];
+                    }
+                    if (fits) units_.insert(std::move(unit));
+                }
+            }
+        }
+        settle(l.base, l.length);
+        provenance_ = std::string("keep=") + (keep_ ? "include" : "exclude") + " transpose=" + (every_pitch ? "every" : "drawn") + " chart=" +
+                      Sha256::hex_hash(all).substr(0, 16) + " fractals=" + std::to_string(chart->size()) + " melodies=" + variants();
+    }
 };
 
 Variants variants_of(const FilterSpec& spec, const FilterValues& v)
@@ -616,6 +921,29 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                         "written where it is the one it has without it. Every escape or converge formula and every "
                         "aggregate passes.",
                         canonical));
+    out.push_back(judge("fractal-strange",
+                        "Strange: an attractor or a flow whose path stays finite through its first 8,192 points (a flow's "
+                        "32,768 steps) and on "
+                        "which a start a billionth away (x moved) ends further from it than a thousandth of the path's "
+                        "extent: sensitive to where it starts, as a chaotic attractor is, where one that settles on a "
+                        "point, a loop or a torus, or flies off, is not. Every other family passes.",
+                        strange));
+    {
+        FilterSpec lasts;
+        lasts.id = "fractal-lasts";
+        lasts.title = "fractal-lasts";
+        lasts.description = "Lasts: an automaton alive at the generation set (some cell not the field beyond) whose live part, "
+                            "wherever it stands, is none of the 8 generations' before: one that dies out, freezes, repeats "
+                            "with a short period, or is a glider moving on, does not pass. An elementary automaton is "
+                            "judged by its newest row. Every other family passes.";
+        lasts.params = {{"generations", "the generation it is judged at", FilterParam::Kind::Integer, "32", 8, 256, 8, {}}};
+        lasts.applies = is_fractals;
+        lasts.judge_only = true;
+        lasts.make = [own = lasts.name()](const FilterLine&, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+            return std::make_unique<Lasts>(uint32_t(std::stoi(param_value(*find_filter(own), v, "generations"))));
+        };
+        out.push_back(lasts);
+    }
 
     // How fractal a drawing is (list X2; IDEAS 19.235: "a measure of how fractal a drawing is (its
     // box-counting dimension, worked out from the picture) could rank what is left").
@@ -724,6 +1052,53 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
         return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
     };
     out.push_back(moving2);
+
+    // In the pages and audio lines (list Z4).
+    FilterSpec written;
+    written.id = "fractal-written";
+    written.title = "fractal-written";
+    written.description = "The fractal dimension in the pages line: a page that is a charted fractal's word at a depth (within "
+                          "2^18 symbols), its first characters to the page's length or the whole word and spaces after it, each "
+                          "character as the alphabet writes it (an upper-case letter as its lower case where the alphabet has "
+                          "none; a word with a character the alphabet lacks is not on the line); with symbols = any, every "
+                          "renaming of its characters into the alphabet. keep = include passes those pages alone; exclude "
+                          "every other. Set from the FRACTALS rows of the setup page. Exact: counts and ranks (compact) on "
+                          "alphabets of 256 symbols or fewer; symbols = any past 65,536 pages is counted exactly and judged.";
+    written.params = {{"keep", "include: only the fractals' words; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
+                       {"include", "exclude"}},
+                      {"symbols", "written: as the word writes them; any: every renaming of its characters", FilterParam::Kind::Text, "written", 0,
+                       0, 1, {"written", "any"}}};
+    written.applies = is_text;
+    written.counts_as = "own";
+    written.make = [own = written.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Written>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "symbols") == "any");
+    };
+    out.push_back(written);
+
+    FilterSpec scored;
+    scored.id = "fractal-scored";
+    scored.title = "fractal-scored";
+    scored.description = "The fractal dimension in the audio line (notes): a melody that is a charted fractal's at a depth, as "
+                         "Prusinkiewicz made scores of L-systems (1986): the turtle's lines across, left to right, each a note, "
+                         "its height the step of the major scale up from the line's first C, its length the note's (a step an "
+                         "eighth, the nearest length the line has), lines carrying on at one height one note; a substitution's "
+                         "word one quarter note a symbol, each symbol in the order met a step of the scale. Its first notes to "
+                         "the line's length in the first voice, rests after; with transpose = every (the default), at every "
+                         "pitch the line holds it. keep = include passes those melodies alone; exclude every other. Exact: "
+                         "counts and ranks (compact) on sets of 256 symbols or fewer (notes104); counted exactly and judged "
+                         "past that.";
+    scored.params = {{"keep", "include: only the fractals' melodies; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
+                      {"include", "exclude"}},
+                     {"transpose", "drawn: from the line's first C; every: at every pitch it fits", FilterParam::Kind::Text, "every", 0, 0, 1,
+                      {"drawn", "every"}}};
+    scored.applies = is_notes;
+    scored.counts_as = "own";
+    scored.make = [own = scored.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Scored>(l, param_value(spec, v, "keep") == "include", param_value(spec, v, "transpose") == "every");
+    };
+    out.push_back(scored);
 }
 
 } // namespace sieve
