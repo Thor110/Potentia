@@ -221,6 +221,12 @@ run before a release package, and after each of the three reviews. Each batch is
   dimensions as we still need to do that"): the noise filters for automata, attractors, flows and aggregates,
   and fractal-moving-v1 on the video line, a charted fractal growing, set with fractal-drawn-v1 (*made 16
   November 2026*). `[01]` + `[10]`.
+- Z1. Every colouring of each fractal (Edward, 16 November 2026, IDEAS 19.244): fractal-drawn-v2 and
+  fractal-moving-v2, each picture and video also turned, mirrored and inverted, or in any colouring of its
+  shape (*made 17 November 2026*). `[01]` + `[04]` + `[10]`.
+- Z2. The models line (Edward, 17 November 2026: "in theory those fractals are already there, so culling
+  would make the most sense"): the charted fractals' meshes found on the models line, or culled from it.
+  `[01]` + `[04]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

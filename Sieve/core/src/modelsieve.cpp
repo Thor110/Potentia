@@ -4,14 +4,18 @@
 
 #include "sieve/modelsieve.hpp"
 
+#include "sieve/fractal.hpp"
 #include "sieve/plugin.hpp"
+#include "sieve/worldspace.hpp"
 #include "sieve/sha256.hpp"
 
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
+#include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 
 namespace sieve {
@@ -626,6 +630,122 @@ private:
     }
 };
 
+// ---------------------------------------------------------------- fractal-modelled-v1
+//
+// The fractal dimension on the models line (list Z2; Edward, 17 November 2026: "in theory those fractals are
+// already there, so culling would make the most sense"): the models that are a charted fractal's lines at a
+// depth. A line drawn is a face naming its two ends (a, b, b), its ends the vertices in the order the
+// drawing reaches them, each once; an L-system's turtle lines (in three dimensions for v3, in the plane
+// z = 0 for v1 and v2) or a flow's path, point to point. Where a depth has no more ends than the line's V
+// and no more lines than its F, it is fitted as any mesh warped in is (ModelSpace::fit: centred, scaled to
+// fill the grid, the faces it lacks filled with (0, 1, 2), the vertices with the cell by the origin), and,
+// where it lacks faces, once more with its own lines again in their place (the drawing alone); with
+// turns = every, in each of the 24 turns of turns-24-v1 as well.
+namespace {
+
+constexpr size_t kModelledSymbolsMost = size_t(1) << 18; // (as fractal-drawn draws)
+
+// The charted fractals' models, as their positional indices, sorted; and the chart's hash, for the provenance.
+std::vector<BigUint> fractal_models(const ModelSpace& space, bool every_turn, std::string& chart_hash, size_t& fractals)
+{
+    const auto chart = fractal_chart();
+    std::string all;
+    std::set<ModelSpace::Digits> found;
+    const uint32_t V = space.vertices(), F = space.face_count(), C = space.coords();
+    for (const auto& c : *chart)
+    {
+        all += c.id + "\n" + c.text;
+        const Fractal& f = c.fractal;
+        auto add = [&](const std::vector<std::array<double, 6>>& lines) {
+            std::map<std::array<double, 3>, uint32_t> at;
+            std::vector<ModelSpace::Vertex> verts;
+            std::vector<ModelSpace::Face> faces;
+            std::set<std::pair<uint32_t, uint32_t>> seen;
+            auto vertex = [&](double x, double y, double z) {
+                // (ends a hair apart are one: the turtle's sums differ in the last places)
+                const std::array<double, 3> key{std::round(x * 1e6) / 1e6, std::round(y * 1e6) / 1e6, std::round(z * 1e6) / 1e6};
+                const auto it = at.emplace(key, uint32_t(verts.size()));
+                if (it.second) verts.push_back({float(key[0]), float(key[1]), float(key[2])});
+                return it.first->second;
+            };
+            for (const auto& l : lines)
+            {
+                const uint32_t a = vertex(l[0], l[1], l[2]), b = vertex(l[3], l[4], l[5]);
+                if (a == b || !seen.insert({std::min(a, b), std::max(a, b)}).second) continue;
+                faces.push_back({a, b, b});
+                if (verts.size() > V || faces.size() > F) return false;
+            }
+            if (faces.empty() || verts.size() > V) return true;
+            const auto fitted = space.fit(verts, faces);
+            // (two of each: the faces it lacks as the line fills them, and as its own lines again, in turn,
+            // so the drawing alone)
+            std::vector<ModelSpace::Parts> ways{fitted.parts};
+            if (faces.size() < F)
+            {
+                ModelSpace::Parts own = fitted.parts;
+                for (size_t i = faces.size(); i < F; ++i)
+                    for (size_t k = 0; k < 3; ++k) own.faces[i * 3 + k] = own.faces[(i % faces.size()) * 3 + k];
+                ways.push_back(std::move(own));
+            }
+            const uint32_t turns_n = every_turn ? kTurns : 1;
+            for (const auto& way : ways)
+            for (uint32_t t = 0; t < turns_n; ++t)
+            {
+                ModelSpace::Parts p = way;
+                const Turn& turn = turns()[t];
+                for (size_t v = 0; v < V; ++v)
+                {
+                    const uint32_t old[3] = {p.verts[v * 3], p.verts[v * 3 + 1], p.verts[v * 3 + 2]};
+                    // (a minus mirrors a cell about the middle of the grid: d to C - 1 - d)
+                    for (int k = 0; k < 3; ++k)
+                    {
+                        const uint32_t d = old[turn.perm[size_t(k)]];
+                        p.verts[v * 3 + size_t(k)] = turn.sign[size_t(k)] < 0 ? C - 1 - d : d;
+                    }
+                }
+                ModelSpace::Digits all_digits = p.verts;
+                all_digits.insert(all_digits.end(), p.faces.begin(), p.faces.end());
+                found.insert(std::move(all_digits));
+            }
+            return true;
+        };
+        if (f.family == Fractal::Family::LSystem)
+        {
+            const uint32_t deepest = fractal_deepest_within(f, kModelledSymbolsMost);
+            for (uint32_t d = 0; d <= deepest; ++d)
+            {
+                const auto word = f.grow(d);
+                if (!word || !add(fractal_lines3(f, *word))) break;
+            }
+        }
+        else if (f.family == Fractal::Family::Flow)
+        {
+            const auto path = fractal_path(f, 0);
+            if (path && path->size() <= size_t(F) + 1)
+            {
+                std::vector<std::array<double, 6>> lines;
+                for (size_t i = 1; i < path->size(); ++i)
+                    lines.push_back({(*path)[i - 1][0], (*path)[i - 1][1], (*path)[i - 1][2], (*path)[i][0], (*path)[i][1], (*path)[i][2]});
+                add(lines);
+            }
+        }
+    }
+    chart_hash = Sha256::hex_hash(all).substr(0, 16);
+    fractals = chart->size();
+    std::vector<BigUint> out;
+    for (const auto& digits : found)
+    {
+        ModelSpace::Parts p;
+        p.verts.assign(digits.begin(), digits.begin() + std::ptrdiff_t(size_t(V) * 3));
+        p.faces.assign(digits.begin() + std::ptrdiff_t(size_t(V) * 3), digits.end());
+        out.push_back(space.index_of(p, AddressMode::Positional));
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+} // namespace
+
 // ---------------------------------------------------------------- ModelSieve
 
 ModelSieve::ModelSieve() = default;
@@ -646,6 +766,19 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
         else if (id == "distinct-indices") di = true;
         else if (id == "every-vertex-used") au = true;
         else if (id == "canonical-mesh") cm = true;
+        else if (id == "fractal-modelled")
+        {
+            fractal_keep_ = param_value(*e.spec, e.values, "keep") == "include";
+            std::string hash;
+            size_t fractals = 0;
+            fractal_all_ = fractal_models(space, param_value(*e.spec, e.values, "turns") == "every", hash, fractals);
+            names_.push_back(e.spec->name());
+            ids_.push_back(id);
+            provenance_ += "; " + e.spec->name() + "{keep=" + param_value(*e.spec, e.values, "keep") + " turns=" +
+                           param_value(*e.spec, e.values, "turns") + " chart=" + hash + " fractals=" + std::to_string(fractals) +
+                           " models=" + std::to_string(fractal_all_.size()) + "}";
+            continue;
+        }
         else throw std::invalid_argument(e.spec->name() + " does not apply to the models line");
         names_.push_back(e.spec->name());
         ids_.push_back(id);
@@ -677,6 +810,25 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
            : rules_ && !files_            ? rules_->count()
            : files_                       ? BigUint()
                                           : size_;
+    if (fractal_keep_)
+    {
+        // The charted fractals' models that the other filters keep: include, just those (a list, so it
+        // ranks whatever the others are); exclude, the others' survivors without them (ranks where they do).
+        for (const auto& x : fractal_all_)
+            if (base_failure(x).empty()) fractal_kept_.push_back(x);
+        if (*fractal_keep_)
+        {
+            can_rank_ = true;
+            blocker_.clear();
+            count_ = BigUint(uint64_t(fractal_kept_.size()));
+        }
+        else if (can_rank_)
+        {
+            for (const auto& x : fractal_kept_) fractal_ranks_.push_back(base_rank(x));
+            std::sort(fractal_ranks_.begin(), fractal_ranks_.end());
+            count_ -= BigUint(uint64_t(fractal_ranks_.size()));
+        }
+    }
     shuffle_ = std::make_unique<Shuffle>(count_.is_zero() ? BigUint(1) : count_, space.key(), id_);
     BigUint top = count_;
     if (!top.is_zero()) top -= BigUint(1);
@@ -686,6 +838,23 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
 double ModelSieve::table_bytes() const { return canon_ ? canon_->table_bytes() : 0.0; }
 
 std::string ModelSieve::first_failure(const BigUint& index) const
+{
+    if (fractal_keep_)
+    {
+        // (the first ticked filter it fails: fractal-modelled-v1 where it stands, the others as they judge)
+        const bool fails = std::binary_search(fractal_all_.begin(), fractal_all_.end(), index) != *fractal_keep_;
+        const std::string other = base_failure(index);
+        for (size_t i = 0; i < ids_.size(); ++i)
+        {
+            if (ids_[i] == "fractal-modelled" && fails) return names_[i];
+            if (!other.empty() && names_[i] == other) return other;
+        }
+        return {};
+    }
+    return base_failure(index);
+}
+
+std::string ModelSieve::base_failure(const BigUint& index) const
 {
     if (names_.empty()) return {};
     const ModelSpace::Parts parts = (rules_ || canon_) ? space_->parts_at(index, AddressMode::Positional) : ModelSpace::Parts{};
@@ -703,13 +872,44 @@ std::string ModelSieve::first_failure(const BigUint& index) const
 
 BigUint ModelSieve::rank(const BigUint& positional) const
 {
+    if (fractal_keep_)
+    {
+        if (*fractal_keep_) return BigUint(uint64_t(std::lower_bound(fractal_kept_.begin(), fractal_kept_.end(), positional) - fractal_kept_.begin()));
+        const BigUint r = base_rank(positional);
+        BigUint out = r;
+        out -= BigUint(uint64_t(std::lower_bound(fractal_ranks_.begin(), fractal_ranks_.end(), r) - fractal_ranks_.begin()));
+        return out;
+    }
+    return base_rank(positional);
+}
+
+BigUint ModelSieve::unrank(const BigUint& k) const
+{
+    if (fractal_keep_)
+    {
+        if (*fractal_keep_) return fractal_kept_[size_t(k.is_zero() ? 0 : k.limbs()[0])];
+        // (the k-th of the others' survivors that is not one of the fractals': past each of theirs at or
+        // below it, one further)
+        BigUint r = k;
+        for (const auto& e : fractal_ranks_)
+        {
+            if (r < e) break;
+            r += BigUint(1);
+        }
+        return base_unrank(r);
+    }
+    return base_unrank(k);
+}
+
+BigUint ModelSieve::base_rank(const BigUint& positional) const
+{
     if (files_) return files_->kept_below(positional);
     if (canon_) return canon_->rank(space_->parts_at(positional, AddressMode::Positional));
     if (rules_) return rules_->rank(space_->parts_at(positional, AddressMode::Positional));
     return positional;
 }
 
-BigUint ModelSieve::unrank(const BigUint& k) const
+BigUint ModelSieve::base_unrank(const BigUint& k) const
 {
     if (files_) return files_->unrank(k);
     if (canon_) return space_->index_of(canon_->unrank(k), AddressMode::Positional);

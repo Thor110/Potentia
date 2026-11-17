@@ -57,9 +57,11 @@ units a shelf's list: `client/listed_shelf.hpp`, so the next dimension of the ki
   the magnifying glass, mark or hide rulesets that draw nothing, never grow, have idle rules, or are a
   renaming of another, or measure a box-counting dimension below the least set (`[fractals]`, `sieve
   filters --line fractals`). In other lines (the third FRACTALS row): the image line finds the charted
-  fractals drawn, or sets them aside (`fractal-drawn-v1`; 5,279 pictures at 10 x 10 black and white,
-  compact), and the video line finds them growing, a frame a depth (`fractal-moving-v1`, list Y4; 1,774
-  videos at 10 x 10 and 4 frames). `sieve fractal` lists, shows and draws them, and counts the
+  fractals drawn, or sets them aside (`fractal-drawn-v2`, list Z1: each also turned, mirrored and
+  inverted, or in any colouring of its shape; 62,356 pictures at 10 x 10 black and white, compact), and
+  the video line finds them growing, a frame a depth (`fractal-moving-v2`; 23,830 videos at 10 x 10 and
+  4 frames), and the models line finds or culls their lines as meshes (`fractal-modelled-v1`, list Z2;
+  3,216 models at 8 vertices and 12 faces). `sieve fractal` lists, shows and draws them, and counts the
   space, gives the ruleset at an address and the address of one. Next: the other lines as further ways,
   more charted as they are found; layouts for your personal dimension, the maze
   door, later.

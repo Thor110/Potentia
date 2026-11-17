@@ -117,8 +117,17 @@ private:
     std::unique_ptr<Shuffle> shuffle_;
     size_t hex_width_ = 1;
     std::string provenance_, id_;
+    // fractal-modelled-v1 (list Z2), when ticked: whether it keeps the charted fractals' models (include)
+    // or sets them aside (exclude); those models (positional, sorted), those of them the other filters keep,
+    // and (exclude) where those stand among the others' survivors.
+    std::optional<bool> fractal_keep_;
+    std::vector<BigUint> fractal_all_, fractal_kept_, fractal_ranks_;
     BigUint rank(const BigUint& positional) const;
     BigUint unrank(const BigUint& k) const;
+    // The same without fractal-modelled-v1: the line's other filters.
+    std::string base_failure(const BigUint& index) const;
+    BigUint base_rank(const BigUint& positional) const;
+    BigUint base_unrank(const BigUint& k) const;
 };
 
 } // namespace sieve

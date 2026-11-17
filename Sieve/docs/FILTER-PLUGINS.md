@@ -786,6 +786,8 @@ closed form, however many faces there are. Ranking walks `3F` digits and tries u
 so past a budget (`3F · V · (V+1)` at 4 million with every-vertex-used) a stack still counts but
 judges only.
 
+**`fractal-modelled-v1`** (list Z2; `core/src/modelsieve.cpp`): the charted fractals' lines as models, found (`keep = include`) or culled (`exclude`), set from the setup page's third FRACTALS row (SPECIFICATIONS §12). Its models are a sorted list of positional indices, 3,216 at the default shape, so include ranks by a search of the list (whatever the other filters are, which judge the list first) and exclude ranks as the others do, less the fractals' models below.
+
 Ticked with `not-a-file-v1`, the stack judges but cannot count: not-a-file is arithmetic on the
 whole number, the rules walk its digits, and counting the two together is the open problem of the
 text lines too (see the note under "Together" above).

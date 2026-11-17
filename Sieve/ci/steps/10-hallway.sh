@@ -1941,13 +1941,25 @@ printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-draw
 printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = exclude\n' > drawn-out.ini
 build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    5279 (exact; compact mode available)$"
 build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     5279 (exact)$"
-$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (5279 survivors), "
+# Version 2 (IDEAS 19.244), what the FRACTALS row sets: each picture also turned and mirrored (eight ways,
+# 31,190) and inverted (62,356); with colours = any, every colouring of each shape (on black and white the
+# same 62,356).
+printf '[image]\nmode = compact\nfilters = fractal-drawn-v2\n[image.fractal-drawn-v2]\nkeep = include\n' > drawn2-in.ini
+printf '[image]\nmode = compact\nfilters = fractal-drawn-v2\n[image.fractal-drawn-v2]\nkeep = include\ncolours = drawn\n' > drawn2-turned.ini
+printf '[image]\nmode = compact\nfilters = fractal-drawn-v2\n[image.fractal-drawn-v2]\nkeep = exclude\ncolours = any\n' > drawn2-any-out.ini
+build/sieve filters --line image --filters drawn2-in.ini | tr -d '\r' | q "^survivors    62356 (exact; compact mode available)$"
+build/sieve filters --line image --filters drawn2-turned.ini | tr -d '\r' | q "^survivors    31190 (exact; compact mode available)$"
+build/sieve filters --line image --filters drawn2-any-out.ini | tr -d '\r' | q "^excluded     62356 (exact)$"
+$H --no-menu --filters drawn2-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (62356 survivors), "
 # And the video line (list Y4): a charted fractal growing, its frames its depths in turn, 1,774 at
 # 10 x 10 and 4 frames in black and white, counted exactly both ways round.
 printf '[video]\nmode = compact\nfilters = fractal-moving-v1\n[video.fractal-moving-v1]\nkeep = include\n' > moving-in.ini
 printf '[video]\nmode = compact\nfilters = fractal-moving-v1\n[video.fractal-moving-v1]\nkeep = exclude\n' > moving-out.ini
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving-in.ini | tr -d '\r' | q "^survivors    1774 (exact; compact mode available)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving-out.ini | tr -d '\r' | q "^excluded     1774 (exact)$"
+# Version 2: each video turned, mirrored and inverted, every frame alike: 23,830.
+printf '[video]\nmode = compact\nfilters = fractal-moving-v2\n[video.fractal-moving-v2]\nkeep = include\n' > moving2-in.ini
+build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving2-in.ini | tr -d '\r' | q "^survivors    23830 (exact; compact mode available)$"
 dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
 test -n "$dragon"
 $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"

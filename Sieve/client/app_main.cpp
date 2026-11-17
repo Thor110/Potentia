@@ -1330,7 +1330,7 @@ int run(const Args& a)
     // folder, then data/training (running from the repository).
     sieve::cli::use_training_runs({a.has("training-dir") ? std::filesystem::path(a.get("training-dir")) : training_dir(),
                                    std::filesystem::path("data") / "training"});
-    // The fractal chart the other lines' filters judge by (fractal-drawn-v1), where there is one.
+    // The fractal chart the other lines' filters judge by (fractal-drawn-v2), where there is one.
     try
     {
         sieve::set_fractal_chart_folder(sieve::cli::find_data_folder("fractals", "chart.txt"));

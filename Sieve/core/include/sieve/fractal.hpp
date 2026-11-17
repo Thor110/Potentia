@@ -251,6 +251,9 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
 
 // An L-system's turtle path at a depth: the lines drawn, as (x1, y1, x2, y2), in turtle steps.
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word);
+// The same in three dimensions, as (x1, y1, z1, x2, y2, z2): a v3 ruleset's turtle as it moves, not seen
+// from a side; v1's and v2's in the plane z = 0 (the models line's fractals, fractal-modelled-v1).
+std::vector<std::array<double, 6>> fractal_lines3(const Fractal& f, const std::string& word);
 // An IFS's points at a depth, as (x, y, the last map applied); nothing past kFractalMost points.
 std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& f, uint32_t depth);
 // The steps an escape or converge picture follows a point for at a depth: 4 x 2^depth.
@@ -307,9 +310,9 @@ struct FractalDimension
 std::optional<FractalDimension> fractal_box_dimension(const Fractal& f);
 
 // The deepest a ruleset grows to within `symbols` symbols (at most deepest()): how deep the hallway draws
-// one, and how deep fractal-drawn-v1 draws the charted ones.
+// one, and how deep fractal-drawn-v2 draws the charted ones.
 uint32_t fractal_deepest_within(const Fractal& f, size_t symbols);
-// The chart the other lines' filters judge by (fractal-drawn-v1): the programs say where it is (the
+// The chart the other lines' filters judge by (fractal-drawn-v2): the programs say where it is (the
 // fractals folder beside them, or data/fractals), and it is read once. Throws std::invalid_argument
 // where no folder was set or the chart cannot be read.
 void set_fractal_chart_folder(const std::filesystem::path& folder);

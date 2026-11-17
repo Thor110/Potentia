@@ -1097,9 +1097,12 @@ const std::vector<Page>& pages()
          "least, in hundredths: 110 at first; an IFS measured on its points; a substitution and an escape or\n"
          "converge picture pass). Each judges;\n"
          "the known fractals are never judged (the setup menu's known fractals row rules them). In the image\n"
-         "line, fractal-drawn-v1 keeps (keep = include) or sets aside (exclude) the pictures that are a charted\n"
-         "fractal drawn at any depth, counted and ranked exactly (the setup menu's in other lines row); in the\n"
-         "video line, fractal-moving-v1 the videos that are one growing, its frames its depths in turn.",
+         "line, fractal-drawn-v2 keeps (keep = include) or sets aside (exclude) the pictures that are a charted\n"
+         "fractal drawn at any depth, also turned and mirrored (turns = every) and inverted (colours =\n"
+         "inverted) or in any colouring of its shape (colours = any), counted exactly (the setup menu's in\n"
+         "other lines row); in the video line, fractal-moving-v2 the videos that are one growing, its frames\n"
+         "its depths in turn; in the models line, fractal-modelled-v1 the models that are one's lines, a line\n"
+         "a face naming its two ends.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},

@@ -434,7 +434,7 @@ private:
     sieve::cli::LineFilters listed_filters_; // a listed line's that has none: never ticked (dimensions.hpp `listed`)
     // A listed line's filters: the fractals' [fractals]; any other's none (listed_filters_).
     // The fractal dimension in other lines (list X1c; the third FRACTALS row): "off", "include" or
-    // "exclude", read from and written to fractal-drawn-v1 on the image line's filters (ticked on, the
+    // "exclude", read from and written to fractal-drawn-v2 on the image line's filters (ticked on, the
     // image line's mode turned from off to mark so that it shows).
     std::string fractal_elsewhere() const;
     void set_fractal_elsewhere(const std::string& way);

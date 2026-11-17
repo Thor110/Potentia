@@ -18,6 +18,8 @@
 #include <optional>
 #include <array>
 #include <cmath>
+#include <functional>
+#include <utility>
 #include <set>
 #include <stdexcept>
 #include <span>
@@ -374,11 +376,72 @@ private:
 // (ranked on palettes of 256 colours or fewer: a walk tries each colour in turn)
 constexpr uint32_t kRankedColoursMost = 256;
 
+// The variants of a picture drawn (version 2; IDEAS 19.244: "the colouring ruleset can also be inverted,
+// flipped or just follow a completely different pattern/procedure which would allow for every possible
+// colour/pixel colour variant of each fractal"). turns: the picture as drawn, or also turned and mirrored
+// (the eight ways a square has, the four a picture that is not square has: mirrored either way and a half
+// turn). colours: as drawn; inverted too (each colour's opposite, 255 less each channel, the palette's
+// nearest); or any (every way of colouring the same shape: the pixels that share a colour in a picture
+// share one in its variant, any colours, each different).
+enum class Colours { Drawn, Inverted, Any };
+struct Variants
+{
+    bool turns = false;
+    Colours colours = Colours::Drawn;
+};
+
+// A frame's pixels turned: bit 1 mirrors left to right, bit 2 top to bottom, bit 4 swaps the axes (a square only).
+std::vector<uint32_t> turned(std::span<const uint32_t> digits, uint32_t w, uint32_t h, uint32_t frames, uint32_t t)
+{
+    std::vector<uint32_t> out(digits.size());
+    const size_t per = size_t(w) * h;
+    for (uint32_t f = 0; f < frames; ++f)
+        for (uint32_t y = 0; y < h; ++y)
+            for (uint32_t x = 0; x < w; ++x)
+            {
+                uint32_t sx = (t & 1) ? w - 1 - x : x, sy = (t & 2) ? h - 1 - y : y;
+                if (t & 4) std::swap(sx, sy);
+                out[f * per + size_t(y) * w + x] = digits[f * per + size_t(sy) * w + sx];
+            }
+    return out;
+}
+
+std::vector<uint32_t> inverted(const std::vector<uint32_t>& digits, const Palette& p)
+{
+    std::map<uint32_t, uint32_t> opposite;
+    std::vector<uint32_t> out(digits.size());
+    for (size_t i = 0; i < digits.size(); ++i)
+    {
+        auto it = opposite.find(digits[i]);
+        if (it == opposite.end())
+        {
+            const Rgb c = p.colour(digits[i]);
+            it = opposite.emplace(digits[i], p.nearest(Rgb{uint8_t(255 - c.r), uint8_t(255 - c.g), uint8_t(255 - c.b)})).first;
+        }
+        out[i] = it->second;
+    }
+    return out;
+}
+
+// A picture's shape apart from its colours: each colour renamed by the order it first appears in.
+std::vector<uint32_t> shape_of(std::span<const uint32_t> digits, uint32_t* classes = nullptr)
+{
+    std::map<uint32_t, uint32_t> name;
+    std::vector<uint32_t> out(digits.size());
+    for (size_t i = 0; i < digits.size(); ++i) out[i] = name.emplace(digits[i], uint32_t(name.size())).first->second;
+    if (classes) *classes = uint32_t(name.size());
+    return out;
+}
+
+// (any colours: written out as pictures, and so ranked, while there are this many at most; past it, counted
+// exactly and judged)
+constexpr uint64_t kAnyWrittenMost = uint64_t(1) << 16;
+
 class Drawn : public Filter
 {
 public:
-    Drawn(const FilterLine& l, bool keep)
-        : keep_(keep)
+    Drawn(const FilterLine& l, bool keep, Variants v)
+        : keep_(keep), any_(v.colours == Colours::Any)
     {
         // (the palette from the line's symbols: "image/PALETTE/WxH")
         const std::string& id = l.symbols_id;
@@ -389,6 +452,7 @@ public:
         fmt.palette = &palette_by_id(id.substr(a + 1, b - a - 1));
         const auto chart = fractal_chart();
         std::string all;
+        std::set<std::vector<uint32_t>> drawn;
         for (const auto& c : *chart)
         {
             all += c.id + "\n" + c.text;
@@ -397,45 +461,124 @@ public:
             if (!video)
             {
                 for (uint32_t d = 0; d <= deepest; ++d)
-                    if (const auto img = draw_fractal(c.fractal, d, w, h)) units_.insert(canonicalise_frame(*img, fmt));
+                    if (const auto img = draw_fractal(c.fractal, d, w, h)) drawn.insert(canonicalise_frame(*img, fmt));
                 continue;
             }
             // (a video: the frames from depth s on, one a depth, for each s that leaves room for them all;
             // each depth drawn once)
             if (deepest + 1 < fmt.frames) continue;
-            std::vector<std::optional<RgbaImage>> drawn(deepest + 1);
-            for (uint32_t d = 0; d <= deepest && d < kMovingStartsMost + fmt.frames; ++d) drawn[d] = draw_fractal(c.fractal, d, w, h);
+            std::vector<std::optional<RgbaImage>> pictures(deepest + 1);
+            for (uint32_t d = 0; d <= deepest && d < kMovingStartsMost + fmt.frames; ++d) pictures[d] = draw_fractal(c.fractal, d, w, h);
             for (uint32_t s0 = 0; s0 + fmt.frames - 1 <= deepest && s0 <= kMovingStartsMost; ++s0)
             {
                 std::vector<RgbaImage> frames;
                 for (uint32_t d = s0; d < s0 + fmt.frames; ++d)
-                    if (drawn[d]) frames.push_back(*drawn[d]);
-                if (frames.size() == fmt.frames) units_.insert(canonicalise_image(frames, fmt));
+                    if (pictures[d]) frames.push_back(*pictures[d]);
+                if (frames.size() == fmt.frames) drawn.insert(canonicalise_image(frames, fmt));
             }
         }
-        if (l.base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, l.base, l.length, keep_);
-        else
+        // The variants: turned, then (inverted, any) coloured.
+        const uint32_t turns = !v.turns ? 1 : l.width == l.height ? 8 : 4;
+        for (const auto& u : drawn)
+            for (uint32_t t = 0; t < turns; ++t)
+            {
+                auto turned_unit = turned(u, l.width, l.height, fmt.frames, t);
+                if (v.colours != Colours::Drawn) units_.insert(inverted(turned_unit, *fmt.palette));
+                units_.insert(std::move(turned_unit));
+            }
+        const uint32_t base = l.base;
+        if (any_)
         {
-            survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(l.base, l.length);
-            if (!keep_) survivors_ -= BigUint(uint64_t(units_.size()));
+            // Every colouring of each shape: k colours on a shape of k, base x (base - 1) x ... ways.
+            std::map<std::vector<uint32_t>, uint32_t> shapes;
+            for (const auto& u : units_)
+            {
+                uint32_t k = 0;
+                auto s = shape_of(u, &k);
+                shapes.emplace(std::move(s), k);
+            }
+            BigUint total;
+            for (const auto& [s, k] : shapes)
+            {
+                BigUint ways(1);
+                for (uint32_t i = 0; i < k; ++i) ways.mul_small(base > i ? base - i : 0);
+                total += ways;
+            }
+            if (total <= BigUint(kAnyWrittenMost) && base <= kRankedColoursMost)
+            {
+                // Written out: each shape's colourings, in turn (the colours for its k classes, each different).
+                units_.clear();
+                for (const auto& [s, k] : shapes)
+                {
+                    std::vector<uint32_t> pick(k, 0), unit(s.size());
+                    std::vector<bool> used(base, false);
+                    // (a walk through the k-permutations of the palette, one class at a time)
+                    std::function<void(uint32_t)> place = [&](uint32_t i) {
+                        if (i == k)
+                        {
+                            for (size_t p = 0; p < s.size(); ++p) unit[p] = pick[s[p]];
+                            units_.insert(unit);
+                            return;
+                        }
+                        for (uint32_t c = 0; c < base; ++c)
+                            if (!used[c])
+                            {
+                                used[c] = true, pick[i] = c;
+                                place(i + 1);
+                                used[c] = false;
+                            }
+                    };
+                    place(0);
+                }
+                any_ = false; // (the pictures themselves now: judged and ranked as the others are)
+            }
+            else
+            {
+                for (const auto& [s, k] : shapes) shapes_.insert(s);
+                survivors_ = keep_ ? total : BigUint::pow(base, l.length);
+                if (!keep_) survivors_ -= total;
+            }
+        }
+        if (!any_)
+        {
+            if (base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, base, l.length, keep_);
+            else
+            {
+                survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(base, l.length);
+                if (!keep_) survivors_ -= BigUint(uint64_t(units_.size()));
+            }
         }
         provenance_ = std::string("keep=") + (keep_ ? "include" : "exclude") + " chart=" + Sha256::hex_hash(all).substr(0, 16) + " fractals=" +
-                      std::to_string(chart->size()) + " pictures=" + std::to_string(units_.size());
+                      std::to_string(chart->size()) + " pictures=" + std::to_string(drawn.size());
+        if (v.turns || v.colours != Colours::Drawn)
+            provenance_ += std::string(" turns=") + (v.turns ? "every" : "drawn") + " colours=" +
+                           (v.colours == Colours::Drawn ? "drawn" : v.colours == Colours::Inverted ? "inverted" : "any") + " variants=" +
+                           (any_ ? std::to_string(shapes_.size()) + " shapes" : std::to_string(units_.size()));
     }
     bool passes(std::span<const uint32_t> unit) const override
     {
-        const bool drawn = units_.count(std::vector<uint32_t>(unit.begin(), unit.end())) > 0;
+        const bool drawn = any_ ? shapes_.count(shape_of(unit)) > 0 : units_.count(std::vector<uint32_t>(unit.begin(), unit.end())) > 0;
         return drawn == keep_;
     }
     const Ranker* ranker() const override { return ranker_.get(); }
     const BigUint* survivors() const override { return ranker_ ? nullptr : &survivors_; }
 
 private:
-    bool keep_;
-    std::set<std::vector<uint32_t>> units_;
+    bool keep_, any_;
+    std::set<std::vector<uint32_t>> units_, shapes_;
     std::unique_ptr<DrawnRanker> ranker_;
     BigUint survivors_;
 };
+
+Variants variants_of(const FilterSpec& spec, const FilterValues& v)
+{
+    Variants out;
+    if (spec.version < 2) return out;
+    out.turns = param_value(spec, v, "turns") == "every";
+    const std::string c = param_value(spec, v, "colours");
+    out.colours = c == "any" ? Colours::Any : c == "inverted" ? Colours::Inverted : Colours::Drawn;
+    return out;
+}
 
 } // namespace
 
@@ -501,17 +644,48 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     drawn.description = "The fractal dimension in the image line: a picture that is a charted fractal drawn, at any depth it "
                         "grows to (within 2^18 symbols), on a picture four times the unit's size a side (at most 512) "
                         "and fitted to the line as a picture warped in is (canon-image-v2). keep = include passes those "
-                        "pictures alone (find what the fractals make); exclude passes every other (knock them out). Set "
-                        "from the FRACTALS rows of the setup page. Exact: counts and ranks (compact) on palettes of 256 "
-                        "colours or fewer; on rgb24, counted exactly and judged.";
+                        "pictures alone (find what the fractals make); exclude passes every other (knock them out). "
+                        "Exact: counts and ranks (compact) on palettes of 256 colours or fewer; on rgb24, counted exactly "
+                        "and judged. Kept so earlier stacks reproduce: fractal-drawn-v2 adds each picture turned and "
+                        "mirrored, and coloured other ways.";
     drawn.params = {{"keep", "include: only the fractals drawn; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
                      {"include", "exclude"}}};
     drawn.applies = is_image;
     drawn.counts_as = "own"; // (a trie of its pictures, not merged with other automata)
+    drawn.retired = true;
+    drawn.replaced_by = "fractal-drawn-v2";
     drawn.make = [own = drawn.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        return std::make_unique<Drawn>(l, param_value(*find_filter(own), v, "keep") == "include");
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
     };
     out.push_back(drawn);
+
+    // Version 2 (IDEAS 19.244): the same pictures turned, mirrored and coloured other ways.
+    const FilterParam turns{"turns", "drawn: each picture as drawn; every: also turned and mirrored (eight ways on a square "
+                                     "picture, four otherwise)",
+                            FilterParam::Kind::Text, "every", 0, 0, 1, {"drawn", "every"}};
+    const FilterParam colours{"colours", "drawn: as drawn; inverted: also each colour's opposite; any: every colouring of the "
+                                         "same shape (the pixels that share a colour share one, any colours, each different)",
+                              FilterParam::Kind::Text, "inverted", 0, 0, 1, {"drawn", "inverted", "any"}};
+    FilterSpec drawn2 = drawn;
+    drawn2.version = 2;
+    drawn2.retired = false;
+    drawn2.replaced_by.clear();
+    drawn2.description = "The fractal dimension in the image line: a picture that is a charted fractal drawn, at any depth it "
+                         "grows to (within 2^18 symbols), on a picture four times the unit's size a side (at most 512) and "
+                         "fitted to the line as a picture warped in is (canon-image-v2); with turns = every, also turned and "
+                         "mirrored; with colours = inverted, also in each colour's opposite; with colours = any, in every "
+                         "colouring of its shape. keep = include passes those pictures alone (find what the fractals make); "
+                         "exclude passes every other (knock them out). Set from the FRACTALS rows of the setup page. Exact: "
+                         "counts and ranks (compact) on palettes of 256 colours or fewer; on rgb24, and with colours = any "
+                         "past 65,536 pictures, counted exactly and judged.";
+    drawn2.params.push_back(turns);
+    drawn2.params.push_back(colours);
+    drawn2.make = [own = drawn2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+    };
+    out.push_back(drawn2);
 
     // In the video line (list Y4; IDEAS 19.239: "every frame of cellular automata simulations could become
     // a texture / image as well", depth being time for every family): a video that is a charted fractal
@@ -523,12 +697,33 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                          "its depths in turn (depth is time: an automaton's generations, a fern's levels, a Mandelbrot "
                          "set's steps), from depth 0 to 32 on, each depth drawn as fractal-drawn-v1 draws it and the "
                          "frames fitted as a video warped in is. keep = include passes those videos alone; exclude "
-                         "passes every other. Set from the FRACTALS rows of the setup page, with fractal-drawn-v1.";
+                         "passes every other. Kept so earlier stacks reproduce: fractal-moving-v2 adds each video turned "
+                         "and mirrored, and coloured other ways.";
     moving.applies = is_video;
+    moving.replaced_by = "fractal-moving-v2";
     moving.make = [own = moving.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
-        return std::make_unique<Drawn>(l, param_value(*find_filter(own), v, "keep") == "include");
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
     };
     out.push_back(moving);
+
+    FilterSpec moving2 = moving;
+    moving2.version = 2;
+    moving2.retired = false;
+    moving2.replaced_by.clear();
+    moving2.description = "The fractal dimension in the video line: a video that is a charted fractal growing, its frames its "
+                          "depths in turn (depth is time: an automaton's generations, a fern's levels, a Mandelbrot set's "
+                          "steps), from depth 0 to 32 on, each depth drawn as fractal-drawn-v2 draws it and the frames fitted "
+                          "as a video warped in is; turned, mirrored and coloured as fractal-drawn-v2's pictures are, every "
+                          "frame alike. keep = include passes those videos alone; exclude passes every other. Set from the "
+                          "FRACTALS rows of the setup page, with fractal-drawn-v2.";
+    moving2.params.push_back(turns);
+    moving2.params.push_back(colours);
+    moving2.make = [own = moving2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        return std::make_unique<Drawn>(l, param_value(spec, v, "keep") == "include", variants_of(spec, v));
+    };
+    out.push_back(moving2);
 }
 
 } // namespace sieve

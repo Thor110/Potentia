@@ -9820,7 +9820,7 @@ for example".
   three-dimensional sets are left. The box-counting dimension's error (the equilateral Sierpinski
   triangle at 1.595 against 1.585, Edward's question of 16 November) was measured with the grid shifted
   by 1/2, 1/4 and 1/8 of a cell and the fewest cells taken: 1.594 to 1.596, the fern 1.278 throughout, so
-  the error is in how the count bends across the grids, not where the grid lies, and the measure stays.
+  the error is in how the count bends across the grids, not where the grid lies, and the measure stays. *The models line (list Z2, 17 November 2026)*: Edward, asked whether that meant adding the fractals to the models line or culling them: "in theory those fractals are already there, so culling would make the most sense". fractal-modelled-v1 finds or culls the charted fractals' lines as meshes (3,216 models at 8 vertices and 12 faces, in every turn of a cube); only the shallow depths fit so few vertices.
 
 **19.236 The CI's steps split further, 1a, 1b and so on (Edward, 16 November 2026).** His words: "perhaps we
 could start splitting the test scripts down even further than the current 11 odd steps into step 1a,b etc",
@@ -9935,7 +9935,7 @@ eliminate it from those lines anyway, but we may just need to ensure it is hooke
 frames or leave them as gifs or whatever is best suited for them". As built (lists X1c and Y4) a fractal
 reaches the image line a picture a depth and the video line as frames, a depth each, which is the form a GIF
 takes there too (the video line holds a GIF as its frames); so a colouring added is one more way each picture
-and frame is drawn, and both filters take it with no other change. *Planned only.*
+and frame is drawn, and both filters take it with no other change. *Planned only.* *Built (list Z1, 17 November 2026)*: fractal-drawn-v2 and fractal-moving-v2, each picture and video turned, mirrored and inverted (the defaults), or in any colouring of its shape; 62,356 pictures at 10 x 10 in black and white against version 1's 5,279 (SPECIFICATIONS, In other lines). A colouring ruleset numbered beside the fractal's (by depth, by order, palettes turned) is still to come.
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

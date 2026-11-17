@@ -45,6 +45,22 @@ void add_model_filters(std::vector<FilterSpec>& out)
                            "C(V(V-1)(V-2)/3, F); with every-vertex-used it ranks while its table fits in the filter "
                            "memory (16 vertices in 512 MB).",
          {"distinct-vertices-v1", "distinct-indices-v1"});
+
+    // The fractal dimension on the models line (list Z2): the charted fractals' models, found or culled.
+    spec("fractal-modelled", "The fractal dimension in the models line: a model that is a charted fractal's lines at a "
+                             "depth (an L-system's turtle, in three dimensions for v3 and in the plane for v1 and v2, or a "
+                             "flow's path), each line a face naming its two ends (a, b, b), its ends the vertices in the "
+                             "order it reaches them, where they fit the line's V and its lines its F; fitted as a mesh "
+                             "warped in is (the faces it lacks filled with (0, 1, 2)), and again with its own lines in "
+                             "their place, and with turns = every in each of the 24 turns of a cube. keep = include "
+                             "passes those models alone (find them); exclude every other (cull them). Set from the "
+                             "FRACTALS rows of the setup page, with fractal-drawn-v2. Exact: counts and ranks where the "
+                             "line's other filters do, and with include always (a list).");
+    FilterSpec& fm = out.back();
+    fm.params = {{"keep", "include: only the fractals' models; exclude: everything but them", FilterParam::Kind::Text, "include", 0, 0, 1,
+                  {"include", "exclude"}},
+                 {"turns", "drawn: each model as fitted; every: also in each of the 24 turns of a cube", FilterParam::Kind::Text, "every", 0,
+                  0, 1, {"drawn", "every"}}};
 }
 
 } // namespace sieve

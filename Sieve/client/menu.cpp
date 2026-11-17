@@ -1601,7 +1601,7 @@ void Menu::adjust(int dir, int step)
     }
     case kFractalRows + 2:
     {
-        // In other lines (list X1c): off, include or exclude, in turn; kept as fractal-drawn-v1 ticked
+        // In other lines (list X1c): off, include or exclude, in turn; kept as fractal-drawn-v2 ticked
         // on the image line, so it is the one setting there and here.
         static const char* const ways[] = {"off", "include", "exclude"};
         const std::string now = fractal_elsewhere();
@@ -4395,17 +4395,20 @@ void Menu::render_char_drawing(float bx, float by, float bw, float bh)
 std::string Menu::fractal_elsewhere() const
 {
     const sieve::cli::LineFilters& lf = cfg_.lines[size_t(LineKind::Image)];
-    if (!lf.is_enabled("fractal-drawn-v1")) return "off";
-    return sieve::param_value(*sieve::find_filter("fractal-drawn-v1"), lf.values_of("fractal-drawn-v1"), "keep");
+    if (!lf.is_enabled("fractal-drawn-v2")) return "off";
+    return sieve::param_value(*sieve::find_filter("fractal-drawn-v2"), lf.values_of("fractal-drawn-v2"), "keep");
 }
 
 void Menu::set_fractal_elsewhere(const std::string& way)
 {
-    // The image line's pictures (fractal-drawn-v1) and, depth being time (list Y4), the video line's
-    // videos of them growing (fractal-moving-v1), set together.
-    for (const auto& [kind, id] : {std::pair<LineKind, const char*>{LineKind::Image, "fractal-drawn-v1"}, {LineKind::Video, "fractal-moving-v1"}})
+    // The image line's pictures (fractal-drawn-v2), the video line's videos of them growing, depth being
+    // time (fractal-moving-v2, list Y4), and the models line's models of their lines (fractal-modelled-v1,
+    // list Z2), set together.
+    for (const auto& [lfp, id] : {std::pair<sieve::cli::LineFilters*, const char*>{&cfg_.lines[size_t(LineKind::Image)], "fractal-drawn-v2"},
+                                  {&cfg_.lines[size_t(LineKind::Video)], "fractal-moving-v2"},
+                                  {&cfg_.models, "fractal-modelled-v1"}})
     {
-        sieve::cli::LineFilters& lf = cfg_.lines[size_t(kind)];
+        sieve::cli::LineFilters& lf = *lfp;
         if (way == "off") (void)sieve::cli::tick_filter(lf, id, false);
         else
         {

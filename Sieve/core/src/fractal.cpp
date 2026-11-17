@@ -1081,6 +1081,69 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
     return f;
 }
 
+namespace {
+
+// v3's turtle, in three dimensions: the lines drawn, as (x1, y1, z1, x2, y2, z2), and whether it left the
+// plane (`solid`).
+std::vector<std::array<double, 6>> turtle_v3(const Fractal& f, const std::string& word, bool& solid)
+{
+    constexpr double kPi = 3.14159265358979323846;
+    const double turn = f.turn_degrees() * kPi / 180.0, ratio = f.scale_ratio;
+    // v3's digits, each a turn (radians) or a factor.
+    std::array<double, 10> digit_value{};
+    std::array<int, 10> digit_kind{}; // 0 none, 1 turn, 2 scale
+    for (const auto& d : f.defines) digit_value[size_t(d.digit - '0')] = d.turn ? d.value * kPi / 180.0 : d.value, digit_kind[size_t(d.digit - '0')] = d.turn ? 1 : 2;
+    // The turtle in three dimensions: its place, its heading H, left L and up U (v1 and v2 stay in the
+    // plane of H and L, and are drawn as before); the step's length; whether + and - are swapped.
+    using V = std::array<double, 3>;
+    struct Turtle
+    {
+        V p{0, 0, 0}, h{1, 0, 0}, l{0, 1, 0}, u{0, 0, 1};
+        double step = 1;
+        bool swapped = false;
+    } t;
+    auto turn_in = [](V& a, V& b, double angle) { // a towards b by angle
+        double s, c;
+        own_sin_cos(angle, s, c);
+        const V na{a[0] * c + b[0] * s, a[1] * c + b[1] * s, a[2] * c + b[2] * s}, nb{b[0] * c - a[0] * s, b[1] * c - a[1] * s, b[2] * c - a[2] * s};
+        a = na, b = nb;
+    };
+    std::vector<Turtle> kept;
+    std::vector<std::array<double, 6>> lines3;
+    solid = false;
+    for (const char c : word)
+    {
+        if (c == 'F' || c == 'G' || c == 'f')
+        {
+            const V np{t.p[0] + t.step * t.h[0], t.p[1] + t.step * t.h[1], t.p[2] + t.step * t.h[2]};
+            if (c != 'f') lines3.push_back({t.p[0], t.p[1], t.p[2], np[0], np[1], np[2]});
+            t.p = np;
+        }
+        else if (c == '+') turn_in(t.h, t.l, t.swapped ? -turn : turn);
+        else if (c == '-') turn_in(t.h, t.l, t.swapped ? turn : -turn);
+        else if (c == '|') turn_in(t.h, t.l, kPi);
+        else if (c == '!') t.swapped = !t.swapped;
+        else if (c == '&') turn_in(t.h, t.u, -turn), solid = true; // pitch down
+        else if (c == '^') turn_in(t.h, t.u, turn), solid = true;  // pitch up
+        else if (c == '\\') turn_in(t.l, t.u, turn), solid = true; // roll left
+        else if (c == '/') turn_in(t.l, t.u, -turn), solid = true; // roll right
+        // (held within 10^-60 and 10^60, so a word of a million ' still draws: a bound chosen)
+        else if (c == '"' && ratio > 0) t.step = std::max(t.step * ratio, 1e-60);
+        else if (c == '\'' && ratio > 0) t.step = std::min(t.step / ratio, 1e60);
+        else if (c >= '0' && c <= '9')
+        {
+            const size_t k = size_t(c - '0');
+            if (digit_kind[k] == 1) turn_in(t.h, t.l, digit_value[k]);
+            else if (digit_kind[k] == 2) t.step = std::clamp(t.step * digit_value[k], 1e-60, 1e60);
+        }
+        else if (c == '[') kept.push_back(t);
+        else if (c == ']' && !kept.empty()) t = kept.back(), kept.pop_back();
+    }
+    return lines3;
+}
+
+} // namespace
+
 std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::string& word)
 {
     std::vector<std::array<double, 4>> out;
@@ -1112,57 +1175,8 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
         }
         return out;
     }
-    const double turn = f.turn_degrees() * kPi / 180.0, ratio = f.scale_ratio;
-    // v3's digits, each a turn (radians) or a factor.
-    std::array<double, 10> digit_value{};
-    std::array<int, 10> digit_kind{}; // 0 none, 1 turn, 2 scale
-    for (const auto& d : f.defines) digit_value[size_t(d.digit - '0')] = d.turn ? d.value * kPi / 180.0 : d.value, digit_kind[size_t(d.digit - '0')] = d.turn ? 1 : 2;
-    // The turtle in three dimensions: its place, its heading H, left L and up U (v1 and v2 stay in the
-    // plane of H and L, and are drawn as before); the step's length; whether + and - are swapped.
-    using V = std::array<double, 3>;
-    struct Turtle
-    {
-        V p{0, 0, 0}, h{1, 0, 0}, l{0, 1, 0}, u{0, 0, 1};
-        double step = 1;
-        bool swapped = false;
-    } t;
-    auto turn_in = [](V& a, V& b, double angle) { // a towards b by angle
-        double s, c;
-        own_sin_cos(angle, s, c);
-        const V na{a[0] * c + b[0] * s, a[1] * c + b[1] * s, a[2] * c + b[2] * s}, nb{b[0] * c - a[0] * s, b[1] * c - a[1] * s, b[2] * c - a[2] * s};
-        a = na, b = nb;
-    };
-    std::vector<Turtle> kept;
-    std::vector<std::array<double, 6>> lines3;
-    bool solid = false; // (whether it left the plane)
-    for (const char c : word)
-    {
-        if (c == 'F' || c == 'G' || c == 'f')
-        {
-            const V np{t.p[0] + t.step * t.h[0], t.p[1] + t.step * t.h[1], t.p[2] + t.step * t.h[2]};
-            if (c != 'f') lines3.push_back({t.p[0], t.p[1], t.p[2], np[0], np[1], np[2]});
-            t.p = np;
-        }
-        else if (c == '+') turn_in(t.h, t.l, t.swapped ? -turn : turn);
-        else if (c == '-') turn_in(t.h, t.l, t.swapped ? turn : -turn);
-        else if (c == '|') turn_in(t.h, t.l, kPi);
-        else if (c == '!') t.swapped = !t.swapped;
-        else if (c == '&') turn_in(t.h, t.u, -turn), solid = true; // pitch down
-        else if (c == '^') turn_in(t.h, t.u, turn), solid = true;  // pitch up
-        else if (c == '\\') turn_in(t.l, t.u, turn), solid = true; // roll left
-        else if (c == '/') turn_in(t.l, t.u, -turn), solid = true; // roll right
-        // (held within 10^-60 and 10^60, so a word of a million ' still draws: a bound chosen)
-        else if (c == '"' && ratio > 0) t.step = std::max(t.step * ratio, 1e-60);
-        else if (c == '\'' && ratio > 0) t.step = std::min(t.step / ratio, 1e60);
-        else if (c >= '0' && c <= '9')
-        {
-            const size_t k = size_t(c - '0');
-            if (digit_kind[k] == 1) turn_in(t.h, t.l, digit_value[k]);
-            else if (digit_kind[k] == 2) t.step = std::clamp(t.step * digit_value[k], 1e-60, 1e60);
-        }
-        else if (c == '[') kept.push_back(t);
-        else if (c == ']' && !kept.empty()) t = kept.back(), kept.pop_back();
-    }
+    bool solid = false;
+    const auto lines3 = turtle_v3(f, word, solid);
     // Drawn in the plane as it is; out of it, seen from a fixed side (turned 30 degrees about the first
     // heading, then 20 about the first up), the same on every machine.
     double sx, cx, sz, cz;
@@ -1179,6 +1193,18 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
         const auto a = seen(l[0], l[1], l[2]), b = seen(l[3], l[4], l[5]);
         out.push_back({a[0], a[1], b[0], b[1]});
     }
+    return out;
+}
+
+std::vector<std::array<double, 6>> fractal_lines3(const Fractal& f, const std::string& word)
+{
+    if (f.version == 3)
+    {
+        bool solid = false;
+        return turtle_v3(f, word, solid);
+    }
+    std::vector<std::array<double, 6>> out;
+    for (const auto& l : fractal_lines(f, word)) out.push_back({l[0], l[1], 0, l[2], l[3], 0});
     return out;
 }
 

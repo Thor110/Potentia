@@ -592,18 +592,33 @@ for pair in "16 image" "19 text" "23 books" "24 audio" "27 audio" "30 tracks" "3
   $H --menu --filters row$1.ini --press "$downs,F,Space,Escape" --screenshot row$1.png > /dev/null
   grep -A1 "^\[$2\]" row$1.ini | q "mode = mark"
 done
-# The third FRACTALS row, in other lines (list X1c), is fractal-drawn-v1 on the image line: Right
+# The third FRACTALS row, in other lines (list X1c), is fractal-drawn-v2 on the image line: Right
 # turns it to include (and the image line's mode from off to mark), again to exclude, again off.
 rm -f elsewhere.ini
 downs=$(python -c "print(','.join(['Down']*49))")
 $H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere.png > /dev/null
-grep -A2 "^\[image\]" elsewhere.ini | q "filters = fractal-drawn-v1"
-grep -A1 "^\[image.fractal-drawn-v1\]" elsewhere.ini | q "keep = include"
+grep -A2 "^\[image\]" elsewhere.ini | q "filters = fractal-drawn-v2"
+grep -A1 "^\[image.fractal-drawn-v2\]" elsewhere.ini | q "keep = include"
 grep -A1 "^\[image\]" elsewhere.ini | q "mode = mark"
 $H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere2.png > /dev/null
-grep -A1 "^\[image.fractal-drawn-v1\]" elsewhere.ini | q "keep = exclude"
+grep -A1 "^\[image.fractal-drawn-v2\]" elsewhere.ini | q "keep = exclude"
 $H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere3.png > /dev/null
 test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" = 0
+# The same row sets the models line's fractal-modelled-v1 (list Z2): the charted fractals' lines as meshes,
+# found (include) or culled (exclude): 69 fitted at 8 vertices and 12 faces, each twice (its lacking faces
+# as the line fills them, and as its own lines again), 3,216 in the 24 turns, 7,008 at 16 and 32; with
+# distinct-vertices-v1, culled from its survivors and still ranked.
+$H --menu --filters elsewhere.ini --press "$downs,Right" --screenshot elsewhere4.png > /dev/null
+grep -A2 "^\[models\]" elsewhere.ini | q "filters = fractal-modelled-v1"
+grep -A2 "^\[models.fractal-modelled-v1\]" elsewhere.ini | q "keep = include"
+printf '[models]\nmode = compact\nfilters = fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = include\n' > modelled-in.ini
+printf '[models]\nmode = compact\nfilters = fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = include\nturns = drawn\n' > modelled-drawn.ini
+printf '[models]\nmode = compact\nfilters = distinct-vertices-v1, fractal-modelled-v1\n[models.fractal-modelled-v1]\nkeep = exclude\n' > modelled-out.ini
+build/sieve filters --line models --filters modelled-in.ini | tr -d '\r' | q "^survivors    3216 (exact; compact mode available)$"
+build/sieve filters --line models --filters modelled-drawn.ini | tr -d '\r' | q "^survivors    138 (exact; compact mode available)$"
+build/sieve filters --line models --vertices 16 --faces 32 --filters modelled-in.ini | tr -d '\r' | q "^survivors    7008 (exact; compact mode available)$"
+build/sieve filters --line models --filters modelled-out.ini | tr -d '\r' | q "^survivors    25535742590412128370542152760826504956658650037345953041611936 (exact; compact mode available)$"
+$H --no-menu --line models --filters modelled-in.ini --walk "0,0" --screenshot models-fractals.png | sed -n 1p | tr -d '\r' | q "^MODELS line, positional, filters: 1 compact (3216 survivors)"
 # On the rows that belong to no line, F opens the filters of the line you start on: pages
 # by default, and models once the "line" row (the first) is turned to models.
 rm -f start.ini start2.ini

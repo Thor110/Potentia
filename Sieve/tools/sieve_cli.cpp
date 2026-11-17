@@ -4260,7 +4260,7 @@ int main(int argc, char** argv)
         // The training runs the AI line's filters can name (language-v1, near-model-v1): beside the
         // programs, then data/training.
         use_training_runs({install_dir() / "training", std::filesystem::path("data") / "training"});
-        // The fractal chart the other lines' filters judge by (fractal-drawn-v1), where there is one.
+        // The fractal chart the other lines' filters judge by (fractal-drawn-v2), where there is one.
         try
         {
             sieve::set_fractal_chart_folder(find_data_folder("fractals", "chart.txt"));

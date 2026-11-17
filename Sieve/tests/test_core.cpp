@@ -2479,8 +2479,8 @@ void test_filters(const std::string& dir)
     CHECK(filters_for(text_line(8)).size() == 16); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 10); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
-                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn
+    CHECK(filters_for(image).size() == 11); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2)
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -7878,6 +7878,103 @@ void test_fractals()
             BigUint vrest = BigUint::pow(2, 400);
             vrest -= vin.ranker()->count();
             CHECK(vin.ranker() && vout.ranker() && vin.ranker()->count() == BigUint(1774) && vout.ranker()->count() == vrest);
+        }
+        {
+            // Version 2 (IDEAS 19.244): turned, mirrored and coloured other ways. As drawn it is v1's set; its
+            // defaults (every turn, inverted too) and any colouring (on black and white, the same as inverted:
+            // two colours, two ways) count and rank exactly; on ega16, any colouring is counted and judged.
+            const FilterSpec* d2 = find_filter("fractal-drawn-v2");
+            CHECK(d2 && !d2->retired && spec->retired && spec->replaced_by == "fractal-drawn-v2");
+            const auto count_of = [&](const FilterLine& line, const FilterSpec* s, FilterValues v) {
+                const FilterStack st(line, {{s, v}}, none);
+                return st.ranker() ? st.ranker()->count().to_decimal() : std::string("judged");
+            };
+            CHECK(count_of(il, d2, {{"keep", "include"}, {"turns", "drawn"}, {"colours", "drawn"}}) == "5279"); // (v1's own)
+            CHECK(count_of(il, d2, {{"keep", "include"}, {"colours", "drawn"}}) == "31190");                       // (turned)
+            CHECK(count_of(il, d2, {{"keep", "include"}}) == "62356");                                             // (and inverted)
+            CHECK(count_of(il, d2, {{"keep", "include"}, {"colours", "any"}}) == "62356");
+            {
+                const FilterStack all_out(il, {{d2, {{"keep", "exclude"}}}}, none);
+                BigUint others = BigUint::pow(2, 100);
+                others -= BigUint(62356);
+                CHECK(all_out.ranker() && all_out.ranker()->count() == others);
+            }
+            ImageFormat vf = fmt;
+            vf.frames = 4;
+            FilterLine vl{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
+            CHECK(count_of(vl, find_filter("fractal-moving-v2"), {{"keep", "include"}}) == "23830");
+            ImageFormat ef = fmt;
+            ef.palette = &palette_by_id("ega16");
+            FilterLine el{"image", ef.symbols_id(), 16, 100, nullptr, 10, 10, 1};
+            CHECK(count_of(el, d2, {{"keep", "include"}}) == "91206");
+            const auto any16 = d2->make(el, {{"keep", "include"}, {"colours", "any"}}, none);
+            // (45,180 shapes, each in every colouring: counted exactly, judged)
+            CHECK(!any16->ranker() && any16->survivors() && any16->survivors()->to_decimal() == "12830096076621376");
+            {
+                // (a picture of the chart, its colours swapped about, passes: the shape is what is kept)
+                const auto img = draw_fractal(chart.front().fractal, 2, 40, 40);
+                CHECK(img.has_value());
+                ImageFormat f16 = ef;
+                auto u = canonicalise_frame(*img, f16);
+                CHECK(any16->passes(u));
+                for (auto& p : u) p = (p + 5) % 16;
+                CHECK(any16->passes(u));
+                std::vector<uint32_t> flat(100, 3);
+                flat[0] = 4, flat[1] = 4, flat[2] = 9; // (three colours in no drawn shape)
+                CHECK(!any16->passes(flat));
+            }
+        }
+        {
+            // The models line (list Z2): the charted fractals' lines as meshes, a line a face (a, b, b), where a
+            // depth fits the line's 8 vertices and 12 faces, in each of the 24 turns of a cube.
+            {
+                // (a v3 ruleset's lines leave the plane where it pitches; v1's stay in it)
+                const auto f3 = read_fractal("sieve-fractal-v3\nlsystem 90\naxiom F&F\nrule F F\n");
+                const auto f1 = read_fractal("sieve-fractal-v1\nlsystem 90\naxiom F+F\nrule F F\n");
+                CHECK(f3 && f1);
+                if (f3 && f1)
+                {
+                    const auto l3 = fractal_lines3(*f3, "F&F"), l1 = fractal_lines3(*f1, "F+F");
+                    CHECK(l3.size() == 2 && l1.size() == 2 && std::abs(l3[1][5]) > 0.5 && l1[1][5] == 0);
+                }
+            }
+            const ModelSpace space(8, 12, 16);
+            const FilterSpec* fm = find_filter("fractal-modelled-v1");
+            CHECK(fm && fm->applies(sieve::FilterLine{"models", "", 0, 0}));
+            const ModelSieve in(space, {{fm, {{"keep", "include"}}}}), out(space, {{fm, {{"keep", "exclude"}}}});
+            const ModelSieve drawn(space, {{fm, {{"keep", "include"}, {"turns", "drawn"}}}});
+            // (69 fitted, each twice: its lacking faces as the line fills them and as its own lines again; 3,216 turned)
+            CHECK(in.count() == BigUint(3216) && drawn.count() == BigUint(138));
+            CHECK(in.can_rank() && out.can_rank());
+            BigUint rest = space.size();
+            rest -= in.count();
+            CHECK(out.count() == rest);
+            // Ranked both ways round: each survivor's address and back.
+            for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7)})
+            {
+                const BigUint m = in.model_at(BigUint(k), AddressMode::Positional);
+                CHECK(in.first_failure(m).empty() && out.first_failure(m) == "fractal-modelled-v1");
+                CHECK(in.index_of(m, AddressMode::Positional) == BigUint(k));
+                const BigUint o = out.model_at(m, AddressMode::Positional); // (the survivor at the same number)
+                CHECK(out.first_failure(o).empty() && out.index_of(o, AddressMode::Positional) == m);
+            }
+            // With the line's own rules: no degenerate faces sets every one aside already (a line is a face
+            // (a, b, b)); with distinct vertices, the others' survivors without the fractals', still ranked.
+            const FilterSpec* di = find_filter("distinct-indices-v1");
+            const FilterSpec* dv = find_filter("distinct-vertices-v1");
+            const ModelSieve none_left(space, {{di, {}}, {fm, {{"keep", "include"}}}});
+            CHECK(none_left.can_rank() && none_left.count().is_zero());
+            const ModelSieve base(space, {{dv, {}}}), culled(space, {{dv, {}}, {fm, {{"keep", "exclude"}}}}),
+                kept(space, {{dv, {}}, {fm, {{"keep", "include"}}}});
+            BigUint left = base.count();
+            left -= kept.count();
+            CHECK(kept.count() == BigUint(864));
+            CHECK(culled.can_rank() && culled.count() == left);
+            for (uint64_t k : {uint64_t(0), uint64_t(12345)})
+            {
+                const BigUint m = culled.model_at(BigUint(k), AddressMode::Scrambled);
+                CHECK(culled.first_failure(m).empty() && culled.index_of(m, AddressMode::Scrambled) == BigUint(k));
+            }
         }
         if (!(kept == BigUint(5279)) || std::getenv("SIEVE_FRACTAL_DIGEST"))
         {
