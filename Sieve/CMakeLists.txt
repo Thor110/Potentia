@@ -695,10 +695,12 @@ add_custom_target(sieve_data ALL
             ${CMAKE_CURRENT_SOURCE_DIR}/data/languages
             $<TARGET_FILE_DIR:sieve>/languages
     # The Documentation's help library (IDEAS 19.201): its contents and pages, written for the person
-    # using Sieve.
+    # using Sieve. Beside the programs it is help-library, not help: Ninja has a target of its own called
+    # help, whose output is a file of that name in the build folder, so a clean (Visual Studio's Rebuild)
+    # tried to delete a help folder there and stopped ("remove(help): The directory is not empty").
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/help
-            $<TARGET_FILE_DIR:sieve>/help
+            $<TARGET_FILE_DIR:sieve>/help-library
     # The fractal dimension's shelves, charted by hand (IDEAS 19.191, 19.235): the chart and its rulesets.
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/data/fractals

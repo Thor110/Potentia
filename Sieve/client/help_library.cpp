@@ -9,13 +9,15 @@
 #include "music.hpp"
 #include "strings.hpp"
 
-#include "cli/dictionaries.hpp" // find_data_folder
+#include "cli/dictionaries.hpp" // executable_dir
 #include "sieve/paths.hpp"
 #include "sieve/utf8.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -71,7 +73,22 @@ void pop_char(std::string& s)
 
 } // namespace
 
-std::filesystem::path HelpLibrary::folder() { return sieve::cli::find_data_folder("help", "contents.txt"); }
+// Beside the programs it is help-library (CMakeLists.txt says why); in the repository, data/help. A help
+// folder beside the programs, as earlier builds and releases left it, is still read.
+std::filesystem::path HelpLibrary::folder()
+{
+    namespace fs = std::filesystem;
+    const fs::path exe = sieve::cli::executable_dir();
+    std::vector<fs::path> folders = {fs::path("data") / "help"}; // (run from the repository: the pages as they are now)
+    if (!exe.empty())
+        for (const fs::path& f : {exe / "help-library", exe / "help", exe / ".." / "data" / "help"}) folders.push_back(f);
+    for (const fs::path& f : folders)
+    {
+        std::error_code ec;
+        if (fs::is_regular_file(f / "contents.txt", ec)) return f;
+    }
+    return folders.front();
+}
 
 HelpLibrary::HelpLibrary(SDL_Window* window, SDL_Renderer* renderer, const std::filesystem::path& folder, const std::string& page)
     : window_(window), r_(renderer)
