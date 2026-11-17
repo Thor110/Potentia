@@ -5655,7 +5655,18 @@ void Menu::optimise_filters()
         sieve::set_filter_memory(filter_memory_setting());
         if (app_) sieve::set_unit_time_ms(app_->unit_time_ms);
     }
-    for (const Reach& r : reach_of(ToggleScope::EveryLine, overlay_, otab_)) (void)sieve::cli::tick_filter(*r.lf, r.name, false);
+    std::vector<int> lines;
+    for (const Reach& r : reach_of(ToggleScope::EveryLine, overlay_, otab_))
+    {
+        (void)sieve::cli::tick_filter(*r.lf, r.name, false);
+        if (std::find(lines.begin(), lines.end(), r.li) == lines.end()) lines.push_back(r.li);
+    }
+    // A line whose mode is off is set to compact (Edward, 17 November 2026: "otherwise the filters would do
+    // nothing"): off draws every item whatever is ticked, compact only the survivors, closed up, and where a
+    // stack cannot count them, the hallway shows them as hide does, saying why. A line set to mark, hide,
+    // compact, full or excluded by hand keeps its mode.
+    for (const int li : lines)
+        if (sieve::cli::FilterMode& m = mode_of(li); m == sieve::cli::FilterMode::Off) m = sieve::cli::FilterMode::Compact;
     toggle_all_filters(ToggleScope::EveryLine);
 }
 

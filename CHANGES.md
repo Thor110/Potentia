@@ -1,33 +1,41 @@
-# Sieve: the help library is copied to help-library (fixes Rebuild)
+# Sieve: OPTIMISE FILTERS sets lines that are off to compact
 
-One commit on top of 406ebe2 (list W).
+One commit on top of b16aad7 (the help-library rename).
 
-## Why Rebuild stopped with "remove(help): The directory is not empty"
+## The change (your answer)
 
-Ninja has a built-in target called `help`, which prints the list of targets. Ninja counts a file called
-`help` in the build folder as that target's output. The build copied the help library into a folder with
-that same name and place. A plain build never runs Ninja's `help` target, so the copy went through. A
-clean, however, deletes every target's output, and Visual Studio's Rebuild runs a clean first. The clean
-tried to delete the `help` folder as if it were Ninja's file, found it full, and stopped.
+OPTIMISE FILTERS now also sets each line whose display mode is **off** to **compact**. Off shows every
+item whatever is ticked, so before this, optimising a line that was off changed nothing in the hallway.
 
-I reproduced it with a minimal CMake project: copying into `help` makes the clean fail with exactly this
-error, and copying into `help-library` makes the clean and the rebuild both succeed.
+- **Other modes are kept.** A line you set to mark, hide, full or excluded by hand keeps that mode.
+- **The fractals line stays off.** Its filters are all judge-only, so OPTIMISE ticks none of them and
+  leaves the line alone. Making the fractal filters countable is the next piece of work there.
+- **A stack that can't count still works.** Compact falls back to hide, as it always has, and the top bar
+  says why.
 
-## The change
+## Your readout
 
-- **CMakeLists.txt:** copies `data/help` to `help-library` beside the programs, with a comment saying
-  why.
-- **tools/make_release.py:** puts `help-library` in the release.
-- **The program:** looks for its help pages in this order:
-  1. `data/help` (when run from the repository);
-  2. `help-library` beside the program;
-  3. an old `help` folder beside it, so earlier builds and releases still work;
-  4. `../data/help`.
-- **Checked here:** run from outside the repository, the Documentation opens from `help-library` (26
-  pages); run from the repository, from `data/help`.
+Your Books figure, 10^-118.30, is stronger than the 10^-115.95 measured here because of your settings:
+
+- With 3 GB of filter memory, OPTIMISE keeps more of the books' filters ticked before their combined
+  table is full. Here the default is 512 MB.
+- Every other line matches what was measured here.
+
+Both figures, and your answer above, are recorded in IDEAS 19.248.
+
+## Docs
+
+- **MANUAL, the "Limits" paragraph:** says OPTIMISE switches lines that are off to compact.
+- **MANUAL, the compact paragraph:** no longer says every other ticked filter must be one the counting
+  filter implies. Since list W, automata merge and compact together, and only filters with a ranker of
+  their own still need that.
+
+## Checks
+
+- **CI step 04:** after OPTIMISE, a line that was off is compact. With the image line set to mark
+  beforehand, it stays mark while audio becomes compact.
+- **CI step 04 passed in full,** including the optimised metrics figures, which are unchanged.
 
 ## Files to delete by hand
 
-- The old `help` folder in each build folder, once: `out\build\x64-Debug\help` and
-  `out\build\x64-Release\help`. After that, Rebuild works.
-- Nothing in the repository.
+None.

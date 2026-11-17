@@ -10170,6 +10170,10 @@ more we have the better the results".
 - *Where it is kept:* docs/FILTERS-CONFLICTS.md, "Working through: every filter countable", a list of the
   filters that do not yet count together with the rest, each with its way forward (an automaton, a smaller
   table, or the judge-only tab), ticked off as each is done.
+- *OPTIMISE FILTERS sets lines that are off to compact* (Edward, the same day: "Yes they should switch them to
+  compact otherwise the filters would do nothing I believe?"). A line set to another mode by hand keeps it.
+  His readout after list W, at his own settings (filter memory 3 GB, counting memory 30%): books 10^-118.30
+  where the default 512 MB gives 10^-115.95, the other lines as measured here.
 - *The filter memory's default stays at 512 MB.* Asked whether to raise it, Edward: "no, we just leave that to
   the find my limits calculation to work out what is free, as well as the user to specify."
 
