@@ -3819,9 +3819,10 @@ void Menu::render()
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
         // Magnifying glass: opens this line's filters; both binary columns open the one binary
-        // line's filters (by its files' kinds). A listed line's are its own (the fractals' noise).
+        // line's filters (by its files' kinds). A listed line's are its own (the fractals' noise), where
+        // it has any.
         magnifier_[c] = {};
-        if (listed_has_filters(i))
+        if (!is_listed(i) || listed_has_filters(i))
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);
@@ -3870,35 +3871,38 @@ void Menu::render()
         SDL_RenderRect(r_, &bar);
         const SDL_FRect inner{x + 9, top + 1, 38, len - 2};
         SDL_RenderRect(r_, &inner);
-        // A listed line (the fractal dimension): its bar broken whatever its length, as AI's is, the
-        // break drawn as a Koch curve of two steps (Edward: "a similar bar layout with the gap, unless
-        // you think of a fancy fractal gap").
-        if (is_listed(i) && len > 40)
-        {
-            const float by = top + std::min(span / 3, len / 2);
-            const SDL_FRect gap{x + 6, by - 5, 44, 10};
-            SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
-            SDL_RenderFillRect(r_, &gap);
-            static const auto koch = [] {
-                const auto f = sieve::read_fractal("sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n");
-                return sieve::fractal_lines(*f, *f->grow(2));
-            }();
-            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
-            for (const float off : {-5.0f, 5.0f})
-                for (const auto& l : koch) // (9 steps wide; drawn 48 pixels across)
-                    SDL_RenderLine(r_, x + 4 + float(l[0]) * 48 / 9, by + off - float(l[1]) * 48 / 9, x + 4 + float(l[2]) * 48 / 9, by + off - float(l[3]) * 48 / 9);
-        }
-        // Past the scale: a break across the bar, a third of the way down.
-        else if (std::isfinite(z.bits) && z.bits > scale_bits)
-        {
-            const float by = top + span / 3;
-            const SDL_FRect gap{x + 6, by - 4, 44, 8};
-            SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
-            SDL_RenderFillRect(r_, &gap);
-            SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
-            SDL_RenderLine(r_, x + 4, by - 2, x + 52, by - 6);
-            SDL_RenderLine(r_, x + 4, by + 6, x + 52, by + 2);
-        }
+        // The break, drawn after what survives (below) so the filled bar never covers it.
+        const auto draw_break = [&] {
+            // A listed line (the fractal dimension): its bar broken whatever its length, as AI's is, the
+            // break drawn as a Koch curve of two steps (Edward: "a similar bar layout with the gap, unless
+            // you think of a fancy fractal gap").
+            if (is_listed(i) && len > 40)
+            {
+                const float by = top + std::min(span / 3, len / 2);
+                const SDL_FRect gap{x + 6, by - 5, 44, 10};
+                SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+                SDL_RenderFillRect(r_, &gap);
+                static const auto koch = [] {
+                    const auto f = sieve::read_fractal("sieve-fractal-v1\nlsystem 60\naxiom F\nrule F F+F--F+F\n");
+                    return sieve::fractal_lines(*f, *f->grow(2));
+                }();
+                SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+                for (const float off : {-5.0f, 5.0f})
+                    for (const auto& l : koch) // (9 steps wide; drawn 48 pixels across)
+                        SDL_RenderLine(r_, x + 4 + float(l[0]) * 48 / 9, by + off - float(l[1]) * 48 / 9, x + 4 + float(l[2]) * 48 / 9, by + off - float(l[3]) * 48 / 9);
+            }
+            // Past the scale: a break across the bar, a third of the way down.
+            else if (std::isfinite(z.bits) && z.bits > scale_bits)
+            {
+                const float by = top + span / 3;
+                const SDL_FRect gap{x + 6, by - 4, 44, 8};
+                SDL_SetRenderDrawColor(r_, 0, 0, 0, 255);
+                SDL_RenderFillRect(r_, &gap);
+                SDL_SetRenderDrawColor(r_, frame.r, frame.g, frame.b, 255);
+                SDL_RenderLine(r_, x + 4, by - 2, x + 52, by - 6);
+                SDL_RenderLine(r_, x + 4, by + 6, x + 52, by + 2);
+            }
+        };
         // What survives the ticked filters, where it can be counted exactly: a filled bar inside.
         const StackInfo& info = stack_info(i);
         if (info.survivor_bits >= 0)
@@ -3925,6 +3929,7 @@ void Menu::render()
             else if (unit_at(i) >= 0) ticked = cfg_.lines[unit_at(i)].enabled.size();
             if (ticked) text(r_, x, label + 82, clip(trf("map.ticked", {std::to_string(ticked)})), 1, th.edge);
         }
+        draw_break();
     }
     render_side(W, H);
     if (alpha_open_) render_alphabets(W, H);

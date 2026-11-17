@@ -10089,3 +10089,27 @@ it is we should be aiming to make meaningful content pop out of the walls in the
     edge in two faces), judged on the models line's own stack.
   - Across lines: a page whose words name the picture beside it, a melody that fits its title's
     syllables: the cross-dimensional filters of §19.235's "every line by every other".
+
+**19.246 Space for the infinite RAID, a typo filter, and the longest word (Edward, 17 November 2026).** His
+words: "we should have an adjustable value for the amount of storage users can spare for the infinite raid
+system", "perhaps a typo dictionary filter with a dictionary of words that looks for typos to filter out of
+the pages dimension", and, of word-length-v1's cap, "why should the cap be 20 letters?
+antidisestablishmentarianism".
+- *Space:* the settings already hold it, [raid] space_mb (1,024 MiB kept for others in all) and
+  per_peer_mb (64 MiB for any one address), but only in the settings file; the Infinite RAID page has no
+  row for them. Next: a row on that page, adjusted in steps, showing what is kept now beside it.
+- *Typos:* words-v1 already keeps only pages whose every word is in the dictionary, so a page with a
+  typo is already set aside wherever it is ticked. What a typo filter adds is the step between: a word
+  one edit (a letter added, dropped, changed, or two swapped) from a dictionary word. Two ways round:
+  tolerate (pages whose words are each a dictionary word or one edit from one: real writing with its
+  mistakes, which words-v1 loses), or find (only pages with such a word, to filter them out or look at
+  them). An automaton of the dictionary's trie with one edit allowed (a Levenshtein automaton), so it can
+  count where the dictionary's automaton fits.
+- *The longest word:* 20 was measured on this project's prose (its longest words 19 and 23 letters), and
+  each letter more lets in far more noise: on lower27 pages of 1,000, a cap of 20 keeps 10^-24.23 of the
+  line, 28 keeps 10^-12.92, 45 keeps 10^-4.53. But a cap below the dictionary's longest word cuts real
+  words: antidisestablishmentarianism (28) is in the dictionary at SCOWL size 80, and that list's longest word,
+  pneumonoultramicroscopicsilicovolcanoconiosis, is 45. The cap is a setting (1 to 64); the question is
+  its default. Edward: "perhaps the cap should be an adjustable setting for that filter instead, default
+  28, maximum 100, minimum maybe 5". *Built (17 November 2026)*: word-length-v2, 28 at first, 5 to 100;
+  v1 (20, 1 to 64) retired, kept so earlier stacks reproduce.

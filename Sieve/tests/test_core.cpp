@@ -2578,10 +2578,14 @@ void test_z_filters()
         CHECK(!br.passes(unit_of(a96, ")(x) = [a (b {c}) d] and (e) ok.")));
     }
     {
-        const FilterStack wl(page, {{find_filter("word-length-v1"), {{"longest", "10"}}}}, none);
+        const FilterStack wl(page, {{find_filter("word-length-v2"), {{"longest", "10"}}}}, none);
+        CHECK(find_filter("word-length-v1")->retired && find_filter("word-length-v1")->replaced_by == "word-length-v2");
+        CHECK(param_value(*find_filter("word-length-v2"), {}, "longest") == "28");
+        CHECK(throws([&] { (void)FilterStack(page, {{find_filter("word-length-v2"), {{"longest", "4"}}}}, none); }));
+        CHECK(FilterStack(page, {{find_filter("word-length-v2"), {{"longest", "100"}}}}, none).ranker() != nullptr);
         CHECK(wl.ranker() && wl.passes(unit_of(a27, "words of ordinary lengths pass i")) && !wl.passes(unit_of(a27, "antidisestablishmentarianism ok ")));
         // (lower27, 32 letters, no word past 20: every page but those with a run of 21 letters or more)
-        CHECK(count(page, "word-length-v1") != "none");
+        CHECK(count(page, "word-length-v2") != "none");
     }
     {
         ImageFormat f;
@@ -2663,9 +2667,9 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 22); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
+    CHECK(filters_for(text_line(8)).size() == 23); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
-                                                    // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (list Z) these
+                                                    // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (v1 and v2) (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
     CHECK(filters_for(image).size() == 12); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
                                             // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror

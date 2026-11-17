@@ -1978,14 +1978,14 @@ build/sieve filters --line audio --filters scored.ini | tr -d '\r' | q "^survivo
 printf '[text]\nmode = mark\nfilters = pronounceable-v1\n' > spoken.ini
 printf '[text]\nmode = mark\nfilters = letter-case-v1\n' > case.ini
 printf '[text]\nmode = mark\nfilters = brackets-v1\n' > brackets.ini
-printf '[text]\nmode = mark\nfilters = word-length-v1\n' > wordlen.ini
+printf '[text]\nmode = mark\nfilters = word-length-v2\n' > wordlen.ini
 printf '[image]\nmode = mark\nfilters = image-mirror-v1\n' > mirror.ini
 printf '[video]\nmode = mark\nfilters = life-causal-v1\n' > life.ini
 printf '[video]\nmode = mark\nfilters = video-pan-v1\n' > pan.ini
 build/sieve filters --line text --length 1000 --filters spoken.ini | tr -d '\r' | q "keeps 10^-29.07 of the line"
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters case.ini | tr -d '\r' | q "keeps 10^-42.46 of the line"
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters brackets.ini | tr -d '\r' | q "keeps 10^-14.87 of the line"
-build/sieve filters --line text --length 1000 --filters wordlen.ini | tr -d '\r' | q "keeps 10^-24.23 of the line"
+build/sieve filters --line text --length 1000 --filters wordlen.ini | tr -d '\r' | q "keeps 10^-12.92 of the line"
 build/sieve filters --line image --filters mirror.ini | tr -d '\r' | q "^survivors    1125899906842624 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters life.ini | tr -d '\r' | q "^survivors    1267650600228229401496703205376 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters pan.ini | tr -d '\r' | q "^survivors    1361129467683753853853498429727072845824 (exact; judged)$"

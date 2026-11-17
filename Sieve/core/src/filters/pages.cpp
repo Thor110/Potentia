@@ -31,6 +31,8 @@
 //   brackets-v1       every ( [ { opened is closed by its own kind, in order, nested at most D deep, and
 //                     never closed before it is opened (list Z9): prose's asides and code's blocks. An
 //                     automaton of the open brackets (3^D stacks at most).
+//   word-length-v2    no word (a run of letters) longer than N: 28 at first (5 to 100), so
+//                     antidisestablishmentarianism passes (Edward). word-length-v1, retired, had 20 (1 to 64).
 //   word-length-v1    no word (a run of letters) longer than N, 20 at first (list Z9): on random lower27
 //                     pages a space comes once in 27 letters, so their words run on; of this project's pages
 //                     every one of the manual's 206 passes, 333 of the specifications' 335 (their
@@ -681,7 +683,27 @@ void add_page_filters(std::vector<FilterSpec>& out)
         const uint32_t most = uint32_t(param_int(*find_filter(own), v, "longest"));
         return make_dfa_filter(word_length_dfa(*l.alphabet, most), l.length, "longest=" + std::to_string(most));
     };
+    wl.retired = true;
+    wl.replaced_by = "word-length-v2";
     out.push_back(wl);
+
+    // Version 2 (Edward, 17 November 2026: "perhaps the cap should be an adjustable setting for that filter
+    // instead, default 28, maximum 100, minimum maybe 5"): 28 lets antidisestablishmentarianism through.
+    FilterSpec wl2 = wl;
+    wl2.version = 2;
+    wl2.retired = false;
+    wl2.replaced_by.clear();
+    wl2.description = "Pages: no word (a run of letters) longer than `longest` letters, 28 at first, so antidisestablishmentarianism "
+                      "passes (5 to 100; the dictionary's longest, pneumonoultramicroscopicsilicovolcanoconiosis, is 45). On "
+                      "random lower27 pages a space comes once in 27 letters, so their words run on: on pages of 1,000 a cap of "
+                      "28 keeps 10^-12.92 of the line, 20 keeps 10^-24.23, 45 keeps 10^-4.53. An automaton: counted and ranked "
+                      "exactly.";
+    wl2.params = {{"longest", "the longest word allowed, in letters", FilterParam::Kind::Integer, "28", 5, 100, 1, {}}};
+    wl2.make = [own = wl2.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const uint32_t most = uint32_t(param_int(*find_filter(own), v, "longest"));
+        return make_dfa_filter(word_length_dfa(*l.alphabet, most), l.length, "longest=" + std::to_string(most));
+    };
+    out.push_back(wl2);
 }
 
 } // namespace sieve
