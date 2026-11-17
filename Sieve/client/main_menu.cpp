@@ -146,7 +146,8 @@ std::vector<MainMenu::Item> MainMenu::items() const
     // red box; the machines and the address are set in the settings file and shown here.
     case Screen::Raid:
         return {{Kind::Toggle, "raid_share"}, {Kind::Info, "raid_peers"},  {Kind::Number, "raid_copies"}, {Kind::Action, "raid_check"},
-                {Kind::Toggle, "raid_serve"}, {Kind::Info, "raid_listen"}, {Kind::Action, "back"}};
+                {Kind::Toggle, "raid_serve"}, {Kind::Info, "raid_listen"}, {Kind::Number, "raid_space"},  {Kind::Number, "raid_per_peer"},
+                {Kind::Action, "back"}};
     }
     return {};
 }
@@ -213,6 +214,15 @@ std::string MainMenu::value_of(const Item& it) const
     if (it.id == "raid_share") return onoff(s_.raid_share);
     if (it.id == "raid_serve") return onoff(s_.raid_serve);
     if (it.id == "raid_copies") return trf("value.raid_copies", {std::to_string(s_.raid_copies)});
+    // (the space for others in MiB, read as GiB or TiB where it is whole ones)
+    if (it.id == "raid_space" || it.id == "raid_per_peer")
+    {
+        const int mb = it.id == "raid_space" ? s_.raid_space_mb : s_.raid_per_peer_mb;
+        const std::string size = mb >= (1 << 20) && mb % (1 << 20) == 0 ? std::to_string(mb >> 20) + " TiB"
+                                : mb >= 1024 && mb % 1024 == 0          ? std::to_string(mb >> 10) + " GiB"
+                                                                        : std::to_string(mb) + " MiB";
+        return trf(it.id == "raid_space" ? "value.raid_space" : "value.raid_per_peer", {size});
+    }
     if (it.id.rfind("keyrow:", 0) == 0)
     {
         const size_t i = size_t(std::stoul(it.id.substr(7)));
@@ -569,6 +579,16 @@ void MainMenu::change(int dir)
         else if (it.id == "view_rooms") s_.view_rooms = std::clamp(s_.view_rooms + dir, 2, 64);
         else if (it.id == "picture_rooms") s_.picture_rooms = std::clamp(s_.picture_rooms + dir, 0, 8);
         else if (it.id == "raid_copies") s_.raid_copies = std::clamp(s_.raid_copies + dir, 1, 16);
+        else if (it.id == "raid_space" || it.id == "raid_per_peer")
+        {
+            // Halved or doubled, 1 MiB to 1 TiB ([raid] space_mb and per_peer_mb), and kept to at once when
+            // keeping others' saves is on (the service starts again with the new limits).
+            int& mb = it.id == "raid_space" ? s_.raid_space_mb : s_.raid_per_peer_mb;
+            mb = std::clamp(dir > 0 ? mb * 2 : mb / 2, 1, 1 << 20);
+            save();
+            hallway::raid_service::apply(s_, path_);
+            return;
+        }
         else if (it.id == "character_drawing") s_.character_drawing = (s_.character_drawing + kDrawCount + dir) % kDrawCount; // (as the Creator's row steps it)
         else if (it.id == "voxel_size") s_.character_voxel_size = (s_.character_voxel_size + 2 + dir) % 2;
         else if (it.id == "voxel_base_mm") s_.character_voxel_base_mm = std::clamp(s_.character_voxel_base_mm + dir, 1, 100);

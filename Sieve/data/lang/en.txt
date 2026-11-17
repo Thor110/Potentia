@@ -108,6 +108,8 @@ item.raid_share = Share my saves
 item.raid_peers = Machines
 item.raid_serve = Keep others' saves
 item.raid_listen = Answering on
+item.raid_space = Space for others
+item.raid_per_peer = Space for any one
 item.back = Back
 help.graphics = Resolution, fullscreen and how the geometry is drawn.
 help.controls = Mouse and keys.
@@ -123,6 +125,8 @@ help.raid_copies = How many of the machines keep each piece of your save (3 by d
 help.raid_check = Asks each machine which pieces of your shared saves it still keeps, and puts any kept on too few back on the next machines.\nMachines come and go; checking now and then keeps your saves whole. A piece no machine keeps is lost, and said.
 help.raid_serve = OPT IN, and Online must be on too (Potentia Settings). When on, while Sieve runs THIS MACHINE KEEPS OTHER PEOPLE'S SAVES for whoever connects to the address below,\nup to [raid] space_mb in all and per_peer_mb for any one address. They are sealed: you cannot read them, and they cannot be changed unseen.\nOpen the port in your firewall or router only if you mean others to reach it. Off: it keeps none.
 help.raid_listen = Where this machine answers while keeping others' saves ([raid] listen in the settings file; 127.0.0.1 answers this machine alone).
+help.raid_space = How much of this machine others' saves may take, in all, while keeping them ([raid] space_mb; 1 GiB by default).\nLeft/Right halve or double it, from 1 MiB to 1 TiB. Past it, a machine asking to keep more is told no; what is kept already stays.
+help.raid_per_peer = How much any one address may keep here ([raid] per_peer_mb; 64 MiB by default), so no one machine takes all the space.\nLeft/Right halve or double it, from 1 MiB to 1 TiB.
 help.back = Back to the previous screen.
 
 ; ---- graphics
@@ -238,6 +242,8 @@ value.raid_listen.offline = {0}: not answering, as Online is off (Potentia Setti
 value.replay.cache = cache
 value.replay.plain = plain text
 value.raid_copies = {0} machines
+value.raid_space = {0} in all
+value.raid_per_peer = {0} each
 value.key_press = press a key...
 value.fav_in = {0}, in {1}
 value.fav_media = a melody, in the Media Player

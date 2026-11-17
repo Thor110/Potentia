@@ -106,8 +106,8 @@ file for the run they are given in. An empty default is written empty.
 | `serve` | `off` | OPT IN ONLY (Potentia Settings > Infinite RAID): on: while Sieve runs, this machine keeps others' sealed saves for whoever connects to listen, up to the limits below (it cannot read them); off (the default): it keeps none |
 | `listen` | `0.0.0.0:47100` | with serve on: the address answered on, HOST:PORT (0.0.0.0: every network this machine is on; 127.0.0.1: this machine alone) |
 | `held` | (empty) | with serve on: the folder others' saves are kept in; empty: raid-held beside these settings |
-| `space_mb` | `1024` | with serve on: the most kept for others in all, in MiB (1024 by default) |
-| `per_peer_mb` | `64` | with serve on: the most kept for any one address, in MiB (64 by default) |
+| `space_mb` | `1024` | with serve on: the most kept for others in all, in MiB (1024 by default); Space for others on the Infinite RAID page |
+| `per_peer_mb` | `64` | with serve on: the most kept for any one address, in MiB (64 by default); Space for any one on the Infinite RAID page |
 
 ## [replays]
 

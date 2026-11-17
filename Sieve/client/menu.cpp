@@ -3819,10 +3819,8 @@ void Menu::render()
         const SDL_Color edge = th.edge;
         th.edge = ink; // labels in a readable colour; the bar keeps the line's own edges
         // Magnifying glass: opens this line's filters; both binary columns open the one binary
-        // line's filters (by its files' kinds). A listed line's are its own (the fractals' noise), where
-        // it has any.
-        magnifier_[c] = {};
-        if (!is_listed(i) || listed_has_filters(i))
+        // line's filters (by its files' kinds). A listed line's are its own (the fractals' noise). Every
+        // column has one (Edward, 17 November 2026: "every row should always have one").
         {
             magnifier_[c] = {x - 2, label - 2, 20, 20};
             SDL_SetRenderDrawColor(r_, th.edge.r, th.edge.g, th.edge.b, 255);

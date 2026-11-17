@@ -10098,6 +10098,11 @@ antidisestablishmentarianism".
 - *Space:* the settings already hold it, [raid] space_mb (1,024 MiB kept for others in all) and
   per_peer_mb (64 MiB for any one address), but only in the settings file; the Infinite RAID page has no
   row for them. Next: a row on that page, adjusted in steps, showing what is kept now beside it.
+  *Built (17 November 2026)*: Space for others and Space for any one on the Infinite RAID page, Left/Right
+  halving or doubling them from 1 MiB to 1 TiB, kept to at once while this machine keeps others' saves;
+  what it keeps now is on the Answering on row above them. And the setup page's magnifying glass on
+  every column, always (Edward: "every row should always have one, we only removed it from fractals at
+  first as it was looking like we would hand chart it").
 - *Typos:* words-v1 already keeps only pages whose every word is in the dictionary, so a page with a
   typo is already set aside wherever it is ticked. What a typo filter adds is the step between: a word
   one edit (a letter added, dropped, changed, or two swapped) from a dictionary word. Two ways round:

@@ -710,6 +710,13 @@ test ! -e raidn-held2
 printf '[online]\nenabled = on\n[raid]\nlisten = 127.0.0.1:47134\nheld = raidn-held2\n' > raidn/serve.ini
 $H --main-menu --settings raidn/serve.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_serve,Return,Item:raid_listen" --screenshot raid-serve.png | tr -d '\r' | q "^read aloud: Answering on, on 127.0.0.1:47134, 0 bytes kept for others$"
 test -f raidn-held2/sieve-raid-held
+# The space kept for others, from the page (Edward, 17 November 2026: "an adjustable value for the amount
+# of storage users can spare for the infinite raid system"): Right doubles it, Left halves it, written to
+# [raid] space_mb and per_peer_mb.
+printf '[raid]\nlisten = 127.0.0.1:47135\n' > raidn/space.ini
+$H --main-menu --settings raidn/space.ini --read-aloud --press "Item:settings,Return,Item:raid,Return,Item:raid_space,Right,Item:raid_per_peer,Left" --screenshot raid-space.png | tr -d '\r' | q "^read aloud: Space for any one, 32 MiB each$"
+grep "^space_mb" raidn/space.ini | q "^space_mb = 2048 "
+grep "^per_peer_mb" raidn/space.ini | q "^per_peer_mb = 32 "
 # The catalogue of formats as a ring of doors (IDEAS 19.165, stage 3): standing at "image", its doors
 # are what it is part of (data), its other kinds (video, documents) and its file kinds; two doors on,
 # Enter walks through to "document"; Home goes back to the root; L takes a Unicode block onto the

@@ -203,7 +203,7 @@ public:
     void open_details(int line) { details_ = line; }
     int details_open() const { return details_; }
     std::vector<std::pair<int, std::string>> details_lines();
-    // (a listed line without filters opens nothing: its column draws no magnifying glass)
+    // (a listed line without filters of its own, should one come, opens nothing yet; its glass is drawn all the same)
     void open_filters(int line)
     {
         if (is_listed(line) && !listed_has_filters(line)) return;
