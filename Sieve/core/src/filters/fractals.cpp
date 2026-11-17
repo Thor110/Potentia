@@ -16,6 +16,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <array>
+#include <cmath>
 #include <set>
 #include <stdexcept>
 #include <span>
@@ -91,7 +93,7 @@ public:
     {
         const auto f = fractal_of(unit);
         if (!f) return false;
-        if (f->family == Fractal::Family::Substitution || f->family == Fractal::Family::Escape || f->family == Fractal::Family::Converge) return true;
+        if (f->family == Fractal::Family::Substitution || f->is_formula() || f->family == Fractal::Family::Life || f->family == Fractal::Family::Flow) return true;
         const auto d = fractal_box_dimension(*f);
         return d && d->value >= least_;
     }
@@ -111,9 +113,76 @@ bool mentions(const Fractal& f, const char* t)
 // at the point) or c (without it, where c is the point).
 bool varies(const Fractal& f) { return f.julia ? mentions(f, "z") : mentions(f, "c"); }
 
+// An automaton over its first generations (kAutomatonLooked): whether a cell is ever live, and whether
+// any generation differs from the one before it (an elementary one's newest row against the last, a
+// life-like one's field against the last's, a cell in from each side, and the field beyond).
+constexpr uint32_t kAutomatonLooked = 8;
+bool automaton_lives(const Fractal& f)
+{
+    const auto c = fractal_cells(f, std::min(kAutomatonLooked, fractal_deepest_within(f, kFractalMost)));
+    if (!c) return false;
+    for (const uint8_t v : c->cells)
+        if (v) return true;
+    return c->beyond != 0;
+}
+bool automaton_changes(const Fractal& f)
+{
+    const uint32_t most = std::min(kAutomatonLooked, fractal_deepest_within(f, kFractalMost));
+    for (uint32_t g = 1; g <= most; ++g)
+    {
+        const auto a = fractal_cells(f, g - 1), b = fractal_cells(f, g);
+        if (!a || !b) return false;
+        if (a->beyond != b->beyond) return true;
+        if (f.family == Fractal::Family::Elementary)
+        {
+            const size_t ra = size_t(a->height - 1) * a->width, rb = size_t(b->height - 1) * b->width;
+            for (uint32_t x = 0; x < b->width; ++x)
+            {
+                const uint8_t before = x >= 1 && x - 1 < a->width ? a->cells[ra + x - 1] : a->beyond;
+                if (b->cells[rb + x] != before) return true;
+            }
+            continue;
+        }
+        for (uint32_t y = 0; y < b->height; ++y)
+            for (uint32_t x = 0; x < b->width; ++x)
+            {
+                const bool in = x >= 1 && y >= 1 && x - 1 < a->width && y - 1 < a->height;
+                const uint8_t before = in ? a->cells[size_t(y - 1) * a->width + x - 1] : a->beyond;
+                if (b->cells[size_t(y) * b->width + x] != before) return true;
+            }
+    }
+    return false;
+}
+// A start written one way: an elementary one's "1" not written (it is the default); a life-like one's with
+// no empty row at its top or bottom and no column of 0 at its left (one at the right is the same field).
+bool start_trimmed(const Fractal& f)
+{
+    if (f.family == Fractal::Family::Elementary) return f.start != "1";
+    const auto empty = [](const std::string& r) { return r.find('1') == std::string::npos; };
+    if (empty(f.start_rows.front()) || empty(f.start_rows.back())) return false;
+    for (const std::string& r : f.start_rows)
+        if (r[0] == '1') return true;
+    return false;
+}
+
+// A path's (an attractor's or a flow's) distinct points among its first depth's last 256, rounded to a
+// millionth: one that settles on a point or a short cycle has few.
+size_t path_distinct(const Fractal& f)
+{
+    const auto p = fractal_path(f, 0);
+    if (!p) return 0;
+    std::set<std::array<long long, 3>> seen;
+    for (size_t k = p->size() > 256 ? p->size() - 256 : 0; k < p->size(); ++k)
+        seen.insert({std::llround((*p)[k][0] * 1e6), std::llround((*p)[k][1] * 1e6), std::llround((*p)[k][2] * 1e6)});
+    return seen.size();
+}
+
 bool draws(const Fractal& f)
 {
+    if (f.family == Fractal::Family::Aggregate) return true;
+    if (f.is_path()) return path_distinct(f) >= 2;
     if (f.family == Fractal::Family::Ifs) return true;
+    if (f.is_automaton()) return automaton_lives(f);
     if (!f.rewrites()) return varies(f);
     const std::vector<char> m = reach(f);
     if (f.family == Fractal::Family::Substitution) return m.size() >= 2;
@@ -125,6 +194,9 @@ bool draws(const Fractal& f)
 bool grows(const Fractal& f)
 {
     if (f.family == Fractal::Family::Ifs) return f.maps.size() >= 2;
+    if (f.is_automaton()) return automaton_changes(f);
+    if (f.family == Fractal::Family::Aggregate) return true;
+    if (f.is_path()) return path_distinct(f) >= 16;
     if (!f.rewrites()) return mentions(f, "z");
     const std::vector<char> m = reach(f);
     const std::set<char> met(m.begin(), m.end());
@@ -170,6 +242,14 @@ bool canonical(const Fractal& f)
     // Renamable symbols take their names in the order they are met, the first of the names free to
     // them first; and every rule is for a symbol met (a rule for one never met could be named anything).
     if (f.family == Fractal::Family::Ifs) return maps_in_order(f);
+    if (f.is_automaton()) return start_trimmed(f);
+    if (f.is_path())
+    {
+        // (its start not written where it is the one it has without it: 0 0, or a flow's 1 1 1)
+        const bool flow = f.family == Fractal::Family::Flow;
+        return !f.from || !(f.from_text[0] == (flow ? "1" : "0") && f.from_text[1] == (flow ? "1" : "0") && (!flow || f.from_text[2] == "1"));
+    }
+    if (f.family == Fractal::Family::Aggregate) return true;
     if (!f.rewrites()) return true;
     std::string names;
     if (f.family == Fractal::Family::Substitution) names = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -215,6 +295,16 @@ bool is_image(const FilterLine& l)
 {
     return l.kind == "image" && l.width && l.height && l.length == l.width * l.height && l.symbols_id.rfind("image/", 0) == 0;
 }
+
+// The video line's units are frames one after another (list Y4): fractal-moving-v1's, a charted fractal's
+// depths in turn, depth being time (IDEAS 19.239).
+bool is_video(const FilterLine& l)
+{
+    return l.kind == "video" && l.width && l.height && l.frames >= 2 && l.length == l.width * l.height * l.frames && l.symbols_id.rfind("video/", 0) == 0;
+}
+// (a video's first depth from 0 to this at most: past it, an elementary automaton's 512 depths would be
+// hundreds of videos each, of rows a cell high)
+constexpr uint32_t kMovingStartsMost = 32;
 
 // The pictures as a trie, walked a pixel at a time: include, the units in the trie; exclude, every unit
 // but those (a state off the trie is free from there on). So both count and rank exactly, and the line
@@ -294,7 +384,8 @@ public:
         const std::string& id = l.symbols_id;
         const size_t a = id.find('/'), b = id.find('/', a + 1);
         ImageFormat fmt;
-        fmt.width = l.width, fmt.height = l.height, fmt.frames = 1;
+        const bool video = l.kind == "video";
+        fmt.width = l.width, fmt.height = l.height, fmt.frames = video ? l.frames : 1;
         fmt.palette = &palette_by_id(id.substr(a + 1, b - a - 1));
         const auto chart = fractal_chart();
         std::string all;
@@ -302,9 +393,25 @@ public:
         {
             all += c.id + "\n" + c.text;
             const uint32_t deepest = fractal_deepest_within(c.fractal, kDrawnMost);
-            for (uint32_t d = 0; d <= deepest; ++d)
-                if (const auto img = draw_fractal(c.fractal, d, std::min(l.width * kScale, kSideMost), std::min(l.height * kScale, kSideMost)))
-                    units_.insert(canonicalise_frame(*img, fmt));
+            const uint32_t w = std::min(l.width * kScale, kSideMost), h = std::min(l.height * kScale, kSideMost);
+            if (!video)
+            {
+                for (uint32_t d = 0; d <= deepest; ++d)
+                    if (const auto img = draw_fractal(c.fractal, d, w, h)) units_.insert(canonicalise_frame(*img, fmt));
+                continue;
+            }
+            // (a video: the frames from depth s on, one a depth, for each s that leaves room for them all;
+            // each depth drawn once)
+            if (deepest + 1 < fmt.frames) continue;
+            std::vector<std::optional<RgbaImage>> drawn(deepest + 1);
+            for (uint32_t d = 0; d <= deepest && d < kMovingStartsMost + fmt.frames; ++d) drawn[d] = draw_fractal(c.fractal, d, w, h);
+            for (uint32_t s0 = 0; s0 + fmt.frames - 1 <= deepest && s0 <= kMovingStartsMost; ++s0)
+            {
+                std::vector<RgbaImage> frames;
+                for (uint32_t d = s0; d < s0 + fmt.frames; ++d)
+                    if (drawn[d]) frames.push_back(*drawn[d]);
+                if (frames.size() == fmt.frames) units_.insert(canonicalise_image(frames, fmt));
+            }
         }
         if (l.base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, l.base, l.length, keep_);
         else
@@ -337,27 +444,34 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
     out.push_back(judge("fractal-draws",
                         "Draws something: an L-system whose axiom reaches F or G (a line drawn) at some depth; a "
                         "substitution whose axiom reaches two symbols or more (two colours); every IFS; an escape or "
-                        "converge formula that mentions what differs from point to point (c, or z for a Julia set). A "
+                        "converge formula that mentions what differs from point to point (c, or z for a Julia set); an "
+                        "automaton with a live cell in its first 8 generations; an attractor or a flow whose path visits two "
+                        "points or more; every aggregate. A "
                         "ruleset that draws nothing is a blank picture at every depth.",
                         draws));
     out.push_back(judge("fractal-grows",
                         "Grows: a symbol the axiom reaches has a rule of two symbols or more, so its word is longer at "
                         "every depth. One that does not is the same length at every depth, a picture that never "
                         "changes size. An IFS grows with two maps or more; an escape or converge formula, where it "
-                        "mentions z.",
+                        "mentions z; an automaton, where a generation of its first 8 differs from the one before; an attractor or "
+                        "a flow whose path does not settle (16 points or more among its first depth's last 256); every aggregate.",
                         grows));
     out.push_back(judge("fractal-no-idle",
                         "No idle rules: no rule for a symbol the axiom never reaches, and no rule that rewrites a "
                         "symbol to itself. Either draws what the ruleset without that rule draws, which is at an "
-                        "address of its own. An IFS: no map given twice. Every escape or converge formula passes.",
+                        "address of its own. An IFS: no map given twice. Every escape or converge formula, automaton, "
+                        "attractor, flow and aggregate passes.",
                         no_idle));
     out.push_back(judge("fractal-canonical",
                         "One ruleset of each renaming: the symbols whose names change nothing drawn (an L-system's "
                         "letters but F, G and f) or only a colour (every substitution symbol) take the first names "
                         "free in the order the axiom reaches them, and every rule is for a symbol reached. Of the "
                         "charted fractals, the dragon curve (X and Y) is a renaming of A and B. An IFS: its maps in the "
-                        "order of their texts, each once (another order draws the same). Every escape or converge "
-                        "formula passes.",
+                        "order of their texts, each once (another order draws the same). An automaton: its start written "
+                        "one way (an elementary one's \"1\" left unwritten, a life-like one's field with no empty row "
+                        "at the top or bottom and a live cell in its left column). An attractor or a flow: its start not "
+                        "written where it is the one it has without it. Every escape or converge formula and every "
+                        "aggregate passes.",
                         canonical));
 
     // How fractal a drawing is (list X2; IDEAS 19.235: "a measure of how fractal a drawing is (its
@@ -370,8 +484,9 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                       "straight lines (1), the curves that are hardly bent and those too small to measure (fewer "
                       "than 16 lines, or under three grids). The Koch curve measures 1.29, the Sierpinski triangle "
                       "1.58, the Hilbert curve 2.00. A substitution, whose rows are a sequence and not a figure, "
-                      "passes, and so does an escape or converge picture (not measured); an IFS is measured on its "
-                      "points.";
+                      "passes, and so does an escape or converge picture, a life-like automaton or a flow (not measured); "
+                      "an IFS or an attractor is measured on its points, an elementary automaton on its live cells over "
+                      "its history, an aggregate on its cells.";
     dim.params = {{"least", "the least box-counting dimension passed, in hundredths (110: 1.10)", FilterParam::Kind::Integer, "110", 0, 200, 5, {}}};
     dim.applies = is_fractals;
     dim.judge_only = true;
@@ -397,6 +512,23 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
         return std::make_unique<Drawn>(l, param_value(*find_filter(own), v, "keep") == "include");
     };
     out.push_back(drawn);
+
+    // In the video line (list Y4; IDEAS 19.239: "every frame of cellular automata simulations could become
+    // a texture / image as well", depth being time for every family): a video that is a charted fractal
+    // growing, its frames the depths one after another.
+    FilterSpec moving = drawn;
+    moving.id = "fractal-moving";
+    moving.title = "fractal-moving";
+    moving.description = "The fractal dimension in the video line: a video that is a charted fractal growing, its frames "
+                         "its depths in turn (depth is time: an automaton's generations, a fern's levels, a Mandelbrot "
+                         "set's steps), from depth 0 to 32 on, each depth drawn as fractal-drawn-v1 draws it and the "
+                         "frames fitted as a video warped in is. keep = include passes those videos alone; exclude "
+                         "passes every other. Set from the FRACTALS rows of the setup page, with fractal-drawn-v1.";
+    moving.applies = is_video;
+    moving.make = [own = moving.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        return std::make_unique<Drawn>(l, param_value(*find_filter(own), v, "keep") == "include");
+    };
+    out.push_back(moving);
 }
 
 } // namespace sieve

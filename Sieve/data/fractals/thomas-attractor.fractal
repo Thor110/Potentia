@@ -1,0 +1,6 @@
+sieve-fractal-v6
+flow 0.05
+x - sin y * 0.208186 x
+y - sin z * 0.208186 y
+z - sin x * 0.208186 z
+from 0.1 0 0

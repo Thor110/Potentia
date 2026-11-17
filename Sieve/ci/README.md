@@ -6,7 +6,7 @@ together when everything is to be checked at once (Edward, 24 October 2026).
 
 | Step | What it checks | Run when this changes |
 | :--- | :--- | :--- |
-| `01-unit-tests` | the unit and conformance tests (`ctest`) | anything in `core/`, `tools/`, `client/` |
+| `01-unit-tests` | the unit and conformance tests (`ctest`), the core suite in eleven parts (`core-spaces` to `core-mixing`) | anything in `core/`, `tools/`, `client/` |
 | `02-same-addresses` | the same addresses on every platform | the lines, canonical forms, addresses |
 | `03-filters` | filters judge, count and rank the same | `core/src/filters`, filter settings |
 | `04-models` | the models line: meshes, items, with the hallway's screens of them and the oracle | `core/src/model*`, meshes |
@@ -30,6 +30,22 @@ ci/run.sh --changed           # only the steps the uncommitted changes reach (ci
 ci/run.sh --changed-since origin/main --dry   # what a branch's changes reach, shown, not run
 ci/run.sh --build out/build/linux-release 01
 ```
+
+Step 01's core suite is eleven tests, one a part (Edward, IDEAS 19.236: "that way we can more easily
+pinpoint what is going wrong"), so its log's last lines name the part that failed, as `core-fractals`.
+To run one part, or a few, give their names as a ctest pattern:
+
+```sh
+SIEVE_CI_PARTS=core-fractals ci/run.sh 01           # one part, as the step runs it
+SIEVE_CI_PARTS='core-(fractals|filters)' ci/run.sh 01
+build/sieve_tests tests --part fractals --times     # straight, from the Sieve folder, with each test's seconds
+build/sieve_tests tests --list                      # every test and its part
+```
+
+The parts are `kParts` in `tests/test_core.cpp`, and its `PART(...)` lines say where each begins; a new
+test goes under the part it belongs to. On Windows, `set SIEVE_CI_PARTS=core-fractals` before `ci\run.bat 01`.
+Measured here (16 November 2026), the longest part is `core-cross` (143 s), then `core-filters` (47 s);
+the rest take 15 s or less each.
 
 On Windows: `ci\run.bat` (double-click it, or give it the same options), which runs `run.sh` with
 the bash that comes with Git for Windows, and the Release build in `out\build\x64-Release`.

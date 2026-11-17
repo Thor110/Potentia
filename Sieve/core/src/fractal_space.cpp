@@ -553,11 +553,12 @@ struct Formula : Part
     };
     std::vector<Tok> toks;
     std::vector<Poly> g;
-    explicit Formula(P number)
+    // (v4's: abs conj cos exp log sin, and c i z; v6's (list X5) its own, each list in order of code)
+    explicit Formula(P number, std::vector<const char*> unaries = {"abs", "conj", "cos", "exp", "log", "sin"}, std::vector<const char*> leaves = {"c", "i", "z"})
     {
         for (const char* b : {"*", "+", "-", "/", "^"}) toks.push_back({std::make_shared<const Lit>(b), 2});
-        for (const char* u : {"abs", "conj", "cos", "exp", "log", "sin"}) toks.push_back({std::make_shared<const Lit>(u), 1});
-        for (const char* l : {"c", "i", "z"}) toks.push_back({std::make_shared<const Lit>(l), 0});
+        for (const char* u : unaries) toks.push_back({std::make_shared<const Lit>(u), 1});
+        for (const char* l : leaves) toks.push_back({std::make_shared<const Lit>(l), 0});
         toks.push_back({std::move(number), 0});
         g.assign(kFractalAwaitedMost + 1, zeros());
         for (uint32_t len = 1; len <= g_longest; ++len)
@@ -734,6 +735,41 @@ std::shared_ptr<const FractalSpaceV3> make_v4(uint32_t longest)
     return v;
 }
 
+// fractal-space-v5's v5 rulesets (list Y2): the elementary automata's, then the life-like ones'.
+std::shared_ptr<const FractalSpaceV3> make_v5(uint32_t longest)
+{
+    g_longest = longest;
+    const P row = std::make_shared<const Word>("01", uint32_t(kFractalWordMost));
+    const P head = lit(std::string(kFractalVersion5) + "\n");
+    const P elementary = seq({head, lit("elementary "), std::make_shared<const Whole>(0, 255), lit("\n"), std::make_shared<const Opt>(seq({lit("start "), row, lit("\n")}))});
+    const P counts = std::make_shared<const Opt>(std::make_shared<const Choice>("012345678"));
+    const P rows = seq({row, std::make_shared<const Star>(seq({lit("/"), row}), nullptr)});
+    const P life = seq({head, lit("life B"), counts, lit("/S"), counts, lit("\nstart "), rows, lit("\n")});
+    auto v = std::make_shared<FractalSpaceV3>();
+    v->all = std::make_shared<const Alt>(std::vector<P>{elementary, life});
+    return v;
+}
+
+// fractal-space-v6's v6 rulesets (list X5): the attractors', then the flows', then the aggregates'.
+std::shared_ptr<const FractalSpaceV3> make_v6(uint32_t longest)
+{
+    g_longest = longest;
+    const P number = std::make_shared<const Num>(true, 999, false, false);
+    const P coef = std::make_shared<const Num>(true, 999, false, false, true);
+    const std::vector<const char*> unaries = {"abs", "cos", "exp", "log", "sin"};
+    const P f2 = std::make_shared<const Formula>(number, unaries, std::vector<const char*>{"x", "y"});
+    const P f3 = std::make_shared<const Formula>(number, unaries, std::vector<const char*>{"x", "y", "z"});
+    const P head = lit(std::string(kFractalVersion6) + "\n");
+    const P attractor = seq({head, lit("attractor\nx "), f2, lit("\ny "), f2, lit("\n"), std::make_shared<const Opt>(seq({lit("from "), coef, lit(" "), coef, lit("\n")}))});
+    const P step = std::make_shared<const Num>(false, 999, false, false);
+    const P flow = seq({head, lit("flow "), step, lit("\nx "), f3, lit("\ny "), f3, lit("\nz "), f3, lit("\n"),
+                        std::make_shared<const Opt>(seq({lit("from "), coef, lit(" "), coef, lit(" "), coef, lit("\n")}))});
+    const P aggregate = seq({head, lit("aggregate "), std::make_shared<const Whole>(1, 4294967295u), lit("\n")});
+    auto v = std::make_shared<FractalSpaceV3>();
+    v->all = std::make_shared<const Alt>(std::vector<P>{attractor, flow, aggregate});
+    return v;
+}
+
 } // namespace v3parts
 
 BigUint FractalSpace::count_v3() const { return total_v3_; }
@@ -797,10 +833,16 @@ FractalSpace::FractalSpace(uint32_t longest) : longest_(longest)
     for (uint32_t l = kFractalSpaceShortest; l <= longest; ++l) total_v3_ += v3_->all->n[l];
     v4_ = v3parts::make_v4(longest);
     for (uint32_t l = 0; l <= longest; ++l) total_v4_ += v4_->all->n[l];
+    v5_ = v3parts::make_v5(longest);
+    for (uint32_t l = 0; l <= longest; ++l) total_v5_ += v5_->all->n[l];
+    v6_ = v3parts::make_v6(longest);
+    for (uint32_t l = 0; l <= longest; ++l) total_v6_ += v6_->all->n[l];
     total_ = total_v1_;
     total_ += total_v2_;
     total_ += total_v3_;
     total_ += total_v4_;
+    total_ += total_v5_;
+    total_ += total_v6_;
 }
 
 BigUint FractalSpace::at_length_v2(uint32_t l) const
@@ -843,6 +885,8 @@ BigUint FractalSpace::count_at(uint32_t length) const
     n += by_length_v2_[length];
     n += v3_->all->n[length];
     n += v4_->all->n[length];
+    n += v5_->all->n[length];
+    n += v6_->all->n[length];
     return n;
 }
 
@@ -895,6 +939,30 @@ std::string FractalSpace::at(const BigUint& index) const
     v1v2 += total_v2_;
     BigUint v1v3 = v1v2;
     v1v3 += total_v3_;
+    BigUint v1v4 = v1v3;
+    v1v4 += total_v4_;
+    BigUint v1v5 = v1v4;
+    v1v5 += total_v5_;
+    if (i >= v1v5)
+    {
+        // v6's: as v4's.
+        i -= v1v5;
+        uint32_t l = 0;
+        while (i >= v6_->all->n[l]) i -= v6_->all->n[l++];
+        std::string text;
+        v6_->all->write(l, i, text);
+        return text;
+    }
+    if (i >= v1v4)
+    {
+        // v5's: as v4's.
+        i -= v1v4;
+        uint32_t l = 0;
+        while (i >= v5_->all->n[l]) i -= v5_->all->n[l++];
+        std::string text;
+        v5_->all->write(l, i, text);
+        return text;
+    }
     if (i >= v1v3)
     {
         // v4's: its length (from the shortest it has), then its parts' places.
@@ -997,6 +1065,27 @@ std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
     if (!f || text.size() > longest_) return std::nullopt;
     const uint32_t l = uint32_t(text.size());
     BigUint index;
+    if (f->version == 6)
+    {
+        index = total_v1_;
+        index += total_v2_;
+        index += total_v3_;
+        index += total_v4_;
+        index += total_v5_;
+        for (uint32_t k = 0; k < l; ++k) index += v6_->all->n[k];
+        index += v6_->all->rank(text);
+        return index;
+    }
+    if (f->version == 5)
+    {
+        index = total_v1_;
+        index += total_v2_;
+        index += total_v3_;
+        index += total_v4_;
+        for (uint32_t k = 0; k < l; ++k) index += v5_->all->n[k];
+        index += v5_->all->rank(text);
+        return index;
+    }
     if (f->version == 4)
     {
         index = total_v1_;

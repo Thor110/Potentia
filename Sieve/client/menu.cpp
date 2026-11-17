@@ -80,6 +80,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 namespace hallway {
@@ -4400,13 +4401,18 @@ std::string Menu::fractal_elsewhere() const
 
 void Menu::set_fractal_elsewhere(const std::string& way)
 {
-    sieve::cli::LineFilters& lf = cfg_.lines[size_t(LineKind::Image)];
-    if (way == "off") (void)sieve::cli::tick_filter(lf, "fractal-drawn-v1", false);
-    else
+    // The image line's pictures (fractal-drawn-v1) and, depth being time (list Y4), the video line's
+    // videos of them growing (fractal-moving-v1), set together.
+    for (const auto& [kind, id] : {std::pair<LineKind, const char*>{LineKind::Image, "fractal-drawn-v1"}, {LineKind::Video, "fractal-moving-v1"}})
     {
-        if (!lf.is_enabled("fractal-drawn-v1")) (void)sieve::cli::tick_filter(lf, "fractal-drawn-v1", true);
-        lf.values["fractal-drawn-v1"]["keep"] = way;
-        if (lf.mode == sieve::cli::FilterMode::Off) lf.mode = sieve::cli::FilterMode::Mark;
+        sieve::cli::LineFilters& lf = cfg_.lines[size_t(kind)];
+        if (way == "off") (void)sieve::cli::tick_filter(lf, id, false);
+        else
+        {
+            if (!lf.is_enabled(id)) (void)sieve::cli::tick_filter(lf, id, true);
+            lf.values[id]["keep"] = way;
+            if (lf.mode == sieve::cli::FilterMode::Off) lf.mode = sieve::cli::FilterMode::Mark;
+        }
     }
     save_filters();
 }

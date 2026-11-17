@@ -655,6 +655,50 @@ def fractal_v4():
     return alt(fractal_v3(), seq("sieve-fractal-v4\n", alt(ifs, esc)))
 
 
+def fractal_v5():
+    """Every v1 to v4 ruleset, and every sieve-fractal-v5 (list Y2), a cellular automaton: "elementary RULE"
+    (0 to 255, no leading zero) and an optional "start ROW", or "life BIRTH/SURVIVAL" (B, any of 0-8 in
+    order each once, /S, alike) and "start ROW/ROW/..."; a ROW 1 to 64 of 0 and 1. So its v5 survivors are
+    exactly the reader's."""
+    row = rep(chars("01"), 1, 64)
+    counts = opt(nonempty_ascending("012345678"))
+    elementary = seq("elementary ", decimal_at_most(255), "\n", opt(seq("start ", row, "\n")))
+    life = seq("life B", counts, "/S", counts, "\nstart ", row, star(seq("/", row)), "\n")
+    return alt(fractal_v4(), seq("sieve-fractal-v5\n", alt(elementary, life)))
+
+
+def fractal_v6():
+    """Every v1 to v5 ruleset, and every sieve-fractal-v6 (list X5): "attractor" with "x FORMULA" and "y
+    FORMULA", or "flow STEP" with x, y and z, each with an optional "from"; or "aggregate SEED" (1 to
+    4294967295). A formula as v4's but over x and y (and a flow's z), its unary tokens abs cos exp log sin,
+    never more than 8 values awaited; STEP more than 0. So its v6 survivors are exactly the reader's."""
+    nz = "123456789"
+    frac = seq(".", rep(chars(DIGITS), 0, 5), chars(nz))
+    positive = alt(seq("0", frac), seq(decimal_between(1, 999), opt(frac)))
+    nonzero = seq(opt("-"), positive)
+    coef = alt(lit("0"), nonzero)
+
+    def formula(leaves):
+        most = 8
+        kinds = [(chars("*+-/^"), 2), (alt("abs", "cos", "exp", "log", "sin"), 1), (alt(chars(leaves), nonzero), 0)]
+        prods = {}
+        for p in range(1, most + 1):
+            prods[p] = []
+            for tok, takes in kinds:
+                np = p - 1 + takes
+                if np == 0:
+                    prods[p].append((tok, None))
+                elif np <= most:
+                    prods[p].append((seq(tok, " "), np))
+        return Linear(prods, 1)
+
+    f2, f3 = formula("xy"), formula("xyz")
+    attractor = seq("attractor\nx ", f2, "\ny ", f2, "\n", opt(seq("from ", coef, " ", coef, "\n")))
+    flow = seq("flow ", positive, "\nx ", f3, "\ny ", f3, "\nz ", f3, "\n", opt(seq("from ", coef, " ", coef, " ", coef, "\n")))
+    aggregate = seq("aggregate ", decimal_between(1, 4294967295), "\n")
+    return alt(fractal_v5(), seq("sieve-fractal-v6\n", alt(attractor, flow, aggregate)))
+
+
 def nonempty_ascending(symbols):
     """One or more of the symbols, in their order, each once."""
     return alt(*[seq(lit(c), *[opt(lit(d)) for d in symbols[k + 1:]]) for k, c in enumerate(symbols)])
@@ -736,6 +780,25 @@ PLUGINS = [
       "optional -, 0 to 999 and up to 6 decimals with no 0 at the end, never -0. A v4 ruleset passes exactly",
       "when the reader takes it (the values a formula awaits are a walk's state); the rules' order of v1 to",
       "v3 is still the reader's alone. tools/check_formats.py checks every other verdict."]),
+    ("format-fractal", 5, fractal_v5,
+     "One sieve-fractal-v1 to v5 ruleset (v1 to v3's rules' order aside): the fractal dimension's line, each ruleset at its address in fractal-space-v5 (list Y2).",
+     ["A fractal's ruleset (sieve-fractal-v1 to v5, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp) written",
+      "as a filter: v1's to v4's as format-fractal-v4 passes them, and v5's, the cellular automata, a family",
+      "of the fractal dimension (Edward, 16 November 2026: \"perhaps cellular automata should be considered",
+      "fractals instead\"): \"sieve-fractal-v5\", then \"elementary RULE\" (0 to 255) and an optional \"start",
+      "ROW\", or \"life BIRTH/SURVIVAL\" (B and S each followed by any of 0 to 8 in order, each once) and",
+      "\"start ROW/ROW/...\"; a ROW 1 to 64 of 0 and 1. A v5 ruleset passes exactly when the reader takes it;",
+      "the rules' order of v1 to v3 is still the reader's alone. tools/check_formats.py checks every other",
+      "verdict."]),
+    ("format-fractal", 6, fractal_v6,
+     "One sieve-fractal-v1 to v6 ruleset (v1 to v3's rules' order aside): the fractal dimension's line, each ruleset at its address in fractal-space-v6 (list X5).",
+     ["A fractal's ruleset (sieve-fractal-v1 to v6, SPECIFICATIONS 12.0t, core/include/sieve/fractal.hpp) written",
+      "as a filter: v1's to v5's as format-fractal-v5 passes them, and v6's: \"sieve-fractal-v6\", then",
+      "\"attractor\" with \"x FORMULA\" and \"y FORMULA\" (a map of the plane), or \"flow STEP\" with x, y and z",
+      "(three equations followed through time), each with an optional \"from\"; or \"aggregate SEED\"",
+      "(diffusion-limited aggregation, 1 to 4294967295). A formula as v4's over x and y (and z), never more",
+      "than 8 values awaited. A v6 ruleset passes exactly when the reader takes it; the rules' order of v1",
+      "to v3 is still the reader's alone. tools/check_formats.py checks every other verdict."]),
     ("format-world", 1, world_v1,
      "One sieve-personal-world-v1 exactly as it is written (the numbers a float's own aside): a personal dimension's seed and what is placed (IDEAS 19.185, 19.187).",
      ["A personal dimension's world (sieve-personal-world-v1, SPECIFICATIONS 12.0r, client/personal_world.cpp)",

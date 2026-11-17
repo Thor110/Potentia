@@ -96,7 +96,7 @@ python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for
 # unnamed, a melody past its set, and a world with nothing of v2's but its places' heights), which the
 # reader alone refuses. A v2 world of 33 characters is one kept line of one character: 10 seeds x 94.
 python ../tools/grammars.py --check
-for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60 format-fractal-v2:46 format-fractal-v2:60 format-fractal-v3:44 format-fractal-v3:60 format-fractal-v4:30 format-fractal-v4:60; do
+for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60 format-fractal-v2:46 format-fractal-v2:60 format-fractal-v3:44 format-fractal-v3:60 format-fractal-v4:30 format-fractal-v4:60 format-fractal-v5:30 format-fractal-v5:60 format-fractal-v6:29 format-fractal-v6:60; do
   python sieve_ref.py plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
   $S filters --plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
@@ -120,9 +120,19 @@ $S filters --plugin ../data/filters/format-fractal-v4.sfilter --length 30 | tr -
 $S filters --plugin ../data/filters/format-fractal-v4.sfilter --length 46 | tr -d '\r' | grep -c "^survivors  1247045761988088314$" > /dev/null
 $S fractal count | tr -d '\r' > fractal-count.txt
 grep -c "^  26 characters: 12$" fractal-count.txt > /dev/null
-grep -c "^  30 characters: 28770$" fractal-count.txt > /dev/null
-grep -c "^  46 characters: 1247045761988088314$" fractal-count.txt > /dev/null
-for k in actions save replay world world-v2 fractal fractal-v2 fractal-v3 fractal-v4; do
+# With v5 (list Y2), the cellular automata too, as many as fractal-space-v5 counts: at 30 characters v4's
+# and the ten elementary automata of a one-digit rule, and every version's together at 46.
+$S filters --plugin ../data/filters/format-fractal-v5.sfilter --length 30 | tr -d '\r' | grep -c "^survivors  28780$" > /dev/null
+$S filters --plugin ../data/filters/format-fractal-v5.sfilter --length 46 | tr -d '\r' | grep -c "^survivors  1247045762062959802$" > /dev/null
+# With v6 (list X5), the attractors, flows and aggregates too: at 29 characters its shortest, the aggregates
+# of a one-digit seed (9), beside v4's 2,799; at 30 those of two digits (90) too; and all together at 46.
+$S filters --plugin ../data/filters/format-fractal-v6.sfilter --length 29 | tr -d '\r' | grep -c "^survivors  2808$" > /dev/null
+$S filters --plugin ../data/filters/format-fractal-v6.sfilter --length 30 | tr -d '\r' | grep -c "^survivors  28870$" > /dev/null
+$S filters --plugin ../data/filters/format-fractal-v6.sfilter --length 46 | tr -d '\r' | grep -c "^survivors  1251161846308103713$" > /dev/null
+grep -c "^  29 characters: 2808$" fractal-count.txt > /dev/null
+grep -c "^  30 characters: 28870$" fractal-count.txt > /dev/null
+grep -c "^  46 characters: 1251161846308103713$" fractal-count.txt > /dev/null
+for k in actions save replay world world-v2 fractal fractal-v2 fractal-v3 fractal-v4 fractal-v5 fractal-v6; do
   grep -c "^$k: [0-9]* documents (" formats.txt > /dev/null
 done
 # The token form: the ports of words-v1 and window-v1 (a dictionary each, built another way

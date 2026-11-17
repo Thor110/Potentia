@@ -716,9 +716,9 @@ test -f raidn-held2/sieve-raid-held
 # pages line as its alphabet. (document's 15: text and image above it; the manifest, PDF, the
 # catalogue's two record formats, the hallway's recordings (sieve-replay-v1), favourites, as one
 # and as a dimension's list, the RAID's tally of who keeps its pieces, and the fractal dimension's
-# rulesets (v1 to v3) and chart (v1 and v2), beneath.)
+# rulesets (v1 to v6) and chart (v1 and v2), beneath: 17 since Y2's v5, 18 since X5's v6.)
 $H --menu --catalogue-entry image --screenshot cat-image.png | tr -d '\r' | q "^catalogue: image: 8 doors$"
-$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 16 doors$"
+$H --menu --catalogue-entry image --press "Right,Right,Return" --screenshot cat-walk.png | tr -d '\r' | q "^catalogue: document: 18 doors$"
 $H --menu --catalogue-entry image --press "Return,Home" --screenshot cat-home.png | tr -d '\r' | q "^catalogue: information: "
 $H --menu --catalogue-entry script-greek --press "l" --screenshot cat-greek.png | tr -d '\r' > cat-greek.txt
 q "^catalogue: script-greek: " cat-greek.txt
@@ -1899,10 +1899,10 @@ $H --no-menu --line fractals --walk "0,0" --warp nosuch --screenshot fractals-no
 # The whole space (list X1, fractal-space-v1): every ruleset the reader takes, the shorter first, each
 # charted fractal at its address there, named (the known fractals included, the default); excluded, a
 # charted one is not on the line, nor the index, and Warp says which setting keeps it off and where it
-# is changed; only they, the shelves are the chart's 155 after the index (X4's 155). And sieve fractal gives the
+# is changed; only they, the shelves are the chart's 197 after the index (X4's 155, Y2's automata 32 more, X5's attractors, flows and aggregate 10 more). And sieve fractal gives the
 # same: the first ruleset of all, and each charted one back from its address (v2's and v3's among them,
 # lists X2 and X3), but Voderberg's tiling, 590 characters, past the default longest (256).
-$H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 156 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 156 items"
+$H --no-menu --line fractals --fractal-known only --walk "0,0" --goto 198 --screenshot fractals-past.png | tr -d '\r' | q "This line holds 198 items"
 $H --no-menu --line fractals --walk "0,0" --warp voderberg-spiral-tiling --screenshot fractals-long.png | tr -d '\r' | q "voderberg-spiral-tiling is 590 characters, past the longest ruleset on this line, 256 "
 $H --no-menu --line fractals --walk "0,0" --warp hilbert-curve-3d --take --screenshot fractals-3d.png | tr -d '\r' | q "| went to hilbert-curve-3d$"
 # Beyond rewriting (list X4): Barnsley's fern as an IFS, the Mandelbrot set as an escape-time formula
@@ -1928,25 +1928,32 @@ printf '[fractals]\nmode = mark\nfilters = fractal-draws-v1, fractal-grows-v1\n'
 $H --no-menu --filters fractals-mark.ini --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-marked.png | tr -d '\r' | q "^FRACTALS line, positional, filters: 2 mark, "
 printf '[fractals]\nmode = hide\nfilters = fractal-draws-v1, fractal-grows-v1, fractal-no-idle-v1\n' > fractals-three.ini
 build/sieve filters --line fractals --filters fractals-three.ini --sample 1000 | tr -d '\r' > fractal-sample.txt
-q "^  fractal-draws-v1 passes 894 of 1000 (89.40%)$" fractal-sample.txt
-q "^  fractal-dimension-v1 passes 180 of 1000 (18.00%)$" fractal-sample.txt
-q "^  the ticked stack passes 688 of 1000 (68.80%)$" fractal-sample.txt
+q "^  fractal-draws-v1 passes 897 of 1000 (89.70%)$" fractal-sample.txt
+q "^  fractal-dimension-v1 passes 195 of 1000 (19.50%)$" fractal-sample.txt
+q "^  the ticked stack passes 681 of 1000 (68.10%)$" fractal-sample.txt
 q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
 # In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
-# fitted as a picture warped in is (fractal-drawn-v1): 1,057 at 10 x 10 in black and white (782 before
-# X4's IFS and escape pictures), counted and
+# fitted as a picture warped in is (fractal-drawn-v1): 5,279 at 10 x 10 in black and white (782 before
+# X4's IFS and escape pictures, 1,057 before Y2's automata, an elementary one's history another picture
+# at each depth, 5,244 before X5's attractors, flows and aggregate), counted and
 # ranked exactly, so the line compacts to them (include) or closes up without them (exclude).
 printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = include\n' > drawn-in.ini
 printf '[image]\nmode = compact\nfilters = fractal-drawn-v1\n[image.fractal-drawn-v1]\nkeep = exclude\n' > drawn-out.ini
-build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    1057 (exact; compact mode available)$"
-build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     1057 (exact)$"
-$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (1057 survivors), "
+build/sieve filters --line image --filters drawn-in.ini | tr -d '\r' | q "^survivors    5279 (exact; compact mode available)$"
+build/sieve filters --line image --filters drawn-out.ini | tr -d '\r' | q "^excluded     5279 (exact)$"
+$H --no-menu --filters drawn-in.ini --line image --walk "0,0" --screenshot image-fractals.png | tr -d '\r' | q "^IMAGE line, positional, filters: 1 compact (5279 survivors), "
+# And the video line (list Y4): a charted fractal growing, its frames its depths in turn, 1,774 at
+# 10 x 10 and 4 frames in black and white, counted exactly both ways round.
+printf '[video]\nmode = compact\nfilters = fractal-moving-v1\n[video.fractal-moving-v1]\nkeep = include\n' > moving-in.ini
+printf '[video]\nmode = compact\nfilters = fractal-moving-v1\n[video.fractal-moving-v1]\nkeep = exclude\n' > moving-out.ini
+build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving-in.ini | tr -d '\r' | q "^survivors    1774 (exact; compact mode available)$"
+build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving-out.ini | tr -d '\r' | q "^excluded     1774 (exact)$"
 dragon=$(build/sieve fractal index dragon-curve | tr -d '\r' | sed -n 's/^address   [0-9]* (0x\([0-9a-f]*\)).*/\1/p')
 test -n "$dragon"
 $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fractals-space.png | tr -d '\r' | q "^FRACTALS line, positional, filters: none, tile [0-9.]* (39 digits)"
 build/sieve fractal at 0 | tr -d '\r' > fractal-first.txt
 printf 'sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n' | cmp - fractal-first.txt
-build/sieve fractal count | tr -d '\r' | q "^  44 characters: 19972340341540161$"
+build/sieve fractal count | tr -d '\r' | q "^  44 characters: 20010504322671072$"
 for f in data/fractals/*.fractal; do
     if [ "$(wc -c < "$f")" -gt 256 ]; then continue; fi
     a=$(build/sieve fractal index "$f" | tr -d '\r' | sed -n 's/^address   \([0-9]*\) .*/\1/p')

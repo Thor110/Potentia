@@ -25,6 +25,14 @@ namespace hallway {
 
 namespace {
 
+// A v6 formula's tokens, one space apart, as its line writes them.
+std::string joined(const std::vector<std::string>& tokens)
+{
+    std::string out;
+    for (const std::string& t : tokens) out += (out.empty() ? "" : " ") + t;
+    return out;
+}
+
 using sieve::BigUint;
 
 // The deepest a fractal is drawn on a shelf, in the hands or in the viewer: past this many symbols a
@@ -100,6 +108,15 @@ public:
         if (!f->rewrites())
         {
             if (f->family == sieve::Fractal::Family::Ifs) return trf("fractals.generated.ifs", {std::to_string(f->maps.size())});
+            if (f->family == sieve::Fractal::Family::Elementary) return trf("fractals.generated.elementary", {std::to_string(f->rule_number), f->start.empty() ? std::string("1") : f->start.substr(0, 12)});
+            if (f->family == sieve::Fractal::Family::Life) return trf("fractals.generated.life", {f->life_rule_text(), std::to_string(f->start_rows.size())});
+            if (f->family == sieve::Fractal::Family::Aggregate) return trf("fractals.generated.aggregate", {std::to_string(f->seed)});
+            if (f->family == sieve::Fractal::Family::Flow) return trf("fractals.generated.flow", {f->step_text});
+            if (f->family == sieve::Fractal::Family::Attractor)
+            {
+                const std::string x = joined(f->path_formula[0]);
+                return trf("fractals.generated.attractor", {x.size() > 16 ? x.substr(0, 16) + ".." : x});
+            }
             std::string formula;
             for (const std::string& t : f->formula) formula += (formula.empty() ? "" : " ") + t;
             if (formula.size() > 16) formula = formula.substr(0, 16) + "..";
@@ -117,6 +134,11 @@ public:
         std::string formula;
         for (const std::string& t : f->formula) formula += (formula.empty() ? "" : " ") + t;
         const std::string family = f->family == sieve::Fractal::Family::Ifs ? trf("fractals.ifs", {std::to_string(f->maps.size())})
+                                   : f->family == sieve::Fractal::Family::Elementary ? trf("fractals.elementary", {std::to_string(f->rule_number), f->start.empty() ? std::string("1") : f->start})
+                                   : f->family == sieve::Fractal::Family::Life ? trf("fractals.life", {f->life_rule_text(), std::to_string(f->start_rows.size())})
+                                   : f->family == sieve::Fractal::Family::Aggregate ? trf("fractals.aggregate", {std::to_string(f->seed)})
+                                   : f->family == sieve::Fractal::Family::Attractor ? trf("fractals.attractor", {joined(f->path_formula[0]), joined(f->path_formula[1])})
+                                   : f->family == sieve::Fractal::Family::Flow ? trf("fractals.flow", {f->step_text, joined(f->path_formula[0]), joined(f->path_formula[1]), joined(f->path_formula[2])})
                                    : f->family == sieve::Fractal::Family::Escape || f->family == sieve::Fractal::Family::Converge
                                        ? trf(f->family == sieve::Fractal::Family::Escape ? "fractals.escape" : "fractals.converge", {formula}) +
                                              (f->julia ? trf("fractals.julia", {f->julia_text[0] + " " + f->julia_text[1]}) : std::string())

@@ -1898,6 +1898,60 @@ ruleset (168 characters):
 
 mapping: pi/2, pi and 1/pi rounded to 6 decimals (1.570796, 3.141593, 0.31831); z starts at the point (julia 0 0; c is not used)
 
+## Y2: those sieve-fractal-v5 can write (cellular automata)
+
+Sources read for Y2 (16 November 2026), as raw wikitext: Wikipedia's Elementary cellular automaton, Rule 30,
+Rule 90, Rule 110, Rule 184, Conway's Game of Life, Gun (cellular automaton), Highlife (cellular automaton),
+Seeds (cellular automaton), Day and Night (cellular automaton) and Life-like cellular automaton (its table of
+rules, from which each B/S string was taken). The patterns are pictures on those pages, not text, so each
+was transcribed and then run, by a simulator written apart from Sieve's, against what its source says it
+does; every one did: the glider and the lightweight spaceship back to themselves 4 generations on, moved;
+the blinker, toad and beacon of period 2 and the pulsar of period 3 (48 cells); the R-pentomino 116 cells at
+generation 1103; the acorn 633 at generation 5206; diehard gone at 130; the Gosper gun 36 cells, then 41
+and 46 at generations 30 and 60 (a glider each 30); HighLife's replicator 12 cells, then 24 at generation 12.
+Sieve's own generations agree with that simulator at eight checks (the gun at 60, the replicator at 12, the
+acorn and the R-pentomino at 100, Seeds at 20, Day and Night at 50, Fredkin's replicator at 30, Morley at
+80). A start that is not the source's own is said to be written or chosen for Sieve.
+
+- rule-30, rule-90, rule-110, rule-150, rule-18, rule-22, rule-126, rule-45, rule-73, rule-54, rule-60,
+  rule-105: from one live cell (the reader's default), Wikipedia's Elementary cellular automaton and the
+  rules' own pages. Measured: rules 18, 22, 60, 90 and 126 at 1.58 (Sierpinski's), rule 150 1.70, rule 30
+  1.93, rule 110 1.95, rules 45, 73 and 105 2.00.
+- rule-184: Wikipedia, Rule 184 (traffic flow); its start, a road of cars, written for Sieve.
+- life-glider, life-blinker, life-toad, life-beacon, life-pulsar, life-lwss, life-r-pentomino, life-acorn,
+  life-diehard, life-gosper-gun (368 characters, past the default longest): B3/S23, Conway's Game of Life.
+- highlife-replicator: B36/S23. seeds: B2/S, from two cells written for Sieve. day-and-night: B3678/S34678;
+  life-without-death: B3/S012345678; morley: B368/S245; each from the R-pentomino, chosen for Sieve.
+  diamoeba: B35678/S5678 from a 3 x 3 block; two-by-two: B36/S125 from one 2 x 2 block; anneal:
+  B4678/S35678; fredkin-replicator: B1357/S1357 from one cell (Fredkin's: every pattern replaced by copies of
+  itself).
+
+## X5: those sieve-fractal-v6 can write (attractors, flows, aggregates)
+
+Sources read for X5 (16 November 2026), as raw wikitext: Wikipedia's Henon map, Ikeda map, Tinkerbell map,
+Gingerbreadman map, Duffing map, Bogdanov map, Lorenz system, Rossler attractor, Thomas' cyclically symmetric
+attractor and Diffusion-limited aggregation. Each formula is its page's equation written in prefix, its
+parameters the page's (8/3 rounded to 2.666667); a start that is not the page's own is said to be chosen for
+Sieve. Each was read by the reader and drawn, and the drawings looked over: Thomas's from 1 1 1 drew a
+straight line (it stays on x = y = z, by its symmetry), so it starts at 0.1 0 0.
+
+- henon-attractor: x <- 1 - 1.4 x^2 + y, y <- 0.3 x, from 0 0; measured 1.26 (its known 1.26).
+- ikeda-attractor: u = 0.9, t = 0.4 - 6 / (1 + x^2 + y^2) written out in each line; measured 1.70.
+- tinkerbell-attractor: a = 0.9, b = -0.6013, c = 2, d = 0.5, from -0.72 -0.64, as its page's figure.
+- gingerbreadman: x <- 1 - y + |x|, y <- x; from 0.5 3.7, chosen for Sieve.
+- duffing-attractor: a = 2.75, b = 0.2; from 0.1 0.1, chosen for Sieve.
+- bogdanov-attractor: epsilon = 0, k = 1.2, mu = 0, as its page's figure; from 0.1 0, chosen for Sieve,
+  where the map circles a closed curve (measured 1.02).
+- lorenz-attractor: sigma = 10, rho = 28, beta = 8/3, a step of 0.01, from 1 1 1.
+- rossler-attractor: a = b = 0.2, c = 5.7, a step of 0.02, from 1 1 1 (-y - z written - * -1 y z, as a
+  formula's numbers are never 0).
+- thomas-attractor: b = 0.208186, where its page says it becomes chaotic; a step of 0.05.
+- diffusion-limited-aggregation: Witten and Sander's (1981) on a square lattice, seed 1; measured 1.63 at
+  1,024 particles.
+
+Not yet charted: parametric L-systems, circle inversion (the Apollonian gasket) and the three-dimensional
+sets; the Lozi, Clifford and Chen pages, refused by the server when read, to be read again.
+
 ## Looked at and not charted
 
 - Bourke's L-system pages (Crystal, Board, Rings, Tiles, Krishna anklets, Mango leaf, his trees): paulbourke.net is still blocked (DNS refused by the network policy). The archive.org API reports a Wayback snapshot of 2026-10-11, but web.archive.org itself resets the connection. Nothing was transcribed; third-party copies were not used.

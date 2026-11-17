@@ -6,4 +6,10 @@ set -eo pipefail
 cd "$(dirname "$0")/../.."
 . ci/lib.sh
 
-ctest --test-dir build -C Release --output-on-failure
+# The core suite runs as its parts (core-spaces, core-fractals and so on, IDEAS 19.236), so a failure
+# names its part; SIEVE_CI_PARTS, a ctest pattern, runs only those (SIEVE_CI_PARTS=core-fractals ci/run.sh 01).
+if [ -n "${SIEVE_CI_PARTS:-}" ]; then
+    ctest --test-dir build -C Release --output-on-failure -R "$SIEVE_CI_PARTS"
+else
+    ctest --test-dir build -C Release --output-on-failure
+fi

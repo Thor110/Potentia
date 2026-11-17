@@ -436,14 +436,14 @@ const std::vector<Page>& pages()
         {"fractal", "The fractal dimension: its shelves, charted by hand, and any ruleset grown and drawn.",
          "sieve fractal [list] [--folder DIR]\n"
          "       sieve fractal show ID|FILE [--depth N]\n"
-         "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX]\n"
+         "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX] [--all-depths]\n"
          "       sieve fractal check FILE\n"
          "       sieve fractal count [--longest N]\n"
          "       sieve fractal at ADDRESS [--longest N]\n"
          "       sieve fractal index ID|FILE [--longest N]",
          "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"
-         "grammar (sieve-fractal-v1 to v4, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96\n"
-         "that the format-fractal-v4 filter passes, so its survivor number is its address. Its shelves show the\n"
+         "grammar (sieve-fractal-v1 to v6, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96\n"
+         "that the format-fractal-v6 filter passes, so its survivor number is its address. Its shelves show the\n"
          "fractals charted by hand (fractals/chart.txt beside the program: the Fibonacci word, Koch's\n"
          "snowflake, the dragon curve and more), each named with its ruleset. A ruleset is a substitution\n"
          "(each symbol replaced by its word at every step, drawn as its words one under another) or an\n"
@@ -453,17 +453,25 @@ const std::vector<Page>& pages()
          "rules for a symbol chosen from a seed, contexts and three dimensions), or, in v4, an iterated\n"
          "function system (maps of the plane, drawn as the points they reach) or an escape-time or\n"
          "convergence formula (z's next value in prefix, as + ^ z 2 c, drawn point by point: the Mandelbrot\n"
-         "and Julia sets, Newton's method). In the hallway it is the\n"
+         "and Julia sets, Newton's method), or, in v5, a cellular automaton (an elementary one, Wolfram's rules\n"
+         "0 to 255, drawn as its rows one under another, or a life-like one such as Conway's B3/S23, drawn as\n"
+         "its field), its depth its generation, or, in v6, a strange attractor (a map of the plane, as Henon's),\n"
+         "a flow (three equations followed through time, as Lorenz's) or an aggregate (particles wandering until\n"
+         "they stick). In the hallway it is the\n"
          "FRACTALS line, its door after AI: its first\n"
          "book the index of them all, each book after it one fractal, taken in hand and grown a step at\n"
-         "a time with N and B (or = and -). The whole space (fractal-space-v4, lists X1 to X4) is every\n"
+         "a time with N and B (or = and -). The whole space (fractal-space-v6, lists X1 to X5 and Y2) is every\n"
          "ruleset the reader takes, each at an address of its own, the shorter first, v1's, then v2's, then\n"
-         "v3's, then v4's: count says how many there are, at gives the ruleset at an address, and index the\n"
-         "address of one. show also measures an L-system's or an IFS's box-counting dimension.",
+         "v3's, then v4's to v6's: count says how many there are, at gives the ruleset at an address, and index the\n"
+         "address of one. show also measures an L-system's, an IFS's, an elementary automaton's, an attractor's or\n"
+         "an aggregate's box-counting\n"
+         "dimension. Depth is time for every family: draw --all-depths draws each depth to the one given, a\n"
+         "picture each (OUT-000.png, OUT-001.png ...), the frames of it growing.",
          {{"list", "The charted fractals: id, family, size, how deep each grows, and its name (the default)."},
-          {"show ID|FILE", "A ruleset at a depth: its family, its size, its word (or how many lines it draws, points it reaches or steps it follows a point for), and an L-system's or an IFS's box-counting dimension."},
+          {"show ID|FILE", "A ruleset at a depth: its family, its size, its word (or how many lines it draws, points it reaches, cells it has or steps it follows a point for), and an L-system's, an IFS's or an elementary automaton's box-counting dimension."},
           {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},
-          {"check FILE", "Whether a file is a sieve-fractal-v1, v2, v3 or v4 ruleset, and if not why; exit 1 if not."},
+          {"--all-depths", "With draw: every depth from 0 to --depth, a picture each, OUT-000.png and on (depth as time: its frames)."},
+          {"check FILE", "Whether a file is a sieve-fractal-v1 to v6 ruleset, and if not why; exit 1 if not."},
           {"count", "How many rulesets the whole space holds, and how many of its shortest lengths."},
           {"at ADDRESS", "The ruleset at an address of the whole space (decimal, or hex after 0x)."},
           {"index ID|FILE", "A charted fractal's or a ruleset's address in the whole space."},
@@ -1090,7 +1098,8 @@ const std::vector<Page>& pages()
          "converge picture pass). Each judges;\n"
          "the known fractals are never judged (the setup menu's known fractals row rules them). In the image\n"
          "line, fractal-drawn-v1 keeps (keep = include) or sets aside (exclude) the pictures that are a charted\n"
-         "fractal drawn at any depth, counted and ranked exactly (the setup menu's in other lines row).",
+         "fractal drawn at any depth, counted and ranked exactly (the setup menu's in other lines row); in the\n"
+         "video line, fractal-moving-v1 the videos that are one growing, its frames its depths in turn.",
          {kLine, kLineOptions,
           {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable. A missing\n"
                              "file means nothing is ticked."},

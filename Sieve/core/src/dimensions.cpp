@@ -42,7 +42,7 @@ const std::vector<Dimension>& dimensions()
          "the length the setup menu sets; not yet a reader of FASTA files", "pages species research", "IDEAS 19.139 c, 19.152, 19.162"},
 
         {"fractals", "The fractal dimension", S::Partly,
-         "a ruleset (sieve-fractal-v1: a substitution or an L-system; v2: an L-system with a tenth of a degree or a scaled step; v3: turns swapped and by stated degrees, several rules a symbol, contexts, three dimensions; v4: an iterated function system, or an escape-time or convergence formula): a unit of the pages line over ascii96 that format-fractal-v4 passes",
+         "a ruleset (sieve-fractal-v1: a substitution or an L-system; v2: an L-system with a tenth of a degree or a scaled step; v3: turns swapped and by stated degrees, several rules a symbol, contexts, three dimensions; v4: an iterated function system, or an escape-time or convergence formula; v5: a cellular automaton, elementary or life-like; v6: a strange attractor, a flow or an aggregate): a unit of the pages line over ascii96 that format-fractal-v6 passes",
          "words of 1 to 64 symbols, grown to 2,097,152; its shelves the fractals charted by hand (data/fractals)", "pages personal",
          "IDEAS 19.191, 19.235; SPECIFICATIONS §12.0t"},
 

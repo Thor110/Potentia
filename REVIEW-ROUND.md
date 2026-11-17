@@ -206,7 +206,21 @@ run before a release package, and after each of the three reviews. Each batch is
   November 2026: sieve-fractal-v4, fractal-space-v4 and format-fractal-v4; 48 more charted, 155 in all, from
   Fractint's fractint.ifs and built-in types and from Wikipedia, their notes in Sieve/docs/FRACTAL-SOURCES.md*). Then
   (X5) parametric L-systems for ABOP's trees, strange attractors, circle inversion, three-dimensional sets
-  and random ones. `[01]` + `[10]` + `[11]`.
+  and random ones (*strange attractors, flows and aggregates made 16 November 2026: sieve-fractal-v6,
+  fractal-space-v6 and format-fractal-v6; 10 charted, 197 in all; parametric L-systems, circle inversion
+  and the three-dimensional sets left*). `[01]` + `[10]` + `[11]`.
+- Y1. CI steps split further (Edward, 16 November 2026, IDEAS 19.236: "splitting the test scripts down even
+  further than the current 11 odd steps into step 1a,b etc"): step 01's core suite as eleven parts, each its
+  own ctest entry, so a failure names its part (*made 16 November 2026*; steps 04, 10 and 11 by line, left).
+  `[01]`.
+- Y2. Cellular automata as a family of the fractal dimension, not a dimension (Edward, 16 November 2026:
+  "perhaps cellular automata should be considered fractals instead"; IDEAS 19.239), and depth as time for
+  every family (*made 16 November 2026: sieve-fractal-v5, fractal-space-v5 and format-fractal-v5; 32 charted,
+  187 in all; `sieve fractal draw --all-depths`*). `[01]` + `[04]` + `[10]` + `[11]`.
+- Y4. Filters for the new families (Edward, 16 November 2026: "insert after 3 working on filters for the new
+  dimensions as we still need to do that"): the noise filters for automata, attractors, flows and aggregates,
+  and fractal-moving-v1 on the video line, a charted fractal growing, set with fractal-drawn-v1 (*made 16
+  November 2026*). `[01]` + `[10]`.
 - Kept in mind throughout (Edward, the same day, IDEAS 19.235): how a fractal translates into each other
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.

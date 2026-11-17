@@ -9814,6 +9814,13 @@ for example".
   such as diffusion-limited aggregation); and each one found in a source is charted with where it came
   from, however long its ruleset (the longest charted ones lie past the line's default longest, and are on
   it when the longest is raised).
+  *Strange attractors, flows and aggregates built 16 November 2026 (list X5):* sieve-fractal-v6, in
+  fractal-space-v6 after v5's and passed exactly by format-fractal-v6; 10
+  charted (Henon's measures 1.259, its known 1.26). Parametric L-systems, circle inversion and the
+  three-dimensional sets are left. The box-counting dimension's error (the equilateral Sierpinski
+  triangle at 1.595 against 1.585, Edward's question of 16 November) was measured with the grid shifted
+  by 1/2, 1/4 and 1/8 of a cell and the fewest cells taken: 1.594 to 1.596, the fern 1.278 throughout, so
+  the error is in how the count bends across the grids, not where the grid lies, and the measure stays.
 
 **19.236 The CI's steps split further, 1a, 1b and so on (Edward, 16 November 2026).** His words: "perhaps we
 could start splitting the test scripts down even further than the current 11 odd steps into step 1a,b etc",
@@ -9821,7 +9828,12 @@ could start splitting the test scripts down even further than the current 11 odd
 ten minutes on Edward's machine), so one failed check stops the step and the rest of its log is read by hand,
 as the fractal picture count was on 16 November; steps 04, 10 and 11 run for half an hour or more each. Split
 by what they test (step 01 by the suite's sections, run as their own ctest entries; step 10 by line), a red
-step would name its part, and a part could be run again alone. *Planned only.*
+step would name its part, and a part could be run again alone. *Step 01 built 16 November 2026:* the core suite
+is eleven ctest entries, one a part (core-spaces, core-characters, core-hallway, core-fractals, core-models,
+core-vectors, core-filters, core-cross, core-books, core-text-sound, core-mixing; `--part` in
+tests/test_core.cpp, every test in exactly one), so a failure names its part; `SIEVE_CI_PARTS=core-fractals
+ci/run.sh 01` runs one, and `sieve_tests --times` gives each test's seconds (ci/README). Measured: core-cross
+143 s, core-filters 47 s, the rest 15 s or less. *Left:* steps 04, 10 and 11 split by line.
 
 **19.237 Tilings, aperiodic and regular, as a dimension as fractals are (Edward, 16 November 2026).** His
 words: "we could also look at aperiodic and regular tiling in a similar way as fractals", "they can not only
@@ -9849,11 +9861,30 @@ text), to see how far from a trained model coherence lasts. *Planned only.*
 discussed the game of life but a cellular automata dimension could lead to the creation of patterns and shapes
 to be filtered out of the video dimension", "they can be used to create many fascinating and very detailed
 animations", "this could lead to content that could be found in the video dimension or filtered from in the
-same way our fractal filters work". Every rule of a family (the elementary rules, the life-like birth and
+same way our fractal filters work", and later the same day: "every frame of cellular automata simulations could become a texture / image as well". So each frame is a picture too, for the image line and as a texture, not only the run of them a video. Every rule of a family (the elementary rules, the life-like birth and
 survival sets, then wider neighbourhoods) with its starting field, numbered as the fractal space is; each
 drawn as frames, and those frames, fitted to the video line, a filter there (include, exclude), as
 fractal-drawn-v1 is on the image line (§19.235). The Game of Life's gliders filter (GAME-OF-LIFE) is one rule
-of it already. *Planned only.*
+of it already. *Decided the same day: not a dimension of its own, a family of the fractal dimension.* Edward:
+"should cellular automata be its own dimension, truly?", "it is a state space, it uses time, but fractals can
+also be animated through time, so they could be frames or animated textures or gifs as well", "so I am
+wondering if perhaps cellular automata should be considered fractals instead", "I am weary of adding too many
+dimensions too fast as it is already quite packed in there", "But that could mean that it is time to make the
+list scroll from side to side so that it can fit on screen regardless"; and, on the answer below, "I agree, we
+just need to make sure it is documented somewhere as well". An automaton is a rule applied generation after
+generation, as a fractal ruleset is applied depth after depth (elementary rule 90 grown from one cell is
+Sierpinski's triangle, drawn as substitutions already are, one row a depth), so it is a family of the fractal
+format (sieve-fractal-v5), numbered in the same space and charted alike; and depth is time for every family,
+so a fern growing, a Mandelbrot set deepening and a Life run are each frames, an animated texture or a GIF,
+and each frame a picture. The dimension list scrolling sideways waits until another dimension would not fit
+at 1024x600. Tilings (§19.237) likewise join as a family rather than a dimension. *Built 16 November 2026
+(list Y2):* sieve-fractal-v5, elementary and life-like automata, in fractal-space-v5 after v4's and passed
+exactly by format-fractal-v5; 32 charted (13 elementary rules, 19 life-like patterns and rules, each
+transcribed pattern run against what its source says it does); `sieve fractal draw --all-depths` writes
+every depth as a frame. *Their frames as a filter on the video line, built the same day (list Y4):*
+fractal-moving-v1, a video that is a charted fractal growing, its frames its depths in turn (from depth 0
+to 32 on), every family's (an automaton's generations, a fern's levels, an attractor's points doubling), set
+with fractal-drawn-v1 by the third FRACTALS row; 1,774 at 10 x 10 and 4 frames. *Left:* animated GIFs.
 
 **19.240 Replays' name, and the main menu's rows of two words in a neat shape (Edward, 16 November 2026).**
 His words: "Replays should be called Active Replays or perhaps Video Replay, thoughts?", "Most options in the
@@ -9889,6 +9920,22 @@ rulesets from it. *Built 16 November 2026:* a listed line whose first book is it
 (client/app_main.cpp); with the known fractals excluded there is no index, and it starts halfway along as
 before. A door into the line still takes you to the same angle you left the last one at (Home, or T and
 "index", goes to it from anywhere on the line).
+
+**19.244 Every colouring of each fractal, as filters on the image and video lines (Edward, 16 November
+2026).** His words: "something I just considered is the colouring ruleset can also be inverted, flipped or
+just follow a completely different pattern/procedure which would allow for every possible colour/pixel colour
+variant of each fractal or cellular automata pattern", "even though they are viable images I suspect being
+able to filter all of these out of the image dimension and video / movies dimensions will be more than
+worthwhile". Today each family is drawn one way (fractal-drawn-v1 and fractal-moving-v1 hold those
+pictures and videos alone); the colouring would become a ruleset of its own beside the fractal's (which
+colour each cell, point or line takes: by depth, by order, by map, by count, inverted, flipped, a palette
+turned), numbered as rulesets are, so each fractal's pictures are every colouring of its shape, and the two
+filters keep or set aside all of them. Later the same day: "the standard cross dimensional filtering should
+eliminate it from those lines anyway, but we may just need to ensure it is hooked up to break them down into
+frames or leave them as gifs or whatever is best suited for them". As built (lists X1c and Y4) a fractal
+reaches the image line a picture a depth and the video line as frames, a depth each, which is the form a GIF
+takes there too (the video line holds a GIF as its frames); so a colouring added is one more way each picture
+and frame is drawn, and both filters take it with no other change. *Planned only.*
 
 **19.191 Layout rulesets and a fractal dimension: each line laid out by your own rules, and rules that
 make things (Edward, 13 November 2026).** His words: "as well as a series of fractal rulesets that allow

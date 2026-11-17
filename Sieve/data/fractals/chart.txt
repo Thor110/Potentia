@@ -309,3 +309,87 @@ fractal julia-san-marco-dem Julia set, c = -0.75 + 0.11i
 source Wikipedia, Julia set, its distance-estimation gallery (c = -0.75 + 0.11i)
 fractal collatz-fractal Collatz fractal
 source Wikipedia, Collatz conjecture, "Iterating on real or complex numbers" (Letherman, Schleicher and Wood's f with h(z) = 0), centred at 0 with real parts -5 to 5
+fractal rule-30 Rule 30 (elementary cellular automaton)
+source Wikipedia, Rule 30 (Wolfram, 1983), from one live cell
+fractal rule-90 Rule 90 (Sierpinski triangle as an automaton)
+source Wikipedia, Rule 90 (each cell the exclusive or of its two neighbours), from one live cell
+fractal rule-110 Rule 110 (Turing-complete automaton)
+source Wikipedia, Rule 110 (Cook, 2004: universal), from one live cell
+fractal rule-150 Rule 150 (exclusive or of three cells)
+source Wikipedia, Elementary cellular automaton, Rule 150, from one live cell
+fractal rule-18 Rule 18
+source Wikipedia, Elementary cellular automaton, Rule 18 (a Sierpinski triangle from one cell), from one live cell
+fractal rule-22 Rule 22
+source Wikipedia, Elementary cellular automaton, rules 18, 22, 126 and 146 (Sierpinski-like), from one live cell
+fractal rule-126 Rule 126
+source Wikipedia, Elementary cellular automaton, rules 18, 22, 126 and 146 (Sierpinski-like), from one live cell
+fractal rule-45 Rule 45
+source Wikipedia, Elementary cellular automaton (Wolfram class 3, chaotic), from one live cell
+fractal rule-73 Rule 73
+source Wikipedia, Elementary cellular automaton (Wolfram class 3, chaotic), from one live cell
+fractal rule-54 Rule 54
+source Wikipedia, Elementary cellular automaton (Wolfram class 4, complex), from one live cell
+fractal rule-60 Rule 60
+source Wikipedia, Elementary cellular automaton (Rule 60, the additive rule of a cell and its left neighbour), from one live cell
+fractal rule-105 Rule 105
+source Wikipedia, Elementary cellular automaton (the complement of Rule 150), from one live cell
+fractal rule-184 Rule 184 (traffic flow)
+source Wikipedia, Rule 184 (traffic and particle flow); the start, a road of cars, written for Sieve
+fractal life-glider Glider (Game of Life)
+source Wikipedia, Conway's Game of Life (Gardner, Scientific American, October 1970)
+fractal life-blinker Blinker (Game of Life oscillator)
+source Wikipedia, Conway's Game of Life, its oscillators
+fractal life-toad Toad (Game of Life oscillator)
+source Wikipedia, Conway's Game of Life, its oscillators
+fractal life-beacon Beacon (Game of Life oscillator)
+source Wikipedia, Conway's Game of Life, its oscillators
+fractal life-pulsar Pulsar (Game of Life, period 3)
+source Wikipedia, Conway's Game of Life, its oscillators
+fractal life-lwss Lightweight spaceship (Game of Life)
+source Wikipedia, Conway's Game of Life, its spaceships
+fractal life-r-pentomino R-pentomino (Game of Life, a methuselah)
+source Wikipedia, Conway's Game of Life (stable at generation 1103, 116 cells)
+fractal life-acorn Acorn (Game of Life, a methuselah)
+source Wikipedia, Conway's Game of Life (Corderman; 633 cells at generation 5206)
+fractal life-diehard Diehard (Game of Life, gone at 130)
+source Wikipedia, Conway's Game of Life (vanishes after 130 generations)
+fractal life-gosper-gun Gosper glider gun (Game of Life)
+source Wikipedia, Gun (cellular automaton) (Gosper, 1970: a glider every 30 generations)
+fractal highlife-replicator Replicator (HighLife)
+source Wikipedia, Highlife (cellular automaton) (Thompson, 1994: two after 12 generations)
+fractal seeds Seeds
+source Wikipedia, Seeds (cellular automaton) (Silverman); the start, two cells, written for Sieve
+fractal day-and-night Day and Night
+source Wikipedia, Day and Night (cellular automaton) (Thompson, 1997); the start, the R-pentomino, chosen for Sieve
+fractal life-without-death Life without Death
+source Wikipedia, Life-like cellular automaton, Life without Death (cells that come alive never die); the start, the R-pentomino, chosen for Sieve
+fractal diamoeba Diamoeba
+source Wikipedia, Life-like cellular automaton, Diamoeba (Hickerson); the start, a 3 x 3 block, written for Sieve
+fractal morley Morley (Move)
+source Wikipedia, Life-like cellular automaton, Morley (Stephen Morley); the start, the R-pentomino, chosen for Sieve
+fractal fredkin-replicator Replicator (Fredkin)
+source Wikipedia, Life-like cellular automaton, Replicator (Fredkin: every pattern replaced by copies of itself), from one live cell
+fractal two-by-two 2x2
+source Wikipedia, Life-like cellular automaton, B36/S125 ("2x2"); the start, one 2 x 2 block, written for Sieve
+fractal anneal Anneal (twisted majority)
+source Wikipedia, Life-like cellular automaton, Anneal; the start written for Sieve
+fractal henon-attractor Henon attractor
+source Wikipedia, Henon map (x <- 1 - a x^2 + y, y <- b x; a = 1.4, b = 0.3), from 0 0
+fractal ikeda-attractor Ikeda attractor
+source Wikipedia, Ikeda map (u = 0.9, t = 0.4 - 6 / (1 + x^2 + y^2)), from 0 0
+fractal tinkerbell-attractor Tinkerbell attractor
+source Wikipedia, Tinkerbell map (a = 0.9, b = -0.6013, c = 2, d = 0.5, from -0.72, -0.64)
+fractal gingerbreadman Gingerbreadman map
+source Wikipedia, Gingerbreadman map (x <- 1 - y + |x|, y <- x); the start, 0.5 3.7, chosen for Sieve
+fractal duffing-attractor Duffing map
+source Wikipedia, Duffing map (a = 2.75, b = 0.2); the start, 0.1 0.1, chosen for Sieve
+fractal bogdanov-attractor Bogdanov map
+source Wikipedia, Bogdanov map (epsilon = 0, k = 1.2, mu = 0, as its figure); the start, 0.1 0, chosen for Sieve
+fractal lorenz-attractor Lorenz attractor
+source Wikipedia, Lorenz system (sigma = 10, rho = 28, beta = 8/3 rounded to 2.666667), from 1 1 1, a step of 0.01
+fractal rossler-attractor Rossler attractor
+source Wikipedia, Rossler attractor (a = 0.2, b = 0.2, c = 5.7), from 1 1 1, a step of 0.02
+fractal thomas-attractor Thomas cyclically symmetric attractor
+source Wikipedia, Thomas' cyclically symmetric attractor (b = 0.208186, where it becomes chaotic), a step of 0.05; the start, 0.1 0 0, chosen for Sieve (from 1 1 1 it stays on the line x = y = z)
+fractal diffusion-limited-aggregation Diffusion-limited aggregation
+source Wikipedia, Diffusion-limited aggregation (Witten and Sander, 1981), on a square lattice; seed 1, chosen for Sieve

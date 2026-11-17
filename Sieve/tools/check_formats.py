@@ -687,6 +687,106 @@ def fractal4_edges(r):
     ]
 
 
+def fractal5_doc(r):
+    """v1's to v4's, and v5's: an elementary automaton with or without a start, or a life-like one."""
+    if r.random() < 0.4:
+        return fractal4_doc(r)
+    row = lambda: "".join(r.choice("01") for _ in range(r.randint(1, 8 if r.random() < 0.9 else 70)))
+    if r.random() < 0.5:
+        t = f"sieve-fractal-v5\nelementary {r.randint(0, 255)}\n"
+        return t + (f"start {row()}\n" if r.random() < 0.5 else "")
+    counts = lambda: "".join(sorted(r.sample("012345678", r.randint(0, 9))))
+    return f"sieve-fractal-v5\nlife B{counts()}/S{counts()}\nstart " + "/".join(row() for _ in range(r.randint(1, 5))) + "\n"
+
+
+def fractal5_edges(r):
+    h = "sieve-fractal-v5\n"
+    return fractal4_edges(r) + [
+        h + "elementary 0\n",
+        h + "elementary 90\n",
+        h + "elementary 255\n",
+        h + "elementary 256\n",
+        h + "elementary 030\n",
+        h + "elementary -1\n",
+        h + "elementary 30\nstart 1\n",
+        h + "elementary 30\nstart 0101\n",
+        h + "elementary 30\nstart \n",
+        h + "elementary 30\nstart 012\n",
+        h + "elementary 30\nstart " + "1" * 64 + "\n",
+        h + "elementary 30\nstart " + "1" * 65 + "\n",
+        h + "elementary 30\nstart 1\nstart 1\n",
+        h + "life B3/S23\nstart 010/001/111\n",
+        h + "life B/S\nstart 1\n",
+        h + "life B012345678/S012345678\nstart 1\n",
+        h + "life B33/S23\nstart 1\n",
+        h + "life B32/S23\nstart 1\n",
+        h + "life B9/S23\nstart 1\n",
+        h + "life B3/S23\n",
+        h + "life B3/S23\nstart 1//1\n",
+        h + "life B3/S23\nstart /1\n",
+        h + "life B3S23\nstart 1\n",
+        h + "life b3/s23\nstart 1\n",
+        h + "life B3/S23\nstart 1\nstart 1\n",
+        h + "ifs\nmap 0 0 0 0 0 0\n",
+    ]
+
+
+def fractal6_doc(r):
+    """v1's to v5's, and v6's: an attractor or a flow of formulas grown at random, or an aggregate."""
+    if r.random() < 0.4:
+        return fractal5_doc(r)
+    frac = lambda: "." + "".join(r.choice("0123456789") for _ in range(r.randint(0, 5))) + r.choice("123456789")
+    num = lambda zero: (r.choice(["0"]) if zero and r.random() < 0.3 else r.choice(["", "-"]) + r.choice([str(r.randint(1, 999)), "0" + frac(), str(r.randint(1, 999)) + frac()]))
+    k = r.random()
+    if k < 0.2:
+        return f"sieve-fractal-v6\naggregate {r.choice([1, r.randint(1, 4294967295), 4294967296, 0])}\n"
+    leaves = ["x", "y"] if k < 0.6 else ["x", "y", "z"]
+
+    def term(depth):
+        q = r.random()
+        if depth > 3 or q < 0.4:
+            return [r.choice(leaves + [num(False)] + (["z", "c", "i"] if r.random() < 0.05 else []))]
+        if q < 0.6:
+            return [r.choice(["abs", "cos", "exp", "log", "sin"] + (["conj"] if r.random() < 0.1 else []))] + term(depth + 1)
+        return [r.choice("+-*/^")] + term(depth + 1) + term(depth + 1)
+
+    t = "sieve-fractal-v6\n" + ("attractor\n" if len(leaves) == 2 else f"flow {num(False).lstrip('-')}\n")
+    for v in "xyz"[:len(leaves)]:
+        t += v + " " + " ".join(term(0)) + "\n"
+    if r.random() < 0.4:
+        t += "from " + " ".join(num(True) for _ in leaves) + "\n"
+    return t
+
+
+def fractal6_edges(r):
+    h = "sieve-fractal-v6\n"
+    return fractal5_edges(r) + [
+        h + "aggregate 1\n",
+        h + "aggregate 4294967295\n",
+        h + "aggregate 4294967296\n",
+        h + "aggregate 0\n",
+        h + "aggregate 01\n",
+        h + "aggregate 1\nfrom 0 0\n",
+        h + "attractor\nx x\ny x\n",
+        h + "attractor\nx + - 1 * 1.4 ^ x 2 y\ny * 0.3 x\n",
+        h + "attractor\nx x\ny x\nfrom 0 0\n",
+        h + "attractor\nx x\ny x\nfrom 0 0 0\n",
+        h + "attractor\nx x\ny z\n",
+        h + "attractor\nx x\n",
+        h + "attractor\nx conj x\ny x\n",
+        h + "attractor\nx 0\ny x\n",
+        h + "attractor\nx + + + + + + + x x x x x x x x\ny x\n",
+        h + "attractor\nx + + + + + + + + x x x x x x x x x\ny x\n",
+        h + "flow 0.01\nx * 10 - y x\ny - * x - 28 z y\nz - * x y * 2.666667 z\n",
+        h + "flow 0.01\nx x\ny y\nz z\nfrom 0.1 0 0\n",
+        h + "flow 0\nx x\ny y\nz z\n",
+        h + "flow -1\nx x\ny y\nz z\n",
+        h + "flow 1\nx x\ny y\n",
+        h + "flow 1\nx x\ny y\nz z\nfrom 1 1\n",
+        h + "lsystem 90\naxiom F\nrule F FF\n",
+    ]
+
+
 def fractal_beyond_walk(doc, why):
     """A ruleset the reader refuses only because its rules are out of order or one is given twice."""
     return "in the order of their symbols" in why
@@ -703,6 +803,8 @@ FORMATS = [
     ("fractal-v2", "sieve", "fractal", "format-fractal-v2.sfilter", fractal2_doc, fractal2_edges, fractal_beyond_walk),
     ("fractal-v3", "sieve", "fractal", "format-fractal-v3.sfilter", fractal3_doc, fractal3_edges, fractal_beyond_walk),
     ("fractal-v4", "sieve", "fractal", "format-fractal-v4.sfilter", fractal4_doc, fractal4_edges, fractal_beyond_walk),
+    ("fractal-v5", "sieve", "fractal", "format-fractal-v5.sfilter", fractal5_doc, fractal5_edges, fractal_beyond_walk),
+    ("fractal-v6", "sieve", "fractal", "format-fractal-v6.sfilter", fractal6_doc, fractal6_edges, fractal_beyond_walk),
 ]
 
 OTHERS = ["", "a", "0", " ", "\n", "-", "Z", ".", "\r"]

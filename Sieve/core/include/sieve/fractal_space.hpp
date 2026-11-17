@@ -31,6 +31,18 @@
 // length by its first token's kind (+ - * / ^, then abs conj cos exp log sin, then c i z, then a
 // number), then that token's length, its place among those, then the rest alike.
 //
+// "fractal-space-v5" (list Y2): fractal-space-v4's, then every v5 ruleset (sieve-fractal-v5: a cellular
+// automaton) of `longest` characters or fewer, from the shortest there is (30: "elementary 0"), the shorter
+// first; within a length by its parts as v4's are: an elementary automaton before a life-like one; its rule
+// by its value; an absent start before one; a start's row by its 0s and 1s (0 first), the first the most
+// significant; a life-like rule's counts as a choice of 0-8 in order, none first, then the earlier choices.
+//
+// "fractal-space-v6" (list X5): fractal-space-v5's, then every v6 ruleset (sieve-fractal-v6: an attractor, a
+// flow or an aggregate) of `longest` characters or fewer, from the shortest there is (29: "aggregate 1"), the
+// shorter first; within a length by its parts as v4's are: an attractor before a flow before an aggregate;
+// a formula's texts as v4's are, its tokens + - * / ^, then abs cos exp log sin, then x y (and z), then a
+// number; an absent start before one; a seed by its value.
+//
 // "fractal-space-v1", the numbering:
 //   - every ruleset of 44 to `longest` characters (44 is the shortest there is: "lsystem 1", an axiom of
 //     one symbol and one rule of one); the shorter first;
@@ -56,7 +68,7 @@
 
 namespace sieve {
 
-inline constexpr const char* kFractalSpaceVersion = "fractal-space-v4";
+inline constexpr const char* kFractalSpaceVersion = "fractal-space-v6";
 inline constexpr uint32_t kFractalSpaceShortest = 44;
 // A longest beyond this is refused (its tables grow with it: the space is counted in 0.65 s to 256
 // characters and 4.0 s to 512, measured 16 November 2026; Voderberg's tiling, charted, is 590).
@@ -79,7 +91,9 @@ public:
     const BigUint& count() const { return total_; }   // all of them
     const BigUint& count_v1() const { return total_v1_; } // v1's, the first of them
     BigUint count_v3() const;                             // v3's
-    const BigUint& count_v4() const { return total_v4_; } // v4's, the last of them
+    const BigUint& count_v4() const { return total_v4_; } // v4's
+    const BigUint& count_v5() const { return total_v5_; } // v5's
+    const BigUint& count_v6() const { return total_v6_; } // v6's, the last of them
     BigUint count_at(uint32_t length) const;           // those of exactly `length` characters (v1 and v2)
     // The ruleset at an address (below count()). Throws std::invalid_argument past the end.
     std::string at(const BigUint& index) const;
@@ -119,8 +133,8 @@ private:
     std::vector<Group> groups_;      // v2's, in order
     std::vector<BigUint> by_length_; // [length]: v1 rulesets of exactly that many characters
     std::vector<BigUint> by_length_v2_;
-    std::shared_ptr<const FractalSpaceV3> v3_, v4_; // (v4's counted by the same parts)
-    BigUint total_v1_, total_v2_, total_v3_, total_v4_, total_;
+    std::shared_ptr<const FractalSpaceV3> v3_, v4_, v5_, v6_; // (v4's to v6's counted by the same parts)
+    BigUint total_v1_, total_v2_, total_v3_, total_v4_, total_v5_, total_v6_, total_;
 };
 
 } // namespace sieve

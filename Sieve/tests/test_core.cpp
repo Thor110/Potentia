@@ -7440,7 +7440,7 @@ void test_fractals()
     CHECK(img && img->width == 64 && img->height == 48 && img->rgba.size() == 64u * 48 * 4);
     CHECK(!draw_fractal(*d, d->deepest() + 1, 64, 64)); // past its limit: nothing, not a word of millions
     // Not as written: each refused with a reason.
-    for (const std::string bad : {std::string("sieve-fractal-v1\nsubstitution\naxiom 0\n"), std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 1 0\nrule 0 01\n"),
+    for (const std::string& bad : {std::string("sieve-fractal-v1\nsubstitution\naxiom 0\n"), std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 1 0\nrule 0 01\n"),
                                   std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 0 1\n"), std::string("sieve-fractal-v1\nlsystem 0\naxiom F\nrule F FF\n"),
                                   std::string("sieve-fractal-v1\nlsystem 090\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v1\nlsystem 90\naxiom F\nrule + FF\n"),
                                   std::string("sieve-fractal-v1\nsubstitution\naxiom A\nrule A 0\n"), std::string("sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01"),
@@ -7468,7 +7468,7 @@ void test_fractals()
         }
         CHECK(fractal_angle_text(1) == "0.1" && fractal_angle_text(3599) == "359.9" && fractal_angle_text(900) == "90");
         CHECK(fractal_scale_text(707) == "0.707" && fractal_scale_text(500) == "0.5" && fractal_scale_text(10) == "0.01");
-        for (const std::string bad : {std::string("sieve-fractal-v2\nlsystem 90\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v2\nlsystem 22.0\naxiom F\nrule F FF\n"),
+        for (const std::string& bad : {std::string("sieve-fractal-v2\nlsystem 90\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v2\nlsystem 22.0\naxiom F\nrule F FF\n"),
                                       std::string("sieve-fractal-v2\nlsystem 360.5\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v2\nlsystem 00.5\naxiom F\nrule F FF\n"),
                                       std::string("sieve-fractal-v2\nlsystem 90 scale 0.70\naxiom F\nrule F FF\n"), std::string("sieve-fractal-v2\nlsystem 90 scale 1.5\naxiom F\nrule F FF\n"),
                                       std::string("sieve-fractal-v2\nlsystem 22.5\naxiom F\nrule F F\"F\n"), std::string("sieve-fractal-v1\nlsystem 90\naxiom F\nrule F F\"F\n"),
@@ -7501,7 +7501,7 @@ void test_fractals()
         CHECK(f && f->version == 3 && f->text() == full && f->rules.size() == 4 && f->defines.size() == 3 && f->seed == 7 && f->ignore == "+-F");
         CHECK(f && std::fabs(f->angle_degrees - 360.0 / 34) < 1e-12 && std::fabs(f->scale_ratio - 0.618034) < 1e-12 && f->contexts[0] == std::make_pair('a', 'b'));
         CHECK(f && f->defines[1].value == -84.5 && !f->defines[2].turn && f->angle_written() == "360/34" && f->scale_written() == "0.618034");
-        for (const std::string bad : {std::string("sieve-fractal-v3\nlsystem 360\naxiom F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 360/1\naxiom F\nrule F F\n"),
+        for (const std::string& bad : {std::string("sieve-fractal-v3\nlsystem 360\naxiom F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 360/1\naxiom F\nrule F F\n"),
                                       std::string("sieve-fractal-v3\nlsystem 22.50\naxiom F\nrule F F\n"), std::string("sieve-fractal-v3\nlsystem 90\nseed 0\naxiom F\nrule F F\n"),
                                       std::string("sieve-fractal-v3\nlsystem 90\nignore F+\naxiom F\nrule F F\n"),
                                       std::string("sieve-fractal-v3\nlsystem 90\ndefine 2 turn 1\ndefine 1 turn 1\naxiom F\nrule F F\n"),
@@ -7549,13 +7549,17 @@ void test_fractals()
         BigUint first3 = space.count();
         first3 -= space.count_v3();
         first3 -= space.count_v4(); // (v4's after v3's, list X4)
+        first3 -= space.count_v5(); // (and v5's, list Y2)
+        first3 -= space.count_v6(); // (and v6's, list X5)
         // (the rules symbol by symbol, an earlier symbol's shorter first: so the first has its rule for z)
         CHECK(space.at(first3) == "sieve-fractal-v3\nlsystem 1\naxiom !\nrule z !\n");
         const FractalSpace whole(kFractalSpaceLongestDefault);
         BigUint first3w = whole.count();
         first3w -= whole.count_v3();
         first3w -= whole.count_v4();
-        for (const std::string t : {full, bush, std::string("sieve-fractal-v3\nlsystem 0.000001\naxiom A\nrule A A\n")})
+        first3w -= whole.count_v5();
+        first3w -= whole.count_v6();
+        for (const std::string& t : {full, bush, std::string("sieve-fractal-v3\nlsystem 0.000001\naxiom A\nrule A A\n")})
         {
             const auto i = whole.index_of(t);
             CHECK(i && *i >= first3w && whole.at(*i) == t);
@@ -7571,7 +7575,7 @@ void test_fractals()
         CHECK(f && f->family == Fractal::Family::Ifs && f->maps.size() == 4 && f->maps[1].value[5] == 1.6 && f->text() == fern && !f->grow(1));
         CHECK(m && m->family == Fractal::Family::Escape && m->formula.size() == 5 && m->view && m->view_value[0] == -0.5 && m->text() == mandel);
         CHECK(n && n->family == Fractal::Family::Converge && n->julia && n->text() == newton);
-        for (const std::string bad : {std::string("sieve-fractal-v4\nifs\n"), std::string("sieve-fractal-v4\nifs\nmap 0 0 0 0 0\n"),
+        for (const std::string& bad : {std::string("sieve-fractal-v4\nifs\n"), std::string("sieve-fractal-v4\nifs\nmap 0 0 0 0 0\n"),
                                       std::string("sieve-fractal-v4\nifs\nmap -0 0 0 0 0 0\n"), std::string("sieve-fractal-v4\nifs\nmap 1000 0 0 0 0 0\n"),
                                       std::string("sieve-fractal-v4\nescape + z\n"), std::string("sieve-fractal-v4\nescape z z\n"),
                                       std::string("sieve-fractal-v4\nescape 0\n"), std::string("sieve-fractal-v4\nescape tan z\n"),
@@ -7595,21 +7599,105 @@ void test_fractals()
         const FractalSpace space(96);
         BigUint first4 = space.count();
         first4 -= space.count_v4();
-        CHECK(space.at(first4) == "sieve-fractal-v4\nescape c\n" && space.count_at(26) == BigUint(12) && space.count_at(30) == BigUint(28770));
+        first4 -= space.count_v5(); // (list Y2: v5's after v4's)
+        first4 -= space.count_v6(); // (and v6's, list X5)
+        CHECK(space.at(first4) == "sieve-fractal-v4\nescape c\n" && space.count_at(26) == BigUint(12) && space.count_at(30) == BigUint(28770 + 10 + 90)); // (and v5's elementary 0 to 9, v6's aggregate 10 to 99)
         const FractalSpace whole(kFractalSpaceLongestDefault); // (the fern is 133 characters)
         BigUint first4w = whole.count();
         first4w -= whole.count_v4();
+        first4w -= whole.count_v5();
+        first4w -= whole.count_v6();
         for (const std::string& t : {fern, mandel, newton, std::string("sieve-fractal-v4\nescape c\n")})
         {
             const auto i = whole.index_of(t);
             CHECK(i && *i >= first4w && whole.at(*i) == t);
         }
-        // Against format-fractal-v4: at 26 to 30 characters v4's alone, which the grammar passes exactly.
+        // Against format-fractal-v5 (v4's and v5's): at 26 to 30 characters theirs alone, which the grammar
+        // passes exactly.
         const Alphabet& a96 = alphabet_by_id("ascii96");
-        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v4.sfilter");
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v6.sfilter"); // (v5's and v6's too)
         static const TestResources none(nullptr, nullptr);
         for (uint32_t l = 26; l <= 30; ++l)
             CHECK(space.count_at(l) == DfaRanker(compile_plugin(*plugin, FilterLine{"text", "ascii96", 96, l, &a96, 0, 0, 0}, {}, none), l).count());
+    }
+    // sieve-fractal-v5 (list Y2): cellular automata as a family of the fractal dimension, read and written
+    // back; refusals; generations worked out; rule 90 from one cell Sierpinski's triangle (dimension
+    // log 3 / log 2, its cells on a lattice); a glider the same five cells four generations on, moved; a
+    // rule that wakes empty space waking all of it; and in the space, after v4's.
+    {
+        const std::string r90 = "sieve-fractal-v5\nelementary 90\n", glider = "sieve-fractal-v5\nlife B3/S23\nstart 010/001/111\n";
+        const auto e = read_fractal(r90), l = read_fractal(glider);
+        CHECK(e && l && e->text() == r90 && l->text() == glider && e->family == Fractal::Family::Elementary && l->family == Fractal::Family::Life && e->is_automaton() && !e->rewrites());
+        CHECK(l->birth == (1u << 3) && l->survival == ((1u << 2) | (1u << 3)) && l->life_rule_text() == "B3/S23" && l->start_rows.size() == 3);
+        for (const std::string& bad : {std::string("sieve-fractal-v5\nelementary 256\n"), std::string("sieve-fractal-v5\nelementary 090\n"),
+                                       std::string("sieve-fractal-v5\nelementary 30\nstart \n"), std::string("sieve-fractal-v5\nelementary 30\nstart 012\n"),
+                                       std::string("sieve-fractal-v5\nelementary 30\nstart ") + std::string(65, '1') + "\n", std::string("sieve-fractal-v5\nlife B33/S23\nstart 1\n"),
+                                       std::string("sieve-fractal-v5\nlife B9/S23\nstart 1\n"), std::string("sieve-fractal-v5\nlife B3/S23\n"),
+                                       std::string("sieve-fractal-v5\nlife B3/S23\nstart 1//1\n"), std::string("sieve-fractal-v5\nlife B3S23\nstart 1\n"),
+                                       std::string("sieve-fractal-v5\nelementary 30\nstart 1\nstart 1\n"), std::string("sieve-fractal-v5\nifs\nmap 0 0 0 0 0 0\n")})
+            CHECK(!read_fractal(bad));
+        CHECK(read_fractal("sieve-fractal-v5\nlife B/S\nstart 1\n") && read_fractal(std::string("sieve-fractal-v5\nelementary 30\nstart ") + std::string(64, '1') + "\n"));
+        const auto c90 = fractal_cells(*e, 3);
+        // (generations 0 to 3 of rule 90 from one cell: 1, 101, 10001, 1010101, a row each, 7 wide)
+        const std::vector<uint8_t> want = {0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1};
+        CHECK(c90 && c90->width == 7 && c90->height == 4 && c90->cells == want && c90->beyond == 0);
+        const auto d90 = fractal_box_dimension(*e);
+        CHECK(d90 && std::fabs(d90->value - std::log(3.0) / std::log(2.0)) < 0.01 && !fractal_box_dimension(*l));
+        auto live = [](const AutomatonCells& c) {
+            std::vector<std::pair<uint32_t, uint32_t>> at;
+            for (uint32_t y = 0; y < c.height; ++y)
+                for (uint32_t x = 0; x < c.width; ++x)
+                    if (c.cells[size_t(y) * c.width + x]) at.push_back({x, y});
+            return at;
+        };
+        const auto g0 = fractal_cells(*l, 0), g4 = fractal_cells(*l, 4);
+        auto a = live(*g0), b = live(*g4);
+        CHECK(a.size() == 5 && b.size() == 5);
+        for (auto& [x, y] : b) x -= 4 + 1, y -= 4 + 1; // (the window 4 bigger each way, and the glider a cell right and down)
+        CHECK(a == b && g4->width == 11 && g4->height == 11);
+        const auto wake = fractal_cells(*read_fractal("sieve-fractal-v5\nelementary 1\nstart 0\n"), 1);
+        CHECK(wake && wake->beyond == 1 && wake->cells[0] == 0 && wake->cells[size_t(wake->width) * 1] == 1); // (000 makes 1: rule 1 wakes it)
+        CHECK(e->deepest() == kFractalGenerationsMost && draw_fractal(*e, 31, 64, 64) && draw_fractal(*l, 8, 32, 32) && !draw_fractal(*l, l->deepest() + 1, 32, 32));
+        const FractalSpace space(96);
+        BigUint first5 = space.count();
+        first5 -= space.count_v5();
+        first5 -= space.count_v6();
+        CHECK(space.at(first5) == "sieve-fractal-v5\nelementary 0\n" && space.index_of(r90) && space.at(*space.index_of(r90)) == r90 && space.at(*space.index_of(glider)) == glider);
+        BigUint last = space.count();
+        last -= BigUint(1);
+        CHECK(read_fractal(space.at(last))->version == 6 && space.index_of(space.at(last)) == last); // (v6's after v5's, list X5)
+    }
+    // sieve-fractal-v6 (list X5): an attractor, a flow and an aggregate, read and written back; refusals;
+    // Henon's attractor measured near its known 1.26; Lorenz's flow followed, finite and staying within its
+    // butterfly; an aggregate the same from its seed every time, every particle stuck; and in the space,
+    // after v5's, from "aggregate 1".
+    {
+        const std::string henon = "sieve-fractal-v6\nattractor\nx + - 1 * 1.4 ^ x 2 y\ny * 0.3 x\n";
+        const std::string lorenz = "sieve-fractal-v6\nflow 0.01\nx * 10 - y x\ny - * x - 28 z y\nz - * x y * 2.666667 z\n";
+        const std::string dla = "sieve-fractal-v6\naggregate 1\n";
+        const auto h = read_fractal(henon), lz = read_fractal(lorenz), a = read_fractal(dla);
+        CHECK(h && lz && a && h->text() == henon && lz->text() == lorenz && a->text() == dla && h->family == Fractal::Family::Attractor && lz->family == Fractal::Family::Flow &&
+              a->family == Fractal::Family::Aggregate && h->is_path() && !a->is_path() && lz->from_value[0] == 1 && a->seed == 1);
+        for (const std::string& bad : {std::string("sieve-fractal-v6\naggregate 0\n"), std::string("sieve-fractal-v6\naggregate 4294967296\n"),
+                                       std::string("sieve-fractal-v6\nattractor\nx x\ny z\n"), std::string("sieve-fractal-v6\nattractor\nx conj x\ny x\n"),
+                                       std::string("sieve-fractal-v6\nattractor\nx x\n"), std::string("sieve-fractal-v6\nattractor\nx x\ny x\nfrom 0 0 0\n"),
+                                       std::string("sieve-fractal-v6\nflow 0\nx x\ny y\nz z\n"), std::string("sieve-fractal-v6\nflow 1\nx x\ny y\n"),
+                                       std::string("sieve-fractal-v6\nattractor\nx + + + + + + + + x x x x x x x x x\ny x\n")})
+            CHECK(!read_fractal(bad));
+        const auto hd = fractal_box_dimension(*h);
+        CHECK(hd && std::fabs(hd->value - 1.26) < 0.05 && !fractal_box_dimension(*lz));
+        const auto path = fractal_path(*lz, 3);
+        bool within = path && path->size() == size_t(1024) << 3;
+        for (const auto& p : *path) within = within && std::fabs(p[0]) < 30 && std::fabs(p[1]) < 40 && p[2] > -1 && p[2] < 60;
+        CHECK(within);
+        const auto c1 = fractal_cells(*a, 2), c2 = fractal_cells(*a, 2);
+        size_t stuck = 0;
+        for (const uint8_t v : c1->cells) stuck += v;
+        CHECK(c1 && c2 && c1->cells == c2->cells && c1->when == c2->when && stuck == 16u << 2 && draw_fractal(*a, 2, 32, 32) && draw_fractal(*h, 2, 32, 32) && draw_fractal(*lz, 2, 32, 32));
+        const FractalSpace space(96);
+        BigUint first6 = space.count();
+        first6 -= space.count_v6();
+        CHECK(space.at(first6) == dla && space.at(*space.index_of(henon)) == henon && space.at(*space.index_of(lorenz)) == lorenz);
     }
     // The shelves as charted in the repository: every entry read, and each grows at least a step.
     const auto chart = read_fractal_chart(std::filesystem::path(g_data) / "fractals");
@@ -7631,7 +7719,7 @@ void test_fractals()
         std::filesystem::remove_all(dir);
     }
     // (list X2: 75, each with where it was transcribed from; the first 11 as they were)
-    CHECK(chart.size() == 155 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant"); // (X3: 107; X4: 155)
+    CHECK(chart.size() == 197 && chart[0].id == "fibonacci-word" && chart[10].id == "fractal-plant"); // (X3: 107; X4: 155; Y2: 187; X5: 197)
     for (const auto& c : chart) CHECK(c.fractal.deepest() >= 3 && c.fractal.text() == c.text && !c.source.empty());
     // The whole space (fractal-space-v1, list X1): every ruleset the reader takes, at an address of its
     // own. Up to 52 characters a ruleset has one rule, so the count is format-fractal-v1's exactly; at 53
@@ -7643,7 +7731,7 @@ void test_fractals()
         const Alphabet& a96 = alphabet_by_id("ascii96");
         // (fractal-space-v2, list X2: v1's first, at the addresses v1 gave them, then v2's; the grammar
         // format-fractal-v2 passes both)
-        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v4.sfilter"); // (v3's and v4's too, lists X3 and X4)
+        const auto plugin = load_plugin_file(std::string(g_data) + "/filters/format-fractal-v6.sfilter"); // (v3's to v6's too, lists X3, X4, Y2 and X5)
         static const TestResources none(nullptr, nullptr);
         for (uint32_t l = kFractalSpaceShortest; l <= 52; ++l)
         {
@@ -7665,7 +7753,7 @@ void test_fractals()
             ours += extra;
             CHECK(ours == grammar);
         }
-        CHECK(space.count_at(44) == BigUint::from_decimal("19972340341540161")); // (v1's 1,520,532, v3's 2,562,768 and v4's)
+        CHECK(space.count_at(44) == BigUint::from_decimal("20010504322671072")); // (v1's 1,520,532, v3's 2,562,768, v4's, v5's and v6's)
         CHECK(space.at(BigUint(0)) == "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n");
         CHECK(space.at(space.count_v1()) == "sieve-fractal-v2\nlsystem 0.1\naxiom +\nrule A +\n");
         {
@@ -7684,7 +7772,8 @@ void test_fractals()
                 {
                     // (Voderberg's tiling 590 characters, and X4's Fractint koch3 272, the Sierpinski carpet 331 and
                     // Fractint's own name 690: the four past the default)
-                    CHECK(c.id == "voderberg-spiral-tiling" || c.id == "fractint-ifs-fractint" || c.id == "fractint-ifs-koch3" || c.id == "sierpinski-carpet-ifs");
+                    CHECK(c.id == "voderberg-spiral-tiling" || c.id == "fractint-ifs-fractint" || c.id == "fractint-ifs-koch3" || c.id == "sierpinski-carpet-ifs" ||
+                          c.id == "life-gosper-gun"); // (and Y2's Gosper glider gun, 368)
                     continue;
                 }
                 const auto i = whole.index_of(c.text);
@@ -7695,8 +7784,12 @@ void test_fractals()
         // first; and texts it does not hold have none.
         std::mt19937_64 g(7);
         size_t last_length = 0;
-        bool v2_met = false, v3_met = false, v4_met = false;
-        BigUint v4_from = space.count();
+        bool v2_met = false, v3_met = false, v4_met = false, v5_met = false, v6_met = false;
+        BigUint v6_from = space.count();
+        v6_from -= space.count_v6();
+        BigUint v5_from = v6_from;
+        v5_from -= space.count_v5();
+        BigUint v4_from = v5_from;
         v4_from -= space.count_v4();
         BigUint v3_from = v4_from;
         v3_from -= space.count_v3();
@@ -7712,6 +7805,8 @@ void test_fractals()
             if (!v2_met && i >= space.count_v1()) v2_met = true, last_length = 0; // (v2's begin again from the shortest)
             if (!v3_met && i >= v3_from) v3_met = true, last_length = 0;          // (and v3's)
             if (!v4_met && i >= v4_from) v4_met = true, last_length = 0;          // (and v4's)
+            if (!v5_met && i >= v5_from) v5_met = true, last_length = 0;          // (and v5's)
+            if (!v6_met && i >= v6_from) v6_met = true, last_length = 0;          // (and v6's)
             CHECK(read_fractal(t).has_value() && space.index_of(t) == i && t.size() >= last_length);
             last_length = t.size();
         }
@@ -7768,8 +7863,23 @@ void test_fractals()
         const BigUint kept = in.ranker()->count();
         BigUint rest = BigUint::pow(2, 100);
         rest -= kept;
-        CHECK(kept == BigUint(1057) && out.ranker()->count() == rest); // (112 with X1's 11 charted, 567 with X2's 75, 782 with X3's 107)
-        if (!(kept == BigUint(1057)) || std::getenv("SIEVE_FRACTAL_DIGEST"))
+        // (112 with X1's 11 charted, 567 with X2's 75, 782 with X3's 107, 1,057 with X4's 155; Y2's automata, an
+        // elementary one's history another picture at each of its 512 depths, bring it to 5,244)
+        CHECK(kept == BigUint(5279) && out.ranker()->count() == rest); // (X5's attractors, flows and aggregate: 5,279)
+        {
+            // In the video line (list Y4): a charted fractal growing, its frames its depths in turn; at 10 x 10
+            // and 4 frames in black and white, 1,774 of them, counted and ranked exactly both ways round.
+            ImageFormat vf = fmt;
+            vf.frames = 4;
+            FilterLine vl{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
+            const FilterSpec* mv = find_filter("fractal-moving-v1");
+            CHECK(mv && mv->applies(vl) && !mv->applies(il) && !spec->applies(vl));
+            const FilterStack vin(vl, {{mv, {{"keep", "include"}}}}, none), vout(vl, {{mv, {{"keep", "exclude"}}}}, none);
+            BigUint vrest = BigUint::pow(2, 400);
+            vrest -= vin.ranker()->count();
+            CHECK(vin.ranker() && vout.ranker() && vin.ranker()->count() == BigUint(1774) && vout.ranker()->count() == vrest);
+        }
+        if (!(kept == BigUint(5279)) || std::getenv("SIEVE_FRACTAL_DIGEST"))
         {
             // (where the count differs from machine to machine, each charted fractal's pictures as one hash,
             // drawn and fitted as fractal-drawn-v1 draws and fits them, to compare against another machine's)
@@ -8041,7 +8151,7 @@ void test_format_stats()
     s.figures = {{"bytes", 1000}, {"deflate", 600}, {"install-us", 1000}, {"lzma2", 500}, {"make-us", 20000}, {"sieve", 400}};
     const std::string line = "sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless bytes=1000 deflate=600 install-us=1000 lzma2=500 make-us=20000 sieve=400";
     CHECK(s.text() == line && read_format_stat(line).text() == line && read_format_stat(line).get("lzma2") == 500 && read_format_stat(line).get("none") == 0);
-    for (const std::string bad : {std::string("sieve-format-stat-v2 date=2026-11-12 machine=desk what=pack result=lossless"),
+    for (const std::string& bad : {std::string("sieve-format-stat-v2 date=2026-11-12 machine=desk what=pack result=lossless"),
                                   std::string("sieve-format-stat-v1 date=2026-1-12 machine=desk what=pack result=lossless"),
                                   std::string("sieve-format-stat-v1 date=2026-11-12 machine=Desk what=pack result=lossless"),
                                   std::string("sieve-format-stat-v1 date=2026-11-12 machine=desk what=pack result=lossless b=1 a=2"),
@@ -8244,6 +8354,17 @@ void test_catalogue()
     fs::remove_all(dir, ec);
 }
 
+// `--part NAME[,NAME...]` (Edward, IDEAS 19.236: "splitting the test scripts down even further ... that
+// way we can more easily pinpoint what is going wrong"): only the tests of those parts of the suite, each
+// part one ctest entry (CMakeLists.txt, core-NAME), so a red step 01 names the part that failed and that
+// part can be run alone. Every test is in exactly one part: the PART(...) lines in run_all() mark where
+// each begins, and --list names each test's part.
+const char* const kParts[] = {"spaces", "characters", "hallway", "fractals", "models", "vectors", "filters", "cross", "books", "text-sound", "mixing"};
+std::vector<std::string> g_parts;
+std::string g_part;
+
+#define PART(name) g_part = name
+
 // `sieve_tests DIR --only NAME[,NAME...]` (Edward, IDEAS 19.10: to check one area without the whole
 // suite): only the tests whose call names one of them (as part of it: "mix" runs test_mix to
 // test_mix4); `--list` names them all and runs none.
@@ -8254,9 +8375,10 @@ bool wanted(const char* call)
 {
     if (g_list)
     {
-        std::cout << call << "\n";
+        std::cout << g_part << ": " << call << "\n";
         return false;
     }
+    if (!g_parts.empty() && std::find(g_parts.begin(), g_parts.end(), g_part) == g_parts.end()) return false;
     if (g_only.empty()) return true;
     const std::string c = call;
     for (const std::string& o : g_only)
@@ -8264,10 +8386,18 @@ bool wanted(const char* call)
     return false;
 }
 
+// `--times`: each test's seconds after it, to see which part of the suite the time goes to.
+bool g_times = false;
+
 #define RUN(call) \
     do \
     { \
-        if (wanted(#call)) call; \
+        if (wanted(#call)) \
+        { \
+            const auto run_from = std::chrono::steady_clock::now(); \
+            call; \
+            if (g_times) std::cout << "time " << std::chrono::duration<double>(std::chrono::steady_clock::now() - run_from).count() << " s " << #call << "\n"; \
+        } \
     } while (false)
 
 // A character's voxels (IDEAS 19.214, sieve/character_voxels.hpp), the cubes every space draws: none
@@ -9346,6 +9476,7 @@ void test_favourites()
 
 void run_all(int argc, char** argv)
 {
+    PART("spaces");
     RUN(test_sha256());
     RUN(test_utf8());
     RUN(test_biguint());
@@ -9359,6 +9490,7 @@ void run_all(int argc, char** argv)
     RUN(test_image());
     RUN(test_audio());
     RUN(test_midi_read());
+    PART("characters");
     RUN(test_character());
     RUN(test_character_voxels());
     RUN(test_voxel_lattice_and_joining());
@@ -9368,23 +9500,28 @@ void run_all(int argc, char** argv)
     RUN(test_skin_taubin());
     RUN(test_skin_subdivide());
     RUN(test_character_edit());
+    PART("hallway");
     RUN(test_key_registry());
     RUN(test_footer_wrap());
     RUN(test_favourites());
     RUN(test_raid());
     RUN(test_raid_net());
     RUN(test_raid_pieces());
+    PART("fractals");
     RUN(test_fractals());
+    PART("hallway");
     RUN(test_format_stats());
     RUN(test_catalogue());
     RUN(test_save());
     RUN(test_actions());
+    PART("models");
     RUN(test_model());
     RUN(test_guided());
     RUN(test_modelspace());
     if (argc > 1)
     {
         const std::string dir = std::string(argv[1]) + "/";
+        PART("vectors");
         RUN(test_vectors(dir + "vectors_v1.tsv"));
         RUN(test_biguint_vectors(dir + "vectors_biguint_v1.tsv"));
         RUN(test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv"));
@@ -9395,13 +9532,18 @@ void run_all(int argc, char** argv)
         RUN(test_model_vectors(dir + "vectors_models_v1.tsv"));
         RUN(test_image_vectors(dir + "vectors_image_v1.tsv"));
         RUN(test_image_vectors(dir + "vectors_image_v2.tsv", ImageFormat::Fit::Levels, 32));
+        PART("models");
         RUN(test_system_prompt(dir + "../data/prompts/sieve-system-v1.txt"));
+        PART("text-sound");
         RUN(test_cipher_vectors(dir + "vectors_cipher_v1.tsv"));
+        PART("models");
         RUN(test_guided_vectors(dir));
+        PART("filters");
         RUN(test_filters(dir));
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));
+        PART("books");
         RUN(test_bookspace());
         RUN(test_booksieve());
         RUN(test_review_additions());
@@ -9410,9 +9552,12 @@ void run_all(int argc, char** argv)
         RUN(test_composition_sieve());
         RUN(test_world_vectors(dir));
         RUN(test_world_sieve());
+        PART("models");
         RUN(test_json());
         RUN(test_safetensors());
+        PART("vectors");
         RUN(test_jpeg_eighth(dir));
+        PART("models");
         RUN(test_weights());
         RUN(test_llm(dir));
         RUN(test_ai_vectors(dir));
@@ -9421,6 +9566,7 @@ void run_all(int argc, char** argv)
         RUN(test_ai_run_filters(dir));
         RUN(test_training(dir));
         RUN(test_diffusion_vectors(dir));
+        PART("text-sound");
         RUN(test_titled_vectors(dir + "vectors_titled_v1.tsv"));
         RUN(test_binary_vectors(dir + "vectors_binary_v1.tsv"));
         RUN(test_chunk_vectors(dir + "vectors_chunks_v1.tsv"));
@@ -9430,20 +9576,28 @@ void run_all(int argc, char** argv)
         RUN(test_notes3_vectors(dir + "vectors_notes3_v1.tsv"));
         RUN(test_sound_vectors(dir));
         RUN(test_notes2(dir));
+        PART("filters");
         RUN(test_plugins(dir));
         RUN(test_book_filter_vectors(dir));
+        PART("filters");
         RUN(test_kinds());
         RUN(test_kind_vectors(dir + "vectors_kinds_v1.tsv"));
         RUN(test_written_vectors(dir));
+        PART("cross");
         RUN(test_cross_vectors(dir));
+        PART("filters");
         RUN(test_picture_vectors(dir));
         RUN(test_figure_vectors(dir));
+        PART("text-sound");
         RUN(test_utf8_vectors(dir));
         RUN(test_utf8_joint());
         RUN(test_shortest_path());
+        PART("filters");
         RUN(test_filter_memory(dir));
+        PART("text-sound");
         RUN(test_byte_conversions());
         RUN(test_digit_histogram());
+        PART("mixing");
         RUN(test_rope_wave());
         RUN(test_mix());
         RUN(test_mix2());
@@ -9457,12 +9611,30 @@ void run_all(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory> [--only NAME[,NAME...]] [--list]\n"; return 1; }
+    if (argc < 2) { std::cerr << "usage: sieve_tests <tests directory> [--part NAME[,NAME...]] [--only NAME[,NAME...]] [--list] [--times]\n"; return 1; }
     g_data = std::string(argv[1]) + "/../data/";
     for (int i = 2; i < argc; ++i)
     {
         const std::string a = argv[i];
         if (a == "--list") g_list = true;
+        else if (a == "--times") g_times = true;
+        else if (a == "--part" && i + 1 < argc)
+        {
+            std::string list = argv[++i];
+            for (size_t at = 0; at <= list.size();)
+            {
+                const size_t e = std::min(list.find(',', at), list.size());
+                const std::string name = list.substr(at, e - at);
+                if (std::find(std::begin(kParts), std::end(kParts), name) == std::end(kParts))
+                {
+                    std::cerr << "sieve_tests: no part " << name << " (";
+                    for (const char* k : kParts) std::cerr << k << (k == kParts[std::size(kParts) - 1] ? ")\n" : ", ");
+                    return 1;
+                }
+                g_parts.push_back(name);
+                at = e + 1;
+            }
+        }
         else if (a == "--only" && i + 1 < argc)
         {
             std::string list = argv[++i];

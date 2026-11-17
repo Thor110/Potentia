@@ -74,14 +74,63 @@
 // written out, as z - (z^3 - 1) / (3 z^2), settles on a root). The maps of an IFS in another order, or
 // the same formula written another way, are other texts at addresses of their own.
 //
+// "sieve-fractal-v5" (list Y2) adds cellular automata, as a family of the fractal dimension and not a
+// dimension of their own (Edward, 16 November 2026: "perhaps cellular automata should be considered fractals
+// instead", "I agree, we just need to make sure it is documented somewhere as well"; IDEAS 19.239): a rule
+// applied generation after generation, as a ruleset is depth after depth. Its second line names the family:
+//     sieve-fractal-v5
+//     elementary RULE           Wolfram's numbering, 0 to 255: a row of cells, each 0 or 1, and each
+//     start WORD                 cell's next its rule's bit at (left x 4 + itself x 2 + right) of the row
+//                                before; START (optional) the first row, 1 to 64 of 0 and 1, "1" without it
+// or
+//     sieve-fractal-v5
+//     life BIRTH/SURVIVAL       a plane of cells: B then the counts of live neighbours (of the eight
+//     start ROW/ROW/...          round it) a dead cell comes alive at, / S and those a live one stays alive
+//                                at, each 0 to 8 in order, each once, either none (B3/S23 is Conway's Game
+//                                of Life); START the first field, its rows top first, each 1 to 64 of 0
+//                                and 1, the shorter ones 0 to the right
+// "sieve-fractal-v6" (list X5) adds the strange attractors, the flows and the aggregates: a point moved by a
+// map again and again, a point carried along by three equations, and particles that wander until they stick.
+//     sieve-fractal-v6
+//     attractor                 a map of the plane:
+//     x FORMULA                 x's next value, and
+//     y FORMULA                 y's, each from x and y (Henon's: x <- 1 - 1.4 x^2 + y, y <- 0.3 x)
+//     from X Y                  (optional: where it starts; 0 0 without it)
+// or
+//     sieve-fractal-v6
+//     flow STEP                 three equations, how fast x, y and z change, followed STEP at a time (by
+//     x FORMULA                  the classical Runge-Kutta rule, four looks a step):
+//     y FORMULA                  Lorenz's, 10 (y - x), x (28 - z) - y, x y - 8/3 z
+//     z FORMULA
+//     from X Y Z                (optional: where it starts; 1 1 1 without it)
+// or
+//     sieve-fractal-v6
+//     aggregate SEED            diffusion-limited aggregation (1 to 4294967295): particles let go far off
+//                                one at a time, each wandering a cell at a time until it touches the
+//                                cluster, which grows from one cell; where and how each wanders, from SEED
+// A FORMULA is a v4 formula's form over real numbers: + - * / ^ take two, abs cos exp log sin one, and x, y
+// (and in a flow z) and a NUMBER (not 0) none; never more than 8 values awaited. STEP and the start's
+// numbers are v4 NUMBERs (STEP more than 0). A value that is not a finite number ends the path there.
+//
+// Both are on an endless field of 0 beyond what is written (whatever the rule makes of an all-0 or all-1
+// neighbourhood the field beyond becomes, so a rule that wakes empty space, as rule 1 or B0, wakes all of
+// it), and grow a cell each way a generation.
+//
 // Depth: an IFS's at depth d is its first map's fixed point (where the map shrinks, so it is on the
 // figure; (0, 0) where there is none) with every sequence of up to d maps applied to it (1 + n + ... + n^d
 // points for n maps); an escape or converge picture's at depth d is each point followed for at most
-// 4 x 2^d steps (fractal_iterations).
+// 4 x 2^d steps (fractal_iterations); an automaton's is its generation d, its first row or field depth 0
+// (to kFractalGenerationsMost); an attractor's, 1024 x 2^d points of its path (the first 64 left out, so it
+// has settled), a flow's 1024 x 2^d steps, an aggregate's 16 x 2^d particles. So depth is time for every family: its pictures at depths 0, 1, 2 ... are
+// the frames of it growing.
 //
 // Drawing: a substitution as its words one under another, depth 0 at the top, each row stretched to
 // the picture's width and each symbol a colour of its own, so its self-similarity is seen as the rows
-// repeat; an L-system as the turtle's path at that depth, fitted to the picture. A word is grown only
+// repeat; an L-system as the turtle's path at that depth, fitted to the picture; an elementary automaton
+// as its rows one under another, generation 0 at the top, so the picture is its history (rule 90 from one
+// cell is Sierpinski's triangle); a life-like one as its field at that generation, square cells fitted; an
+// attractor as its points and a flow as its path (seen from the side three-dimensional L-systems are),
+// each coloured along it, fitted; an aggregate as its cells, coloured by when each stuck. A word is grown only
 // up to kFractalMost symbols (a limit chosen, so the deepest a rule may go is said, not run out of
 // memory).
 #pragma once
@@ -106,6 +155,11 @@ inline constexpr const char* kFractalChartVersion = "sieve-fractal-chart-v1";
 inline constexpr const char* kFractalChartVersion2 = "sieve-fractal-chart-v2";
 inline constexpr const char* kFractalVersion3 = "sieve-fractal-v3";
 inline constexpr const char* kFractalVersion4 = "sieve-fractal-v4";
+inline constexpr const char* kFractalVersion5 = "sieve-fractal-v5";
+inline constexpr uint32_t kFractalGenerationsMost = 1024; // an automaton's depth at most
+inline constexpr const char* kFractalVersion6 = "sieve-fractal-v6";
+inline constexpr uint32_t kFractalPathDeepest = 12;      // an attractor's or a flow's depth at most
+inline constexpr uint32_t kFractalAggregateDeepest = 10; // an aggregate's
 inline constexpr uint32_t kFractalAwaitedMost = 8;      // a v4 formula's values awaited at once, at most
 inline constexpr uint32_t kFractalEscapeDeepest = 10;   // an escape or converge picture's depth at most
 inline constexpr double kFractalEscapeRadius = 1000;    // |z| past this has escaped
@@ -117,8 +171,8 @@ inline constexpr uint32_t kFractalDepthMost = 64;        // steps at most
 
 struct Fractal
 {
-    enum class Family { Substitution, LSystem, Ifs, Escape, Converge } family = Family::Substitution;
-    uint32_t version = 1;      // sieve-fractal-v1 to v4
+    enum class Family { Substitution, LSystem, Ifs, Escape, Converge, Elementary, Life, Attractor, Flow, Aggregate } family = Family::Substitution;
+    uint32_t version = 1;      // sieve-fractal-v1 to v6
     uint32_t angle_tenths = 0; // an L-system's turn, in tenths of a degree (v1: whole degrees, so a multiple of 10)
     uint32_t scale = 0;        // v2: the step's ratio for " and ', in thousandths (0: none)
     // v3: each number as written (the text is made again from them) and its value.
@@ -152,9 +206,28 @@ struct Fractal
     std::array<std::string, 3> view_text;
     std::array<double, 3> view_value{0, 0, 4};
 
+    // v5: an elementary automaton's rule (0 to 255); a life-like one's birth and survival counts (bit k
+    // for k neighbours) and their text; the start as written ("" for none: one live cell) and its rows.
+    uint32_t rule_number = 0;
+    uint16_t birth = 0, survival = 0;
+    std::string start;
+    std::vector<std::string> start_rows;
+    std::string life_rule_text() const;
+    // v6: an attractor's or a flow's formulas (x, y and a flow's z), its start and a flow's step, each
+    // number as written and its value; an aggregate's seed is `seed`.
+    std::array<std::vector<std::string>, 3> path_formula;
+    bool from = false;
+    std::array<std::string, 3> from_text;
+    std::array<double, 3> from_value{};
+    std::string step_text;
+    double step_value = 0;
+
     std::string view_value_text() const { return view_text[0].empty() ? "0 0 4" : view_text[0] + " " + view_text[1] + " " + view_text[2]; }
     // A substitution or L-system: grown as a word (the others are not).
     bool rewrites() const { return family == Family::Substitution || family == Family::LSystem; }
+    bool is_formula() const { return family == Family::Escape || family == Family::Converge; }
+    bool is_automaton() const { return family == Family::Elementary || family == Family::Life; }
+    bool is_path() const { return family == Family::Attractor || family == Family::Flow; }
 
     double turn_degrees() const { return version == 3 ? angle_degrees : double(angle_tenths) / 10.0; }
     std::string angle_written() const; // the angle as its text writes it
@@ -182,6 +255,21 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
 std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& f, uint32_t depth);
 // The steps an escape or converge picture follows a point for at a depth: 4 x 2^depth.
 inline uint32_t fractal_iterations(uint32_t depth) { return uint32_t(4) << depth; }
+// An automaton's cells at a generation, row by row, each 0 or 1, on the window it has grown to (its start's
+// size and a cell more each way a generation); an elementary one's every generation to that one, one row
+// each. An aggregate's at a depth: its cells, on the square that holds them, and when each stuck (`when`,
+// from 1). Nothing for another family, or past its deepest.
+struct AutomatonCells
+{
+    uint32_t width = 0, height = 0;
+    std::vector<uint8_t> cells; // [y * width + x]
+    uint8_t beyond = 0;         // the field outside the window
+    std::vector<uint32_t> when; // an aggregate's: the particle that filled each cell (0: none)
+};
+std::optional<AutomatonCells> fractal_cells(const Fractal& f, uint32_t depth);
+// An attractor's or a flow's path at a depth: its points, as (x, y, z; z 0 for an attractor), up to the first
+// that is not a finite number. Nothing for another family or past kFractalPathDeepest.
+std::optional<std::vector<std::array<double, 3>>> fractal_path(const Fractal& f, uint32_t depth);
 
 // The shelves, charted by hand: "sieve-fractal-chart-v1", then "fractal ID TITLE" a line; each
 // ruleset is ID.fractal beside the chart. ID is 1 to 64 of a-z, 0-9 and '-'. "sieve-fractal-chart-v2"

@@ -216,7 +216,7 @@ $exe dimensions research | tr -d '\r' | q "^linked by .*dna"
 # The fractal dimension (list S, IDEAS 19.191, 19.235): its shelves charted by hand, a ruleset grown
 # (the Fibonacci word's lengths are Fibonacci numbers), drawn, and one not as written refused.
 $exe dimensions fractals | tr -d '\r' | q "^linked by pages$"
-$exe fractal | tr -d '\r' | q "^shelves   155 fractals, charted by hand "
+$exe fractal | tr -d '\r' | q "^shelves   197 fractals, charted by hand "
 $exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19, dimension 1.73: Dragon curve (after Wikipedia, Dragon curve, Heighway dragon as an L-system)$"
 # Widened (sieve-fractal-v2, list X2): an orb web, its step 0.985 as long at each chord, read as v2, its
 # box-counting dimension measured; and a v2 ruleset that says nothing v1 cannot is refused (each
@@ -237,6 +237,27 @@ $exe fractal draw mandelbrot-set --size 64 --out mandelbrot.png | tr -d '\r' | q
 printf 'sieve-fractal-v4\nescape + z\n' > awaits.fractal
 if $exe fractal check awaits.fractal > fractal-check4.txt; then exit 1; fi
 tr -d '\r' < fractal-check4.txt | q "the formula awaits 1 more value(s)"
+# Cellular automata as a family of the fractal dimension (sieve-fractal-v5, list Y2; IDEAS 19.239): rule
+# 90 from one cell measures as Sierpinski's triangle; the Gosper glider gun has made its first glider by
+# generation 30 (36 cells, then 41); depth is time, every depth a frame; and a rule with a count twice
+# refused.
+$exe fractal check data/fractals/rule-90.fractal | tr -d '\r' | q "^a sieve-fractal-v5 ruleset, 31 characters; it grows to depth 1024$"
+$exe fractal show rule-90 | tr -d '\r' | q "^dimension 1.585 (box-counting, measured at depth 1023 on 8 grids)$"
+$exe fractal show life-gosper-gun --depth 30 | tr -d '\r' | q "^depth     30 of 104: generation 30, 96 x 69 cells, 41 live$"
+$exe fractal draw life-glider --depth 4 --size 32 --all-depths --out glider.png | tr -d '\r' | q "^drew      life-glider: Glider (Game of Life) at depths 0 to 4 to glider-000.png to glider-004.png (5 frames, 32 x 32)$"
+test -s glider-004.png
+printf 'sieve-fractal-v5\nlife B33/S23\nstart 1\n' > b33.fractal
+if $exe fractal check b33.fractal > fractal-check5.txt; then exit 1; fi
+tr -d '\r' < fractal-check5.txt | q "each of 0 to 8 in order, each once (B3/S23)"
+# Followed as a path or grown at random (sieve-fractal-v6, list X5): Henon's attractor measured near its
+# known 1.26; Lorenz's flow followed 1024 x 2^2 steps from 1 1 1; an aggregate's particles; and a formula
+# naming z where an attractor has only x and y refused.
+$exe fractal show henon-attractor | tr -d '\r' | q "^dimension 1.259 (box-counting, measured at depth 6 on 9 grids)$"
+$exe fractal show lorenz-attractor --depth 2 | tr -d '\r' | q "^depth     2 of 5: 4096 steps$"
+$exe fractal show diffusion-limited-aggregation --depth 4 | tr -d '\r' | q "^depth     4 of 7: 256 particles$"
+printf 'sieve-fractal-v6\nattractor\nx x\ny z\n' > xyz.fractal
+if $exe fractal check xyz.fractal > fractal-check6.txt; then exit 1; fi
+tr -d '\r' < fractal-check6.txt | q "is not a token of this formula"
 # Widened again (sieve-fractal-v3, list X3): the Cesaro curve, its angle 360/34 and its turns swapped by
 # !; the Hilbert curve in three dimensions, measured; and a v3 ruleset with its rules out of order refused.
 $exe fractal check data/fractals/cesaro-fractint.fractal | tr -d '\r' | q "^a sieve-fractal-v3 ruleset, 82 characters; it grows to depth 16$"

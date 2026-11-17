@@ -1180,6 +1180,8 @@ survivors at a length are the documents of that length:
 | `format-fractal-v2` | `sieve-fractal-v1` and `sieve-fractal-v2` (v2: an L-system with a tenth of a degree or a scaled step; list X2) | 505 | `read_fractal` |
 | `format-fractal-v3` | `sieve-fractal-v1` to `sieve-fractal-v3` (v3: turns swapped and by stated degrees, several rules a symbol, contexts, three dimensions; list X3) | 1,596 | `read_fractal` |
 | `format-fractal-v4` | `sieve-fractal-v1` to `sieve-fractal-v4` (v4: an IFS, or an escape-time or convergence formula in prefix, the values it awaits a walk's state; list X4; v4's passed exactly) | 2,059 | `read_fractal` |
+| `format-fractal-v5` | `sieve-fractal-v1` to `sieve-fractal-v5` (v5: a cellular automaton, elementary or life-like, a family of the fractal dimension; list Y2; v5's passed exactly) | 2,244 | `read_fractal` |
+| `format-fractal-v6` | `sieve-fractal-v1` to `sieve-fractal-v6` (v6: a strange attractor, a flow or an aggregate; list X5; v6's passed exactly) | 3,439 | `read_fractal` |
 | `format-world-v2` | `sieve-personal-world-v2` (the same in three dimensions, with its day, ground, models, music and lines kept) | 1,881 | the same |
 
 **Written by a compiler, not by hand.** `tools/grammars.py` holds each grammar as a regular expression

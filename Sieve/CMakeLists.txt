@@ -717,7 +717,11 @@ if(SIEVE_BUILD_TESTS)
     enable_testing()
     add_executable(sieve_tests tests/test_core.cpp)
     target_link_libraries(sieve_tests PRIVATE sieve_core)
-    add_test(NAME core COMMAND sieve_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests)
+    # The core suite in parts (IDEAS 19.236), each its own test, so a failure names its part and
+    # `ctest -R core-fractals` runs that part alone; the parts are kParts in tests/test_core.cpp.
+    foreach(part spaces characters hallway fractals models vectors filters cross books text-sound mixing)
+        add_test(NAME core-${part} COMMAND sieve_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests --part ${part})
+    endforeach()
     # packMP3's decoder given damaged forms of an MP3 (tests/test_mp3.cpp): none may end the program.
     add_executable(sieve_mp3_check tests/test_mp3.cpp)
     target_include_directories(sieve_mp3_check PRIVATE tools)

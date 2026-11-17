@@ -1,0 +1,5 @@
+sieve-fractal-v6
+flow 0.01
+x * 10 - y x
+y - * x - 28 z y
+z - * x y * 2.666667 z

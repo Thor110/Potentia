@@ -235,6 +235,12 @@ std::vector<FormatEntry> gather()
     own(kFractalVersion4, "A fractal beyond rewriting: an iterated function system's maps, or an escape-time or convergence formula", "document",
         std::string("first line \"") + kFractalVersion4 + "\", then \"ifs\" and \"map A B C D E F\" lines, or \"escape FORMULA\" or \"converge FORMULA\" (in prefix) and optional \"julia RE IM\" and \"view X Y SPAN\"",
         "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list X4); its grammar data/filters/format-fractal-v4.sfilter, every version's together");
+    own(kFractalVersion5, "A fractal grown in time: a cellular automaton, elementary (Wolfram's rules 0 to 255) or life-like (birth and survival counts, as Conway's B3/S23)", "document",
+        std::string("first line \"") + kFractalVersion5 + "\", then \"elementary RULE\" and an optional \"start ROW\", or \"life BIRTH/SURVIVAL\" and \"start ROW/ROW/...\"",
+        "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list Y2): cellular automata a family of it, not a dimension of their own; its grammar data/filters/format-fractal-v5.sfilter, every version's together");
+    own(kFractalVersion6, "A fractal followed as a path or grown at random: a strange attractor (a map of the plane), a flow (three equations followed through time) or an aggregate (diffusion-limited, from a seed)", "document",
+        std::string("first line \"") + kFractalVersion6 + "\", then \"attractor\" with \"x FORMULA\" and \"y FORMULA\", or \"flow STEP\" with x, y and z, each with an optional \"from\"; or \"aggregate SEED\"",
+        "the fractal dimension, as v1 (SPECIFICATIONS 12.0t; list X5); its grammar data/filters/format-fractal-v6.sfilter, every version's together");
     own(kFractalChartVersion, "The fractal dimension's shelves: the fractals charted by hand, each named with its ruleset", "document",
         std::string("first line \"") + kFractalChartVersion + "\", then \"fractal ID TITLE\" lines; each ruleset ID.fractal beside it",
         "fractals/chart.txt beside the program (SPECIFICATIONS 12.0t; IDEAS 19.235)");

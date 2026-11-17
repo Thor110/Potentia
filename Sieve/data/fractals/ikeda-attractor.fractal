@@ -1,0 +1,4 @@
+sieve-fractal-v6
+attractor
+x + 1 * 0.9 - * x cos - 0.4 / 6 + 1 + ^ x 2 ^ y 2 * y sin - 0.4 / 6 + 1 + ^ x 2 ^ y 2
+y * 0.9 + * x sin - 0.4 / 6 + 1 + ^ x 2 ^ y 2 * y cos - 0.4 / 6 + 1 + ^ x 2 ^ y 2

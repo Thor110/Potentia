@@ -359,6 +359,146 @@ std::optional<Fractal> read_v4(const std::vector<std::string>& lines, const std:
     return f;
 }
 
+// A v5 row of cells: 1 to kFractalWordMost of 0 and 1.
+bool cell_row(std::string_view r) { return !r.empty() && r.size() <= kFractalWordMost && std::all_of(r.begin(), r.end(), [](char c) { return c == '0' || c == '1'; }); }
+
+// Counts of neighbours as v5's life writes them: each of 0-8 in order, each once, any (none too); bit k
+// for k. Nothing where it is not.
+std::optional<uint16_t> neighbour_counts(std::string_view s)
+{
+    uint16_t bits = 0;
+    int last = -1;
+    for (const char c : s)
+    {
+        if (c < '0' || c > '8' || c - '0' <= last) return std::nullopt;
+        last = c - '0', bits = uint16_t(bits | (1u << last));
+    }
+    return bits;
+}
+
+// The lines after the version line of a v5 ruleset (sieve/fractal.hpp).
+std::optional<Fractal> read_v5(const std::vector<std::string>& lines, const std::function<std::optional<Fractal>(const std::string&)>& bad)
+{
+    Fractal f;
+    f.version = 5;
+    if (lines.size() < 2) return bad("a v5 ruleset's second line is \"elementary RULE\" or \"life BIRTH/SURVIVAL\"");
+    size_t i = 2;
+    if (lines[1].rfind("elementary ", 0) == 0)
+    {
+        f.family = Fractal::Family::Elementary;
+        const auto r = decimal(std::string_view(lines[1]).substr(11), 0, 255);
+        if (!r) return bad("an elementary automaton's rule is 0 to 255, with no leading zero");
+        f.rule_number = *r;
+        if (i < lines.size() && lines[i].rfind("start ", 0) == 0)
+        {
+            f.start = lines[i].substr(6);
+            if (!cell_row(f.start)) return bad("an elementary automaton's start is 1 to " + std::to_string(kFractalWordMost) + " of 0 and 1");
+            f.start_rows = {f.start}, ++i;
+        }
+        else f.start_rows = {"1"};
+    }
+    else if (lines[1].rfind("life B", 0) == 0)
+    {
+        f.family = Fractal::Family::Life;
+        const std::string_view r = std::string_view(lines[1]).substr(6);
+        const size_t slash = r.find("/S");
+        const auto b = slash == std::string_view::npos ? std::nullopt : neighbour_counts(r.substr(0, slash));
+        const auto sv = slash == std::string_view::npos ? std::nullopt : neighbour_counts(r.substr(slash + 2));
+        if (!b || !sv) return bad("a life-like rule is B, the birth counts, /S and the survival counts: each of 0 to 8 in order, each once (B3/S23)");
+        f.birth = *b, f.survival = *sv;
+        if (i >= lines.size() || lines[i].rfind("start ", 0) != 0) return bad("a life-like automaton's third line is \"start ROW/ROW/...\"");
+        f.start = lines[i].substr(6);
+        for (size_t from = 0;;)
+        {
+            const size_t e = f.start.find('/', from);
+            const std::string row = f.start.substr(from, e == std::string::npos ? std::string::npos : e - from);
+            if (!cell_row(row)) return bad("a life-like automaton's start is rows of 1 to " + std::to_string(kFractalWordMost) + " of 0 and 1, / between them");
+            f.start_rows.push_back(row);
+            if (e == std::string::npos) break;
+            from = e + 1;
+        }
+        ++i;
+    }
+    else return bad("a v5 ruleset's second line is \"elementary RULE\" or \"life BIRTH/SURVIVAL\"");
+    if (i != lines.size()) return bad("line " + std::to_string(i + 1) + " is not of a v5 ruleset (an elementary automaton's optional start, or nothing more)");
+    return f;
+}
+
+// A v6 formula (sieve/fractal.hpp): its tokens, read; `leaves` the variables it may name. A message
+// where it is not one.
+std::optional<std::string> v6_formula_error(const std::vector<std::string>& tokens, const std::string& leaves)
+{
+    uint32_t awaited = 1;
+    for (size_t k = 0; k < tokens.size(); ++k)
+    {
+        const std::string& t = tokens[k];
+        int takes = -1;
+        if (t == "+" || t == "-" || t == "*" || t == "/" || t == "^") takes = 2;
+        else if (t == "abs" || t == "cos" || t == "exp" || t == "log" || t == "sin") takes = 1;
+        else if ((t.size() == 1 && leaves.find(t[0]) != std::string::npos) || v4_number(t, false)) takes = 0;
+        if (takes < 0) return "\"" + t + "\" is not a token of this formula (+ - * / ^, abs cos exp log sin, " + std::string(leaves.size() == 2 ? "x y" : "x y z") + ", or a number not 0)";
+        if (awaited == 0) return std::string("the formula is whole before its last token");
+        awaited = awaited - 1 + uint32_t(takes);
+        if (awaited > kFractalAwaitedMost) return "a formula awaits " + std::to_string(kFractalAwaitedMost) + " values at most at once";
+    }
+    if (awaited != 0) return "the formula awaits " + std::to_string(awaited) + " more value(s)";
+    return std::nullopt;
+}
+
+// The lines after the version line of a v6 ruleset (sieve/fractal.hpp).
+std::optional<Fractal> read_v6(const std::vector<std::string>& lines, const std::function<std::optional<Fractal>(const std::string&)>& bad)
+{
+    Fractal f;
+    f.version = 6;
+    if (lines.size() < 2) return bad("a v6 ruleset's second line is \"attractor\", \"flow STEP\" or \"aggregate SEED\"");
+    if (lines[1].rfind("aggregate ", 0) == 0)
+    {
+        f.family = Fractal::Family::Aggregate;
+        const auto seed = whole_number(std::string_view(lines[1]).substr(10), 1, 4294967295u);
+        if (!seed) return bad("an aggregate's seed is 1 to 4294967295, with no leading zero");
+        f.seed = uint32_t(*seed);
+        if (lines.size() != 2) return bad("an aggregate is its seed alone");
+        return f;
+    }
+    size_t dims = 0;
+    if (lines[1] == "attractor") f.family = Fractal::Family::Attractor, dims = 2;
+    else if (lines[1].rfind("flow ", 0) == 0)
+    {
+        f.family = Fractal::Family::Flow, dims = 3;
+        f.step_text = lines[1].substr(5);
+        const auto v = v4_number(f.step_text, false);
+        if (!v || *v <= 0) return bad("a flow's step is more than 0: 0 to 999 and up to 6 decimals with no 0 at the end");
+        f.step_value = *v;
+    }
+    else return bad("a v6 ruleset's second line is \"attractor\", \"flow STEP\" or \"aggregate SEED\"");
+    const std::string leaves = dims == 2 ? "xy" : "xyz";
+    for (size_t d = 0; d < dims; ++d)
+    {
+        const std::string head = std::string(1, "xyz"[d]) + " ";
+        if (lines.size() <= 2 + d || lines[2 + d].rfind(head, 0) != 0) return bad("line " + std::to_string(3 + d) + " is not \"" + head + "FORMULA\"");
+        const auto tokens = words_of(std::string_view(lines[2 + d]).substr(2));
+        if (!tokens) return bad("a formula's tokens are one space apart");
+        if (const auto e = v6_formula_error(*tokens, leaves)) return bad(*e);
+        f.path_formula[d] = *tokens;
+    }
+    size_t i = 2 + dims;
+    if (i < lines.size() && lines[i].rfind("from ", 0) == 0)
+    {
+        const auto w = words_of(std::string_view(lines[i]).substr(5));
+        if (!w || w->size() != dims) return bad(std::string("\"from\" is ") + (dims == 2 ? "\"from X Y\"" : "\"from X Y Z\""));
+        for (size_t k = 0; k < dims; ++k)
+        {
+            const auto v = v4_number((*w)[k], true);
+            if (!v) return bad("from's numbers are each an optional -, 0 to 999 and up to 6 decimals with no 0 at the end (not -0)");
+            f.from_text[k] = (*w)[k], f.from_value[k] = *v;
+        }
+        f.from = true, ++i;
+    }
+    else if (dims == 3) f.from_value = {1, 1, 1};
+    if (i != lines.size()) return bad("line " + std::to_string(i + 1) + " is not of a v6 ruleset (its formulas, then an optional \"from\")");
+    return f;
+}
+
 // A v4 formula's arithmetic, Sieve's own (list X4): only + - * / and sqrt, which IEEE 754 rounds the same
 // on every machine, and floor, ldexp, frexp and fmod, which are exact. The system's complex numbers and
 // its exp, log, sin, cos, pow and atan2 differ in their last bit between libraries (Microsoft's and GNU's,
@@ -504,12 +644,14 @@ struct Program
         Cx value;
     };
     std::vector<Op> ops; // (in reverse, so a stack takes them as they come)
-    explicit Program(const std::vector<std::string>& tokens)
+    // (real: a v6 formula's, its leaves x, y and z the path's coordinates, X Y W)
+    explicit Program(const std::vector<std::string>& tokens, bool real = false)
     {
         for (size_t k = tokens.size(); k-- > 0;)
         {
             const std::string& t = tokens[k];
             Op o{t[0], {}};
+            if (real && (t == "x" || t == "y" || t == "z")) o.kind = t == "x" ? 'X' : t == "y" ? 'Y' : 'W';
             if (t == "abs") o.kind = 'a';
             else if (t == "conj") o.kind = 'j';
             else if (t == "cos") o.kind = 'C';
@@ -541,7 +683,11 @@ struct Program
         if (a.re == 0 && a.im == 0) return b.re > 0 ? Cx{0, 0} : Cx{std::numeric_limits<double>::quiet_NaN(), 0};
         return cx_exp(b * cx_log(a));
     }
-    Cx operator()(Cx z, Cx c) const
+    Cx operator()(Cx z, Cx c) const { return run(z, c, nullptr); }
+    // A v6 formula's value at (x, y, z): its real part (log of a number below 0, or a power that is not
+    // whole of one, has an imaginary part, left out).
+    double operator()(const std::array<double, 3>& xyz) const { return run({}, {}, &xyz).re; }
+    Cx run(Cx z, Cx c, const std::array<double, 3>* xyz) const
     {
         std::array<Cx, kFractalAwaitedMost + 1> st;
         size_t n = 0;
@@ -550,6 +696,9 @@ struct Program
             {
             case 'z': st[n++] = z; break;
             case 'c': st[n++] = c; break;
+            case 'X': st[n++] = {(*xyz)[0], 0}; break;
+            case 'Y': st[n++] = {(*xyz)[1], 0}; break;
+            case 'W': st[n++] = {(*xyz)[2], 0}; break;
             case 'n': st[n++] = o.value; break;
             case 'a': st[n - 1] = {std::fabs(st[n - 1].re), std::fabs(st[n - 1].im)}; break;
             case 'j': st[n - 1].im = -st[n - 1].im; break;
@@ -675,8 +824,45 @@ std::string fractal_scale_text(uint32_t thousandths)
     return "0." + t;
 }
 
+std::string Fractal::life_rule_text() const
+{
+    std::string t = "B";
+    for (int k = 0; k <= 8; ++k)
+        if (birth & (1u << k)) t += char('0' + k);
+    t += "/S";
+    for (int k = 0; k <= 8; ++k)
+        if (survival & (1u << k)) t += char('0' + k);
+    return t;
+}
+
 std::string Fractal::text() const
 {
+    if (version == 6)
+    {
+        std::string t = std::string(kFractalVersion6) + "\n";
+        if (family == Family::Aggregate) return t + "aggregate " + std::to_string(seed) + "\n";
+        t += family == Family::Attractor ? std::string("attractor\n") : "flow " + step_text + "\n";
+        const size_t dims = family == Family::Attractor ? 2 : 3;
+        for (size_t d = 0; d < dims; ++d)
+        {
+            t += "xyz"[d];
+            for (const std::string& k : path_formula[d]) t += " " + k;
+            t += "\n";
+        }
+        if (from)
+        {
+            t += "from";
+            for (size_t d = 0; d < dims; ++d) t += " " + from_text[d];
+            t += "\n";
+        }
+        return t;
+    }
+    if (version == 5)
+    {
+        std::string t = std::string(kFractalVersion5) + "\n";
+        if (family == Family::Elementary) return t + "elementary " + std::to_string(rule_number) + "\n" + (start.empty() ? std::string() : "start " + start + "\n");
+        return t + "life " + life_rule_text() + "\nstart " + start + "\n";
+    }
     if (version == 4)
     {
         std::string t = std::string(kFractalVersion4) + "\n";
@@ -768,6 +954,30 @@ uint32_t fractal_deepest_within(const Fractal& f, size_t most)
         for (uint64_t level = 1, points = 1; d < kFractalDepthMost && points + level * f.maps.size() <= limit; ++d) level *= f.maps.size(), points += level;
         return d;
     }
+    if (f.is_path() || f.family == Fractal::Family::Aggregate)
+    {
+        // (an attractor's points, a flow's steps and an aggregate's particles, each counted as what it costs:
+        // a point 16 symbols, a step 64, a particle 1024)
+        const bool agg = f.family == Fractal::Family::Aggregate;
+        const uint64_t base = agg ? 16 : 1024, cost = agg ? 1024 : f.family == Fractal::Family::Flow ? 64 : 16;
+        const uint32_t most_d = agg ? kFractalAggregateDeepest : kFractalPathDeepest;
+        uint32_t d = 0;
+        while (d < most_d && (base << (d + 1)) * cost <= limit) ++d;
+        return d;
+    }
+    if (f.is_automaton())
+    {
+        // (the cells worked out, every generation's: an elementary one's rows, a life-like one's fields)
+        uint64_t w = 0, h = f.start_rows.size(), cells = 0;
+        for (const std::string& r : f.start_rows) w = std::max<uint64_t>(w, r.size());
+        uint32_t d = 0;
+        for (;; ++d)
+        {
+            cells += f.family == Fractal::Family::Elementary ? w + 2 * d : (w + 2 * d) * (h + 2 * d);
+            if (d >= kFractalGenerationsMost || cells > limit) break;
+        }
+        return d == 0 ? 0 : d - (cells > limit ? 1 : 0);
+    }
     if (!f.rewrites())
     {
         // (a picture's points followed for fractal_iterations steps each: counted as 256 symbols a step)
@@ -814,8 +1024,10 @@ std::optional<Fractal> read_fractal(const std::string& text, std::string* why)
     if (!lf_lines(text, lines)) return bad("its last line does not end in a line feed");
     if (!lines.empty() && lines[0] == kFractalVersion3) return read_v3(lines, bad);
     if (!lines.empty() && lines[0] == kFractalVersion4) return read_v4(lines, bad);
+    if (!lines.empty() && lines[0] == kFractalVersion5) return read_v5(lines, bad);
+    if (!lines.empty() && lines[0] == kFractalVersion6) return read_v6(lines, bad);
     if (lines.size() < 4 || (lines[0] != kFractalVersion && lines[0] != kFractalVersion2))
-        return bad(std::string("its first line is not ") + kFractalVersion + ", " + kFractalVersion2 + ", " + kFractalVersion3 + " or " + kFractalVersion4 + ", or it has no axiom and rule");
+        return bad(std::string("its first line is not ") + kFractalVersion + ", " + kFractalVersion2 + ", " + kFractalVersion3 + ", " + kFractalVersion4 + ", " + kFractalVersion5 + " or " + kFractalVersion6 + ", or it has no axiom and rule");
     Fractal f;
     f.version = lines[0] == kFractalVersion2 ? 2 : 1;
     if (lines[1] == "substitution")
@@ -970,6 +1182,158 @@ std::vector<std::array<double, 4>> fractal_lines(const Fractal& f, const std::st
     return out;
 }
 
+namespace {
+
+// An aggregate's cells (sieve/fractal.hpp): 16 x 2^depth particles, each let go on a circle 5 cells past the
+// cluster's furthest cell and walking a cell at a time, one of the four ways, until a cell beside it is
+// the cluster's (it sticks there) or it is 20 cells past the furthest (it is let go again). Where and which
+// way from the seed's sequence (mix64); the circle's point by Sieve's own sin and cos, rounded.
+AutomatonCells aggregate_cells(const Fractal& f, uint32_t depth)
+{
+    const uint32_t n = uint32_t(16) << depth;
+    const int64_t half = int64_t(4.0 * std::sqrt(double(n))) + 40, side = 2 * half + 1;
+    std::vector<uint32_t> when(size_t(side) * size_t(side), 0);
+    auto at = [&](int64_t x, int64_t y) -> uint32_t& { return when[size_t(y + half) * size_t(side) + size_t(x + half)]; };
+    at(0, 0) = 1;
+    uint64_t state = mix64(f.seed);
+    auto next = [&] { return state = mix64(state); };
+    int64_t reach = 0; // (the furthest cell's distance, rounded up)
+    for (uint32_t p = 1; p < n; ++p)
+    {
+        int64_t x = 0, y = 0;
+        auto let_go = [&] {
+            double sn, cs;
+            own_sin_cos(double(next() & 0xFFFFFF) / double(1 << 24) * 6.283185307179586, sn, cs);
+            x = std::lround(double(reach + 5) * cs), y = std::lround(double(reach + 5) * sn);
+        };
+        let_go();
+        for (;;)
+        {
+            if (at(x + 1, y) || at(x - 1, y) || at(x, y + 1) || at(x, y - 1))
+            {
+                at(x, y) = p + 1;
+                reach = std::max<int64_t>(reach, int64_t(std::ceil(std::sqrt(double(x * x + y * y)))));
+                break;
+            }
+            const uint64_t way = next() & 3;
+            x += way == 0 ? 1 : way == 1 ? -1 : 0, y += way == 2 ? 1 : way == 3 ? -1 : 0;
+            const int64_t far = reach + 20;
+            if (x * x + y * y > far * far || std::abs(x) >= half - 1 || std::abs(y) >= half - 1) let_go();
+        }
+    }
+    int64_t lx = half, hx = -half, ly = half, hy = -half;
+    for (int64_t y = -half; y <= half; ++y)
+        for (int64_t x = -half; x <= half; ++x)
+            if (at(x, y)) lx = std::min(lx, x), hx = std::max(hx, x), ly = std::min(ly, y), hy = std::max(hy, y);
+    AutomatonCells out;
+    out.width = uint32_t(hx - lx + 1), out.height = uint32_t(hy - ly + 1);
+    out.cells.assign(size_t(out.width) * out.height, 0), out.when.assign(out.cells.size(), 0);
+    for (int64_t y = ly; y <= hy; ++y)
+        for (int64_t x = lx; x <= hx; ++x)
+            if (const uint32_t w = at(x, y)) out.cells[size_t(y - ly) * out.width + size_t(x - lx)] = 1, out.when[size_t(y - ly) * out.width + size_t(x - lx)] = w;
+    return out;
+}
+
+} // namespace
+
+std::optional<std::vector<std::array<double, 3>>> fractal_path(const Fractal& f, uint32_t depth)
+{
+    if (!f.is_path() || depth > kFractalPathDeepest) return std::nullopt;
+    const Program px(f.path_formula[0], true), py(f.path_formula[1], true);
+    std::array<double, 3> p = f.from_value;
+    std::vector<std::array<double, 3>> out;
+    const size_t count = size_t(1024) << depth;
+    auto finite = [](const std::array<double, 3>& q) { return std::isfinite(q[0]) && std::isfinite(q[1]) && std::isfinite(q[2]); };
+    if (f.family == Fractal::Family::Attractor)
+    {
+        // (the first 64 left out, so it has settled on what it is drawn to)
+        for (size_t k = 0; k < 64 + count; ++k)
+        {
+            p = {px(p), py(p), 0};
+            if (!finite(p)) break;
+            if (k >= 64) out.push_back(p);
+        }
+        return out;
+    }
+    const Program pz(f.path_formula[2], true);
+    const double h = f.step_value;
+    auto rate = [&](const std::array<double, 3>& q) { return std::array<double, 3>{px(q), py(q), pz(q)}; };
+    auto along = [](const std::array<double, 3>& q, const std::array<double, 3>& k, double by) { return std::array<double, 3>{q[0] + k[0] * by, q[1] + k[1] * by, q[2] + k[2] * by}; };
+    out.push_back(p);
+    for (size_t k = 1; k < count; ++k)
+    {
+        // (the classical Runge-Kutta step: four looks at how fast it goes, weighed 1, 2, 2, 1)
+        const auto k1 = rate(p), k2 = rate(along(p, k1, h / 2)), k3 = rate(along(p, k2, h / 2)), k4 = rate(along(p, k3, h));
+        for (int d = 0; d < 3; ++d) p[size_t(d)] += h / 6 * (k1[size_t(d)] + 2 * k2[size_t(d)] + 2 * k3[size_t(d)] + k4[size_t(d)]);
+        if (!finite(p)) break;
+        out.push_back(p);
+    }
+    return out;
+}
+
+std::optional<AutomatonCells> fractal_cells(const Fractal& f, uint32_t generation)
+{
+    if (f.family == Fractal::Family::Aggregate) return generation <= kFractalAggregateDeepest ? std::optional<AutomatonCells>(aggregate_cells(f, generation)) : std::nullopt;
+    if (!f.is_automaton() || generation > kFractalGenerationsMost) return std::nullopt;
+    uint32_t w = 0;
+    for (const std::string& r : f.start_rows) w = std::max(w, uint32_t(r.size()));
+    const uint32_t h = uint32_t(f.start_rows.size());
+    AutomatonCells out;
+    if (f.family == Fractal::Family::Elementary)
+    {
+        // Every generation a row, the window as wide as the last's: row k's cells from (generation - k).
+        out.width = w + 2 * generation, out.height = generation + 1;
+        out.cells.assign(size_t(out.width) * out.height, 0);
+        std::vector<uint8_t> row(f.start_rows[0].begin(), f.start_rows[0].end());
+        for (auto& c : row) c = uint8_t(c - '0');
+        uint8_t beyond = 0;
+        for (uint32_t k = 0;; ++k)
+        {
+            const uint32_t off = generation - k;
+            for (uint32_t x = 0; x < out.width; ++x) out.cells[size_t(k) * out.width + x] = x >= off && x - off < row.size() ? row[x - off] : beyond;
+            if (k == generation) break;
+            std::vector<uint8_t> next(row.size() + 2);
+            for (size_t x = 0; x < next.size(); ++x)
+            {
+                // (cell x of the next row stands over cell x - 1 of this one)
+                auto at = [&](int64_t i) { return i >= 0 && size_t(i) < row.size() ? row[size_t(i)] : beyond; };
+                const int64_t c = int64_t(x) - 1;
+                next[x] = uint8_t((f.rule_number >> (at(c - 1) * 4 + at(c) * 2 + at(c + 1))) & 1u);
+            }
+            beyond = uint8_t((f.rule_number >> (beyond * 7)) & 1u);
+            row = std::move(next);
+        }
+        out.beyond = beyond;
+        return out;
+    }
+    // A life-like field, a cell bigger each way a generation.
+    uint32_t cw = w, ch = h;
+    std::vector<uint8_t> field(size_t(cw) * ch, 0);
+    for (uint32_t y = 0; y < h; ++y)
+        for (uint32_t x = 0; x < f.start_rows[y].size(); ++x) field[size_t(y) * cw + x] = uint8_t(f.start_rows[y][x] - '0');
+    uint8_t beyond = 0;
+    for (uint32_t g = 0; g < generation; ++g)
+    {
+        const uint32_t nw = cw + 2, nh = ch + 2;
+        std::vector<uint8_t> next(size_t(nw) * nh);
+        auto at = [&](int64_t x, int64_t y) { return x >= 0 && y >= 0 && x < int64_t(cw) && y < int64_t(ch) ? field[size_t(y) * cw + size_t(x)] : beyond; };
+        for (uint32_t y = 0; y < nh; ++y)
+            for (uint32_t x = 0; x < nw; ++x)
+            {
+                const int64_t ox = int64_t(x) - 1, oy = int64_t(y) - 1; // (its place in the field before)
+                uint32_t n = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if (dx || dy) n += at(ox + dx, oy + dy);
+                next[size_t(y) * nw + x] = uint8_t(at(ox, oy) ? (f.survival >> n) & 1u : (f.birth >> n) & 1u);
+            }
+        beyond = uint8_t(beyond ? (f.survival >> 8) & 1u : f.birth & 1u);
+        field = std::move(next), cw = nw, ch = nh;
+    }
+    out.width = cw, out.height = ch, out.cells = std::move(field), out.beyond = beyond;
+    return out;
+}
+
 std::optional<std::vector<std::array<double, 3>>> fractal_points(const Fractal& f, uint32_t depth)
 {
     if (f.family != Fractal::Family::Ifs || depth > fractal_deepest_within(f, kFractalMost)) return std::nullopt;
@@ -1053,6 +1417,68 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
             }
         return img;
     }
+    if (f.is_path())
+    {
+        // An attractor's points, or a flow's path seen from the side three-dimensional L-systems are (turned
+        // 30 degrees about x, then 20 about z), fitted as an IFS's points are, coloured along it.
+        if (depth > fractal_deepest_within(f, kFractalMost)) return std::nullopt;
+        const auto path = fractal_path(f, depth);
+        if (!path) return std::nullopt;
+        if (path->empty()) return img;
+        double sx, cx, sz, cz;
+        own_sin_cos(30 * 3.141592653589793 / 180, sx, cx);
+        own_sin_cos(20 * 3.141592653589793 / 180, sz, cz);
+        const bool flow = f.family == Fractal::Family::Flow;
+        std::vector<std::array<double, 2>> q;
+        q.reserve(path->size());
+        for (const auto& p : *path)
+        {
+            if (!flow)
+            {
+                q.push_back({p[0], p[1]});
+                continue;
+            }
+            const double y1 = p[1] * cx - p[2] * sx, z1 = p[1] * sx + p[2] * cx;
+            q.push_back({p[0] * cz + z1 * sz, y1});
+        }
+        double lx = q[0][0], hx = lx, ly = q[0][1], hy = ly;
+        for (const auto& v : q) lx = std::min(lx, v[0]), hx = std::max(hx, v[0]), ly = std::min(ly, v[1]), hy = std::max(hy, v[1]);
+        const double margin = 0.05, span = std::max(hx - lx, hy - ly);
+        const double sc = (1 - 2 * margin) * double(std::min(width, height)) / std::max(span, 1e-9);
+        const double ox = (double(width) - (hx - lx) * sc) / 2, oy = (double(height) - (hy - ly) * sc) / 2;
+        auto px = [&](const std::array<double, 2>& v) { return std::array<int, 2>{int(std::lround(ox + (v[0] - lx) * sc)), int(std::lround(double(height) - oy - (v[1] - ly) * sc))}; };
+        for (size_t i = 0; i < q.size(); ++i)
+        {
+            const auto a = px(q[i]);
+            const auto col = hue(i * 360 / q.size(), 360);
+            if (flow && i) line(img, px(q[i - 1])[0], px(q[i - 1])[1], a[0], a[1], col);
+            else put(img, a[0], a[1], col);
+        }
+        return img;
+    }
+    if (f.is_automaton() || f.family == Fractal::Family::Aggregate)
+    {
+        // Its cells, square, fitted to the picture and centred; a live cell coloured (an elementary one's
+        // by its generation, round the wheel from the top; an aggregate's by when it stuck), a dead one the
+        // ground.
+        if (depth > fractal_deepest_within(f, kFractalMost)) return std::nullopt;
+        const auto cells = fractal_cells(f, depth);
+        if (!cells) return std::nullopt;
+        const double side = std::min(double(width) / cells->width, double(height) / cells->height);
+        const double ox = (double(width) - side * cells->width) / 2, oy = (double(height) - side * cells->height) / 2;
+        const bool history = f.family == Fractal::Family::Elementary, aggregate = f.family == Fractal::Family::Aggregate;
+        const uint32_t particles = uint32_t(16) << depth;
+        for (uint32_t y = 0; y < height; ++y)
+            for (uint32_t x = 0; x < width; ++x)
+            {
+                const double cx = (double(x) + 0.5 - ox) / side, cy = (double(y) + 0.5 - oy) / side;
+                if (cx < 0 || cy < 0 || cx >= cells->width || cy >= cells->height) continue;
+                const uint32_t ix = uint32_t(cx), iy = uint32_t(cy);
+                const size_t at = size_t(iy) * cells->width + ix;
+                if (cells->cells[at]) put(img, int(x), int(y), aggregate ? hue(size_t(cells->when[at] - 1) * 360 / particles, 360) : history ? hue(iy % 48, 48) : hue(2, 6));
+            }
+        return img;
+    }
     if (f.family == Fractal::Family::Ifs)
     {
         // The points fitted to the picture as a path is, each coloured by the map that placed it.
@@ -1126,10 +1552,21 @@ double length_of(const std::array<double, 4>& l)
 
 std::optional<FractalDimension> fractal_box_dimension(const Fractal& f)
 {
-    if (f.family == Fractal::Family::Ifs)
+    if (f.family == Fractal::Family::Ifs || f.family == Fractal::Family::Elementary || f.family == Fractal::Family::Attractor || f.family == Fractal::Family::Aggregate)
     {
+        // (an elementary automaton's live cells over its history, as points, as an IFS's are: rule 90 from
+        // one cell is Sierpinski's triangle)
         const uint32_t depth = fractal_deepest_within(f, kFractalDimensionPoints);
-        const auto pts = fractal_points(f, depth);
+        std::optional<std::vector<std::array<double, 3>>> pts;
+        if (f.family == Fractal::Family::Ifs) pts = fractal_points(f, depth);
+        else if (f.family == Fractal::Family::Attractor) pts = fractal_path(f, depth);
+        else if (const auto cells = fractal_cells(f, depth))
+        {
+            pts.emplace();
+            for (uint32_t y = 0; y < cells->height; ++y)
+                for (uint32_t x = 0; x < cells->width; ++x)
+                    if (cells->cells[size_t(y) * cells->width + x]) pts->push_back({double(x), -double(y), 0});
+        }
         if (!pts || pts->size() < 16) return std::nullopt;
         double lx = (*pts)[0][0], hx = lx, ly = (*pts)[0][1], hy = ly;
         for (const auto& q : *pts) lx = std::min(lx, q[0]), hx = std::max(hx, q[0]), ly = std::min(ly, q[1]), hy = std::max(hy, q[1]);

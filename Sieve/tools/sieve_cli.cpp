@@ -1358,12 +1358,17 @@ std::string fractal_family_name(const sieve::Fractal& f)
     case sieve::Fractal::Family::Ifs: return "IFS";
     case sieve::Fractal::Family::Escape: return "escape-time";
     case sieve::Fractal::Family::Converge: return "convergence";
+    case sieve::Fractal::Family::Elementary: return "elementary automaton";
+    case sieve::Fractal::Family::Life: return "life-like automaton";
+    case sieve::Fractal::Family::Attractor: return "strange attractor";
+    case sieve::Fractal::Family::Flow: return "flow";
+    case sieve::Fractal::Family::Aggregate: return "aggregate";
     }
     return "";
 }
 const char* fractal_version_name(const sieve::Fractal& f)
 {
-    return f.version == 4 ? sieve::kFractalVersion4 : f.version == 3 ? sieve::kFractalVersion3 : f.version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion;
+    return f.version == 6 ? sieve::kFractalVersion6 : f.version == 5 ? sieve::kFractalVersion5 : f.version == 4 ? sieve::kFractalVersion4 : f.version == 3 ? sieve::kFractalVersion3 : f.version == 2 ? sieve::kFractalVersion2 : sieve::kFractalVersion;
 }
 
 } // namespace
@@ -1392,12 +1397,14 @@ int cmd_fractal(const Args& a)
     {
         const sieve::FractalSpace space(longest);
         std::cout << "space     " << sieve::kFractalSpaceVersion << ": every " << sieve::kFractalVersion << " ruleset the reader takes, then every v2 and v3, " << sieve::kFractalSpaceShortest
-                  << " to " << longest << " characters, then every v4 to " << longest << "\n"
+                  << " to " << longest << " characters, then every v4, v5 and v6 to " << longest << "\n"
                   << "rulesets  " << space.count().to_decimal() << " (about 10^" << std::fixed << std::setprecision(1)
                   << double(space.count().bit_length()) * 0.30103 << ")\n"
                   << "v1        " << space.count_v1().to_decimal() << " of them, the first\n"
-                  << "v4        " << space.count_v4().to_decimal() << " of them, the last (IFS, escape-time and convergence; the shortest 26 characters)\n";
-        // (v4's shortest first, 26 to 30 characters, where it is alone; then 44 on, where every version is)
+                  << "v4        " << space.count_v4().to_decimal() << " of them (IFS, escape-time and convergence; the shortest 26 characters)\n"
+                  << "v5        " << space.count_v5().to_decimal() << " of them (cellular automata; the shortest 30 characters)\n"
+                  << "v6        " << space.count_v6().to_decimal() << " of them, the last (attractors, flows and aggregates; the shortest 29 characters)\n";
+        // (v4's shortest first, 26 to 30 characters, where it and v5's are alone; then 44 on, where every version is)
         for (uint32_t l = 26; l <= 30; ++l) std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
             std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
@@ -1425,13 +1432,13 @@ int cmd_fractal(const Args& a)
     {
         if (!f)
         {
-            std::cout << "not a " << sieve::kFractalVersion << ", v2, v3 or v4 ruleset: " << why << "\n";
+            std::cout << "not a " << sieve::kFractalVersion << ", v2, v3, v4, v5 or v6 ruleset: " << why << "\n";
             return 1;
         }
         std::cout << "a " << fractal_version_name(*f) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
         return 0;
     }
-    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2, v3 or v4 ruleset: " + why);
+    if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2, v3, v4, v5 or v6 ruleset: " + why);
     if (what == "index")
     {
         const sieve::FractalSpace space(longest);
@@ -1446,24 +1453,46 @@ int cmd_fractal(const Args& a)
     if (depth > f->deepest()) throw std::invalid_argument("it grows to depth " + std::to_string(f->deepest()) + " at most (" + std::to_string(sieve::kFractalMost) + " symbols)");
     const std::string word = f->rewrites() ? *f->grow(depth) : std::string();
     // (what a depth holds: a word's symbols, an IFS's points, or the steps each point is followed for)
-    const std::string held = f->family == sieve::Fractal::Family::Ifs ? std::to_string(sieve::fractal_points(*f, depth)->size()) + " points"
-                             : f->rewrites()                         ? std::to_string(word.size()) + " symbols"
-                                                                     : std::to_string(sieve::fractal_iterations(depth)) + " steps a point at most";
+    // (what a depth holds: a word's symbols, an IFS's points, an automaton's generation and cells, or the
+    // steps each point is followed for)
+    std::string held;
+    if (f->family == sieve::Fractal::Family::Ifs) held = std::to_string(sieve::fractal_points(*f, depth)->size()) + " points";
+    else if (f->rewrites()) held = std::to_string(word.size()) + " symbols";
+    else if (f->is_path())
+    {
+        const auto p = sieve::fractal_path(*f, depth);
+        held = std::to_string(p->size()) + (f->family == sieve::Fractal::Family::Flow ? " steps" : " points");
+    }
+    else if (f->family == sieve::Fractal::Family::Aggregate) held = std::to_string(16u << depth) + " particles";
+    else if (f->is_automaton())
+    {
+        const auto c = sieve::fractal_cells(*f, depth);
+        size_t live = 0;
+        for (const uint8_t v : c->cells) live += v;
+        held = "generation " + std::to_string(depth) + ", " + std::to_string(c->width) + " x " + std::to_string(c->height) + " cells, " + std::to_string(live) + " live";
+    }
+    else held = std::to_string(sieve::fractal_iterations(depth)) + " steps a point at most";
     if (what == "show")
     {
         std::string family = fractal_family_name(*f);
         if (f->family == sieve::Fractal::Family::LSystem) family += ", " + f->angle_written() + " degrees" + (f->scale_written().empty() ? std::string() : ", step scaled by " + f->scale_written());
         if (f->family == sieve::Fractal::Family::Ifs) family += ", " + std::to_string(f->maps.size()) + " map(s)";
-        if (!f->rewrites() && f->family != sieve::Fractal::Family::Ifs) family += std::string(f->julia ? ", a Julia set" : "") + ", viewed at " + f->view_value_text();
+        if (f->family == sieve::Fractal::Family::Elementary) family += ", rule " + std::to_string(f->rule_number) + ", starting " + (f->start.empty() ? std::string("1") : f->start);
+        if (f->family == sieve::Fractal::Family::Life) family += ", " + f->life_rule_text() + ", starting " + std::to_string(f->start_rows.size()) + " row(s)";
+        if (f->family == sieve::Fractal::Family::Flow) family += ", step " + f->step_text;
+        if (f->is_path()) family += ", from " + (f->from ? f->from_text[0] + " " + f->from_text[1] + (f->family == sieve::Fractal::Family::Flow ? " " + f->from_text[2] : std::string()) : std::string(f->family == sieve::Fractal::Family::Flow ? "1 1 1" : "0 0"));
+        if (f->family == sieve::Fractal::Family::Aggregate) family += ", seed " + std::to_string(f->seed);
+        if (f->is_formula()) family += std::string(f->julia ? ", a Julia set" : "") + ", viewed at " + f->view_value_text();
         std::cout << "fractal   " << name << "\n"
                   << "family    " << family << "\n"
-                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v4 passes)\n"
+                  << "ruleset   " << text.size() << " characters (a unit of the text line over ascii96 that format-fractal-v6 passes)\n"
                   << "depth     " << depth << " of " << f->deepest() << ": " << held << "\n";
         if (f->family == sieve::Fractal::Family::Substitution) std::cout << "word      " << word.substr(0, 80) << (word.size() > 80 ? "..." : "") << "\n";
         else if (f->family == sieve::Fractal::Family::LSystem) std::cout << "lines     " << sieve::fractal_lines(*f, word).size() << " drawn\n";
         if (const auto d = sieve::fractal_box_dimension(*f))
             std::cout << "dimension " << std::fixed << std::setprecision(3) << d->value << " (box-counting, measured at depth " << d->depth << " on " << d->grids << " grids)\n";
-        else if (f->family == sieve::Fractal::Family::LSystem || f->family == sieve::Fractal::Family::Ifs)
+        else if (f->family == sieve::Fractal::Family::LSystem || f->family == sieve::Fractal::Family::Ifs || f->family == sieve::Fractal::Family::Elementary ||
+                 f->family == sieve::Fractal::Family::Attractor || f->family == sieve::Fractal::Family::Aggregate)
             std::cout << "dimension not measured (too few lines or points, or too small to lay three grids over)\n";
         return 0;
     }
@@ -1471,6 +1500,24 @@ int cmd_fractal(const Args& a)
     {
         if (!a.has("out")) throw std::invalid_argument("give where to write the picture: --out FILE.png");
         const uint32_t size = a.has("size") ? a.get_u32("size", 512) : 512;
+        if (a.has("all-depths"))
+        {
+            // Depth as time (IDEAS 19.239): every depth to this one, a picture each, OUT-000.png and on.
+            std::string out = a.get("out");
+            if (out.size() > 4 && out.substr(out.size() - 4) == ".png") out.resize(out.size() - 4);
+            for (uint32_t d = 0; d <= depth; ++d)
+            {
+                const auto img = sieve::draw_fractal(*f, d, size, size);
+                if (!img) throw std::invalid_argument("it cannot be drawn at that size and depth " + std::to_string(d));
+                std::vector<sieve::Rgb> rgb(size_t(img->width) * img->height);
+                for (size_t i = 0; i < rgb.size(); ++i) rgb[i] = {img->rgba[i * 4], img->rgba[i * 4 + 1], img->rgba[i * 4 + 2]};
+                char n[16];
+                std::snprintf(n, sizeof n, "-%03u.png", d);
+                write_png(out + n, img->width, img->height, rgb, 1);
+            }
+            std::cout << "drew      " << name << " at depths 0 to " << depth << " to " << out << "-000.png to " << out << "-" << std::string(3 - std::min<size_t>(3, std::to_string(depth).size()), '0') + std::to_string(depth) << ".png (" << depth + 1 << " frames, " << size << " x " << size << ")\n";
+            return 0;
+        }
         const auto img = sieve::draw_fractal(*f, depth, size, size);
         if (!img) throw std::invalid_argument("it cannot be drawn at that size and depth");
         std::vector<sieve::Rgb> rgb(size_t(img->width) * img->height);

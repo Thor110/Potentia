@@ -1,0 +1,5 @@
+sieve-fractal-v6
+attractor
+x + + - ^ x 2 ^ y 2 * 0.9 x * -0.6013 y
+y + + * * 2 x y * 2 x * 0.5 y
+from -0.72 -0.64
