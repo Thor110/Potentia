@@ -271,6 +271,12 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] P1. word-shape-v1, punctuation-v1, letters-and-digits-v1: automata, measured on prose, checked against
   their rules written plainly. `[01]` + `[10]`. A sentence's length and verse not built (IDEAS 19.245 says why).
 
+### List Q: picture filters (Edward, 18 November 2026; IDEAS 19.245)
+
+- [x] Q1. border-v1, specks-v1, gradient-v1: automata, checked against their rules written plainly on every
+  picture of small shapes and on random 10 x 10 ones. `[01]` + `[10]`. Border and gradient pick a kind of picture,
+  so X and OPTIMISE FILTERS leave them (picks_a_kind) `[04]`. The horizon not built (IDEAS 19.245 says why).
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 

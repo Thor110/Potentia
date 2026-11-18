@@ -10090,6 +10090,19 @@ it is we should be aiming to make meaningful content pop out of the walls in the
   - Pictures: a horizon (a row above which the colours differ from those below, an automaton of the
     rows); a frame or border of one colour; colour shared in regions of at least k pixels (no lone
     specks), an automaton of two rows; a gradient across the picture in one direction.
+    *Built (list Q, 18 November 2026): border-v1 (the outer rows and columns all one colour: random 10 x 10
+    black and white pictures kept 10^-10.54, 10^-42.14 on ega16), specks-v1 (every pixel sharing its colour
+    with one of its four neighbours, an automaton carrying the last row: 10^-3.35; it needs the row and its
+    match marks to fit, so it is not offered on ega16 at 10 x 10 or even 6 x 6) and gradient-v1 (along every
+    row, or down every column, the colours only rising or only falling, the same way throughout: 10^-19.39
+    either way, 10^-54.97 on ega16 across); each an automaton, counted and merging. Of ten real pictures cut
+    to 10 x 10 black and white, 4 pass border, 7 specks and 2 gradient. Border and gradient pick a kind of
+    picture rather than set aside noise, so they carry a new mark (picks_a_kind) and X and OPTIMISE FILTERS
+    leave them for ticking by hand; specks is ticked, and the optimised image line goes from 10^-18.19 to
+    10^-18.26 (the books from 10^-115.95 to 10^-116.02). Not built: the horizon. On black and white it only keeps
+    pictures of two flat bands, which gradient down already keeps; on larger palettes it needs the set of
+    colours above every row boundary carried through the rows, an automaton that grows with every subset of the
+    palette.*
   - Video: a scene cut (one frame changes nearly all, the rest little); a sprite moving (a shape the same
     from frame to frame, moved); a fade (each frame nearer one colour).
   - Sound: an envelope (loudness rising then falling, as a note's attack and decay); two notes' pitches

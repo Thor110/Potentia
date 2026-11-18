@@ -601,6 +601,10 @@ $H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot e
 rm -f optimise.ini
 $H --menu --filters optimise.ini --press "Item:optimise,Return" --screenshot optimise.png > /dev/null
 test "$(grep -c 'image-mirror\|fractal-drawn\|golden-word' optimise.ini || true)" = 0
+# (border-v1 and gradient-v1 pick a kind of picture, framed or shaded, so they are left for ticking by hand; specks-v1,
+# which sets aside noise, is ticked)
+test "$(grep -c 'border-v1\|gradient-v1' optimise.ini || true)" = 0
+grep -A2 "^\[image\]" optimise.ini | q "specks-v1"
 grep -A2 "^\[image\]" optimise.ini | q "palette-size-v1"
 # (and on the fractals line, since list F, its four structural filters: they count)
 grep -A2 "^\[fractals\]" optimise.ini | q "fractal-canonical-v1"
@@ -611,8 +615,8 @@ $H --menu --filters optimise-mark.ini --press "Item:optimise,Return" --screensho
 grep -A1 "^\[image\]" optimise-mark.ini | q "mode = mark"
 grep -A1 "^\[audio\]" optimise-mark.ini | q "mode = compact"
 $H --metrics optimised.txt --filters optimise.ini > /dev/null
-q "^Books    : 99.999999999999...%   ( Kept : 10^-115.95 )$" optimised.txt
-q "^Image    : 99.999999999999...%   ( Kept : 10^-18.19 )$" optimised.txt
+q "^Books    : 99.999999999999...%   ( Kept : 10^-116.02 )$" optimised.txt
+q "^Image    : 99.999999999999...%   ( Kept : 10^-18.26 )$" optimised.txt
 test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" = 0
 # The same row sets the models line's fractal-modelled-v1 (list Z2): the charted fractals' lines as meshes,
 # found (include) or culled (exclude): 69 fitted at 8 vertices and 12 faces, each twice (its lacking faces

@@ -2020,6 +2020,14 @@ printf '[text]\nmode = mark\nfilters = letters-and-digits-v1\n' > lettersdigits.
 build/sieve filters --line text --length 1000 --filters wordshape.ini | tr -d '\r' | q "^share        the stack keeps 10^-8.39 of the line"
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters punct.ini | tr -d '\r' | q "^share        the stack keeps 10^-25.61 of the line"
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters lettersdigits.ini | tr -d '\r' | q "^share        the stack keeps 10^-16.36 of the line"
+# List Q: pictures framed in one colour, with no lone specks, and a gradient one way (across, or down); each an
+# automaton, counted, on the default 10 x 10 black and white line.
+printf '[image]\nmode = mark\nfilters = border-v1\n' > border.ini
+printf '[image]\nmode = mark\nfilters = specks-v1\n' > specks.ini
+printf '[image]\nmode = mark\nfilters = gradient-v1\n[image.gradient-v1]\nway = down\n' > gradient.ini
+build/sieve filters --line image --filters border.ini | tr -d '\r' | q "^share        the stack keeps 10^-10.54 of the line"
+build/sieve filters --line image --filters specks.ini | tr -d '\r' | q "^share        the stack keeps 10^-3.35 of the line"
+build/sieve filters --line image --filters gradient.ini | tr -d '\r' | q "^share        the stack keeps 10^-19.39 of the line"
 build/sieve filters --line image --filters mirror.ini | tr -d '\r' | q "^survivors    1125899906842624 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters life.ini | tr -d '\r' | q "^survivors    1267650600228229401496703205376 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters pan.ini | tr -d '\r' | q "^survivors    1361129467683753853853498429727072845824 (exact; judged)$"

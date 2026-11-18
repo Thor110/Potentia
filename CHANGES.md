@@ -1,55 +1,45 @@
-# Sieve: page filters, the next round (list P)
+# Sieve: picture filters (list Q)
 
-One commit on top of b2fbd5a.
+One commit on top of 2db4bc0.
 
-## Three new page filters
+## Three new picture filters
 
-Each one is an automaton, so it is counted exactly, merges with the line's other filters, and OPTIMISE
-FILTERS ticks it.
+Each one is an automaton, so it is counted exactly and merges with the line's other filters.
 
-- **word-shape-v1:** no two words in a row both longer than 10 letters (adjustable, 4 to 30). A language's
-  long words come one at a time.
-- **punctuation-v1:** no space before , ; : . ! or ?, and after one a space, a line feed, a closing
-  ) ] } " ' or the end of the page. After . ! ? another of them may follow. A digit may stand either side
-  of , : and . (1,000, 12:30, 3.14). It only appears on alphabets that have these marks.
-- **letters-and-digits-v1:** a run of letters and digits switches between them at most once (adjustable,
-  0 to 6). "3rd", "1990s" and "x86" pass; "a1b2" doesn't. It only appears on alphabets with digits.
+- **border-v1:** every pixel of the top and bottom rows and the left and right columns is the same colour.
+- **specks-v1:** no lone specks: every pixel shares its colour with at least one of its four neighbours.
+  It is only offered where its automaton fits (it is not offered on the 16-colour ega16 palette, even at
+  6 x 6).
+- **gradient-v1:** along every row (way = across) or down every column (way = down), the colours only rise
+  or only fall, the same way throughout.
 
 ## What they keep
 
-Measured on pages of 1,000 characters:
+| Filter | Random 10 x 10 black and white kept | On ega16 | Ten real pictures pass |
+| :--- | :--- | :--- | :--- |
+| border-v1 | 10^-10.54 | 10^-42.14 | 4 of 10 |
+| specks-v1 | 10^-3.35 | not offered | 7 of 10 |
+| gradient-v1 | 10^-19.39 (across or down) | 10^-54.97 (across) | 2 of 10 |
 
-| Filter | Random pages kept | Don Quixote passes | Manual passes | Specifications pass |
-| :--- | :--- | :--- | :--- | :--- |
-| word-shape-v1 | 10^-8.39 (lower27) | 97.8% | 99.0% | 97.6% |
-| punctuation-v1 | 10^-25.61 (ascii96) | 87.3% | under a fifth | under a fifth |
-| letters-and-digits-v1 | 10^-16.36 (ascii96) | 89.8% | 91.7% | 89.2% |
+## OPTIMISE FILTERS and X leave two of them for you
 
-- **Why some real pages fail:** most of the Don Quixote pages that fail contain the Gutenberg file's
-  illustration names (p007b.jpg, c06a). The manual and specifications fail on file names, markdown and
-  notation such as C4q and 2x32.
-- **word-shape on ascii96:** it sets aside little there (10^-2.94), because random ascii96 pages are mostly
-  short words between symbols.
-- **The optimised Pages figure** stays at 10^-20.38. OPTIMISE ticks word-shape, but at the default
-  32-letter page the dictionary filters already remove everything it would.
+Border and gradient pick out a kind of picture (framed ones, shaded ones) rather than setting aside
+noise, so ticking them for you would throw away everything else. Filters now carry a mark for this, and
+X, Z, C and OPTIMISE FILTERS leave such filters alone; you tick them by hand. Specks is ticked, which moves
+the optimised Image figure from 10^-18.19 to 10^-18.26 (and Books from 10^-115.95 to 10^-116.02).
 
-## Not built, and why (recorded in IDEAS 19.245)
+## Not built: the horizon
 
-- **Sentence length:** real prose needs room for 150-word sentences (97.1% of Don Quixote's pages pass at
-  150), and random pages hit a full stop about every 32 characters, so it would remove almost nothing.
-- **A line of verse:** it can only be judged, not counted.
-- **No typo filter:** your decision, recorded in IDEAS 19.246 in your words.
-
-## Also recorded
-
-Compact on the fractals line is left for later, with the reasons (IDEAS 19.250 and REVIEW-ROUND F-B).
+On black and white it would only keep pictures of two flat bands, which gradient (down) already keeps.
+On larger palettes it would have to carry the set of colours above every row boundary through the rows,
+an automaton that grows with every subset of the palette. Recorded in IDEAS 19.245.
 
 ## Checks
 
-- **Unit tests (step 01):** each automaton against its rule written as plain code, on sample sentences
-  and 20,000 random pages, plus a check that they count and merge.
-- **CI step 10:** the three random-page figures.
-- **CI steps 01, 03, 04 and 10** pass, as do the help and help-library checks.
+- **Unit tests (step 01):** each filter against its rule written as plain code, on every picture of five
+  small shapes (exact counts) and 4,000 random 10 x 10 pictures.
+- **CI step 04:** OPTIMISE leaves border and gradient, ticks specks; the new optimised figures.
+- **CI step 10:** the three random-picture figures.
 
 ## Files to delete by hand
 

@@ -2454,6 +2454,99 @@ void test_notes2(const std::string& dir)
 // (Z7), the sound line's sound-crossings and sound-bend (Z6), the video line's video-moves and video-smooth
 // (Z5), and the fractals in the pages and audio lines, fractal-written and fractal-scored (Z4).
 extern std::string g_data; // (the data folder: defined below)
+// List Q: border, specks and gradient against their rules written plainly: every picture of small sizes counted
+// one by one and against the automaton's count, and random larger ones judged both ways.
+void test_q_filters()
+{
+    static const TestResources none(nullptr, nullptr);
+    using Pic = std::vector<uint32_t>;
+    auto border_rule = [](const Pic& p, uint32_t W, uint32_t H) {
+        for (uint32_t y = 0; y < H; ++y)
+            for (uint32_t x = 0; x < W; ++x)
+                if ((x == 0 || y == 0 || x + 1 == W || y + 1 == H) && p[y * W + x] != p[0]) return false;
+        return true;
+    };
+    auto specks_rule = [](const Pic& p, uint32_t W, uint32_t H) {
+        for (uint32_t y = 0; y < H; ++y)
+            for (uint32_t x = 0; x < W; ++x)
+            {
+                const uint32_t c = p[y * W + x];
+                const bool ok = (x > 0 && p[y * W + x - 1] == c) || (x + 1 < W && p[y * W + x + 1] == c) || (y > 0 && p[(y - 1) * W + x] == c) ||
+                                (y + 1 < H && p[(y + 1) * W + x] == c);
+                if (!ok) return false;
+            }
+        return true;
+    };
+    auto gradient_rule = [](const Pic& p, uint32_t W, uint32_t H, bool down) {
+        int way = 0;
+        for (uint32_t y = 0; y < H; ++y)
+            for (uint32_t x = 0; x < W; ++x)
+            {
+                if (down ? y == 0 : x == 0) continue;
+                const uint32_t a = down ? p[(y - 1) * W + x] : p[y * W + x - 1], b = p[y * W + x];
+                if (a == b) continue;
+                const int w = b > a ? 1 : -1;
+                if (way && way != w) return false;
+                way = w;
+            }
+        return true;
+    };
+    struct Shape
+    {
+        uint32_t W, H, B;
+    };
+    for (const Shape sh : {Shape{3, 3, 2}, Shape{4, 3, 2}, Shape{2, 4, 3}, Shape{3, 2, 4}, Shape{1, 3, 3}})
+    {
+        const Palette& pal = sh.B == 2 ? palette_by_id("mono") : palette_by_id("ega16");
+        (void)pal;
+        FilterLine l;
+        l.kind = "image", l.symbols_id = "test", l.base = sh.B, l.length = sh.W * sh.H, l.width = sh.W, l.height = sh.H;
+        const FilterStack border(l, {{find_filter("border-v1"), {}}}, none), specks(l, {{find_filter("specks-v1"), {}}}, none);
+        const FilterStack across(l, {{find_filter("gradient-v1"), {}}}, none), down(l, {{find_filter("gradient-v1"), {{"way", "down"}}}}, none);
+        uint64_t nb = 0, ns = 0, na = 0, nd = 0, total = 1;
+        for (uint32_t k = 0; k < l.length; ++k) total *= sh.B;
+        for (uint64_t i = 0; i < total; ++i)
+        {
+            Pic p(l.length);
+            uint64_t v = i;
+            for (auto& c : p) c = uint32_t(v % sh.B), v /= sh.B;
+            const bool b = border_rule(p, sh.W, sh.H), s = specks_rule(p, sh.W, sh.H), a = gradient_rule(p, sh.W, sh.H, false), d = gradient_rule(p, sh.W, sh.H, true);
+            CHECK(border.passes(p) == b && specks.passes(p) == s && across.passes(p) == a && down.passes(p) == d);
+            nb += b, ns += s, na += a, nd += d;
+        }
+        CHECK(border.ranker() && border.ranker()->count() == BigUint(nb));
+        CHECK(specks.ranker() && specks.ranker()->count() == BigUint(ns));
+        CHECK(across.ranker() && across.ranker()->count() == BigUint(na));
+        CHECK(down.ranker() && down.ranker()->count() == BigUint(nd));
+    }
+    // The default line, 10 x 10 in black and white: random pictures, half of them smoothed into patches so each rule
+    // meets both answers.
+    {
+        FilterLine l;
+        l.kind = "image", l.symbols_id = "test", l.base = 2, l.length = 100, l.width = 10, l.height = 10;
+        const FilterStack border(l, {{find_filter("border-v1"), {}}}, none), specks(l, {{find_filter("specks-v1"), {}}}, none);
+        const FilterStack across(l, {{find_filter("gradient-v1"), {}}}, none), down(l, {{find_filter("gradient-v1"), {{"way", "down"}}}}, none);
+        std::mt19937_64 rng(43);
+        for (int k = 0; k < 4000; ++k)
+        {
+            Pic p(100);
+            for (auto& c : p) c = uint32_t(rng() & 1);
+            if (k % 2)
+                for (uint32_t i = 1; i < 100; ++i)
+                    if (rng() % 4) p[i] = p[i - 1];
+            if (k % 4 == 1)
+                for (uint32_t y = 0; y < 10; ++y) // (a gradient across: each row 0s then 1s)
+                    for (uint32_t x = 0; x < 10; ++x) p[y * 10 + x] = x >= (rng() % 11) ? 1 : 0;
+            CHECK(border.passes(p) == border_rule(p, 10, 10));
+            CHECK(specks.passes(p) == specks_rule(p, 10, 10));
+            CHECK(across.passes(p) == gradient_rule(p, 10, 10, false));
+            CHECK(down.passes(p) == gradient_rule(p, 10, 10, true));
+        }
+    }
+    // Border and gradient pick a kind of picture: ticking every filter at once leaves them; specks sets aside noise.
+    CHECK(find_filter("border-v1")->picks_a_kind && find_filter("gradient-v1")->picks_a_kind && !find_filter("specks-v1")->picks_a_kind);
+}
+
 // List P: word-shape, punctuation, letters-and-digits, each its automaton against its rule written plainly, on
 // prose and on 20,000 random pages, and counted.
 void test_p_filters()
@@ -2760,8 +2853,9 @@ void test_filters(const std::string& dir)
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
                                                     // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (v1 and v2) (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 12); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
-                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror
+    CHECK(filters_for(image).size() == 15); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+                                            // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror,
+                                            // and border, specks and gradient (list Q)
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -10179,6 +10273,7 @@ void run_all(int argc, char** argv)
         RUN(test_filters(dir));
         RUN(test_z_filters());
         RUN(test_p_filters());
+        RUN(test_q_filters());
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

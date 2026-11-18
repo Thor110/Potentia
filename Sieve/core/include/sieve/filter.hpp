@@ -198,6 +198,10 @@ struct FilterSpec
     // it finds a dimension's content rather than setting aside noise, and as "include" it would win
     // every clash by keeping almost nothing.
     bool set_elsewhere = false;
+    // Picks a kind of item rather than setting aside noise (list Q: a framed picture, a gradient), so ticking every
+    // filter at once leaves it as it is: most real items are not that kind, and it would keep few of them. Ticked
+    // by hand, when that kind is what is looked for.
+    bool picks_a_kind = false;
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a

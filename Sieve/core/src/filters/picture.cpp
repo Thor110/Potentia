@@ -5,6 +5,10 @@
 //   row-runs-v1      along each row of pixels, at most `changes` places where a pixel differs from
 //                    the one to its left. Flat areas and edges pass; static changes almost every
 //                    pixel. The rows of a video are its frames' rows, one after another.
+//   border-v1        (list Q) every pixel of the picture's edge one colour: a kind of picture, ticked by hand.
+//   specks-v1        (list Q) no lone specks: every pixel shares its colour with a neighbour. An automaton of the
+//                    row above and which of its pixels are matched, where it fits.
+//   gradient-v1      (list Q) colours never falling (or never rising) along the rows, or down the columns.
 // Both rank exactly, with completions that depend on a few numbers rather than on which colours
 // were used, so neither steps through the palette symbol by symbol: rank and unrank are worked out
 // arithmetically at each pixel, which keeps 2^24 colours as cheap as two.
@@ -33,10 +37,14 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
+#include <string>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
+#include <vector>
 
 namespace sieve {
 
@@ -497,6 +505,182 @@ std::optional<Dfa> palette_dfa(uint32_t B, uint32_t length, uint32_t scope, uint
     return minimise(d);
 }
 
+
+// ---------------------------------------------------------------- border, specks, gradient (list Q)
+
+// Each built once a line's shape and kept (the filters' lists ask whether one applies often): the automaton, or
+// nothing where it does not fit, so a filter is offered only where it counts.
+template <class Make>
+std::shared_ptr<const std::optional<Dfa>> kept_dfa(const std::string& key, Make make)
+{
+    static std::mutex m;
+    static std::map<std::string, std::shared_ptr<const std::optional<Dfa>>> kept;
+    {
+        std::lock_guard<std::mutex> lock(m);
+        if (const auto it = kept.find(key); it != kept.end()) return it->second;
+    }
+    auto d = std::make_shared<const std::optional<Dfa>>(make());
+    std::lock_guard<std::mutex> lock(m);
+    return kept.emplace(key, std::move(d)).first->second;
+}
+
+bool still_picture(const FilterLine& l) { return l.kind == "image" && l.width && l.height && l.base >= 2 && l.length == l.width * l.height; }
+
+// The pictures framed in one colour: every pixel of the top and bottom rows and the left and right columns the
+// same colour. States: the pixel's place, and the frame's colour once the first pixel has set it.
+std::optional<Dfa> border_dfa(uint32_t B, uint32_t W, uint32_t H)
+{
+    const uint64_t n = uint64_t(W) * H * B + 1;
+    if (!cells_fit(n, B)) return std::nullopt;
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(size_t(n), 0);
+    d.next.assign(size_t(n) * B, Dfa::kDead);
+    // state 1 + (i * B + c): pixel i (0..W H - 1, the next to place) with the frame colour c; i = W H: done
+    auto at = [&](uint64_t i, uint32_t c) { return int32_t(1 + (i % (uint64_t(W) * H)) * B + c); };
+    const uint64_t P = uint64_t(W) * H;
+    auto edge = [&](uint64_t i) {
+        const uint64_t x = i % W, y = i / W;
+        return x == 0 || y == 0 || x + 1 == W || y + 1 == H;
+    };
+    for (uint32_t c = 0; c < B; ++c) d.next[c] = P == 1 ? at(0, c) : at(1, c); // (the first pixel is the frame's)
+    for (uint64_t i = 1; i <= P; ++i)
+        for (uint32_t c = 0; c < B; ++c)
+        {
+            if (i == P)
+            {
+                d.accept[size_t(at(i, c))] = 1; // (at(P, c) is at(0, c): the picture done)
+                continue;
+            }
+            const size_t s = size_t(at(i, c));
+            for (uint32_t x = 0; x < B; ++x)
+                if (!edge(i) || x == c) d.next[s * B + x] = at(i + 1, c);
+        }
+    if (P == 1) for (uint32_t c = 0; c < B; ++c) d.accept[size_t(at(0, c))] = 1;
+    return minimise(d);
+}
+
+// No lone specks: every pixel shares its colour with one of its four neighbours at least. Pixels are placed row by
+// row; a state holds the last W pixels (the row above the next one) with, for each, whether a neighbour has matched
+// it yet, the next pixel's column, and whether the first row is done. A pixel leaves when the one below it is
+// placed, its last chance; the picture is done when every pixel left matched. Built where its states fit.
+std::optional<Dfa> specks_dfa(uint32_t B, uint32_t W)
+{
+    uint32_t bits = 1;
+    while ((1u << bits) < B) ++bits;
+    if (uint64_t(W) * (bits + 1) > 46) return std::nullopt; // (the window packed in a key beside its column)
+    // key: column (8 bits) | first row done (1) | colours (W * bits) | flags (W), the window oldest first
+    struct Win
+    {
+        uint32_t x = 0;
+        bool below = false; // the first row done
+        std::vector<uint32_t> col;
+        std::vector<uint8_t> ok;
+    };
+    auto key = [&](const Win& w) {
+        uint64_t k = uint64_t(w.x) | (uint64_t(w.below) << 8) | (uint64_t(w.col.size()) << 9);
+        uint64_t v = 0;
+        for (size_t i = 0; i < w.col.size(); ++i) v = (v << (bits + 1)) | (uint64_t(w.col[i]) << 1) | w.ok[i];
+        return k | (v << 16);
+    };
+    std::unordered_map<uint64_t, int32_t> id;
+    std::vector<Win> states{Win{}};
+    id[key(states[0])] = 0;
+    std::vector<int32_t> next;
+    for (size_t k = 0; k < states.size(); ++k)
+    {
+        next.resize((k + 1) * B, Dfa::kDead);
+        for (uint32_t c = 0; c < B; ++c)
+        {
+            Win w = states[k];
+            bool me = false;
+            if (w.x > 0 && w.col.back() == c) me = true, w.ok.back() = 1;
+            if (w.below)
+            {
+                if (w.col.front() == c) me = true, w.ok.front() = 1;
+                if (!w.ok.front()) continue; // (the pixel above leaves unmatched)
+                w.col.erase(w.col.begin()), w.ok.erase(w.ok.begin());
+            }
+            w.col.push_back(c), w.ok.push_back(me ? 1 : 0);
+            if (++w.x == W) w.x = 0, w.below = true;
+            const uint64_t kk = key(w);
+            const auto [it, added] = id.emplace(kk, int32_t(states.size()));
+            if (added)
+            {
+                states.push_back(std::move(w));
+                if (!cells_fit(states.size(), B)) return std::nullopt;
+            }
+            next[k * B + c] = it->second;
+        }
+    }
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(states.size(), 0);
+    for (size_t k = 0; k < states.size(); ++k)
+        d.accept[k] = states[k].x == 0 && states[k].below && std::all_of(states[k].ok.begin(), states[k].ok.end(), [](uint8_t v) { return v != 0; });
+    d.next = std::move(next);
+    return minimise(d);
+}
+
+// A gradient one way: along every row (across) or down every column (down) the colours (in the palette's order)
+// never fall, or never rise, the same way for the whole picture. States: the place in the row (or the row above,
+// down), the last colour (or the colours above), and which way, once a change has said.
+std::optional<Dfa> gradient_dfa(uint32_t B, uint32_t W, bool down)
+{
+    const uint32_t L = down ? W : 1; // colours remembered
+    uint64_t combos = 1;
+    for (uint32_t k = 0; k < L; ++k)
+    {
+        combos *= B;
+        if (combos > kMaxDfaCells) return std::nullopt;
+    }
+    std::map<std::tuple<uint32_t, bool, int, std::vector<uint32_t>>, int32_t> id; // (column, first row done, way, remembered)
+    std::vector<std::tuple<uint32_t, bool, int, std::vector<uint32_t>>> states{{0, false, 0, {}}};
+    id[states[0]] = 0;
+    std::vector<int32_t> next;
+    for (size_t k = 0; k < states.size(); ++k)
+    {
+        next.resize((k + 1) * B, Dfa::kDead);
+        for (uint32_t c = 0; c < B; ++c)
+        {
+            auto [x, below, way, mem] = states[k];
+            // the colour this pixel follows: the one left of it (across, not at a row's start), or above it (down)
+            std::optional<uint32_t> before;
+            if (!down && x > 0) before = mem.back();
+            if (down && below) before = mem.front();
+            if (before && c != *before)
+            {
+                const int w = c > *before ? 1 : -1;
+                if (way && way != w) continue;
+                way = w;
+            }
+            if (down)
+            {
+                if (below) mem.erase(mem.begin());
+                mem.push_back(c);
+            }
+            else mem = {c};
+            if (++x == W) x = 0, below = true;
+            const auto st = std::make_tuple(x, below, way, mem);
+            const auto [it, added] = id.emplace(st, int32_t(states.size()));
+            if (added)
+            {
+                states.push_back(st);
+                if (!cells_fit(states.size(), B)) return std::nullopt;
+            }
+            next[k * B + c] = it->second;
+        }
+    }
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(states.size(), 1);
+    d.next = std::move(next);
+    return minimise(d);
+}
+
 } // namespace
 
 void add_picture_filters(std::vector<FilterSpec>& out)
@@ -549,6 +733,64 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         return cells_fit(row_runs_states(l.base, l.width, l.width > 0 ? l.width - 1 : 0), l.base) ? "automaton" : "own";
     };
     out.push_back(r);
+
+    // List Q (Edward, 18 November 2026: "go ahead with the picture filters next"; IDEAS 19.245's next round).
+    FilterSpec bo;
+    bo.id = "border";
+    bo.title = "border";
+    bo.description = "Pictures framed in one colour: every pixel of the top and bottom rows and the left and right columns the same "
+                     "colour, as icons, diagrams and pictures on a plain ground are. Random black-and-white pictures of 10 x 10 almost all fail (it keeps 10^-10.54; on the 16-colour palette 10^-42.14); of ten real pictures fitted to that line, 4 pass. It picks a kind of picture, so ticking every filter at once leaves it. An automaton: counted and ranked "
+                     "exactly where it fits (the place in the picture times the colours).";
+    bo.applies = [](const FilterLine& l) { return still_picture(l) && cells_fit(uint64_t(l.width) * l.height * l.base + 1, l.base); }; // (its states known without building)
+    bo.counts_as = "automaton";
+    bo.picks_a_kind = true; // (4 of 10 real pictures at 10 x 10 pass: a kind, not noise)
+    bo.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        auto d = border_dfa(l.base, l.width, l.height);
+        if (!d) throw std::invalid_argument("border-v1: past what its automaton holds on this picture");
+        return make_dfa_filter(std::move(*d), l.length, "");
+    };
+    out.push_back(bo);
+
+    FilterSpec sp;
+    sp.id = "specks";
+    sp.title = "specks";
+    sp.description = "Pictures with no lone specks: every pixel shares its colour with one of its four neighbours at least, so "
+                     "every patch of colour is two pixels or more. Random black-and-white pictures of 10 x 10: 10^-3.35 kept (random pixels often match a neighbour); of ten real pictures fitted to that line, 7 pass. An automaton of the row above and which of its "
+                     "pixels have been matched: counted and ranked exactly where it fits (black and white to about 10 pixels wide; "
+                     "a few colours narrower).";
+    auto specks_of = [](const FilterLine& l) {
+        return kept_dfa("specks/" + std::to_string(l.base) + "/" + std::to_string(l.width), [&] { return specks_dfa(l.base, l.width); });
+    };
+    sp.applies = [specks_of](const FilterLine& l) { return still_picture(l) && specks_of(l)->has_value(); };
+    sp.counts_as = "automaton";
+    sp.make = [specks_of](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        const auto d = specks_of(l);
+        if (!d->has_value()) throw std::invalid_argument("specks-v1: past what its automaton holds at this width and palette");
+        return make_dfa_filter(**d, l.length, "");
+    };
+    out.push_back(sp);
+
+    FilterSpec gr;
+    gr.id = "gradient";
+    gr.title = "gradient";
+    gr.description = "Pictures that are a gradient one way: along every row (across) or down every column (down), the colours, "
+                     "in the palette's order, never fall, or never rise, the same way for the whole picture. Random black-and-white pictures of 10 x 10: 10^-19.39 kept either way (16 colours: 10^-54.97 across); of ten real pictures, 2 pass. It picks a kind of picture, so ticking every filter at once leaves it. An "
+                     "automaton: counted and ranked exactly where it fits (down remembers a row, so on small palettes and widths).";
+    gr.params = {{"way", "across: along the rows; down: down the columns", FilterParam::Kind::Text, "across", 0, 0, 1, {"across", "down"}}};
+    auto gradient_of = [](const FilterLine& l, bool down) {
+        return kept_dfa("gradient/" + std::to_string(l.base) + "/" + std::to_string(l.width) + (down ? "/down" : "/across"),
+                        [&] { return gradient_dfa(l.base, l.width, down); });
+    };
+    gr.applies = [gradient_of](const FilterLine& l) { return still_picture(l) && gradient_of(l, false)->has_value(); };
+    gr.counts_as = "automaton";
+    gr.picks_a_kind = true; // (2 of 10 real pictures pass)
+    gr.make = [own = gr.name(), gradient_of](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const bool down = param_value(*find_filter(own), v, "way") == "down";
+        const auto d = gradient_of(l, down);
+        if (!d->has_value()) throw std::invalid_argument("gradient-v1: down remembers a row, past what its automaton holds here");
+        return make_dfa_filter(**d, l.length, std::string("way=") + (down ? "down" : "across"));
+    };
+    out.push_back(gr);
 }
 
 } // namespace sieve

@@ -5621,7 +5621,7 @@ std::vector<Menu::Reach> Menu::reach_of(ToggleScope scope, int overlay, int tab)
             // The title filters (title-v1, title-data-v1) are for a book's title page (words, then
             // SPACEs): ticking all ticks them only there, never on pages, where they would leave
             // little but short lines.
-            if ((both_tabs ? tab_of(*f) < 2 : tab_of(*f) == tab) && !f->set_elsewhere && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
+            if ((both_tabs ? tab_of(*f) < 2 : tab_of(*f) == tab) && !f->set_elsewhere && !f->picks_a_kind && (f->id.rfind("title", 0) != 0 || st.lf == &cfg_.books.parts[1]))
                 in_reach.push_back({st.lf, st.li, st.part, f->name()});
     // Which of them clash with another in reach on the same stack: those are weighed.
     for (Reach& r : in_reach)
