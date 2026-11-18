@@ -13,7 +13,6 @@ namespace {
 
 constexpr uint32_t kAxiomOverhead = 7; // "axiom " and the line feed (as fractal_space.cpp writes them)
 constexpr uint32_t kRuleOverhead = 8;  // "rule X " and the line feed
-constexpr uint32_t kWordMost = uint32_t(kFractalWordMost);
 
 using Poly = std::vector<BigUint>; // [r]: how many of exactly r characters
 
@@ -27,48 +26,71 @@ uint64_t choose(uint32_t n, uint32_t k)
     return v;
 }
 
-// One optional rule over an alphabet of a symbols, multiplied in: p times (no rule, or "rule X " and a word
-// and a line feed). Its words: a^n of n symbols, n to kWordMost (Short: one symbol only; NoSelf: not the
-// symbol itself). In one pass, as the words' counts are a geometric series: h[k] = a (h[k-1] + p[k-1]) less
-// a^(W+1) p[k-1-W], where h[k] = sum over n of a^n p[k-n].
+// A symbol's rules over an alphabet of a symbols, multiplied in. v1 and v2: none or one, "rule X " and a word and
+// a line feed, p + q p. v3 (many): any number, each also with a context letter or none either side ("L<" and
+// ">R", of `context` letters each), p / (1 - q), so q' = p + q q'. Its words: a^n of n symbols, n to
+// word_most (Short: one symbol only; NoSelf: not the symbol itself). Both in one pass, as the words' counts
+// are a geometric series: h[j] = a (h[j-1] + src[j-1]) less a^(W+1) src[j-1-W], h[j] being the sum over n of
+// a^n src[j-n], src the input (one rule) or the output so far (many: h[j] needs it only below j).
 struct RuleMul
 {
-    uint32_t a;
+    uint32_t a, word_most, context;
+    bool many;
     Rule mode;
-    BigUint a_top; // a^(kWordMost + 1)
-    RuleMul(uint32_t alphabet, Rule m) : a(alphabet), mode(m), a_top(BigUint::pow(alphabet, kWordMost + 1)) {}
+    BigUint a_top; // a^(word_most + 1)
+    RuleMul(uint32_t alphabet, const FractalBodyKinds& kd, Rule m)
+        : a(alphabet), word_most(kd.word_most), context(kd.context_letters), many(kd.many_rules), mode(m), a_top(BigUint::pow(alphabet, kd.word_most + 1))
+    {
+    }
     void apply(Poly& p) const
     {
         if (mode == Rule::None) return;
         const size_t top = p.size() - 1;
-        Poly h(top + 1);
         const bool shorts = mode == Rule::Short || mode == Rule::ShortNoSelf;
         const bool noself = mode == Rule::NoSelf || mode == Rule::ShortNoSelf;
-        for (size_t k = 1; k <= top; ++k)
+        Poly out(top + 1), hf(top + 1);
+        const Poly& src = many ? out : p;
+        // h(j): the words of a rule ending j characters after its "rule X ", ahead of src (j >= 1)
+        auto h = [&](size_t j) {
+            BigUint v = hf[j];
+            if (noself && !shorts) v -= src[j - 1]; // (the n = 1 term is a src[j-1]; one of the a is the symbol itself)
+            return v;
+        };
+        const BigUint both(uint64_t(context) * context), either(uint64_t(context) * 2);
+        for (size_t k = 0; k <= top; ++k)
         {
-            if (shorts)
+            if (k > kRuleOverhead)
             {
-                h[k] = p[k - 1];
-                h[k].mul_small(noself ? a - 1 : a);
-                continue;
+                const size_t j = k - kRuleOverhead; // (src below j is final by now)
+                if (shorts)
+                {
+                    hf[j] = src[j - 1];
+                    hf[j].mul_small(noself ? a - 1 : a);
+                }
+                else
+                {
+                    BigUint v = hf[j - 1];
+                    v += src[j - 1];
+                    v.mul_small(a);
+                    if (j >= word_most + 1 && !src[j - 1 - word_most].is_zero()) v -= BigUint::mul(a_top, src[j - 1 - word_most]);
+                    hf[j] = std::move(v);
+                }
             }
-            BigUint v = h[k - 1];
-            v += p[k - 1];
-            v.mul_small(a);
-            if (k >= kWordMost + 1 && !p[k - 1 - kWordMost].is_zero()) v -= BigUint::mul(a_top, p[k - 1 - kWordMost]);
-            h[k] = std::move(v);
+            BigUint t = p[k];
+            if (k > kRuleOverhead) t += h(k - kRuleOverhead);
+            if (context && k > kRuleOverhead + 2) t += BigUint::mul(h(k - kRuleOverhead - 2), either);
+            if (context && k > kRuleOverhead + 4) t += BigUint::mul(h(k - kRuleOverhead - 4), both);
+            out[k] = std::move(t);
         }
-        if (noself && !shorts)
-            for (size_t k = top; k >= 1; --k) h[k] -= p[k - 1]; // (h's n = 1 term is a p[k-1]; one of the a is the symbol)
-        for (size_t k = top; k >= kRuleOverhead; --k) p[k] += h[k - kRuleOverhead];
+        p = std::move(out);
     }
 };
 
-Poly axiom_poly(uint32_t a, uint32_t top)
+Poly axiom_poly(uint32_t a, uint32_t word_most, uint32_t top)
 {
     Poly p(top + 1);
     BigUint w(1);
-    for (uint32_t n = 1; n <= kWordMost && kAxiomOverhead + n <= top; ++n)
+    for (uint32_t n = 1; n <= word_most && kAxiomOverhead + n <= top; ++n)
     {
         w.mul_small(a);
         p[kAxiomOverhead + n] = w;
@@ -91,8 +113,8 @@ Poly bodies(const FractalBodyKinds& kd, uint32_t top, const FractalStructureFilt
     std::vector<Poly> inner;
     for (uint32_t s = 0; s <= R; ++s)
     {
-        const RuleMul rule(I + s, in);
-        Poly all = axiom_poly(I + s, top);
+        const RuleMul rule(I + s, kd, in);
+        Poly all = axiom_poly(I + s, kd.word_most, top);
         for (uint32_t k = 0; k < s; ++k) rule.apply(all);
         // sum over u < s of C(s, u) inner[u] rule^(s - u), by Horner's way
         Poly acc(top + 1);
@@ -107,7 +129,7 @@ Poly bodies(const FractalBodyKinds& kd, uint32_t top, const FractalStructureFilt
     }
     // Each reach of s symbols: how many sets it stands for (and, canonical, the share of them named in order);
     // then the unreached symbols' rules, by Horner's way again over s (x_s times out^(R - s)).
-    const RuleMul outside(kd.alphabet(), out);
+    const RuleMul outside(kd.alphabet(), kd, out);
     Poly total(top + 1);
     for (uint32_t s = 0; s <= R; ++s)
     {
@@ -164,8 +186,15 @@ std::vector<BigUint> fractal_bodies_passing(const FractalBodyKinds& kinds, uint3
     return v;
 }
 
-FractalBodyKinds fractal_substitution_kinds() { return {0, 0, 0, 36, true}; }        // 0-9 a-z
-FractalBodyKinds fractal_lsystem_kinds() { return {5, 2, 1, 49, false}; }            // + - [ ] |, F G, f, the other letters
-FractalBodyKinds fractal_scaled_kinds() { return {7, 2, 1, 49, false}; }             // and " '
+FractalBodyKinds fractal_substitution_kinds() { return {0, 0, 0, 36, true}; } // 0-9 a-z
+FractalBodyKinds fractal_lsystem_kinds() { return {5, 2, 1, 49, false}; }     // + - [ ] |, F G, f, the other letters
+FractalBodyKinds fractal_scaled_kinds() { return {7, 2, 1, 49, false}; }      // and " '
+FractalBodyKinds fractal_v3_kinds()
+{
+    // The 74 symbols of a v3 word: the 52 letters (rules), and the digits and + - [ ] | ! & ^ / " ' \ (none)
+    FractalBodyKinds k{22, 2, 1, 49, false};
+    k.word_most = uint32_t(kFractalWordMostV3), k.context_letters = 52, k.many_rules = true;
+    return k;
+}
 
 } // namespace sieve

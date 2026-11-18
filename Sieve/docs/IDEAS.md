@@ -10211,9 +10211,19 @@ do A then B?".
   prototype's figures at 40 and 60 characters; the space's own counts; and 3,000 rulesets drawn at random to 80
   characters. With all four, 10^-62.09 of v1 is kept and 10^-62.02 of v2 (`sieve fractal count --filters`), and
   the setup page says so: "v1 and v2 counted: kept 10^-62.09 of them; v3 to v6 judged only, as yet".
-- *What it does not yet change:* the line is almost all v3 (v1 is about 10^357.6 rulesets of its 10^405.1, v2
-  10^355.1), so its share waits on v3's rulesets being counted the same way (several rules for a symbol,
-  contexts, ignore lists, digits' turns: the same counting, with more kinds of part).
+- *What it did not yet change:* the line is almost all v3 (v1 is about 10^357.6 rulesets of its 10^405.1, v2
+  10^355.1), so its share waited on v3's rulesets being counted the same way.
+- *Built (A on v3, 18 November 2026; Edward: "go ahead with v3"):* the same counting, with any number of rules
+  for a symbol (in the order written) and a context letter or none either side of each, over v3's 74 symbols;
+  its header (angle, scale, seed, ignore, digits' turns), which reaches nothing, counted apart from the space's own
+  parts. Checked against every body of small alphabets with those rules (336 figures in the prototype), every
+  v3 ruleset of the smallest length judged by the filters, the space's own count, and 3,000 rulesets drawn at
+  random to 90 characters. With all four, 10^-59.27 of v3 is kept (canonical alone nearly all of it; draws
+  keeps 10^-0.05, grows and no-idle 10^-0.17 each). As v4 to v6 are about 10^-200 of the line, its share is now
+  known to every figure shown: FRACTALS 99.999999999999...% (kept 10^-59.27). The four have left the judge-only
+  tab, so X and OPTIMISE FILTERS tick them; fractal-dimension, fractal-strange and fractal-lasts draw or run each
+  ruleset and stay there. The metrics list says the line has no compact mode yet rather than what compact would
+  save.
 - *B (compact) needs more than a count:* the k-th survivor and a survivor's number, which counting by sets (a
   difference of counts) does not give directly; the walk does, but slowly. Designed once for v3's grammar
   rather than twice.

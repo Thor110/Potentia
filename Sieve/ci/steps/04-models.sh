@@ -602,6 +602,8 @@ rm -f optimise.ini
 $H --menu --filters optimise.ini --press "Item:optimise,Return" --screenshot optimise.png > /dev/null
 test "$(grep -c 'image-mirror\|fractal-drawn\|golden-word' optimise.ini || true)" = 0
 grep -A2 "^\[image\]" optimise.ini | q "palette-size-v1"
+# (and on the fractals line, since list F, its four structural filters: they count)
+grep -A2 "^\[fractals\]" optimise.ini | q "fractal-canonical-v1"
 # ...and a line whose mode was off is compact after it (the filters then take effect); one set by hand keeps its mode.
 grep -A1 "^\[text\]" optimise.ini | q "mode = compact"
 printf '[image]\nmode = mark\n' > optimise-mark.ini

@@ -1408,8 +1408,8 @@ int cmd_fractal(const Args& a)
         for (uint32_t l = 26; l <= 30; ++l) std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
             std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
-        // With --filters, the [fractals] structural filters ticked there, counted exactly on v1 and v2 (list F:
-        // fractal_count.hpp); v3 to v6 are judged only, as yet.
+        // With --filters, the [fractals] structural filters ticked there, counted exactly on v1 to v3 (list F:
+        // fractal_count.hpp); v4 to v6 are judged only, as yet.
         if (a.has("filters"))
         {
             const FilterConfig cfg = load_filter_config(a);
@@ -1428,11 +1428,12 @@ int cmd_fractal(const Args& a)
                 else o << "kept 10^" << part.log10_approx() - all.log10_approx();
                 return o.str();
             };
-            const sieve::BigUint v1 = space.count_v1_passing(f), v2 = space.count_v2_passing(f);
+            const sieve::BigUint v1 = space.count_v1_passing(f), v2 = space.count_v2_passing(f), v3 = space.count_v3_passing(f);
             std::cout << "passing   " << (names.empty() ? std::string("no structural filter ticked") : names) << "\n"
                       << "  v1      " << v1.to_decimal() << " (" << kept(v1, space.count_v1()) << ")\n"
                       << "  v2      " << v2.to_decimal() << " (" << kept(v2, space.count_v2()) << ")\n"
-                      << "  v3 to v6 judged only (not yet counted)\n";
+                      << "  v3      " << v3.to_decimal() << " (" << kept(v3, space.count_v3()) << ")\n"
+                      << "  v4 to v6 judged only (not yet counted)\n";
         }
         return 0;
     }

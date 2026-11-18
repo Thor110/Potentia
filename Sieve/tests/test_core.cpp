@@ -7627,6 +7627,7 @@ void test_fractal_count()
         const FractalSpace space(256);
         CHECK(space.count_v1_passing(F{}) == space.count_v1());
         CHECK(space.count_v2_passing(F{}) == space.count_v2());
+        CHECK(space.count_v3_passing(F{}) == space.count_v3());
     }
     // The prototype's figures (L-systems and substitutions, bodies of 40 and 60 characters, every
     // combination of the four: draws, grows, no-idle, canonical).
@@ -7672,6 +7673,35 @@ void test_fractal_count()
         const auto v = fractal_bodies_passing(fam == "L" ? fractal_lsystem_kinds() : fractal_substitution_kinds(), 60, set_of(bits));
         CHECK(v[40].to_decimal() == a40);
         CHECK(v[60].to_decimal() == a60);
+    }
+    // v3's bodies (any number of rules a symbol, each with context letters or none), at 30 and 40 characters: the
+    // prototype's figures, it checked against every body of small alphabets with those rules.
+    static const char* const ref3[] = {
+        "V 0000 8084395968535363825926669461760 68318033607948636336183007116356760577445168013312",
+        "V 0001 35155121677188756019362 21356461569614859021679598804566744358",
+        "V 0010 770349573538586989381231456360 10404951408803978423356831281827206007601944737280",
+        "V 0011 34991546653188659727197 21301744765886833684017767636413451124",
+        "V 0100 671529401997831392500949647040 9622487037060241467537031287088394018442692583888",
+        "V 0101 30745602595288060064692 19840160805516125291629482456024800010",
+        "V 0110 671529401997823185643760817104 9622487037059235164760213506702465802522025567564",
+        "V 0111 30745602595286679528137 19840160805512205710074996087721464945",
+        "V 1000 1541911817430681806799304334768 20427510034345216847581337326035167090256801713356",
+        "V 1001 28204053770264710267012 19090883176261086848652305843868758606",
+        "V 1010 266035003445282784742940781860 5231100915478329320783917225517843333854498625880",
+        "V 1011 28074871090389931756088 19042291355564297445282872285257236560",
+        "V 1100 231843205004554067162635602640 4837075755324278955606995373456493590861242037488",
+        "V 1101 24664075924303067815240 17734468596376414930394807074074812222",
+        "V 1110 231843205004552894594621054804 4837075755323980781003404522319191537542562977914",
+        "V 1111 24664075924302129535052 17734468596373100976304204255571942226",
+    };
+    for (const char* line : ref3)
+    {
+        std::istringstream in(line);
+        std::string fam, bits, a30, a40;
+        in >> fam >> bits >> a30 >> a40;
+        const auto v = fractal_bodies_passing(fractal_v3_kinds(), 40, set_of(bits));
+        CHECK(v[30].to_decimal() == a30);
+        CHECK(v[40].to_decimal() == a40);
     }
     // Every ruleset of the smallest lengths, judged by the filters: the L-systems of 44 characters (an angle
     // of one digit, an axiom and a rule of one symbol each) and the substitutions of 47 and 48.
@@ -7724,6 +7754,47 @@ void test_fractal_count()
             const auto v = fractal_bodies_passing(fractal_substitution_kinds(), 18, set_of(bits_of(c)));
             CHECK(v[17] == BigUint(p17[c]));
             CHECK(v[18] == BigUint(p18[c]));
+        }
+    }
+    // Every v3 body of 17 characters (an axiom and a rule of one symbol each, over its 74 symbols), judged.
+    {
+        std::string syms;
+        for (int c = 33; c < 127; ++c)
+            if (std::isalnum(c) || std::string("+-[]|!&^/\"'\\").find(char(c)) != std::string::npos) syms += char(c);
+        CHECK(syms.size() == 74);
+        std::array<uint64_t, 16> passed{};
+        for (const char x : syms)
+            for (const char y : syms)
+                if (std::isalpha(static_cast<unsigned char>(y)))
+                    for (const char z : syms)
+                        tally(std::string("sieve-fractal-v3\nlsystem 7\naxiom ") + x + "\nrule " + y + " " + z + "\n", passed);
+        for (unsigned c = 0; c < 16; ++c) CHECK(fractal_bodies_passing(fractal_v3_kinds(), 17, set_of(bits_of(c)))[17] == BigUint(passed[c]));
+    }
+    // A sample of v3 to 90 characters (several rules for a symbol, contexts, header lines): as v1's below.
+    {
+        const FractalSpace space(90);
+        std::mt19937_64 rng(37);
+        std::array<uint64_t, 16> passed{};
+        const unsigned n = 3000;
+        BigUint base = space.count_v1();
+        base += space.count_v2();
+        for (unsigned k = 0; k < n; ++k)
+        {
+            BigUint r;
+            for (int w = 0; w < 6; ++w)
+            {
+                r <<= 64;
+                r += BigUint(rng());
+            }
+            BigUint i = BigUint::mod(r, space.count_v3());
+            i += base;
+            tally(space.at(i), passed);
+        }
+        for (unsigned c : {1u, 2u, 4u, 8u, 7u})
+        {
+            const double p = std::pow(10.0, space.count_v3_passing(set_of(bits_of(c))).log10_approx() - space.count_v3().log10_approx());
+            const double sd = std::sqrt(p * (1 - p) / n), got = double(passed[c]) / n;
+            CHECK(std::abs(got - p) <= 4 * sd + 1.0 / n);
         }
     }
     // A sample of v1 to 80 characters (several rules, words of several symbols): each filter's share among
@@ -8182,7 +8253,7 @@ void test_fractals()
         const std::string draws_not = "sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n";
         CHECK(all.first_failure(std::vector<uint32_t>(draws_not.begin(), draws_not.end())) == 0);
         CHECK(throws([&] { (void)all.first_failure(std::vector<uint32_t>(97, 'F')); })); // (longer than the line)
-        for (const char* n : names) CHECK(find_filter(n)->category == "hard" && find_filter(n)->judge_only);
+        for (const char* n : names) CHECK(find_filter(n)->category == "hard" && !find_filter(n)->judge_only); // (counted since list F)
         {
             // List Z3: fractal-strange-v1 (attractors and flows) and fractal-lasts-v1 (automata), on the charted
             // ones and on generated ones from the v5 and v6 blocks.

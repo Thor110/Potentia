@@ -668,6 +668,7 @@ struct Formula : Part
 struct FractalSpaceV3
 {
     v3parts::P all;
+    v3parts::P header; // v3's: its lines before the axiom (none reach a symbol, so the filters count its body alone)
 };
 
 namespace v3parts {
@@ -705,8 +706,9 @@ std::shared_ptr<const FractalSpaceV3> make_v3(uint32_t longest)
     const P rules = std::make_shared<const NonEmpty>(seq(each));
     std::vector<P> parts{lit(std::string(kFractalVersion3) + "\nlsystem "), angle, lit("\n"), scale, seed, ignore};
     parts.insert(parts.end(), defines.begin(), defines.end());
-    parts.insert(parts.end(), {lit("axiom "), word, lit("\n"), rules});
     auto v = std::make_shared<FractalSpaceV3>();
+    v->header = seq(parts);
+    parts.insert(parts.end(), {lit("axiom "), word, lit("\n"), rules});
     v->all = seq(parts);
     return v;
 }
@@ -906,6 +908,17 @@ BigUint FractalSpace::count_v2_passing(const FractalStructureFilters& filters) c
         for (const Group& g : groups_)
             if (l >= g.header)
                 total += times((g.family == &scaled_ ? scaled : ls)[l - g.header], BigUint(g.lines()));
+    return total;
+}
+
+BigUint FractalSpace::count_v3_passing(const FractalStructureFilters& filters) const
+{
+    const std::vector<BigUint> body = fractal_bodies_passing(fractal_v3_kinds(), longest_, filters);
+    const auto& head = v3_->header->n;
+    BigUint total;
+    for (uint32_t l = kFractalSpaceShortest; l <= longest_; ++l)
+        for (uint32_t h = 0; h < l; ++h)
+            if (!head[h].is_zero() && !body[l - h].is_zero()) total += times(head[h], body[l - h]);
     return total;
 }
 

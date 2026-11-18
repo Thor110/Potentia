@@ -1011,6 +1011,13 @@ void add_fractal_filters(std::vector<FilterSpec>& out)
                         "written where it is the one it has without it. Every escape or converge formula and every "
                         "aggregate passes.",
                         canonical));
+    // The four above count (list F, IDEAS 19.250): by the symbols the axiom reaches, exactly, on v1 to v3, nearly
+    // all of the line (sieve/fractal_count.hpp); v4 to v6, about 10^-200 of it at the default, are judged.
+    for (size_t k = out.size() - 4; k < out.size(); ++k)
+    {
+        out[k].judge_only = false;
+        out[k].description += " Counted exactly on v1 to v3 by the symbols the axiom reaches; v4 to v6 judged.";
+    }
     out.push_back(judge("fractal-strange",
                         "Strange: an attractor or a flow whose path stays finite through its first 8,192 points (a flow's "
                         "32,768 steps) and on "

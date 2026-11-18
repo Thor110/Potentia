@@ -100,6 +100,7 @@ public:
     // v1's and v2's rulesets that pass the ticked structural filters (fractal_count.hpp), counted exactly.
     BigUint count_v1_passing(const FractalStructureFilters& filters) const;
     BigUint count_v2_passing(const FractalStructureFilters& filters) const;
+    BigUint count_v3_passing(const FractalStructureFilters& filters) const;
     // The ruleset at an address (below count()). Throws std::invalid_argument past the end.
     std::string at(const BigUint& index) const;
     // A ruleset's address: nothing where the reader does not take the text, or it is longer than

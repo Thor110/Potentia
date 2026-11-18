@@ -1,6 +1,7 @@
 // Sieve — how many of the fractal dimension's rulesets pass its structural filters (list F, IDEAS 19.250):
 // fractal-draws, fractal-grows, fractal-no-idle and fractal-canonical, counted exactly on the rulesets of
-// sieve-fractal-v1 and v2 (an axiom and at most one rule a symbol) without growing any of them.
+// sieve-fractal-v1 and v2 (an axiom and at most one rule a symbol) and v3 (any number of rules a symbol, with
+// contexts; its header's lines, which reach nothing, counted apart) without growing any of them.
 //
 // Each of those filters asks about the symbols the axiom reaches, rule after rule (its reach,
 // filters/fractals.cpp): whether F or G is among them, whether one of them has a rule of two symbols or more,
@@ -39,6 +40,9 @@ struct FractalBodyKinds
     uint32_t fixed = 0;     // f: a rule, but its name matters (an L-system)
     uint32_t renamable = 0; // the rest: their names change nothing drawn (or, a substitution's, only a colour)
     bool substitution = false; // draws means two symbols or more reached, not F or G
+    uint32_t word_most = 64;   // a word's symbols at most (kFractalWordMost; v3's kFractalWordMostV3)
+    uint32_t context_letters = 0; // v3: a rule's context letter either side, or none (0: no contexts)
+    bool many_rules = false;      // v3: any number of rules for a symbol, in the order written (v1, v2: one)
     uint32_t ruled() const { return drawing + fixed + renamable; }
     uint32_t alphabet() const { return inert + ruled(); }
 };
@@ -58,5 +62,6 @@ std::vector<BigUint> fractal_bodies_passing(const FractalBodyKinds& kinds, uint3
 FractalBodyKinds fractal_substitution_kinds();
 FractalBodyKinds fractal_lsystem_kinds();
 FractalBodyKinds fractal_scaled_kinds();
+FractalBodyKinds fractal_v3_kinds();
 
 } // namespace sieve

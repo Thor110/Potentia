@@ -261,7 +261,7 @@ run before a release package, and after each of the three reviews. Each batch is
 
 - [x] F-A. fractal-draws, -grows, -no-idle and -canonical counted exactly on v1 and v2, by the set the axiom
   reaches; checked against every ruleset of the smallest lengths, judged by the filters. `[01]` + `[10]`.
-- [ ] F-A3. The same on v3 (nearly all of the line).
+- [x] F-A3. The same on v3 (nearly all of the line): the four off the judge-only tab. `[01]` + `[04]` + `[10]`.
 - [ ] F-B. Compact on the fractals line: the k-th survivor and back.
 
 ### Later (in ROADMAP's final tasks)

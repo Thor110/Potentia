@@ -1929,7 +1929,7 @@ $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --goto 0 --scr
 $H --no-menu --line fractals --walk "0,0" --screenshot fractals-start.png | tr -d '\r' | q "first book 0 \"Index of the fractal dimension\".*went to index$"
 $H --no-menu --line fractals --fractal-known exclude --walk "0,0" --screenshot fractals-start-excluded.png | tr -d '\r' | q "50\.0000000000% along.*went to 50%$"
 $H --no-menu --line fractals --fractal-longest 60 --walk "0,0" --warp gosper-curve --screenshot fractals-short.png | tr -d '\r' | q "gosper-curve is 82 characters, past the longest ruleset on this line, 60 (Setup > FRACTALS, or the command line: --fractal-longest)\.$"
-# Its noise filters ([fractals], judge-only): a ruleset that draws nothing fails fractal-draws-v1, marked
+# Its noise filters ([fractals]; the structural four counted since list F, the rest judge-only): a ruleset that draws nothing fails fractal-draws-v1, marked
 # where it stands; and sieve filters judges rulesets spread over the space, the same on every machine.
 printf '[fractals]\nmode = mark\nfilters = fractal-draws-v1, fractal-grows-v1\n' > fractals-mark.ini
 $H --no-menu --filters fractals-mark.ini --line fractals --fractal-known exclude --walk "0,0" --goto 0 --screenshot fractals-marked.png | tr -d '\r' | q "^FRACTALS line, positional, filters: 2 mark, "
@@ -1938,16 +1938,18 @@ build/sieve filters --line fractals --filters fractals-three.ini --sample 1000 |
 q "^  fractal-draws-v1 passes 897 of 1000 (89.70%)$" fractal-sample.txt
 q "^  fractal-dimension-v1 passes 195 of 1000 (19.50%)$" fractal-sample.txt
 q "^  the ticked stack passes 681 of 1000 (68.10%)$" fractal-sample.txt
-q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
-# List F: the structural four counted exactly on v1 and v2 (fractal_count.hpp, checked in step 01 against every
-# ruleset of the smallest lengths): with all four, 10^-62.09 of v1 and 10^-62.02 of v2 kept; and the setup
-# page says so, v3 to v6 judged only as yet.
+q "^\[x\] fractal-no-idle-v1   (hard)$" fractal-sample.txt
+# List F: the structural four counted exactly on v1 to v3, nearly all of the line (fractal_count.hpp, checked in
+# step 01 against every ruleset of the smallest lengths and a sample of the rest): with all four, 10^-62.09 of v1,
+# 10^-62.02 of v2 and 10^-59.27 of v3 kept, so the line's share is known; v4 to v6 (about 10^-200 of it) are judged.
 printf '[fractals]\nmode = compact\nfilters = fractal-draws-v1, fractal-grows-v1, fractal-no-idle-v1, fractal-canonical-v1\n' > fractals-four.ini
 build/sieve fractal count --filters fractals-four.ini | tr -d '\r' > fractal-four.txt
 q "^  v1      [0-9]* (kept 10^-62.09)$" fractal-four.txt
 q "^  v2      [0-9]* (kept 10^-62.02)$" fractal-four.txt
+q "^  v3      [0-9]* (kept 10^-59.27)$" fractal-four.txt
 $H --metrics fractals-four-metrics.txt --filters fractals-four.ini > /dev/null
-q "^Fractals : v1 and v2 counted: kept 10^-62.09 of them; v3 to v6 judged only, as yet$" fractals-four-metrics.txt
+q "^Fractals : 99.999999999999...%   ( Kept : 10^-59.27 )$" fractals-four-metrics.txt
+q "^Fractals : compact: not on this line yet (its survivors are counted, not yet numbered)$" fractals-four-metrics.txt
 # In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
 # fitted as a picture warped in is (fractal-drawn-v1): 5,279 at 10 x 10 in black and white (782 before
 # X4's IFS and escape pictures, 1,057 before Y2's automata, an elementary one's history another picture

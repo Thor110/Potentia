@@ -192,8 +192,9 @@ less one takes the more can be counted with it. What is left, and the way forwar
   automaton is mostly single paths, whose counts are 1 and need no row of their own), so the pictures
   fit as they are and merge.
 - [ ] The fractal line's structural filters (`fractal-draws-v1`, `fractal-grows-v1`, `fractal-no-idle-v1`,
-  `fractal-canonical-v1`): *counted exactly on v1 and v2 since list F (17 November 2026, IDEAS 19.250)*;
-  v3 (nearly all of the line) to be counted the same way, then compact. `fractal-dimension-v1`,
+  `fractal-canonical-v1`): *counted exactly on v1 to v3, nearly all of the line, since list F (17 and 18
+  November 2026, IDEAS 19.250); off the judge-only tab*; v4 to v6 (about 10^-200 of the line) judged; compact
+  next. `fractal-dimension-v1`,
   `fractal-strange-v1` and `fractal-lasts-v1` draw or run each ruleset: judge-only.
 - [ ] `neighbour-agreement-v1`: its own transfer matrix, which depends on the cell. The way forward: an
   automaton for the rows (the last row and the disagreements so far, its states the same as the matrix's)

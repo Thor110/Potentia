@@ -4828,21 +4828,31 @@ const Menu::StackInfo& Menu::stack_info(int i)
             const sieve::FilterStack st = sieve::cli::build_stack(filter_line_of(i), lf);
             if (st.empty()) none_of(out);
             else out.status = trf("status.not_countable", {st.compact_blocker()});
-            // The structural four (list F, fractal_count.hpp) counted exactly on v1 and v2, the rest of the space
-            // (v3 to v6) judged only as yet: the line's share is not known, but theirs is, and is said.
+            // The structural four (list F, fractal_count.hpp) counted exactly on v1 to v3, nearly all of the line;
+            // v4 to v6 (about 10^-200 of it at the default) judged: the share is v1 to v3's survivors over the whole
+            // line, short by at most v4 to v6's, too few to show. Filters that judge only (dimension, strange,
+            // lasts) are not in it, and it says so.
             sieve::FractalStructureFilters f;
             f.draws = lf.is_enabled("fractal-draws-v1"), f.grows = lf.is_enabled("fractal-grows-v1");
             f.no_idle = lf.is_enabled("fractal-no-idle-v1"), f.canonical = lf.is_enabled("fractal-canonical-v1");
+            size_t judged = 0;
+            for (const auto& n : lf.enabled)
+                if (n != "fractal-draws-v1" && n != "fractal-grows-v1" && n != "fractal-no-idle-v1" && n != "fractal-canonical-v1") ++judged;
             if (f.any())
             {
                 const uint32_t longest = s_.fractal_longest;
-                return resolve(i, out.key, [f, longest]() {
+                return resolve(i, out.key, [f, longest, judged]() {
                     const sieve::FractalSpace space(longest);
-                    sieve::BigUint part = space.count_v1_passing(f), all = space.count_v1();
+                    sieve::BigUint part = space.count_v1_passing(f);
                     part += space.count_v2_passing(f);
-                    all += space.count_v2();
+                    part += space.count_v3_passing(f);
+                    sieve::BigUint rest = space.count_v4();
+                    rest += space.count_v5();
+                    rest += space.count_v6();
                     StackInfo o{"", "", -1, ""};
-                    o.status = trf("status.fractals_counted", {part.is_zero() ? std::string("none") : "10^" + fixed(part.log10_approx() - all.log10_approx(), 2)});
+                    survivors_of(o, part, space.count());
+                    o.status += trf("status.fractals_counted", {fixed(rest.log10_approx() - space.count().log10_approx(), 0)});
+                    if (judged) o.status += trf("status.fractals_judged", {std::to_string(judged)});
                     return o;
                 });
             }
@@ -5040,7 +5050,10 @@ std::string Menu::ordering_metrics(const std::vector<int>& order, const std::arr
         std::string row = name_of(i);
         row.resize(name_w, ' ');
         const StackInfo& s = got[size_t(i)];
-        if (!s.filtered.empty() && std::isfinite(s.kept_log10))
+        // (The fractals line's survivors are counted, list F, but it has no compact mode yet: the k-th survivor and
+        // a survivor's number are still to be built, F-B.)
+        if (is_listed(i) && !s.filtered.empty()) row += " : compact: not on this line yet (its survivors are counted, not yet numbered)";
+        else if (!s.filtered.empty() && std::isfinite(s.kept_log10))
         {
             const double saved = std::max(0.0, -s.kept_log10 * log2_10);
             row += " : compact " + fixed(saved, saved < 0.01 ? 6 : 2) + " bits off every survivor (of " +
