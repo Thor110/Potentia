@@ -90,6 +90,64 @@ bool save_render(SDL_Renderer* r, const std::string& path)
     return true;
 }
 
+// --replay-video: a recording played back as a film, every frame drawn as it plays and handed to ffmpeg
+// as raw pixels through a pipe, which writes the film (for showing Sieve: a trailer, a tutorial). The
+// recording's own frames come at whatever pace it was made at; the film's come FPS a second, each the
+// hallway as it stood at that moment, so a recording of uneven frames still makes an even film.
+class FilmPipe
+{
+public:
+    FilmPipe(const std::string& ffmpeg, const std::string& out, int w, int h, int fps) : w_(w), h_(h)
+    {
+        const std::string cmd = "\"" + ffmpeg + "\" -loglevel error -y -f rawvideo -pix_fmt rgb24 -s " + std::to_string(w) + "x" + std::to_string(h) +
+                                " -r " + std::to_string(fps) + " -i - -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p \"" + out + "\"";
+#ifdef _WIN32
+        f_ = _popen(cmd.c_str(), "wb");
+#else
+        f_ = popen(cmd.c_str(), "w");
+#endif
+        if (!f_) throw std::runtime_error("--replay-video: ffmpeg could not be started (" + ffmpeg + ")");
+    }
+    FilmPipe(const FilmPipe&) = delete;
+    FilmPipe& operator=(const FilmPipe&) = delete;
+    // The frame drawn now, its pixels read back and sent.
+    bool frame(SDL_Renderer* r)
+    {
+        SDL_Surface* s = SDL_RenderReadPixels(r, nullptr);
+        if (!s) return false;
+        SDL_Surface* rgb = SDL_ConvertSurface(s, SDL_PIXELFORMAT_RGB24);
+        SDL_DestroySurface(s);
+        if (!rgb) return false;
+        bool ok = rgb->w == w_ && rgb->h == h_;
+        for (int y = 0; ok && y < rgb->h; ++y)
+            ok = std::fwrite(static_cast<const Uint8*>(rgb->pixels) + size_t(y) * rgb->pitch, 1, size_t(rgb->w) * 3, f_) == size_t(rgb->w) * 3;
+        SDL_DestroySurface(rgb);
+        ++frames_;
+        return ok;
+    }
+    int frames() const { return frames_; }
+    // ffmpeg finishes the film once its input ends; true if it said nothing was wrong.
+    bool close()
+    {
+        if (!f_) return false;
+#ifdef _WIN32
+        const int rc = _pclose(f_);
+#else
+        const int rc = pclose(f_);
+#endif
+        f_ = nullptr;
+        return rc == 0;
+    }
+    ~FilmPipe()
+    {
+        if (f_) close();
+    }
+
+private:
+    std::FILE* f_ = nullptr;
+    int w_, h_, frames_ = 0;
+};
+
 // ---------------------------------------------------------------- options
 
 const char* kUsage =
@@ -232,6 +290,8 @@ const char* kUsage =
     "  --replay FILE       play a recording back in the hallway (started as it was recorded), then hand it\n"
     "                      back to you; with --screenshot, played through and pictured where it ends\n"
     "  --replay-cache      decode a packed recording once into the cache, not each time ([replays] cached)\n"
+    "  --replay-video OUT  with --replay and --screenshot: the recording as a film, OUT (.mp4), each frame drawn\n"
+    "                      as it plays and written by ffmpeg, --replay-fps N a second (30 unless given)\n"
     "  --action NAME       hold your character at one action for a picture (idle, walk, run, jump, take,\n"
     "                      read, wave): it plays that action's animation from its map, or none\n"
     "  --creator           with --menu: the Character Creator instead (the whole window, as the main menu's\n"
@@ -2262,10 +2322,40 @@ int run(const Args& a)
             replay_begin(*hall, r);
             Recording again(replay_start_of(*hall));
             bool q = false;
+            std::unique_ptr<FilmPipe> film;
+            int fps = 30;
+            if (a.has("replay-video"))
+            {
+                const auto ff = sieve::cli::find_ffmpeg();
+                if (!ff) throw std::runtime_error("--replay-video: " + sieve::cli::ffmpeg_missing());
+                fps = int(a.get_positive("replay-fps", 30));
+                int w = 0, h = 0;
+                SDL_GetCurrentRenderOutputSize(renderer, &w, &h);
+                film = std::make_unique<FilmPipe>(*ff, a.get("replay-video"), w, h, fps);
+            }
+            // (the film's next frame is due at `due` seconds into the recording; one is drawn at the start)
+            double played = 0, due = 0;
+            auto film_to = [&](double t) {
+                while (film && due <= t + 1e-9)
+                {
+                    hall->render();
+                    if (!film->frame(renderer)) throw std::runtime_error("--replay-video: a frame could not be written");
+                    due += 1.0 / fps;
+                }
+            };
+            film_to(0);
             for (const auto& f : r.frames)
             {
                 replay_frame(*hall, f, q);
                 again.add(f);
+                played += double(f.dt_us) / 1e6;
+                film_to(played);
+            }
+            if (film)
+            {
+                const int n = film->frames();
+                if (!film->close()) throw std::runtime_error("--replay-video: ffmpeg did not finish " + a.get("replay-video"));
+                std::cout << "film: " << n << " frames at " << fps << " a second, " << a.get("replay-video") << "\n";
             }
             std::cout << "replay: " << r.frames.size() << " frames, " << hallway::hall::fixed(r.seconds(), 3) << " s\n" << hall->status() << "\n";
             if (a.has("record")) save_replay_text(a.get("record"), again.text());

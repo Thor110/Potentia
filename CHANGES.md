@@ -1,45 +1,48 @@
-# Sieve: picture filters (list Q)
+# Sieve: the trailer
 
-One commit on top of 2db4bc0.
+One commit on top of 8fc8e3d.
 
-## Three new picture filters
+## The film
 
-Each one is an automaton, so it is counted exactly and merges with the line's other filters.
+`potentia-sieve-trailer.mp4`: 10 minutes 35 seconds, 1920 x 1080, 30 frames a second, in eight chapters,
+each opening on a title card:
 
-- **border-v1:** every pixel of the top and bottom rows and the left and right columns is the same colour.
-- **specks-v1:** no lone specks: every pixel shares its colour with at least one of its four neighbours.
-  It is only offered where its automaton fits (it is not offered on the 16-colour ega16 palette, even at
-  6 x 6).
-- **gradient-v1:** along every row (way = across) or down every column (way = down), the colours only rise
-  or only fall, the same way throughout.
+0. Cold open: a walk down the pages line, wireframe off, and the title.
+1. Why: exact records, the Museum and the Gallery, the shortest description (Kolmogorov complexity,
+   and that it cannot be computed), honesty about addresses, and what it is for: historical
+   preservation, human unification, long-term archiving.
+2. The address: warp (T), the item tabs (C), the orderings (M), go to (G), the navigator (X), Home,
+   running and jumping (PgUp, ]).
+3. Walking the dimensions: one walk through every door, pages to binary, each line's size on
+   screen; the same corridors with wireframe off; edge glow; the fractal shelves.
+4. Holding things: Sieve's icon warped onto the image line and opened in the viewer, a book, a
+   melody, a world, J to the binary line, the fractal index, CHAT, CHAIN, a model turned.
+5. Filters: the setup menu, a line's filters, the details, OPTIMISE FILTERS and what it keeps on
+   every line, then the pages and image lines walked in compact mode; the Filter Designer, versions.
+6. Files: the File Locator; the help pages packed, installed and a damaged copy refused, measured
+   by the build itself (65,185 bytes; zip 30,029; 7z 21,204; Sieve 16,478); the benchmark table;
+   the two decoders, and where it loses.
+7. Everything else: pause menu, node graph, Manual Navigation, Encryption Engine, Media Player,
+   rings, Character Creator, personal dimension (day, dusk, ground shaper), Training Harness,
+   Replays, System Viewer, Documentation, Settings.
+8. Dynamic, modular, procedural; the close; the end card, "by Edward James Gordon (Thor110)".
 
-## What they keep
+The music is melodies of the audio line, drawn at random from the survivors of the music player's
+own default stacks (WORLD under the walks, MENUS under the cards and tools) and played with its
+voices; `music.txt` lists each one by its rank.
 
-| Filter | Random 10 x 10 black and white kept | On ega16 | Ten real pictures pass |
-| :--- | :--- | :--- | :--- |
-| border-v1 | 10^-10.54 | 10^-42.14 | 4 of 10 |
-| specks-v1 | 10^-3.35 | not offered | 7 of 10 |
-| gradient-v1 | 10^-19.39 (across or down) | 10^-54.97 (across) | 2 of 10 |
+## In the repository
 
-## OPTIMISE FILTERS and X leave two of them for you
-
-Border and gradient pick out a kind of picture (framed ones, shaded ones) rather than setting aside
-noise, so ticking them for you would throw away everything else. Filters now carry a mark for this, and
-X, Z, C and OPTIMISE FILTERS leave such filters alone; you tick them by hand. Specks is ticked, which moves
-the optimised Image figure from 10^-18.19 to 10^-18.26 (and Books from 10^-115.95 to 10^-116.02).
-
-## Not built: the horizon
-
-On black and white it would only keep pictures of two flat bands, which gradient (down) already keeps.
-On larger palettes it would have to carry the set of colours above every row boundary through the rows,
-an automaton that grows with every subset of the palette. Recorded in IDEAS 19.245.
+- **The hallway:** `--replay-video OUT.mp4` (with `--replay` and `--screenshot`), `--replay-fps N`.
+  Every frame of a recording is drawn and piped to ffmpeg; MANUAL's Replays paragraph says so.
+- **tools/trailer:** the whole film as scripts (README.md says how to run it): `trailer.py` (the
+  running order, every caption and card), `walker.py` (recordings written by hand), `shoot.py`,
+  `stills.py`, `cards.py`, `music.py`, `cube.obj`. Run on your machine it makes the same film, drawn
+  by your graphics card.
 
 ## Checks
 
-- **Unit tests (step 01):** each filter against its rule written as plain code, on every picture of five
-  small shapes (exact counts) and 4,000 random 10 x 10 pictures.
-- **CI step 04:** OPTIMISE leaves border and gradient, ticks specks; the new optimised figures.
-- **CI step 10:** the three random-picture figures.
+- CI steps 01 and 10 pass; the help, help-library and settings checks pass.
 
 ## Files to delete by hand
 
