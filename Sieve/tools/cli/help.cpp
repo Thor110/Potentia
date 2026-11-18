@@ -438,7 +438,7 @@ const std::vector<Page>& pages()
          "       sieve fractal show ID|FILE [--depth N]\n"
          "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX] [--all-depths]\n"
          "       sieve fractal check FILE\n"
-         "       sieve fractal count [--longest N]\n"
+         "       sieve fractal count [--longest N] [--filters FILE]\n"
          "       sieve fractal at ADDRESS [--longest N]\n"
          "       sieve fractal index ID|FILE [--longest N]",
          "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"

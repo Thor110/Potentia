@@ -30,6 +30,7 @@
 #include "sieve/raid_net.hpp"
 #include "sieve/raid_piece.hpp"
 #include "sieve/fractal.hpp"
+#include "sieve/fractal_count.hpp"
 #include "sieve/fractal_space.hpp"
 #include "sieve/seal.hpp"
 #include "sieve/catalogue.hpp"
@@ -74,6 +75,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdint>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -7609,6 +7611,147 @@ extern std::string g_data; // (the data folder: defined below, set from the test
 
 // The fractal dimension's rulesets (IDEAS 19.191, 19.235): read as written, grown, drawn, and the
 // shelves' chart read whole.
+// The fractals' structural filters counted (list F, fractal_count.hpp): against the filters themselves on every
+// ruleset of the smallest lengths, against the space's own counts, against the prototype's figures (counted
+// there by the reach and checked against every body of small alphabets), and against a sample of the space.
+void test_fractal_count()
+{
+    using F = FractalStructureFilters;
+    auto set_of = [](const std::string& bits) {
+        F f;
+        f.draws = bits[0] == '1', f.grows = bits[1] == '1', f.no_idle = bits[2] == '1', f.canonical = bits[3] == '1';
+        return f;
+    };
+    // Unfiltered, the counts are the space's.
+    {
+        const FractalSpace space(256);
+        CHECK(space.count_v1_passing(F{}) == space.count_v1());
+        CHECK(space.count_v2_passing(F{}) == space.count_v2());
+    }
+    // The prototype's figures (L-systems and substitutions, bodies of 40 and 60 characters, every
+    // combination of the four: draws, grows, no-idle, canonical).
+    static const char* const ref[] = {
+        "L 0000 98420592945317914665633198458843339160591940176 23649639520036478924985839625019871447085463645245115667161331110073148528847860141",
+        "L 0001 12597993001936297324679977773 67012544609824111221381416120081114611492105639602792",
+        "L 0010 18916154112002317707298917228485799575181180304 7359631518329260620521519090966782878169382108241303709139547795660975316532583784",
+        "L 0011 12541328518892693954145436824 66896392884355496663074261116116924264030269551322998",
+        "L 0100 17521776230820238635261532447405813336495894500 7073931409328999550642893153438903702167223971491317276000230845543902808432872700",
+        "L 0101 11804058675908487447826588410 64815726798883776518682988034676884407207578104234552",
+        "L 0110 17521776230806050015022315762600461515259674256 7073931409312115506747444363219912517853851257053771982449948339776923309686120936",
+        "L 0111 11804058673649526670366580481 64815726796514243085157979580063662217261705667460021",
+        "L 1000 36644110481986348841420290333094971231047199816 13299296410578507376740882176234713243376073811122592649594283870635854725449473406",
+        "L 1001 12337282580396477933302551776 66548805335381901939837716171079106495540302401443616",
+        "L 1010 11233892279698111067113064744694888198987405004 5901618121162990563576455170129376561209553961658860479515268865235868391544874484",
+        "L 1011 12281861766452504218387626588 66433483487317579268738990159071067703782587912065460",
+        "L 1100 10404154576837655222544780060479508229799451650 5672256594344082836968378902422192911690525967860354996884548411781522974217880650",
+        "L 1101 11559536622069900338006134736 64367049409511717271883183364639792784005260535046128",
+        "L 1110 10404154576832546891867686356512036432725268556 5672256594333945773348420596566615285785361768062955499654261077574070877493662836",
+        "L 1111 11559536619898844893495247376 64367049407165464153874044219652781751507367787866514",
+        "S 0000 698355023751216440472543347174482749947904 17114637772298140040263309203570095381928754149565816588115077472723140608",
+        "S 0001 749334085145788427057 66898438743087941752277881879811212491809556",
+        "S 0010 197495214712677371262617476450941139978788 7434594492267717208635933262624615283261865657474346191208171599167811708",
+        "S 0011 745141449244695046808 66767882186713769575102709472921194650899441",
+        "S 0100 183593475370110724037625369172713853765248 7165917637162675961354308730531548986801159910311005616167309393044883328",
+        "S 0101 704787385961390728422 64780980988219736103322961885994033253762375",
+        "S 0110 183593475366397935247852267369321824523128 7165917636788885895679946493500097071445099636156940813561387824534643248",
+        "S 0111 704787381931694051557 64780980974251561525833480800665767393959579",
+        "S 1000 669256897759859471131383150455799816252960 16725668731971210311338784250414566923128024639663631052719215587310698640",
+        "S 1001 749334085145788427033 66898438743087941752277881879811212491809512",
+        "S 1010 197495214712677371262617476450941139977960 7434594492267717208635933262624615283261865657474346191208171599167810160",
+        "S 1011 745141449244695046785 66767882186713769575102709472921194650899398",
+        "S 1100 183593475370110715851573941555446141872420 7165917637162675851927310963975634696447195702186271445874865338714945940",
+        "S 1101 704787385961390728399 64780980988219736103322961885994033253762332",
+        "S 1110 183593475366397935247852267369321824522300 7165917636788885895679946493500097071445099636156940813561387824534641700",
+        "S 1111 704787381931694051534 64780980974251561525833480800665767393959536",
+    };
+    for (const char* line : ref)
+    {
+        std::istringstream in(line);
+        std::string fam, bits, a40, a60;
+        in >> fam >> bits >> a40 >> a60;
+        const auto v = fractal_bodies_passing(fam == "L" ? fractal_lsystem_kinds() : fractal_substitution_kinds(), 60, set_of(bits));
+        CHECK(v[40].to_decimal() == a40);
+        CHECK(v[60].to_decimal() == a60);
+    }
+    // Every ruleset of the smallest lengths, judged by the filters: the L-systems of 44 characters (an angle
+    // of one digit, an axiom and a rule of one symbol each) and the substitutions of 47 and 48.
+    FilterLine fl;
+    fl.kind = "fractals", fl.symbols_id = "fractals/96", fl.base = 128, fl.length = 96, fl.up_to_length = true;
+    static const TestResources none(nullptr, nullptr);
+    const char* names[] = {"fractal-draws-v1", "fractal-grows-v1", "fractal-no-idle-v1", "fractal-canonical-v1"};
+    std::vector<std::unique_ptr<Filter>> judge;
+    for (const char* n : names) judge.push_back(find_filter(n)->make(fl, {}, none));
+    // passed[combination]: how many pass every filter of it (combination's bit k: filter k ticked)
+    auto tally = [&](const std::string& text, std::array<uint64_t, 16>& passed) {
+        const std::vector<uint32_t> u(text.begin(), text.end());
+        unsigned ok = 0;
+        for (unsigned k = 0; k < 4; ++k)
+            if (judge[k]->passes(u)) ok |= 1u << k;
+        for (unsigned c = 0; c < 16; ++c)
+            if ((c & ok) == c) ++passed[c];
+    };
+    auto bits_of = [](unsigned c) {
+        std::string b;
+        for (unsigned k = 0; k < 4; ++k) b += (c >> k) & 1 ? '1' : '0';
+        return b;
+    };
+    {
+        const std::string syms = "+-ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz|";
+        const std::string rulers = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        std::array<uint64_t, 16> passed{};
+        for (const char x : syms)
+            for (const char y : rulers)
+                for (const char z : syms)
+                    tally(std::string("sieve-fractal-v1\nlsystem 7\naxiom ") + x + "\nrule " + y + " " + z + "\n", passed);
+        for (unsigned c = 0; c < 16; ++c) CHECK(fractal_bodies_passing(fractal_lsystem_kinds(), 17, set_of(bits_of(c)))[17] == BigUint(passed[c]));
+    }
+    {
+        const std::string syms = "0123456789abcdefghijklmnopqrstuvwxyz";
+        std::array<uint64_t, 16> p17{}, p18{};
+        for (const char x : syms)
+            for (const char y : syms)
+                for (const char z : syms)
+                {
+                    tally(std::string("sieve-fractal-v1\nsubstitution\naxiom ") + x + "\nrule " + y + " " + z + "\n", p17);
+                    for (const char w : syms)
+                    {
+                        tally(std::string("sieve-fractal-v1\nsubstitution\naxiom ") + x + w + "\nrule " + y + " " + z + "\n", p18);
+                        tally(std::string("sieve-fractal-v1\nsubstitution\naxiom ") + x + "\nrule " + y + " " + z + w + "\n", p18);
+                    }
+                }
+        for (unsigned c = 0; c < 16; ++c)
+        {
+            const auto v = fractal_bodies_passing(fractal_substitution_kinds(), 18, set_of(bits_of(c)));
+            CHECK(v[17] == BigUint(p17[c]));
+            CHECK(v[18] == BigUint(p18[c]));
+        }
+    }
+    // A sample of v1 to 80 characters (several rules, words of several symbols): each filter's share among
+    // 3,000 rulesets drawn at random is within four standard deviations of its count's.
+    {
+        const FractalSpace space(80);
+        std::mt19937_64 rng(31);
+        std::array<uint64_t, 16> passed{};
+        const unsigned n = 3000;
+        for (unsigned k = 0; k < n; ++k)
+        {
+            BigUint r;
+            for (int w = 0; w < 6; ++w)
+            {
+                r <<= 64;
+                r += BigUint(rng());
+            }
+            tally(space.at(BigUint::mod(r, space.count_v1())), passed);
+        }
+        for (unsigned c : {1u, 2u, 4u, 8u, 7u})
+        {
+            const double p = std::pow(10.0, space.count_v1_passing(set_of(bits_of(c))).log10_approx() - space.count_v1().log10_approx());
+            const double sd = std::sqrt(p * (1 - p) / n), got = double(passed[c]) / n;
+            CHECK(std::abs(got - p) <= 4 * sd + 1.0 / n);
+        }
+    }
+}
+
 void test_fractals()
 {
     const std::string fib = "sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 1 0\n";
@@ -9844,6 +9987,7 @@ void run_all(int argc, char** argv)
     RUN(test_raid_pieces());
     PART("fractals");
     RUN(test_fractals());
+    RUN(test_fractal_count());
     PART("hallway");
     RUN(test_format_stats());
     RUN(test_catalogue());

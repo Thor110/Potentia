@@ -257,6 +257,13 @@ run before a release package, and after each of the three reviews. Each batch is
   dimension's data, in many ways, so it can be filtered out of them; every system and dimension added asks
   what its fractal ways are.
 
+### List F: the fractals' filters counted (Edward, 17 November 2026; IDEAS 19.250)
+
+- [x] F-A. fractal-draws, -grows, -no-idle and -canonical counted exactly on v1 and v2, by the set the axiom
+  reaches; checked against every ruleset of the smallest lengths, judged by the filters. `[01]` + `[10]`.
+- [ ] F-A3. The same on v3 (nearly all of the line).
+- [ ] F-B. Compact on the fractals line: the k-th survivor and back.
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 

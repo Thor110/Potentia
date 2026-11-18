@@ -639,6 +639,7 @@ status.counting = counting... (a custom grammar compiles the first time only, th
 ; Left out, they show the English text built into Sieve.
 status.too_large = line too large to open
 status.listed = no filters (its items are listed, not counted)
+status.fractals_counted = v1 and v2 counted: kept {0} of them; v3 to v6 judged only, as yet
 status.none_units = no filters ticked: every unit is shelved
 status.none_books = no filters ticked: every book is shelved
 status.survivors = survivors: {0} (exact); compact in every ordering

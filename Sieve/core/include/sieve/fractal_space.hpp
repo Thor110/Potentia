@@ -59,6 +59,7 @@
 #pragma once
 
 #include "sieve/biguint.hpp"
+#include "sieve/fractal_count.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -90,11 +91,15 @@ public:
     uint32_t longest() const { return longest_; }
     const BigUint& count() const { return total_; }   // all of them
     const BigUint& count_v1() const { return total_v1_; } // v1's, the first of them
+    const BigUint& count_v2() const { return total_v2_; } // v2's
     BigUint count_v3() const;                             // v3's
     const BigUint& count_v4() const { return total_v4_; } // v4's
     const BigUint& count_v5() const { return total_v5_; } // v5's
     const BigUint& count_v6() const { return total_v6_; } // v6's, the last of them
     BigUint count_at(uint32_t length) const;           // those of exactly `length` characters (v1 and v2)
+    // v1's and v2's rulesets that pass the ticked structural filters (fractal_count.hpp), counted exactly.
+    BigUint count_v1_passing(const FractalStructureFilters& filters) const;
+    BigUint count_v2_passing(const FractalStructureFilters& filters) const;
     // The ruleset at an address (below count()). Throws std::invalid_argument past the end.
     std::string at(const BigUint& index) const;
     // A ruleset's address: nothing where the reader does not take the text, or it is longer than

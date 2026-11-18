@@ -1408,6 +1408,32 @@ int cmd_fractal(const Args& a)
         for (uint32_t l = 26; l <= 30; ++l) std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
         for (uint32_t l = sieve::kFractalSpaceShortest; l <= std::min<uint32_t>(longest, sieve::kFractalSpaceShortest + 4); ++l)
             std::cout << "  " << l << " characters: " << space.count_at(l).to_decimal() << "\n";
+        // With --filters, the [fractals] structural filters ticked there, counted exactly on v1 and v2 (list F:
+        // fractal_count.hpp); v3 to v6 are judged only, as yet.
+        if (a.has("filters"))
+        {
+            const FilterConfig cfg = load_filter_config(a);
+            sieve::FractalStructureFilters f;
+            f.draws = cfg.fractals.is_enabled("fractal-draws-v1");
+            f.grows = cfg.fractals.is_enabled("fractal-grows-v1");
+            f.no_idle = cfg.fractals.is_enabled("fractal-no-idle-v1");
+            f.canonical = cfg.fractals.is_enabled("fractal-canonical-v1");
+            std::string names;
+            for (const char* n : {"fractal-draws-v1", "fractal-grows-v1", "fractal-no-idle-v1", "fractal-canonical-v1"})
+                if (cfg.fractals.is_enabled(n)) names += (names.empty() ? "" : ", ") + std::string(n);
+            auto kept = [](const sieve::BigUint& part, const sieve::BigUint& all) {
+                std::ostringstream o;
+                o << std::fixed << std::setprecision(2);
+                if (part.is_zero()) o << "none";
+                else o << "kept 10^" << part.log10_approx() - all.log10_approx();
+                return o.str();
+            };
+            const sieve::BigUint v1 = space.count_v1_passing(f), v2 = space.count_v2_passing(f);
+            std::cout << "passing   " << (names.empty() ? std::string("no structural filter ticked") : names) << "\n"
+                      << "  v1      " << v1.to_decimal() << " (" << kept(v1, space.count_v1()) << ")\n"
+                      << "  v2      " << v2.to_decimal() << " (" << kept(v2, space.count_v2()) << ")\n"
+                      << "  v3 to v6 judged only (not yet counted)\n";
+        }
         return 0;
     }
     if (what == "at")

@@ -10193,3 +10193,27 @@ when and where necessary".
   tests of the Up and Down keys themselves, which count on purpose. Each window gets names as its scripts
   are next touched, with the CI split into more individual steps (so that a change runs only the parts it
   touches).
+
+**19.250 The fractals' filters counted (list F; Edward, 17 November 2026).** His words: "go ahead with v1 A
+through B", after choosing to count the fractal line's structural filters on the space as it is (A) and then
+give the line a compact mode from the same counting (B), and asking "why do you recommend A first? Or would you
+do A then B?".
+- *Built (A, v1 and v2):* fractal-draws, fractal-grows, fractal-no-idle and fractal-canonical counted exactly on
+  every v1 and v2 ruleset (core/src/fractal_count.cpp). Not by the text, which does not show what the axiom
+  reaches, but by the set it reaches: every body reaches one set of the symbols that can have a rule, the bodies
+  reaching all of a set of s symbols are all the bodies on it less those reaching only part of it, C(s, u) of
+  each part of u, and which symbols the set holds matters only by their kinds. A walk counting the reach symbol
+  by symbol came first, and agreed with every body of three small alphabets (each of the sixteen combinations of
+  the four, budgets to 9) but took 337 s at 80 characters in the prototype; counted by the set, every length to
+  256 takes 2.4 s in the program for all four. Checked against every ruleset of the smallest lengths (the
+  168,948 bodies of the 44-character L-systems, the same under each of the nine one-digit angles, and the
+  substitutions of 47 and 48 characters), judged by the filters themselves; the
+  prototype's figures at 40 and 60 characters; the space's own counts; and 3,000 rulesets drawn at random to 80
+  characters. With all four, 10^-62.09 of v1 is kept and 10^-62.02 of v2 (`sieve fractal count --filters`), and
+  the setup page says so: "v1 and v2 counted: kept 10^-62.09 of them; v3 to v6 judged only, as yet".
+- *What it does not yet change:* the line is almost all v3 (v1 is about 10^357.6 rulesets of its 10^405.1, v2
+  10^355.1), so its share waits on v3's rulesets being counted the same way (several rules for a symbol,
+  contexts, ignore lists, digits' turns: the same counting, with more kinds of part).
+- *B (compact) needs more than a count:* the k-th survivor and a survivor's number, which counting by sets (a
+  difference of counts) does not give directly; the walk does, but slowly. Designed once for v3's grammar
+  rather than twice.

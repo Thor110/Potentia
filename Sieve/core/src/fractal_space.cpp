@@ -878,6 +878,37 @@ BigUint FractalSpace::at_length(uint32_t l, std::vector<BigUint>* per_angle_bloc
     return total;
 }
 
+BigUint FractalSpace::count_v1_passing(const FractalStructureFilters& filters) const
+{
+    const std::vector<BigUint> sub = fractal_bodies_passing(fractal_substitution_kinds(), longest_, filters);
+    const std::vector<BigUint> ls = fractal_bodies_passing(fractal_lsystem_kinds(), longest_, filters);
+    BigUint total;
+    for (uint32_t l = kFractalSpaceShortest; l <= longest_; ++l)
+    {
+        if (l >= kSubHeader) total += sub[l - kSubHeader];
+        for (uint32_t d = 1; d <= 3; ++d)
+            if (l >= ls_header(d))
+            {
+                BigUint one = ls[l - ls_header(d)];
+                one.mul_small(angles_with(d));
+                total += one;
+            }
+    }
+    return total;
+}
+
+BigUint FractalSpace::count_v2_passing(const FractalStructureFilters& filters) const
+{
+    const std::vector<BigUint> ls = fractal_bodies_passing(fractal_lsystem_kinds(), longest_, filters);
+    const std::vector<BigUint> scaled = fractal_bodies_passing(fractal_scaled_kinds(), longest_, filters);
+    BigUint total;
+    for (uint32_t l = kFractalSpaceShortest; l <= longest_; ++l)
+        for (const Group& g : groups_)
+            if (l >= g.header)
+                total += times((g.family == &scaled_ ? scaled : ls)[l - g.header], BigUint(g.lines()));
+    return total;
+}
+
 BigUint FractalSpace::count_at(uint32_t length) const
 {
     if (length >= by_length_.size()) return BigUint();

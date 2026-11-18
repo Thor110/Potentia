@@ -1939,6 +1939,15 @@ q "^  fractal-draws-v1 passes 897 of 1000 (89.70%)$" fractal-sample.txt
 q "^  fractal-dimension-v1 passes 195 of 1000 (19.50%)$" fractal-sample.txt
 q "^  the ticked stack passes 681 of 1000 (68.10%)$" fractal-sample.txt
 q "^\[x\] fractal-no-idle-v1   (hard, judge-only)$" fractal-sample.txt
+# List F: the structural four counted exactly on v1 and v2 (fractal_count.hpp, checked in step 01 against every
+# ruleset of the smallest lengths): with all four, 10^-62.09 of v1 and 10^-62.02 of v2 kept; and the setup
+# page says so, v3 to v6 judged only as yet.
+printf '[fractals]\nmode = compact\nfilters = fractal-draws-v1, fractal-grows-v1, fractal-no-idle-v1, fractal-canonical-v1\n' > fractals-four.ini
+build/sieve fractal count --filters fractals-four.ini | tr -d '\r' > fractal-four.txt
+q "^  v1      [0-9]* (kept 10^-62.09)$" fractal-four.txt
+q "^  v2      [0-9]* (kept 10^-62.02)$" fractal-four.txt
+$H --metrics fractals-four-metrics.txt --filters fractals-four.ini > /dev/null
+q "^Fractals : v1 and v2 counted: kept 10^-62.09 of them; v3 to v6 judged only, as yet$" fractals-four-metrics.txt
 # In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
 # fitted as a picture warped in is (fractal-drawn-v1): 5,279 at 10 x 10 in black and white (782 before
 # X4's IFS and escape pictures, 1,057 before Y2's automata, an elementary one's history another picture

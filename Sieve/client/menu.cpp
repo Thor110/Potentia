@@ -4828,6 +4828,24 @@ const Menu::StackInfo& Menu::stack_info(int i)
             const sieve::FilterStack st = sieve::cli::build_stack(filter_line_of(i), lf);
             if (st.empty()) none_of(out);
             else out.status = trf("status.not_countable", {st.compact_blocker()});
+            // The structural four (list F, fractal_count.hpp) counted exactly on v1 and v2, the rest of the space
+            // (v3 to v6) judged only as yet: the line's share is not known, but theirs is, and is said.
+            sieve::FractalStructureFilters f;
+            f.draws = lf.is_enabled("fractal-draws-v1"), f.grows = lf.is_enabled("fractal-grows-v1");
+            f.no_idle = lf.is_enabled("fractal-no-idle-v1"), f.canonical = lf.is_enabled("fractal-canonical-v1");
+            if (f.any())
+            {
+                const uint32_t longest = s_.fractal_longest;
+                return resolve(i, out.key, [f, longest]() {
+                    const sieve::FractalSpace space(longest);
+                    sieve::BigUint part = space.count_v1_passing(f), all = space.count_v1();
+                    part += space.count_v2_passing(f);
+                    all += space.count_v2();
+                    StackInfo o{"", "", -1, ""};
+                    o.status = trf("status.fractals_counted", {part.is_zero() ? std::string("none") : "10^" + fixed(part.log10_approx() - all.log10_approx(), 2)});
+                    return o;
+                });
+            }
         }
         info_[i] = std::move(out);
         return info_[i];

@@ -191,6 +191,10 @@ less one takes the more can be counted with it. What is left, and the way forwar
   (1.9 GB and 87.6 GB at the default shapes). The way forward: a smaller table for a list (a list's
   automaton is mostly single paths, whose counts are 1 and need no row of their own), so the pictures
   fit as they are and merge.
+- [ ] The fractal line's structural filters (`fractal-draws-v1`, `fractal-grows-v1`, `fractal-no-idle-v1`,
+  `fractal-canonical-v1`): *counted exactly on v1 and v2 since list F (17 November 2026, IDEAS 19.250)*;
+  v3 (nearly all of the line) to be counted the same way, then compact. `fractal-dimension-v1`,
+  `fractal-strange-v1` and `fractal-lasts-v1` draw or run each ruleset: judge-only.
 - [ ] `neighbour-agreement-v1`: its own transfer matrix, which depends on the cell. The way forward: an
   automaton for the rows (the last row and the disagreements so far, its states the same as the matrix's)
   where it fits, otherwise judge-only.
