@@ -167,7 +167,7 @@ for spec in "key-data-v2:" "key-data-v2:tonic=A,scale=minor" "key-data-v2:tonic=
     diff plugin.oracle plugin.engine
   done
 done
-for spec in "melody-metre-v1:" "melody-metre-v1:time=3-4,complete=yes" "melody-metre-v1:time=5-4" "melody-ambitus-v1:" "melody-ambitus-v1:span=4" "melody-gapfill-v1:" "melody-gapfill-v1:leap=2,step=5,resolve=yes"; do
+for spec in "melody-metre-v1:" "melody-metre-v1:time=3-4,complete=yes" "melody-metre-v1:time=5-4" "melody-ambitus-v1:" "melody-ambitus-v1:span=4" "melody-gapfill-v1:" "melody-gapfill-v1:leap=2,step=5,resolve=yes" "melody-cadence-v1:" "melody-cadence-v1:tonic=G,approach=half"; do
   f=${spec%%:*}; p=${spec#*:}
   for L in 1 2 5 17; do
     python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
@@ -229,7 +229,7 @@ done
 # voices, each voice judged on its own (counts to the power of the voices, ranks by voice).
 for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --durations EQH"; do
   for V in 1 2 3; do
-    for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70" "melody-lengths-v2:shortest=e,longest=h,eighths=1" "melody-ending-v2:tonic=G,hold=Q"; do
+    for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70" "melody-lengths-v2:shortest=e,longest=h,eighths=1" "melody-ending-v2:tonic=G,hold=Q" "melody-cadence-v1:tonic=A,approach=half"; do
       f=${spec%%:*}; p=${spec#*:}
       for L in 1 2 5; do
         python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle

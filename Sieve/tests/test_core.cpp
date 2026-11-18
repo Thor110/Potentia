@@ -2454,6 +2454,188 @@ void test_notes2(const std::string& dir)
 // (Z7), the sound line's sound-crossings and sound-bend (Z6), the video line's video-moves and video-smooth
 // (Z5), and the fractals in the pages and audio lines, fractal-written and fractal-scored (Z4).
 extern std::string g_data; // (the data folder: defined below)
+// List M2: the sound filters (envelope, syllables, interval) and the melody filters (cadence, contrary) against their
+// rules written plainly; the envelope's and the syllables' counts block by block against their automata's and against
+// every unit of a small set.
+void test_m2_filters(const std::string& dir)
+{
+    static const TestResources none(nullptr, nullptr);
+    // the rules, plainly: a sample's loudness in quarters of full scale, and the blocks'
+    auto loud = [](const PcmFormat& f, uint32_t d) {
+        const int64_t v = pcm_sample(f, d), m = v < 0 ? -v : v, half = int64_t(1) << (f.bits - 1);
+        return m == 0 ? 0 : int(std::min<int64_t>(4, (4 * m + half - 1) / half));
+    };
+    auto blocks = [&](const PcmFormat& f, const std::vector<uint32_t>& u, uint32_t k) {
+        std::vector<int> out;
+        for (size_t i = 0; i < u.size(); i += k)
+        {
+            int m = 0;
+            for (size_t j = i; j < std::min(u.size(), i + k); ++j) m = std::max(m, loud(f, u[j]));
+            out.push_back(m);
+        }
+        return out;
+    };
+    auto envelope_rule = [&](const PcmFormat& f, const std::vector<uint32_t>& u, uint32_t k) {
+        const auto b = blocks(f, u, k);
+        size_t i = 1;
+        while (i < b.size() && b[i] >= b[i - 1]) ++i;
+        const int peak = b[i - 1];
+        for (; i < b.size(); ++i)
+            if (b[i] > b[i - 1]) return false;
+        return peak >= 2 && b.back() + 2 <= peak;
+    };
+    auto syllables_rule = [&](const PcmFormat& f, const std::vector<uint32_t>& u, uint32_t k, int64_t threshold, uint64_t lo, uint64_t hi) {
+        uint64_t n = 0;
+        bool was = false;
+        for (size_t i = 0; i < u.size(); i += k)
+        {
+            bool now = false;
+            for (size_t j = i; j < std::min(u.size(), i + k); ++j)
+            {
+                const int64_t v = pcm_sample(f, u[j]);
+                now = now || (v < 0 ? -v : v) >= threshold;
+            }
+            n += now && !was;
+            was = now;
+        }
+        return n >= lo && n <= hi;
+    };
+    auto pcm_line = [](const PcmFormat& f, uint32_t L) {
+        FilterLine l;
+        l.kind = "audio", l.symbols_id = f.id(), l.base = f.base(), l.length = L;
+        return l;
+    };
+    std::mt19937_64 rng(2245);
+    // Every unit of one-bit sound, 20 samples (a block of 16 and one of 4): judged both ways, and counted.
+    {
+        const PcmFormat f = make_pcm_format(8, 1, 1);
+        const FilterLine l = pcm_line(f, 20);
+        const FilterValues ev{{"block", "16"}}, sv{{"block", "16"}, {"low", "1"}, {"high", "2"}};
+        const FilterStack env(l, {{find_filter("sound-envelope-v1"), ev}}, none), syl(l, {{find_filter("sound-syllables-v1"), sv}}, none);
+        uint64_t ne = 0, ns = 0;
+        for (uint32_t i = 0; i < (1u << 20); ++i)
+        {
+            std::vector<uint32_t> u(20);
+            for (uint32_t j = 0; j < 20; ++j) u[j] = (i >> j) & 1;
+            const bool e = envelope_rule(f, u, 16), s2 = syllables_rule(f, u, 16, 1, 2, 5); // (1 and 2 a second over 2.5 s)
+            CHECK(env.passes(u) == e && syl.passes(u) == s2);
+            ne += e, ns += s2;
+        }
+        CHECK(env.ranker() && env.ranker()->count() == BigUint(ne));
+        CHECK(syl.ranker() && syl.ranker()->count() == BigUint(ns));
+    }
+    // Four-bit sound, 200 samples in blocks of 16: the automaton's count and the count block by block (the filter
+    // memory set too small for the automaton's table) agree; and random sounds, and notes that swell and fade, judged
+    // the same by both and by the rule.
+    {
+        const PcmFormat f = make_pcm_format(800, 4, 1);
+        const FilterLine l = pcm_line(f, 200);
+        const FilterValues ev{{"block", "16"}}, sv{{"block", "16"}, {"low", "8"}, {"high", "30"}, {"threshold", "30"}};
+        const FilterStack env(l, {{find_filter("sound-envelope-v1"), ev}}, none), syl(l, {{find_filter("sound-syllables-v1"), sv}}, none);
+        const double was = filter_memory();
+        set_filter_memory(1024);
+        const FilterStack env2(l, {{find_filter("sound-envelope-v1"), ev}}, none), syl2(l, {{find_filter("sound-syllables-v1"), sv}}, none);
+        set_filter_memory(was);
+        CHECK(env.ranker() && env2.counted() && !env2.ranker() && env.ranker()->count() == *env2.counted());
+        CHECK(syl.ranker() && syl2.counted() && !syl2.ranker() && syl.ranker()->count() == *syl2.counted());
+        int envelopes = 0;
+        for (int k = 0; k < 3000; ++k)
+        {
+            std::vector<uint32_t> u(200);
+            const double a = double(rng() % 8), period = 4 + double(rng() % 20);
+            for (uint32_t i = 0; i < 200; ++i)
+            {
+                double v;
+                if (k % 3 == 0) v = double(int64_t(rng() % 16) - 8);                            // noise
+                else if (k % 3 == 1) v = a * std::sin(i * 6.283 / period) * std::exp(-double(i) / 60.0) * std::min(1.0, i / 10.0); // a struck note
+                else v = (i / 25) % 2 ? 0.0 : a * std::sin(i * 6.283 / period);               // bursts, as syllables
+                u[i] = pcm_digit(f, int32_t(std::lround(std::clamp(v, -8.0, 7.0))));
+            }
+            const bool e = envelope_rule(f, u, 16), s2 = syllables_rule(f, u, 16, 3, 2, 8); // (8 to 30 a second over a quarter of a second; 30% of 8 is 2.4, so 3)
+            envelopes += e;
+            CHECK(env.passes(u) == e && env2.passes(u) == e);
+            CHECK(syl.passes(u) == s2 && syl2.passes(u) == s2);
+        }
+        CHECK(envelopes > 0);
+    }
+    // The interval: two tones a fifth apart pass, and a major third; one tone with its octave above does not, nor noise.
+    {
+        const PcmFormat f = make_pcm_format(8000, 8, 1);
+        const FilterLine l = pcm_line(f, 8000);
+        const FilterStack iv(l, {{find_filter("sound-interval-v1"), {}}}, none);
+        auto tones = [&](double a, double b, double ga, double gb) {
+            std::vector<uint32_t> u(8000);
+            for (uint32_t i = 0; i < 8000; ++i)
+                u[i] = pcm_digit(f, int32_t(std::lround(60 * ga * std::sin(i * 6.2831853 * a / 8000) + 60 * gb * std::sin(i * 6.2831853 * b / 8000))));
+            return u;
+        };
+        CHECK(iv.passes(tones(440, 660, 1, 1)));
+        CHECK(iv.passes(tones(440, 550, 1, 0.8)));
+        CHECK(!iv.passes(tones(440, 880, 1, 0.5)));
+        std::vector<uint32_t> noise(8000);
+        for (auto& d : noise) d = uint32_t(rng() & 255);
+        CHECK(!iv.passes(noise));
+    }
+    // The cadence (a plugin): a melody ending on the tonic from a step; counted against every melody of 3 notes.
+    {
+        const std::string filters = dir + "../data/filters/";
+        const auto def = load_plugin_file(filters + "melody-cadence-v1.sfilter");
+        auto notes = [](const std::string& notation) {
+            return canonicalise_notes(notation, uint32_t(std::count(notation.begin(), notation.end(), ' ') + 1)).units.front();
+        };
+        auto audio = [](uint32_t L) { return FilterLine{"audio", kNotesSymbolsId, kNoteSymbols, L, nullptr, 0, 0, 0}; };
+        auto judge = [&](const std::string& n, const FilterValues& v = {}) {
+            const auto u = notes(n);
+            return compile_plugin(*def, audio(uint32_t(u.size())), v, none).accepts(u);
+        };
+        CHECK(judge("E4q D4q C4h") && judge("G4q B4q C5h") && judge("C5q C#5q C5w") && judge("D4q C4e C4h"));
+        CHECK(!judge("G4q C4q C4h"));
+        CHECK(!judge("E4q C4h") && !judge("D4q Rq C4h") && !judge("C4q D4h") && !judge("E4q D4q C4h Rq"));
+        CHECK(!judge("D4q C4h", {{"approach", "half"}}) && judge("B4q C5h", {{"approach", "half"}}));
+        CHECK(judge("C4q B4q A4h", {{"tonic", "A"}}));
+        const NoteSet n104 = note_set_of(kNotesSymbolsId);
+        const Dfa d = compile_plugin(*def, audio(3), {}, none);
+        uint64_t brute = 0;
+        for (uint32_t a = 0; a < kNoteSymbols; ++a)
+            for (uint32_t b = 0; b < kNoteSymbols; ++b)
+                for (uint32_t c = 0; c < kNoteSymbols; ++c)
+                {
+                    // the rule: the last note C, reached by a step, or repeated after a C reached by a step
+                    const uint32_t pa = n104.midi(a), pb = n104.midi(b), pc = n104.midi(c);
+                    auto step = [](uint32_t x, uint32_t y) { return x != 0 && y != 0 && (x > y ? x - y : y - x) >= 1 && (x > y ? x - y : y - x) <= 2; };
+                    const bool want = pc != 0 && pc % 12 == 0 && (step(pb, pc) || (pb == pc && step(pa, pb)));
+                    const std::vector<uint32_t> u{a, b, c};
+                    CHECK(d.accepts(u) == want);
+                    brute += want;
+                }
+        CHECK(DfaRanker(std::make_shared<const Dfa>(d), 3).count() == BigUint(brute));
+    }
+    // Contrary motion, two voices on notes2 judged together, beside a filter that judges each voice.
+    {
+        const NoteSet set = make_note_set(48, 84, "eqhw", 2);
+        FilterLine l;
+        l.kind = "audio", l.symbols_id = set.id(), l.base = set.base(), l.length = 8;
+        auto unit = [&](const std::string& n) { return canonicalise_notes2(n, set, 4).units.front(); };
+        const FilterStack con(l, {{find_filter("melody-contrary-v1"), {}}}, none);
+        CHECK(con.passes(unit("C4q D4q E4q F4q // G4q F4q E4q D4q")));
+        CHECK(!con.passes(unit("C4q D4q E4q F4q // E4q F4q G4q A4q")));  // in parallel
+        CHECK(!con.passes(unit("C4q D4q E4q F4q // G4w")));             // one voice holds: no joint moves
+        CHECK(con.passes(unit("C4q D4q E4q F4q // G4q Rq E4q D4q")));    // a rest: E4 is from G4, down, against E4 up
+        // beside melody-motif, which judges each voice on its own: the stack passes where both do
+        const FilterValues mv{{"notes", "2"}, {"times", "2"}};
+        const FilterStack motif(l, {{find_filter("melody-motif-v1"), mv}}, none);
+        const FilterStack mixed(l, {{find_filter("melody-contrary-v1"), {}}, {find_filter("melody-motif-v1"), mv}}, none);
+        for (const char* n : {"C4q D4q E4q F4q // G4q F4q E4q D4q", "C4q D4q C4q D4q // G4q F4q G4q F4q", "C4q D4q E4q F4q // E4q F4q G4q A4q"})
+        {
+            const auto u = unit(n);
+            CHECK(mixed.passes(u) == (con.passes(u) && motif.passes(u)));
+        }
+        CHECK(mixed.passes(unit("C4q D4q C4q D4q // G4q F4q G4q F4q")));
+        CHECK(find_filter("melody-contrary-v1")->whole_unit && find_filter("melody-contrary-v1")->judge_only);
+    }
+    CHECK(find_filter("sound-envelope-v1")->picks_a_kind && find_filter("sound-syllables-v1")->picks_a_kind && find_filter("sound-interval-v1")->picks_a_kind);
+}
+
 // List Q: border, specks and gradient against their rules written plainly: every picture of small sizes counted
 // one by one and against the automaton's count, and random larger ones judged both ways.
 void test_q_filters()
@@ -10274,6 +10456,7 @@ void run_all(int argc, char** argv)
         RUN(test_z_filters());
         RUN(test_p_filters());
         RUN(test_q_filters());
+        RUN(test_m2_filters(dir));
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

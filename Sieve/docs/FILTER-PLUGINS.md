@@ -262,6 +262,7 @@ every length checked, and the same verdict on every unit.
 | `key-data-v2` | `key-v1`, every scale | table, v2 (a choice parameter) |
 | `melody-leap-v1`, `melody-lengths-v1`, `melody-rests-v1`, `melody-ending-v1`, `melody-range-v1` | (new: melody shape) | table, v2 |
 | `melody-metre-v1`, `melody-ambitus-v1`, `melody-gapfill-v1` | (new: bars, span, leaps filled; §19) | table, v2 |
+| `melody-cadence-v1` | (new: a phrase coming home by a step; list M2) | table, v2 |
 | `letter-pairs-v1`, `letter-triples-v1`, `word-cost-v1`, `function-words-v1` and `-v2`, `sentence-shape-v1`, `babel-punctuation-v1` | (new: generated from the pinned lists by `tools/build_text_plugins.py`; §19) | table, v2 (function-words: tokens, v1; babel-punctuation: table, v1) |
 
 They are new filters with new ids (the built-ins keep theirs); a built-in and its port agreeing is
@@ -957,6 +958,7 @@ melody filters and rank through the product):
 | `melody-metre-v1` | every note and rest fits inside its bar, none across a bar line; `complete` fills the last bar (`time`: 2-4, 3-4, 4-4, 5-4; `notes104`) | eighths gone in the bar | 10^-2.38 |
 | `melody-ambitus-v1` | lowest note to highest at most `span` semitones (melody-range bounds the register; this bounds the width) | lowest note and width | 10^-3.33 |
 | `melody-gapfill-v1` | after a leap wider than `leap`, the next note turns back by at most `step`; `resolve` refuses ending on an unfilled leap | last note and what it owes | 10^-4.51 |
+| `melody-cadence-v1` | the last note is the tonic, reached by a step of one or two semitones (`approach` half: one), a repeated note keeping how it was reached; a rest before it breaks the approach (list M2, 18 November 2026; every note set) | last pitch, and whether it came by a step | 10^-1.91 |
 
 Checked against a brute force written from the descriptions at lengths 1 to 3 (every one of 104^3
 units), and against the oracle at four lengths, several settings and on `notes2` sets of one and

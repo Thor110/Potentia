@@ -277,6 +277,14 @@ run before a release package, and after each of the three reviews. Each batch is
   picture of small shapes and on random 10 x 10 ones. `[01]` + `[10]`. Border and gradient pick a kind of picture,
   so X and OPTIMISE FILTERS leave them (picks_a_kind) `[04]`. The horizon not built (IDEAS 19.245 says why).
 
+### List M2: melody and sound filters (Edward, 18 November 2026; IDEAS 19.245)
+
+- [x] M2-1. sound-envelope-v1, sound-syllables-v1 (counted exactly block by block; automata where their tables fit),
+  sound-interval-v1 (judged), measured on random sound and on clips of speech, notes, chords, tones and noise
+  `[01]` + `[07]`.
+- [x] M2-2. melody-cadence-v1 (a plugin, checked against the oracle `[11]`) and melody-contrary-v1 (judged on all
+  voices at once, FilterSpec::whole_unit) `[01]` + `[07]`.
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 

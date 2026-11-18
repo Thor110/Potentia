@@ -41,6 +41,30 @@ printf '[audio]\nmode = mark\nfilters = sound-bend-v1\n' > bend.ini
 $exe filters --line audio --note-set pcm --length 800 --filters crossings.ini | tr -d '\r' | q "keeps 10^-67.87"
 $exe filters --line audio --note-set pcm --bits 4 --length 800 --filters bend.ini | tr -d '\r' | q "keeps 10^-315.44"
 $exe filters --line audio --note-set pcm --length 800 --filters bend.ini | tr -d '\r' | q "^compact      unavailable"
+# List M2 (IDEAS 19.245): one note's shape (loudness rising, then falling) and speech's rhythm (3 to 7 syllables a
+# second), each counted exactly block by block at the line's own second of sound, and as an automaton that ranks
+# where its table fits (4 bits, 200 samples, blocks of 16); and two notes a consonant interval apart, judged. The
+# tone above (440 and 660 Hz, a fifth, then silence) is a struck note's shape and an interval, and no speech.
+printf '[audio]\nmode = mark\nfilters = sound-envelope-v1\n' > envelope.ini
+printf '[audio]\nmode = mark\nfilters = sound-syllables-v1\n' > syllables.ini
+$exe filters --line audio --note-set pcm --filters envelope.ini | tr -d '\r' | q "^survivors    7414914950153691849216887613441770424540334063"
+$exe filters --line audio --note-set pcm --filters syllables.ini | tr -d '\r' | q "^survivors    1220600467205922326150641341988771768641895933"
+printf '[audio]\nmode = mark\nfilters = sound-envelope-v1\n[audio.sound-envelope-v1]\nblock = 16\n' > envelope16.ini
+printf '[audio]\nmode = mark\nfilters = sound-syllables-v1\n[audio.sound-syllables-v1]\nblock = 16\nlow = 8\nhigh = 30\nthreshold = 30\n' > syllables16.ini
+$exe filters --line audio --note-set pcm --rate 800 --bits 4 --length 200 --filters envelope16.ini | tr -d '\r' | q "keeps 10^-2.16"
+$exe filters --line audio --note-set pcm --rate 800 --bits 4 --length 200 --filters syllables16.ini | tr -d '\r' | q "keeps 10^-7.04"
+$exe check --line audio --note-set pcm --file tone.wav > tone-check.txt
+tr -d '\r' < tone-check.txt | q "sound-envelope-v1 *pass"
+tr -d '\r' < tone-check.txt | q "sound-interval-v1 *pass"
+tr -d '\r' < tone-check.txt | q "sound-syllables-v1 *FAIL"
+# And two melody filters: a phrase ending on the tonic from a step (a plugin, counted), and two voices moving
+# against each other (judged on both voices at once: the other filters judge each voice on its own).
+printf '[audio]\nmode = mark\nfilters = melody-cadence-v1\n' > cadence.ini
+$exe filters --line audio --filters cadence.ini | tr -d '\r' | q "keeps 10^-1.91"
+$exe check --line audio --length 14 "C4q C4q G4q G4q A4q A4q G4h F4q F4q E4q E4q D4q D4q C4h" | tr -d '\r' | q "melody-cadence-v1 *pass"
+$exe check --line audio --length 4 "C5q F5q E5q G4h" | tr -d '\r' | q "melody-cadence-v1 *FAIL"
+$exe check --line audio --note-set notes2 --voices 2 --length 4 "C4q D4q E4q F4q // G4q F4q E4q D4q" | tr -d '\r' | q "melody-contrary-v1 *pass"
+$exe check --line audio --note-set notes2 --voices 2 --length 4 "C4q D4q E4q F4q // E4q F4q G4q A4q" | tr -d '\r' | q "melody-contrary-v1 *FAIL"
 # Open-ended notes (notes3): ticks and levels, and a MIDI file that reads back as the same music.
 o="--line audio --note-set notes3 --voices 2 --length 4 --instruments 0,40 --mode positional"
 $exe warp $o "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2" | tr -d '\r' | q "C#4:3!5 R:1 D4:16!8 E4:1!1 // C2:16!3 R:2 G9:1!8 C-1:3!2"

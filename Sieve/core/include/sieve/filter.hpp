@@ -202,6 +202,10 @@ struct FilterSpec
     // filter at once leaves it as it is: most real items are not that kind, and it would keep few of them. Ticked
     // by hand, when that kind is what is looked for.
     bool picks_a_kind = false;
+    // Judges the whole unit, every voice at once, where the stack hands the other filters one voice at a time (a
+    // rule between voices: melody-contrary-v1, two voices moving against each other). Made for the whole line.
+    // Judged only: a filter of the voices together does not count through the voices as the others do.
+    bool whole_unit = false;
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a
@@ -257,7 +261,8 @@ uint32_t line_voices(const FilterLine& l);
 // line (its length the line's divided by the voices) and judge each voice on its own: a unit
 // passes when every voice does. Its survivors are then those of one voice to the power of the
 // voices, and a ranker for one voice ranks the whole (VoicesRanker): the unit's rank is its
-// voices' ranks read as one number in base (one voice's count), voice 1 first.
+// voices' ranks read as one number in base (one voice's count), voice 1 first. A filter marked whole_unit
+// is the exception: made for the whole line, it judges the whole unit once, all its voices together.
 class FilterStack
 {
 public:
@@ -296,6 +301,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<Filter>> filters_;
+    std::vector<char> whole_; // (per filter: it judges the whole unit, FilterSpec::whole_unit)
     std::vector<std::string> names_;
     uint32_t length_ = 0, voices_ = 1;
     bool up_to_length_ = false; // (FilterLine::up_to_length)

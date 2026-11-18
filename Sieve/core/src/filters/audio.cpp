@@ -9,6 +9,7 @@
 #include "sieve/filter.hpp"
 
 #include <array>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <span>
@@ -167,6 +168,68 @@ private:
     uint32_t notes_, times_;
 };
 
+// melody-contrary: two voices moving against each other. Each voice is read as its notes in time (a note's start in
+// sixteenths, its pitch; rests left out); wherever two voices both begin a note at once and both have moved from
+// the note before, they have moved the same way (similar motion) or opposite ways (contrary). Every pair of voices
+// is judged: at least `moves` such joint moves, and at least `percent` of them contrary.
+class Contrary : public Filter
+{
+public:
+    Contrary(const NoteSet& set, uint32_t per_voice, uint32_t moves, uint32_t percent)
+        : set_(set), per_(per_voice), moves_(moves), percent_(percent)
+    {
+        provenance_ = "moves=" + std::to_string(moves) + " percent=" + std::to_string(percent);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        const uint32_t voices = set_.voices;
+        if (voices < 2 || unit.size() != size_t(per_) * voices) return false;
+        // each voice: (start, pitch) of its notes, in time
+        std::vector<std::map<uint64_t, uint32_t>> notes(voices);
+        for (uint32_t v = 0; v < voices; ++v)
+        {
+            uint64_t t = 0;
+            for (uint32_t i = 0; i < per_; ++i)
+            {
+                const uint32_t d = unit[size_t(v) * per_ + i];
+                if (const uint32_t m = set_.midi(d)) notes[v][t] = m;
+                t += set_.sixteenths(d);
+            }
+        }
+        for (uint32_t a = 0; a < voices; ++a)
+            for (uint32_t b = a + 1; b < voices; ++b)
+            {
+                uint64_t joint = 0, contrary = 0;
+                uint32_t pa = 0, pb = 0; // the last note of each, as time goes
+                auto ia = notes[a].begin(), ib = notes[b].begin();
+                while (ia != notes[a].end() || ib != notes[b].end())
+                {
+                    const uint64_t ta = ia == notes[a].end() ? UINT64_MAX : ia->first;
+                    const uint64_t tb = ib == notes[b].end() ? UINT64_MAX : ib->first;
+                    if (ta == tb)
+                    {
+                        const int da = pa ? int(ia->second) - int(pa) : 0, db = pb ? int(ib->second) - int(pb) : 0;
+                        if (da != 0 && db != 0)
+                        {
+                            ++joint;
+                            if ((da > 0) != (db > 0)) ++contrary;
+                        }
+                        pa = ia->second, pb = ib->second;
+                        ++ia, ++ib;
+                    }
+                    else if (ta < tb) pa = (ia++)->second;
+                    else pb = (ib++)->second;
+                }
+                if (joint < moves_ || contrary * 100 < joint * percent_) return false;
+            }
+        return true;
+    }
+
+private:
+    NoteSet set_;
+    uint32_t per_, moves_, percent_;
+};
+
 } // namespace
 
 void add_audio_filters(std::vector<FilterSpec>& out)
@@ -206,6 +269,26 @@ void add_audio_filters(std::vector<FilterSpec>& out)
     };
     motif.judge_only = true;
     out.push_back(motif);
+
+    FilterSpec con;
+    con.id = "melody-contrary";
+    con.title = "melody-contrary";
+    con.description = "Melodies of two voices or more: the voices move against each other. Wherever two voices both begin a note "
+                      "at the same moment and both have moved from the note before, they move the same way (up together, down "
+                      "together) or opposite ways (contrary motion, counterpoint's first rule of independence). Every pair of voices "
+                      "has at least `moves` such moves, and at least `percent` of them contrary. Judges the voices together (the "
+                      "other filters judge each voice on its own). Judged.";
+    con.params = {{"moves", "the fewest moves made together", FilterParam::Kind::Integer, "2", 1, 64, 1, {}},
+                  {"percent", "the share of them that must be contrary", FilterParam::Kind::Integer, "100", 1, 100, 5, {}}};
+    con.applies = [](const FilterLine& l) { return l.kind == "audio" && is_note_symbols(l.symbols_id) && note_set_of(l.symbols_id).voices >= 2; };
+    con.make = [own = con.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own);
+        const NoteSet set = note_set_of(l.symbols_id);
+        return std::make_unique<Contrary>(set, l.length / set.voices, uint32_t(param_int(spec, v, "moves")), uint32_t(param_int(spec, v, "percent")));
+    };
+    con.judge_only = true;
+    con.whole_unit = true;
+    out.push_back(con);
 }
 
 } // namespace sieve

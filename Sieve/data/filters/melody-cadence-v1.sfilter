@@ -1,0 +1,42 @@
+sieve-filter-v2
+; A phrase that comes home: the last event is a note on the tonic (any octave), and the note before it is a
+; step away, one or two semitones above or below (with `approach` half, one semitone only: the leading note
+; below, or the note above it). A note repeated keeps how it was reached, so D C C ends by a step too. Rests
+; break the approach: a rest just before the last note does not count as a step. The state is the last event's
+; pitch (0: a rest, or nothing yet) and whether it was reached by a step.
+id        melody-cadence
+version   1
+author    Edward James Gordon (written with Claude)
+origin    ai-directed
+lines     audio
+symbols   notes*
+describe  The melody ends on the tonic, reached by a step from the note before.
+param     tonic     choice  C C,C#,D,D#,E,F,F#,G,G#,A,A#,B the note to end on
+param     approach  choice  step step,half a step of one or two semitones, or of one only
+
+states    {2 * (PITCHES + 1)}
+start     0
+for p 1 {PITCHES}
+  if {(LOW + p - 1) % 12 == tonic}
+    accept  {2 * p + 1}
+  fi
+done
+for f 0 1
+  for p 0 {PITCHES}
+    for d 0 {DURATIONS - 1}
+      t {2 * p + f} @{d} 0
+      for q 1 {PITCHES}
+        if {p >= 1 && abs(q - p) >= 1 && abs(q - p) <= 2 - approach}
+          t {2 * p + f} @{q * DURATIONS + d} {2 * q + 1}
+        else
+          if {q == p}
+            t {2 * p + f} @{q * DURATIONS + d} {2 * q + f}
+          else
+            t {2 * p + f} @{q * DURATIONS + d} {2 * q}
+          fi
+        fi
+      done
+    done
+  done
+done
+end

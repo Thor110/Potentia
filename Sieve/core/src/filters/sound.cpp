@@ -29,12 +29,17 @@
 //                    pitch of 50 Hz to 1 kHz), most samples are within a share of the range of the one a
 //                    period before. A voice, an instrument, a hum pass; noise does not. Judged.
 
+#include "sieve/biguint.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp" // make_dfa_filter
 #include "sieve/sound.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <string>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -290,6 +295,334 @@ private:
     uint64_t most_;
 };
 
+// ---------------------------------------------------------------- loudness in blocks (sound-envelope, sound-syllables)
+
+// A sample's loudness in four steps: 0 silent, then 1 to 4 for up to a quarter, a half, three quarters and the whole
+// of full scale (its magnitude against 2^(BITS-1)). A block's loudness is its loudest sample's.
+uint32_t loudness_of(const PcmFormat& f, uint32_t digit)
+{
+    const int64_t v = pcm_sample(f, digit), m = v < 0 ? -v : v;
+    if (m == 0) return 0;
+    const int64_t half = int64_t(1) << (f.bits - 1);
+    return uint32_t(std::min<int64_t>(4, (4 * m + half - 1) / half));
+}
+
+// sound-envelope: block loudness rises (or holds), then falls (or holds), never rising again once it has fallen,
+// the loudest at least 2 and the last block at least 2 below it. The blocks' story, outside any one block: 0
+// nothing yet; 1 + L rising, the last block L; 6 + k falling, (the last L, the loudest P) the k-th pair L < P.
+constexpr uint32_t kEnvStory = 16;
+uint32_t env_falling(uint32_t last, uint32_t peak) { return 6 + (peak * (peak - 1)) / 2 + last; } // (P = 1..4, L < P)
+// The story after a block of loudness l; kDead where it rises again after falling.
+int64_t env_close(uint32_t g, uint32_t l)
+{
+    if (g == 0) return 1 + l;
+    if (g <= 5)
+    {
+        const uint32_t last = g - 1;
+        return l >= last ? int64_t(1 + l) : int64_t(env_falling(l, last));
+    }
+    for (uint32_t p = 1; p <= 4; ++p)
+        for (uint32_t q = 0; q < p; ++q)
+            if (env_falling(q, p) == g) return l <= q ? int64_t(env_falling(l, p)) : -1;
+    return -1;
+}
+bool env_accepts(uint32_t g)
+{
+    for (uint32_t p = 2; p <= 4; ++p)
+        for (uint32_t q = 0; q + 2 <= p; ++q)
+            if (env_falling(q, p) == g) return true;
+    return false;
+}
+
+std::optional<Dfa> envelope_dfa(const PcmFormat& f, uint32_t block)
+{
+    const uint64_t B = f.base(), states = uint64_t(kEnvStory) * 5 * block;
+    if (!cells_fit(states, B)) return std::nullopt;
+    // State ((g * 5) + cur) * block + pos: the story g, the loudest so far in this block cur, pos samples into it.
+    auto id = [block](uint32_t g, uint32_t cur, uint32_t pos) { return int32_t((uint64_t(g) * 5 + cur) * block + pos); };
+    Dfa d;
+    d.base = uint32_t(B);
+    d.start = 0;
+    d.accept.assign(size_t(states), 0);
+    d.next.assign(size_t(states * B), Dfa::kDead);
+    std::vector<uint32_t> lev(static_cast<size_t>(B));
+    for (uint64_t c = 0; c < B; ++c) lev[size_t(c)] = loudness_of(f, uint32_t(c));
+    for (uint32_t g = 0; g < kEnvStory; ++g)
+        for (uint32_t cur = 0; cur < 5; ++cur)
+            for (uint32_t pos = 0; pos < block; ++pos)
+            {
+                const size_t at = size_t(id(g, cur, pos));
+                // the unit ending here: a block begun is the last block
+                const int64_t end = pos == 0 ? int64_t(g) : env_close(g, cur);
+                d.accept[at] = end >= 0 && env_accepts(uint32_t(end)) ? 1 : 0;
+                for (uint64_t c = 0; c < B; ++c)
+                {
+                    const uint32_t now = std::max(cur, lev[size_t(c)]);
+                    if (pos + 1 < block) d.next[at * B + c] = id(g, now, pos + 1);
+                    else if (const int64_t g2 = env_close(g, now); g2 >= 0) d.next[at * B + c] = id(uint32_t(g2), 0, 0);
+                }
+            }
+    return minimise(d);
+}
+
+// How many samples are of each loudness, and so how many blocks of k samples have their loudest at each level:
+// those of at most l, less those of at most l - 1.
+std::array<uint64_t, 5> loudness_counts(const PcmFormat& f)
+{
+    std::array<uint64_t, 5> n{};
+    for (uint64_t c = 0; c < f.base(); ++c) ++n[loudness_of(f, uint32_t(c))];
+    return n;
+}
+std::array<BigUint, 5> blocks_at_level(const std::array<uint64_t, 5>& n, uint32_t k)
+{
+    std::array<BigUint, 5> out;
+    uint64_t at_most = 0;
+    BigUint below(0);
+    for (uint32_t l = 0; l < 5; ++l)
+    {
+        at_most += n[l];
+        BigUint upto = BigUint::pow(uint32_t(at_most), k);
+        out[l] = upto;
+        out[l] -= below;
+        below = std::move(upto);
+    }
+    return out;
+}
+
+// sound-envelope counted block by block: the units of `length` samples whose blocks tell an envelope. Exact, at
+// any length (an automaton's table grows with the length; this, with the blocks only).
+BigUint envelope_count(const PcmFormat& f, uint32_t block, uint32_t length)
+{
+    const auto n = loudness_counts(f);
+    std::vector<BigUint> ways(kEnvStory, BigUint(0));
+    ways[0] = BigUint(1);
+    auto step = [&](uint32_t k) {
+        const auto at = blocks_at_level(n, k);
+        std::vector<BigUint> next(kEnvStory, BigUint(0));
+        for (uint32_t g = 0; g < kEnvStory; ++g)
+        {
+            if (ways[g].is_zero()) continue;
+            for (uint32_t l = 0; l < 5; ++l)
+                if (const int64_t g2 = env_close(g, l); g2 >= 0 && !at[l].is_zero()) next[size_t(g2)] += BigUint::mul(ways[g], at[l]);
+        }
+        ways = std::move(next);
+    };
+    for (uint32_t b = 0; b < length / block; ++b) step(block);
+    if (length % block) step(length % block);
+    BigUint total(0);
+    for (uint32_t g = 0; g < kEnvStory; ++g)
+        if (env_accepts(g)) total += ways[g];
+    return total;
+}
+
+class EnvelopeFilter : public Filter
+{
+public:
+    EnvelopeFilter(const PcmFormat& f, uint32_t block, uint32_t length, std::string prov)
+        : f_(f), block_(block), count_(envelope_count(f, block, length))
+    {
+        provenance_ = std::move(prov);
+    }
+    const BigUint* survivors() const override { return &count_; }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        int64_t g = 0;
+        uint32_t cur = 0, pos = 0;
+        for (const uint32_t c : unit)
+        {
+            cur = std::max(cur, loudness_of(f_, c));
+            if (++pos == block_)
+            {
+                if ((g = env_close(uint32_t(g), cur)) < 0) return false;
+                cur = pos = 0;
+            }
+        }
+        if (pos > 0 && (g = env_close(uint32_t(g), cur)) < 0) return false;
+        return env_accepts(uint32_t(g));
+    }
+
+private:
+    PcmFormat f_;
+    uint32_t block_;
+    BigUint count_;
+};
+
+// sound-syllables: a block is loud where its loudest sample reaches the threshold; each loud block after a quiet
+// one (or first) begins a syllable; between `fewest` and `most` of them in the unit.
+struct SyllableRule
+{
+    uint32_t block = 256;
+    int64_t threshold = 1; // (the smallest magnitude that is loud)
+    uint64_t fewest = 0, most = 0;
+};
+bool loud_sample(const PcmFormat& f, uint32_t digit, int64_t threshold)
+{
+    const int64_t v = pcm_sample(f, digit);
+    return (v < 0 ? -v : v) >= threshold;
+}
+SyllableRule syllable_rule(const PcmFormat& f, uint32_t length, uint32_t block, int64_t percent, int64_t per_second_low, int64_t per_second_high)
+{
+    SyllableRule r;
+    r.block = block;
+    // loud from `percent` of full scale (2^(BITS-1)), rounded up, and never silence itself
+    r.threshold = std::max<int64_t>(1, ((int64_t(1) << (f.bits - 1)) * percent + 99) / 100);
+    // per second, over the unit's length in seconds: at least the floor of the low rate's, at most the ceiling of the high's
+    const uint64_t num = uint64_t(length), den = f.rate;
+    r.fewest = uint64_t(per_second_low) * num / den;
+    r.most = (uint64_t(per_second_high) * num + den - 1) / den;
+    return r;
+}
+
+std::optional<Dfa> syllables_dfa(const PcmFormat& f, const SyllableRule& r)
+{
+    const uint64_t B = f.base(), states = (r.most + 1) * 4 * uint64_t(r.block);
+    if (!cells_fit(states, B)) return std::nullopt;
+    // State ((n * 2 + was) * 2 + now) * block + pos: n syllables so far, the last whole block loud (was), this
+    // block loud so far (now), pos samples into it.
+    auto id = [&](uint64_t n, uint32_t was, uint32_t now, uint32_t pos) { return int32_t(((n * 2 + was) * 2 + now) * r.block + pos); };
+    Dfa d;
+    d.base = uint32_t(B);
+    d.start = 0;
+    d.accept.assign(size_t(states), 0);
+    d.next.assign(size_t(states * B), Dfa::kDead);
+    std::vector<uint32_t> loud(static_cast<size_t>(B));
+    for (uint64_t c = 0; c < B; ++c) loud[size_t(c)] = loud_sample(f, uint32_t(c), r.threshold) ? 1 : 0;
+    for (uint64_t n = 0; n <= r.most; ++n)
+        for (uint32_t was = 0; was < 2; ++was)
+            for (uint32_t now = 0; now < 2; ++now)
+                for (uint32_t pos = 0; pos < r.block; ++pos)
+                {
+                    const size_t at = size_t(id(n, was, now, pos));
+                    const uint64_t end = n + (pos > 0 && now && !was ? 1 : 0); // (a block begun counts as the last)
+                    d.accept[at] = end >= r.fewest && end <= r.most ? 1 : 0;
+                    for (uint64_t c = 0; c < B; ++c)
+                    {
+                        const uint32_t now2 = now | loud[size_t(c)];
+                        if (pos + 1 < r.block) d.next[at * B + c] = id(n, was, now2, pos + 1);
+                        else
+                        {
+                            const uint64_t n2 = n + (now2 && !was ? 1 : 0);
+                            if (n2 <= r.most) d.next[at * B + c] = id(n2, now2, 0, 0);
+                        }
+                    }
+                }
+    return minimise(d);
+}
+
+// sound-syllables counted block by block: the story is the syllables so far and whether the last block was loud.
+BigUint syllables_count(const PcmFormat& f, const SyllableRule& r, uint32_t length)
+{
+    uint64_t quiet = 0;
+    for (uint64_t c = 0; c < f.base(); ++c) quiet += loud_sample(f, uint32_t(c), r.threshold) ? 0 : 1;
+    const size_t states = size_t(r.most + 1) * 2;
+    std::vector<BigUint> ways(states, BigUint(0));
+    ways[0] = BigUint(1); // (no syllables, the block before quiet: the first loud block begins one)
+    auto step = [&](uint32_t k) {
+        const BigUint q = BigUint::pow(uint32_t(quiet), k);
+        BigUint loud = BigUint::pow(f.base(), k);
+        loud -= q;
+        std::vector<BigUint> next(states, BigUint(0));
+        for (uint64_t n = 0; n <= r.most; ++n)
+            for (uint32_t was = 0; was < 2; ++was)
+            {
+                const BigUint& w = ways[size_t(n * 2 + was)];
+                if (w.is_zero()) continue;
+                next[size_t(n * 2)] += BigUint::mul(w, q);
+                const uint64_t n2 = n + (was ? 0 : 1);
+                if (n2 <= r.most && !loud.is_zero()) next[size_t(n2 * 2 + 1)] += BigUint::mul(w, loud);
+            }
+        ways = std::move(next);
+    };
+    for (uint32_t b = 0; b < length / r.block; ++b) step(r.block);
+    if (length % r.block) step(length % r.block);
+    BigUint total(0);
+    for (uint64_t n = r.fewest; n <= r.most; ++n) total += ways[size_t(n * 2)], total += ways[size_t(n * 2 + 1)];
+    return total;
+}
+
+class SyllablesFilter : public Filter
+{
+public:
+    SyllablesFilter(const PcmFormat& f, SyllableRule r, uint32_t length, std::string prov)
+        : f_(f), r_(r), count_(syllables_count(f, r, length))
+    {
+        provenance_ = std::move(prov);
+    }
+    const BigUint* survivors() const override { return &count_; }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        uint64_t n = 0;
+        uint32_t was = 0, now = 0, pos = 0;
+        for (const uint32_t c : unit)
+        {
+            now |= loud_sample(f_, c, r_.threshold) ? 1 : 0;
+            if (++pos == r_.block)
+            {
+                if (now && !was && ++n > r_.most) return false;
+                was = now, now = 0, pos = 0;
+            }
+        }
+        if (pos > 0 && now && !was) ++n;
+        return n >= r_.fewest && n <= r_.most;
+    }
+
+private:
+    PcmFormat f_;
+    SyllableRule r_;
+    BigUint count_;
+};
+
+// sound-interval: the two strongest peaks of the sound's spectrum (50 Hz to 2 kHz, the first 2,048 samples or the
+// largest power of two the unit holds) a consonant interval apart, not an octave: a minor or major third, a fourth,
+// a fifth, a minor or major sixth, within `cents`. The weaker at least a quarter of the stronger.
+class IntervalFilter : public Filter
+{
+public:
+    IntervalFilter(const PcmFormat& f, int64_t cents, std::string prov) : f_(f), cents_(cents) { provenance_ = std::move(prov); }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        size_t n = 1;
+        while (n * 2 <= unit.size() && n * 2 <= 2048) n *= 2;
+        if (n < 256) return false;
+        std::vector<double> x(n);
+        for (size_t i = 0; i < n; ++i)
+            x[i] = double(pcm_sample(f_, unit[i])) * (0.5 - 0.5 * std::cos(2 * 3.14159265358979323846 * double(i) / double(n - 1)));
+        const double hz = double(f_.rate) / double(n);
+        const size_t lo = std::max<size_t>(1, size_t(50 / hz)), hi = std::min<size_t>(n / 2 - 1, size_t(2000 / hz) + 1);
+        if (lo + 2 > hi) return false;
+        std::vector<double> mag(hi + 2, 0.0);
+        for (size_t k = lo - 1; k <= hi + 1 && k < n / 2; ++k)
+        {
+            double re = 0, im = 0;
+            const double w = 2 * 3.14159265358979323846 * double(k) / double(n);
+            for (size_t i = 0; i < n; ++i)
+            {
+                re += x[i] * std::cos(w * double(i));
+                im -= x[i] * std::sin(w * double(i));
+            }
+            mag[k] = std::sqrt(re * re + im * im);
+        }
+        // the two strongest local peaks
+        size_t a = 0, b = 0;
+        for (size_t k = lo; k <= hi; ++k)
+            if (mag[k] > mag[k - 1] && mag[k] >= mag[k + 1])
+            {
+                if (a == 0 || mag[k] > mag[a]) b = a, a = k;
+                else if (b == 0 || mag[k] > mag[b]) b = k;
+            }
+        if (a == 0 || b == 0 || mag[a] <= 0 || mag[b] < 0.25 * mag[a]) return false;
+        const double ratio = double(std::max(a, b)) / double(std::min(a, b));
+        static const double kConsonant[] = {6.0 / 5, 5.0 / 4, 4.0 / 3, 3.0 / 2, 8.0 / 5, 5.0 / 3};
+        for (const double c : kConsonant)
+            if (std::fabs(1200.0 * std::log2(ratio / c)) <= double(cents_)) return true;
+        return false;
+    }
+
+private:
+    PcmFormat f_;
+    int64_t cents_;
+};
+
 // ---------------------------------------------------------------- sound-bend
 
 std::optional<Dfa> bend_dfa(const PcmFormat& f, int64_t limit)
@@ -507,6 +840,99 @@ void add_sound_filters(std::vector<FilterSpec>& out)
     };
     per.judge_only = true;
     out.push_back(per);
+
+    FilterSpec env;
+    env.id = "sound-envelope";
+    env.title = "sound-envelope";
+    env.description = "Sound: one note's shape, loudness rising (or holding) and then falling, as a struck or plucked note's attack "
+                      "and decay. Each block of samples has a loudness, its loudest sample in four steps of full scale (a quarter, a "
+                      "half, three quarters, the whole); the blocks' loudness never rises again once it has fallen, the loudest is "
+                      "at least the second step, and the last block is at least two steps below it. Noise, as loud at the end as "
+                      "at the start, does not pass. Each channel on its own. Picks a kind of sound, so ticking every filter leaves it. "
+                      "Counted exactly block by block at any length; as an automaton (the blocks so far, and this block's loudest), so "
+                      "it ranks and merges, where its table fits the filter memory.";
+    env.params = {{"block", "samples in a block (256 at 8,000 a second is 32 ms)", FilterParam::Kind::Integer, "256", 16, 4096, 16, {}}};
+    env.applies = sound_line;
+    env.counts_as = "automaton";
+    env.picks_a_kind = true;
+    env.make = [own = env.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const PcmFormat f = pcm_format_of(l.symbols_id);
+        const uint32_t block = uint32_t(param_int(*find_filter(own), v, "block"));
+        const std::string prov = "block=" + std::to_string(block);
+        if (auto dfa = envelope_dfa(f, block); dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory())
+            return make_dfa_filter(std::move(*dfa), l.length, prov);
+        return std::make_unique<EnvelopeFilter>(f, block, l.length, prov); // (counted block by block, judged)
+    };
+    env.counts_as_on = [own = env.name()](const FilterLine& l, const FilterValues* v) -> std::string {
+        int64_t block = 256;
+        if (v)
+            try { block = param_int(*find_filter(own), *v, "block"); }
+            catch (const std::exception&) {} // a malformed setting: as without one
+        return cells_fit(uint64_t(kEnvStory) * 5 * uint64_t(block), l.base) ? "automaton" : "";
+    };
+    out.push_back(env);
+
+    FilterSpec syl;
+    syl.id = "sound-syllables";
+    syl.title = "sound-syllables";
+    syl.description = "Sound: the rhythm of speech, loud and quiet in turn so many times a second (syllables, 3 to 7 a second "
+                      "unless changed). A block of samples is loud where its loudest sample reaches the threshold (12% of full "
+                      "scale unless changed: speech is often quiet), and each loud "
+                      "block after a quiet one begins a syllable; over the unit's length in seconds there are at least `low` and at "
+                      "most `high` a second. Noise and a held tone are loud throughout: one syllable. Each channel on its own. "
+                      "Picks a kind of sound, so ticking every filter leaves it. Counted exactly block by block at any length; as "
+                      "an automaton (the syllables so far, whether the last block was loud, and this one so far), so it ranks and "
+                      "merges, where its table fits the filter memory.";
+    syl.params = {{"low", "the fewest syllables a second", FilterParam::Kind::Integer, "3", 0, 30, 1, {}},
+                  {"high", "the most syllables a second", FilterParam::Kind::Integer, "7", 1, 60, 1, {}},
+                  {"threshold", "how loud a block's loudest sample must be, as a percentage of full scale",
+                   FilterParam::Kind::Integer, "12", 1, 100, 1, {}},
+                  {"block", "samples in a block (256 at 8,000 a second is 32 ms)", FilterParam::Kind::Integer, "256", 16, 4096, 16, {}}};
+    syl.applies = sound_line;
+    syl.counts_as = "automaton";
+    syl.picks_a_kind = true;
+    auto syllables_of = [](const std::string& own, const FilterLine& l, const FilterValues& v) {
+        const FilterSpec& spec = *find_filter(own);
+        const int64_t lo = param_int(spec, v, "low"), hi = param_int(spec, v, "high");
+        if (lo > hi) throw std::invalid_argument("sound-syllables: low is more than high");
+        return syllable_rule(pcm_format_of(l.symbols_id), l.length, uint32_t(param_int(spec, v, "block")), param_int(spec, v, "threshold"), lo, hi);
+    };
+    syl.make = [own = syl.name(), syllables_of](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const PcmFormat f = pcm_format_of(l.symbols_id);
+        const SyllableRule r = syllables_of(own, l, v);
+        const std::string prov = "block=" + std::to_string(r.block) + " threshold=" + std::to_string(r.threshold) + " syllables=" +
+                                 std::to_string(r.fewest) + ".." + std::to_string(r.most);
+        if (auto dfa = syllables_dfa(f, r); dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory())
+            return make_dfa_filter(std::move(*dfa), l.length, prov);
+        return std::make_unique<SyllablesFilter>(f, r, l.length, prov); // (counted block by block, judged)
+    };
+    syl.counts_as_on = [own = syl.name(), syllables_of](const FilterLine& l, const FilterValues* v) -> std::string {
+        try
+        {
+            const SyllableRule r = syllables_of(own, l, v ? *v : FilterValues{});
+            return cells_fit((r.most + 1) * 4 * uint64_t(r.block), l.base) ? "automaton" : "";
+        }
+        catch (const std::exception&) { return ""; }
+    };
+    out.push_back(syl);
+
+    FilterSpec iv;
+    iv.id = "sound-interval";
+    iv.title = "sound-interval";
+    iv.description = "Sound: two notes sounding together a consonant interval apart. The two strongest peaks of the sound's spectrum "
+                     "(50 Hz to 2 kHz, over its first 2,048 samples) are a minor or major third, a fourth, a fifth, or a minor or "
+                     "major sixth apart, within so many cents, the weaker at least a quarter of the stronger. An octave does not "
+                     "count, so one note and its own first overtone do not pass. Each channel on its own. Picks a kind of sound. "
+                     "Judged.";
+    iv.params = {{"cents", "how far from the interval's exact ratio, in hundredths of a semitone", FilterParam::Kind::Integer, "25", 1, 100, 5, {}}};
+    iv.applies = sound_line;
+    iv.picks_a_kind = true;
+    iv.judge_only = true;
+    iv.make = [own = iv.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const int64_t cents = param_int(*find_filter(own), v, "cents");
+        return std::make_unique<IntervalFilter>(pcm_format_of(l.symbols_id), cents, "cents=" + std::to_string(cents));
+    };
+    out.push_back(iv);
 }
 
 } // namespace sieve

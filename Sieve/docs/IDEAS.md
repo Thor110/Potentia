@@ -10109,6 +10109,25 @@ it is we should be aiming to make meaningful content pop out of the walls in the
     at a musical interval; speech's rhythm (loud and quiet syllables, 3 to 7 a second).
   - Melodies: a phrase ending on the key's home note after a step; a rhythm that keeps one metre's bar;
     two voices that move against each other (contrary motion).
+    *Built (list M2, 18 November 2026).* Sound: sound-envelope-v1 (blocks of 256 samples, their loudness in
+    quarters of full scale, rising or holding and then falling, the loudest at least the second quarter and
+    the last block two quarters below it; random 8-bit sound at 8,000 a second kept 10^-19.05),
+    sound-syllables-v1 (a block loud where a sample reaches 12% of full scale, each loud block after a quiet
+    one a syllable, 3 to 7 a second; 10^-466.83), both counted exactly block by block at any length and
+    automata that rank where their tables fit (not the default second of sound: at 4 bits, 200 samples and
+    blocks of 16 they keep 10^-2.16 and 10^-7.04); and sound-interval-v1 (the two strongest spectral peaks,
+    50 Hz to 2 kHz, a third, fourth, fifth or sixth apart, not an octave; judged). On six clips each of
+    Sieve's own voice, struck notes, two-note chords, steady tones and noise, a second at 8,000 a second:
+    the envelope passes the 6 notes and nothing else, the syllables the 6 speech clips and nothing else, the
+    interval the 6 chords and 1 speech clip and 1 noise clip. Envelope, syllables and interval pick a kind of
+    sound, so X and OPTIMISE leave them (picks_a_kind). Melodies: melody-cadence-v1, a plugin (the last note
+    the tonic, reached by a step, a repeated note keeping it; 10^-1.91 of random 16-note melodies; 5 of 7
+    traditional tunes pass, Frere Jacques and London Bridge ending by a leap); melody-contrary-v1 (where two
+    voices move at once they move opposite ways; judged, on all the voices at once, which a filter can now
+    ask for: FilterSpec::whole_unit). The Hurrian Hymn's two voices move together 29 times, 2 of them
+    contrary, so it does not pass. A metre's bar was there already: melody-metre-v1. OPTIMISE FILTERS ticks the
+    cadence with the other melody plugins: the optimised audio line goes from 10^-13.63 to 10^-14.04, tracks from
+    10^-93.08 to 10^-94.80.*
   - Models: one solid (every face reached from every other through shared edges), watertight (each
     edge in two faces), judged on the models line's own stack.
   - Across lines: a page whose words name the picture beside it, a melody that fits its title's

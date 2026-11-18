@@ -540,8 +540,10 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
     }
     for (const auto& e : entries)
     {
-        if (!e.spec->applies(line)) throw std::invalid_argument(e.spec->name() + " does not apply to the " + line.kind + " line");
-        filters_.push_back(e.spec->make(line, e.values, resources));
+        const FilterLine& its = e.spec->whole_unit ? whole : line; // (a rule between voices sees them all)
+        if (!e.spec->applies(its)) throw std::invalid_argument(e.spec->name() + " does not apply to the " + its.kind + " line");
+        filters_.push_back(e.spec->make(its, e.values, resources));
+        whole_.push_back(e.spec->whole_unit ? 1 : 0);
         names_.push_back(e.spec->name());
         provenance_ += "; " + e.spec->name() + "{" + filters_.back()->provenance() + "}";
     }
@@ -674,8 +676,15 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
     if (unit.size() != length_) throw std::invalid_argument("unit has the wrong length for this filter stack");
     const size_t per = length_ / voices_;
     for (size_t i = 0; i < filters_.size(); ++i)
+    {
+        if (whole_[i])
+        {
+            if (!filters_[i]->passes(unit)) return int(i);
+            continue;
+        }
         for (uint32_t v = 0; v < voices_; ++v)
             if (!filters_[i]->passes(unit.subspan(v * per, per))) return int(i);
+    }
     return -1;
 }
 
