@@ -2454,6 +2454,92 @@ void test_notes2(const std::string& dir)
 // (Z7), the sound line's sound-crossings and sound-bend (Z6), the video line's video-moves and video-smooth
 // (Z5), and the fractals in the pages and audio lines, fractal-written and fractal-scored (Z4).
 extern std::string g_data; // (the data folder: defined below)
+// List P: word-shape, punctuation, letters-and-digits, each its automaton against its rule written plainly, on
+// prose and on 20,000 random pages, and counted.
+void test_p_filters()
+{
+    static const TestResources none(nullptr, nullptr);
+    const Alphabet& a96 = alphabet_by_id("ascii96");
+    const Alphabet& a27 = alphabet_by_id("lower27");
+    auto unit_of = [](const Alphabet& a, const std::string& t) {
+        std::vector<uint32_t> u;
+        for (const char c : t) u.push_back(*a.digit_of(char32_t(uint8_t(c))));
+        return u;
+    };
+    auto letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
+    auto digit = [](char c) { return c >= '0' && c <= '9'; };
+    auto shape_rule = [&](const std::string& t, size_t longest) {
+        std::vector<size_t> ws;
+        size_t n = 0;
+        for (const char c : t + " ")
+            if (letter(c)) ++n;
+            else if (n) ws.push_back(n), n = 0;
+        for (size_t k = 0; k + 1 < ws.size(); ++k)
+            if (ws[k] > longest && ws[k + 1] > longest) return false;
+        return true;
+    };
+    auto punct_rule = [&](const std::string& t) {
+        const std::string close = ")]}\"'";
+        for (size_t i = 0; i < t.size(); ++i)
+        {
+            const char c = t[i];
+            const bool mid = c == ',' || c == ';' || c == ':', end = c == '.' || c == '!' || c == '?';
+            if (!mid && !end) continue;
+            if (i > 0 && (t[i - 1] == ' ' || t[i - 1] == '\n')) return false;
+            if (i + 1 == t.size()) continue;
+            const char x = t[i + 1];
+            if (x == ' ' || x == '\n' || close.find(x) != std::string::npos) continue;
+            if (end && (x == '.' || x == '!' || x == '?')) continue;
+            if (c != ';' && c != '!' && c != '?' && digit(x) && i > 0 && digit(t[i - 1])) continue;
+            return false;
+        }
+        return true;
+    };
+    auto ld_rule = [&](const std::string& t, size_t turns) {
+        size_t n = 0;
+        for (size_t i = 0; i < t.size(); ++i)
+        {
+            const bool in = letter(t[i]) || digit(t[i]);
+            if (!in) { n = 0; continue; }
+            if (i > 0 && (letter(t[i - 1]) || digit(t[i - 1])) && digit(t[i]) != digit(t[i - 1]) && ++n > turns) return false;
+        }
+        return true;
+    };
+    const FilterLine p96{"text", "ascii96", 96, 40, &a96, 0, 0, 0};
+    const FilterLine p27{"text", "lower27", 27, 40, &a27, 0, 0, 0};
+    const FilterStack shape96(p96, {{find_filter("word-shape-v1"), {}}}, none), shape27(p27, {{find_filter("word-shape-v1"), {{"longest", "4"}}}}, none);
+    const FilterStack punct(p96, {{find_filter("punctuation-v1"), {}}}, none), ld(p96, {{find_filter("letters-and-digits-v1"), {}}}, none);
+    const char* prose[] = {"The quick brown fox, 3rd of its kind, ran.", "Prices: 1,000 at 12:30; 3.14 (or so)! Yes", "x86 and 1990s",
+                           "a1b2 is not a word , nor this", "internationalisation organisations", "Hello.World and e.g.this"};
+    for (const char* q : prose)
+    {
+        std::string t(q);
+        t.resize(40, ' ');
+        CHECK(shape96.passes(unit_of(a96, t)) == shape_rule(t, 10));
+        CHECK(punct.passes(unit_of(a96, t)) == punct_rule(t));
+        CHECK(ld.passes(unit_of(a96, t)) == ld_rule(t, 1));
+    }
+    std::mt19937_64 rng(41);
+    // (random pages weighted toward the marks, digits and spaces each rule turns on)
+    const std::string pool96 = "abcdeABC xyz  012,.;:!?)\"'\n([", pool27 = "abcdefghij   ";
+    for (int k = 0; k < 20000; ++k)
+    {
+        std::string t(40, ' '), w(40, ' ');
+        for (char& c : t) c = pool96[rng() % pool96.size()];
+        for (char& c : w) c = pool27[rng() % pool27.size()];
+        CHECK(shape96.passes(unit_of(a96, t)) == shape_rule(t, 10));
+        CHECK(shape27.passes(unit_of(a27, w)) == shape_rule(w, 4));
+        CHECK(punct.passes(unit_of(a96, t)) == punct_rule(t));
+        CHECK(ld.passes(unit_of(a96, t)) == ld_rule(t, 1));
+    }
+    // Each counts and ranks (an automaton), and merges with the pages' other automata.
+    CHECK(shape96.ranker() && punct.ranker() && ld.ranker());
+    const FilterStack all(p96, {{find_filter("word-shape-v1"), {}}, {find_filter("punctuation-v1"), {}}, {find_filter("letters-and-digits-v1"), {}}, {find_filter("brackets-v1"), {}}}, none);
+    CHECK(all.ranker() != nullptr);
+    // (lower27 has no punctuation and no digits: only word-shape applies there)
+    CHECK(find_filter("word-shape-v1")->applies(p27) && !find_filter("punctuation-v1")->applies(p27) && !find_filter("letters-and-digits-v1")->applies(p27));
+}
+
 void test_z_filters()
 {
     static const TestResources none(nullptr, nullptr);
@@ -2669,7 +2755,8 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 23); // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
+    CHECK(filters_for(text_line(8)).size() == 24); // (word-shape-v1, list P, the 24th: punctuation and letters-and-digits need marks and digits)
+                                                    // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
                                                     // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (v1 and v2) (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
@@ -10091,6 +10178,7 @@ void run_all(int argc, char** argv)
         PART("filters");
         RUN(test_filters(dir));
         RUN(test_z_filters());
+        RUN(test_p_filters());
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

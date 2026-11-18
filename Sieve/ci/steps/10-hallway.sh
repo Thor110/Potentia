@@ -2012,6 +2012,14 @@ build/sieve filters --line text --length 1000 --filters spoken.ini | tr -d '\r' 
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters case.ini | tr -d '\r' | q "keeps 10^-42.46 of the line"
 build/sieve filters --line text --alphabet ascii96 --length 1000 --filters brackets.ini | tr -d '\r' | q "keeps 10^-14.87 of the line"
 build/sieve filters --line text --length 1000 --filters wordlen.ini | tr -d '\r' | q "keeps 10^-12.92 of the line"
+# List P: no two long words in a row (10 letters at first), punctuation where writing puts it, and runs of letters and
+# digits turning between them at most once; each an automaton, counted.
+printf '[text]\nmode = mark\nfilters = word-shape-v1\n' > wordshape.ini
+printf '[text]\nmode = mark\nfilters = punctuation-v1\n' > punct.ini
+printf '[text]\nmode = mark\nfilters = letters-and-digits-v1\n' > lettersdigits.ini
+build/sieve filters --line text --length 1000 --filters wordshape.ini | tr -d '\r' | q "^share        the stack keeps 10^-8.39 of the line"
+build/sieve filters --line text --alphabet ascii96 --length 1000 --filters punct.ini | tr -d '\r' | q "^share        the stack keeps 10^-25.61 of the line"
+build/sieve filters --line text --alphabet ascii96 --length 1000 --filters lettersdigits.ini | tr -d '\r' | q "^share        the stack keeps 10^-16.36 of the line"
 build/sieve filters --line image --filters mirror.ini | tr -d '\r' | q "^survivors    1125899906842624 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters life.ini | tr -d '\r' | q "^survivors    1267650600228229401496703205376 (exact; judged)$"
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters pan.ini | tr -d '\r' | q "^survivors    1361129467683753853853498429727072845824 (exact; judged)$"

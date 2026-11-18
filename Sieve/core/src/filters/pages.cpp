@@ -33,6 +33,11 @@
 //                     automaton of the open brackets (3^D stacks at most).
 //   word-length-v2    no word (a run of letters) longer than N: 28 at first (5 to 100), so
 //                     antidisestablishmentarianism passes (Edward). word-length-v1, retired, had 20 (1 to 64).
+//   word-shape-v1     no two words in a row both longer than N letters, 10 at first (list P): a language's long
+//                     words come one at a time. An automaton of the word's length and the one before.
+//   punctuation-v1    no space before , ; : . ! ?, and a space (a line feed, a closing quote or bracket, the end)
+//                     after one, or a digit after , : . between digits (list P). An automaton of the last kind.
+//   letters-and-digits-v1 a run of letters and digits turns between them at most N times, once at first (list P).
 //   word-length-v1    no word (a run of letters) longer than N, 20 at first (list Z9): on random lower27
 //                     pages a space comes once in 27 letters, so their words run on; of this project's pages
 //                     every one of the manual's 206 passes, 333 of the specifications' 335 (their
@@ -537,6 +542,118 @@ Dfa word_length_dfa(const Alphabet& a, uint32_t most)
     return minimise(d);
 }
 
+// ---------------------------------------------------------------- word-shape, punctuation, letters-and-digits (list P)
+
+// Letters (a-z, A-Z) of the alphabet.
+std::vector<uint8_t> is_letter(const Alphabet& a)
+{
+    std::vector<uint8_t> k(a.size(), 0);
+    for (uint32_t d = 0; d < a.size(); ++d)
+    {
+        const char32_t c = a.symbol(d);
+        k[d] = ((c >= U'a' && c <= U'z') || (c >= U'A' && c <= U'Z')) ? 1 : 0;
+    }
+    return k;
+}
+
+// No two words in a row (letter runs, whatever lies between them) both longer than `longest`. States: the word so far
+// (0 to longest + 1 letters, the last "longer"), and whether the word before was longer.
+Dfa word_shape_dfa(const Alphabet& a, uint32_t longest)
+{
+    const auto letter = is_letter(a);
+    const uint32_t B = a.size(), L = longest + 2; // lengths 0 .. longest + 1
+    auto id = [L](uint32_t len, bool prev) { return int32_t(len + (prev ? L : 0)); };
+    Dfa d;
+    d.base = B;
+    d.start = id(0, false);
+    d.accept.assign(2 * size_t(L), 1);
+    d.next.assign(2 * size_t(L) * B, Dfa::kDead);
+    for (int prev = 0; prev < 2; ++prev)
+        for (uint32_t len = 0; len < L; ++len)
+            for (uint32_t c = 0; c < B; ++c)
+            {
+                int32_t n;
+                if (letter[c])
+                {
+                    const uint32_t m = std::min(len + 1, longest + 1);
+                    n = (m == longest + 1 && prev) ? Dfa::kDead : id(m, prev);
+                }
+                else n = len == 0 ? id(0, prev) : id(0, len == longest + 1);
+                d.next[size_t(id(len, prev)) * B + c] = n;
+            }
+    return minimise(d);
+}
+
+// Punctuation where writing puts it: no space before , ; : . ! or ?; after , ; or : a space, a line feed, a closing
+// ) ] } " or ' (or the page's end); after . ! or ? the same or another of . ! ?; and , : or . between two digits
+// (1,000 12:30 3.14). States: 0 after anything else, 1 after a space, 2 after a digit, 3 after , ; or :, 4 after
+// , or : that follows a digit, 5 after . ! or ?, 6 after . that follows a digit.
+Dfa punctuation_dfa(const Alphabet& a)
+{
+    const uint32_t B = a.size();
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(7, 1);
+    d.next.assign(7 * size_t(B), Dfa::kDead);
+    for (uint32_t c = 0; c < B; ++c)
+    {
+        const char32_t x = a.symbol(c);
+        const bool space = x == U' ' || x == U'\n', digit = x >= U'0' && x <= U'9';
+        const bool closing = x == U')' || x == U']' || x == U'}' || x == U'"' || x == U'\'';
+        const bool mid = x == U',' || x == U';' || x == U':', end = x == U'.' || x == U'!' || x == U'?';
+        for (int32_t s = 0; s < 7; ++s)
+        {
+            int32_t n = Dfa::kDead;
+            if (s >= 3) // (just after a mark)
+            {
+                if (space) n = 1;
+                else if (closing) n = 0;
+                else if ((s == 5 || s == 6) && end) n = 5;
+                else if ((s == 4 || s == 6) && digit) n = 2;
+            }
+            else if ((mid || end) && s == 1) n = Dfa::kDead;
+            else if (space) n = 1;
+            else if (digit) n = 2;
+            else if (mid) n = (s == 2 && x != U';') ? 4 : 3;
+            else if (end) n = (s == 2 && x == U'.') ? 6 : 5;
+            else n = 0;
+            d.next[size_t(s) * B + c] = n;
+        }
+    }
+    return minimise(d);
+}
+
+// A run of letters and digits turns from one to the other at most `turns` times (3rd, 1990s, x86 once; a1b2 three
+// times). States: outside a run, or in one (its last a letter or a digit) after t turns.
+Dfa letters_digits_dfa(const Alphabet& a, uint32_t turns)
+{
+    const auto letter = is_letter(a);
+    const uint32_t B = a.size();
+    auto id = [](bool dig, uint32_t t) { return int32_t(1 + 2 * t + (dig ? 1 : 0)); };
+    const size_t states = 1 + 2 * (size_t(turns) + 1);
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(states, 1);
+    d.next.assign(states * B, Dfa::kDead);
+    for (uint32_t c = 0; c < B; ++c)
+    {
+        const char32_t x = a.symbol(c);
+        const bool dig = x >= U'0' && x <= U'9', let = letter[c] != 0;
+        d.next[c] = dig ? id(true, 0) : let ? id(false, 0) : 0;
+        for (uint32_t t = 0; t <= turns; ++t)
+            for (int k = 0; k < 2; ++k)
+            {
+                const bool was_dig = k == 1;
+                int32_t n = 0;
+                if (dig || let) n = (dig == was_dig) ? id(dig, t) : (t + 1 <= turns ? id(dig, t + 1) : Dfa::kDead);
+                d.next[size_t(id(was_dig, t)) * B + c] = n;
+            }
+    }
+    return minimise(d);
+}
+
 } // namespace
 
 void add_page_filters(std::vector<FilterSpec>& out)
@@ -705,6 +822,54 @@ void add_page_filters(std::vector<FilterSpec>& out)
         return make_dfa_filter(word_length_dfa(*l.alphabet, most), l.length, "longest=" + std::to_string(most));
     };
     out.push_back(wl2);
+
+    // List P (Edward, 18 November 2026: "go ahead with the page filters next"; IDEAS 19.245's next round).
+    auto has = [](const FilterLine& l, std::u32string_view any) {
+        for (const char32_t c : any)
+            if (l.alphabet->contains(c)) return true;
+        return false;
+    };
+    FilterSpec ws;
+    ws.id = "word-shape";
+    ws.title = "word-shape";
+    ws.description = "Pages: no two words in a row (runs of letters, whatever lies between) both longer than `longest` letters: "
+                     "a language's words are mostly short, its long ones come one at a time. Random lower27 pages run words together (a space comes once in 27 letters): at 10, the default, it keeps 10^-8.39 of pages of 1,000; of prose pages of 1,000 as lower27, 97.8% of Don Quixote's pass, 99.0% of this project's manual's and 97.6% of its specifications' (at 11: 99.5%, 100% and 98.5%, keeping 10^-7.71). On ascii96, whose random pages are mostly short words between symbols, it sets aside little (10^-2.94). An automaton: "
+                     "counted and ranked exactly.";
+    ws.params = {{"longest", "a word longer than this may not follow another", FilterParam::Kind::Integer, "10", 4, 30, 1, {}}};
+    ws.applies = page_line;
+    ws.counts_as = "automaton";
+    ws.make = [own = ws.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const uint32_t most = uint32_t(param_int(*find_filter(own), v, "longest"));
+        return make_dfa_filter(word_shape_dfa(*l.alphabet, most), l.length, "longest=" + std::to_string(most));
+    };
+    out.push_back(ws);
+
+    FilterSpec pu;
+    pu.id = "punctuation";
+    pu.title = "punctuation";
+    pu.description = "Pages with punctuation: no space before , ; : . ! or ?, and after one a space, a line feed, a closing ) ] } \" "
+                     "or ' or the page's end (after . ! or ? also another of them); , : and . may stand between two digits "
+                     "(1,000 12:30 3.14). Random ascii96 pages of 1,000 almost all fail (it keeps 10^-25.61). Of Don Quixote's pages of 1,000, 87.3% pass (most that fail hold its file's illustration names, p007b.jpg); of this project's manual and specifications, under a fifth (file names, markdown). An automaton: counted and ranked exactly.";
+    pu.applies = [has](const FilterLine& l) { return page_line(l) && l.alphabet->contains(U' ') && has(l, U",;:.!?"); };
+    pu.counts_as = "automaton";
+    pu.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        return make_dfa_filter(punctuation_dfa(*l.alphabet), l.length, "");
+    };
+    out.push_back(pu);
+
+    FilterSpec ld;
+    ld.id = "letters-and-digits";
+    ld.title = "letters-and-digits";
+    ld.description = "Pages with letters and digits: a run of them turns from letters to digits, or back, at most `turns` times "
+                     "(once: 3rd, 1990s, x86; not a1b2). Random ascii96 pages of 1,000: 10^-16.36 kept. Of prose pages of 1,000, 89.8% of Don Quixote's pass (the rest hold its illustration names, c06a), 91.7% of the manual's and 89.2% of the specifications' (notation such as C4q and 2x32). An automaton: counted and ranked exactly.";
+    ld.params = {{"turns", "the most changes between letters and digits in one run", FilterParam::Kind::Integer, "1", 0, 6, 1, {}}};
+    ld.applies = [has](const FilterLine& l) { return page_line(l) && has(l, U"0123456789") && has(l, U"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"); };
+    ld.counts_as = "automaton";
+    ld.make = [own = ld.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const uint32_t t = uint32_t(param_int(*find_filter(own), v, "turns"));
+        return make_dfa_filter(letters_digits_dfa(*l.alphabet, t), l.length, "turns=" + std::to_string(t));
+    };
+    out.push_back(ld);
 }
 
 } // namespace sieve

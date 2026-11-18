@@ -1,65 +1,55 @@
-# Sieve: the fractals' structural filters counted on v3 (list F)
+# Sieve: page filters, the next round (list P)
 
-One commit on top of 7e9e25c (the same filters counted on v1 and v2).
+One commit on top of b2fbd5a.
 
-## The fractals line now has a real figure
+## Three new page filters
 
-The four structural filters (fractal-draws, fractal-grows, fractal-no-idle and fractal-canonical) are now
-counted exactly on v3, the version that is nearly all of the fractals line. So the line's share is known:
+Each one is an automaton, so it is counted exactly, merges with the line's other filters, and OPTIMISE
+FILTERS ticks it.
 
-**FRACTALS: 99.999999999999...% (kept 10^-59.27)** with all four ticked.
+- **word-shape-v1:** no two words in a row both longer than 10 letters (adjustable, 4 to 30). A language's
+  long words come one at a time.
+- **punctuation-v1:** no space before , ; : . ! or ?, and after one a space, a line feed, a closing
+  ) ] } " ' or the end of the page. After . ! ? another of them may follow. A digit may stand either side
+  of , : and . (1,000, 12:30, 3.14). It only appears on alphabets that have these marks.
+- **letters-and-digits-v1:** a run of letters and digits switches between them at most once (adjustable,
+  0 to 6). "3rd", "1990s" and "x86" pass; "a1b2" doesn't. It only appears on alphabets with digits.
 
-v4 to v6 are still judged only, but at the default 256 characters they are about 10^-200 of the line, far
-too few to change any figure shown, even at 20 decimal places.
+## What they keep
 
-How much each filter keeps of v3 on its own:
+Measured on pages of 1,000 characters:
 
-| Filter | Kept |
-| :--- | :--- |
-| fractal-canonical | 10^-59.27 (nearly all of the effect) |
-| fractal-grows | 10^-0.17 |
-| fractal-no-idle | 10^-0.17 |
-| fractal-draws | 10^-0.05 |
+| Filter | Random pages kept | Don Quixote passes | Manual passes | Specifications pass |
+| :--- | :--- | :--- | :--- | :--- |
+| word-shape-v1 | 10^-8.39 (lower27) | 97.8% | 99.0% | 97.6% |
+| punctuation-v1 | 10^-25.61 (ascii96) | 87.3% | under a fifth | under a fifth |
+| letters-and-digits-v1 | 10^-16.36 (ascii96) | 89.8% | 91.7% | 89.2% |
 
-## What v3 needed
+- **Why some real pages fail:** most of the Don Quixote pages that fail contain the Gutenberg file's
+  illustration names (p007b.jpg, c06a). The manual and specifications fail on file names, markdown and
+  notation such as C4q and 2x32.
+- **word-shape on ascii96:** it sets aside little there (10^-2.94), because random ascii96 pages are mostly
+  short words between symbols.
+- **The optimised Pages figure** stays at 10^-20.38. OPTIMISE ticks word-shape, but at the default
+  32-letter page the dictionary filters already remove everything it would.
 
-The counter is the same as for v1 and v2: it works by the set of symbols the axiom reaches. v3 rulesets
-differ in three ways that matter:
+## Not built, and why (recorded in IDEAS 19.245)
 
-- **Several rules per symbol.** A symbol can have any number of rules, in the order written.
-- **Contexts.** Each rule can have a context letter on either side (52 choices each), or none.
-- **A different alphabet.** Words use 74 symbols, of which 52 letters can have rules.
+- **Sentence length:** real prose needs room for 150-word sentences (97.1% of Don Quixote's pages pass at
+  150), and random pages hit a full stop about every 32 characters, so it would remove almost nothing.
+- **A line of verse:** it can only be judged, not counted.
+- **No typo filter:** your decision, recorded in IDEAS 19.246 in your words.
 
-The header lines (angle, scale, seed, ignore, digit definitions) reach nothing, so they are counted
-separately, from the space's own parts.
+## Also recorded
 
-## Other changes
-
-- **Judge-only tab:** the four are off it, since they count now. So X and OPTIMISE FILTERS tick them on
-  the fractals line, and OPTIMISE sets the line to compact. The hallway shows it as hide until compact
-  exists. fractal-dimension, fractal-strange and fractal-lasts have to draw or run each ruleset, so they
-  stay judge-only.
-- **The metrics list:** for the fractals line it now says "compact: not on this line yet (its survivors are
-  counted, not yet numbered)". Before, it claimed a compact saving that doesn't exist yet.
-- **The setup page:** names any judge-only fractal filters that are ticked but not in the count.
-- **`sieve fractal count --filters FILE`:** prints v3's survivors as well.
+Compact on the fractals line is left for later, with the reasons (IDEAS 19.250 and REVIEW-ROUND F-B).
 
 ## Checks
 
-- **Unit tests (step 01):**
-  - Every v3 body of 17 characters, judged by the real filters, for all 16 combinations of the four.
-  - The Python prototype's v3 figures at 30 and 40 characters. The prototype matched brute force in all
-    336 checks on small grammars with several rules per symbol and with contexts.
-  - The unfiltered total equals the space's own v3 count exactly.
-  - 3,000 random v3 rulesets up to 90 characters, so several rules per symbol, contexts and header lines
-    are all exercised.
-- **CI step 04:** OPTIMISE FILTERS ticks the four on the fractals line.
-- **CI step 10:** v3's 10^-59.27, the metrics line, and the no-compact-yet line.
-- **CI steps 01, 04 and 10** pass, as do the help, help-library and settings checks.
-
-## Next
-
-Compact on the fractals line (F-B): finding the *k*-th survivor and a survivor's number.
+- **Unit tests (step 01):** each automaton against its rule written as plain code, on sample sentences
+  and 20,000 random pages, plus a check that they count and merge.
+- **CI step 10:** the three random-page figures.
+- **CI steps 01, 03, 04 and 10** pass, as do the help and help-library checks.
 
 ## Files to delete by hand
 

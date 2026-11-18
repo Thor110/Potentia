@@ -10075,7 +10075,18 @@ it is we should be aiming to make meaningful content pop out of the walls in the
   - Pages: word lengths shaped as a language's (most words 2 to 8 letters; their cap, word-length-v1,
     built: 10^-24.23 of lower27 pages of 1,000); a sentence's length bounded (its words between ends); punctuation followed by a space;
     digits grouped as numbers are (no "1a2b"); a page that is a line of verse (stresses alternating, a
-    rhyme at the end), judged.
+    rhyme at the end), judged. *Built 18 November 2026 (list P; Edward: "go ahead with the page filters
+    next"), measured on Don Quixote's pages of 1,000 and this project's manual and specifications:
+    word-shape-v1 (no two words in a row longer than 10 letters: 97.6% to 99.0% of prose pages pass, random
+    lower27 pages of 1,000 kept 10^-8.39), punctuation-v1 (no space before , ; : . ! ?, a space after, digits
+    either side allowed: 87.3% of Don Quixote's pages pass, the rest holding its file's illustration names, but
+    under a fifth of the manual's, with its file names and markdown; random ascii96 pages kept 10^-25.61) and
+    letters-and-digits-v1 (a run of letters and digits turning between them once at most: about 90% of prose
+    pages; random ascii96 kept 10^-16.36); each an automaton, counted and merging. Not built: a sentence's
+    length, as prose needs room for 150 words (Don Quixote's 97.1% pass there) and random pages end a sentence
+    every 32 characters or so, so it would set aside next to nothing; and the line of verse, which judges only.
+    Optimised, the pages line is unchanged (10^-20.38): its dictionary filters already set aside what
+    word-shape would.*
   - Pictures: a horizon (a row above which the colours differ from those below, an automaton of the
     rows); a frame or border of one colour; colour shared in regions of at least k pixels (no lone
     specks), an automaton of two rows; a gradient across the picture in one direction.
@@ -10103,6 +10114,8 @@ antidisestablishmentarianism".
   what it keeps now is on the Answering on row above them. And the setup page's magnifying glass on
   every column, always (Edward: "every row should always have one, we only removed it from fractals at
   first as it was looking like we would hand chart it").
+- *Typos, decided (18 November 2026):* no typo filter. Edward: "We don't need to keep content we should be
+  filtering, typos and mistakes aren't the kind of content we are looking for or hoping to find."
 - *Typos:* words-v1 already keeps only pages whose every word is in the dictionary, so a page with a
   typo is already set aside wherever it is ticked. What a typo filter adds is the step between: a word
   one edit (a letter added, dropped, changed, or two swapped) from a dictionary word. Two ways round:
@@ -10226,4 +10239,8 @@ do A then B?".
   save.
 - *B (compact) needs more than a count:* the k-th survivor and a survivor's number, which counting by sets (a
   difference of counts) does not give directly; the walk does, but slowly. Designed once for v3's grammar
-  rather than twice.
+  rather than twice. *Left for later (Edward, 18 November 2026: "I think we should leave it for now, that all
+  sounds very heavy indeed"), after weighing three ways: the walk's tables (about 3 to 4 million states and
+  0.5 GB a filter set at 229 characters), counts made on demand from the counting by sets (no tables, seconds
+  to open each region), or the line's own order (counts with part of a ruleset fixed, which the counting by
+  sets cannot give). The line hides what fails meanwhile.*

@@ -262,7 +262,14 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] F-A. fractal-draws, -grows, -no-idle and -canonical counted exactly on v1 and v2, by the set the axiom
   reaches; checked against every ruleset of the smallest lengths, judged by the filters. `[01]` + `[10]`.
 - [x] F-A3. The same on v3 (nearly all of the line): the four off the judge-only tab. `[01]` + `[04]` + `[10]`.
-- [ ] F-B. Compact on the fractals line: the k-th survivor and back.
+- [ ] F-B. Compact on the fractals line: the k-th survivor and back. *Left for later (Edward, 18 November 2026:
+  "I think we should leave it for now, that all sounds very heavy indeed"): numbering the survivors needs the
+  walk's tables (about 0.5 GB a filter set at 229 characters) or counts made on demand, seconds a region.*
+
+### List P: page filters, the next round (Edward, 18 November 2026; IDEAS 19.245)
+
+- [x] P1. word-shape-v1, punctuation-v1, letters-and-digits-v1: automata, measured on prose, checked against
+  their rules written plainly. `[01]` + `[10]`. A sentence's length and verse not built (IDEAS 19.245 says why).
 
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
