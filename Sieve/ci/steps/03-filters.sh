@@ -139,13 +139,14 @@ echo "$out"
 echo "$out" | q "^  note.txt  *200  *200   its own address"
 echo "$out" | q "^  pic.png  *624  *4   image 3"
 echo "$out" | q "^  tune1.mid  *864  *36   audio, tailored 1e5230293"
-# (the audio filters' description 27 bits: one more filter to choose from, fractal-scored-v1, since list Z4)
-echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 259 = 531 bits"
+# (the audio filters' description 28 bits: more filters to choose from, fractal-scored-v1 since list Z4, then
+# melody-cadence-v1 and melody-contrary-v1 since list M2)
+echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 260 = 532 bits"
 # The search's time: a generous one finds the same; a tiny one stops, and says so (each
 # gives the other, the files counted: 0.001 s a file is 0.004 s for the four).
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-total 600 2>&1 | tr -d '\r')
 echo "$out" | q "^  search: 150.0 s a file, 600.0 s for the run; the weighing's search took "
-echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 259 = 531 bits"
+echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 260 = 532 bits"
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
 echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; the weighing's search took "
 echo "$out" | q "^  tailored audio: none, "
