@@ -3329,6 +3329,14 @@ void test_filters(const std::string& dir)
 // Every ranker, exhaustively: rank is the position among the survivors in address order,
 // unrank inverts it, the walk accepts exactly what the filter passes, and alive() agrees with
 // completions().
+// floor(a * b / c) exactly, for the bearings below (BigUint: MSVC has no 128-bit integer).
+uint64_t mul_div(uint64_t a, uint64_t b, uint64_t c)
+{
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(BigUint(a), BigUint(b)), BigUint(c), q, r);
+    return std::stoull(q.to_decimal());
+}
+
 // degree-window-v1 (sieve/window.hpp): the units whose bearing floor(v * 360 * 10^d / N) lies in [from, to), alone and
 // over other filters, against every unit of small lines: counted, ranked and walked (the generic walk, by next and
 // completions, as well as the window's own rank and unrank), the bounds exactly the hallway's bearings.
@@ -3346,7 +3354,7 @@ void test_degree_window(const std::string& dir)
     const auto bearing_in = [](uint64_t v, uint64_t n, uint64_t from, uint64_t to, uint32_t d) {
         uint64_t s = 360;
         for (uint32_t i = 0; i < d; ++i) s *= 10;
-        const unsigned __int128 b = (unsigned __int128)v * s / n;
+        const uint64_t b = mul_div(v, s, n);
         return b >= from && b < to;
     };
     const auto walk_both = [](const Ranker& rk, bool& ok) { // the generic walk agrees with the window's own
@@ -3446,7 +3454,7 @@ void test_degree_window(const std::string& dir)
         for (uint64_t x = 0; x < n4; ++x)
         {
             const auto u = BigUint(x).to_digits(27, 4);
-            const unsigned __int128 b = (unsigned __int128)x * whole / n4;
+            const uint64_t b = mul_div(x, whole, n4);
             const bool in = width >= whole || b >= from || b < from + width - whole;
             ok = ok && alone.passes(u) == in;
             n += in;
@@ -6703,7 +6711,7 @@ void test_place_window()
     const auto in = [&](uint64_t v, uint64_t from, uint64_t width, uint32_t d) {
         uint64_t s = 360;
         for (uint32_t i = 0; i < d; ++i) s *= 10;
-        const uint64_t b = uint64_t((unsigned __int128)v * s / n);
+        const uint64_t b = mul_div(v, s, n);
         return width >= s || (b + s - from) % s < width;
     };
     struct Case
