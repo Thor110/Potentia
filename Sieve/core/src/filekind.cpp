@@ -967,11 +967,15 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
     // not-an-item-v1: pages as a pattern count exactly; any other form asked for is judged.
     for (const std::string& f : item_forms_)
     {
-        if (f == "pages" && items_.pages)
+        if (f == "pages" && !items_.pages.empty())
         {
             exclude_pages_ = true;
-            pages_in_ = counter_->pattern_count(*items_.pages);
-            if (items_.pages->allowed.size() <= counter_->max_bytes()) pages_table_ = counter_->pattern_table(*items_.pages);
+            for (const KindCounter::Pattern& pat : items_.pages)
+            {
+                const bool fits = pat.allowed.size() <= counter_->max_bytes();
+                pages_tables_.push_back(fits ? counter_->pattern_table(pat) : KindCounter::PatternTable{});
+                if (fits) pages_in_ += pages_tables_.back()[0][0];
+            }
             count_ -= pages_in_;
             continue;
         }
@@ -994,7 +998,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
         else if (can_count_ && utf8_->can_rank())
         {
             survivors_ = counter_->utf8_count(utf8_text_only_, utf8_->tail_sums(rest));
-            if (exclude_pages_) survivors_ -= counter_->utf8_count(utf8_text_only_, {}, &*items_.pages);
+            if (exclude_pages_) survivors_ -= utf8_pages(utf8_text_only_);
             survivors_log10_ = survivors_.is_zero() ? -std::numeric_limits<double>::infinity() : survivors_.log10_approx();
             can_rank_ = false;
             blocker_ = "utf8-valid-v1 is counted with binary-kind-v1 and not-an-item-v1, but ranked only on its own";
@@ -1002,7 +1006,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
         else if (can_count_)
         {
             Scaled n = counter_->utf8_estimate(utf8_text_only_, Utf8Counter::tail_estimate(utf8_text_only_, rest));
-            if (exclude_pages_) n -= Scaled::of(counter_->utf8_count(utf8_text_only_, {}, &*items_.pages));
+            if (exclude_pages_) n -= Scaled::of(utf8_pages(utf8_text_only_));
             survivors_log10_ = n.log10();
             count_exact_ = false;
             can_rank_ = false;
@@ -1091,7 +1095,7 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
         if (item_filter_[f] < 0) continue;
         for (const std::string& form : item_forms_)
         {
-            if (form == "pages" && items_.pages && KindCounter::pattern_has(*items_.pages, file)) return names_[f];
+            if (form == "pages" && is_page(file)) return names_[f];
             for (const auto& [name, judge] : items_.judges)
                 if (name == form && judge(file)) return names_[f];
         }
@@ -1111,8 +1115,31 @@ BigUint BinarySieve::below_inner(const BigUint& place) const
     const std::vector<uint8_t> file = BinarySpace::file_at_place(place);
     if (utf8_) return utf8_->below(file);
     BigUint r = counter_->count_before(place);
-    if (exclude_pages_ && !pages_table_.empty()) r -= counter_->pattern_below(*items_.pages, pages_table_, file);
+    if (exclude_pages_) r -= pages_below(file);
     return r;
+}
+
+BigUint BinarySieve::pages_below(const std::vector<uint8_t>& file) const
+{
+    BigUint n;
+    for (size_t i = 0; i < items_.pages.size(); ++i)
+        if (!pages_tables_[i].empty()) n += counter_->pattern_below(items_.pages[i], pages_tables_[i], file);
+    return n;
+}
+
+bool BinarySieve::is_page(const std::vector<uint8_t>& file) const
+{
+    for (const KindCounter::Pattern& pat : items_.pages)
+        if (KindCounter::pattern_has(pat, file)) return true;
+    return false;
+}
+
+BigUint BinarySieve::utf8_pages(bool text_only) const
+{
+    BigUint n;
+    for (size_t i = 0; i < items_.pages.size(); ++i)
+        if (!pages_tables_[i].empty()) n += counter_->utf8_count(text_only, {}, &items_.pages[i]);
+    return n;
 }
 
 BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
@@ -1139,20 +1166,22 @@ BigUint BinarySieve::rank_inner(const std::vector<uint8_t>& file) const
 {
     if (utf8_) return utf8_->rank(file);
     BigUint r = counter_->rank(file);
-    if (exclude_pages_ && !pages_table_.empty()) r -= counter_->pattern_below(*items_.pages, pages_table_, file);
+    if (exclude_pages_) r -= pages_below(file);
     return r;
 }
 
 std::vector<uint8_t> BinarySieve::unrank_inner(const BigUint& k) const
 {
     if (utf8_) return utf8_->unrank(k);
-    if (!exclude_pages_ || pages_table_.empty()) return counter_->unrank(k);
+    if (!exclude_pages_ || pages_in_.is_zero()) return counter_->unrank(k);
     // Files come shortest first, and every page is a file of exactly the page's length, so a
     // survivor past that length has all the pages below it: it is the kind survivor k + (the
     // pages there are), found directly. Only survivors of up to the page's length need the search
     // below (which on a line of files of megabytes would otherwise unrank one about 150 times).
     {
-        const uint64_t page_bytes = items_.pages->allowed.size();
+        uint64_t page_bytes = 0; // (the longest page that fits the line)
+        for (size_t i = 0; i < items_.pages.size(); ++i)
+            if (!pages_tables_[i].empty()) page_bytes = std::max<uint64_t>(page_bytes, items_.pages[i].allowed.size());
         BigUint kept_up_to = counter_->shorter_than(page_bytes + 1);
         kept_up_to -= pages_in_;
         if (k >= kept_up_to)
@@ -1168,8 +1197,8 @@ std::vector<uint8_t> BinarySieve::unrank_inner(const BigUint& k) const
         f = counter_->unrank(j);
         BigUint n = j;
         n.add_small(1);
-        if (!pages_table_.empty()) n -= counter_->pattern_below(*items_.pages, pages_table_, f);
-        if (KindCounter::pattern_has(*items_.pages, f)) n -= BigUint(1);
+        n -= pages_below(f);
+        if (is_page(f)) n -= BigUint(1);
         return n;
     };
     BigUint lo = k, hi = k;

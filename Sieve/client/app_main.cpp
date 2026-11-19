@@ -157,6 +157,8 @@ const char* kUsage =
     "  --line LINE         the line to start in: image, pages (default), books, audio, tracks,\n"
     "                      video, movies, models, worlds, ai or binary\n"
     "  --length L          text: characters per book (default 32)\n"
+    "  --min-length M      text: pages of every length from M to L, the shorter first (default L:\n"
+    "                      one length; no guided ordering on such a line yet)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"
@@ -517,6 +519,7 @@ Args line_args(const Args& a, LineKind k)
         {
         case LineKind::Text:
             la.opts["length"] = a.get("length", "32");
+            if (a.has("min-length")) la.opts["min-length"] = a.get("min-length"); // (pages of a range of lengths)
             la.opts["alphabet"] = a.get("alphabet", "lower27");
             la.opts["canon"] = a.get("canon", "v2");
             if (a.has("model")) la.opts["model"] = a.get("model");

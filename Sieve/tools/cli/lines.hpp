@@ -39,6 +39,11 @@ struct Line
 
 // Builds the line and its space from --line and the line's own options (and --model).
 Line make_line(const Args& a);
+// The line at one length: a pages line of a range of lengths (--min-length) as the line of its longest pages, which
+// the books' pages and the titles keep (list O4); any other line as it is.
+Line fixed_length(const Line& line);
+// A line's shape as a reader is told it: its symbols and length ("lower27/L32"), or range of lengths ("lower27/L1-32").
+std::string space_shape(const Space& space);
 
 // Tracks and movies (sieve/composition.hpp) are made of units of this line:
 // - strands_of: how many runs a unit is, one after another: an audio unit's voices or channels (a

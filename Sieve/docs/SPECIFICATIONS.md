@@ -145,6 +145,12 @@ Every unit on a line has exactly one address, and every address decodes to exact
   address is a number below the size: hex as wide as the size needs, a step along the loop adds modulo the size.
   With `MIN = MAX` the space is the fixed one above, every address unchanged (`lower27/L32/...`,
   `feistel-sha256-v1`). The oracle's `RangeSpace` and `tests/vectors_range_v1.tsv` fix it.
+  In the hallway (as built, list O4; `--min-length`, the setup menu's rows come with O6) the pages line may be such a
+  space. Its titled space's content is the page's place, its shape `lower27/L1-32`; titles and the books' pages stay
+  at the line's longest length (`MAX`). Its filters are counted and ranked over the whole range (list O3), so compact
+  and full work on it; guided order does not yet (O5). A page's file is exactly its text at its own length, so a file
+  is a page (`item_of`, not-an-item-v1, the File Locator) when it is the text of `MIN` to `MAX` symbols of the
+  alphabet, byte for byte; not-an-item-v1 sets aside the pages of every length of the range.
 
 ### 4.2 Entropy-Ordered Mode
 

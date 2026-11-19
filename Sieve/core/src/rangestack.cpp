@@ -77,6 +77,13 @@ RangeStack::RangeStack(const FilterLine& line, const std::vector<FilterStack::En
     lazy_ = std::make_unique<std::once_flag>();
 }
 
+double RangeStack::table_bytes() const
+{
+    double most = 0;
+    for (const FilterStack& s : stacks_) most = std::max(most, s.table_bytes());
+    return most;
+}
+
 BigUint RangeStack::shorter_places(uint32_t length) const
 {
     BigUint n;

@@ -6208,7 +6208,7 @@ void test_cross_vectors(const std::string& dir)
         {
             const BinarySpace space(std::stoull(f[1]), "sieve");
             BinaryItems items;
-            items.pages = pattern_of(alphabet_of(f[4]), uint32_t(std::stoul(f[5])));
+            items.pages = {pattern_of(alphabet_of(f[4]), uint32_t(std::stoul(f[5])))};
             const BinarySieve bs(space, {kind_entry(f[2], f[3]), {not_item, {{"items", "pages"}}}}, &items);
             ok = bs.can_rank() && bs.count().to_decimal() == f[6];
             if (!ok) std::cerr << "  (" << bs.count().to_decimal() << " " << bs.blocker() << ")\n";
@@ -6494,7 +6494,7 @@ void test_cross_vectors(const std::string& dir)
     {
         const BinarySpace space(2, "sieve");
         BinaryItems items;
-        items.pages = pattern_of(alphabet_of("u+0061-u+0062"), 1);
+        items.pages = {pattern_of(alphabet_of("u+0061-u+0062"), 1)};
         const BinarySieve bs(space, {kind_entry("any", "keep"), {not_item, {{"items", "pages"}}}}, &items);
         bool ok = bs.can_rank() && bs.needs_file(); // a page is judged by its whole file
         BigUint last;
@@ -6818,9 +6818,9 @@ void test_place_window()
     const BinarySpace space(2, "sieve");
     const uint64_t n = 1 + 256 + 65536;
     BinaryItems items;
-    items.pages.emplace();
-    items.pages->allowed.assign(1, std::array<bool, 256>{});
-    items.pages->allowed[0]['a'] = items.pages->allowed[0]['b'] = true; // (the pages of a line of one letter, a or b)
+    items.pages.emplace_back();
+    items.pages[0].allowed.assign(1, std::array<bool, 256>{});
+    items.pages[0].allowed[0]['a'] = items.pages[0].allowed[0]['b'] = true; // (the pages of a line of one letter, a or b)
     const auto in = [&](uint64_t v, uint64_t from, uint64_t width, uint32_t d) {
         uint64_t s = 360;
         for (uint32_t i = 0; i < d; ++i) s *= 10;
@@ -6947,6 +6947,73 @@ void test_range_stack()
     const RangeStack only_pat(line, {{pat, {}}}, none);
     CHECK(only_pat.passes(std::vector<uint32_t>{5}));
     CHECK(only_pat.provenance().rfind("text/lower27/L1-3", 0) == 0);
+
+    // A FilterStack on a line of a range of lengths (list O4) hands every question to its RangeStack: the same
+    // verdicts, a ranker that counts, ranks and unranks across the range, and a compact line on it in both orders.
+    {
+        const std::vector<FilterStack::Entry> entries = {{run, {{"max_run", "1"}}}, {win, wv(100, 200)}};
+        const RangeStack rs(line, entries, none);
+        const FilterStack st(line, entries, none);
+        CHECK(st.range() != nullptr && st.size() == 2 && st.filter_name(1) == rs.filter_name(1) && st.id() == rs.id());
+        const Ranker* r = st.ranker();
+        CHECK(r && r->count() == rs.count() && r->length() == 3 && r->base() == 27);
+        if (r)
+        {
+            const CompactLine cl(*r, "sieve", st.id());
+            bool ok = true;
+            uint64_t k = 0;
+            std::set<std::string> seen;
+            for (uint64_t p = 0; ok && p < n; ++p)
+            {
+                const auto u = sp.unit_at_place(BigUint(p));
+                ok = st.first_failure(u) == rs.first_failure(u);
+                if (!ok || !rs.passes(u)) continue;
+                ok = r->rank(u) == BigUint(k) && r->unrank(BigUint(k)) == u && cl.index_of(u, AddressMode::Positional) == BigUint(k);
+                const BigUint s = cl.index_of(u, AddressMode::Scrambled);
+                ok = ok && s < r->count() && cl.unit_at(s, AddressMode::Scrambled) == u && seen.insert(s.to_hex()).second;
+                ++k;
+            }
+            CHECK(ok);
+            CHECK(BigUint(k) == r->count());
+        }
+        // a line of one length is a plain stack, as before
+        FilterLine one = line;
+        one.min_length = 0;
+        CHECK(FilterStack(one, {{run, {{"max_run", "1"}}}}, none).range() == nullptr);
+    }
+    // not-an-item-v1's pages on the binary line when pages are of several lengths: those of every length (1 and 2
+    // letters, a or b) are set aside, and the survivors, in order, are the kind survivors that are none of them.
+    {
+        const FilterSpec* not_item = find_filter("not-an-item-v1");
+        const FilterSpec* kind = find_filter("binary-kind-v1");
+        CHECK(not_item && kind);
+        if (!not_item || !kind) return;
+        const BinarySpace space(2, "sieve");
+        BinaryItems items;
+        for (uint32_t L = 1; L <= 2; ++L)
+        {
+            KindCounter::Pattern pt;
+            std::array<bool, 256> ab{};
+            ab['a'] = ab['b'] = true;
+            pt.allowed.assign(L, ab);
+            items.pages.push_back(pt);
+        }
+        const BinarySieve bs(space, {{kind, {{"kinds", "any"}, {"keep", "keep"}}}, {not_item, {{"items", "pages"}}}}, &items);
+        bool ok = bs.can_rank();
+        const uint64_t files = 1 + 256 + 65536;
+        CHECK(ok && bs.count() == BigUint(files - 2 - 4));
+        uint64_t k = 0;
+        for (uint64_t p = 0; ok && p < files; ++p)
+        {
+            const auto f = BinarySpace::file_at_place(BigUint(p));
+            bool page = !f.empty();
+            for (uint8_t c : f) page = page && (c == 'a' || c == 'b');
+            ok = bs.first_failure_of(f).empty() == !page;
+            if (ok && !page) ok = bs.index_of(f, AddressMode::Positional) == BigUint(k) && bs.file_at(BigUint(k), AddressMode::Positional) == f;
+            k += page ? 0 : 1;
+        }
+        CHECK(ok);
+    }
 }
 
 // The join filters (list N5-14): join-leap-v1 and join-cut-v1 judge only where one part of a joined unit meets the
@@ -7084,7 +7151,7 @@ void test_utf8_vectors(const std::string& dir)
                 std::array<bool, 256> at{};
                 for (uint32_t d = 0; d < a.size(); ++d) at[a.symbol(d) & 0xff] = true;
                 p.allowed.assign(std::stoul(f[5].substr(colon + 1)), at);
-                items.pages = p;
+                items.pages = {p};
                 entries.push_back({find_filter("not-an-item-v1"), {{"items", "pages"}}});
             }
             const BinarySieve bs(space, entries, &items);
@@ -7166,7 +7233,7 @@ void test_utf8_joint()
                 for (const auto& pat : patterns)
                 {
                     BinaryItems items;
-                    items.pages = pat;
+                    items.pages = {pat};
                     brute(2, {kind_entry(kinds, keep), {utf8, {{"controls", ctl}}}, {not_item, {{"items", "pages"}}}}, &items);
                 }
             }
@@ -7200,7 +7267,7 @@ void test_utf8_joint()
     {
         const BinarySpace space(1000000, "sieve");
         BinaryItems items;
-        items.pages = pages;
+        items.pages = {pages};
         const BinarySieve bs(space, {kind_entry("text", "keep"), {utf8, {{"controls", "text"}}}, {not_item, {{"items", "pages"}}}}, &items);
         CHECK(bs.can_count() && !bs.count_exact() && !bs.can_rank() && !bs.blocker().empty());
         const double share = bs.survivors_log10() - space.size().log10_approx();

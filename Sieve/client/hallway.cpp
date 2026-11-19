@@ -35,7 +35,9 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
     texture_px_ = gpu::max_texture_px(r_);
     filters_ = filters; // what COST's tailoring starts from, and changes
     // The books line: a cover from the image line, a title and book_pages pages from the pages line.
-    const Line& text = unit_line(LineKind::Text);
+    // (A pages line of a range of lengths: the books' pages and the titles stay at its longest, list O4.)
+    const Line text_fixed = fixed_length(unit_line(LineKind::Text));
+    const Line& text = text_fixed;
     const Line& image = unit_line(LineKind::Image);
     books_ = std::make_unique<BookSpace>(image.space, text.space, book_pages);
     // The models line: V vertices and F triangles on a grid of C steps (SPECIFICATIONS §12).
@@ -53,8 +55,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
             const Space& content = unit_line(k).space;
             std::optional<Space> cover;
             if (k == LineKind::Audio || k == LineKind::Video) cover = image.space;
-            titled_[size_t(line_of(k))] = std::make_unique<TitledSpace>(title, cover, content.size(),
-                                                                        content.symbols_id() + "/L" + std::to_string(content.unit_length()), key);
+            titled_[size_t(line_of(k))] = std::make_unique<TitledSpace>(title, cover, content.size(), space_shape(content), key);
         }
         titled_[kModelsLine] = std::make_unique<TitledSpace>(
             title, std::nullopt, model_space_->size(),
@@ -191,8 +192,7 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
                 {
                     const TitledSpace& t = *titled_[size_t(i)];
                     full_[size_t(i)] = std::make_unique<TitledSpace>(t.title_space(), t.cover_space(), rk->count(),
-                                                                     ln.space.symbols_id() + "/L" + std::to_string(ln.space.unit_length()) +
-                                                                         "/survivors=" + stacks_[i].id(),
+                                                                     space_shape(ln.space) + "/survivors=" + stacks_[i].id(),
                                                                      ln.space.key());
                 }
             }
@@ -904,13 +904,13 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             const TitledSpace::Parts tp = ts->parts_at(b.index, mode_);
             b.cover = tp.cover;
             b.title = tp.title;
-            b.unit = tp.content.to_digits(sp.base(), sp.unit_length());
+            b.unit = sp.unit_at_place(tp.content); // (on a line of a range of lengths, its place)
             b.hex = ts->hex_of(b.index);
             b.fraction = b.index.is_zero() ? 0.0 : std::pow(10.0, b.index.log10_approx() - ts->size().log10_approx());
         }
         else
         {
-            const auto address = b.index.to_digits(sp.base(), sp.unit_length());
+            const auto address = b.index.to_digits(sp.base(), sp.address_length());
             b.unit = sp.unit_of_address(address, mode_);
             b.hex = sp.hex_of(address);
             b.fraction = sp.fraction_of(address);
@@ -997,7 +997,7 @@ BigUint Hallway::index_of(const Space::Digits& unit)
     }
     // On a titled line a unit warped in on its own carries a blank title and a blank cover.
     if (const TitledSpace* ts = titled_here())
-        return ts->index_of({ts->blank_cover(), ts->blank_title(), BigUint::from_digits(unit, line().space.base())}, mode_);
+        return ts->index_of({ts->blank_cover(), ts->blank_title(), line().space.place_of(unit)}, mode_);
     return BigUint::from_digits(line().space.address_digits(unit, mode_), line().space.base());
 }
 

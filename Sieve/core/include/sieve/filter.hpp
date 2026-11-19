@@ -275,6 +275,14 @@ uint32_t line_voices(const FilterLine& l);
 // voices' ranks read as one number in base (one voice's count), voice 1 first. A filter marked whole_unit
 // is the exception: made for the whole line, it judges the whole unit once, all its voices together.
 // A degree window (FilterSpec::window) is counted last, over the rest of the stack (sieve/window.hpp).
+//
+// On a line of a range of lengths (FilterLine::min_length, list O4) the stack is a RangeStack (sieve/rangestack.hpp),
+// a stack for each length, and this one hands every question to it: a unit of any length in the range is judged by
+// its own length's stack, and ranker() is the range's (RangeRanker: it counts, ranks and unranks over the whole range
+// but cannot be walked a symbol at a time, so the guided line and anything else that walks a ranker are not offered
+// on a range line).
+class RangeStack;
+
 class FilterStack
 {
 public:
@@ -286,8 +294,10 @@ public:
     FilterStack() = default;
     FilterStack(const FilterLine& line, const std::vector<Entry>& entries, const FilterResources& resources);
 
-    bool empty() const { return filters_.empty(); }
-    size_t size() const { return filters_.size(); }
+    bool empty() const { return range_ ? names_.empty() : filters_.empty(); }
+    size_t size() const { return range_ ? names_.size() : filters_.size(); }
+    // The range's stack, on a line of a range of lengths (else null).
+    const RangeStack* range() const { return range_.get(); }
     // Index of the first filter the unit fails, or -1 if it passes them all.
     int first_failure(std::span<const uint32_t> unit) const;
     bool passes(std::span<const uint32_t> unit) const { return first_failure(unit) < 0; }
@@ -340,6 +350,8 @@ private:
     mutable double table_bytes_ = 0;
     std::string provenance_, id_;
     std::string symbols_id_; // the line's kind and symbols, without its length: what merges are kept by
+    std::shared_ptr<const RangeStack> range_; // a line of a range of lengths: every question goes to it
+    mutable std::unique_ptr<Ranker> range_ranker_;
 };
 
 } // namespace sieve

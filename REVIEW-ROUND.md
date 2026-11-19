@@ -399,11 +399,21 @@ run before a release package, and after each of the three reviews. Each batch is
     counted with the rest. Every unit of 1 to 3 letters checked against each length's own stack and the window by
     place, both ways, across 0 too `[01]`. Stacks that cannot count together on one length cannot on a range either
     (max-run with not-a-pattern), and say at which length. Nothing uses it yet (O4).
-  - [ ] O4. The hallway: the pages line, its title shelves (titles stay fixed), shelving and walking, compact, J/F,
+  - [x] O4. The hallway: the pages line, its title shelves (titles stay fixed), shelving and walking, compact, J/F,
     the File Locator's page items, not-an-item's pages on the binary line, the greeting at its own length.
     Items found by their exact bytes at any length of the range (item_of, J, the File Locator, the packer's items),
     and not-an-item's pages counted over every length of the range; tested: a padded page and a bare one each come
     back byte for byte.
+    *Built (19 November 2026):* `--min-length` on the pages line (the hallway and the CLI; the menu rows are O6). A
+    FilterStack on a range line hands every question to its RangeStack, and its ranker (RangeRanker) counts, ranks
+    and unranks over the range, so compact and full work unchanged; guided is not offered on a range until O5. The
+    titled space's content is the page's place (`lower27/L1-32`); titles and the books' pages stay at the longest
+    length. item_of takes a page of any length in the range, exactly its text; not-an-item-v1 counts the pages of
+    every length (a pattern for each). The hallway spawns at "welcome to the sieve" as a page of 20 letters, compact
+    too. Tested: the range stack against its RangeStack and a compact line in both orders on every page of 1 to 3
+    letters, not-an-item over pages of two lengths against every file of up to 2 bytes `[01]`; on the CLI, a bare
+    page (1-32) and a padded one (5-32, "hi   ") warp and read back byte for byte, and the fixed line as before.
+    Lines of one length are unchanged: nothing on the packing path moves.
   - [ ] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
   - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
     old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.

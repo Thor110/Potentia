@@ -146,6 +146,8 @@ BinaryItems binary_items(const Line* pages, const Line* image, const Line* video
 std::optional<std::vector<uint32_t>> item_of(const Line& line, const std::vector<uint8_t>& file);
 // Pages of `length` symbols of an alphabet as files: a pattern when every symbol is one byte.
 std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t length);
+// The patterns of the pages of every length from min_length to max_length (empty where a page is judged instead).
+std::vector<KindCounter::Pattern> page_patterns(const Alphabet& a, uint32_t min_length, uint32_t max_length);
 BinarySieve build_binary_sieve(const BinarySpace& space, const LineFilters& settings, const BinaryItems* items = nullptr);
 // The AI line's shape as filters see it (kind "ai", the weights its digits): the space must outlive it.
 FilterLine ai_filter_line(const AiSpace& space);

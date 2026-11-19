@@ -36,6 +36,9 @@ public:
     size_t size() const { return names_.size(); }
     uint32_t min_length() const { return min_; }
     uint32_t max_length() const { return max_; }
+    uint32_t base() const { return base_; }
+    // The memory the lengths' stacks' counts need: the most any one of them does.
+    double table_bytes() const;
     const std::string& filter_name(size_t i) const { return names_[i]; }
     // The first ticked filter the unit (min to max symbols) fails, as an index into the ticked filters, or -1.
     int first_failure(std::span<const uint32_t> unit) const;

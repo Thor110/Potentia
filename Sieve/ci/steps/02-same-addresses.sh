@@ -69,3 +69,13 @@ around=$($exe read --length 32 --mode guided --around 2 --zoom 20 90922 | tr -d 
 printf '%s\n' "$around" | q '^>     +0  "it was that they are and god tha"  90922  (52 bits)$'
 printf '%s\n' "$around" | q '^      +1  "it was the brave uttered through"  90923  (56 bits)$'
 if $exe read --length 32 --mode guided --around 2 --zoom 0 90922 > /dev/null 2>&1; then exit 1; fi # (a zoom of 0: refused)
+# Pages of a range of lengths (list O4, --min-length): on 1 to 32 the greeting is a page of its own 20 letters, and
+# on 5 to 32 "hi" is padded only to 5; each reads back exactly, in both orderings (the addresses pinned by the oracle,
+# tests/vectors_range_v1.tsv).
+for m in positional scrambled; do
+  a=$($exe warp --min-length 1 --length 32 --mode $m "welcome to the sieve" | tr -d '\r' | awk -v m=$m '$1 == m {print $2}')
+  test "$($exe read --min-length 1 --length 32 --mode $m "$a" | tr -d '\r')" = "welcome to the sieve"
+  a=$($exe warp --min-length 5 --length 32 --mode $m "hi" | tr -d '\r' | awk -v m=$m '$1 == m {print $2}')
+  test "$($exe read --min-length 5 --length 32 --mode $m "$a" | tr -d '\r')" = "hi   "
+done
+$exe warp --min-length 1 --length 32 --mode positional "welcome to the sieve" | tr -d '\r' | q "^  positional  0000000000000007af91537105fe1b722177727$"

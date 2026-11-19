@@ -1,19 +1,25 @@
 # Changes
 
-One commit on top of b9e375e ("sieve O1").
+One commit on top of 8ad6e67 ("sieve O2O3").
 
-## Pages of a range of lengths: O2 and O3
-- **O2, no padding on a range line:** a text warped onto a line of a range of lengths keeps its own length; only a
-  text shorter than the line's minimum is padded, up to the minimum. On a line of 1 to 32, "welcome to the sieve" is
-  a page of exactly 20 characters. Lines of one length (all of them today) are padded as before: every pinned
-  address is unchanged (CI step 02), and the existing canonicalisation vectors are unchanged.
-- **O3, filters over a range:** the filters of a range line count and rank across every length: each length has its
-  own stack, the counts add up, and a survivor's number is the survivors of every shorter length plus its number
-  within its own. The degree window works over the whole range by a page's place. Checked on every page of 1 to 3
-  letters.
-- Nothing on the packing path changes: .sieve files and items are made exactly as before.
-- Nothing uses the range yet; the hallway, menus and CLI come in O4 to O6.
-- The version goes to 0.13.80 when list O is finished (REVIEW-ROUND O11).
+## Pages of a range of lengths: O4, the hallway
+- **`--min-length`** on the pages line, in the hallway and the CLI (`hallway --min-length 1`, `sieve warp
+  --min-length 1 --length 32 ...`). The setup menu's MIN LENGTH and MAX LENGTH rows, the settings file and the
+  new default of 1 to 32 come in O6; until then nothing changes unless the option is given.
+- **The pages line on a range:** shelving, walking, warping, the titles (which stay at the longest length) and
+  the books (their pages stay at the longest length too). The hallway spawns at "welcome to the sieve" as a page
+  of exactly 20 letters.
+- **Compact and full on a range:** a filter stack on a range line counts, ranks and unranks over every length
+  (list O3), so compact and full work as on any line. The guided order is not offered on a range yet (O5); the
+  hallway shows it positional instead.
+- **Items at any length:** a file is a page of the line when it is exactly the text of a page of any length in the
+  range, byte for byte (the File Locator, F, not-an-item). not-an-item-v1 on the binary line sets aside the pages
+  of every length of the range.
+- **Lossless as before:** lines of one length are unchanged (every pinned address, CI step 02), and nothing on the
+  packing path moves.
+- Tests: the range stack against RangeStack and a compact line in both orders on every page of 1 to 3 letters,
+  and not-an-item over pages of two lengths against every file of up to 2 bytes. CI step 02: a bare page (1 to 32)
+  and a padded one (5 to 32, "hi   ") each warp and read back exactly, in both orders.
 
 ## Files to delete by hand
 None.

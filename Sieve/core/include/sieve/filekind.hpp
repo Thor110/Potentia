@@ -176,7 +176,9 @@ private:
 // application, which knows the lines' shapes (tools/cli/filter_config.hpp).
 struct BinaryItems
 {
-    std::optional<KindCounter::Pattern> pages; // counted exactly
+    // Counted exactly: a pattern for each length a page may be (one; on a pages line of a range of lengths, list O4,
+    // one for each length, shortest first). Empty: pages are judged, or not asked for.
+    std::vector<KindCounter::Pattern> pages;
     // Judges, by the form they recognise: "pages" (when not a pattern), "melodies", "pictures",
     // "models". A form asked for with no judge here leaves the sieve unable to count.
     std::vector<std::pair<std::string, std::function<bool(const std::vector<uint8_t>&)>>> judges;
@@ -306,7 +308,11 @@ private:
     int utf8_filter_ = -1;                 // its place in names_
     bool utf8_text_only_ = false;
     BigUint count_, pages_in_;             // survivors; pages among the kind survivors
-    KindCounter::PatternTable pages_table_; // the pages' pattern table, worked out once
+    std::vector<KindCounter::PatternTable> pages_tables_; // each page length's pattern table, worked out once (empty: none fits)
+    // The pages, as not-an-item-v1 sets them aside: those of every length before (or at) a file, and whether it is one.
+    BigUint pages_below(const std::vector<uint8_t>& file) const;
+    bool is_page(const std::vector<uint8_t>& file) const;
+    BigUint utf8_pages(bool text_only) const;
     bool can_rank_ = true, exclude_pages_ = false;
     bool can_count_ = true, count_exact_ = true;
     BigUint survivors_;            // counted (exactly) though not ranked

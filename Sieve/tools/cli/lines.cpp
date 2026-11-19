@@ -91,6 +91,21 @@ LineKind line_from_string(std::string_view s)
     throw std::invalid_argument("unknown line '" + std::string(s) + "' (text or pages|image|audio|video)");
 }
 
+std::string space_shape(const Space& sp)
+{
+    std::string s = sp.symbols_id() + "/L";
+    if (sp.is_range()) s += std::to_string(sp.min_length()) + "-";
+    return s + std::to_string(sp.unit_length());
+}
+
+Line fixed_length(const Line& line)
+{
+    if (!line.space.is_range()) return line;
+    Line f = line;
+    f.space = Space(*line.alphabet, line.space.unit_length(), line.space.key());
+    return f;
+}
+
 Line make_line(const Args& a)
 {
     const LineKind kind = line_from_string(a.get("line", "text"));
@@ -101,9 +116,14 @@ Line make_line(const Args& a)
     {
         // A built-in id, or Unicode blocks and ranges stacked with '+' (see sieve alphabets).
         const Alphabet& alpha = alphabet_of(a.get("alphabet", "lower27"));
+        // --min-length: pages of every length from it to --length (list O4; the default, --length, is one length).
+        const uint32_t length = a.require_positive("length");
+        const uint32_t min_length = a.get_positive("min-length", length);
+        if (min_length > length) throw std::invalid_argument("--min-length is more than --length");
         Line line{kind, &alpha, canon_version_from_string(a.get("canon", "v2")), {},
-                  Space(alpha, a.require_positive("length"), key), nullptr, {}};
-        if (a.get("model") != "none")
+                  min_length < length ? Space(alpha, min_length, length, key) : Space(alpha, length, key), nullptr, {}};
+        // The guided line walks a page one letter at a time at one length; a range of lengths has none yet (list O5).
+        if (a.get("model") != "none" && !line.space.is_range())
         {
             const LoadedModel m = resolve_model(a.get("model"), alpha.id());
             if (m.model)

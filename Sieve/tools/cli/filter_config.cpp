@@ -376,6 +376,7 @@ FilterLine filter_line(const Line& line)
     f.symbols_id = line.space.symbols_id();
     f.base = line.space.base();
     f.length = line.space.unit_length();
+    f.min_length = line.space.is_range() ? line.space.min_length() : 0;
     f.alphabet = line.alphabet;
     if (line.kind == LineKind::Image || line.kind == LineKind::Video)
     {
@@ -517,6 +518,18 @@ std::optional<KindCounter::Pattern> page_pattern(const Alphabet& a, uint32_t len
     return p;
 }
 
+std::vector<KindCounter::Pattern> page_patterns(const Alphabet& a, uint32_t min_length, uint32_t max_length)
+{
+    std::vector<KindCounter::Pattern> out;
+    for (uint32_t l = min_length; l <= max_length; ++l)
+    {
+        std::optional<KindCounter::Pattern> p = page_pattern(a, l);
+        if (!p) return {};
+        out.push_back(std::move(*p));
+    }
+    return out;
+}
+
 std::optional<std::vector<uint32_t>> item_of(const Line& l, const std::vector<uint8_t>& b)
 {
     try
@@ -528,7 +541,8 @@ std::optional<std::vector<uint32_t>> item_of(const Line& l, const std::vector<ui
             if (!l.alphabet) return std::nullopt;
             const std::string t(b.begin(), b.end());
             const std::u32string u = utf8_decode(t);
-            if (u.size() != l.space.unit_length() || utf8_encode(u) != t) return std::nullopt;
+            // (A page of a range of lengths, list O4: exactly its text at any length in the range.)
+            if (u.size() < l.space.min_length() || u.size() > l.space.unit_length() || utf8_encode(u) != t) return std::nullopt;
             std::vector<uint32_t> unit;
             unit.reserve(u.size());
             for (char32_t c : u)
@@ -598,8 +612,8 @@ BinaryItems binary_items(const Line* pages, const Line* image, const Line* video
     if (pages && pages->alphabet)
     {
         const Line* l = pages;
-        items.pages = page_pattern(*l->alphabet, l->space.unit_length());
-        if (!items.pages) items.judges.emplace_back("pages", guard([l](const std::vector<uint8_t>& b) { return item_of(*l, b).has_value(); }));
+        items.pages = page_patterns(*l->alphabet, l->space.min_length(), l->space.unit_length());
+        if (items.pages.empty()) items.judges.emplace_back("pages", guard([l](const std::vector<uint8_t>& b) { return item_of(*l, b).has_value(); }));
     }
     if (image || video)
         items.judges.emplace_back("pictures", guard([image, video](const std::vector<uint8_t>& b) {

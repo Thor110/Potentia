@@ -73,7 +73,7 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
         w.line = l;
         w.filters = given.filters.of(l->kind);
         w.fl = filter_line(*l);
-        w.shape = l->space.symbols_id() + "/L" + std::to_string(l->space.unit_length());
+        w.shape = space_shape(l->space);
         try
         {
             if (!w.filters.enabled.empty()) w.stack = build_stack(*l, w.filters);
@@ -220,7 +220,7 @@ Weighing weigh_files(const fs::path& root, const std::vector<std::string>& files
                 if (!unit) continue;
                 fw.line = int(w.line->kind);
                 fw.unit = *unit;
-                const BigUint size = w.line->space.size(), index = BigUint::from_digits(*unit, w.line->space.base());
+                const BigUint size = w.line->space.size(), index = w.line->space.place_of(*unit);
                 cand.push_back({group_of(int(li), w.name, 0), route_bits(index, size), written_route(index, size)});
                 if (w.stack && w.stack->passes(*unit))
                     if (const Ranker* r = w.stack->ranker())

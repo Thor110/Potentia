@@ -4781,7 +4781,7 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     StackInfo out;
                     const sieve::BinarySpace space(std::max<uint32_t>(1, bytes), "sieve");
                     sieve::BinaryItems items;
-                    items.pages = sieve::cli::page_pattern(sieve::alphabet_of(alphabet), length);
+                    items.pages = sieve::cli::page_patterns(sieve::alphabet_of(alphabet), length, length);
                     const sieve::BinarySieve bs = sieve::cli::build_binary_sieve(space, lf, &items);
                     out.table_bytes = bs.table_bytes();
                     if (bs.empty()) none_of(out);

@@ -5,6 +5,7 @@
 #include "sieve/audio.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
+#include "sieve/rangestack.hpp"
 #include "sieve/sha256.hpp"
 #include "sieve/window.hpp"
 #include "sieve/written.hpp"
@@ -533,6 +534,18 @@ std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, cons
 FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entries, const FilterResources& resources)
     : length_(whole.length), base_(whole.base), up_to_length_(whole.up_to_length)
 {
+    if (whole.min_length > 0 && whole.min_length < whole.length)
+    {
+        // A line of a range of lengths: a stack for each length, which every question goes to.
+        range_ = std::make_shared<const RangeStack>(whole, entries, resources);
+        for (size_t i = 0; i < range_->size(); ++i) names_.push_back(range_->filter_name(i));
+        provenance_ = range_->provenance();
+        id_ = range_->id();
+        symbols_id_ = whole.kind + "/" + whole.symbols_id;
+        unit_length_ = whole.length;
+        lazy_ = std::make_unique<std::once_flag>();
+        return;
+    }
     provenance_ = whole.kind + "/" + whole.symbols_id + "/L" + std::to_string(whole.length);
     symbols_id_ = whole.kind + "/" + whole.symbols_id;
     // Several voices: the filters are made for one voice and judge each (see the header).
@@ -570,8 +583,44 @@ void FilterStack::settle() const
     if (lazy_) std::call_once(*lazy_, [this] { settle_now(); }); // (a default stack has nothing to settle)
 }
 
+namespace {
+
+// The ranker of a line of a range of lengths: the range's count, rank and unrank. It is not walked a symbol at a
+// time (its units are of several lengths), so next() and completions() other than the whole count throw.
+class RangeRanker final : public Ranker
+{
+public:
+    explicit RangeRanker(const RangeStack& r) : r_(r) { set_count(); }
+    uint32_t length() const override { return r_.max_length(); }
+    uint32_t base() const override { return r_.base(); }
+    State start() const override { return 0; }
+    State next(State, uint32_t) const override { throw std::logic_error("a line of a range of lengths is not walked a symbol at a time"); }
+    BigUint completions(State s, uint32_t remaining) const override
+    {
+        if (s == 0 && remaining == r_.max_length()) return r_.count();
+        throw std::logic_error("a line of a range of lengths is not walked a symbol at a time");
+    }
+    std::vector<uint32_t> unrank(const BigUint& k) const override { return r_.unrank(k); }
+    BigUint rank(std::span<const uint32_t> unit) const override { return r_.rank(unit); }
+
+private:
+    const RangeStack& r_;
+};
+
+} // namespace
+
 void FilterStack::settle_now() const
 {
+    if (range_)
+    {
+        if (range_->can_rank())
+        {
+            range_ranker_ = std::make_unique<RangeRanker>(*range_);
+            compact_ = range_ranker_.get();
+        }
+        else blocker_ = range_->compact_blocker();
+        return;
+    }
     const std::vector<Entry>& entries = entries_;
     struct
     {
@@ -725,6 +774,7 @@ int FilterStack::first_failure_at(std::span<const uint32_t> unit, const BigUint&
 
 int FilterStack::first_failure(std::span<const uint32_t> unit) const
 {
+    if (range_) return range_->first_failure(unit);
     if (filters_.empty()) return -1;
     if (by_place_) throw std::invalid_argument("a degree window on this line judges a unit by its place on the line: first_failure_at");
     if (up_to_length_)
@@ -777,6 +827,7 @@ double FilterStack::table_bytes() const
     settle();
     // The one filter that ranks the stack, or the plugins merged (with not-written or without), as
     // worked out in settle; where nothing ranks it, the largest any filter's table would need.
+    if (range_) return range_->table_bytes();
     if (table_bytes_ > 0 || compact_) return table_bytes_;
     double most = 0;
     for (const auto& f : filters_) most = std::max(most, f->table_bytes());
