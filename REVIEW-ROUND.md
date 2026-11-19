@@ -414,7 +414,15 @@ run before a release package, and after each of the three reviews. Each batch is
     letters, not-an-item over pages of two lengths against every file of up to 2 bytes `[01]`; on the CLI, a bare
     page (1-32) and a padded one (5-32, "hi   ") warp and read back byte for byte, and the fixed line as before.
     Lines of one length are unchanged: nothing on the packing path moves.
-  - [ ] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
+  - [x] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
+    *Built (19 November 2026):* guided-range-v1 (SPECIFICATIONS 4.2.3): one step more, first, chooses the length, an
+    equal share to each length with a unit (a survivor, sieved), then the page's own guided-ac-v1 steps, its arc scaled
+    out to 16 (MAX + 1) bits; naming the length costs about 5 bits on 1 to 32, and a page pays nothing for padding
+    ("welcome to the sieve" 44 bits, against 56 padded to 32). Sieved by each length's stack, so compact's guided view
+    works on a range; a degree window (a stretch of the whole range) leaves no guided order within each length and
+    says so. The oracle's guided_range_code and 46 vectors (ranges 1-32, 1-3, 5-8, 19-21), agreed by the C++ `[01]` +
+    `[11]`; every page of 1 to 3 letters tiles the line in order, plain and sieved two ways, each read back from its
+    address `[01]`; CI step 02 pins the greeting's guided address. Lines of one length are guided-ac-v1 as before.
   - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
     old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.
   - [ ] O8. Seeds, studied (Edward, 19 November 2026: "a guided sweep of a small number of seeds at fractional

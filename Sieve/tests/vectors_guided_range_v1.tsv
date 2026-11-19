@@ -1,0 +1,49 @@
+# sieve guided range conformance vectors v1 (guided-range-v1 over guided-ac-v1, sieve-charmodel-v1)
+# model sha256 dff72d8a00e53f08aaf273c23242e44785e121792f4d33a1b6335f45ef5dd4a3
+# kind	min	max	unit	bits	address
+code	1	32	welcome to the sieve	44	9fc46a578d1
+code	1	32	it was the best of times	48	bc8491638035
+code	1	32	hi	13	0c08
+code	1	32	qzxj	65	1e1b87ffdb545c9e8
+code	1	32	a	10	01c
+code	1	32	 	8	00
+code	1	32	cnxrcmkuvtpmvxqroyjlkj	281	aa40ffe7cf2b9094e27ec05012490817426288944f847d102149df973246c0ba6fe9998
+code	1	32	lasidvtldqyyzpuznshtwobo	253	bcb120aa259395eafd11fe066ebb9dba99b1b37cc087ef7a6f89c805b4434428
+code	1	32	hwdp	52	1c24cfeca602d
+point	1	32	 	-	0
+point	1	32	herefore herod which hero spe	-	e4
+point	1	32	n a jo	-	2d11
+point	1	32	to	-	0f654a290
+point	1	32	n the silk but he beginning down	-	fd272e5cb3fb9c70a174
+point	1	32	 sugar louisa spanish cof	-	c11c92db4aa902734b6026ede633b92660c2f0e0e349f3b758f2c27abc496a7ac489cc65ea3be9d1f02ef56845a15e4c9ad13574a1e7c1672eef994cab60571da142c4
+code	1	3	hi	10	804
+code	1	3	a	7	12
+code	1	3	 	4	0
+code	1	3	ldp	28	dcf790f
+code	1	3	y	8	54
+code	1	3	 im	15	b116
+point	1	3	e	-	2
+point	1	3	 g	-	5a
+point	1	3	 a 	-	aabd
+point	1	3	 	-	091ed2ba3
+point	1	3	t	-	4c9b5a995c4e5c53db78
+point	1	3	he 	-	d48422fbbe01905ff6
+code	5	8	lshikw	56	66f2fdd9188aff
+code	5	8	viskcv	63	7db37e418b0797b2
+code	5	8	rxwgwh	71	73af6e20d8e015cff4
+point	5	8	       	-	8
+point	5	8	that 	-	39
+point	5	8	the t	-	39d2
+point	5	8	forth	-	1c3878ab2
+point	5	8	your 	-	3fe3554ce94f36712b09
+point	5	8	 to ou	-	4abf5af8873da286f0f3f86aeb217a1c3d249d
+code	19	21	welcome to the sieve	41	a82f70cc1d0
+code	19	21	c zxtznbhsbsaamqbzie	221	6c716353aeed28ffd04b96259473aff06e8f77d579a943696a66ffc8
+code	19	21	gbgfugvwqih jxj lymbi	230	d118dcebf93376c4aebb78e18bb1b16954116568c9151cd92048921cd4
+code	19	21	lphpujetrmjkoxxsbmi	200	33e3cb3cefc34dff98e32bb6e5ed6efef46e1f800e2cd6115f
+point	19	21	day and dome of you 	-	7
+point	19	21	nly pervading with a	-	8f
+point	19	21	 before and in town	-	0225
+point	19	21	diers stroke well a	-	1b1c0b3b5
+point	19	21	 father found that co	-	aec0b19550d624557051
+point	19	21	o it came to stay yet	-	e5c4b74afb930753f14d8371cd46e8a622d41c28784a1aabecc3991f1b1e228598fce8a40aa5bbdaf72996e13c

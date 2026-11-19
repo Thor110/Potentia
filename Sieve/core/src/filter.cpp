@@ -602,6 +602,8 @@ public:
     }
     std::vector<uint32_t> unrank(const BigUint& k) const override { return r_.unrank(k); }
     BigUint rank(std::span<const uint32_t> unit) const override { return r_.rank(unit); }
+    uint32_t min_length() const override { return r_.min_length(); }
+    const Ranker* at_length(uint32_t length) const override { return r_.length_ranker(length); }
 
 private:
     const RangeStack& r_;

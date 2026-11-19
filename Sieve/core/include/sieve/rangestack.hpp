@@ -37,6 +37,10 @@ public:
     uint32_t min_length() const { return min_; }
     uint32_t max_length() const { return max_; }
     uint32_t base() const { return base_; }
+    // The ranker of one length's survivors (null: no filter at that length, so every unit of it survives), for the
+    // guided order within each length (list O5). Where a degree window is ticked, which keeps a stretch of the whole
+    // range rather than of each length, there is none: it throws.
+    const Ranker* length_ranker(uint32_t length) const;
     // The memory the lengths' stacks' counts need: the most any one of them does.
     double table_bytes() const;
     const std::string& filter_name(size_t i) const { return names_[i]; }

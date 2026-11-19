@@ -122,13 +122,14 @@ Line make_line(const Args& a)
         if (min_length > length) throw std::invalid_argument("--min-length is more than --length");
         Line line{kind, &alpha, canon_version_from_string(a.get("canon", "v2")), {},
                   min_length < length ? Space(alpha, min_length, length, key) : Space(alpha, length, key), nullptr, {}};
-        // The guided line walks a page one letter at a time at one length; a range of lengths has none yet (list O5).
-        if (a.get("model") != "none" && !line.space.is_range())
+        if (a.get("model") != "none")
         {
             const LoadedModel m = resolve_model(a.get("model"), alpha.id());
             if (m.model)
             {
-                line.guided = std::make_shared<const GuidedLine>(m.model, line.space.unit_length());
+                // (A range of lengths: guided-range-v1, the lengths in turn, each in its own guided order.)
+                line.guided = line.space.is_range() ? std::make_shared<const GuidedLine>(m.model, line.space.min_length(), line.space.unit_length())
+                                                    : std::make_shared<const GuidedLine>(m.model, line.space.unit_length());
                 line.model_id = m.id;
             }
         }

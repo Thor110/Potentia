@@ -22,6 +22,7 @@ python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
 python sieve_ref.py image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
 python sieve_ref.py cipher-vectors | diff - ../tests/vectors_cipher_v1.tsv
 python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+python sieve_ref.py guided-range-vectors | diff - ../tests/vectors_guided_range_v1.tsv
 python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
 python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
 python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv

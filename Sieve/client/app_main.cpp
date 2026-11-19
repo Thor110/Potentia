@@ -158,7 +158,7 @@ const char* kUsage =
     "                      video, movies, models, worlds, ai or binary\n"
     "  --length L          text: characters per book (default 32)\n"
     "  --min-length M      text: pages of every length from M to L, the shorter first (default L:\n"
-    "                      one length; no guided ordering on such a line yet)\n"
+    "                      one length)\n"
     "  --alphabet ID       text: lower27 (default), babel29, ascii95\n"
     "  --canon v2|v1       text: warp rules (default v2)\n"
     "  --image-width W  --image-height H  --image-palette ID    image line (10, 10, mono)\n"

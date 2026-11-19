@@ -19,6 +19,8 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 - [A game archive: MAPS.WoW](#a-game-archive-mapswow)
 - [A game's release: WoWRevived](#a-games-release-wowrevived)
 - [A game engine: ALTEngine](#a-game-engine-altengine)
+- [A game texture: Ruler01.tga](#a-game-texture-ruler01tga)
+- [A game's files: The War of the Worlds](#a-games-files-the-war-of-the-worlds)
 - [A million digits of pi](#a-million-digits-of-pi)
 - [A book: Don Quixote](#a-book-don-quixote)
 - [Photographs (JPEG)](#photographs-jpeg)
@@ -487,6 +489,58 @@ SHA-256.
 - **Installing:** mixed programs decode as slowly as they were coded, so most of the 14.8 s is
   theirs.
 - **The File Locator's own 7z** (LZMA2 9e, one stream) made 7,943,117; the `.sieve` is 7.53% under it.
+
+## A game texture: Ruler01.tga
+
+`Ruler01.tga`, a texture from *Star Wars: Knights of the Old Republic II*: an uncompressed TGA of 256 by 256
+pixels at 32 bits a pixel, 262,162 bytes. A small example of what a game's own textures could be shipped as, and
+opened as, with Sieve in its engine. Edward made `Ruler01.simage` with Sieve 0.13.79 in the picture viewer (its S
+key, Prioritise Decoding Speed); the same file was made again with the 19 November 2026 build, byte for byte the same
+size, and the other rows were made there with `sieve locate --installer` at each priority. Every `.sieve` installs
+the TGA back byte for byte, checked against its SHA-256. The 7z is 7-Zip 23.01 at `-mx9`, the zip Info-ZIP at `-9`.
+
+| | Bytes | Ratio | Of the file | Against 7z |
+| :--- | ---: | ---: | ---: | ---: |
+| `Ruler01.tga` | 262,162 | | | |
+| `Ruler01.zip` | 79,330 | 3.30:1 | 30.26% | +47.78% |
+| `Ruler01.7z` | 53,681 | 4.88:1 | 20.48% | |
+| **`Ruler01.simage`** (Prioritise Decoding Speed; Balanced and Speed the same, 53,502 as a `.sieve`) | **53,498** | **4.90:1** | **20.41%** | **−0.34%** |
+| **`.sieve`, Size** | **45,500** | **5.76:1** | **17.36%** | **−15.24%** |
+
+- **What carries it:** under Balanced, Speed and Prioritise Decoding Speed the texture's bytes are one LZMA2 stream
+  (`raw`); under Size they are mixed (`mix4`, 45,419 bytes of code), 15% smaller and slower to decode, which
+  Balanced did not choose for it.
+- **Opening it** (`tools/time_open_image.py`: each viewer run from start to its first screenshot, the whole program,
+  10 runs, the median):
+
+| | Edward's machine (Windows), 0.13.79 | Linux, 4 logical processors, 19 November 2026 build |
+| :--- | ---: | ---: |
+| `sieve-view Ruler01.tga` | 301.5 ms | 42.9 ms |
+| `sieve-view Ruler01.simage` | 316.4 ms | 42.8 ms |
+| the difference: decoding the `.simage` | 14.9 ms (4.9%) | under the runs' noise |
+| `sieve-view` the Size `.sieve` | | 294.1 ms |
+| `sieve install Ruler01.simage` (put back, checked, written) | 315.8 ms | about 150 to 180 ms |
+
+  Almost all of a viewer run is the program starting and its window opening; the `.simage` adds the LZMA2
+  decoding of 53 KB, which a person does not see. The Size `.sieve`, 15% smaller, takes about a quarter of a second
+  more to open on the Linux machine: mixing decodes as slowly as it codes.
+
+## A game's files: The War of the Worlds
+
+Four files from *Jeff Wayne's The War of the Worlds*, `.WOF` files picked at random, each made into its own
+`.sieve`, zip and 7z on Edward's machine on 19 November 2026, with Sieve 0.13.79 (each file alone; the times
+were not taken down).
+
+| File | Bytes | zip | 7z | `.sieve` | `.sieve` against 7z |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| `AA_gu_1.WOF` | 27,127 | 3,639 | 2,991 | **2,791** | **−6.69%** |
+| `FIGHT_2.WOF` | 101,628 | 26,915 | 22,841 | **22,382** | **−2.01%** |
+| `FIGHT_3.WOF` | 104,663 | 28,025 | 23,974 | **23,496** | **−1.99%** |
+| `TELEPA_3.WOF` | 79,714 | 11,217 | 9,152 | **8,665** | **−5.32%** |
+| All four | 313,132 | 69,796 | 58,958 | **57,334** | **−2.75%** |
+
+Of the files, all four together: zip 22.29% (4.49:1), 7z 18.83% (5.31:1), the `.sieve` files 18.31% (5.46:1).
+The `.sieve` is the smallest of the three for every file; the zip is 16.90% to 22.56% over the 7z.
 
 ## A million digits of pi
 

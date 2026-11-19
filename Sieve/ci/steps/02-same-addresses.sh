@@ -79,3 +79,7 @@ for m in positional scrambled; do
   test "$($exe read --min-length 5 --length 32 --mode $m "$a" | tr -d '\r')" = "hi   "
 done
 $exe warp --min-length 1 --length 32 --mode positional "welcome to the sieve" | tr -d '\r' | q "^  positional  0000000000000007af91537105fe1b722177727$"
+# ...and in guided order (guided-range-v1, list O5): the lengths in turn, each in its own guided order; the greeting
+# as a page of its own 20 letters takes 44 bits, read back exactly (tests/vectors_guided_range_v1.tsv).
+$exe warp --min-length 1 --length 32 --mode guided "welcome to the sieve" | tr -d '\r' | q "^  guided      9fc46a578d1$"
+test "$($exe read --min-length 1 --length 32 --mode guided 9fc46a578d1 | tr -d '\r')" = "welcome to the sieve"

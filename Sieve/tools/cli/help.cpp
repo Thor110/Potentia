@@ -48,8 +48,8 @@ const Option kLineOptions = {
     "line options",
     "text   --length L (required)  --alphabet SPEC (lower27)  --canon v2|v1\n"
     "       --model ID|PATH|none  (guided ordering; default: the alphabet's default model)\n"
-    "       --min-length M (L): pages of every length from M to L, the shorter first (no guided\n"
-    "       ordering yet)\n"
+    "       --min-length M (L): pages of every length from M to L, the shorter first (guided:\n"
+    "       the lengths in turn, each in its own guided order)\n"
     "image  --width W (10)  --height H (10)  --palette mono|ega16|rgb332|rgb24 (mono)\n"
     "       --fit levels|average (levels): how a picture from a file is fitted (see help lines)\n"
     "audio  --length N note events (16)  --note-set notes104|notes2|notes3|pcm (notes104)\n"

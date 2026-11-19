@@ -148,7 +148,7 @@ Every unit on a line has exactly one address, and every address decodes to exact
   In the hallway (as built, list O4; `--min-length`, the setup menu's rows come with O6) the pages line may be such a
   space. Its titled space's content is the page's place, its shape `lower27/L1-32`; titles and the books' pages stay
   at the line's longest length (`MAX`). Its filters are counted and ranked over the whole range (list O3), so compact
-  and full work on it; guided order does not yet (O5). A page's file is exactly its text at its own length, so a file
+  and full work on it, and guided order too (§4.2.3). A page's file is exactly its text at its own length, so a file
   is a page (`item_of`, not-an-item-v1, the File Locator) when it is the text of `MIN` to `MAX` symbols of the
   alphabet, byte for byte; not-an-item-v1 sets aside the pages of every length of the range.
 
@@ -185,6 +185,19 @@ The unit's arc is `[low_L, low_L + w_L)` in `[0, 2^S)`, `S = 16·L`. The arcs of
 - **Point.** Any binary fraction in `[0, 1)`. Every point lies in exactly one arc, so every point decodes to exactly one unit.
 - **Address.** The shortest aligned block `[m/2^b, (m+1)/2^b)` that fits inside the unit's arc (the lowest, if two fit), written as `m/2^b` in `⌈b/4⌉` hexadecimal fraction digits. Then `−log2 P(u) ≤ b < −log2 P(u) + 2`: the address length is the unit's information content to within two bits, and the addresses form a prefix code. Units and addresses are in one-to-one correspondence; any other hex string is still a valid point, which reads the unit whose arc contains it.
 - **Example.** `"it was the best of times"` at `L = 32`: raw 152 bits, guided `90922c700685e28` (58 bits, 1.81 bits/char).
+
+#### 4.2.3 A range of lengths (`guided-range-v1`, as built, list O5)
+
+On a line of every unit of `MIN` to `MAX` symbols (§4.1) the code takes one step more, first, which chooses the length.
+Its table gives each length that has a unit (on a sieved line, a survivor) an equal share, `⌊T/n⌋` of the `n` such
+lengths, the `T − n⌊T/n⌋` left over one each to the shortest, and a length with none 0, in length order. Then the
+unit's own steps as above (sieved by that length's stack, §9), and the arc is scaled out by `T^(MAX−L)`, so the arcs
+of every unit of the range tile `[0, 2^S)`, `S = 16·(MAX+1)`; addresses and points are as above. The line is the
+lengths in turn, shortest first, each in its own guided order, and naming the length costs about `log2 n` bits (5 on a
+line of 1 to 32). A page keeps its own length, so it pays nothing for padding: `"welcome to the sieve"` on 1 to 32 is
+`9fc46a578d1` (44 bits), where on the line of 32 it is a padded page of 56. With `MIN = MAX` the line is
+`guided-ac-v1`, every address unchanged. A degree window, which keeps a stretch of the whole range, leaves no guided
+order within each length (§9). The oracle's `guided_range_code` and `tests/vectors_guided_range_v1.tsv` fix it.
 
 ### 4.3 Determinism
 

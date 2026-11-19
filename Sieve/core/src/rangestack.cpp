@@ -77,6 +77,17 @@ RangeStack::RangeStack(const FilterLine& line, const std::vector<FilterStack::En
     lazy_ = std::make_unique<std::once_flag>();
 }
 
+const Ranker* RangeStack::length_ranker(uint32_t length) const
+{
+    if (length < min_ || length > max_) throw std::invalid_argument("a length outside the range");
+    if (!windows_.empty()) throw std::invalid_argument("a degree window keeps a stretch of the whole range: no guided order within each length");
+    const FilterStack& st = stacks_[length - min_];
+    if (st.empty()) return nullptr;
+    const Ranker* r = st.ranker();
+    if (!r) throw std::invalid_argument("at " + std::to_string(length) + " symbols: " + st.compact_blocker());
+    return r;
+}
+
 double RangeStack::table_bytes() const
 {
     double most = 0;

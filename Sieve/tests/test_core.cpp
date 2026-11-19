@@ -7016,6 +7016,105 @@ void test_range_stack()
     }
 }
 
+// The guided order on a line of a range of lengths (guided-range-v1, list O5): the oracle's vectors; every unit of 1 to
+// 3 letters, its arc tiling the line in order (the lengths in turn, each in its guided order) and read back from its
+// address; and sieved, by a stack on the range, its survivors' arcs tiling the line and a compact line's guided view.
+void test_guided_range(const std::string& dir)
+{
+    const auto model = std::make_shared<const CharModel>(CharModel::load_file(dir + "../data/models/gutenberg-lower27-o5.model"));
+    const Alphabet& a = alphabet_by_id("lower27");
+    {
+        std::ifstream in(dir + "vectors_guided_range_v1.tsv");
+        CHECK(bool(in));
+        std::string line;
+        std::getline(in, line);
+        std::getline(in, line);
+        CHECK(line == "# model sha256 " + model->sha256());
+        std::map<std::pair<uint32_t, uint32_t>, std::unique_ptr<GuidedLine>> lines;
+        int n = 0;
+        while (std::getline(in, line))
+        {
+            if (line.empty() || line[0] == '#') continue;
+            std::vector<std::string> f;
+            std::stringstream ss(line);
+            std::string x;
+            while (std::getline(ss, x, '\t')) f.push_back(x);
+            CHECK(f.size() == 6);
+            if (f.size() != 6) continue;
+            const uint32_t lo = uint32_t(std::stoul(f[1])), hi = uint32_t(std::stoul(f[2]));
+            auto& g = lines[{lo, hi}];
+            if (!g) g = std::make_unique<GuidedLine>(model, lo, hi);
+            std::vector<uint32_t> unit;
+            for (char c : f[3]) unit.push_back(*a.digit_of(char32_t(c)));
+            if (f[0] == "code")
+            {
+                const auto c = g->code(unit);
+                CHECK(std::to_string(c.bits) == f[4]);
+                CHECK(c.hex == f[5]);
+            }
+            CHECK(g->unit_at(g->point_of(f[5])) == unit);
+            ++n;
+        }
+        std::cout << "guided range vectors checked: " << n << "\n";
+        CHECK(n == 46);
+    }
+    // Every unit of 1 to 3 letters, in place order: arcs that meet end to end from 0 to 2^S, each read back.
+    static const TestResources none(nullptr, model);
+    const Space sp(a, 1, 3, "sieve");
+    const uint64_t places = 27 + 729 + 19683;
+    auto tiles = [&](const GuidedLine& g, const std::function<bool(const std::vector<uint32_t>&)>& kept) {
+        BigUint at;
+        bool ok = true;
+        uint64_t k = 0;
+        for (uint64_t p = 0; ok && p < places; ++p)
+        {
+            const auto u = sp.unit_at_place(BigUint(p));
+            if (!kept(u))
+            {
+                ok = throws([&] { (void)g.interval(u); });
+                continue;
+            }
+            const auto iv = g.interval(u);
+            ok = iv.low == at && !iv.width.is_zero() && g.unit_at(iv.low) == u && g.unit_at(g.code_of(iv).point) == u;
+            at = iv.low;
+            at += iv.width;
+            ++k;
+        }
+        BigUint end(1);
+        end <<= g.scale_bits();
+        return ok && at == end && k > 0;
+    };
+    {
+        const GuidedLine g(model, 1, 3);
+        CHECK(g.scale_bits() == 64 && g.is_range());
+        CHECK(tiles(g, [](const std::vector<uint32_t>&) { return true; }));
+    }
+    FilterLine fl;
+    fl.kind = "text", fl.symbols_id = a.id(), fl.base = 27, fl.length = 3, fl.min_length = 1, fl.alphabet = &a;
+    const FilterSpec* run = find_filter("max-run-v1");
+    const FilterSpec* pat = find_filter("not-a-pattern-v1");
+    CHECK(run && pat);
+    if (!run || !pat) return;
+    for (const auto& entries : std::vector<std::vector<FilterStack::Entry>>{{{run, {{"max_run", "1"}}}}, {{pat, {}}}})
+    {
+        const FilterStack st(fl, entries, none);
+        const Ranker* r = st.ranker();
+        CHECK(r != nullptr);
+        if (!r) continue;
+        const GuidedLine g(model, *r);
+        CHECK(tiles(g, [&](const std::vector<uint32_t>& u) { return st.passes(u); }));
+        const CompactLine cl(*r, "sieve", st.id(), model);
+        CHECK(cl.guided() && cl.guided()->is_range() && cl.guided()->code(digits27("ab")).hex == g.code(digits27("ab")).hex);
+    }
+    // a degree window keeps a stretch of the whole range: no guided order within each length
+    {
+        const FilterStack st(fl, {{run, {{"max_run", "1"}}}, {find_filter("degree-window-v2"), {{"from", "10"}, {"width", "100"}}}}, none);
+        CHECK(st.ranker() && throws([&] { (void)GuidedLine(model, *st.ranker()); }));
+    }
+    // a line of one length is guided-ac-v1, as before
+    CHECK(GuidedLine(model, 3).scale_bits() == 48);
+}
+
 // The join filters (list N5-14): join-leap-v1 and join-cut-v1 judge only where one part of a joined unit meets the
 // next, and count and rank: against every unit of small joined lines, and over two voices.
 void test_join_filters()
@@ -11339,6 +11438,7 @@ void run_all(int argc, char** argv)
         RUN(test_cipher_vectors(dir + "vectors_cipher_v1.tsv"));
         PART("models");
         RUN(test_guided_vectors(dir));
+        RUN(test_guided_range(dir));
         PART("filters");
         RUN(test_filters(dir));
         RUN(test_z_filters());

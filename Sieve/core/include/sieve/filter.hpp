@@ -124,6 +124,10 @@ public:
     virtual bool alive(State s, uint32_t remaining) const { return !completions(s, remaining).is_zero(); }
 
     const BigUint& count() const { return count_; }                  // survivors at this length
+    // A ranker over a range of lengths (FilterStack's on a range line, list O5): its shortest length, and the ranker
+    // of one length's units (null: every unit of that length survives). A ranker of one length is its own.
+    virtual uint32_t min_length() const { return length(); }
+    virtual const Ranker* at_length(uint32_t) const { return this; }
     // The generic walks below work for every ranker; a ranker may override them with a faster
     // method that gives the same answers (key-v1 ranks as a plain base-a number).
     virtual std::vector<uint32_t> unrank(const BigUint& k) const;     // k < count()

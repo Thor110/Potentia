@@ -32,6 +32,14 @@
 // applied to the live symbols. The arcs then tile [0, 1) with survivors only, each as wide as
 // the model finds it likely among the survivors that share its beginning, and a survivor's
 // address is never longer than its unsieved one by more than the rounding.
+//
+// A range of lengths ("guided-range-v1", list O5; sieve/space.hpp's range space): every unit of MIN to MAX symbols.
+// The code takes one step more, first, which chooses the length: its table gives each length that has a unit (on a
+// sieved line, a survivor) an equal share, floor(T / n) of the n such lengths, the T - n floor(T / n) left over one each
+// to the shortest, and a length with none 0, in length order. Then the unit's own symbols, as above (sieved by that
+// length's ranker), and the arc is scaled out by T^(MAX - L), so the arcs of every unit of the range tile [0, 2^S),
+// S = 16 (MAX + 1). The line is the lengths in turn, shortest first, each in its own guided order; naming the length
+// costs about log2 n bits (5 on a line of 1 to 32). With MIN = MAX it is not used: the line is guided-ac-v1 as above.
 #pragma once
 
 #include "sieve/biguint.hpp"
@@ -39,6 +47,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -47,6 +56,7 @@ namespace sieve {
 
 inline constexpr const char* kGuidedVersion = "guided-ac-v1";
 inline constexpr const char* kSieveRestrictVersion = "sieve-restrict-v1";
+inline constexpr const char* kGuidedRangeVersion = "guided-range-v1";
 
 class Ranker;
 
@@ -59,11 +69,19 @@ public:
     // The sieved line of a stack's survivors. `sieve` must outlive this object and have the
     // same unit length and symbols as the model.
     GuidedLine(std::shared_ptr<const CharModel> model, uint32_t unit_length, const Ranker* sieve);
+    // A range of lengths (guided-range-v1), min_length below max_length; and its sieved line, `sieves` holding a
+    // ranker for each length from the shortest (null: every unit of that length survives), each to outlive this.
+    GuidedLine(std::shared_ptr<const CharModel> model, uint32_t min_length, uint32_t max_length,
+               std::vector<const Ranker*> sieves = {});
+    // The sieved line of a ranker, of one length or (Ranker::min_length below its length) of a range.
+    GuidedLine(std::shared_ptr<const CharModel> model, const Ranker& sieve);
 
     const CharModel& model() const { return *model_; }
     const std::shared_ptr<const CharModel>& model_ptr() const { return model_; }
     const Ranker* sieve() const { return sieve_; }
-    uint32_t unit_length() const { return length_; }
+    uint32_t unit_length() const { return length_; } // (a range's longest)
+    uint32_t min_length() const { return min_; }
+    bool is_range() const { return min_ < length_; }
     size_t scale_bits() const { return scale_; } // S = 16 L: points are integers in [0, 2^S)
 
     struct Interval
@@ -100,13 +118,17 @@ public:
 private:
     // The cumulative table for the next symbol after unit[0..i), in walk state `state` (sieved
     // lines). Returns the model's table, or `buf` filled with the restricted one.
-    const uint32_t* table(std::span<const uint32_t> history, uint64_t state, std::vector<uint32_t>& buf) const;
-    uint64_t advance(uint64_t state, uint32_t symbol) const;
+    const uint32_t* table(const Ranker* sieve, uint32_t length, std::span<const uint32_t> history, uint64_t state,
+                          std::vector<uint32_t>& buf) const;
+    const Ranker* sieve_of(uint32_t length) const { return is_range() ? sieves_.empty() ? nullptr : sieves_[length - min_] : sieve_; }
 
     std::shared_ptr<const CharModel> model_;
     const Ranker* sieve_ = nullptr;
     uint32_t length_;
+    uint32_t min_;
     size_t scale_;
+    std::vector<const Ranker*> sieves_; // a sieved range: each length's ranker
+    std::vector<uint32_t> lengths_;     // a range: the length step's cumulative table (lengths_[L - min] .. [L - min + 1])
 };
 
 } // namespace sieve

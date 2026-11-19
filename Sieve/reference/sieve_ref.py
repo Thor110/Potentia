@@ -27,6 +27,7 @@ bit for bit; the conformance vectors in tests/vectors_v1.tsv are generated here.
     python3 sieve_ref.py image-v2-vectors > ../tests/vectors_image_v2.tsv
     python3 sieve_ref.py cipher-vectors > ../tests/vectors_cipher_v1.tsv
     python3 sieve_ref.py guided-vectors > ../tests/vectors_guided_v1.tsv
+    python3 sieve_ref.py guided-range-vectors > ../tests/vectors_guided_range_v1.tsv
     python3 sieve_ref.py filter-vectors > ../tests/vectors_filters_v1.tsv
     python3 sieve_ref.py model-build --out /tmp/check.model   # rebuilds the pinned model
     python3 sieve_ref.py warp --length 32 "Some text"
@@ -1258,6 +1259,97 @@ def guided_unit_at(model, length, point):
         width *= f[s]
         assert low * scale <= point < (low + width) * scale
     return unit
+
+
+def guided_range_lengths(lo, hi, live=None):
+    """guided-range-v1's length step: an equal share of TOTAL to each length with a unit, the rest one each to the
+    shortest; a length with none 0. Returns the frequencies, length lo first."""
+    live = live or [True] * (hi - lo + 1)
+    n = sum(live)
+    share, extra = TOTAL // n, TOTAL - (TOTAL // n) * n
+    f = []
+    for ok in live:
+        x = 0
+        if ok:
+            x = share
+            if extra:
+                x, extra = x + 1, extra - 1
+        f.append(x)
+    return f
+
+
+def guided_range_code(model, lo, hi, unit):
+    """(point, bits) on a guided line of every unit of lo to hi symbols (guided-range-v1): the length step, the unit's
+    own steps (guided-ac-v1), the arc scaled out to S = 16 (hi + 1) bits, and its address as guided-ac-v1's."""
+    f = guided_range_lengths(lo, hi)
+    L = len(unit)
+    low, width = sum(f[:L - lo]), f[L - lo]
+    for i, s in enumerate(unit):
+        t = model.table(unit[:i])
+        low = low * TOTAL + sum(t[:s]) * width
+        width *= t[s]
+    low <<= 16 * (hi - L)
+    width <<= 16 * (hi - L)
+    S = 16 * (hi + 1)
+    high = low + width
+    for b in range(S, -1, -1):
+        m = -(-low // (1 << b))
+        if (m + 1) << b <= high:
+            return m << b, S - b
+    raise AssertionError("no block fits")
+
+
+def guided_range_unit_at(model, lo, hi, point):
+    """The unit whose arc on the guided range line holds the point."""
+    S = 16 * (hi + 1)
+    f = guided_range_lengths(lo, hi)
+    top, cum, L = point >> (S - 16), 0, lo
+    while cum + f[L - lo] <= top:
+        cum += f[L - lo]
+        L += 1
+    unit, low, width = [], cum, f[L - lo]
+    for i in range(L):
+        t = model.table(unit)
+        scale = TOTAL ** (hi - 1 - i)  # from depth i+2 (the length step and i+1 symbols) to points
+        c = 0
+        for s in range(model.n):
+            if (low * TOTAL + (c + t[s]) * width) * scale > point:
+                break
+            c += t[s]
+        unit.append(s)
+        low = low * TOTAL + c * width
+        width *= t[s]
+    return unit
+
+
+def cmd_guided_range_vectors(args):
+    """Guided addresses on lines of a range of lengths (guided-range-v1): codes, and points -> units."""
+    model = Model(args.model)
+    sym = alphabet(model.symbols)
+    print("# sieve guided range conformance vectors v1 (guided-range-v1 over guided-ac-v1, sieve-charmodel-v1)")
+    print(f"# model sha256 {model.sha256}")
+    print("# kind\tmin\tmax\tunit\tbits\taddress")
+    for lo, hi in ((1, 32), (1, 3), (5, 8), (19, 21)):
+        texts = ["welcome to the sieve", "it was the best of times", "hi", "qzxj", "a", " "]
+        g = stream(f"guided-range/{lo}-{hi}")
+        for _ in range(3):
+            n = lo + next(g) % (hi - lo + 1)
+            texts.append("".join(sym[next(g) % model.n] for _ in range(n)))
+        for t in texts:
+            if not lo <= len(t) <= hi:
+                continue
+            d = [sym.index(c) for c in t]
+            point, bits = guided_range_code(model, lo, hi, d)
+            assert guided_range_unit_at(model, lo, hi, point) == d
+            print(f"code\t{lo}\t{hi}\t{t}\t{bits}\t{guided_hex(point, bits, 16 * (hi + 1))}")
+        S = 16 * (hi + 1)
+        for k in range(6):
+            nh = [1, 2, 4, 9, 20, S // 4 + 2][k]
+            h = "".join("0123456789abcdef"[next(g) % 16] for _ in range(nh))
+            v = int(h, 16)
+            point = v << (S - 4 * nh) if 4 * nh <= S else v >> (4 * nh - S)
+            u = "".join(sym[s] for s in guided_range_unit_at(model, lo, hi, point))
+            print(f"point\t{lo}\t{hi}\t{u}\t-\t{h}")
 
 
 def cmd_model_build(args):
@@ -11746,6 +11838,8 @@ def main():
     s.add_argument("book")
     s = sub.add_parser("guided-vectors")
     s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
+    s = sub.add_parser("guided-range-vectors")
+    s.add_argument("--model", default="../data/models/gutenberg-lower27-o5.model")
     args = p.parse_args()
 
     if args.cmd == "vectors":
@@ -11780,6 +11874,8 @@ def main():
         cmd_model_build(args)
     elif args.cmd == "guided-vectors":
         cmd_guided_vectors(args)
+    elif args.cmd == "guided-range-vectors":
+        cmd_guided_range_vectors(args)
     elif args.cmd == "filter-vectors":
         cmd_filter_vectors(args)
     elif args.cmd == "compact-vectors":
