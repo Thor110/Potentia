@@ -615,8 +615,13 @@ $H --menu --filters optimise-mark.ini --press "Item:optimise,Return" --screensho
 grep -A1 "^\[image\]" optimise-mark.ini | q "mode = mark"
 grep -A1 "^\[audio\]" optimise-mark.ini | q "mode = compact"
 $H --metrics optimised.txt --filters optimise.ini > /dev/null
-q "^Books    : 99.999999999999...%   ( Kept : 10^-116.02 )$" optimised.txt
-q "^Image    : 99.999999999999...%   ( Kept : 10^-18.26 )$" optimised.txt
+# (list N: rows-alike-v1 on the pictures, books' covers too, and video-smooth-v2, which ranks, on the video line: it
+# was 10^-1.12 before, its filters about time judged only; the movies 10^-43.05)
+q "^Books    : 99.999999999999...%   ( Kept : 10^-116.67 )$" optimised.txt
+q "^Image    : 99.999999999999...%   ( Kept : 10^-18.90 )$" optimised.txt
+q "^Video    : 99.999999999999...%   ( Kept : 10^-14.95 )$" optimised.txt
+q "^Movies   : 99.999999999999...%   ( Kept : 10^-99.08 )$" optimised.txt
+grep -A2 "^\[video\]" optimise.ini | q "video-smooth-v2"
 test "$(grep -A2 '^\[image\]' elsewhere.ini | grep -c 'fractal-drawn' || true)" = 0
 # The same row sets the models line's fractal-modelled-v1 (list Z2): the charted fractals' lines as meshes,
 # found (include) or culled (exclude): 69 fitted at 8 vertices and 12 faces, each twice (its lacking faces

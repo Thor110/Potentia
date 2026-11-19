@@ -150,3 +150,26 @@ echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 260 = 53
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
 echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; the weighing's search took "
 echo "$out" | q "^  tailored audio: none, "
+# degree-window-v1 (sieve/window.hpp): one stretch of the loop by bearing. Alone, a whole degree keeps
+# 1/360 of the pages line; over words-v2, the tenth of a degree about "it was the best of times" (its
+# bearing 129.89) keeps the part of words-v2's survivors there, counted, ranked and read back in compact.
+printf '[text]\nmode = compact\nfilters = degree-window-v1\n[text.degree-window-v1]\nfrom = 1\nwidth = 1\n' > window1.ini
+printf '[text]\nmode = compact\nfilters = words-v2, degree-window-v1\n[text.words-v2]\ndictionary = scowl-en-60-names-v2\n[text.degree-window-v1]\nfrom = 1298\nwidth = 1\ndecimals = 1\n' > window2.ini
+$exe filters --filters window1.ini | tr -d '\r' | q "^survivors    17674126225377617662430079895940372863583934 "
+$exe filters --filters window1.ini | tr -d '\r' | q "keeps 10^-2.56 of the line"
+$exe filters --filters window2.ini | tr -d '\r' | q "^survivors    1585047662160081237252524 (exact; compact mode available)"
+out=$($exe warp --length 32 --filters window2.ini --compact "It was the best of times" 2>/dev/null | tr -d '\r')
+echo "$out"
+echo "$out" | q "survivor number 1486634149773833632027098 of 1585047662160081237252524"
+for m in positional scrambled guided; do
+  addr=$(echo "$out" | awk -v m=$m '/compact/ {seen = 1; next} seen && $1 == m {print $2; exit}')
+  test "$($exe read --length 32 --mode $m --filters window2.ini --compact "$addr" 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it was the best of times"
+done
+test "$($exe read --length 32 --mode positional --filters window2.ini --survivor 0 2>/dev/null | tr -d '\r' | sed 's/ *$//')" = "it"
+# sieve window: the page's bearing, and the windows about it: words-v2's survivors are thicker there than
+# an even spread (2.71 times in the whole degree), so no window writes it shorter.
+out=$($exe window --length 32 --filters words2.ini --decimals 2 "It was the best of times" | tr -d '\r')
+echo "$out"
+echo "$out" | q "bearing    129.89 degrees"
+echo "$out" | q "1 degree       \[129, 130)  *10^-2.12  *2.71   81.8   8.5   90.2  88.8"
+echo "$out" | q "best         no window: 88.8 bits against 88.8 (no window pays)"

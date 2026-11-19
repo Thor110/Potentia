@@ -82,7 +82,7 @@ bool better(const Verdict& v, const std::optional<Verdict>& best)
 // Whether a filter can count anywhere on the line (the ones the search tries, and the mask prices).
 bool can_count_on(const FilterSpec& f, const FilterLine& line)
 {
-    if (f.retired) return false;
+    if (f.retired || f.window) return false; // (a degree window is chosen by bearing, not searched here)
     const std::string how = f.counts_as_on ? f.counts_as_on(line, nullptr) : f.counts_as;
     return !(how.empty() && f.counts_as.empty());
 }

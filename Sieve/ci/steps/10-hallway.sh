@@ -2001,6 +2001,7 @@ printf '[text]\nmode = compact\nfilters = brackets-v1, pronounceable-v1, letter-
 build/sieve filters --line text --alphabet ascii96 --filter-memory 1 --filters overfilled.ini | tr -d '\r' | q "over the filter memory (1 MB); the largest automaton is brackets-v1's (121 states): they judge only$"
 # Lists Z8 and Z9: pages said aloud, capitals and brackets where writing puts them, words of a length;
 # pictures their own mirror image; films of the Game of Life and of a camera panning.
+# (Counted and judged until list N; since then each ranks, so the lines compact with them.)
 printf '[text]\nmode = mark\nfilters = pronounceable-v1\n' > spoken.ini
 printf '[text]\nmode = mark\nfilters = letter-case-v1\n' > case.ini
 printf '[text]\nmode = mark\nfilters = brackets-v1\n' > brackets.ini
@@ -2028,9 +2029,9 @@ printf '[image]\nmode = mark\nfilters = gradient-v1\n[image.gradient-v1]\nway = 
 build/sieve filters --line image --filters border.ini | tr -d '\r' | q "^share        the stack keeps 10^-10.54 of the line"
 build/sieve filters --line image --filters specks.ini | tr -d '\r' | q "^share        the stack keeps 10^-3.35 of the line"
 build/sieve filters --line image --filters gradient.ini | tr -d '\r' | q "^share        the stack keeps 10^-19.39 of the line"
-build/sieve filters --line image --filters mirror.ini | tr -d '\r' | q "^survivors    1125899906842624 (exact; judged)$"
-build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters life.ini | tr -d '\r' | q "^survivors    1267650600228229401496703205376 (exact; judged)$"
-build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters pan.ini | tr -d '\r' | q "^survivors    1361129467683753853853498429727072845824 (exact; judged)$"
+build/sieve filters --line image --filters mirror.ini | tr -d '\r' | q "^survivors    1125899906842624 (exact; compact mode available)$"
+build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters life.ini | tr -d '\r' | q "^survivors    1267650600228229401496703205376 (exact; compact mode available)$"
+build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters pan.ini | tr -d '\r' | q "^survivors    1361129467683753853853498429727072845824 (exact; compact mode available)$"
 # Version 2: each video turned, mirrored and inverted, every frame alike: 23,830.
 printf '[video]\nmode = compact\nfilters = fractal-moving-v2\n[video.fractal-moving-v2]\nkeep = include\n' > moving2-in.ini
 build/sieve filters --line video --width 10 --height 10 --frames 4 --palette mono --filters moving2-in.ini | tr -d '\r' | q "^survivors    23830 (exact; compact mode available)$"

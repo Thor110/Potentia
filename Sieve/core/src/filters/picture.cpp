@@ -9,6 +9,8 @@
 //   specks-v1        (list Q) no lone specks: every pixel shares its colour with a neighbour. An automaton of the
 //                    row above and which of its pixels are matched, where it fits.
 //   gradient-v1      (list Q) colours never falling (or never rising) along the rows, or down the columns.
+//   rows-alike-v1    (list N) each row differs from the row above in at most `changes` pixels: row-runs'
+//                    other half (row-runs is blind up and down). An automaton of the row above, where it fits.
 // Both rank exactly, with completions that depend on a few numbers rather than on which colours
 // were used, so neither steps through the palette symbol by symbol: rank and unrank are worked out
 // arithmetically at each pixel, which keeps 2^24 colours as cheap as two.
@@ -34,6 +36,8 @@
 
 #include "sieve/filter.hpp"
 #include "sieve/plugin.hpp"
+
+#include "changes_ranker.hpp"
 
 #include <algorithm>
 #include <map>
@@ -683,6 +687,89 @@ std::optional<Dfa> gradient_dfa(uint32_t B, uint32_t W, bool down)
 
 } // namespace
 
+// Each row differs from the row above in at most k pixels (rows-alike-v1, list N). Pixels are placed row by row; a
+// state holds the last W pixels (the row above the next pixel, then the new row so far), the column, the changes in
+// this row, and the row's place: on a picture whether the first row is done, on a video the row within its frame (a
+// frame's first row has no row above in it, and starts again). Built where its states fit.
+std::optional<Dfa> rows_alike_dfa(uint32_t B, uint32_t W, uint32_t rows_a_frame, uint32_t k)
+{
+    uint64_t combos = 1;
+    for (uint32_t i = 0; i < W; ++i)
+    {
+        combos *= B;
+        if (combos > kMaxDfaCells) return std::nullopt;
+    }
+    using Key = std::tuple<uint32_t, uint32_t, uint32_t, std::vector<uint32_t>>; // (column, row, changes, window)
+    std::map<Key, int32_t> id;
+    std::vector<Key> states{{0, 0, 0, {}}};
+    id[states[0]] = 0;
+    std::vector<int32_t> next;
+    for (size_t at = 0; at < states.size(); ++at)
+    {
+        next.resize((at + 1) * B, Dfa::kDead);
+        for (uint32_t c = 0; c < B; ++c)
+        {
+            auto [x, y, ch, win] = states[at];
+            if (y > 0 && win.front() != c && ++ch > k) continue; // (win.front(): the pixel above)
+            win.push_back(c);
+            if (win.size() > W) win.erase(win.begin());
+            if (++x == W)
+            {
+                x = 0, ch = 0;
+                y = rows_a_frame ? (y + 1) % rows_a_frame : 1;
+            }
+            Key key{x, y, ch, std::move(win)};
+            const auto [it, added] = id.emplace(key, int32_t(states.size()));
+            if (added)
+            {
+                states.push_back(std::move(key));
+                if (!cells_fit(states.size(), B)) return std::nullopt;
+            }
+            next[at * B + c] = it->second;
+        }
+    }
+    Dfa d;
+    d.base = B;
+    d.start = 0;
+    d.accept.assign(states.size(), 0);
+    for (size_t i = 0; i < states.size(); ++i) d.accept[i] = std::get<0>(states[i]) == 0; // (whole rows; the length is the line's)
+    d.next = std::move(next);
+    return minimise(d);
+}
+
+// rows-alike-v1 past where its automaton fits (large palettes): judged by its rule, counted and ranked by a
+// ChangesRanker (changes_ranker.hpp) whose parts are the rows, each picture's (each frame's) first row free.
+class RowsAlike : public Filter
+{
+public:
+    RowsAlike(const FilterLine& l, uint32_t k) : w_(l.width), h_(l.height), k_(k)
+    {
+        const size_t rows = l.length / w_;
+        std::vector<char> free(rows, 0);
+        for (size_t r = 0; r < rows; r += h_) free[r] = 1;
+        if (ChangesRanker::table_bytes(l.base, w_, k_) <= filter_memory()) // (a row's table: small but for the widest pictures)
+            ranker_ = std::make_unique<ChangesRanker>(l.base, w_, std::move(free), k_, false);
+        else set_table_bytes(ChangesRanker::table_bytes(l.base, w_, k_));
+        provenance_ = "changes=" + std::to_string(k);
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        for (size_t at = 0; at < unit.size(); at += size_t(w_) * h_)
+            for (uint32_t y = 1; y < h_; ++y)
+            {
+                uint32_t ch = 0;
+                for (uint32_t x = 0; x < w_; ++x)
+                    if (unit[at + size_t(y) * w_ + x] != unit[at + size_t(y - 1) * w_ + x] && ++ch > k_) return false;
+            }
+        return true;
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+
+private:
+    uint32_t w_, h_, k_;
+    std::unique_ptr<Ranker> ranker_;
+};
+
 void add_picture_filters(std::vector<FilterSpec>& out)
 {
     FilterSpec p;
@@ -791,6 +878,39 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         return make_dfa_filter(**d, l.length, std::string("way=") + (down ? "down" : "across"));
     };
     out.push_back(gr);
+
+    FilterSpec ra;
+    ra.id = "rows-alike";
+    ra.title = "rows-alike";
+    ra.description = "Pictures and video whose rows each differ from the row above in at most `changes` pixels: row-runs' other "
+                     "half, as row-runs is blind up and down. Noise changes nearly every pixel between rows (all but one in P); a "
+                     "drawing or a photograph changes few. On a video each frame's first row is free. Black-and-white pictures "
+                     "of 10 x 10: at 5 (the default), 10^-1.85 kept, and 14 of 20 real pictures cut to that size pass (at 3, "
+                     "10^-6.88 and 3 of 20: so small a picture changes much between rows). An automaton of the row "
+                     "above where it fits (black and white to about 20 pixels wide, a few colours narrower), counted, ranked and "
+                     "merging; past that, on any palette, counted and ranked by how many pixels each row has changed so far.";
+    ra.params = {{"changes", "the most pixels a row may differ from the row above", FilterParam::Kind::Integer, "5", 0, 64, 1, {}}};
+    auto rows_of = [](const FilterLine& l, uint32_t k) {
+        const uint32_t per = l.kind == "video" ? l.height : 0;
+        return kept_dfa("rows-alike/" + std::to_string(l.base) + "/" + std::to_string(l.width) + "/" + std::to_string(per) + "/" + std::to_string(k),
+                        [&] { return rows_alike_dfa(l.base, l.width, per, k); });
+    };
+    auto moving_picture = [](const FilterLine& l) {
+        return (l.kind == "image" || l.kind == "video") && l.width && l.height && l.base >= 2 && l.length % (uint64_t(l.width) * l.height) == 0;
+    };
+    ra.applies = [moving_picture](const FilterLine& l) { return moving_picture(l) && l.height >= 2; };
+    ra.counts_as = "automaton";
+    ra.counts_as_on = [own = ra.name(), rows_of](const FilterLine& l, const FilterValues* v) -> std::string {
+        const int64_t k = v ? param_int(*find_filter(own), *v, "changes") : int64_t(l.width);
+        return rows_of(l, uint32_t(std::min<int64_t>(k, l.width)))->has_value() ? "automaton" : "own";
+    };
+    ra.make = [own = ra.name(), rows_of](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const int64_t k = param_int(*find_filter(own), v, "changes");
+        const auto d = rows_of(l, uint32_t(std::min<int64_t>(k, l.width)));
+        if (!d->has_value()) return std::make_unique<RowsAlike>(l, uint32_t(std::min<int64_t>(k, l.width))); // (counted and ranked by its changes)
+        return make_dfa_filter(**d, l.length, "changes=" + std::to_string(k));
+    };
+    out.push_back(ra);
 }
 
 } // namespace sieve

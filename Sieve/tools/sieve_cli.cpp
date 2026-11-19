@@ -3102,6 +3102,110 @@ int cmd_check(const Args& a)
     return 0;
 }
 
+// A unit's bearing on its line, and the degree windows about it (degree-window-v1): for each
+// width (a whole degree, a tenth, ... down to --decimals), the window that holds the unit, how many
+// of the stack's survivors it keeps, and what the unit's address costs inside it plus naming the
+// window, against its address under the stack alone. A window pays only where the stack's
+// survivors are thinner about the unit than round the rest of the loop.
+int cmd_window(const Args& a)
+{
+    const std::string name = a.get("line", "text");
+    if (name == "books" || name == "binary") throw std::invalid_argument("'sieve window' takes the lines of digits (not --line " + name + ")");
+    const Line line = make_line(a);
+    const FilterConfig cfg = load_filter_config(a);
+    const LineFilters& lf = cfg.of(line.kind);
+    const WarpInput w = read_warp_input(line, a);
+    if (w.units.empty()) throw std::invalid_argument("no input to find the bearing of");
+    const uint32_t most = a.get_u32("decimals", 3);
+    if (most > 9) throw std::invalid_argument("--decimals must be 0..9");
+    const FilterLine fl = filter_line(line);
+    const FilterSpec* win = find_filter("degree-window-v1");
+    const FilterStack st = build_stack(fl, lf);
+    const BigUint all = BigUint::pow(fl.base, fl.length);
+    const Ranker* rk = st.empty() ? nullptr : st.ranker();
+    if (!st.empty() && !rk) throw std::invalid_argument("the stack cannot be counted, so no window over it can be: " + st.compact_blocker());
+    const BigUint count = rk ? rk->count() : all;
+    auto log2_of = [](const BigUint& x) { return x.is_zero() ? 0.0 : x.log10_approx() / std::log10(2.0); };
+    auto fixed = [](double x, int places) {
+        std::ostringstream o;
+        o << std::fixed << std::setprecision(places) << x;
+        return o.str();
+    };
+    print_header(line);
+    std::cout << "stack        " << (st.empty() ? std::string("(none ticked: every unit)") : st.provenance()) << "\n"
+              << "survivors    " << count.to_decimal() << " (" << fixed(log2_of(count), 1) << " bits a unit)\n";
+    for (size_t i = 0; i < w.units.size(); ++i)
+    {
+        const auto& u = w.units[i];
+        std::cout << "\nunit " << i + 1 << "/" << w.units.size() << "  " << preview(line, u) << "\n";
+        if (!st.empty() && !st.passes(u))
+        {
+            std::cout << "  the stack sets it aside: no window over the stack holds it\n";
+            continue;
+        }
+        const BigUint v = BigUint::from_digits(u, fl.base);
+        std::cout << "  bearing    ";
+        uint64_t whole = 360;
+        std::vector<uint64_t> at;
+        for (uint32_t d = 0; d <= most; ++d, whole *= 10)
+        {
+            BigUint q, r;
+            BigUint::divmod(BigUint::mul(v, BigUint(whole)), all, q, r);
+            at.push_back(q.is_zero() ? 0 : q.limbs()[0]);
+        }
+        {
+            std::string b = std::to_string(at[most]);
+            if (most > 0)
+            {
+                if (b.size() <= most) b.insert(0, most + 1 - b.size(), '0');
+                b.insert(b.size() - most, ".");
+            }
+            std::cout << b << " degrees\n";
+        }
+        std::cout << "  width          window                     kept of the stack         share  route  name  total  against\n";
+        const double alone = log2_of(count);
+        double best = alone;
+        std::string best_at = "no window";
+        whole = 360;
+        for (uint32_t d = 0; d <= most; ++d, whole *= 10)
+        {
+            LineFilters one = lf;
+            one.set_enabled(win->name(), true);
+            one.values[win->name()] = {{"from", std::to_string(at[d])}, {"width", "1"}, {"decimals", std::to_string(d)}};
+            const FilterStack ws = build_stack(fl, one);
+            const Ranker* wr = ws.ranker();
+            if (!wr) throw std::logic_error("a window over a stack that counts did not count");
+            const BigUint in = wr->count();
+            const double route = log2_of(in), naming = std::log2(double(whole)), total = route + naming;
+            // the window's share of the stack's survivors, against its share of the loop (1: as many as an even spread)
+            const double share = (count.is_zero() ? 0.0 : std::pow(10.0, in.log10_approx() - count.log10_approx())) * double(whole);
+            auto bound = [&](uint64_t x) {
+                std::string b = std::to_string(x);
+                if (d > 0)
+                {
+                    if (b.size() <= d) b.insert(0, d + 1 - b.size(), '0');
+                    b.insert(b.size() - d, ".");
+                }
+                return b;
+            };
+            const std::string range = "[" + bound(at[d]) + ", " + bound(at[d] + 1) + ")";
+            const std::string width = d == 0 ? "1 degree" : "1/" + std::to_string(whole / 360) + " degree";
+            const std::string kept = "10^" + fixed(in.log10_approx() - count.log10_approx(), 2);
+            std::cout << "  " << std::left << std::setw(15) << width << std::setw(27) << range << std::setw(26) << kept << std::right
+                      << std::setw(5) << fixed(share, 2) << "  " << std::setw(5) << fixed(route, 1) << "  " << std::setw(4) << fixed(naming, 1) << "  "
+                      << std::setw(5) << fixed(total, 1) << "  " << fixed(alone, 1) << "\n";
+            if (total < best)
+            {
+                best = total;
+                best_at = range + " at " + std::to_string(d) + " decimal" + (d == 1 ? "" : "s");
+            }
+        }
+        std::cout << "  best         " << best_at << ": " << fixed(best, 1) << " bits against " << fixed(alone, 1) << " ("
+                  << (best < alone ? fixed(alone - best, 2) + " bits saved)" : "no window pays)") << "\n";
+    }
+    return 0;
+}
+
 // The line's filters tailored to one unit of the input (cli/tailor.hpp): each filter's settings
 // searched for those that keep it and set aside the most, then the set of them that can be counted
 // together and leaves the fewest survivors. With --out, the settings file with this line's filters
@@ -4195,7 +4299,7 @@ bool is_command(const std::string& name)
 {
     return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "fractal" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
-           name == "filters" || name == "check" || name == "tailor" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
+           name == "filters" || name == "check" || name == "tailor" || name == "window" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
 
 } // namespace
@@ -4359,6 +4463,7 @@ int main(int argc, char** argv)
         if (a.command == "filters") return cmd_filters(a);
         if (a.command == "check") return cmd_check(a);
         if (a.command == "tailor") return cmd_tailor(a);
+        if (a.command == "window") return cmd_window(a);
         if (a.command == "bind") return cmd_bind(a);
         if (a.command == "unbind") return cmd_unbind(a);
         if (a.command == "locate") return cmd_locate(a);

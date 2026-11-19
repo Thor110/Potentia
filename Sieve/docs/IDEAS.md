@@ -10276,3 +10276,88 @@ do A then B?".
   0.5 GB a filter set at 229 characters), counts made on demand from the counting by sets (no tables, seconds
   to open each region), or the line's own order (counts with part of a ruleset fixed, which the counting by
   sets cannot give). The line hides what fails meanwhile.*
+
+**19.251 A filter for one degree (Edward, 18 November 2026).** His words: "imagine an automaton could just
+filter out any whole degrees worth it wants ... I would imagine a single filter that has the ability to exclude
+everything but whatever lies within a single chosen degree range 1-2, 1-5 etc ... this filter could work for all
+lines ... the result would be everything except the chosen degree is filtered and thus that chosen degree becomes
+the vast majority of the state space wrapping back around and providing more freedom/rotation/movement choices for
+the state space ... this way a massive amount of those simple filter combinations can be trialled to search for the
+minimum viable address and or just reduce the state space when required ... I don't like the idea of potentially
+filtering meaningful files but it could prove beneficial to the compression side of things so it might be
+worthwhile".
+- *Built (list N1):* `degree-window-v1`, on every line of digits (pages, pictures, melodies, sound, video, models,
+  the AI line; not the binary line, whose files have lengths of their own, nor the fractals, whose rulesets do).
+  It keeps the units whose bearing, floor(address x 360 x 10^d / units) with the address in positional order (the
+  bearing the hallway shows in raw positional mode), lies from `from` up to `from` + `width`, in whole degrees or
+  to d decimals (0 to 9): Edward's "1-2" is from 1, width 1, and "1-5" from 1, width 4. A `from` of 360 or more
+  goes round the loop to 0 again, and a window that would run past 360 stops there, so stepping either setting
+  in the filters window never makes a stack that cannot be built. It counts on top of whatever else is ticked: the stack's other filters are counted as they would be
+  without it, and a WindowRanker keeps the part of their survivors between its two bounds (their survivors under
+  each bound counted by walking the bound's digits), so the window never conflicts with anything and its
+  survivors fill the whole loop in compact, as Edward described. Two windows keep what both keep. A whole degree
+  alone keeps 10^-2.56 of the pages line (1/360); over words-v2 the tenth of a degree about "it was the best of
+  times" keeps 1,585,047,662,160,081,237,252,524 of words-v2's survivors. It is soft (it sets aside the
+  meaningful with the noise) and picks a stretch rather than setting aside noise, so X and OPTIMISE FILTERS leave
+  it alone, and tailoring does not search it (`sieve window` does, below).
+- *Measured (N2, `sieve window`): whether a window writes a unit shorter.* Naming a window of 1/(360 x 10^d) of
+  the loop costs log2(360 x 10^d) bits (8.5 for a whole degree, 18.5 for a thousandth); inside it the unit's
+  address is log2 of the survivors the window keeps. On a line with nothing else ticked the two cancel exactly:
+  on 1,881 pages of 32 letters from Don Quixote (`data/anchors/public-domain/pg996.txt`, 64,000 characters from
+  byte 336,000), no window at any width saved a bit. Over a stack (clean-data-v1 and letter-pairs-v1, 1,880 of
+  the pages kept), what the window keeps is the stack's survivors about the page, and there real pages sit where
+  the stack's survivors are thicker than an even spread: the window's share of them against its share of the
+  loop has a median of 1.09 at a whole degree, 1.13 at a tenth, 1.18 at a hundredth and 1.24 at a thousandth, so
+  on average each width loses (0.06, 0.11, 0.18 and 0.25 bits). The best of no window and the four widths saves
+  something on 461 of the 1,880 pages, 0.47 bits where it does, 0.116 bits a page over all, before the 2.3 bits
+  that saying which of the five was chosen costs. Over words-v2, "it was the best of times" sits where the
+  survivors are 2.71 times as thick as an even spread at a whole degree and 16.5 times at a hundredth (CI step
+  03).
+- *What that means.* A window can only gain where the filters' survivors are thinner about a file than round the
+  rest of the loop, and filters that work put their survivors where real files are, so real files tend to sit
+  where windows lose: the thicker share is the filters doing their job. Choosing among many windows, or many
+  simple combinations, costs log2 of how many there were to choose from, which on average is at least what the
+  best of them saves (as §16.8c and §19.94 found for a shift of the loop and for grids of degrees). So the window
+  is a way to make the space smaller when that is wanted (a stretch of the loop to walk, every unit in it on the
+  shelves), as Edward said, and not, measured, a way to write files shorter.
+
+**19.252 The night's filters, the rest (Edward, 18 November 2026: "work through the video filters and in general
+as many new automatons as you can come up with, with the aim of filtering out as much noise as possible").**
+- *The video line compacts (list N3).* Its filters about time compared each frame with the one before, so they were
+  counted but never ranked, and a stack with any of them could only mark or hide. Four now rank, each with a
+  ranker of its own, checked against every unit of small lines (pictures to 4 x 3, videos to 3 x 2 x 2 and
+  2 x 2 x 3, two to four colours), by their own rank and unrank and by the walk symbol by symbol. `life-causal-v1`,
+  `video-pan-v1` and `image-mirror-v1` leave each place free or forced by the places before it (the cell the rule
+  steps to, the pixel the scene brought along, the mirror's): two survivors first differ at a free place, so the
+  k-th survivor is k written in the free places, the forced ones filled in after. `video-smooth-v2` is v1 with the
+  still videos set aside too (a film that moves, smoothly; v1 retired for it, as the rule changed); at each pixel
+  one colour is the one before it and the rest are changes, so the ways to finish a unit depend only on how many
+  pixels the frame has changed so far and whether anything has moved yet, and it ranks by those counts (the same
+  ranker, every change allowed, ranks video-moves-v1 too; each builds its table only where the filter memory holds
+  it, and past that counts and judges as before). On the
+  video line's default (5 x 5 pixels, 8 frames, black and white): video-smooth-v2 keeps 10^-14.95,
+  life-causal-v1 10^-52.68 (2^25 films), video-pan-v1 10^-42.14; image-mirror-v1 keeps 10^-15.05 of 10 x 10
+  pictures. The Roundhay Garden Scene (1888, `data/anchors/public-domain/`), fitted to the line, passes
+  video-smooth-v2. Life, pan and mirror pick a kind of item, so X and OPTIMISE FILTERS leave them.
+- *rows-alike-v1 (list N4):* each row differs from the row above in at most `changes` pixels, a video's frames
+  each on their own: row-runs' other half (row-runs is blind up and down). An automaton of the row above, merging
+  with the others where it fits; past that (16 colours at 10 wide, rgb24) counted and ranked by how many pixels
+  each row has changed so far, by the same ranker as video-smooth-v2 (`changes_ranker.hpp`: parts of n places,
+  each free or within so many changes of the one before), its count on rgb24 10 x 10 checked against
+  P^10 g^9. Measured on 20 real pictures cut to 10 x 10 black and white (ten crops of the
+  Vitruvian drawing and ten frames of the Roundhay film, both in the public-domain anchors): their worst row
+  changed 2 to 8 pixels from the one above, so at 3 changes 3 pass and the line keeps 10^-6.88; at 4, 7 pass and
+  10^-3.81; at 5 (the default), 14 pass and 10^-1.85; at 6, 16 and 10^-0.74. So small a picture changes much
+  between rows, and the filter is weak there; it is stronger on wider pictures, where noise changes about half a
+  row and a drawing a few pixels.
+- *What OPTIMISE FILTERS now keeps (the setup menu's shapes):* the video line 10^-14.95, where it kept 10^-1.12
+  (video-smooth-v2 counts, where v1 judged only); the movies 10^-99.08 (10^-43.05); pictures 10^-18.90 (10^-18.26,
+  rows-alike ticked with the others); the books 10^-116.67 (10^-116.02, their covers); the tracks 10^-95.44, their
+  covers too.
+- *A fault found and fixed:* filters whose automata are made in code rather than read from a plugin file give
+  their settings alone as their provenance ("longest=6" is word-length-v2's and word-shape-v1's both, "changes=3"
+  row-runs' and rows-alike's), and the merges of a stack's automata were kept under those alone. So, in one
+  program, a stack of word-shape-v1 and few-values-v1 was counted with the merge already made for word-length-v2
+  and few-values-v1: a test written for it found a page the count kept that the filters did not. The merges are
+  now kept under each filter's name as well. The menus count many stacks in one program, so the hallway could have
+  shown such a count; `sieve` counts one stack a run and could not.

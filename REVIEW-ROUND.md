@@ -285,6 +285,60 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] M2-2. melody-cadence-v1 (a plugin, checked against the oracle `[11]`) and melody-contrary-v1 (judged on all
   voices at once, FilterSpec::whole_unit) `[01]` + `[07]`.
 
+### List N: the night's filters (Edward, 18 November 2026; IDEAS 19.251 and 19.252)
+
+- [x] N1. degree-window-v1: one stretch of any line of digits by bearing, counted over whatever else is ticked
+  (a WindowRanker over the stack's ranker), checked against every unit of small lines, alone, over plugins, two
+  windows at once, and two voices `[01]` + `[03]`.
+- [x] N2. `sieve window`: a unit's bearing and the windows about it, weighed (route in the window plus naming it,
+  against the route without one), measured on 1,881 pages of Don Quixote: no window pays on its own, and over a
+  stack real pages sit where survivors are thicker, so windows lose on average `[03]`.
+- [x] N3. Video filters that rank: life-causal-v1, video-pan-v1 and image-mirror-v1 (places free or forced),
+  video-smooth-v2 (v1 with still videos set aside, counted by changes so far), each checked against every unit of
+  small lines; the video line compacts `[01]` + `[03]`.
+- [x] N4. rows-alike-v1 (each row within `changes` pixels of the row above; row-runs' other half), an automaton,
+  measured on 20 real pictures from the public-domain anchors `[01]`. A fault found on the way and fixed: merges of
+  code-made automata kept under their settings alone, so two stacks could share a count (IDEAS 19.252) `[01]`.
+- [ ] N5. The rest, for the days after (Edward, 18 November 2026: "prepare a massive task list"):
+  - Degree windows
+    - [ ] N5-1. Hallway: a WINDOW HERE row (or key) that ticks degree-window-v1 at the bearing you stand on, a
+      degree wide, and a row to widen or narrow it; the readout says which stretch the line is.
+    - [ ] N5-2. A window across 0 degrees (350 to 10): two stretches, ranked as one (the lower first).
+    - [ ] N5-3. The binary line's window (its files have lengths of their own: the bearing of a file among all
+      files to the line's length) and the fractals line's (rulesets in the line's own order).
+    - [ ] N5-4. `sieve window` over many simple stacks at once, its search paid for (log2 of the choices), to
+      show in one table where a window ever pays; and the same for the books line.
+  - Video and pictures
+    - [x] N5-5. video-moves-v1 ranked: by the same ranker as smooth-v2, every change allowed and one needed.
+    - [x] N5-6. rows-alike-v1 counted and ranked on every palette (done with N4: the same ranker, the rows as its
+      parts).
+    - [ ] N5-7. Counting row-runs and rows-alike together on large palettes (both count by changes so far:
+      one ranker for the pair).
+    - [ ] N5-8. Video filters measured on the Roundhay Garden Scene cut many ways (clips, sizes, palettes), as
+      the pictures were.
+    - [ ] N5-9. A frame-to-frame filter that merges: smooth as an automaton on the smallest frames (2 x 2,
+      3 x 2), where its table fits.
+  - Sound
+    - [ ] N5-10. sound-envelope-v1 and sound-syllables-v1 ranked at any length (their counts already go block by
+      block: a walk sample by sample with the block's state can rank by those counts), so a second of sound
+      compacts with them.
+    - [ ] N5-11. melody-contrary-v1 counted (rules between voices: a walk over both voices' moves at once).
+  - Pages
+    - [ ] N5-12. Quotation marks spaced as prose spaces them (an opening mark after a space, a closing one before
+      a space or a mark), and a dialogue's turns (IDEAS 19.21), as automata on ascii96.
+    - [ ] N5-13. The `.obj` filter on the pages line (IDEAS 7.3) and its alphabet (7.4).
+    - [ ] N5-14. Join filters (IDEAS §13): filters that look only at the joins between a book's pages.
+  - Models and the AI line
+    - [ ] N5-15. More filters for the models line (no degenerate triangles, edges shared by two faces, a mesh that
+      closes), counted with the model rules.
+    - [ ] N5-16. Filters for the AI line's weights (their spread, their signs), measured on trained runs.
+  - Throughout
+    - [ ] N5-17. OPTIMISE FILTERS measured again on every line with list N's filters, the new shares in
+      STATISTICS.
+    - [ ] N5-18. An audit of every other cache kept by provenance (the plugin cache on disk, the tables), for the
+      fault list N4 found in the merges.
+    - [ ] N5-19. The manual: the degree window and `sieve window` in the filters chapter.
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 

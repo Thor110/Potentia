@@ -206,6 +206,10 @@ struct FilterSpec
     // rule between voices: melody-contrary-v1, two voices moving against each other). Made for the whole line.
     // Judged only: a filter of the voices together does not count through the voices as the others do.
     bool whole_unit = false;
+    // A degree window (degree-window-v1, sieve/window.hpp): keeps one stretch of the line's loop by bearing. It counts
+    // on top of whatever else is ticked, the stack's other filters counted as without it and the part of their
+    // survivors between its bounds kept, so it never conflicts with another filter and never stops a stack compacting.
+    bool window = false;
     // Hard or soft (docs/FILTER-PLUGINS.md §17): "hard" sets aside only noise, with no collateral
     // (structural and exclusion rules: content of another line, a re-encoding of the same mesh, a
     // pattern); "soft" may set aside things a person would keep (a dictionary, a model, a key, a
@@ -263,6 +267,7 @@ uint32_t line_voices(const FilterLine& l);
 // voices, and a ranker for one voice ranks the whole (VoicesRanker): the unit's rank is its
 // voices' ranks read as one number in base (one voice's count), voice 1 first. A filter marked whole_unit
 // is the exception: made for the whole line, it judges the whole unit once, all its voices together.
+// A degree window (FilterSpec::window) is counted last, over the rest of the stack (sieve/window.hpp).
 class FilterStack
 {
 public:
@@ -303,7 +308,7 @@ private:
     std::vector<std::unique_ptr<Filter>> filters_;
     std::vector<char> whole_; // (per filter: it judges the whole unit, FilterSpec::whole_unit)
     std::vector<std::string> names_;
-    uint32_t length_ = 0, voices_ = 1;
+    uint32_t length_ = 0, base_ = 0, voices_ = 1;
     bool up_to_length_ = false; // (FilterLine::up_to_length)
     // Compact, worked out once, when first asked for (settle()).
     std::vector<Entry> entries_;
@@ -315,6 +320,8 @@ private:
     mutable std::unique_ptr<Ranker> own_ranker_; // a stack of plugins with not-written: its ranker
     mutable std::shared_ptr<const Ranker> shared_ranker_; // plugins alone: their combined table, perhaps shared
     mutable std::unique_ptr<Ranker> voices_ranker_; // several voices: one voice's ranker, for them all
+    mutable std::unique_ptr<Ranker> full_ranker_;   // degree windows alone: every unit, for them to keep a stretch of
+    mutable std::unique_ptr<Ranker> window_ranker_; // degree windows: the part of the stack's survivors they keep
     mutable std::string blocker_;
     mutable double table_bytes_ = 0;
     std::string provenance_, id_;

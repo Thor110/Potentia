@@ -88,6 +88,7 @@ add_library(sieve_core STATIC
     core/src/filters/fractals.cpp
     core/src/filters/motion.cpp
     core/src/filters/pages.cpp
+    core/src/filters/window.cpp
     core/src/filters/statistics.cpp
     core/src/filters/text_m1.cpp
     core/src/guided.cpp

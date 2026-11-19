@@ -2888,7 +2888,7 @@ void test_z_filters()
         const FilterLine video{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
         BigUint moving = BigUint::pow(2, 400);
         moving -= BigUint::pow(2, 100);
-        CHECK(count(video, "video-moves-v1") == moving.to_decimal() + " judged");
+        CHECK(count(video, "video-moves-v1") == moving.to_decimal()); // (ranked since list N)
         // (5%: five pixels a frame; within five of one frame, 1 + 100 + ... + C(100, 5) = 79,375,496)
         BigUint smooth = BigUint::mul(BigUint::pow(2, 100), BigUint::pow(BigUint(79375496), 3));
         CHECK(count(video, "video-smooth-v1", {{"percent", "5"}}) == smooth.to_decimal() + " judged");
@@ -2954,9 +2954,9 @@ void test_z_filters()
         ImageFormat f;
         f.width = 10, f.height = 10, f.palette = &palette_by_id("mono");
         const FilterLine pic{"image", f.symbols_id(), 2, 100, nullptr, 10, 10, 1};
-        CHECK(count(pic, "image-mirror-v1") == BigUint::pow(2, 50).to_decimal() + " judged");
-        CHECK(count(pic, "image-mirror-v1", {{"axis", "both"}}) == BigUint::pow(2, 25).to_decimal() + " judged");
-        CHECK(count(pic, "image-mirror-v1", {{"axis", "turn"}}) == BigUint::pow(2, 50).to_decimal() + " judged");
+        CHECK(count(pic, "image-mirror-v1") == BigUint::pow(2, 50).to_decimal());
+        CHECK(count(pic, "image-mirror-v1", {{"axis", "both"}}) == BigUint::pow(2, 25).to_decimal());
+        CHECK(count(pic, "image-mirror-v1", {{"axis", "turn"}}) == BigUint::pow(2, 50).to_decimal());
         std::vector<uint32_t> face(100, 0);
         face[2 * 10 + 3] = face[2 * 10 + 6] = 1; // (two eyes, a mouth)
         for (int x = 3; x <= 6; ++x) face[7 * 10 + x] = 1;
@@ -2965,8 +2965,8 @@ void test_z_filters()
         ImageFormat vf = f;
         vf.frames = 4;
         const FilterLine video{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
-        CHECK(count(video, "life-causal-v1") == BigUint::pow(2, 100).to_decimal() + " judged");
-        CHECK(count(video, "video-pan-v1") == BigUint::pow(2, 130).to_decimal() + " judged");
+        CHECK(count(video, "life-causal-v1") == BigUint::pow(2, 100).to_decimal());
+        CHECK(count(video, "video-pan-v1") == BigUint::pow(2, 130).to_decimal());
         // (a blinker: three across, then three down, then across again)
         std::vector<uint32_t> blink(400, 0);
         for (int k = 0; k < 4; ++k)
@@ -3030,14 +3030,15 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 24); // (word-shape-v1, list P, the 24th: punctuation and letters-and-digits need marks and digits)
+    CHECK(filters_for(text_line(8)).size() == 25); // (word-shape-v1, list P, the 24th: punctuation and letters-and-digits need marks and digits;
+                                                    // degree-window-v1, list N, the 25th)
                                                     // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
                                                     // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (v1 and v2) (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 15); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+    CHECK(filters_for(image).size() == 17); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
                                             // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror,
-                                            // and border, specks and gradient (list Q)
+                                            // border, specks and gradient (list Q), and rows-alike and degree-window (list N)
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -3284,6 +3285,291 @@ void test_filters(const std::string& dir)
 // Every ranker, exhaustively: rank is the position among the survivors in address order,
 // unrank inverts it, the walk accepts exactly what the filter passes, and alive() agrees with
 // completions().
+// degree-window-v1 (sieve/window.hpp): the units whose bearing floor(v * 360 * 10^d / N) lies in [from, to), alone and
+// over other filters, against every unit of small lines: counted, ranked and walked (the generic walk, by next and
+// completions, as well as the window's own rank and unrank), the bounds exactly the hallway's bearings.
+void test_degree_window(const std::string& dir)
+{
+    static const TestResources none(nullptr, nullptr);
+    const FilterSpec* w = find_filter("degree-window-v1");
+    CHECK(w && w->window && w->picks_a_kind && w->whole_unit && w->category == "soft");
+    if (!w) return;
+    const auto wv = [](uint64_t from, uint64_t to, uint32_t d) { // (written as from and to; the filter takes a width)
+        return FilterValues{{"from", std::to_string(from)}, {"width", std::to_string(to - from)}, {"decimals", std::to_string(d)}};
+    };
+    // the rule, plainly
+    const auto bearing_in = [](uint64_t v, uint64_t n, uint64_t from, uint64_t to, uint32_t d) {
+        uint64_t s = 360;
+        for (uint32_t i = 0; i < d; ++i) s *= 10;
+        const unsigned __int128 b = (unsigned __int128)v * s / n;
+        return b >= from && b < to;
+    };
+    const auto walk_both = [](const Ranker& rk, bool& ok) { // the generic walk agrees with the window's own
+        const uint64_t c = rk.count().is_zero() ? 0 : uint64_t(rk.count().limbs()[0]);
+        for (uint64_t k = 0; k < c; k += 1 + c / 61)
+        {
+            const auto u = rk.unrank(BigUint(k));
+            ok = ok && rk.Ranker::unrank(BigUint(k)) == u && rk.Ranker::rank(u) == BigUint(k);
+        }
+    };
+    // Alone, on the pages line at 4 letters (531,441 units).
+    const FilterLine l4 = text_line(4);
+    const uint64_t n4 = 27ull * 27 * 27 * 27;
+    for (auto [from, to, d] : std::vector<std::tuple<uint64_t, uint64_t, uint32_t>>{
+             {0, 1, 0}, {1, 2, 0}, {1, 5, 0}, {359, 360, 0}, {0, 360, 0}, {100, 101, 0}, {1234, 1240, 2}, {35999, 36000, 2}, {7, 8, 3}})
+    {
+        const FilterStack st(l4, {{w, wv(from, to, d)}}, none);
+        bool ok = true;
+        uint64_t n = 0;
+        for (uint64_t v = 0; v < n4; ++v)
+        {
+            const auto u = BigUint(v).to_digits(27, 4);
+            const bool in = bearing_in(v, n4, from, to, d);
+            ok = ok && st.passes(u) == in;
+            n += in;
+        }
+        CHECK(ok);
+        CHECK(st.ranker() && st.ranker()->count() == BigUint(n));
+        check_ranker_exhaustive(st, 27, 4, ok);
+        if (st.ranker()) walk_both(*st.ranker(), ok);
+        CHECK(ok);
+    }
+    // A window narrower than one unit's share keeps nothing (a line of 27 units, a thousandth of a degree).
+    {
+        const FilterStack st(text_line(1), {{w, wv(5, 6, 3)}}, none);
+        CHECK(st.ranker() && st.ranker()->count().is_zero());
+    }
+    // Over plugins: max-run-data alone, with a second plugin merged, and two windows at once (the part both keep).
+    const std::string filters = dir + "../data/filters/";
+    const FilterSpec run = plugin_spec(load_plugin_file(filters + "max-run-data-v1.sfilter"));
+    const FilterSpec pairs = plugin_spec(load_plugin_file(filters + "letter-pairs-v1.sfilter"));
+    for (auto [from, to] : std::vector<std::pair<uint64_t, uint64_t>>{{0, 1}, {10, 40}, {200, 360}, {359, 360}})
+    {
+        const FilterStack plain(l4, {{&run, {{"max", "1"}}}}, none);
+        const FilterStack st(l4, {{&run, {{"max", "1"}}}, {w, wv(from, to, 0)}}, none);
+        bool ok = true;
+        check_ranker_exhaustive(st, 27, 4, ok);
+        uint64_t n = 0;
+        for (uint64_t v = 0; v < n4; ++v)
+        {
+            const auto u = BigUint(v).to_digits(27, 4);
+            n += plain.passes(u) && bearing_in(v, n4, from, to, 0);
+        }
+        CHECK(st.ranker() && st.ranker()->count() == BigUint(n));
+        if (st.ranker()) walk_both(*st.ranker(), ok);
+        const FilterStack merged(l4, {{w, wv(from, to, 0)}, {&run, {{"max", "2"}}}, {&pairs, {}}}, none);
+        check_ranker_exhaustive(merged, 27, 4, ok);
+        CHECK(ok);
+    }
+    {
+        const FilterStack two(l4, {{w, wv(10, 40, 0)}, {&run, {{"max", "1"}}}, {w, wv(30, 90, 0)}}, none),
+            one(l4, {{&run, {{"max", "1"}}}, {w, wv(30, 40, 0)}}, none);
+        bool ok = true;
+        check_ranker_exhaustive(two, 27, 4, ok);
+        CHECK(ok && two.ranker() && one.ranker() && two.ranker()->count() == one.ranker()->count());
+    }
+    // A stack that cannot count still cannot with a window, and says why (not the window).
+    {
+        const FilterStack st(l4, {{find_filter("symbol-entropy-v2"), {}}, {w, wv(0, 90, 0)}}, none);
+        CHECK(!st.ranker() && st.compact_blocker().find("degree-window") == std::string::npos);
+        CHECK(filter_conflict(*w, *find_filter("not-a-file-v1")).empty() && filter_conflict(*find_filter("not-a-file-v1"), *w).empty());
+    }
+    // Two voices (stereo one-bit sound, 6 samples a channel): the bearing is the whole unit's.
+    {
+        const PcmFormat f = make_pcm_format(8, 1, 2);
+        FilterLine l;
+        l.kind = "audio", l.symbols_id = f.id(), l.base = f.base(), l.length = 12;
+        const FilterStack st(l, {{w, wv(90, 200, 0)}}, none);
+        bool ok = true;
+        check_ranker_exhaustive(st, f.base(), 12, ok);
+        uint64_t n = 0;
+        const uint64_t all = uint64_t(1) << 12;
+        for (uint64_t v = 0; v < all; ++v) n += bearing_in(v, all, 90, 200, 0);
+        CHECK(ok && st.ranker() && st.ranker()->count() == BigUint(n));
+    }
+    // A width of 0 is refused; from goes round the loop; a window past 360 stops there.
+    bool threw = false;
+    try { (void)FilterStack(l4, {{w, wv(5, 5, 0)}}, none); } catch (const std::invalid_argument&) { threw = true; }
+    CHECK(threw);
+    {
+        const FilterStack round(l4, {{w, wv(361, 362, 0)}}, none), one(l4, {{w, wv(1, 2, 0)}}, none); // (361 degrees is 1 again)
+        CHECK(round.ranker() && one.ranker() && round.ranker()->count() == one.ranker()->count());
+    }
+    {
+        const FilterStack past(l4, {{w, wv(350, 400, 0)}}, none), to_end(l4, {{w, wv(350, 360, 0)}}, none);
+        CHECK(past.ranker() && to_end.ranker() && past.ranker()->count() == to_end.ranker()->count());
+    }
+}
+
+// List N3: the video line's filters that rank (life-causal, video-pan, video-smooth-v2) and image-mirror, against
+// every unit of small lines: each survivor's number, the k-th survivor, the walk by next and completions, and
+// the count, all as the filter judges.
+void test_video_rankers(const std::string&)
+{
+    static const TestResources none(nullptr, nullptr);
+    const auto video = [](uint32_t base, uint32_t w, uint32_t h, uint32_t f) {
+        return FilterLine{"video", "video/test" + std::to_string(base), base, w * h * f, nullptr, w, h, f};
+    };
+    const auto exhaustive = [](const FilterLine& l, const char* name, const FilterValues& v) {
+        const FilterStack st(l, {{find_filter(name), v}}, none);
+        bool ok = st.ranker() != nullptr;
+        if (ok) check_ranker_exhaustive(st, l.base, l.length, ok);
+        if (ok)
+        {
+            const Ranker& rk = *st.ranker();
+            const uint64_t c = rk.count().is_zero() ? 0 : uint64_t(rk.count().limbs()[0]);
+            for (uint64_t k = 0; k < c; k += 1 + c / 37) // (the generic walk, by next and completions)
+                ok = ok && rk.Ranker::unrank(BigUint(k)) == rk.unrank(BigUint(k)) && rk.Ranker::rank(rk.unrank(BigUint(k))) == BigUint(k);
+        }
+        if (!ok) std::cerr << "  " << name << " on " << l.width << "x" << l.height << "x" << l.frames << " (" << l.base << " colours) failed\n";
+        return ok;
+    };
+    CHECK(find_filter("video-smooth-v1")->retired && find_filter("video-smooth-v1")->replaced_by == "video-smooth-v2");
+    for (const FilterLine& l : {video(2, 2, 2, 3), video(3, 2, 1, 3), video(2, 3, 1, 4), video(4, 1, 2, 2)})
+    {
+        for (const char* pct : {"0", "25", "50", "100"}) CHECK(exhaustive(l, "video-smooth-v2", {{"percent", pct}}));
+        CHECK(exhaustive(l, "video-moves-v1", {}));
+        for (const char* way : {"left", "right", "up", "down"}) CHECK(exhaustive(l, "video-pan-v1", {{"direction", way}}));
+        if (l.base == 2)
+            for (const char* rule : {"B3/S23", "B36/S23", "B1/S012345678", "B/S"}) CHECK(exhaustive(l, "life-causal-v1", {{"rule", rule}}));
+    }
+    for (auto [w, h, base] : std::vector<std::tuple<uint32_t, uint32_t, uint32_t>>{{3, 3, 2}, {4, 3, 2}, {3, 2, 3}, {2, 3, 3}})
+    {
+        const FilterLine pic{"image", "image/test" + std::to_string(base), base, w * h, nullptr, w, h, 1};
+        for (const char* axis : {"across", "down", "both", "turn"}) CHECK(exhaustive(pic, "image-mirror-v1", {{"axis", axis}}));
+    }
+    // v2 sets the still videos aside too: v1's count less P^n, and with video-moves (which it implies) it compacts.
+    {
+        ImageFormat vf;
+        vf.width = 10, vf.height = 10, vf.frames = 4, vf.palette = &palette_by_id("mono");
+        const FilterLine l{"video", vf.symbols_id(), 2, 400, nullptr, 10, 10, 4};
+        const FilterStack v1(l, {{find_filter("video-smooth-v1"), {{"percent", "5"}}}}, none),
+            v2(l, {{find_filter("video-smooth-v2"), {{"percent", "5"}}}, {find_filter("video-moves-v1"), {}}}, none);
+        CHECK(v1.counted() && v2.ranker());
+        if (v1.counted() && v2.ranker())
+        {
+            BigUint want = *v1.counted();
+            want -= BigUint::pow(2, 100);
+            CHECK(v2.ranker()->count() == want);
+            std::mt19937_64 rng(1803);
+            for (int i = 0; i < 20; ++i)
+            {
+                BigUint k = BigUint::from_bytes(std::vector<uint8_t>{uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng()), uint8_t(rng())});
+                k = BigUint::mod(BigUint::mul(k, BigUint::pow(10, 100)), v2.ranker()->count());
+                const auto u = v2.ranker()->unrank(k);
+                CHECK(v2.passes(u) && v2.ranker()->rank(u) == k);
+            }
+        }
+    }
+}
+
+// Code-made automata whose settings read alike (word-length-v2 and word-shape-v1 both "longest=12") are merged and
+// kept apart: a stack's merge is kept under each filter's name as well as its settings (list N).
+void test_merge_keys(const std::string&)
+{
+    static const TestResources none(nullptr, nullptr);
+    const FilterLine l = text_line(12);
+    const FilterValues lv{{"longest", "6"}};
+    const FilterStack a(l, {{find_filter("word-length-v2"), lv}, {find_filter("few-values-v1"), {}}}, none),
+        b(l, {{find_filter("word-shape-v1"), lv}, {find_filter("few-values-v1"), {}}}, none);
+    CHECK(a.ranker() && b.ranker());
+    if (!a.ranker() || !b.ranker()) return;
+    (void)a.ranker()->count();
+    std::mt19937_64 rng(1811);
+    bool same = true;
+    for (int i = 0; i < 20000; ++i)
+    {
+        std::vector<uint32_t> u(12);
+        for (auto& c : u) c = rng() % 3 == 0 ? 0 : uint32_t(1 + rng() % 26);
+        same = same && b.ranker()->accepts(u) == b.passes(u) && a.ranker()->accepts(u) == a.passes(u);
+    }
+    CHECK(same);
+}
+
+// rows-alike-v1 (list N4): each row differs from the row above in at most k pixels (a video's frames each on their
+// own), against the rule written plainly on every unit of small pictures and videos, and counted and ranked.
+void test_rows_alike(const std::string&)
+{
+    static const TestResources none(nullptr, nullptr);
+    const auto rule = [](const std::vector<uint32_t>& u, uint32_t w, uint32_t h, uint32_t k) {
+        for (size_t f = 0; f < u.size(); f += size_t(w) * h)
+            for (uint32_t y = 1; y < h; ++y)
+            {
+                uint32_t ch = 0;
+                for (uint32_t x = 0; x < w; ++x) ch += u[f + size_t(y) * w + x] != u[f + size_t(y - 1) * w + x];
+                if (ch > k) return false;
+            }
+        return true;
+    };
+    for (auto [kind, w, h, frames, base] : std::vector<std::tuple<const char*, uint32_t, uint32_t, uint32_t, uint32_t>>{
+             {"image", 3, 3, 1, 2}, {"image", 4, 3, 1, 2}, {"image", 3, 2, 1, 3}, {"image", 2, 4, 1, 3}, {"video", 2, 2, 3, 2}, {"video", 3, 2, 2, 2}})
+    {
+        const FilterLine l{kind, std::string(kind) + "/test", base, w * h * frames, nullptr, w, h, frames};
+        CHECK(find_filter("rows-alike-v1")->applies(l));
+        for (uint32_t k = 0; k <= w; ++k)
+        {
+            const FilterStack st(l, {{find_filter("rows-alike-v1"), {{"changes", std::to_string(k)}}}}, none);
+            bool ok = true;
+            uint64_t total = 1;
+            for (uint32_t i = 0; i < l.length; ++i) total *= base;
+            for (uint64_t v = 0; v < total; ++v)
+            {
+                const auto u = BigUint(v).to_digits(base, l.length);
+                ok = ok && st.passes(u) == rule(u, w, h, k);
+            }
+            check_ranker_exhaustive(st, base, l.length, ok);
+            CHECK(ok);
+        }
+    }
+    // On rgb24 the automaton does not fit: counted and ranked by changes so far (changes_ranker.hpp), its count
+    // P^W g^(H-1) with g the rows within 5 changes of one row, every survivor drawn at random back to its number.
+    {
+        ImageFormat f;
+        f.width = 10, f.height = 10, f.palette = &palette_by_id("rgb24");
+        const FilterLine pic{"image", f.symbols_id(), 1u << 24, 100, nullptr, 10, 10, 1};
+        CHECK(find_filter("rows-alike-v1")->counts_as_on(pic, nullptr) == "own");
+        const FilterStack st(pic, {{find_filter("rows-alike-v1"), {}}}, none);
+        CHECK(st.ranker() != nullptr);
+        if (st.ranker())
+        {
+            BigUint g, term(1);
+            for (uint32_t j = 0; j <= 5; ++j)
+            {
+                g += term;
+                term.mul_small(10 - j);
+                term.mul_small((1u << 24) - 1);
+                (void)term.divmod_small(j + 1);
+            }
+            CHECK(st.ranker()->count() == BigUint::mul(BigUint::pow(1u << 24, 10), BigUint::pow(g, 9)));
+            std::mt19937_64 rng(1813);
+            for (int i = 0; i < 12; ++i)
+            {
+                std::vector<uint8_t> bytes(400);
+                for (auto& b : bytes) b = uint8_t(rng());
+                const BigUint k = BigUint::mod(BigUint::from_bytes(bytes), st.ranker()->count());
+                const auto u = st.ranker()->unrank(k);
+                CHECK(st.passes(u) && st.ranker()->rank(u) == k && st.ranker()->accepts(u));
+            }
+        }
+    }
+    // With row-runs, both automata merged: smooth both ways (and the merge kept apart from row-runs alone's).
+    {
+        ImageFormat f;
+        f.width = 10, f.height = 10, f.palette = &palette_by_id("mono");
+        const FilterLine pic{"image", f.symbols_id(), 2, 100, nullptr, 10, 10, 1};
+        const FilterStack both(pic, {{find_filter("rows-alike-v1"), {}}, {find_filter("row-runs-v1"), {}}}, none);
+        CHECK(both.ranker() != nullptr);
+        std::vector<uint32_t> disc(100, 0);
+        for (int y = 2; y < 8; ++y)
+            for (int x = 3; x < 7; ++x) disc[size_t(y) * 10 + size_t(x)] = 1;
+        CHECK(both.passes(disc));
+        std::mt19937_64 rng(1812);
+        std::vector<uint32_t> noise(100);
+        for (auto& c : noise) c = uint32_t(rng() & 1);
+        CHECK(!both.passes(noise));
+    }
+}
+
 void check_ranker_exhaustive(const FilterStack& st, uint32_t base, uint32_t L, bool& ok)
 {
     const Ranker* rk = st.ranker();
@@ -10457,6 +10743,10 @@ void run_all(int argc, char** argv)
         RUN(test_p_filters());
         RUN(test_q_filters());
         RUN(test_m2_filters(dir));
+        RUN(test_degree_window(dir));
+        RUN(test_video_rankers(dir));
+        RUN(test_merge_keys(dir));
+        RUN(test_rows_alike(dir));
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

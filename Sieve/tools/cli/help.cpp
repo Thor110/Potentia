@@ -1194,6 +1194,25 @@ const std::vector<Page>& pages()
           {"sieve tailor --length 32 --unit all --describe --file chapter.txt", "one stack for every page of a chapter, its description paid for"},
           {"sieve tailor --line image --file sprite.png --out tailored.ini", "a picture's filters, saved as a settings file"}}},
 
+        {"window", "A unit's bearing on its line, and whether a degree window about it writes it shorter.",
+         "sieve window [--line LINE] [line options] [--filters PATH] [--decimals D] (TEXT... | --file PATH)",
+         "Fits the input to the line as warp does and, for each unit the ticked stack keeps, prints\n"
+         "its bearing (where it stands on the line's loop: floor(address x 360 / units), the\n"
+         "address in positional order) and, for each width from a whole degree down to D decimals,\n"
+         "the degree window that holds it (degree-window-v1): how many of the stack's survivors\n"
+         "the window keeps, that share against the window's share of the loop (1.00: as many as an\n"
+         "even spread would put there), the unit's route inside the window (log2 of what it keeps),\n"
+         "the bits naming the window costs (log2 of 360 x 10^D), their total, and the route under\n"
+         "the stack alone. A window pays only where the share is below 1: where the stack's\n"
+         "survivors are thinner about the unit than round the rest of the loop. Lines of digits:\n"
+         "text, image, audio, video, models and the AI line.",
+         {kLine, kLineOptions,
+          {"--filters PATH", "The settings file. Default: sieve-filters.ini next to the executable."},
+          {"--file PATH", "Read the input from a file instead of the command line."},
+          {"--decimals D", "The narrowest window, in decimals of a degree (0..9). Default 3."}},
+         {{"sieve window --length 32 \"the cat sat on the mat\"", "a page's bearing, and the windows about it"},
+          {"sieve window --line audio --length 16 --filters music.ini \"C4q E4q G4q C5h\"", "a melody's windows over a stack of melody filters"}}},
+
         {"bind", "Bind a title, a cover and pages into a book record.",
          "sieve bind --out FILE.book [--title TEXT] [--cover PICTURE] [--pages FILE] [--length N] [--mode MODE] [--key K]",
          "A book is an ordered list of labelled sections, each a run of units on one line: the\n"
@@ -1746,7 +1765,7 @@ void print_usage()
     // command is never left out.
     const std::vector<std::pair<std::string, std::vector<std::string>>> groups = {
         {"Addresses", {"info", "warp", "read", "browse"}},
-        {"Filters", {"sift", "filters", "check", "tailor"}},
+        {"Filters", {"sift", "filters", "check", "tailor", "window"}},
         {"Guided text: dictionaries and models", {"dicts", "models", "train", "measure", "alphabets"}},
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},

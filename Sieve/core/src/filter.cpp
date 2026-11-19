@@ -6,6 +6,7 @@
 #include "sieve/dfa.hpp"
 #include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/window.hpp"
 #include "sieve/written.hpp"
 
 #include <algorithm>
@@ -399,21 +400,26 @@ bool accepts_all(const Dfa& d)
 
 // `key`, if given, is set to what the result is kept under ("" when it is not kept: an automaton
 // that does not say what it is), for its counting table to be kept with it (shared_table).
-std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filters, const std::string& line, std::string* key_out = nullptr)
+// Each automaton is kept under its filter's name and its provenance: a code-made automaton's provenance is its
+// settings alone ("longest=6" is word-length-v2's and word-shape-v1's both), and before list N two stacks that
+// differed only in which of such a pair they ticked were handed one merge.
+std::shared_ptr<const Dfa> merge_plugins(const std::vector<const Filter*>& filters, const std::vector<const std::string*>& names,
+                                         const std::string& line, std::string* key_out = nullptr)
 {
-    std::vector<std::pair<const Dfa*, const std::string*>> parts;
-    for (const Filter* f : filters)
-        if (const Dfa* d = plugin_dfa(*f)) parts.emplace_back(d, &f->provenance());
+    std::vector<std::pair<const Dfa*, std::string>> parts;
+    for (size_t i = 0; i < filters.size(); ++i)
+        if (const Dfa* d = plugin_dfa(*filters[i]))
+            parts.emplace_back(d, filters[i]->provenance().empty() ? std::string() : *names[i] + "{" + filters[i]->provenance() + "}");
     if (parts.empty()) return nullptr;
     std::sort(parts.begin(), parts.end(), [](const auto& a, const auto& b) {
-        return a.first->states() != b.first->states() ? a.first->states() < b.first->states() : *a.second < *b.second;
+        return a.first->states() != b.first->states() ? a.first->states() < b.first->states() : a.second < b.second;
     });
     bool named = true;
     std::string key = line;
     for (const auto& [d, prov] : parts)
     {
-        if (prov->empty()) named = false; // an automaton that does not say what it is is never shared
-        key += "\n" + *prov;
+        if (prov.empty()) named = false; // an automaton that does not say what it is is never shared
+        key += "\n" + prov;
     }
     auto merge = [&] {
         Dfa d = *parts[0].first;
@@ -525,7 +531,7 @@ std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, cons
 } // namespace
 
 FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entries, const FilterResources& resources)
-    : length_(whole.length), up_to_length_(whole.up_to_length)
+    : length_(whole.length), base_(whole.base), up_to_length_(whole.up_to_length)
 {
     provenance_ = whole.kind + "/" + whole.symbols_id + "/L" + std::to_string(whole.length);
     symbols_id_ = whole.kind + "/" + whole.symbols_id;
@@ -569,13 +575,25 @@ void FilterStack::settle_now() const
     {
         uint32_t length;
     } line{unit_length_};
+    // Degree windows (sieve/window.hpp) count on top of the rest: the other filters are counted as
+    // they would be without them, and the windows (one, or the part they all keep) are laid over that.
+    std::vector<char> win(filters_.size(), 0);
+    std::optional<WindowBounds> window;
+    size_t rest = 0;
+    for (size_t i = 0; i < filters_.size(); ++i)
+        if (const WindowBounds* b = window_bounds(*filters_[i]))
+        {
+            win[i] = 1;
+            window = window ? intersect_windows(*window, *b) : *b;
+        }
+        else ++rest;
     // Compact: one filter with a ranker whose survivors are exactly the stack's.
     for (size_t i = 0; i < filters_.size() && !compact_; ++i)
     {
-        if (!filters_[i]->can_rank()) continue;
+        if (win[i] || !filters_[i]->can_rank()) continue;
         bool covers = true;
         for (size_t j = 0; j < entries.size(); ++j)
-            if (j != i && !implied_by(entries[i], entries[j])) covers = false;
+            if (j != i && !win[j] && !implied_by(entries[i], entries[j])) covers = false;
         if (covers)
         {
             compact_ = filters_[i]->ranker(); // built here, only for the filter that is used
@@ -585,10 +603,16 @@ void FilterStack::settle_now() const
     // A stack of plugins only: their automata combined into one (the units every one accepts),
     // which ranks the stack exactly when its table fits. With not-written-v1 among them, its rule
     // counts the units the plugins keep that it keeps too (sieve/written.hpp).
-    if (!compact_ && filters_.size() > 1)
+    if (!compact_ && rest > 1)
     {
         std::vector<const Filter*> raw;
-        for (const auto& f : filters_) raw.push_back(f.get());
+        std::vector<const std::string*> raw_names;
+        for (size_t i = 0; i < filters_.size(); ++i)
+            if (!win[i])
+            {
+                raw.push_back(filters_[i].get());
+                raw_names.push_back(&names_[i]);
+            }
         // The line's symbols alone ("text/lower27"): not the filters in the order they were ticked
         // (the merge is the same in any order, and is kept by the automata themselves), and not
         // the length. An automaton filter's automaton never depends on the length (a plugin's is
@@ -599,7 +623,7 @@ void FilterStack::settle_now() const
         bool all_plugins = true;
         std::shared_ptr<const WrittenRule> written;
         size_t written_count = 0;
-        for (const auto& f : filters_)
+        for (const Filter* f : raw)
             if (auto w = written_rule_of(*f))
             {
                 written = w;
@@ -619,7 +643,7 @@ void FilterStack::settle_now() const
         if (all_plugins && written_count == 1)
         {
             std::string key;
-            const std::shared_ptr<const Dfa> keep = merge_plugins(raw, line_id, &key);
+            const std::shared_ptr<const Dfa> keep = merge_plugins(raw, raw_names, line_id, &key);
             std::string why;
             own_ranker_ = written_ranker(written, keep.get(), line.length, why, &table_bytes_,
                                          [&] { return shared_table(key, keep, line.length); });
@@ -629,7 +653,7 @@ void FilterStack::settle_now() const
         else if (all_plugins && written_count == 0)
         {
             std::string key;
-            const std::shared_ptr<const Dfa> d = merge_plugins(raw, line_id, &key);
+            const std::shared_ptr<const Dfa> d = merge_plugins(raw, raw_names, line_id, &key);
             const double bytes = DfaRanker::table_bytes(d->states(), d->base, line.length);
             table_bytes_ = bytes;
             if (bytes <= filter_memory())
@@ -645,19 +669,32 @@ void FilterStack::settle_now() const
         voices_ranker_ = std::make_unique<VoicesRanker>(*compact_, voices_);
         compact_ = voices_ranker_.get();
     }
+    if (window)
+    {
+        if (rest == 0) // the windows alone: every unit underneath
+        {
+            full_ranker_ = full_ranker(base_, length_);
+            compact_ = full_ranker_.get();
+        }
+        if (compact_)
+        {
+            window_ranker_ = window_ranker(*compact_, *window);
+            compact_ = window_ranker_.get();
+        }
+    }
     if (filters_.empty()) blocker_ = "no filters ticked";
     else if (!compact_ && blocker_.empty()) // (a stack of plugins over the budget has said why already)
     {
         // Name the first ranking filter and the ticked filters it does not imply.
         size_t r = filters_.size();
         for (size_t i = 0; i < filters_.size() && r == filters_.size(); ++i)
-            if (filters_[i]->can_rank()) r = i;
+            if (!win[i] && filters_[i]->can_rank()) r = i;
         if (r == filters_.size()) blocker_ = "none of the ticked filters can rank its survivors at this size";
         else
         {
             std::string extra;
             for (size_t j = 0; j < names_.size(); ++j)
-                if (j != r && !implied_by(entries[r], entries[j])) extra += (extra.empty() ? "" : ", ") + names_[j];
+                if (j != r && !win[j] && !implied_by(entries[r], entries[j])) extra += (extra.empty() ? "" : ", ") + names_[j];
             blocker_ = names_[r] + " can rank, but not together with " + extra;
         }
     }
@@ -691,6 +728,7 @@ int FilterStack::first_failure(std::span<const uint32_t> unit) const
 std::string filter_conflict(const FilterSpec& a, const FilterSpec& b, const FilterLine* line, const FilterValues* va, const FilterValues* vb)
 {
     if (a.name() == b.name() || a.counts_as.empty() || b.counts_as.empty()) return {};
+    if (a.window || b.window) return {}; // (a window counts on top of whatever else is ticked)
     auto implies = [](const FilterSpec& x, const FilterSpec& y) {
         return std::find(x.implies.begin(), x.implies.end(), y.name()) != x.implies.end();
     };
