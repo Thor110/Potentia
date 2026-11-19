@@ -11,6 +11,8 @@
 //   "well known", "author/editor" -> "author editor").
 //   5. Runs of SPACE collapse to one; leading and trailing SPACE are trimmed.
 //   6. The result is split into units of UNIT_LENGTH symbols; the last is padded with SPACE.
+//      On a line of a range of lengths (list O2: MIN_LENGTH to UNIT_LENGTH), the last keeps its own length and is
+//      padded only up to MIN_LENGTH, so "welcome to the sieve" is a page of 20 symbols on a line of 1 to 32.
 //
 // "canon-text-v1" (kept so earlier results stay reproducible): case folding and whitespace as
 // above, but every other out-of-alphabet codepoint is dropped, which glues words together
@@ -39,7 +41,7 @@ CanonVersion canon_version_from_string(std::string_view s); // accepts "v1", "v2
 struct CanonResult
 {
     CanonVersion version = kDefaultCanon;
-    std::vector<std::u32string> units;   // each exactly UNIT_LENGTH symbols
+    std::vector<std::u32string> units;   // each exactly UNIT_LENGTH symbols (on a range, the last from MIN_LENGTH up)
     size_t input_codepoints = 0;
     size_t whitespace_mapped = 0;         // non-SPACE whitespace mapped to SPACE
     size_t transliterated = 0;            // typographic punctuation replaced by ASCII (v2)
@@ -50,15 +52,16 @@ struct CanonResult
     size_t separated = 0;                 // unknown codepoints turned into SPACE (v2)
     std::u32string separated_examples;    // first distinct separators (up to 16)
     size_t spaces_collapsed = 0;          // SPACE removed by collapsing and trimming
-    size_t padding = 0;                   // SPACE appended to fill the last unit
+    size_t padding = 0;                   // SPACE appended to fill the last unit (to MIN_LENGTH on a range)
     size_t canonical_length = 0;          // symbols before padding
 };
 
+// min_length: a range line's shortest unit (0: unit_length, one length).
 CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, uint32_t unit_length,
-                              CanonVersion version = kDefaultCanon);
+                              CanonVersion version = kDefaultCanon, uint32_t min_length = 0);
 
 // canon-bytes-v1: `raw` byte by byte, each byte the symbol of its own value. The alphabet must
 // hold every byte (holds_all_bytes), or this throws.
-CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length);
+CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length, uint32_t min_length = 0);
 
 } // namespace sieve

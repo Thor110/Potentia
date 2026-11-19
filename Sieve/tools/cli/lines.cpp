@@ -268,8 +268,8 @@ WarpInput read_warp_input(const Line& line, const Args& a)
         // On a line that holds every byte, the input is bytes rather than text: reading it as
         // UTF-8 would refuse most files, and folding anything would stop it coming back.
         const bool bytes = holds_all_bytes(*line.alphabet);
-        const CanonResult c = bytes ? canonicalise_bytes(input, *line.alphabet, line.space.unit_length())
-                                    : canonicalise_text(input, *line.alphabet, line.space.unit_length(), line.canon);
+        const CanonResult c = bytes ? canonicalise_bytes(input, *line.alphabet, line.space.unit_length(), line.space.min_length())
+                                    : canonicalise_text(input, *line.alphabet, line.space.unit_length(), line.canon, line.space.min_length());
         w.report.push_back(std::string(to_string(c.version)) + ": " + std::to_string(c.input_codepoints) +
                            " codepoints in, " + std::to_string(c.canonical_length) + " symbols out, " +
                            std::to_string(c.units.size()) + " unit(s)");

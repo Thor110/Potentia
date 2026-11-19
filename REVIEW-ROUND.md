@@ -387,12 +387,23 @@ run before a release package, and after each of the three reviews. Each batch is
       fraction; min = max the fixed space address for address; the oracle's RangeSpace and 84 vectors (ranges 1-3,
       1-32, 5-8, 19-21 with the greeting, ascii95 1-8), agreed by the C++ `[01]` + `[11]`. Nothing uses it yet
       (O2 to O6).
-  - [ ] O2. Canonicalisation without padding on a range line (a text longer than `max` still cut into pages).
-  - [ ] O3. Filters over a range: each length counted by its own stack and the counts summed (an automaton's table
+  - [x] O2. Canonicalisation without padding on a range line (a text longer than `max` still cut into pages).
+    *Built:* the last unit keeps its own length, padded only up to `min`; bytes the same; the warp passes the
+    line's minimum; the oracle's canonicalise and 18 vectors, agreed by the C++; today's canon vectors unchanged `[01]` + `[11]`.
+  - [x] O3. Filters over a range: each length counted by its own stack and the counts summed (an automaton's table
     answers every shorter length already), a survivor's rank the survivors of the shorter lengths and its rank
     within its own; compact over the range. Filters that need a whole page of one length judge only.
+    *Built:* RangeStack (sieve/rangestack.hpp): a FilterStack for each length, made with the ticked filters that apply
+    at that length (a filter that cannot judge a unit so short says nothing about it), counts summed, a survivor's
+    number the shorter lengths' survivors plus its own; degree-window-v2 by the unit's place on the whole range,
+    counted with the rest. Every unit of 1 to 3 letters checked against each length's own stack and the window by
+    place, both ways, across 0 too `[01]`. Stacks that cannot count together on one length cannot on a range either
+    (max-run with not-a-pattern), and say at which length. Nothing uses it yet (O4).
   - [ ] O4. The hallway: the pages line, its title shelves (titles stay fixed), shelving and walking, compact, J/F,
     the File Locator's page items, not-an-item's pages on the binary line, the greeting at its own length.
+    Items found by their exact bytes at any length of the range (item_of, J, the File Locator, the packer's items),
+    and not-an-item's pages counted over every length of the range; tested: a padded page and a bare one each come
+    back byte for byte.
   - [ ] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
   - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
     old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.
@@ -427,6 +438,7 @@ run before a release package, and after each of the three reviews. Each batch is
       each file). So its time is worked out as the sieving goes: the time spent on seeds so far, and the candidates
       still to come times a seed's cost at their sizes, shown in the progress line; when the cap would be passed
       it stops trying seeds and the rest of the sieving goes on as without them, saying so at the end.
+- [ ] O11. When list O is done: the version to 0.13.80 (Edward, 19 November 2026: 0.13.79 was released before list O).
 - [x] O7. OPTIMISE FILTERS leaves near-model-v1 and language-v1 alone (they pick a run's neighbourhood and language);
   its last step, keeping each stack within the filter memory, on a worker, so the window answers.
 

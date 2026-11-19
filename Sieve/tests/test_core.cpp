@@ -64,6 +64,7 @@
 #include "sieve/sha256.hpp"
 #include "sieve/sieve.hpp"
 #include "sieve/space.hpp"
+#include "sieve/rangestack.hpp"
 #include "sieve/binaryspace.hpp"
 #include "sieve/titledspace.hpp"
 #include "sieve/utf8.hpp"
@@ -1238,6 +1239,36 @@ void test_canon_vectors(const std::string& path)
     std::cout << "canonicalisation vectors checked: " << n << "\n";
     CHECK(n == 80); // a truncated or emptied vector file must fail, not pass quietly
     CHECK(n > 50);
+}
+
+// Canonicalisation on a range line (list O2, reference/sieve_ref.py canon-range-vectors): the last unit keeps its own
+// length, padded only up to the shortest; and a warp on a range space gives the greeting its own 20 symbols.
+void test_canon_range_vectors(const std::string& path)
+{
+    int n = 0;
+    for (const auto& f : read_tsv(path, 6))
+    {
+        const auto r = canonicalise_text(from_hex(f[4]), alphabet_by_id(f[1]), uint32_t(std::stoul(f[3])), canon_version_from_string(f[0]),
+                                         uint32_t(std::stoul(f[2])));
+        std::string got;
+        for (size_t i = 0; i < r.units.size(); ++i)
+        {
+            if (i) got += ",";
+            for (unsigned char c : utf8_encode(r.units[i]))
+            {
+                char b[3];
+                std::snprintf(b, sizeof b, "%02x", c);
+                got += b;
+            }
+        }
+        CHECK(got == f[5]);
+        ++n;
+    }
+    CHECK(n == 18);
+    const auto g = canonicalise_text("welcome to the sieve", alphabet_by_id("lower27"), 32, CanonVersion::V2, 1);
+    CHECK(g.units.size() == 1 && g.units[0] == U"welcome to the sieve" && g.padding == 0);
+    const auto b = canonicalise_bytes("abc", alphabet_by_id("bytes256"), 8, 1);
+    CHECK(b.units.size() == 1 && b.units[0].size() == 3 && b.padding == 0);
 }
 
 void test_image_vectors(const std::string& path, ImageFormat::Fit fit = ImageFormat::Fit::Average, int expected = 36)
@@ -6853,6 +6884,71 @@ void test_place_window()
     }
 }
 
+// A range line's filters (list O3, sieve/rangestack.hpp): every unit of 1 to 3 letters judged against each length's own
+// stack (and a window by its place on the whole range), counted, ranked and unranked in the line's order; a filter
+// that does not apply at a length (not-a-pattern needs two symbols) says nothing about the units of that length.
+void test_range_stack()
+{
+    static const TestResources none(nullptr, nullptr);
+    const Alphabet& a = alphabet_by_id("lower27");
+    const Space sp(a, 1, 3, "sieve");
+    FilterLine line;
+    line.kind = "text", line.symbols_id = a.id(), line.base = 27, line.length = 3, line.min_length = 1, line.alphabet = &a;
+    const FilterSpec* run = find_filter("max-run-v1");
+    const FilterSpec* pat = find_filter("not-a-pattern-v1");
+    const FilterSpec* win = find_filter("degree-window-v2");
+    CHECK(run && pat && win);
+    if (!run || !pat || !win) return;
+    auto wv = [](int from, int width) { return FilterValues{{"from", std::to_string(from)}, {"width", std::to_string(width)}}; };
+    struct Case
+    {
+        std::vector<FilterStack::Entry> entries;
+        std::vector<std::pair<int, int>> windows;
+    };
+    const std::vector<Case> cases = {
+        {{{run, {{"max_run", "1"}}}}, {}},
+        {{{pat, {}}}, {}},                        // not-a-pattern: no stack of its own at one letter
+        {{{run, {{"max_run", "1"}}}}, {{100, 50}}},
+        {{{run, {{"max_run", "1"}}}}, {{350, 30}}}, // across 0
+        {{}, {{10, 20}}},                           // a window alone
+    };
+    const uint64_t n = 27 + 729 + 19683;
+    for (const Case& c : cases)
+    {
+        std::vector<FilterStack::Entry> entries = c.entries;
+        for (const auto& [f, w] : c.windows) entries.push_back({win, wv(f, w)});
+        const RangeStack rs(line, entries, none);
+        // the reference: each length's own stack, with the filters that apply at that length, and the window by place
+        std::vector<FilterStack> per;
+        for (uint32_t L = 1; L <= 3; ++L)
+        {
+            FilterLine fl = line;
+            fl.length = L, fl.min_length = 0;
+            std::vector<FilterStack::Entry> here;
+            for (const auto& e : c.entries)
+                if (e.spec->applies(fl)) here.push_back(e);
+            per.emplace_back(fl, here, none);
+        }
+        bool ok = rs.can_rank();
+        uint64_t k = 0;
+        for (uint64_t p = 0; ok && p < n; ++p)
+        {
+            const auto u = sp.unit_at_place(BigUint(p));
+            bool want = per[u.size() - 1].passes(u);
+            for (const auto& [f, w] : c.windows) want = want && (p * 360 / n + 360 - uint64_t(f)) % 360 < uint64_t(w);
+            ok = rs.passes(u) == want;
+            if (ok && want) ok = rs.rank(u) == BigUint(k) && rs.unrank(BigUint(k)) == u;
+            k += want ? 1 : 0;
+        }
+        CHECK(ok);
+        CHECK(rs.can_rank() && rs.count() == BigUint(k));
+    }
+    // not-a-pattern does not apply at one letter: those pass it
+    const RangeStack only_pat(line, {{pat, {}}}, none);
+    CHECK(only_pat.passes(std::vector<uint32_t>{5}));
+    CHECK(only_pat.provenance().rfind("text/lower27/L1-3", 0) == 0);
+}
+
 // The join filters (list N5-14): join-leap-v1 and join-cut-v1 judge only where one part of a joined unit meets the
 // next, and count and rank: against every unit of small joined lines, and over two voices.
 void test_join_filters()
@@ -11115,6 +11211,7 @@ void run_all(int argc, char** argv)
     RUN(test_utf8());
     RUN(test_biguint());
     RUN(test_space_basics());
+    RUN(test_range_stack());
     RUN(test_scramble_bijection());
     RUN(test_neighbour());
     RUN(test_fraction());
@@ -11163,6 +11260,7 @@ void run_all(int argc, char** argv)
         RUN(test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv"));
         RUN(test_digit_vectors(dir + "vectors_digits_v1.tsv"));
         RUN(test_canon_vectors(dir + "vectors_canon.tsv"));
+        RUN(test_canon_range_vectors(dir + "vectors_canon_range_v1.tsv"));
         RUN(test_bytes_vectors(dir + "vectors_bytes_v1.tsv"));
         RUN(test_alphabet_vectors(dir + "vectors_alphabets_v1.tsv"));
         RUN(test_model_vectors(dir + "vectors_models_v1.tsv"));

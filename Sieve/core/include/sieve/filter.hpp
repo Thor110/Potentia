@@ -52,6 +52,9 @@ struct FilterLine
     // (the joined stack of tracks and movies), a book's pages read as one text. The join filters (list N5-14) judge
     // only where one part meets the next. With several voices, a voice's part (FilterStack divides it as the length).
     uint32_t part_length = 0;
+    // A line of a range of lengths (list O3: every unit of min_length to length symbols; 0: one length). Its filters
+    // are a RangeStack (sieve/rangestack.hpp), a FilterStack for each length made with the length set.
+    uint32_t min_length = 0;
 };
 
 // Pinned data a filter may need, provided by the application (registries, hash checks).

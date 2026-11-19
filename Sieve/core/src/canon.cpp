@@ -252,9 +252,10 @@ CanonVersion canon_version_from_string(std::string_view s)
 // canon-bytes-v1. There is nothing to canonicalise: on a line whose alphabet holds every byte
 // value, each byte already means itself, and folding or collapsing anything would stop a file
 // coming back the way it went in. So this only cuts the bytes into units and pads the last one.
-CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length)
+CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, uint32_t unit_length, uint32_t min_length)
 {
     if (unit_length == 0) throw std::invalid_argument("unit length must be at least 1");
+    if (min_length == 0 || min_length > unit_length) min_length = unit_length;
     if (!holds_all_bytes(alphabet))
         throw std::invalid_argument("canon-bytes-v1 needs an alphabet holding every byte (bytes256)");
     CanonResult r;
@@ -274,16 +275,17 @@ CanonResult canonicalise_bytes(std::string_view raw, const Alphabet& alphabet, u
     }
     if (!unit.empty() || r.units.empty())
     {
-        r.padding = unit_length - unit.size();
+        r.padding = unit.size() < min_length ? min_length - unit.size() : 0; // (a range line: only up to its shortest)
         unit.append(r.padding, char32_t(0)); // NUL, which is digit 0 of the alphabet
         r.units.push_back(unit);
     }
     return r;
 }
 
-CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, uint32_t unit_length, CanonVersion version)
+CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, uint32_t unit_length, CanonVersion version, uint32_t min_length)
 {
     if (unit_length == 0) throw std::invalid_argument("unit length must be at least 1");
+    if (min_length == 0 || min_length > unit_length) min_length = unit_length;
     static_assert(std::is_sorted(std::begin(kTransliterate), std::end(kTransliterate),
                                  [](const Mapping& a, const Mapping& b) { return a.from < b.from; }));
     static_assert(std::is_sorted(std::begin(kFold), std::end(kFold),
@@ -392,11 +394,12 @@ CanonResult canonicalise_text(std::string_view utf8, const Alphabet& alphabet, u
     for (size_t i = 0; i < canon.size(); i += unit_length)
     {
         std::u32string unit = canon.substr(i, unit_length);
-        if (unit.size() < unit_length)
+        if (unit.size() < min_length)
         {
             // Padding is digit 0, which for every alphabet pinned before ascii96 is the space.
             // On ascii96 it is the line feed, so a short .obj is padded with blank lines.
-            r.padding = unit_length - unit.size();
+            // On a range line, only up to its shortest unit (list O2).
+            r.padding = min_length - unit.size();
             unit.append(r.padding, alphabet.symbol(0));
         }
         r.units.push_back(std::move(unit));

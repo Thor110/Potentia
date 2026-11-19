@@ -14,6 +14,7 @@ python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
 python sieve_ref.py biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
 python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
 python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
+python sieve_ref.py canon-range-vectors | diff - ../tests/vectors_canon_range_v1.tsv
 python sieve_ref.py bytes-vectors | diff - ../tests/vectors_bytes_v1.tsv
 python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
 python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv

@@ -289,7 +289,7 @@ def fold_letter(c):
     return FOLD_SPECIAL.get(c) or unicodedata.normalize("NFD", c)[0]
 
 
-def canonicalise(text, alphabet_id, length, version="v2"):
+def canonicalise(text, alphabet_id, length, version="v2", lo=None):
     """canon-text-v1 or canon-text-v2. Returns the list of units."""
     symbols = alphabet(alphabet_id)
     fold = not any("A" <= c <= "Z" for c in symbols)
@@ -330,7 +330,8 @@ def canonicalise(text, alphabet_id, length, version="v2"):
         canon.pop()
     s = "".join(canon)
     pad = symbols[0]  # digit 0: the space for every alphabet pinned before ascii96
-    return [s[i:i + length].ljust(length, pad) for i in range(0, len(s), length)]
+    lo = length if lo is None else lo  # (a range line, list O2: the last unit padded only to its shortest)
+    return [s[i:i + length].ljust(lo, pad) for i in range(0, len(s), length)]
 
 
 def canonicalise_bytes(data, alphabet_id, length):
@@ -755,6 +756,19 @@ def cmd_canon_vectors(_args):
                 units = canonicalise(text, alpha, L, version)
                 uh = ",".join(u.encode("utf-8").hex() for u in units)
                 print(f"{version}\t{alpha}\t{L}\t{text.encode('utf-8').hex()}\t{uh}")
+
+
+def cmd_canon_range_vectors(_args):
+    """Canonicalisation on a range line (list O2): version, alphabet, min, max, input (UTF-8 hex), units (hex, comma-separated)."""
+    inputs = ["welcome to the sieve", "It was the best of times, it was the worst of times.", "a", "   ", "ab cd",
+              "A well-known author/editor didn't stop \u2014 na\u00efve caf\u00e9."]
+    print("# sieve text canonicalisation on a range of lengths (list O2: the last unit padded only to the shortest)")
+    print("# version\talphabet\tmin\tmax\tinput_hex\tunits_hex")
+    for text in inputs:
+        for alpha, lo, hi in (("lower27", 1, 32), ("lower27", 4, 16), ("ascii96", 1, 20)):
+            units = canonicalise(text, alpha, hi, "v2", lo)
+            uh = ",".join(u.encode("utf-8").hex() for u in units)
+            print(f"v2\t{alpha}\t{lo}\t{hi}\t{text.encode('utf-8').hex()}\t{uh}")
 
 
 class ModelSpace:
@@ -11573,6 +11587,7 @@ def main():
     s.add_argument("--max", type=int, default=4)
     sub.add_parser("vectors")
     sub.add_parser("range-vectors")
+    sub.add_parser("canon-range-vectors")
     sub.add_parser("biguint-vectors")
     sub.add_parser("biguint-large-vectors")
     sub.add_parser("digit-vectors")
@@ -11737,6 +11752,8 @@ def main():
         cmd_vectors(args)
     elif args.cmd == "range-vectors":
         cmd_range_vectors(args)
+    elif args.cmd == "canon-range-vectors":
+        cmd_canon_range_vectors(args)
     elif args.cmd == "biguint-vectors":
         cmd_biguint_vectors(args)
     elif args.cmd == "biguint-large-vectors":
