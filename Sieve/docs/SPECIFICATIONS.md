@@ -137,6 +137,14 @@ Every unit on a line has exactly one address, and every address decodes to exact
 - **Positional:** address = unit read as a base-`|ALPHABET|` number. Neighbours share a prefix.
 - **Scrambled:** positional address passed through a fixed invertible permutation (Borges-style distribution).
 - Address length = `UNIT_LENGTH × log₂|ALPHABET|` bits. No compression is possible.
+- **A range of lengths (as built, list O1):** a text space may hold every unit of `MIN` to `MAX` symbols, the shorter
+  first, as the binary line holds its files. A unit of `L` symbols has the place `(B^L − B^MIN) / (B − 1) + v`, the
+  units shorter than it plus `v`, its digits read as a base-`B` number (`B = |ALPHABET|`); the line holds
+  `B^MIN + … + B^MAX` units. Positional address = the place; scrambled = `shuffle-sha256-v1` of the place over the
+  whole range, keyed with the key, its domain the space's id (`lower27/L1-32/key=sieve/shuffle-sha256-v1`). An
+  address is a number below the size: hex as wide as the size needs, a step along the loop adds modulo the size.
+  With `MIN = MAX` the space is the fixed one above, every address unchanged (`lower27/L32/...`,
+  `feistel-sha256-v1`). The oracle's `RangeSpace` and `tests/vectors_range_v1.tsv` fix it.
 
 ### 4.2 Entropy-Ordered Mode
 

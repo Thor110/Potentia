@@ -10470,3 +10470,28 @@ as it is ... ok go ahead with typing into the filter parameters and the other it
   tidy-data-v2: medians 1.00 to 1.07, losses 0 to 0.07 bits, the best of five 0.046 bits. The stronger the filters,
   the thicker their survivors where real pages are, and the more a window loses: in every stack measured, choosing a
   window costs more than it saves.
+
+**19.254 Runs of spaces named in the header (Edward, 19 November 2026).** His words: "if a file contains something like
+'welcome to the sieve [many spaces] and this is [many spaces] that or this' then a filter or setting can be added to
+the header which states the number of spaces to be replaced with a descriptor such as 'welcome to the sieve:Xand this
+is:Xthat or this'".
+- *What it is:* run-length coding of one symbol, the space, as a reversible way of writing a text: the text carried
+  with each long run of spaces as a marker and its length, and the header saying the marker and the shortest run it
+  stands for. Made again exactly, so it is a way (a recipe) for a file and a form a page could be warped in from, not a
+  filter: a filter only keeps or sets aside what is already there.
+- *Where it pays:* fixed-width text (tables, aligned columns, a page padded to its length, indented code), where runs
+  are long and many. Where it does not: prose, which has few runs of two spaces or more. LZMA2 and mixing already code
+  long runs in a few bytes each, so its gain is in what Sieve does with a text besides packing it: a text's place on a
+  line, which grows by a symbol for every space and so a long run moves it far along.
+- *What it needs:* a marker that cannot be confused with the text (one that does not occur in it, or escaped where
+  it does), the run's length written so that it is not read as the text's own digits (":36:" or a length symbol
+  out of the alphabet), and a lower bound on what counts as a run (at 2 or 3 spaces the marker costs more than it
+  saves).
+- *Measured first:* how many runs of 3, 8 and 32 spaces real texts hold (the anchors' public-domain texts, the
+  repository's own sources and documents), and the bits a text's place saves on the pages line against the bits
+  the header costs. List O's pages of a range of lengths already take the padding off a short page; this is for the
+  runs inside one.
+- *Set aside (the same day):* not worth building. Sieve's packing already codes a run in a few bytes (an LZMA2 match,
+  or the mixer's run and space contexts), and a text's place on the pages line is not how Sieve compresses a text:
+  the .sieve packs it. The one place the runs cost much is a short page's padding, which list O's pages of a range
+  of lengths take away. Taken up again only if a use appears where a page's own address carries the text.

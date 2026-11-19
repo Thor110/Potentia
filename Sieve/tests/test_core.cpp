@@ -337,6 +337,88 @@ void test_biguint()
     CHECK(std::abs(BigUint::pow(10, 50).log10_approx() - 50.0) < 1e-9);
 }
 
+// A space of a range of lengths (list O1): every unit of min to max symbols, the shorter first. Every unit of small
+// ranges walked both ways in both orders (the scrambled order a permutation of the places), its place the units
+// shorter than it plus its digits' value, steps round the loop and the fraction; min = max is the fixed space.
+void test_space_range(const std::string& dir)
+{
+    const Alphabet& a = alphabet_by_id("lower27");
+    const Space r(a, 1, 3, "sieve");
+    CHECK(r.is_range() && r.min_length() == 1 && r.unit_length() == 3 && r.address_length() == 4);
+    CHECK(r.size() == BigUint(27 + 729 + 19683));
+    CHECK(r.id() == "lower27/L1-3/key=sieve/shuffle-sha256-v1");
+    CHECK(r.count_shorter(1).is_zero() && r.count_shorter(2) == BigUint(27) && r.count_shorter(3) == BigUint(27 + 729));
+    CHECK(r.address_of(r.digits_of(U"a"), AddressMode::Positional) == "0001");
+    CHECK(r.address_of(r.digits_of(U"  "), AddressMode::Positional) == "001b"); // the first of two letters: 27
+    CHECK(r.text_of(r.unit_at("001b", AddressMode::Positional)) == U"  ");
+    CHECK(throws([&] { r.unit_at(r.size().to_hex(), AddressMode::Positional); })); // just past the line
+    CHECK(throws([&] { r.digits_of(U"abcd"); }) && throws([&] { r.digits_of(U""); }));
+    // every unit, both ways, both orders
+    bool ok = true;
+    std::vector<char> hit(size_t(27 + 729 + 19683), 0);
+    for (uint64_t p = 0; ok && p < 27 + 729 + 19683; ++p)
+    {
+        const auto u = r.unit_at_place(BigUint(p));
+        ok = r.place_of(u) == BigUint(p) && u.size() == (p < 27 ? 1u : p < 27 + 729 ? 2u : 3u);
+        const auto pos = r.address_digits(u, AddressMode::Positional);
+        ok = ok && BigUint::from_digits(pos, 27) == BigUint(p) && r.unit_of_address(pos, AddressMode::Positional) == u;
+        const auto scr = r.address_digits(u, AddressMode::Scrambled);
+        const BigUint s = BigUint::from_digits(scr, 27);
+        ok = ok && s < r.size() && r.unit_of_address(scr, AddressMode::Scrambled) == u;
+        if (ok)
+        {
+            const uint64_t i = std::stoull(s.to_decimal());
+            ok = !hit[i];
+            hit[i] = 1;
+        }
+        // a step of one, and back
+        ok = ok && r.neighbour(r.neighbour(u, AddressMode::Positional, 1), AddressMode::Positional, -1) == u;
+    }
+    CHECK(ok);
+    // round the loop: the last unit's next is the first; a step of the whole size comes back
+    BigUint top = r.size();
+    top -= BigUint(1);
+    const auto last = r.unit_at_place(top);
+    CHECK(r.neighbour(last, AddressMode::Positional, 1) == r.unit_at_place(BigUint()));
+    CHECK(r.neighbour(r.digits_of(U"ab"), AddressMode::Scrambled, int64_t(27 + 729 + 19683)) == r.digits_of(U"ab"));
+    CHECK(r.neighbour(r.digits_of(U"a"), AddressMode::Positional, -2) == last);
+    // the fraction, and a unit at a fraction
+    CHECK(r.fraction(r.unit_at_place(BigUint()), AddressMode::Positional) == 0.0);
+    CHECK(unit_at_fraction(r, 5, 1, AddressMode::Positional) == r.unit_at_place(BigUint((27 + 729 + 19683) / 2)));
+    // min = max: the fixed space, address for address
+    const Space one(a, 3, 3, "sieve"), fixed(a, 3, "sieve");
+    CHECK(!one.is_range() && one.id() == fixed.id() && one.size() == fixed.size());
+    for (const char32_t* t : {U"abc", U"   ", U"zz "})
+        for (AddressMode m : {AddressMode::Positional, AddressMode::Scrambled})
+            CHECK(one.address_of(one.digits_of(t), m) == fixed.address_of(fixed.digits_of(t), m));
+    // the oracle's vectors (reference/sieve_ref.py range-vectors): places and both orders, both ways
+    {
+        int n = 0;
+        bool agree = true;
+        std::ifstream in(dir + "vectors_range_v1.tsv");
+        CHECK(static_cast<bool>(in));
+        for (std::string line; std::getline(in, line);)
+        {
+            if (line.empty() || line[0] == '#') continue;
+            std::vector<std::string> f;
+            size_t start = 0;
+            for (size_t i = 0; i <= line.size(); ++i)
+                if (i == line.size() || line[i] == '\t') f.push_back(line.substr(start, i - start)), start = i + 1;
+            if (f.size() != 7) continue;
+            const Space sp(alphabet_by_id(f[0]), uint32_t(std::stoul(f[1])), uint32_t(std::stoul(f[2])), f[3]);
+            const std::u32string unit = utf8_decode(f[4]);
+            const auto d = sp.digits_of(unit);
+            agree = agree && sp.address_of(d, AddressMode::Positional) == f[5] && sp.address_of(d, AddressMode::Scrambled) == f[6] &&
+                    sp.text_of(sp.unit_at(f[5], AddressMode::Positional)) == unit && sp.text_of(sp.unit_at(f[6], AddressMode::Scrambled)) == unit;
+            ++n;
+        }
+        CHECK(agree && n >= 80);
+    }
+    // a copy is the same space (its shuffle with it)
+    const Space copy = r;
+    CHECK(copy.address_of(copy.digits_of(U"ab"), AddressMode::Scrambled) == r.address_of(r.digits_of(U"ab"), AddressMode::Scrambled));
+}
+
 void test_space_basics()
 {
     const Alphabet& a = alphabet_by_id("lower27");
@@ -11076,6 +11158,7 @@ void run_all(int argc, char** argv)
         const std::string dir = std::string(argv[1]) + "/";
         PART("vectors");
         RUN(test_vectors(dir + "vectors_v1.tsv"));
+        RUN(test_space_range(dir));
         RUN(test_biguint_vectors(dir + "vectors_biguint_v1.tsv"));
         RUN(test_biguint_large_vectors(dir + "vectors_biguint_large_v1.tsv"));
         RUN(test_digit_vectors(dir + "vectors_digits_v1.tsv"));

@@ -6,17 +6,28 @@
 //                       then read as a base-|ALPHABET| number.
 // Addresses are written as zero-padded lowercase hex of fixed width. Every address below
 // |ALPHABET|^UNIT_LENGTH decodes to exactly one unit; every unit has exactly one address.
+//
+// A space of a range of lengths (list O1; Edward, 19 November 2026: pages of a minimum to a maximum length): every
+// unit of MIN to MAX symbols, the shorter first, as the binary line holds its files. A unit's place is the units
+// shorter than it, (B^L - B^MIN) / (B - 1), plus its digits read as a base-B number; the positional address is that
+// place and the scrambled one shuffle-sha256-v1 of it over the whole range (keyed with the key, its domain the
+// space's id), as the binary line's. An address is a number below the size, written as MAX + 1 base-B digits (the
+// address digits), so a step along the loop adds modulo the size. With MIN = MAX the space is the fixed one above,
+// every address as it was.
 #pragma once
 
 #include "sieve/alphabet.hpp"
 #include "sieve/biguint.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace sieve {
+
+class Shuffle; // (compact.hpp: a range's scrambled order)
 
 enum class AddressMode { Positional, Scrambled };
 
@@ -37,13 +48,29 @@ public:
     Space(const Alphabet& alphabet, uint32_t unit_length, std::string key = "sieve");
     // A space over any symbol set, identified by name and size (images, audio, video).
     Space(std::string symbols_id, uint32_t base, uint32_t unit_length, std::string key = "sieve");
+    // A text space of a range of lengths, min_length to max_length (1 <= min <= max); min = max is the space above.
+    Space(const Alphabet& alphabet, uint32_t min_length, uint32_t max_length, std::string key);
+    ~Space();
+    Space(const Space& o);
+    Space& operator=(const Space& o);
+    Space(Space&&) noexcept;
+    Space& operator=(Space&&) noexcept;
 
     // Only valid for text spaces; throws std::logic_error otherwise.
     const Alphabet& alphabet() const;
     bool is_text() const { return alphabet_ != nullptr; }
     uint32_t base() const { return base_; }
     const std::string& symbols_id() const { return symbols_id_; }
-    uint32_t unit_length() const { return length_; }
+    uint32_t unit_length() const { return length_; } // the longest unit (a range's maximum)
+    uint32_t min_length() const { return min_length_; }
+    bool is_range() const { return min_length_ < length_; }
+    // Digits an address is written in: the unit length, or a range's maximum plus one.
+    uint32_t address_length() const { return is_range() ? length_ + 1 : length_; }
+    // A unit's place in positional order (any length in the range), and the unit at a place (below size()).
+    BigUint place_of(const Digits& unit) const;
+    Digits unit_at_place(const BigUint& place) const;
+    // The units shorter than `length` (from min_length on): (B^length - B^min) / (B - 1).
+    BigUint count_shorter(uint32_t length) const;
     const std::string& key() const { return key_; }
 
     // |ALPHABET|^UNIT_LENGTH, exact.
@@ -55,11 +82,12 @@ public:
     // The address map depends only on base, length and key; the id also names the symbol set.
     std::string id() const;
 
-    // Unit text <-> digits. Text must be exactly UNIT_LENGTH symbols of the alphabet.
+    // Unit text <-> digits. Text must be exactly UNIT_LENGTH symbols of the alphabet (on a range, any length in it).
     Digits digits_of(std::u32string_view unit) const;
     std::u32string text_of(const Digits& unit) const;
 
-    // Scramble maps unit digits to address digits; unscramble is its exact inverse.
+    // Scramble maps unit digits to address digits; unscramble is its exact inverse. One length only (a range's
+    // scrambled order is address_digits').
     Digits scramble(Digits unit) const;
     Digits unscramble(Digits address) const;
 
@@ -95,6 +123,9 @@ private:
     std::string symbols_id_;
     uint32_t base_;
     uint32_t length_;
+    uint32_t min_length_;
+    std::unique_ptr<Shuffle> shuffle_; // a range's scrambled order (null for one length)
+    void check_unit(const Digits& unit) const;
     std::string key_;
     BigUint size_;
     size_t bits_;

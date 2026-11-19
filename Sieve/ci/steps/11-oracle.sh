@@ -9,6 +9,7 @@ cd "$(dirname "$0")/../.."
 trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
 cd reference
 python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
+python sieve_ref.py range-vectors | diff - ../tests/vectors_range_v1.tsv
 python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
 python sieve_ref.py biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
 python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv

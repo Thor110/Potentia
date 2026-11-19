@@ -367,9 +367,26 @@ run before a release package, and after each of the three reviews. Each batch is
   Every page of `min` to `max` characters, the shorter first, then in order within a length, as the binary line holds
   its files; no padding, so a page is what was typed. With `min` = `max` the line is exactly today's (its addresses
   unchanged).
-  - [ ] O1. The address space: a pages space of a range (count of the shorter pages, then the page's own number;
+  - [x] O1. The address space: a pages space of a range (count of the shorter pages, then the page's own number;
     scrambled by shuffle-sha256-v1 over the whole range, as the binary line is; at `min` = `max` the digit Feistel as
     today), hex, steps along the loop, the fraction; the oracle and its vectors.
+    - Space gains a minimum length (`Space(alphabet, min, max, key)`; the old constructor is min = max). Size
+      B^min + ... + B^max; the pages shorter than L, (B^L - B^min) / (B - 1).
+    - A page's place: the pages shorter than it, plus its letters read as a base-B number; the place back to a page
+      by finding its length from the place, as the binary line does. Positional address = the place; scrambled =
+      shuffle-sha256-v1 of it over the whole range, keyed with the line's key, its domain the space's id.
+    - An address is a number below the size, so its digits are written to as many places as the size needs: hex
+      width from the size, a step along the loop is adding modulo the size, the fraction is place / size, and
+      "go to 36.5%" is floor(size x 0.365). With min = max every one of these is today's, digit for digit.
+    - The id: `lower27/L1-32/key=sieve/...` for a range (one length keeps `L32`, so its addresses keep their
+      domain); digits_of and text_of take any length in the range.
+    - The oracle (reference/sieve_ref.py) gains the same space; vectors of places, addresses and pages at several
+      ranges (and at min = max, today's vectors unchanged); unit tests walk every page of small ranges both ways.
+    - *Built (19 November 2026):* Space(alphabet, min, max, key); every one of the 20,439 pages of 1 to 3 letters
+      walked both ways in both orders (the scrambled order a permutation of the places), steps round the loop, the
+      fraction; min = max the fixed space address for address; the oracle's RangeSpace and 84 vectors (ranges 1-3,
+      1-32, 5-8, 19-21 with the greeting, ascii95 1-8), agreed by the C++ `[01]` + `[11]`. Nothing uses it yet
+      (O2 to O6).
   - [ ] O2. Canonicalisation without padding on a range line (a text longer than `max` still cut into pages).
   - [ ] O3. Filters over a range: each length counted by its own stack and the counts summed (an automaton's table
     answers every shorter length already), a survivor's rank the survivors of the shorter lengths and its rank
@@ -379,6 +396,37 @@ run before a release package, and after each of the three reviews. Each batch is
   - [ ] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
   - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
     old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.
+  - [ ] O8. Seeds, studied (Edward, 19 November 2026: "a guided sweep of a small number of seeds at fractional
+    intervals ... try those seeds against a variety of different file types ... sorting the seeds by efficiency ...
+    analysing the way that the seeds move the file"): a `sieve` command first. n seeds evenly spaced through the
+    seeds (n adjustable), a spread of file types (text, PNG, JPEG, MIDI, programs, .sieve files); for each seed and
+    file, where it lands and the bits saved against its place once the seed is named; the seeds sorted by
+    efficiency, overall and by type; and the movement: whether a seed good for one file of a type is good for
+    another, whether neighbouring seeds move a file to neighbouring places, whether landings are even. Two families:
+    the binary line's shuffle (SHA-256 rounds: expected even, no seed better across files, the best of n saving about
+    log2 n, what naming it costs) and an affine one, x -> (a x + b) mod N, whose path from A to B can be solved for
+    (b = t - a x) and whose seed then holds the file's bits. Results in IDEAS; in the File Locator (a few seeds, a
+    setting, 0 for none) only if a seed ever pays.
+  - [ ] O9. Orders by sort key (Edward: "use a number of different sorting algorithms to sort seeds ... to guide the
+    scrambling"): a few named orders of a line, each its units sorted by a key that means something (a model's
+    probability, as guided order is; letters' entropy; a filter's count of passes), tried for a file and the best
+    named, as O8 names a seed. A random key is just another shuffle (no gain); a key that puts real content early
+    can save more than naming it costs. Measured first (IDEAS), built only where it pays, and only keys that can be
+    counted under a prefix, so an order of an endless line can be walked without sorting it.
+  - [ ] O10. Seed Search in the File Locator, after O8 has measured (Edward, 19 November 2026: a "Seed Search"
+    option that toggles between "Every Step" and "At The End"). At The End: a few seeds tried on the finished .sieve,
+    one kept only where its scrambled place plus naming it beats the plain place. Every Step: tried on each candidate
+    the sieving weighs as it goes (each a different file, so fresh tries), the winner kept only where it beats the
+    finished file with At The End's best, all counted in bits at the end. The number of seeds a setting; off by
+    default until O8's figures say whether either pays.
+    - Its time: a seed costs one shuffle of the file's place, about 0.19 ms a KB here (measured 19 November 2026:
+      1 KB 0.20 ms, 16 KB 3.1 ms, 128 KB 24 ms, 1 MB 196 ms a seed). The row says what n seeds will add for the
+      file chosen ("16 seeds: about 3.1 s"), and a cap, the smaller of 2 seconds and 5% of the sieving's own time,
+      lowers n to what fits (none, saying so, for a file too large); Every Step counts its tries against the same cap.
+    - Every Step multiplies the cost: n seeds for each candidate weighed, and the candidates are many (each way of
+      each file). So its time is worked out as the sieving goes: the time spent on seeds so far, and the candidates
+      still to come times a seed's cost at their sizes, shown in the progress line; when the cap would be passed
+      it stops trying seeds and the rest of the sieving goes on as without them, saying so at the end.
 - [x] O7. OPTIMISE FILTERS leaves near-model-v1 and language-v1 alone (they pick a run's neighbourhood and language);
   its last step, keeping each stack within the filter memory, on a worker, so the window answers.
 

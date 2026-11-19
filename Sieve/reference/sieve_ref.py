@@ -203,6 +203,76 @@ class Space:
         return self.text_of(d)
 
 
+
+class RangeSpace:
+    """A text space of a range of lengths (list O1): every unit of lo to hi symbols, the shorter first. A unit's place
+    is the units shorter than it plus its digits' value; positional = the place, scrambled = shuffle-sha256-v1 of it
+    over the whole range, keyed with the key, its domain the space's id."""
+
+    def __init__(self, alphabet_id, lo, hi, key="sieve"):
+        assert 1 <= lo <= hi
+        self.symbols = alphabet(alphabet_id)
+        self.n = len(self.symbols)
+        self.lo, self.hi, self.key = lo, hi, key
+        self.size = self.shorter(hi + 1)
+        self.hex_width = max(1, ((self.size - 1).bit_length() + 3) // 4)
+        self.id = f"{alphabet_id}/L{lo}-{hi}/key={key}/shuffle-sha256-v1"
+
+    def shorter(self, length):
+        return sum(self.n ** l for l in range(self.lo, length))
+
+    def place_of(self, text):
+        assert self.lo <= len(text) <= self.hi, "wrong unit length"
+        v = 0
+        for c in text:
+            v = v * self.n + self.symbols.index(c)
+        return self.shorter(len(text)) + v
+
+    def text_at(self, place):
+        assert 0 <= place < self.size
+        L = self.lo
+        while L < self.hi and place >= self.shorter(L + 1):
+            L += 1
+        v, out = place - self.shorter(L), []
+        for _ in range(L):
+            v, r = divmod(v, self.n)
+            out.append(self.symbols[r])
+        return "".join(reversed(out))
+
+    def address_of(self, text, mode):
+        p = self.place_of(text)
+        if mode == "scrambled":
+            p = shuffle(self.key, self.id, self.size, p)
+        return format(p, "x").zfill(self.hex_width)
+
+    def unit_at(self, hexaddr, mode):
+        v = int(hexaddr, 16)
+        if v >= self.size:
+            raise ValueError("address outside the space")
+        if mode == "scrambled":
+            v = shuffle(self.key, self.id, self.size, v, inverse=True)
+        return self.text_at(v)
+
+
+def cmd_range_vectors(_args):
+    """Conformance vectors for spaces of a range of lengths: alphabet, min, max, key, unit, positional, scrambled."""
+    print("# sieve range-space vectors v1 (list O1: units of min to max symbols, the shorter first; shuffle-sha256-v1)")
+    print("# alphabet\tmin\tmax\tkey\tunit\tpositional\tscrambled")
+    for alpha, lo, hi in (("lower27", 1, 3), ("lower27", 1, 32), ("lower27", 5, 8), ("ascii95", 1, 8), ("lower27", 19, 21)):
+        for key in ("sieve", "alt-key"):
+            sp = RangeSpace(alpha, lo, hi, key)
+            g = stream(f"range/{alpha}/{lo}/{hi}/{key}")
+            units = [sp.symbols[0] * lo, sp.symbols[-1] * hi, sp.text_at(0), sp.text_at(sp.size - 1)]
+            for _ in range(4):
+                L = lo + next(g) % (hi - lo + 1)
+                units.append("".join(sp.symbols[next(g) % sp.n] for _ in range(L)))
+            if alpha == "lower27" and lo <= 20 <= hi:
+                units.append("welcome to the sieve")
+            for u in units:
+                pos, scr = sp.address_of(u, "positional"), sp.address_of(u, "scrambled")
+                assert sp.unit_at(pos, "positional") == u and sp.unit_at(scr, "scrambled") == u
+                print(f"{alpha}\t{lo}\t{hi}\t{key}\t{u}\t{pos}\t{scr}")
+
 TRANSLITERATE = {"\u00ab": '"', "\u00bb": '"', "\u02bc": "'", "\u2010": "-", "\u2011": "-", "\u2012": "-",
                  "\u2013": "-", "\u2014": "-", "\u2015": "-", "\u2018": "'", "\u2019": "'", "\u201c": '"',
                  "\u201d": '"', "\u201e": '"', "\u2026": "...", "\u2032": "'", "\u2033": '"', "\u2212": "-"}
@@ -11502,6 +11572,7 @@ def main():
     s.add_argument("--dict", required=True)
     s.add_argument("--max", type=int, default=4)
     sub.add_parser("vectors")
+    sub.add_parser("range-vectors")
     sub.add_parser("biguint-vectors")
     sub.add_parser("biguint-large-vectors")
     sub.add_parser("digit-vectors")
@@ -11664,6 +11735,8 @@ def main():
 
     if args.cmd == "vectors":
         cmd_vectors(args)
+    elif args.cmd == "range-vectors":
+        cmd_range_vectors(args)
     elif args.cmd == "biguint-vectors":
         cmd_biguint_vectors(args)
     elif args.cmd == "biguint-large-vectors":

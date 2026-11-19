@@ -1,8 +1,11 @@
 #include "sieve/space.hpp"
 
+#include "sieve/compact.hpp"
 #include "sieve/sha256.hpp"
 
+#include <algorithm>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace sieve {
@@ -23,7 +26,7 @@ Space::Space(const Alphabet& alphabet, uint32_t unit_length, std::string key)
 }
 
 Space::Space(std::string symbols_id, uint32_t base, uint32_t unit_length, std::string key)
-    : symbols_id_(std::move(symbols_id)), base_(base), length_(unit_length), key_(std::move(key))
+    : symbols_id_(std::move(symbols_id)), base_(base), length_(unit_length), min_length_(unit_length), key_(std::move(key))
 {
     if (unit_length == 0) throw std::invalid_argument("unit length must be at least 1");
     if (base < 2) throw std::invalid_argument("a space needs at least 2 symbols");
@@ -34,6 +37,77 @@ Space::Space(std::string symbols_id, uint32_t base, uint32_t unit_length, std::s
     if (hex_width_ == 0) hex_width_ = 1;
 }
 
+Space::Space(const Alphabet& alphabet, uint32_t min_length, uint32_t max_length, std::string key)
+    : Space(alphabet, max_length, std::move(key))
+{
+    if (min_length == 0 || min_length > max_length) throw std::invalid_argument("a range of lengths runs from 1 or more up to its maximum");
+    min_length_ = min_length;
+    if (!is_range()) return;
+    size_ = count_shorter(length_ + 1);
+    BigUint top = size_;
+    top -= BigUint(1);
+    bits_ = top.bit_length();
+    hex_width_ = std::max<size_t>(1, (bits_ + 3) / 4);
+    shuffle_ = std::make_unique<Shuffle>(size_, key_, id());
+}
+
+Space::~Space() = default;
+Space::Space(Space&&) noexcept = default;
+Space& Space::operator=(Space&&) noexcept = default;
+
+Space::Space(const Space& o)
+    : alphabet_(o.alphabet_), symbols_id_(o.symbols_id_), base_(o.base_), length_(o.length_), min_length_(o.min_length_),
+      shuffle_(o.shuffle_ ? std::make_unique<Shuffle>(*o.shuffle_) : nullptr), key_(o.key_), size_(o.size_), bits_(o.bits_),
+      hex_width_(o.hex_width_)
+{
+}
+
+Space& Space::operator=(const Space& o)
+{
+    if (this != &o)
+    {
+        Space c(o);
+        *this = std::move(c);
+    }
+    return *this;
+}
+
+BigUint Space::count_shorter(uint32_t length) const
+{
+    if (length <= min_length_) return {};
+    // (B^length - B^min) / (B - 1): the units of min .. length - 1 symbols.
+    BigUint n = BigUint::pow(base_, length);
+    n -= BigUint::pow(base_, min_length_);
+    if (base_ > 2) n.divmod_small(base_ - 1);
+    return n;
+}
+
+void Space::check_unit(const Digits& unit) const
+{
+    if (unit.size() < min_length_ || unit.size() > length_) throw std::invalid_argument("digit vector has the wrong length");
+    for (uint32_t d : unit)
+        if (d >= base_) throw std::invalid_argument("digit out of range for this space");
+}
+
+BigUint Space::place_of(const Digits& unit) const
+{
+    check_unit(unit);
+    BigUint v = BigUint::from_digits(unit, base_);
+    v += count_shorter(uint32_t(unit.size()));
+    return v;
+}
+
+Space::Digits Space::unit_at_place(const BigUint& place) const
+{
+    if (!(place < size_)) throw std::out_of_range("place outside this space");
+    // Its length: the last whose shorter units do not pass the place.
+    uint32_t L = min_length_;
+    while (L < length_ && !(place < count_shorter(L + 1))) ++L;
+    BigUint v = place;
+    v -= count_shorter(L);
+    return v.to_digits(base_, L);
+}
+
 const Alphabet& Space::alphabet() const
 {
     if (!alphabet_) throw std::logic_error("space '" + symbols_id_ + "' is not a text space");
@@ -42,17 +116,19 @@ const Alphabet& Space::alphabet() const
 
 std::string Space::id() const
 {
+    if (is_range())
+        return symbols_id_ + "/L" + std::to_string(min_length_) + "-" + std::to_string(length_) + "/key=" + key_ + "/" + kShuffleVersion;
     return symbols_id_ + "/L" + std::to_string(length_) + "/key=" + key_ + "/" + kScrambleVersion;
 }
 
 Space::Digits Space::digits_of(std::u32string_view unit) const
 {
     const Alphabet& alpha = alphabet();
-    if (unit.size() != length_)
+    if (unit.size() < min_length_ || unit.size() > length_)
         throw std::invalid_argument("unit has " + std::to_string(unit.size()) + " symbols, expected " +
-                                    std::to_string(length_));
-    Digits d(length_);
-    for (uint32_t i = 0; i < length_; ++i)
+                                    (is_range() ? std::to_string(min_length_) + " to " : std::string()) + std::to_string(length_));
+    Digits d(unit.size());
+    for (uint32_t i = 0; i < d.size(); ++i)
     {
         auto digit = alpha.digit_of(unit[i]);
         if (!digit) throw std::invalid_argument("symbol at position " + std::to_string(i) + " is not in alphabet " + symbols_id_);
@@ -64,11 +140,11 @@ Space::Digits Space::digits_of(std::u32string_view unit) const
 std::u32string Space::text_of(const Digits& unit) const
 {
     const Alphabet& alpha = alphabet();
-    if (unit.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
+    if (unit.size() < min_length_ || unit.size() > length_) throw std::invalid_argument("digit vector has the wrong length");
     for (uint32_t d : unit)
         if (d >= base_) throw std::invalid_argument("digit out of range");
-    std::u32string s(length_, U' ');
-    for (uint32_t i = 0; i < length_; ++i) s[i] = alpha.symbol(unit[i]);
+    std::u32string s(unit.size(), U' ');
+    for (uint32_t i = 0; i < unit.size(); ++i) s[i] = alpha.symbol(unit[i]);
     return s;
 }
 
@@ -122,6 +198,7 @@ Space::Digits Space::round_function(uint32_t round, const uint32_t* src, size_t 
 // Each round is invertible by subtraction, so the whole map is a permutation of the space.
 Space::Digits Space::scramble(Digits d) const
 {
+    if (is_range()) throw std::logic_error("a range of lengths is scrambled by its shuffle (address_digits)");
     if (d.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     const uint32_t n = base_;
     const size_t h = length_ / 2;
@@ -138,6 +215,7 @@ Space::Digits Space::scramble(Digits d) const
 
 Space::Digits Space::unscramble(Digits d) const
 {
+    if (is_range()) throw std::logic_error("a range of lengths is scrambled by its shuffle (unit_of_address)");
     if (d.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     const uint32_t n = base_;
     const size_t h = length_ / 2;
@@ -154,6 +232,11 @@ Space::Digits Space::unscramble(Digits d) const
 
 Space::Digits Space::address_digits(const Digits& unit, AddressMode mode) const
 {
+    if (is_range())
+    {
+        const BigUint place = place_of(unit);
+        return (mode == AddressMode::Scrambled ? shuffle_->forward(place) : place).to_digits(base_, address_length());
+    }
     if (unit.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     for (uint32_t d : unit)
         if (d >= base_) throw std::invalid_argument("digit out of range for this space");
@@ -162,6 +245,13 @@ Space::Digits Space::address_digits(const Digits& unit, AddressMode mode) const
 
 Space::Digits Space::unit_of_address(Digits address, AddressMode mode) const
 {
+    if (is_range())
+    {
+        if (address.size() != address_length()) throw std::invalid_argument("digit vector has the wrong length");
+        const BigUint v = BigUint::from_digits(address, base_);
+        if (!(v < size_)) throw std::out_of_range("address is outside this space");
+        return unit_at_place(mode == AddressMode::Scrambled ? shuffle_->inverse(v) : v);
+    }
     if (address.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     return mode == AddressMode::Scrambled ? unscramble(std::move(address)) : address;
 }
@@ -173,6 +263,14 @@ std::string Space::hex_of(const Digits& address) const
 
 double Space::fraction_of(const Digits& address) const
 {
+    if (is_range())
+    {
+        // place / size, from the top 53 bits of each (display only)
+        BigUint v = BigUint::from_digits(address, base_), n = size_;
+        const size_t shift = n.bit_length() > 53 ? n.bit_length() - 53 : 0;
+        v >>= shift, n >>= shift;
+        return double(std::stoull(v.to_decimal())) / double(std::stoull(n.to_decimal()));
+    }
     double f = 0.0, scale = 1.0;
     const double n = base_;
     // Enough leading digits to fill a double, however small the base.
@@ -192,9 +290,10 @@ std::string Space::address_of(const Digits& unit, AddressMode mode) const
 Space::Digits Space::parse_address(std::string_view hex) const
 {
     const BigUint v = BigUint::from_hex(hex);
-    if (v >= size_) throw std::out_of_range("address is outside this space (must be below " +
-                                            std::to_string(base_) + "^" + std::to_string(length_) + ")");
-    return v.to_digits(base_, length_);
+    if (v >= size_)
+        throw std::out_of_range("address is outside this space (must be below " +
+                                (is_range() ? size_.to_hex() + " hex" : std::to_string(base_) + "^" + std::to_string(length_)) + ")");
+    return v.to_digits(base_, address_length());
 }
 
 Space::Digits Space::unit_at(std::string_view hex, AddressMode mode) const
@@ -204,6 +303,26 @@ Space::Digits Space::unit_at(std::string_view hex, AddressMode mode) const
 
 Space::Digits Space::step_address(Digits a, int64_t offset) const
 {
+    if (is_range())
+    {
+        // A number below the size, stepped round the loop.
+        if (a.size() != address_length()) throw std::invalid_argument("digit vector has the wrong length");
+        BigUint v = BigUint::from_digits(a, base_);
+        BigUint step(offset >= 0 ? uint64_t(offset) : 0 - uint64_t(offset));
+        step = BigUint::mod(step, size_);
+        if (offset >= 0)
+        {
+            v += step;
+            if (!(v < size_)) v -= size_;
+        }
+        else if (v < step)
+        {
+            v += size_;
+            v -= step;
+        }
+        else v -= step;
+        return v.to_digits(base_, address_length());
+    }
     if (a.size() != length_) throw std::invalid_argument("digit vector has the wrong length");
     // Add |offset| to (or subtract it from) the address digits, least significant digit last,
     // with the carry or borrow wrapping around the loop.
@@ -251,6 +370,7 @@ Space::Digits unit_at_fraction(const Space& space, uint64_t numerator, uint32_t 
     BigUint v = space.size();
     v.mul_small(static_cast<uint32_t>(numerator));
     for (uint32_t i = 0; i < decimals; ++i) v.divmod_small(10);
+    if (space.is_range()) return space.unit_of_address(v.to_digits(space.base(), space.address_length()), mode);
     Space::Digits a = v.to_digits(space.base(), space.unit_length());
     return mode == AddressMode::Scrambled ? space.unscramble(std::move(a)) : a;
 }
