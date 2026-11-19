@@ -84,7 +84,12 @@ public:
         if (b_.lo.size() != n_ || (b_.has_hi && b_.hi.size() != n_)) throw std::logic_error("a window's bounds are not units of its line");
         has_lo_ = std::any_of(b_.lo.begin(), b_.lo.end(), [](uint32_t c) { return c != 0; });
         empty_ = b_.empty();
-        if (!empty_ && has_lo_ && in_.start() != kDead) below_lo_ = below(in_.start(), b_.lo, 0);
+        if (!empty_ && b_.wrap && in_.start() != kDead)
+        {
+            below_lo_ = below(in_.start(), b_.lo, 0);
+            below_hi_ = below(in_.start(), b_.hi, 0);
+        }
+        else if (!empty_ && has_lo_ && in_.start() != kDead) below_lo_ = below(in_.start(), b_.lo, 0);
         set_count();
     }
     uint32_t length() const override { return n_; }
@@ -92,6 +97,7 @@ public:
     State start() const override
     {
         if (empty_) return kDead;
+        if (b_.wrap) return id_of(in_.start(), 0, 3);
         return id_of(in_.start(), 0, uint8_t((has_lo_ ? 1 : 0) | (b_.has_hi ? 2 : 0)));
     }
     State next(State s, uint32_t c) const override
@@ -100,6 +106,7 @@ public:
         const auto [si, pos, f] = parts(s);
         if (!f) return id_of(in_.next(si, c), 0, 0);
         if (pos >= n_) return kDead;
+        if (b_.wrap) return next_round(si, pos, f, c);
         if ((f & 1) && c < b_.lo[pos]) return kDead;
         if ((f & 2) && c > b_.hi[pos]) return kDead;
         const State t = in_.next(si, c);
@@ -127,12 +134,26 @@ public:
         }
         const BigUint all = in_.completions(si, remaining);
         BigUint v = all;
-        if (f & 1) v -= below(si, b_.lo, pos);
-        if (f & 2)
+        if (b_.wrap) // (the units below hi, and those from lo on: either, while still equal to both)
         {
-            BigUint past = all;
-            past -= below(si, b_.hi, pos);
-            v -= past;
+            v = BigUint();
+            if (f & 2) v += below(si, b_.hi, pos);
+            if (f & 1)
+            {
+                BigUint from_lo = all;
+                from_lo -= below(si, b_.lo, pos);
+                v += from_lo;
+            }
+        }
+        else
+        {
+            if (f & 1) v -= below(si, b_.lo, pos);
+            if (f & 2)
+            {
+                BigUint past = all;
+                past -= below(si, b_.hi, pos);
+                v -= past;
+            }
         }
         std::lock_guard<std::mutex> lock(mx_);
         Rec& r = recs_[size_t(s)];
@@ -151,6 +172,8 @@ public:
     {
         if (k >= count()) throw std::out_of_range("rank beyond the survivors");
         BigUint at = k;
+        if (b_.wrap && k < below_hi_) return in_.unrank(at); // (the stretch at the loop's start comes first)
+        if (b_.wrap) at -= below_hi_;
         at += below_lo_;
         return in_.unrank(at);
     }
@@ -158,11 +181,30 @@ public:
     {
         if (!b_.contains(unit)) throw std::invalid_argument("unit is not a survivor");
         BigUint r = in_.rank(unit);
+        if (b_.wrap && less(unit, b_.hi)) return r;
         r -= below_lo_;
+        if (b_.wrap) r += below_hi_;
         return r;
     }
 
 private:
+    // A step across 0 (b_.wrap): free once below hi's digit or above lo's; between the two, dead; equal to either,
+    // still tight against it (the unit equal to hi is past the first stretch, the one equal to lo the first of
+    // the second).
+    State next_round(State si, uint32_t pos, uint8_t f, uint32_t c) const
+    {
+        const bool th = f & 2, tl = f & 1;
+        const State t = in_.next(si, c);
+        if (t == kDead) return kDead;
+        if ((th && c < b_.hi[pos]) || (tl && c > b_.lo[pos])) return id_of(t, 0, 0);
+        uint8_t g = 0;
+        if (th && c == b_.hi[pos]) g |= 2;
+        if (tl && c == b_.lo[pos]) g |= 1;
+        if (!g) return kDead;
+        if (pos + 1 == n_) return (g & 1) ? id_of(t, 0, 0) : kDead;
+        return id_of(t, pos + 1, g);
+    }
+
     struct Rec
     {
         State inner;
@@ -222,7 +264,7 @@ private:
     WindowBounds b_;
     uint32_t n_;
     bool full_, has_lo_ = false, empty_ = false;
-    BigUint below_lo_;
+    BigUint below_lo_, below_hi_;
     mutable std::mutex mx_;
     mutable std::deque<Rec> recs_;
     mutable std::map<std::tuple<State, uint32_t, uint8_t>, State> ids_;
@@ -233,11 +275,31 @@ private:
 bool WindowBounds::contains(std::span<const uint32_t> unit) const
 {
     if (unit.size() != lo.size()) return false;
+    if (wrap) return less(unit, hi) || !less(unit, lo);
     if (less(unit, lo)) return false;
     return !has_hi || less(unit, hi);
 }
 
-bool WindowBounds::empty() const { return has_hi && !less(lo, hi); }
+bool WindowBounds::empty() const { return !wrap && has_hi && !less(lo, hi); }
+
+WindowBounds degree_bounds_round(uint32_t base, uint32_t length, uint64_t from, uint64_t width, uint32_t decimals)
+{
+    uint64_t whole = 360;
+    for (uint32_t i = 0; i < decimals; ++i) whole *= 10;
+    if (from >= whole || width == 0) throw std::invalid_argument("degree-window: from must be below 360 degrees and width at least 1");
+    if (width >= whole) return degree_bounds(base, length, 0, whole, decimals); // (the whole loop)
+    if (from + width <= whole) return degree_bounds(base, length, from, from + width, decimals);
+    const WindowBounds end = degree_bounds(base, length, from, whole, decimals), start = degree_bounds(base, length, 0, from + width - whole, decimals);
+    if (end.empty()) return start;
+    if (start.empty()) return end;
+    if (!start.has_hi || !less(start.hi, end.lo)) return degree_bounds(base, length, 0, whole, decimals); // (they meet: everything)
+    WindowBounds b;
+    b.lo = end.lo;
+    b.hi = start.hi;
+    b.has_hi = true;
+    b.wrap = true;
+    return b;
+}
 
 WindowBounds degree_bounds(uint32_t base, uint32_t length, uint64_t from, uint64_t to, uint32_t decimals)
 {
@@ -281,6 +343,7 @@ const WindowBounds* window_bounds(const Filter& f)
 
 WindowBounds intersect_windows(const WindowBounds& a, const WindowBounds& b)
 {
+    if (a.wrap || b.wrap) throw std::logic_error("two windows where one crosses 0 are not intersected");
     WindowBounds out;
     out.lo = less(a.lo, b.lo) ? b.lo : a.lo;
     if (a.has_hi && b.has_hi) out.hi = less(a.hi, b.hi) ? a.hi : b.hi;
@@ -330,12 +393,39 @@ void add_window_filters(std::vector<FilterSpec>& out)
         uint64_t whole = 360;
         for (int64_t i = 0; i < d; ++i) whole *= 10;
         const uint64_t at = uint64_t(from) % whole; // (round the loop: 360 degrees is 0 again)
-        const uint64_t to = std::min<uint64_t>(at + uint64_t(width), whole); // (stops at 360)
-        WindowBounds b = degree_bounds(l.base, l.length, at, to, uint32_t(d));
+        WindowBounds b = degree_bounds(l.base, l.length, at, std::min<uint64_t>(at + uint64_t(width), whole), uint32_t(d)); // (v1: stops at 360)
         return std::make_unique<DegreeWindowFilter>(std::move(b), "from=" + std::to_string(from) + " width=" + std::to_string(width) +
                                                                       " decimals=" + std::to_string(d));
     };
+    w.retired = true; // (list N5-2: v2 goes on past 360 to the loop's start)
+    w.replaced_by = "degree-window-v2";
     out.push_back(w);
+
+    FilterSpec w2 = w;
+    w2.version = 2;
+    w2.retired = false;
+    w2.replaced_by.clear();
+    w2.description = w.description;
+    {
+        const std::string was = "Only the units whose bearing on the line's loop lies from `from` up to `from` + `width` degrees";
+        w2.description.replace(w2.description.find(was), was.size(),
+                               "Only the units whose bearing on the line's loop lies from `from` up to `from` + `width` degrees, going on past "
+                               "360 to the loop's start where it is wider than what is left (350 for 20 keeps 350 to 10)");
+    }
+    for (auto& p : w2.params)
+        if (p.key == "width") p.description = "how wide the window is, in the same units (one degree at 0 decimals); past 360 degrees it goes on "
+                                              "from the loop's start, the two stretches as one";
+    const std::string own2 = w2.name();
+    w2.make = [own2](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const FilterSpec& spec = *find_filter(own2);
+        const int64_t from = param_int(spec, v, "from"), width = param_int(spec, v, "width"), d = param_int(spec, v, "decimals");
+        uint64_t whole = 360;
+        for (int64_t i = 0; i < d; ++i) whole *= 10;
+        WindowBounds b = degree_bounds_round(l.base, l.length, uint64_t(from) % whole, uint64_t(width), uint32_t(d));
+        return std::make_unique<DegreeWindowFilter>(std::move(b), "from=" + std::to_string(from) + " width=" + std::to_string(width) +
+                                                                      " decimals=" + std::to_string(d));
+    };
+    out.push_back(w2);
 }
 
 } // namespace sieve

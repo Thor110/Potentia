@@ -39,6 +39,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <tuple>
+#include <functional>
 #include <string>
 #include <mutex>
 #include <optional>
@@ -389,6 +391,202 @@ std::array<BigUint, 5> blocks_at_level(const std::array<uint64_t, 5>& n, uint32_
     return out;
 }
 
+// A block story ranked sample by sample (list N5-10): sound-envelope and sound-syllables at any length. Each sample has
+// a class (its loudness, or loud or not), classes nested so that "at most class l" is a set of N_l samples; a block's
+// class is its loudest sample's; the blocks' story goes on from block to block (close) and ends accepted or not. The
+// ways to finish from a place depend only on the block, the loudest class in it so far and the story: the rest of
+// this block reaching class m exactly (N_m^r less N_(m-1)^r, or N_cur^r staying at cur) times the blocks after it from
+// the story that m leaves (a table, block by block). So it counts, ranks and unranks with the samples taken a run of
+// one class at a time (the digits of one class lie in a few runs), never the whole palette.
+struct BlockStory
+{
+    uint32_t states = 0;
+    std::function<int64_t(uint32_t, uint32_t)> close; // the story after a block of class m (-1: none)
+    std::function<bool(uint32_t)> accept;
+};
+struct ClassRun
+{
+    uint32_t start, len, cls;
+};
+
+class BlockStoryRanker : public Ranker
+{
+public:
+    // The memory its tables take: N_l^r for every class and every length to a block, and the story's table.
+    static double table_bytes(uint32_t bits, uint32_t classes, uint32_t block, uint32_t length, uint32_t states)
+    {
+        const double powers = double(classes) * double(block + 1) * (double(block) * double(bits) / 8 + 32);
+        const double story = double(length / block + 2) * double(states) * (double(length) * double(bits) / 8 + 32);
+        return powers + story;
+    }
+    BlockStoryRanker(uint32_t base, std::vector<ClassRun> runs, uint32_t classes, uint32_t block, uint32_t length, BlockStory st)
+        : base_(base), runs_(std::move(runs)), classes_(classes), block_(block), len_(length), st_(std::move(st))
+    {
+        std::vector<uint64_t> n(classes_, 0);
+        for (const ClassRun& r : runs_) n[r.cls] += r.len;
+        std::vector<uint64_t> le(classes_, 0);
+        for (uint32_t l = 0; l < classes_; ++l) le[l] = n[l] + (l ? le[l - 1] : 0);
+        pw_.assign(classes_, std::vector<BigUint>(block_ + 1));
+        for (uint32_t l = 0; l < classes_; ++l)
+        {
+            pw_[l][0] = BigUint(1);
+            for (uint32_t r = 1; r <= block_; ++r)
+            {
+                pw_[l][r] = pw_[l][r - 1];
+                if (le[l] <= 0xffffffffu) pw_[l][r].mul_small(uint32_t(le[l]));
+                else pw_[l][r] = BigUint::mul(pw_[l][r], BigUint(le[l]));
+            }
+        }
+        const uint32_t blocks = (len_ + block_ - 1) / block_;
+        tail_.assign(size_t(blocks) + 1, std::vector<BigUint>(st_.states));
+        for (uint32_t g = 0; g < st_.states; ++g) tail_[blocks][g] = BigUint(st_.accept(g) ? 1 : 0);
+        for (uint32_t b = blocks; b-- > 0;)
+        {
+            const uint32_t k = std::min(block_, len_ - b * block_);
+            for (uint32_t g = 0; g < st_.states; ++g)
+            {
+                BigUint v;
+                for (uint32_t m = 0; m < classes_; ++m)
+                    if (const int64_t g2 = st_.close(g, m); g2 >= 0 && !tail_[b + 1][size_t(g2)].is_zero())
+                        v += BigUint::mul(exact(k, 0, m), tail_[b + 1][size_t(g2)]);
+                tail_[b][g] = std::move(v);
+            }
+        }
+        set_count();
+    }
+    uint32_t length() const override { return len_; }
+    uint32_t base() const override { return base_; }
+    State start() const override { return pack(0, 0, 0); }
+    State next(State s, uint32_t c) const override
+    {
+        if (s == kDead || c >= base_) return kDead;
+        return step(s, class_of(c));
+    }
+    BigUint completions(State s, uint32_t remaining) const override
+    {
+        if (s == kDead) return BigUint();
+        const auto [pos, g, cur] = unpack(s);
+        if (uint64_t(pos) + remaining != len_) return BigUint();
+        return ways(pos, g, cur);
+    }
+    std::vector<uint32_t> unrank(const BigUint& k0) const override
+    {
+        if (k0 >= count()) throw std::out_of_range("rank beyond the survivors");
+        BigUint k = k0, q, r;
+        std::vector<uint32_t> u(len_);
+        State s = start();
+        for (uint32_t i = 0; i < len_; ++i)
+        {
+            bool placed = false;
+            for (const ClassRun& run : runs_)
+            {
+                const State t = step(s, run.cls);
+                if (t == kDead) continue;
+                const BigUint w = completions(t, len_ - i - 1);
+                if (w.is_zero()) continue;
+                const BigUint all = BigUint::mul(w, BigUint(run.len));
+                if (k < all)
+                {
+                    BigUint::divmod(k, w, q, r);
+                    u[i] = run.start + (q.is_zero() ? 0 : uint32_t(q.limbs()[0]));
+                    k = std::move(r);
+                    s = t;
+                    placed = true;
+                    break;
+                }
+                k -= all;
+            }
+            if (!placed) throw std::logic_error("the block ranker's counts are inconsistent");
+        }
+        return u;
+    }
+    BigUint rank(std::span<const uint32_t> unit) const override
+    {
+        if (unit.size() != len_) throw std::invalid_argument("unit has the wrong length");
+        BigUint k;
+        State s = start();
+        for (uint32_t i = 0; i < len_; ++i)
+        {
+            if (unit[i] >= base_) throw std::invalid_argument("unit is not a survivor");
+            for (const ClassRun& run : runs_)
+            {
+                if (run.start >= unit[i]) continue;
+                const uint32_t below = std::min(run.len, unit[i] - run.start);
+                const State t = step(s, run.cls);
+                if (t == kDead) continue;
+                k += BigUint::mul(completions(t, len_ - i - 1), BigUint(below));
+            }
+            s = step(s, class_of(unit[i]));
+            if (s == kDead) throw std::invalid_argument("unit is not a survivor");
+        }
+        if (completions(s, 0).is_zero()) throw std::invalid_argument("unit is not a survivor");
+        return k;
+    }
+
+private:
+    static State pack(uint32_t pos, uint32_t g, uint32_t cur) { return (State(pos) << 32) | (State(g) << 8) | cur; }
+    static std::tuple<uint32_t, uint32_t, uint32_t> unpack(State s) { return {uint32_t(s >> 32), uint32_t((s >> 8) & 0xffffff), uint32_t(s & 0xff)}; }
+    uint32_t class_of(uint32_t c) const
+    {
+        for (const ClassRun& r : runs_)
+            if (c >= r.start && c - r.start < r.len) return r.cls;
+        throw std::logic_error("a symbol in no class");
+    }
+    State step(State s, uint32_t cls) const
+    {
+        auto [pos, g, cur] = unpack(s);
+        if (pos >= len_) return kDead;
+        cur = std::max(cur, cls);
+        ++pos;
+        if (pos % block_ == 0 || pos == len_)
+        {
+            const int64_t g2 = st_.close(g, cur);
+            if (g2 < 0) return kDead;
+            g = uint32_t(g2), cur = 0;
+        }
+        return pack(pos, g, cur);
+    }
+    // r more samples taking a block whose loudest so far is cur to exactly m
+    BigUint exact(uint32_t r, uint32_t cur, uint32_t m) const
+    {
+        if (m < cur) return BigUint();
+        if (m == cur) return pw_[m][r];
+        BigUint v = pw_[m][r];
+        v -= pw_[m - 1][r];
+        return v;
+    }
+    BigUint ways(uint32_t pos, uint32_t g, uint32_t cur) const
+    {
+        if (pos >= len_) return BigUint(st_.accept(g) ? 1 : 0);
+        const uint32_t b = pos / block_, o = pos % block_, k = std::min(block_, len_ - b * block_);
+        BigUint v;
+        for (uint32_t m = cur; m < classes_; ++m)
+            if (const int64_t g2 = st_.close(g, m); g2 >= 0 && !tail_[b + 1][size_t(g2)].is_zero())
+                v += BigUint::mul(exact(k - o, cur, m), tail_[b + 1][size_t(g2)]);
+        return v;
+    }
+
+    uint32_t base_;
+    std::vector<ClassRun> runs_;
+    uint32_t classes_, block_, len_;
+    BlockStory st_;
+    std::vector<std::vector<BigUint>> pw_, tail_;
+};
+
+// The runs of digits of one class, in digit order (a few: classes go by magnitude).
+template <class Of>
+std::vector<ClassRun> class_runs(uint64_t base, Of of)
+{
+    std::vector<ClassRun> out;
+    for (uint64_t c = 0; c < base; ++c)
+    {
+        const uint32_t k = of(uint32_t(c));
+        if (!out.empty() && out.back().cls == k && out.back().start + out.back().len == c) ++out.back().len;
+        else out.push_back({uint32_t(c), 1, k});
+    }
+    return out;
+}
+
 // sound-envelope counted block by block: the units of `length` samples whose blocks tell an envelope. Exact, at
 // any length (an automaton's table grows with the length; this, with the blocks only).
 BigUint envelope_count(const PcmFormat& f, uint32_t block, uint32_t length)
@@ -422,8 +620,16 @@ public:
         : f_(f), block_(block), count_(envelope_count(f, block, length))
     {
         provenance_ = std::move(prov);
+        // (ranked where its tables fit the filter memory: list N5-10)
+        if (BlockStoryRanker::table_bytes(f.bits, 5, block, length, kEnvStory) <= filter_memory())
+        {
+            BlockStory st{kEnvStory, [](uint32_t g, uint32_t m) { return env_close(g, m); }, [](uint32_t g) { return env_accepts(g); }};
+            ranker_ = std::make_unique<BlockStoryRanker>(f.base(), class_runs(f.base(), [&](uint32_t c) { return loudness_of(f, c); }), 5, block,
+                                                         length, std::move(st));
+        }
     }
-    const BigUint* survivors() const override { return &count_; }
+    const BigUint* survivors() const override { return ranker_ ? nullptr : &count_; }
+    const Ranker* ranker() const override { return ranker_.get(); }
     bool passes(std::span<const uint32_t> unit) const override
     {
         int64_t g = 0;
@@ -445,6 +651,7 @@ private:
     PcmFormat f_;
     uint32_t block_;
     BigUint count_;
+    std::unique_ptr<Ranker> ranker_;
 };
 
 // sound-syllables: a block is loud where its loudest sample reaches the threshold; each loud block after a quiet
@@ -547,8 +754,24 @@ public:
         : f_(f), r_(r), count_(syllables_count(f, r, length))
     {
         provenance_ = std::move(prov);
+        const uint32_t states = uint32_t((r.most + 1) * 2);
+        if (r.most < (1u << 22) && BlockStoryRanker::table_bytes(f.bits, 2, r.block, length, states) <= filter_memory())
+        {
+            const SyllableRule rule = r;
+            BlockStory st{states,
+                          [rule](uint32_t g, uint32_t m) -> int64_t {
+                              const uint64_t n = g / 2, was = g % 2;
+                              if (!m) return int64_t(n * 2);
+                              const uint64_t n2 = n + (was ? 0 : 1);
+                              return n2 > rule.most ? -1 : int64_t(n2 * 2 + 1);
+                          },
+                          [rule](uint32_t g) { return g / 2 >= rule.fewest && g / 2 <= rule.most; }};
+            ranker_ = std::make_unique<BlockStoryRanker>(f.base(), class_runs(f.base(), [&](uint32_t c) { return loud_sample(f, c, r.threshold) ? 1u : 0u; }), 2,
+                                                         r.block, length, std::move(st));
+        }
     }
-    const BigUint* survivors() const override { return &count_; }
+    const BigUint* survivors() const override { return ranker_ ? nullptr : &count_; }
+    const Ranker* ranker() const override { return ranker_.get(); }
     bool passes(std::span<const uint32_t> unit) const override
     {
         uint64_t n = 0;
@@ -570,6 +793,7 @@ private:
     PcmFormat f_;
     SyllableRule r_;
     BigUint count_;
+    std::unique_ptr<Ranker> ranker_;
 };
 
 // sound-interval: the two strongest peaks of the sound's spectrum (50 Hz to 2 kHz, the first 2,048 samples or the
@@ -861,14 +1085,14 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         const std::string prov = "block=" + std::to_string(block);
         if (auto dfa = envelope_dfa(f, block); dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory())
             return make_dfa_filter(std::move(*dfa), l.length, prov);
-        return std::make_unique<EnvelopeFilter>(f, block, l.length, prov); // (counted block by block, judged)
+        return std::make_unique<EnvelopeFilter>(f, block, l.length, prov); // (counted and ranked block by block)
     };
     env.counts_as_on = [own = env.name()](const FilterLine& l, const FilterValues* v) -> std::string {
         int64_t block = 256;
         if (v)
             try { block = param_int(*find_filter(own), *v, "block"); }
             catch (const std::exception&) {} // a malformed setting: as without one
-        return cells_fit(uint64_t(kEnvStory) * 5 * uint64_t(block), l.base) ? "automaton" : "";
+        return cells_fit(uint64_t(kEnvStory) * 5 * uint64_t(block), l.base) ? "automaton" : "own"; // (list N5-10: ranked block by block past that)
     };
     out.push_back(env);
 
@@ -904,13 +1128,13 @@ void add_sound_filters(std::vector<FilterSpec>& out)
                                  std::to_string(r.fewest) + ".." + std::to_string(r.most);
         if (auto dfa = syllables_dfa(f, r); dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory())
             return make_dfa_filter(std::move(*dfa), l.length, prov);
-        return std::make_unique<SyllablesFilter>(f, r, l.length, prov); // (counted block by block, judged)
+        return std::make_unique<SyllablesFilter>(f, r, l.length, prov); // (counted and ranked block by block)
     };
     syl.counts_as_on = [own = syl.name(), syllables_of](const FilterLine& l, const FilterValues* v) -> std::string {
         try
         {
             const SyllableRule r = syllables_of(own, l, v ? *v : FilterValues{});
-            return cells_fit((r.most + 1) * 4 * uint64_t(r.block), l.base) ? "automaton" : "";
+            return cells_fit((r.most + 1) * 4 * uint64_t(r.block), l.base) ? "automaton" : "own"; // (list N5-10)
         }
         catch (const std::exception&) { return ""; }
     };

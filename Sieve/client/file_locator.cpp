@@ -1195,6 +1195,41 @@ void FileLocator::analyse(const std::string& path, bool sync, bool tailor)
     else worker_ = std::thread(job);
 }
 
+void FileLocator::open_only(const std::string& path)
+{
+    if (busy_) return;
+    go_armed_ = false;
+    if (worker_.joinable()) worker_.join();
+    busy_ = true;
+    {
+        std::lock_guard<std::mutex> lock(mx_);
+        status_ = trf("loc.opening", {path});
+    }
+    worker_ = std::thread([this, path] {
+        Result r;
+        r.path = path;
+        try
+        {
+            r.kind = Result::File;
+            r.bytes = cli::read_file_bytes(from_u8(path));
+            const cli::RawSummary a = cli::raw_summary(r.bytes, 24);
+            r.hex = a.hex;
+            r.hex_digits = a.hex_digits;
+            r.sha256 = cli::sha256_hex(r.bytes);
+        }
+        catch (const std::exception& e)
+        {
+            r.kind = Result::None;
+            r.error = e.what();
+        }
+        std::lock_guard<std::mutex> lock(mx_);
+        const std::string bytes = std::to_string(r.bytes.size());
+        result_ = std::move(r);
+        status_ = result_.error.empty() ? trf("loc.opened", {path, bytes}) : result_.error;
+        busy_ = false;
+    });
+}
+
 // What a save dialog chose, done on the worker: a file's address, a folder's manifest, or its
 // installer (which reads every file again for its address).
 void FileLocator::save(const std::string& to)
@@ -1297,15 +1332,20 @@ void FileLocator::go()
 {
     if (result_.kind != Result::File) return;
     if (!in_world()) return;
-    const bool past = host_.binary_bytes && result_.bytes.size() > host_.binary_bytes();
+    // Its .sieve where it has been sieved (its address's raw bytes are the .sieve file Save writes), else the file as
+    // it is (Edward, 19 November 2026: "go to it should go to the .sieve (on the binary line) if it is Sieved and if not
+    // it should go to it as it is").
+    const bool as_sieve = sieved();
+    const std::vector<uint8_t>& walk = as_sieve ? result_.instructions_raw : result_.bytes;
+    const bool past = host_.binary_bytes && walk.size() > host_.binary_bytes();
     if (past && !go_armed_)
     {
         go_armed_ = true;
         return;
     }
     go_armed_ = false;
-    const auto bytes = result_.bytes;
-    const std::string name = u8(from_u8(result_.path).filename());
+    const auto bytes = walk;
+    const std::string name = u8(from_u8(result_.path).filename()) + (as_sieve ? ".sieve" : "");
     close();
     host_.go(bytes, name, past);
 }
@@ -1384,8 +1424,16 @@ void FileLocator::event(const SDL_Event& e)
         }
     }
     else if (pressed == "close") close();
-    else if (pressed == "file") open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false, false, this);
-    else if (pressed == "folder") open_folder_dialog(on_picked, this, window_, nullptr, false, this);
+    else if (pressed == "file" || pressed == "sieve_file")
+    {
+        pick_sieves_ = pressed == "sieve_file";
+        open_file_dialog(on_picked, this, window_, nullptr, 0, nullptr, false, false, this);
+    }
+    else if (pressed == "folder")
+    {
+        pick_sieves_ = true; // (a folder is read and packed, as it always was)
+        open_folder_dialog(on_picked, this, window_, nullptr, false, this);
+    }
     else if (pressed == "go") go();
     else if (pressed == "tailor") analyse(result_.path, false, true);
     else if (pressed == "search_file_less") step_search(false, -1);
@@ -1550,7 +1598,12 @@ void FileLocator::draw(float W, float H)
             weighing = kept_shares().weighing;
         }
         if (learnt && kept_shares().changed) kept_shares().changed(packing, weighing);
-        if (pick) analyse(*pick);
+        if (pick)
+        {
+            std::error_code ec;
+            if (!pick_sieves_ && fs::is_regular_file(from_u8(*pick), ec)) open_only(*pick);
+            else analyse(*pick);
+        }
         if (to && save_what_ == 3)
         {
             // (an installer program: the folder it offers first, named after what was read; a path
@@ -1648,6 +1701,7 @@ void FileLocator::draw(float W, float H)
     };
     const bool busy = busy_;
     button("file", tr("loc.choose_file"), 76, !busy);
+    button("sieve_file", tr("loc.sieve_file"), 76, !busy);
     button("folder", tr("loc.choose_folder"), 76, !busy);
     button("install", tr("loc.install"), 76, !busy);
     button("program_from", tr("loc.program_from"), 76, !busy);
@@ -1796,6 +1850,7 @@ void FileLocator::draw(float W, float H)
             line(tr("loc.bytes"), std::to_string(r.bytes.size()));
             line(tr("loc.sha256"), r.sha256);
             line(tr("loc.address"), trf("loc.address.value", {std::to_string(r.hex_digits), r.hex}));
+            if (in_world()) line(tr("loc.go_to"), sieved() ? trf("loc.go_to.sieve", {std::to_string(r.instructions_raw.size())}) : tr("loc.go_to.file"));
             // Where it can be walked to: the length it needs against the BINARY length now.
             if (in_world() && host_.binary_bytes)
                 line(tr("loc.line"), trf("loc.line.value", {std::to_string(r.bytes.size()), std::to_string(host_.binary_bytes())}));
@@ -2335,6 +2390,13 @@ int FileLocator::create_finished()
     }
     // (saved: said for two seconds, then closed)
     return std::chrono::steady_clock::now() - create_saved_at_ >= std::chrono::seconds(2) ? 1 : 0;
+}
+
+void FileLocator::open_now(const std::string& path)
+{
+    open();
+    open_only(path);
+    if (worker_.joinable()) worker_.join();
 }
 
 // For scripted runs (--locate PATH): open the locator on it, measured before the next frame; with

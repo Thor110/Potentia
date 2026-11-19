@@ -85,6 +85,8 @@ public:
     // Scripted runs: open on a file or folder, measured (and tailored) before the next frame; and
     // an install, at once.
     void locate_now(const std::string& path, bool tailor = false);
+    // For scripted runs (--locate-open PATH): the locator open on a file as Choose a file... opens one, read before the next frame.
+    void open_now(const std::string& path);
     // "Create .sieve" from Explorer's right-click menu (hallway --create PATH, IDEAS 19.100): the
     // locator opened on PATH, working as Choose a file or a folder does, the window live (the
     // estimate, the best so far, Stop); once it is read, not stopped and not failed, its Sieve
@@ -186,6 +188,12 @@ private:
     bool in_world() const { return bool(host_.go); }
     // `tailor`: the weighing tailors each line's filters to the files that are its items.
     void analyse(const std::string& path, bool sync = false, bool tailor = false);
+    // Choose a file... (Edward, 19 November 2026: "should open a file and not automatically sieve it"): the file read,
+    // its address and SHA-256, and nothing packed, so Go to it walks to it at once; Sieve a file... reads and packs.
+    void open_only(const std::string& path);
+    // Which dialog the last pick came from: true for Sieve a file..., false for Choose a file...
+    bool pick_sieves_ = false;
+    bool sieved() const { return result_.instructions.has_value() && !result_.instructions_raw.empty(); }
     void save(const std::string& to);
     void install(const std::string& from, const std::string& to, bool sync = false);
     void go();

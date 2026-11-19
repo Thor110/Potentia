@@ -403,6 +403,8 @@ const char* kUsage =
     "  --force-after S     with --locate: press Stop again (force) S seconds in: the pass under way abandoned\n"
     "  --locate PATH       open the File Locator on a file or folder (--tailored: and tailor the filters to its files;\n"
     "                      with --main-menu: the main menu's, with no world to walk to)\n"
+    "  --locate-open PATH  open the File Locator on a file as Choose a file... does: read, not sieved, so Return walks to\n"
+    "                      the file as it is (--locate sieves it, as Sieve a file... does, and Return walks to its .sieve)\n"
     "  --search-per-file S, --search-total S   the File Locator's search for shorter addresses: seconds a\n"
     "                      file, or for the run (one of them; the other follows, the files counted)\n"
     "  --optimise-compressed the File Locator's Archive and compressed formats boxes both ticked, for this run\n"
@@ -1062,6 +1064,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                             a.has("shot-after") ? std::stod(a.get("shot-after")) : 0, a.has("force-after") ? std::stod(a.get("force-after")) : 0);
         hall->locate_now(a.get("locate"), a.has("tailored"));
     }
+    if (a.has("locate-open")) hall->locate_open_now(a.get("locate-open"));
     if (a.has("install") && a.has("install-to")) hall->install_now(a.get("install"), a.get("install-to"));
     if (a.has("new-map")) hall->graph_picked(4, a.get("new-map")); // the viewer's New map..., at once
     if (a.has("map") || a.has("graph")) hall->graph_map_now(a.has("map") ? a.get("map") : "", a.has("graph"));

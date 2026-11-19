@@ -10361,3 +10361,57 @@ as many new automatons as you can come up with, with the aim of filtering out as
   and few-values-v1: a test written for it found a page the count kept that the filters did not. The merges are
   now kept under each filter's name as well. The menus count many stacks in one program, so the hallway could have
   shown such a count; `sieve` counts one stack a run and could not.
+
+**19.253 The degree window set in its filter, across 0, and the rest of list N5 (Edward, 19 November 2026).** His
+words: "I was thinking that should just be something you enter into the filter rather than a window. A filter
+setting/parameter ... we need to be careful not to add new windows, the main menu and pause menu is getting crowded
+as it is ... ok go ahead with typing into the filter parameters and the other items on the task list".
+- *Typed settings (N5-1):* in the filters window a whole-number setting takes the digit keys (a number typed, shown
+  with a cursor, Backspace taking the last digit off; Left and Right still step it); nothing new on the main or
+  pause menus.
+- *Across 0 (N5-2):* `degree-window-v2` goes on past 360 to the loop's start (350 for 20 keeps 350 to 10, the stretch
+  at the start first in address order), checked against every unit of a small line alone and over a plugin; v1,
+  which stopped at 360, is retired. Two windows where one crosses 0 are not intersected: such a stack judges only,
+  and says so.
+- *Sound that ranks at any length (N5-10):* `sound-envelope-v1` and `sound-syllables-v1` ranked block by block (a
+  sample's class, its block's loudest so far and the story of the blocks before: the ways to finish depend on
+  nothing else), so the default second of 8-bit sound compacts with them (10^-19.05 and 10^-466.83); their numbers
+  agree with the automaton's wherever both fit.
+- *quotes-v1 (N5-12):* quotation marks where prose puts them, opening and closing in turn; on 2,318 pages of 1,000
+  of Don Quixote (its curly marks read as straight ones) 2,256 pass, and 1,628 of the 1,690 with a mark; random
+  ascii96 pages of 1,000 are kept at 10^-3.97. Dialogue's surface; whether an answer answers is meaning.
+- *The cache audit (N5-18):* the menu's counts are kept by line, filter names and settings, and the other
+  automata's caches by keys of their own; only the merges were kept by settings alone, fixed in list N4.
+- *The video filters on a real film (N5-8):* the Roundhay Garden Scene (1888, 20 frames at 7 a second, in the
+  public-domain anchors) cut into 20 clips (four crops, five starting frames, 8 frames each) and fitted to three
+  shapes. At the line's default, 5 x 5 pixels, 8 frames, black and white: video-moves-v1 and video-smooth-v2 pass 6
+  of 20, row-runs, rows-alike, neighbour-agreement and palette-size all 20. At 10 x 10, 4 frames: moves and smooth
+  5, rows-alike 17, row-runs 5. At 8 x 8, 8 frames, 16 colours: moves 9, smooth 4, row-runs 0, rows-alike 1. So
+  fitted to so few pixels most of the clips do not move at all (still videos, which the image line already holds,
+  and which moves and smooth set aside by design), every clip that moves in black and white is smooth, and in 16
+  colours the film's grain changes more than smooth's quarter of a frame and more than row-runs' three changes a
+  row.
+- *Set aside (N5-13):* a grammar keeping only the pages that are `.obj` text, written and removed the same day:
+  not-other-line-v1 already sets such a page aside, as a model belongs on the models line. Edward: "shouldn't .obj
+  already be filtered out through the cross dimensional filtering which is always supposed to be active, though we
+  could have that as a global setting as well as an idea" (N5-20).
+- *J opens a model on the models line (19 November 2026).* Edward: "when opening the file locator and selecting
+  spitfire.obj from my own anchors, it takes me to the binary line ... opening it on its own line takes me to the text
+  line as well ... I can only presume this is either because of the #Blender lines or because we haven't adjusted it to
+  take us to the model line". The second: J chose a line by the kind the first bytes give, and an .obj, having none, is
+  text. J now tries such a file as a model first (.obj, .gltf, .glb, by the importers) and, where it reads as one, opens
+  it on the models line fitted to its shape: the teapot in the anchors, 1,857 vertices and 3,552 faces, is fitted to 8
+  and 12, scaled by 0.3109. The File Locator's Go to it walks to a file's place on the binary line, as it always has.
+- *The File Locator opens without sieving (19 November 2026).* Edward: "first choose a file... should open a file and
+  not automatically sieve it ... we can add "Sieve a file..." to take its current place ... then go to it should go to the
+  .sieve (on the binary line) if it is Sieved and if not it should go to it as it is ... otherwise the user has to wait for
+  the file to be sieved just to go to the original file". Choose a file... now reads the file and its address only;
+  Sieve a file... reads and packs as before; Go to it walks to the .sieve where it has been sieved, else the file.
+- *Windows over more stacks (N5-4).* The same 1,881 pages of Don Quixote under three more stacks. words-v2 (scowl-en-60-
+  names-v2; 509 pages kept): the window's share of the survivors against its share of the loop has a median of 2.88 at
+  a whole degree, 6.25 at a tenth, 16.6 at a hundredth and 38.9 at a thousandth, so each width loses 1.33 to 5.00 bits on
+  average; the best of the five choices saves 0.168 bits a page before the 2.3 that saying which costs. pronounceable-v1
+  with word-length-v2: medians 1.07 to 1.22, losses 0.04 to 0.30 bits, the best of five 0.041 bits a page.
+  tidy-data-v2: medians 1.00 to 1.07, losses 0 to 0.07 bits, the best of five 0.046 bits. The stronger the filters,
+  the thicker their survivors where real pages are, and the more a window loses: in every stack measured, choosing a
+  window costs more than it saves.

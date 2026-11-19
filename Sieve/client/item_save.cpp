@@ -21,6 +21,7 @@
 #include "cli/pack.hpp"
 #include "cli/vault.hpp"
 #include "sieve/filekind.hpp"
+#include "sieve/importers.hpp"
 #include "sieve/paths.hpp"
 
 #include <filesystem>
@@ -534,6 +535,36 @@ void Hallway::open_as_kind(const std::vector<uint8_t>& bytes)
     const int text_line = line_of(LineKind::Text), image_line = line_of(LineKind::Image);
     const int audio_line = line_of(LineKind::Audio), video_line = line_of(LineKind::Video);
     int to = -1;
+    // A mesh (Edward, 19 November 2026: an .obj from Blender opened on the text line): an .obj is text to the kinds
+    // table and a .glb or .gltf no kind it names, so each is tried as a model first, and where it reads as one (three
+    // vertices and a face at least) it opens on the models line, fitted to its shape as `sieve mesh --warp` fits it.
+    if ((kind == "TXT" || kind == "?") && model_space_ && titled_[kModelsLine])
+    {
+        std::optional<sieve::ImportedModel> m;
+        try { m = sieve::read_model(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size())); }
+        catch (const std::exception&) {} // (not a model: on to the other lines)
+        if (m && m->mesh.verts.size() >= 3 && !m->mesh.faces.empty())
+        {
+            const ModelSpace::Fitted fit = model_space_->fit(m->mesh.verts, m->mesh.faces);
+            drop_in_hand();
+            set_line(kModelsLine);
+            if (effective_mode() == FilterMode::Compact)
+            {
+                message(tr("msg.jump.model_compact"));
+                return;
+            }
+            const TitledSpace& ts = *titled_[kModelsLine];
+            const TitledSpace::Parts parts{ts.blank_cover(), ts.blank_title(), model_space_->index_of(fit.parts, AddressMode::Positional)};
+            trail_.clear();
+            place(ts.index_of(parts, mode_), true);
+            char scale[32];
+            std::snprintf(scale, sizeof scale, "%.4g", double(fit.scale));
+            message(trf("msg.jump.model", {m->format, std::to_string(m->mesh.verts.size()), std::to_string(m->mesh.faces.size()),
+                                           std::to_string(fit.vertices_dropped), std::to_string(fit.faces_dropped), std::to_string(fit.faces_added),
+                                           scale}));
+            return;
+        }
+    }
     if (kind == "TXT") to = text_line;
     else if (kind == "PNG" || kind == "JPG" || kind == "GIF" || kind == "BMP") to = image_line;
     // Sound files on the audio line when it holds sound itself (pcm), MIDI when it holds notes.

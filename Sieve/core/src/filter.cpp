@@ -579,14 +579,22 @@ void FilterStack::settle_now() const
     // they would be without them, and the windows (one, or the part they all keep) are laid over that.
     std::vector<char> win(filters_.size(), 0);
     std::optional<WindowBounds> window;
-    size_t rest = 0;
+    size_t rest = 0, windows = 0;
+    bool across = false; // (a window crossing 0 among several: not intersected, so the stack judges only)
     for (size_t i = 0; i < filters_.size(); ++i)
         if (const WindowBounds* b = window_bounds(*filters_[i]))
         {
             win[i] = 1;
+            across = across || b->wrap;
+            if (++windows > 1 && across) continue;
             window = window ? intersect_windows(*window, *b) : *b;
         }
         else ++rest;
+    if (windows > 1 && across)
+    {
+        blocker_ = "two degree windows where one crosses 0 cannot be counted together: they judge only";
+        return;
+    }
     // Compact: one filter with a ranker whose survivors are exactly the stack's.
     for (size_t i = 0; i < filters_.size() && !compact_; ++i)
     {

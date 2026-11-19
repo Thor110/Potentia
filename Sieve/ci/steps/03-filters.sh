@@ -150,11 +150,11 @@ echo "$out" | q "total: own addresses 2488 bits; best ways 272 + shared 260 = 53
 out=$($exe locate weigh --weigh --tailored --filters none.ini --length 8 --width 8 --height 8 --palette mono --search-per-file 0.001 2>&1 | tr -d '\r')
 echo "$out" | q "^  search: 0.001 s a file, 0.004 s for the run; the weighing's search took "
 echo "$out" | q "^  tailored audio: none, "
-# degree-window-v1 (sieve/window.hpp): one stretch of the loop by bearing. Alone, a whole degree keeps
+# degree-window-v2 (sieve/window.hpp): one stretch of the loop by bearing. Alone, a whole degree keeps
 # 1/360 of the pages line; over words-v2, the tenth of a degree about "it was the best of times" (its
 # bearing 129.89) keeps the part of words-v2's survivors there, counted, ranked and read back in compact.
-printf '[text]\nmode = compact\nfilters = degree-window-v1\n[text.degree-window-v1]\nfrom = 1\nwidth = 1\n' > window1.ini
-printf '[text]\nmode = compact\nfilters = words-v2, degree-window-v1\n[text.words-v2]\ndictionary = scowl-en-60-names-v2\n[text.degree-window-v1]\nfrom = 1298\nwidth = 1\ndecimals = 1\n' > window2.ini
+printf '[text]\nmode = compact\nfilters = degree-window-v2\n[text.degree-window-v2]\nfrom = 1\nwidth = 1\n' > window1.ini
+printf '[text]\nmode = compact\nfilters = words-v2, degree-window-v2\n[text.words-v2]\ndictionary = scowl-en-60-names-v2\n[text.degree-window-v2]\nfrom = 1298\nwidth = 1\ndecimals = 1\n' > window2.ini
 $exe filters --filters window1.ini | tr -d '\r' | q "^survivors    17674126225377617662430079895940372863583934 "
 $exe filters --filters window1.ini | tr -d '\r' | q "keeps 10^-2.56 of the line"
 $exe filters --filters window2.ini | tr -d '\r' | q "^survivors    1585047662160081237252524 (exact; compact mode available)"

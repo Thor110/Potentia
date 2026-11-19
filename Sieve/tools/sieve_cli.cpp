@@ -3102,7 +3102,7 @@ int cmd_check(const Args& a)
     return 0;
 }
 
-// A unit's bearing on its line, and the degree windows about it (degree-window-v1): for each
+// A unit's bearing on its line, and the degree windows about it (degree-window-v2): for each
 // width (a whole degree, a tenth, ... down to --decimals), the window that holds the unit, how many
 // of the stack's survivors it keeps, and what the unit's address costs inside it plus naming the
 // window, against its address under the stack alone. A window pays only where the stack's
@@ -3119,7 +3119,7 @@ int cmd_window(const Args& a)
     const uint32_t most = a.get_u32("decimals", 3);
     if (most > 9) throw std::invalid_argument("--decimals must be 0..9");
     const FilterLine fl = filter_line(line);
-    const FilterSpec* win = find_filter("degree-window-v1");
+    const FilterSpec* win = find_filter("degree-window-v2");
     const FilterStack st = build_stack(fl, lf);
     const BigUint all = BigUint::pow(fl.base, fl.length);
     const Ranker* rk = st.empty() ? nullptr : st.ranker();

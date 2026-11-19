@@ -1309,6 +1309,7 @@ private:
 public:
     void open_locator() { locator_.open(); }
     void locate_now(const std::string& path, bool tailor = false) { locator_.locate_now(path, tailor); } // scripted: measured at once
+    void locate_open_now(const std::string& path) { locator_.open_now(path); } // scripted: Choose a file... (opened, not sieved)
     void install_now(const std::string& from, const std::string& to) { locator_.install_now(from, to); }
     void locator_search(double seconds, bool total) { locator_.set_search(seconds, total); } // scripted
 

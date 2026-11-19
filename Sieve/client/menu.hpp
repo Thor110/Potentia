@@ -466,6 +466,11 @@ private:
     void render_details(float W, float H);
     int line_of_row() const; // the line whose settings row is chosen, else the one you will start on
     int orow_ = 0;
+    // A whole-number setting being typed in the filters window (list N5-1): its row, and the digits so far (the row
+    // -1: none; any key but a digit or Backspace ends the typing, so the next digit starts a new number).
+    int otyped_row_ = -1;
+    std::string otyped_;
+    bool overlay_type(const SDL_Event& e);
     int oscroll_ = 0;
     float wheel_ = 0; // wheel movement not yet whole notches
     StackInfo info_[kLines]; // one per line of the map, by door

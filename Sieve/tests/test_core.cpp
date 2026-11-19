@@ -2536,8 +2536,21 @@ void test_m2_filters(const std::string& dir)
         set_filter_memory(1024);
         const FilterStack env2(l, {{find_filter("sound-envelope-v1"), ev}}, none), syl2(l, {{find_filter("sound-syllables-v1"), sv}}, none);
         set_filter_memory(was);
-        CHECK(env.ranker() && env2.counted() && !env2.ranker() && env.ranker()->count() == *env2.counted());
-        CHECK(syl.ranker() && syl2.counted() && !syl2.ranker() && syl.ranker()->count() == *syl2.counted());
+        // (since list N5-10 the counted route ranks too, block by block: past the automaton, its numbers the same)
+        CHECK(env.ranker() && env2.ranker() && dynamic_cast<const DfaRanker*>(env.ranker()) && !dynamic_cast<const DfaRanker*>(env2.ranker()));
+        CHECK(env.ranker() && env2.ranker() && env.ranker()->count() == env2.ranker()->count());
+        CHECK(syl.ranker() && syl2.ranker() && syl.ranker()->count() == syl2.ranker()->count());
+        if (env.ranker() && env2.ranker() && syl.ranker() && syl2.ranker())
+            for (int k = 0; k < 40; ++k)
+                for (const auto& [a, b] : {std::pair{env.ranker(), env2.ranker()}, std::pair{syl.ranker(), syl2.ranker()}})
+                {
+                    std::vector<uint8_t> bytes(40);
+                    for (auto& x : bytes) x = uint8_t(rng());
+                    const BigUint at = BigUint::mod(BigUint::from_bytes(bytes), a->count());
+                    const auto u = a->unrank(at);
+                    CHECK(b->unrank(at) == u && b->rank(u) == at && b->accepts(u));
+                    CHECK(b->Ranker::unrank(at) == u); // (and the walk by next and completions)
+                }
         int envelopes = 0;
         for (int k = 0; k < 3000; ++k)
         {
@@ -3030,15 +3043,15 @@ void test_filters(const std::string& dir)
     CHECK(clash("not-a-file-v1", "words-v2") == "conflict");
     CHECK(clash("not-a-pattern-v1", "not-other-line-v1") == "conflict");
     CHECK(clash("not-a-file-v1", "distinct-vertices-v1") == "conflict");
-    CHECK(filters_for(text_line(8)).size() == 25); // (word-shape-v1, list P, the 24th: punctuation and letters-and-digits need marks and digits;
-                                                    // degree-window-v1, list N, the 25th)
+    CHECK(filters_for(text_line(8)).size() == 26); // (word-shape-v1, list P, the 24th: punctuation and letters-and-digits need marks and digits;
+                                                    // degree-window-v1 and -v2, list N, the 25th and 26th)
                                                     // not-written-v1, not-a-file-v1, not-other-line-v1 and not-a-pattern-v1 joined the ten;
                                                     // symbol-entropy-v2 and model-information-v2 (IDEAS §2.1, §2.2) joined those;
                                                     // few-values, two-symbol-run, golden-word, fractal-written, pronounceable and word-length (v1 and v2) (list Z) these
     const FilterLine image{"image", "image/mono/10x10", 2, 100, nullptr, 10, 10, 1};
-    CHECK(filters_for(image).size() == 17); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
+    CHECK(filters_for(image).size() == 18); // symbol-entropy (v1 and v2), neighbour-agreement, not-a-file, not-packed,
                                             // not-a-pattern, palette-size, row-runs, figure, fractal-drawn (v1 and v2), image-mirror,
-                                            // border, specks and gradient (list Q), and rows-alike and degree-window (list N)
+                                            // border, specks and gradient (list Q), and rows-alike and degree-window v1 and v2 (list N)
     CHECK(clash("palette-size-v1", "row-runs-v1") == "merge");
     CHECK(clash("palette-size-v1", "not-a-pattern-v1") == "conflict");
 
@@ -3291,8 +3304,9 @@ void test_filters(const std::string& dir)
 void test_degree_window(const std::string& dir)
 {
     static const TestResources none(nullptr, nullptr);
-    const FilterSpec* w = find_filter("degree-window-v1");
+    const FilterSpec* w = find_filter("degree-window-v2");
     CHECK(w && w->window && w->picks_a_kind && w->whole_unit && w->category == "soft");
+    CHECK(find_filter("degree-window-v1")->retired && find_filter("degree-window-v1")->replaced_by == "degree-window-v2");
     if (!w) return;
     const auto wv = [](uint64_t from, uint64_t to, uint32_t d) { // (written as from and to; the filter takes a width)
         return FilterValues{{"from", std::to_string(from)}, {"width", std::to_string(to - from)}, {"decimals", std::to_string(d)}};
@@ -3387,17 +3401,46 @@ void test_degree_window(const std::string& dir)
         for (uint64_t v = 0; v < all; ++v) n += bearing_in(v, all, 90, 200, 0);
         CHECK(ok && st.ranker() && st.ranker()->count() == BigUint(n));
     }
-    // A width of 0 is refused; from goes round the loop; a window past 360 stops there.
+    // Across 0 (v2, list N5-2): 350 for 20 keeps 350 to 360 and 0 to 10, the stretch at the loop's start first; alone,
+    // over a plugin, and to two decimals. (v1 stopped at 360.)
+    for (auto [from, width, d] : std::vector<std::tuple<uint64_t, uint64_t, uint32_t>>{{350, 20, 0}, {359, 2, 0}, {300, 100, 0}, {35990, 25, 2}, {200, 360, 0}})
+    {
+        uint64_t whole = 360;
+        for (uint32_t i = 0; i < d; ++i) whole *= 10;
+        const FilterValues v{{"from", std::to_string(from)}, {"width", std::to_string(width)}, {"decimals", std::to_string(d)}};
+        const FilterStack alone(l4, {{w, v}}, none), over(l4, {{&run, {{"max", "1"}}}, {w, v}}, none);
+        const FilterStack plain(l4, {{&run, {{"max", "1"}}}}, none);
+        bool ok = true;
+        uint64_t n = 0, m = 0;
+        for (uint64_t x = 0; x < n4; ++x)
+        {
+            const auto u = BigUint(x).to_digits(27, 4);
+            const unsigned __int128 b = (unsigned __int128)x * whole / n4;
+            const bool in = width >= whole || b >= from || b < from + width - whole;
+            ok = ok && alone.passes(u) == in;
+            n += in;
+            m += in && plain.passes(u);
+        }
+        check_ranker_exhaustive(alone, 27, 4, ok);
+        check_ranker_exhaustive(over, 27, 4, ok);
+        if (alone.ranker()) walk_both(*alone.ranker(), ok);
+        if (over.ranker()) walk_both(*over.ranker(), ok);
+        CHECK(ok && alone.ranker() && alone.ranker()->count() == BigUint(n) && over.ranker() && over.ranker()->count() == BigUint(m));
+    }
+    {
+        const FilterStack v1(l4, {{find_filter("degree-window-v1"), {{"from", "350"}, {"width", "20"}}}}, none),
+            to_end(l4, {{w, wv(350, 360, 0)}}, none);
+        CHECK(v1.ranker() && to_end.ranker() && v1.ranker()->count() == to_end.ranker()->count());
+        const FilterStack two(l4, {{w, {{"from", "350"}, {"width", "20"}}}, {w, wv(0, 5, 0)}}, none);
+        CHECK(!two.ranker() && two.compact_blocker().find("crosses 0") != std::string::npos);
+    }
+    // A width of 0 is refused; from goes round the loop.
     bool threw = false;
     try { (void)FilterStack(l4, {{w, wv(5, 5, 0)}}, none); } catch (const std::invalid_argument&) { threw = true; }
     CHECK(threw);
     {
         const FilterStack round(l4, {{w, wv(361, 362, 0)}}, none), one(l4, {{w, wv(1, 2, 0)}}, none); // (361 degrees is 1 again)
         CHECK(round.ranker() && one.ranker() && round.ranker()->count() == one.ranker()->count());
-    }
-    {
-        const FilterStack past(l4, {{w, wv(350, 400, 0)}}, none), to_end(l4, {{w, wv(350, 360, 0)}}, none);
-        CHECK(past.ranker() && to_end.ranker() && past.ranker()->count() == to_end.ranker()->count());
     }
 }
 
@@ -3568,6 +3611,51 @@ void test_rows_alike(const std::string&)
         for (auto& c : noise) c = uint32_t(rng() & 1);
         CHECK(!both.passes(noise));
     }
+}
+
+// quotes-v1 (list N5-12): against its rule written plainly, on random pages of a few symbols where quotation marks are
+// common, and its count walked back.
+void test_quotes(const std::string&)
+{
+    static const TestResources none(nullptr, nullptr);
+    const Alphabet& a = alphabet_by_id("ascii96");
+    const FilterLine l{"text", "ascii96", 96, 12, &a, 0, 0, 0};
+    const FilterStack st(l, {{find_filter("quotes-v1"), {}}}, none);
+    CHECK(st.ranker() != nullptr);
+    const auto rule = [](const std::u32string& p) {
+        int prev = 0, pend = 0, par = 0;
+        for (char32_t x : p)
+        {
+            const bool space = x == U' ', quote = x == U'"', opener = x == U'(';
+            const bool after = space || x == U'.' || x == U')';
+            if (pend == 1 && (space || quote)) return false;
+            if (pend == 2 && !after) return false;
+            if (quote)
+            {
+                if (prev == 0) { if (par == 1) return false; prev = 1, pend = 1, par = 1; }
+                else { if (par == 2) return false; prev = 1, pend = 2, par = 2; }
+            }
+            else prev = space || opener ? 0 : 1, pend = 0;
+        }
+        return pend != 1;
+    };
+    const std::u32string pool = U"a \".()";
+    std::mt19937_64 rng(1819);
+    bool same = true;
+    for (int i = 0; i < 50000; ++i)
+    {
+        std::u32string p;
+        std::vector<uint32_t> u;
+        for (int k = 0; k < 12; ++k)
+        {
+            p.push_back(pool[rng() % pool.size()]);
+            u.push_back(*a.digit_of(p.back()));
+        }
+        same = same && st.passes(u) == rule(p);
+        if (st.ranker()) same = same && st.ranker()->accepts(u) == rule(p);
+        if (st.ranker() && rule(p)) same = same && st.ranker()->unrank(st.ranker()->rank(u)) == u;
+    }
+    CHECK(same);
 }
 
 void check_ranker_exhaustive(const FilterStack& st, uint32_t base, uint32_t L, bool& ok)
@@ -10747,6 +10835,7 @@ void run_all(int argc, char** argv)
         RUN(test_video_rankers(dir));
         RUN(test_merge_keys(dir));
         RUN(test_rows_alike(dir));
+        RUN(test_quotes(dir));
         RUN(test_filter_vectors(dir));
         RUN(test_compact(dir));
         RUN(test_compact_vectors(dir));

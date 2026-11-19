@@ -5836,8 +5836,48 @@ void Menu::overlay_change(int dir, bool big)
     save_filters();
 }
 
+// A whole-number setting typed in the filters window (list N5-1; Edward, 19 November 2026: "go ahead with typing into
+// the filter parameters"): on a setting's row a digit starts a number (the first replacing the value, the rest
+// added to it) and Backspace takes the last off, the value kept within the setting's range; the arrows still step
+// it. True when the key was taken.
+bool Menu::overlay_type(const SDL_Event& e)
+{
+    const auto rows = overlay_rows();
+    if (orow_ < 0 || orow_ >= int(rows.size())) return false;
+    const ORow& row = rows[size_t(orow_)];
+    if (row.kind != ORow::Kind::Param) return false;
+    const sieve::FilterSpec* spec = sieve::find_filter(row.filter);
+    const sieve::FilterParam* p = nullptr;
+    for (const auto& q : spec->params)
+        if (q.key == row.key) p = &q;
+    if (!p || p->kind != sieve::FilterParam::Kind::Integer) return false;
+    char digit = 0;
+    const SDL_Scancode sc = e.key.scancode;
+    if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9) digit = char('1' + (sc - SDL_SCANCODE_1));
+    else if (sc == SDL_SCANCODE_0) digit = '0';
+    else if (sc >= SDL_SCANCODE_KP_1 && sc <= SDL_SCANCODE_KP_9) digit = char('1' + (sc - SDL_SCANCODE_KP_1));
+    else if (sc == SDL_SCANCODE_KP_0) digit = '0';
+    const bool back = sc == SDL_SCANCODE_BACKSPACE;
+    if (!digit && !back) return false;
+    if (otyped_row_ != orow_)
+    {
+        otyped_.clear();
+        otyped_row_ = orow_;
+        if (back) return true; // (nothing typed yet to take back)
+    }
+    if (digit && otyped_.size() < 18) otyped_.push_back(digit);
+    else if (back && !otyped_.empty()) otyped_.pop_back();
+    while (otyped_.size() > 1 && otyped_[0] == '0') otyped_.erase(otyped_.begin());
+    const int64_t v = std::clamp<int64_t>(otyped_.empty() ? p->min : std::stoll(otyped_), p->min, p->max);
+    filters_of(row).values[row.filter][p->key] = std::to_string(v);
+    save_filters();
+    return true;
+}
+
 void Menu::overlay_key(const SDL_Event& e)
 {
+    if (overlay_type(e)) return;
+    otyped_row_ = -1; // (any other key ends the typing)
     // Its keys as set (Settings > Controls > Keys: "The menus", "The setup menu" and its filters window).
     namespace mk = menu_keys;
     namespace sk = setup_keys;
@@ -6202,7 +6242,8 @@ void Menu::render_overlay(float W, float H)
             std::string desc;
             for (const auto& p : f->params)
                 if (p.key == row.key) desc = tr_or("filter." + f->name() + "." + p.key, p.description);
-            it.lines = {"      " + row.key + " = " + (v.empty() ? tr("filters.default") : v) + "     " + desc};
+            const bool typing = otyped_row_ == int(items.size()) && int(items.size()) == orow_;
+            it.lines = {"      " + row.key + " = " + (v.empty() ? tr("filters.default") : v) + (typing ? "_" : "") + "     " + desc};
         }
         it.h = float(it.lines.size()) * 12 + 8;
         items.push_back(it);

@@ -624,6 +624,56 @@ Dfa punctuation_dfa(const Alphabet& a)
     return minimise(d);
 }
 
+// Quotation marks where prose puts them (list N5-12, IDEAS 19.21's dialogue by its surface): an opening " after the page's
+// start, a space or an opening bracket, and before something other than a space; a closing " after something other than
+// a space, and before a space, a line feed, a mark (. , ; : ! ? ) ] } -) or the page's end; and they alternate, opening
+// then closing (the page may begin inside a quotation, so the first may be either). States: what came before (the start,
+// a space or a bracket, or something else), whether a mark was just opened or closed, and whether a quotation is open.
+Dfa quotes_dfa(const Alphabet& a)
+{
+    const uint32_t B = a.size();
+    auto id = [](int prev, int pend, int par) { return int32_t(prev + 2 * pend + 6 * par); }; // par: 0 unknown, 1 in, 2 out
+    Dfa d;
+    d.base = B;
+    d.start = id(0, 0, 0);
+    d.accept.assign(18, 0);
+    d.next.assign(18 * size_t(B), Dfa::kDead);
+    for (int prev = 0; prev < 2; ++prev)
+        for (int pend = 0; pend < 3; ++pend)
+            for (int par = 0; par < 3; ++par)
+            {
+                const int32_t s = id(prev, pend, par);
+                d.accept[size_t(s)] = pend != 1; // (a page may not end on an opening mark)
+                for (uint32_t c = 0; c < B; ++c)
+                {
+                    const char32_t x = a.symbol(c);
+                    const bool space = x == U' ' || x == U'\n' || x == U'\t', quote = x == U'"';
+                    const bool opener = x == U'(' || x == U'[' || x == U'{';
+                    const bool after_close = space || x == U'.' || x == U',' || x == U';' || x == U':' || x == U'!' || x == U'?' || x == U')' ||
+                                             x == U']' || x == U'}' || x == U'-';
+                    if (pend == 1 && (space || quote)) continue;
+                    if (pend == 2 && !after_close) continue;
+                    int32_t n;
+                    if (quote)
+                    {
+                        if (prev == 0)
+                        {
+                            if (par == 1) continue;
+                            n = id(1, 1, 1);
+                        }
+                        else
+                        {
+                            if (par == 2) continue;
+                            n = id(1, 2, 2);
+                        }
+                    }
+                    else n = id(space || opener ? 0 : 1, 0, par);
+                    d.next[size_t(s) * B + c] = n;
+                }
+            }
+    return minimise(d);
+}
+
 // A run of letters and digits turns from one to the other at most `turns` times (3rd, 1990s, x86 once; a1b2 three
 // times). States: outside a run, or in one (its last a letter or a digit) after t turns.
 Dfa letters_digits_dfa(const Alphabet& a, uint32_t turns)
@@ -856,6 +906,20 @@ void add_page_filters(std::vector<FilterSpec>& out)
         return make_dfa_filter(punctuation_dfa(*l.alphabet), l.length, "");
     };
     out.push_back(pu);
+
+    FilterSpec qu;
+    qu.id = "quotes";
+    qu.title = "quotes";
+    qu.description = "Pages whose quotation marks stand where prose puts them: an opening \" after a space, a bracket or the page's "
+                     "start and before a letter, a closing one after a letter and before a space, a mark or the page's end, opening "
+                     "and closing in turn (a page may begin inside a quotation). Dialogue's surface (IDEAS 19.21); apostrophes are "
+                     "left alone. An automaton: counted and ranked exactly, merging with the others.";
+    qu.applies = [has](const FilterLine& l) { return page_line(l) && l.alphabet->contains(U' ') && has(l, U"\""); };
+    qu.counts_as = "automaton";
+    qu.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
+        return make_dfa_filter(quotes_dfa(*l.alphabet), l.length, "");
+    };
+    out.push_back(qu);
 
     FilterSpec ld;
     ld.id = "letters-and-digits";

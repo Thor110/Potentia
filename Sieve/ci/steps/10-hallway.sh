@@ -220,9 +220,12 @@ again/sieve locate tests/manifest_fixture --program fx-again --v4 > /dev/null
 cmp fx-installer fx-again
 # The File Locator (pause menu): a folder measured, and a file walked to on the binary line.
 $H --no-menu --locate tests/manifest_fixture --screenshot locate.png | q "saved locate.png"
-$H --no-menu --binary-length 64 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
+$H --no-menu --binary-length 64 --locate-open tests/manifest_fixture/a.txt --press "Return" --screenshot locate2.png | tail -2 | sed -n 1p | tee l2.txt | q "^BINARY line"
 # Its kind, read from its first bytes.
 grep -q " TXT " l2.txt
+# Opened (Choose a file..., --locate-open) Return walks to the file as it is; sieved (Sieve a file..., --locate) to its
+# .sieve, the instructions' address as its raw bytes (Edward, 19 November 2026).
+$H --no-menu --binary-length 4096 --locate tests/manifest_fixture/a.txt --press "Return" --screenshot locate3.png | tail -2 | sed -n 1p | tr -d '\r' | q "^BINARY line.* 87 bytes: 74 6a 66 77 66 21 "
 # Worlds in the hallway: the world at an address the tool composed, saved with F, is the
 # tool's .obj of it, byte for byte; the setup menu draws the WORLDS rows and column.
 wa=$(build/sieve world --compose "1:1.2.3.4|2:7.0.7.23" --title "a small world" | tr -d '\r' | awk '$1 == "positional" {print $2}')
@@ -1699,7 +1702,7 @@ $H --no-menu --binary-length 1000 --locate big.bin --press "Return,Return" --scr
 # SORT tab knows a.txt for a verified anchor of that map, and anything else for a lone point.
 $H --no-menu --map tests/manifest_fixture --graph --screenshot graph.png | q "saved graph.png"
 $H --no-menu --binary-length 64 --map tests/manifest_fixture --graph --press "Tab,Tab,Tab,Return" --screenshot graph2.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
-$H --no-menu --binary-length 64 --map tests/manifest_fixture --locate tests/manifest_fixture/a.txt --press "Return,C,C" --screenshot sort.png | tail -2 | sed -n 1p | q "a verified anchor: node 2, a.txt, in manifest_fixture"
+$H --no-menu --binary-length 64 --map tests/manifest_fixture --locate-open tests/manifest_fixture/a.txt --press "Return,C,C" --screenshot sort.png | tail -2 | sed -n 1p | q "a verified anchor: node 2, a.txt, in manifest_fixture"
 $H --no-menu --line binary --map tests/manifest_fixture --walk "0,0" --press "E,C,C" --screenshot sort2.png | tail -2 | sed -n 1p > sort2.txt
 if grep -q "verified anchor" sort2.txt; then exit 1; fi
 # (--warp starts with the item in your hands: the first Escape puts it down, the second pauses.)
@@ -1710,19 +1713,19 @@ $H --no-menu --graph --screenshot installation.png | q "saved installation.png"
 # gains a META tab; a held anchor can be walked to from the viewer, whose Delete removes
 # it; a sealed map will not take one.
 rm -f build/maps/finds.sieve
-$H --no-menu --binary-length 64 --new-map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
+$H --no-menu --binary-length 64 --new-map build/maps/finds.sieve --locate-open tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor.png | q "added a.txt to finds as a verified anchor (node 1)"
 build/sieve map build/maps/finds.sieve 2>&1 | q "1 held"
-$H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
+$H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate-open tests/manifest_fixture/a.txt --press "Return,V" --screenshot anchor2.png | q "removed a.txt from finds"
 build/sieve map build/maps/finds.sieve 2>&1 | q "0 held"
 build/sieve map build/maps/finds.sieve --add tests/manifest_fixture/a.txt --out build/maps/finds.sieve 2> /dev/null
 build/sieve map build/maps/finds.sieve --meta "1:source=the fixture folder" --out build/maps/finds.sieve 2> /dev/null
-$H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
+$H --no-menu --binary-length 64 --map build/maps/finds.sieve --locate-open tests/manifest_fixture/a.txt --press "Return,C,C,C" --screenshot meta.png | q "saved meta.png"
 $H --no-menu --binary-length 64 --map build/maps/finds.sieve --graph --press "Tab,Tab,Return" --screenshot anchorgo.png | tail -2 | sed -n 1p | q "^BINARY line.* TXT 34 bytes"
 $H --no-menu --map build/maps/finds.sieve --graph --press "Tab,Tab,Delete" --screenshot anchordel.png | q "saved anchordel.png"
 build/sieve map build/maps/finds.sieve 2>&1 | q "0 held"
 rm -f build/maps/finds.sieve
 build/sieve map --new sealed --seal --out build/maps/sealed.sieve 2> /dev/null
-$H --no-menu --binary-length 64 --map build/maps/sealed.sieve --locate tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sealed is read-only"
+$H --no-menu --binary-length 64 --map build/maps/sealed.sieve --locate-open tests/manifest_fixture/a.txt --press "Return,V" --screenshot sealed.png | q "sealed is read-only"
 rm -f build/maps/sealed.sieve
 # The pause menu (Esc): its fourth row is the Navigation System, which opens the navigator.
 $H --warp "$W" --press "Escape,Escape,Down,Down,Down,Return,Escape" --screenshot pause.png | q "saved pause.png"
@@ -2360,10 +2363,14 @@ head -c 4 track.mid | q MThd
 # binary line comes back the same item: saved again, the same record.
 $H --no-menu --line tracks --settle 30 --walk "0,0" --take --save-item h.track --screenshot rec1.png > /dev/null
 head -1 h.track | q "^sieve-book-v1$"
-$H --no-menu --binary-length 1024 --locate h.track --press "Return,J" --save-item h2.track --screenshot rec2.png | q "opened on the TRACKS line"
+$H --no-menu --binary-length 1024 --locate-open h.track --press "Return,J" --save-item h2.track --screenshot rec2.png | q "opened on the TRACKS line"
 cmp h.track h2.track
 $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item m.movie --screenshot rec3.png > /dev/null
-$H --no-menu --binary-length 4096 --locate m.movie --press "Return,J" --save-item m2.movie --screenshot rec4.png | q "opened on the MOVIES line"
+$H --no-menu --binary-length 4096 --locate-open m.movie --press "Return,J" --save-item m2.movie --screenshot rec4.png | q "opened on the MOVIES line"
+# J on an .obj (Edward, 19 November 2026: a Blender .obj opened on the text line): read as a model, it opens on the
+# models line, fitted to its shape.
+printf 'o cube\nv -1 -1 -1\nv 1 -1 -1\nv 1 1 -1\nv -1 1 -1\nf 1 2 3\nf 1 3 4\n' > jcube.obj
+$H --no-menu --line binary --binary-length 1024 --warp jcube.obj --press "Return,J" --screenshot jcube.png | tr -d '\r' | q "^MODELS line.*a model (obj) of 4 vertices and 2 faces, opened on the models line"
 cmp m.movie m2.movie
 $H --no-menu --line movies --settle 30 --walk "0,0" --take --save-item movie.png --screenshot moviesave.png > /dev/null
 test -s movie.png

@@ -1,60 +1,39 @@
 # Changes
 
-One commit on top of 5fbfaef ("ci step 3 fix").
+One commit on top of 824f089 ("sieve N").
 
-## The night's filters (list N, IDEAS 19.251 and 19.252)
+## Filters (REVIEW-ROUND list N5; IDEAS 19.253)
+- **Typed settings:** in the filters window, digits type a whole-number setting (shown with a `_`), Backspace takes
+  the last digit off, Left/Right still step it. Nothing new on the main or pause menus.
+- **degree-window-v2:** a window wider than what is left of the loop goes on from 0 (`from` 350, `width` 20 keeps
+  350 to 10). v1, which stopped at 360, is retired (still loads). Two windows where one crosses 0 judge only and say
+  so.
+- **Sound that compacts:** `sound-envelope-v1` and `sound-syllables-v1` now count every survivor at any length. A
+  default second of 8-bit sound compacts with them (10^-19.05 and 10^-466.83 kept), and their numbers are the
+  automaton's wherever both fit (checked).
+- **quotes-v1:** quotation marks where prose puts them. 2,256 of Don Quixote's 2,318 pages of 1,000 pass; random
+  ascii96 pages kept at 10^-3.97.
+- **Video on a real film:** the Roundhay Garden Scene cut into 20 clips; at the line's default size most clips do
+  not move at all (still pictures, set aside by design); every clip that moves in black and white passes
+  video-smooth-v2.
+- The `.obj` page filter was written and removed: `not-other-line-v1` already sets such pages aside.
+- **Windows over more stacks:** under words-v2 real pages sit where survivors are 2.9 to 39 times an even spread,
+  so every window width loses (1.3 to 5.0 bits); the stronger the filters, the more a window loses.
+- Set aside with reasons (REVIEW-ROUND N5-7, N5-9): row-runs and rows-alike counted together on large palettes,
+  and smooth as an automaton.
 
-### A filter for one degree: degree-window-v1
-- Keeps only the units whose bearing (the one the hallway shows: floor(address x 360 / units), positional
-  order) lies from `from` for `width` degrees, to 0-9 `decimals`. "1-2" is from 1, width 1; "1-5" from 1,
-  width 4. A `from` past 360 goes round to 0; a window past 360 stops there.
-- Works on every line of digits (pages, pictures, melodies, sound, video, models, AI; not binary or fractals).
-- Counts over whatever else is ticked: the other filters are counted as before and the window keeps the part of
-  their survivors between its bounds, so it never conflicts and the chosen stretch fills the whole loop in
-  compact. A whole degree keeps 10^-2.56 (1/360) of the pages line.
-- Soft and "picks a kind", so X and OPTIMISE FILTERS leave it alone.
+## J and the File Locator
+- **J on a model:** a file that reads as a model (.obj, .gltf, .glb) opens on the models line, fitted to its shape;
+  the window says what was left out and the scale (the teapot: 1,857 vertices and 3,552 faces fitted to 8 and 12).
+- **File Locator:** Choose a file... opens a file without sieving it (its address at once); Sieve a file... reads
+  and packs it, as Choose a file... did; Go to it walks to the .sieve on the binary line where the file has been
+  sieved, and to the file as it is where it has not. The window says which.
+- For scripts: `--locate-open PATH` opens a file as Choose a file... does; `--locate PATH` still sieves it, as Sieve a
+  file... does (CI step 10 checks both walks).
 
-### `sieve window`: does a window ever write a file shorter?
-- Gives a unit's bearing and, for each width (a degree down to a thousandth), the window about it: what it keeps,
-  the route inside, the bits to name it, the total, against no window.
-- Measured on 1,881 pages of Don Quixote (data/anchors/public-domain/pg996.txt):
-  - with nothing else ticked a window saves exactly what naming it costs: never a bit;
-  - over clean-data + letter-pairs, real pages sit where the stack's survivors are 9-24% thicker than an even
-    spread, so every width loses on average (0.06 to 0.25 bits); the best of the five choices saves 0.116 bits a
-    page, before the 2.3 bits that naming the choice costs.
-- So the window is a way to make the space smaller when you want to walk a stretch of it, not (measured) a way
-  to compress. The filters doing their job is why: they put survivors where real files are.
-
-### The video line compacts
-- life-causal-v1, video-pan-v1 and image-mirror-v1 now rank (each place free or forced by those before it), and
-  video-moves-v1 ranks too.
-- video-smooth-v2: v1 with still videos set aside too (v1 retired), ranked by how many pixels each frame has
-  changed so far. On the default 5x5x8 line it keeps 10^-14.95, and the Roundhay Garden Scene passes it.
-- life-causal keeps 10^-52.68 and video-pan 10^-42.14 of that line; image-mirror 10^-15.05 of 10x10 pictures.
-
-### What OPTIMISE FILTERS now keeps
-- Video 10^-14.95 (was 10^-1.12), movies 10^-99.08 (was 10^-43.05), image 10^-18.90 (was 10^-18.26), books
-  10^-116.67 (was 10^-116.02), tracks 10^-95.44.
-
-### rows-alike-v1
-- Each row within `changes` pixels (default 5) of the row above: row-runs' other half. An automaton where it fits,
-  ranked by changes on larger palettes (rgb24).
-- On 20 real pictures cut to 10x10 black and white (Vitruvian crops and Roundhay frames): at 5, 14 pass and the
-  line keeps 10^-1.85; at 3, 3 pass and 10^-6.88. Weak at that size; stronger on wider pictures.
-
-### A fault fixed
-- Merges of code-made automata were cached under their settings alone ("longest=6" is both word-length-v2's and
-  word-shape-v1's), so in one program (the hallway) two such stacks could share one count. A test showed a page
-  counted that the filters reject; merges are now cached under each filter's name too.
-
-### The task list
-- REVIEW-ROUND.md, list N: N1 to N4 done, and N5-1 to N5-19 for the days after (hallway WINDOW HERE, windows
-  across 0 and on the binary line, video-moves ranked, sound envelope ranked, quotes and dialogue on pages, the
-  .obj filter, models and AI line filters, OPTIMISE measured again, a cache audit, the manual).
-
-Checked: CI steps 01, 03, 04, 10 and 11 pass on the final code (07 passed earlier; nothing it covers changed since);
-help and library checks pass. Steps 04 and 10 now expect the new OPTIMISE figures and the video filters' compact mode.
+## Checked
+CI steps 01, 03, 04, 07 and 10 on the filters; 01 and 10 again with J and the File Locator; help and library
+checks.
 
 ## Files to delete by hand
-
 None.

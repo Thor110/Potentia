@@ -33,6 +33,9 @@ struct WindowBounds
     std::vector<uint32_t> lo;
     std::vector<uint32_t> hi; // (has_hi only)
     bool has_hi = false;
+    // Across 0 degrees (v2): the units below hi, then those from lo on (hi below lo), the loop's end and its
+    // start as one stretch.
+    bool wrap = false;
 
     bool contains(std::span<const uint32_t> unit) const;
     bool empty() const; // nothing between the bounds
@@ -43,10 +46,15 @@ struct WindowBounds
 // Exact, so they agree with the bearing the hallway shows. Throws unless from < to <= 360 * 10^decimals.
 WindowBounds degree_bounds(uint32_t base, uint32_t length, uint64_t from, uint64_t to, uint32_t decimals);
 
+// A window `width` wide from `from` (both in units of 10^-decimals of a degree, from below 360), going on past
+// 360 to the loop's start where it is wider than what is left (degree-window-v2): two stretches as one.
+WindowBounds degree_bounds_round(uint32_t base, uint32_t length, uint64_t from, uint64_t width, uint32_t decimals);
+
 // The bounds a degree-window filter keeps, or null for any other filter.
 const WindowBounds* window_bounds(const Filter& f);
 
-// Both windows at once (the units both keep).
+// Both windows at once (the units both keep). Neither may cross 0 (a stack of two windows where one does
+// judges only: FilterStack says so).
 WindowBounds intersect_windows(const WindowBounds& a, const WindowBounds& b);
 
 // Every unit of base^length (the stack with nothing else ticked, under a window).
