@@ -158,6 +158,22 @@ printf '[text]\nmode = compact\nfilters = words-v2, degree-window-v2\n[text.word
 $exe filters --filters window1.ini | tr -d '\r' | q "^survivors    17674126225377617662430079895940372863583934 "
 $exe filters --filters window1.ini | tr -d '\r' | q "keeps 10^-2.56 of the line"
 $exe filters --filters window2.ini | tr -d '\r' | q "^survivors    1585047662160081237252524 (exact; compact mode available)"
+# On the binary line (list N5-3) a file's bearing is its place among every file: on the 65,793 files of up to 2
+# bytes one whole degree is the places 183 to 365, and 350 for 20 over binary-kind's text the text files there.
+printf '[binary]\nmode = compact\nfilters = degree-window-v2\n[binary.degree-window-v2]\nfrom = 1\nwidth = 1\n' > bwindow1.ini
+printf '[binary]\nmode = compact\nfilters = binary-kind-v1, degree-window-v2\n[binary.binary-kind-v1]\nkinds = text\n[binary.degree-window-v2]\nfrom = 350\nwidth = 20\n' > bwindow2.ini
+$exe filters --line binary --length 2 --filters bwindow1.ini | tr -d '\r' | q "^survivors    183 (exact; compact mode available)"
+$exe filters --line binary --length 2 --filters bwindow2.ini | tr -d '\r' | q "^survivors    1843 (exact; compact mode available)"
+# The join filters (list N5-14): only where one unit meets the next, counted and ranked on the joined units.
+printf '[tracks.joined]\nfilters = join-leap-v1\n' > joinleap.ini
+printf '[movies.joined]\nfilters = join-cut-v1\n' > joincut.ini
+out=$($exe filters --line tracks --filters joinleap.ini | tr -d '\r')
+echo "$out" | q "^joined .*join-leap-v1{semitones=7 part=16}$"
+echo "$out" | q "^survivors    1627566787592043567441535488978947966040043280541053573953360018260808151784098481682354361707416984913685687329295816315557043693939570498336216707385984035148259716060020857807415935053959854060208128000 tracks (exact; compact mode available)$"
+$exe filters --line movies --filters joincut.ini | tr -d '\r' | q "^joined .*join-cut-v1{changes=2 part=200}$"
+# melody-contrary-v1 on two voices, counted by a walk over both at once (list N5-11): 4 notes a voice at its defaults.
+printf '[audio]\nmode = hide\nfilters = melody-contrary-v1\n' > contrary.ini
+$exe filters --line audio --note-set notes2 --voices 2 --length 4 --filters contrary.ini | tr -d '\r' | q "^survivors    665529177786605568 (exact; judged)"
 out=$($exe warp --length 32 --filters window2.ini --compact "It was the best of times" 2>/dev/null | tr -d '\r')
 echo "$out"
 echo "$out" | q "survivor number 1486634149773833632027098 of 1585047662160081237252524"

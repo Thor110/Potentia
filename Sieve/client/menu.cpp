@@ -4520,7 +4520,11 @@ sieve::FilterLine Menu::book_part_line(int part) const
 {
     if (part == 0) return filter_line_of(line_of(Media::Image));
     sieve::FilterLine f = filter_line_of(line_of(Media::Pages));
-    if (part == 2) f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * s_.book_pages, UINT32_MAX));
+    if (part == 2)
+    {
+        f.part_length = f.length; // (its pages' joins: list N5-14)
+        f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * s_.book_pages, UINT32_MAX));
+    }
     return f;
 }
 
@@ -4540,6 +4544,7 @@ sieve::FilterLine Menu::part_line(int line, int part) const
     sieve::FilterLine f = filter_line_of(line);
     if (part == kJoinedPart)
     {
+        f.part_length = f.length; // (where the joins are: list N5-14)
         f.length = uint32_t(std::min<uint64_t>(uint64_t(f.length) * comp_units(line), UINT32_MAX));
         f.frames *= comp_units(line);
     }
@@ -4811,6 +4816,11 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                 if (!st.empty()) out.table_bytes = st.table_bytes();
                 if (st.empty()) none_of(out);
                 else if (st.ranker()) survivors_of(out, st.ranker()->count(), sieve::BigUint::pow(fl.base, fl.length));
+                else if (const sieve::BigUint* n = st.counted()) // (counted, not ranked: the video line's motion, two voices' contrary motion)
+                {
+                    survivors_of(out, *n, sieve::BigUint::pow(fl.base, fl.length));
+                    out.status = trf("status.survivors_no_compact", {out.status.substr(0, out.status.find(" (exact)")), st.compact_blocker()});
+                }
                 else out.status = trf("status.not_countable", {st.compact_blocker()});
                 return out;
             }};

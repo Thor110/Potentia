@@ -48,6 +48,10 @@ struct FilterLine
     // Units of any length up to `length`, each judged whole (kind "fractals": a ruleset's text); a
     // filter for such a line judges whatever length it is given.
     bool up_to_length = false;
+    // A unit made of parts of this many symbols each (0: not), joined end to end: a composition's units joined
+    // (the joined stack of tracks and movies), a book's pages read as one text. The join filters (list N5-14) judge
+    // only where one part meets the next. With several voices, a voice's part (FilterStack divides it as the length).
+    uint32_t part_length = 0;
 };
 
 // Pinned data a filter may need, provided by the application (registries, hash checks).
@@ -284,6 +288,10 @@ public:
     // Index of the first filter the unit fails, or -1 if it passes them all.
     int first_failure(std::span<const uint32_t> unit) const;
     bool passes(std::span<const uint32_t> unit) const { return first_failure(unit) < 0; }
+    // The same for the unit at `place` of `places` on its line, which a degree window on a line of units of any
+    // length judges by (sieve/window.hpp PlaceWindow: the fractals line); first_failure throws on such a stack.
+    int first_failure_at(std::span<const uint32_t> unit, const BigUint& place, const BigUint& places) const;
+    bool by_place() const { return by_place_; } // (it has such a window)
     const std::string& filter_name(size_t i) const { return names_[i]; }
 
     // A ranker for the whole stack, if one filter has a ranker and implies every other ticked
@@ -291,8 +299,10 @@ public:
     // Worked out on first use (see filter.cpp), so a stack that only judges costs nothing for it.
     const Ranker* ranker() const;
     // Where the stack is one filter that counts its survivors without ranking them (Filter::survivors: the
-    // fractals' any colouring, the video line's motion filters) and the unit is one voice: that count.
-    const BigUint* counted() const { return filters_.size() == 1 && voices_ == 1 ? filters_[0]->survivors() : nullptr; }
+    // fractals' any colouring, the video line's motion filters) and the unit is one voice, or the filter judges every
+    // voice at once: that count.
+    // (A filter of every voice at once, whole_unit, counts the whole unit: melody-contrary-v1 on two voices.)
+    const BigUint* counted() const { return filters_.size() == 1 && (voices_ == 1 || whole_[0]) ? filters_[0]->survivors() : nullptr; }
     std::string compact_blocker() const; // why there is no ranker ("" if there is one)
     // The memory the stack's count needs for its tables (the plugins' combined automaton's, not-written
     // with them, or the one filter that ranks it): what the filter memory must hold for it to count.
@@ -310,6 +320,7 @@ private:
     std::vector<std::string> names_;
     uint32_t length_ = 0, base_ = 0, voices_ = 1;
     bool up_to_length_ = false; // (FilterLine::up_to_length)
+    bool by_place_ = false;     // a degree window judged by place (first_failure_at)
     // Compact, worked out once, when first asked for (settle()).
     std::vector<Entry> entries_;
     uint32_t unit_length_ = 0;

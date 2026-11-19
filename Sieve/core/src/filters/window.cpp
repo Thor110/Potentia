@@ -359,6 +359,88 @@ WindowBounds intersect_windows(const WindowBounds& a, const WindowBounds& b)
     return out;
 }
 
+namespace {
+
+// A degree window on a line of units of any length (the fractals line): judged by the unit's place, which
+// its digits alone do not give, so FilterStack::first_failure_at hands it over.
+class PlaceWindowFilter : public Filter
+{
+public:
+    PlaceWindowFilter(PlaceWindow w, std::string prov) : w_(w) { provenance_ = std::move(prov); }
+    bool passes(std::span<const uint32_t>) const override
+    {
+        throw std::logic_error("a degree window on this line judges a unit by its place on the line (FilterStack::first_failure_at)");
+    }
+    const PlaceWindow& window() const { return w_; }
+
+private:
+    PlaceWindow w_;
+};
+
+// The first place whose bearing is x or more: ceil(x * places / whole), at most places.
+BigUint first_place_at(uint64_t x, uint64_t whole, const BigUint& places)
+{
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(places, BigUint(x)), BigUint(whole), q, r);
+    if (!r.is_zero()) q.add_small(1);
+    return q < places ? q : places;
+}
+
+} // namespace
+
+bool PlaceWindow::contains(const BigUint& place, const BigUint& places) const
+{
+    if (width >= whole) return place < places;
+    if (!(place < places)) return false;
+    BigUint q, r;
+    BigUint::divmod(BigUint::mul(place, BigUint(whole)), places, q, r);
+    const uint64_t x = std::stoull(q.to_decimal()); // (below whole)
+    return (x + whole - from) % whole < width;
+}
+
+PlaceWindow::Places PlaceWindow::places_kept(const BigUint& places) const
+{
+    Places p;
+    if (width >= whole)
+    {
+        p.hi = places;
+        return p;
+    }
+    p.lo = first_place_at(from, whole, places);
+    if (from + width <= whole)
+    {
+        p.hi = first_place_at(from + width, whole, places);
+        if (p.hi < p.lo) p.hi = p.lo;
+        return p;
+    }
+    p.hi = first_place_at(from + width - whole, whole, places);
+    if (!(p.hi < p.lo)) // (the two stretches meet: every place)
+    {
+        p.lo = BigUint();
+        p.hi = places;
+        return p;
+    }
+    p.wrap = true;
+    return p;
+}
+
+std::optional<PlaceWindow> place_window(const FilterSpec& spec, const FilterValues& values)
+{
+    if (spec.id != "degree-window" || spec.version != 2) return std::nullopt;
+    const int64_t from = param_int(spec, values, "from"), width = param_int(spec, values, "width"), d = param_int(spec, values, "decimals");
+    PlaceWindow w;
+    for (int64_t i = 0; i < d; ++i) w.whole *= 10;
+    w.from = uint64_t(from) % w.whole; // (round the loop: 360 degrees is 0 again)
+    w.width = uint64_t(width);
+    return w;
+}
+
+const PlaceWindow* place_window_of(const Filter& f)
+{
+    const auto* w = dynamic_cast<const PlaceWindowFilter*>(&f);
+    return w ? &w->window() : nullptr;
+}
+
 std::unique_ptr<Ranker> full_ranker(uint32_t base, uint32_t length) { return std::make_unique<FullRanker>(base, length); }
 
 std::unique_ptr<Ranker> window_ranker(const Ranker& inner, WindowBounds bounds) { return std::make_unique<WindowRanker>(inner, std::move(bounds)); }
@@ -412,6 +494,9 @@ void add_window_filters(std::vector<FilterSpec>& out)
                                "Only the units whose bearing on the line's loop lies from `from` up to `from` + `width` degrees, going on past "
                                "360 to the loop's start where it is wider than what is left (350 for 20 keeps 350 to 10)");
     }
+    w2.description += " On the binary line a file's bearing is its place among every file up to the line's length (the shortest first, "
+                      "then by their bytes), counted with the line's other filters; on the fractals line, a ruleset's place on the line's "
+                      "list, judged.";
     for (auto& p : w2.params)
         if (p.key == "width") p.description = "how wide the window is, in the same units (one degree at 0 decimals); past 360 degrees it goes on "
                                               "from the loop's start, the two stretches as one";
@@ -419,12 +504,17 @@ void add_window_filters(std::vector<FilterSpec>& out)
     w2.make = [own2](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& spec = *find_filter(own2);
         const int64_t from = param_int(spec, v, "from"), width = param_int(spec, v, "width"), d = param_int(spec, v, "decimals");
+        const std::string prov = "from=" + std::to_string(from) + " width=" + std::to_string(width) + " decimals=" + std::to_string(d);
+        if (l.up_to_length) return std::make_unique<PlaceWindowFilter>(*place_window(spec, v), prov); // (by place: list N5-3)
+        if (l.kind == "binary") throw std::invalid_argument(own2 + " on the binary line is counted by BinarySieve, not as units of digits");
         uint64_t whole = 360;
         for (int64_t i = 0; i < d; ++i) whole *= 10;
         WindowBounds b = degree_bounds_round(l.base, l.length, uint64_t(from) % whole, uint64_t(width), uint32_t(d));
-        return std::make_unique<DegreeWindowFilter>(std::move(b), "from=" + std::to_string(from) + " width=" + std::to_string(width) +
-                                                                      " decimals=" + std::to_string(d));
+        return std::make_unique<DegreeWindowFilter>(std::move(b), prov);
     };
+    // Every line (list N5-3, Edward, 19 November 2026): on the binary line a file's bearing is its place among
+    // every file up to the line's length, and on the fractals line a ruleset's place on the line's own list.
+    w2.applies = [](const FilterLine& l) { return l.kind == "binary" || l.up_to_length || (l.base >= 2 && l.length >= 1); };
     out.push_back(w2);
 }
 

@@ -2646,6 +2646,37 @@ void test_m2_filters(const std::string& dir)
         CHECK(mixed.passes(unit("C4q D4q C4q D4q // G4q F4q G4q F4q")));
         CHECK(find_filter("melody-contrary-v1")->whole_unit && find_filter("melody-contrary-v1")->judge_only);
     }
+    // Counted (list N5-11): a walk over both voices at once, in time, against every unit of small lines judged one by one.
+    {
+        struct Small
+        {
+            const char* durations;
+            uint32_t per;
+        };
+        for (const Small sm : {Small{"eq", 2}, Small{"eqh", 2}, Small{"q", 3}})
+            for (const auto& [moves, percent] : std::vector<std::pair<int, int>>{{1, 100}, {2, 100}, {1, 50}, {2, 60}})
+            {
+                const NoteSet set = make_note_set(48, 60, sm.durations, 2);
+                FilterLine l;
+                l.kind = "audio", l.symbols_id = set.id(), l.base = set.base(), l.length = 2 * sm.per;
+                const FilterStack con(l, {{find_filter("melody-contrary-v1"), {{"moves", std::to_string(moves)}, {"percent", std::to_string(percent)}}}}, none);
+                uint64_t brute = 0;
+                std::vector<uint32_t> u(l.length, 0);
+                for (;;)
+                {
+                    brute += con.passes(u) ? 1 : 0;
+                    size_t i = u.size();
+                    while (i > 0 && ++u[i - 1] == l.base) u[--i] = 0;
+                    if (i == 0) break;
+                }
+                CHECK(con.counted() && *con.counted() == BigUint(brute));
+            }
+        // three voices judge only; and the default two-voice line of 16 notes a voice is counted
+        const NoteSet three = make_note_set(48, 60, "q", 3);
+        FilterLine l3;
+        l3.kind = "audio", l3.symbols_id = three.id(), l3.base = three.base(), l3.length = 6;
+        CHECK(!FilterStack(l3, {{find_filter("melody-contrary-v1"), {}}}, none).counted());
+    }
     CHECK(find_filter("sound-envelope-v1")->picks_a_kind && find_filter("sound-syllables-v1")->picks_a_kind && find_filter("sound-interval-v1")->picks_a_kind);
 }
 
@@ -5067,6 +5098,49 @@ void test_ai_filters()
         const std::vector<uint32_t> a = r->unrank(BigUint(41)), b = r->unrank(BigUint(42));
         CHECK(std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end()));
     }
+    // weight-signs-v1 (list N5-16): every row of 2 and of 8 digits counted one by one, and the ranker's rank and unrank
+    // against the generic walk.
+    for (const auto& [name, percent] : std::vector<std::pair<std::string, int>>{{"weight-signs-v1", 10}, {"weight-signs-v1", 20},
+                                                                                 {"weight-signs-v1", 50}, {"weight-signs-v1", 0}})
+    {
+        const bool signs = name == "weight-signs-v1";
+        auto passes_row = [&](const std::vector<uint32_t>& r) {
+            uint32_t k = 0;
+            for (uint32_t d : r) k += signs ? (d < 2 ? 1u : 0u) : (d == 0 || d == 3 ? 1u : 0u);
+            const uint32_t c = uint32_t(r.size());
+            if (signs)
+            {
+                const uint32_t lo = (c * uint32_t(percent) + 99) / 100;
+                return k >= lo && c - k >= lo;
+            }
+            return k <= c * uint32_t(percent) / 100;
+        };
+        auto brute = [&](uint32_t c) {
+            uint64_t n = 0;
+            std::vector<uint32_t> r(c);
+            for (uint64_t v = 0; v < (uint64_t(1) << (2 * c)); ++v)
+            {
+                for (uint32_t i = 0; i < c; ++i) r[i] = uint32_t(v >> (2 * (c - 1 - i))) & 3;
+                n += passes_row(r) ? 1 : 0;
+            }
+            return n;
+        };
+        const sieve::FilterStack st(line, {{find_filter(name), {{"percent", std::to_string(percent)}}}}, TestResources(nullptr, nullptr));
+        const sieve::Ranker* r = st.ranker();
+        CHECK(r != nullptr);
+        if (!r) continue;
+        CHECK(r->count() == BigUint::mul(BigUint::pow(BigUint(brute(2)), 280), BigUint::pow(BigUint(brute(8)), 2)));
+        if (r->count().is_zero()) continue;
+        std::mt19937_64 rng(uint64_t(percent) * 7 + (signs ? 1 : 2));
+        for (int i = 0; i < 12; ++i)
+        {
+            BigUint k = BigUint::from_hex(std::to_string(rng() % 1000003));
+            k = BigUint::mod(BigUint::mul(k, BigUint::pow(BigUint(7), 300)), r->count());
+            const std::vector<uint32_t> u = r->unrank(k);
+            CHECK(st.passes(u) && r->accepts(u));
+            CHECK(r->rank(u) == k && r->Ranker::rank(u) == k && r->Ranker::unrank(k) == u);
+        }
+    }
     // A trained-looking row passes at the defaults; a ramp, a repeat and a long run do not.
     {
         const AiSpace micro(AiShape{}, "sieve");
@@ -6599,6 +6673,190 @@ void test_picture_vectors(const std::string& dir)
         CHECK(agree);
         CHECK(kept == 27 && one.ranker()->count() == BigUint(27));
     }
+}
+
+// degree-window-v2 on the lines whose units are of any length (list N5-3): on the binary line a file's bearing is its
+// place among every file of the line, and BinarySieve counts and ranks the window's part of the other filters'
+// survivors; checked against every file of a line of 2 bytes, alone and over the kinds, not-an-item's pages and
+// utf8-valid, across 0 and two at once. On the fractals line it judges a ruleset by its place (first_failure_at).
+void test_place_window()
+{
+    const FilterSpec* w = find_filter("degree-window-v2");
+    const FilterSpec* utf8 = find_filter("utf8-valid-v1");
+    const FilterSpec* not_item = find_filter("not-an-item-v1");
+    CHECK(w && utf8 && not_item);
+    if (!w || !utf8 || !not_item) return;
+    FilterLine bl;
+    bl.kind = "binary", bl.symbols_id = "bytes256", bl.base = 256, bl.length = 2;
+    FilterLine fl;
+    fl.kind = "fractals", fl.symbols_id = "fractals/96", fl.base = 128, fl.length = 96, fl.up_to_length = true;
+    CHECK(w->applies(bl) && w->applies(fl) && !find_filter("degree-window-v1")->applies(bl));
+    const auto wv = [](uint64_t from, uint64_t width, uint32_t d) {
+        return FilterValues{{"from", std::to_string(from)}, {"width", std::to_string(width)}, {"decimals", std::to_string(d)}};
+    };
+    const BinarySpace space(2, "sieve");
+    const uint64_t n = 1 + 256 + 65536;
+    BinaryItems items;
+    items.pages.emplace();
+    items.pages->allowed.assign(1, std::array<bool, 256>{});
+    items.pages->allowed[0]['a'] = items.pages->allowed[0]['b'] = true; // (the pages of a line of one letter, a or b)
+    const auto in = [&](uint64_t v, uint64_t from, uint64_t width, uint32_t d) {
+        uint64_t s = 360;
+        for (uint32_t i = 0; i < d; ++i) s *= 10;
+        const uint64_t b = uint64_t((unsigned __int128)v * s / n);
+        return width >= s || (b + s - from) % s < width;
+    };
+    struct Case
+    {
+        std::vector<FilterStack::Entry> others;
+        std::vector<std::array<uint64_t, 3>> windows; // from, width, decimals
+    };
+    const std::vector<Case> cases = {
+        {{}, {{{10, 20, 0}}}},
+        {{}, {{{350, 20, 0}}}},                               // across 0
+        {{}, {{{1234, 7, 1}}}},                               // tenths
+        {{kind_entry("text", "keep")}, {{{90, 45, 0}}}},
+        {{kind_entry("text", "keep")}, {{{300, 100, 0}}}},    // across 0, over a kind
+        {{kind_entry("any", "keep"), {not_item, {{"items", "pages"}}}}, {{{0, 1, 0}}}}, // the pages are among the first places
+        {{{utf8, {{"controls", "text"}}}}, {{{200, 30, 0}}}},
+        {{{utf8, {{"controls", "any"}}}}, {{{355, 10, 0}}}},  // across 0, over utf8-valid
+        {{kind_entry("signed-or-text", "keep")}, {{{10, 100, 0}}, {{50, 100, 0}}}}, // two windows: 50 to 110
+    };
+    for (const Case& c : cases)
+    {
+        std::vector<FilterStack::Entry> entries = c.others;
+        for (const auto& x : c.windows) entries.push_back({w, wv(x[0], x[1], uint32_t(x[2]))});
+        const BinarySieve others(space, c.others, &items), bs(space, entries, &items);
+        bool ok = bs.can_rank() && bs.needs_file();
+        uint64_t k = 0;
+        for (uint64_t v = 0; ok && v < n; ++v)
+        {
+            const std::vector<uint8_t> file = BinarySpace::file_at_place(BigUint(v));
+            bool pass = others.first_failure_of(file).empty();
+            for (const auto& x : c.windows) pass = pass && in(v, x[0], x[1], uint32_t(x[2]));
+            ok = bs.first_failure_of(file).empty() == pass;
+            if (pass && ok) ok = bs.index_of(file, AddressMode::Positional) == BigUint(k) && bs.file_at(BigUint(k), AddressMode::Positional) == file;
+            k += pass ? 1 : 0;
+        }
+        CHECK(ok);
+        CHECK(bs.count() == BigUint(k));
+    }
+    // Two windows where one crosses 0: they judge only.
+    {
+        const BinarySieve bs(space, {{w, wv(350, 20, 0)}, {w, wv(0, 5, 0)}});
+        CHECK(!bs.can_rank() && bs.blocker().find("crosses 0") != std::string::npos);
+        CHECK(bs.first_failure_of({}).empty() && !bs.first_failure_of({0x80, 0}).empty()); // (the empty file is at place 0)
+    }
+    // The fractals line: judged by place, and first_failure without one refused.
+    {
+        static const TestResources none(nullptr, nullptr);
+        const FilterStack st(fl, {{w, wv(90, 90, 0)}}, none);
+        CHECK(st.by_place() && throws([&] { (void)st.first_failure(std::vector<uint32_t>{1, 2, 3}); }));
+        const BigUint places(1000);
+        bool ok = true;
+        for (uint64_t v = 0; v < 1000; ++v)
+        {
+            const bool want = v * 360 / 1000 >= 90 && v * 360 / 1000 < 180;
+            ok = ok && (st.first_failure_at(std::vector<uint32_t>{1, 2, 3}, BigUint(v), places) < 0) == want;
+        }
+        CHECK(ok);
+    }
+}
+
+// The join filters (list N5-14): join-leap-v1 and join-cut-v1 judge only where one part of a joined unit meets the
+// next, and count and rank: against every unit of small joined lines, and over two voices.
+void test_join_filters()
+{
+    static const TestResources none(nullptr, nullptr);
+    const FilterSpec* leap = find_filter("join-leap-v1");
+    const FilterSpec* cut = find_filter("join-cut-v1");
+    CHECK(leap && cut);
+    if (!leap || !cut) return;
+    auto walk_all = [](const FilterStack& st, const FilterLine& l, const std::function<bool(const std::vector<uint32_t>&)>& rule) {
+        std::vector<uint32_t> u(l.length, 0);
+        uint64_t kept = 0;
+        bool agree = true;
+        for (;;)
+        {
+            const bool want = rule(u);
+            agree = agree && st.passes(u) == want;
+            if (want && agree && st.ranker()) agree = st.ranker()->rank(u) == BigUint(kept) && st.ranker()->unrank(BigUint(kept)) == u;
+            kept += want ? 1 : 0;
+            size_t i = u.size();
+            while (i > 0 && ++u[i - 1] == l.base) u[--i] = 0;
+            if (i == 0) break;
+        }
+        return std::make_pair(agree, kept);
+    };
+    // join-leap on notes2 C3-C4 of quarter notes (14 symbols, 14^4 units each): parts of 1 joined four times, parts of 2
+    // joined twice, and two voices of parts of 1 a voice joined twice
+    struct Shape
+    {
+        uint32_t voices, part, units;
+    };
+    for (const Shape sh : {Shape{1, 1, 4}, Shape{1, 2, 2}, Shape{2, 2, 2}})
+    {
+        const uint32_t voices = sh.voices;
+        const NoteSet set = make_note_set(48, 60, "q", voices);
+        FilterLine part;
+        part.kind = "audio", part.symbols_id = set.id(), part.base = set.base(), part.length = sh.part;
+        const uint32_t units = sh.units;
+        FilterLine l = part;
+        l.length = part.length * units, l.part_length = part.length;
+        CHECK(leap->applies(l) && !leap->applies(part));
+        const FilterStack st(l, {{leap, {{"semitones", "2"}}}}, none);
+        const uint32_t per = l.length / voices, part_per = part.length / voices;
+        const auto [agree, kept] = walk_all(st, l, [&](const std::vector<uint32_t>& u) {
+            for (uint32_t v = 0; v < voices; ++v)
+                for (uint32_t j = part_per; j < per; j += part_per)
+                {
+                    const uint32_t a = set.midi(u[v * per + j - 1]), b = set.midi(u[v * per + j]);
+                    if (a && b && (a > b ? a - b : b - a) > 2) return false;
+                }
+            return true;
+        });
+        CHECK(agree && st.ranker() && st.ranker()->count() == BigUint(kept));
+    }
+    // join-cut on 2 x 1 pictures of 3 colours, units of 2 frames joined three times
+    {
+        FilterLine l;
+        l.kind = "video", l.symbols_id = "video-test", l.base = 3, l.width = 2, l.height = 1, l.frames = 6, l.length = 12, l.part_length = 4;
+        for (int changes : {0, 1})
+        {
+            const FilterStack st(l, {{cut, {{"changes", std::to_string(changes)}}}}, none);
+            const auto [agree, kept] = walk_all(st, l, [&](const std::vector<uint32_t>& u) {
+                for (uint32_t f = 2; f < 6; f += 2)
+                    if (int((u[f * 2] != u[f * 2 - 2]) + (u[f * 2 + 1] != u[f * 2 - 1])) > changes) return false;
+                return true;
+            });
+            CHECK(agree && st.ranker() && st.ranker()->count() == BigUint(kept));
+        }
+    }
+}
+
+// The models line's mesh filters (list N5-15): a tetrahedron, wound one way, is closed; turned inside out on one
+// face it is not; three faces on one edge are a fin; corners on one line have no area. They judge only.
+void test_mesh_filters()
+{
+    const ModelSpace space(4, 4, 4);
+    ModelSpace::Parts p;
+    p.verts = {0, 0, 0, 3, 0, 0, 0, 3, 0, 0, 0, 3};
+    p.faces = {0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3}; // every edge run once each way
+    const ModelSieve closed(space, {{find_filter("mesh-closed-v1"), {}}}), edges(space, {{find_filter("mesh-edges-v1"), {}}}),
+        area(space, {{find_filter("mesh-area-v1"), {}}});
+    CHECK(!closed.can_rank() && closed.blocker().find("judge only") != std::string::npos);
+    auto at = [&](const ModelSpace::Parts& q) { return space.index_of(q, AddressMode::Positional); };
+    CHECK(closed.first_failure(at(p)).empty() && edges.first_failure(at(p)).empty() && area.first_failure(at(p)).empty());
+    ModelSpace::Parts flipped = p;
+    std::swap(flipped.faces[10], flipped.faces[11]); // the last face wound the other way
+    CHECK(closed.first_failure(at(flipped)) == "mesh-closed-v1" && edges.first_failure(at(flipped)).empty());
+    ModelSpace::Parts fin = p;
+    fin.faces = {0, 1, 2, 0, 1, 3, 1, 0, 3, 0, 1, 2}; // edge 0-1 in four faces
+    CHECK(edges.first_failure(at(fin)) == "mesh-edges-v1" && closed.first_failure(at(fin)) == "mesh-closed-v1");
+    ModelSpace::Parts flat = p;
+    flat.verts = {0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 0, 3}; // the first three on one line
+    CHECK(area.first_failure(at(flat)) == "mesh-area-v1" && closed.first_failure(at(flat)).empty());
+    CHECK(find_filter("mesh-closed-v1")->judge_only && find_filter("mesh-area-v1")->judge_only);
 }
 
 // utf8-valid-v1 on the binary line against the oracle's vectors (tests/vectors_utf8_v1.tsv): the
@@ -10832,6 +11090,9 @@ void run_all(int argc, char** argv)
         RUN(test_q_filters());
         RUN(test_m2_filters(dir));
         RUN(test_degree_window(dir));
+        RUN(test_place_window());
+        RUN(test_join_filters());
+        RUN(test_mesh_filters());
         RUN(test_video_rankers(dir));
         RUN(test_merge_keys(dir));
         RUN(test_rows_alike(dir));

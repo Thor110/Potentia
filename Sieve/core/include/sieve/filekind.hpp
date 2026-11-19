@@ -37,6 +37,7 @@
 #include "sieve/binaryspace.hpp"
 #include "sieve/compact.hpp"
 #include "sieve/filter.hpp"
+#include "sieve/window.hpp"
 
 #include <array>
 #include <functional>
@@ -211,6 +212,8 @@ public:
     const BigUint& count() const { return count_; }
     BigUint rank(const std::vector<uint8_t>& file) const;  // the file must pass
     std::vector<uint8_t> unrank(const BigUint& k) const;   // k < count()
+    // How many survivors come before a file of max_bytes or fewer in the line's order, whether it passes or not.
+    BigUint below(const std::vector<uint8_t>& file) const;
 
     static constexpr uint32_t kStates = 9;
     static constexpr uint8_t kDead = 0xFF;
@@ -249,7 +252,7 @@ public:
     std::string first_failure(std::span<const uint8_t> head, uint64_t size) const;
     std::string first_failure_of(const std::vector<uint8_t>& file) const;
     bool passes(std::span<const uint8_t> head, uint64_t size) const { return first_failure(head, size).empty(); }
-    bool needs_file() const { return !item_forms_.empty() || utf8_filter_ >= 0; }
+    bool needs_file() const { return !item_forms_.empty() || utf8_filter_ >= 0 || !windows_.empty(); }
     // Whether the survivors can be counted and ranked (not when a form is judged file by file).
     bool can_rank() const { return can_rank_; }
     // Whether they can at least be counted (for the share a stack filters): exactly, as count_of()
@@ -278,8 +281,20 @@ public:
     BigUint parse(std::string_view hex) const;
 
 private:
+    // In the order of the filters other than degree windows; rank() and unrank() then lay the window over them.
+    BigUint rank_inner(const std::vector<uint8_t>& file) const;
+    std::vector<uint8_t> unrank_inner(const BigUint& k) const;
+    BigUint below_inner(const BigUint& place) const; // those survivors with a place on the line below this one
     BigUint rank(const std::vector<uint8_t>& file) const;
     std::vector<uint8_t> unrank(const BigUint& k) const;
+    // Degree windows (degree-window-v2, sieve/window.hpp PlaceWindow): a file's bearing is its place among every
+    // file of the line. One window, or several none of which crosses 0, keeps the places [lo, hi) (with wrap,
+    // [0, hi) and [lo, places)): the survivors there are the others' from below_lo_ to below_hi_.
+    std::vector<int> window_filter_;        // per filter: -1, or which window it is
+    std::vector<PlaceWindow> windows_;
+    BigUint places_;                        // every file on the line
+    bool window_wrap_ = false;
+    BigUint below_lo_, below_hi_;           // the others' survivors below lo and below hi
     std::vector<std::string> names_;
     std::vector<KindSet> sets_;          // binary-kind-v1 filters, by position in names_
     std::vector<int> item_filter_;       // per filter: -1, or which not-an-item-v1 it is

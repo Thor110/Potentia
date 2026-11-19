@@ -826,7 +826,8 @@ is a setting, as a book holds pages of any length.
 **Still open.**
 - **Filters made for seams:** the joined stack uses the line's own filters over the whole joined
   unit. Filters that look only at the joins (a note held across the boundary, a cut between frames)
-  would judge less and count more easily.
+  would judge less and count more easily. *Built (list N5-14, IDEAS 19.253): `join-leap-v1` and
+  `join-cut-v1`, counted and ranked; counted together with each unit's own filters, still open.*
 - ~~**A record format for them** and J opening one onto its shelf.~~ Done (7 October): records of
   the books' kind (`cover`, `title`, `units` sections), `sieve-book-v2` where an audio section names
   a set other than `notes104`; F saves one (`.track`, `.movie`), J opens one onto its shelf, and
@@ -10373,6 +10374,60 @@ as it is ... ok go ahead with typing into the filter parameters and the other it
   at the start first in address order), checked against every unit of a small line alone and over a plugin; v1,
   which stopped at 360, is retired. Two windows where one crosses 0 are not intersected: such a stack judges only,
   and says so.
+- *The binary and fractals lines (N5-3):* `degree-window-v2` on the two lines whose units have lengths of their own,
+  by a unit's place rather than its digits (Edward asked what "windows on the binary and fractals lines" meant: the
+  filter, with its settings, made to work there; nothing added to any menu). On the binary line a file's bearing is
+  floor(place x 360 x 10^d / files), its place among every file up to the line's length (the shortest first, then by
+  its bytes), and BinarySieve keeps the part of its other filters' survivors in the window: the survivors below each
+  end of the window counted (binary-kind's heads, not-an-item's pages, utf8-valid's walk stopped where a file stops
+  being UTF-8), so the window's files are counted and ranked and the line compacts to them. Checked against every file
+  of a line of 2 bytes, alone, over a kind, the pages and utf8-valid, across 0 and two at once. On the fractals line a
+  ruleset's bearing is its place on the line's list, and it judges (the line's filters hide there; compact on that
+  line is list F-B).
+- *Contrary motion counted (N5-11):* `melody-contrary-v1` on two voices, by a walk over both voices at once in time:
+  the voice that is behind takes its next digit, both where they are level (the only moments both can begin a note
+  together), and a state is how far each has gone, how far one is ahead in sixteenths, each voice's last pitch, and
+  the moves made together and contrary so far. A note on its own makes its voice's pitch any of the set's, whatever
+  it was; two notes together are split by where the old pitches lie about the new (similar, contrary, neither), each
+  a sum over a quarter of the old pitches from their running sums. Counted, not ranked (the walk is in time, the
+  unit's digits voice after voice), and checked against every unit of 12 small lines. On notes2 C3 to C6 with all
+  eight lengths and two voices, at its defaults (2 moves, all contrary): 665,529,177,786,605,568 at 4 notes a voice
+  (0.6 s here), about 10^38.39 at 8 (1.3 s), and about 10^78.46 at the setup menu's 16 (8 s). With fewer than all of
+  them contrary the moves must be counted in full, so it counts to 5 notes a voice and past that judges. The setup
+  menu now shows a stack that is counted but not ranked (this, and the video line's motion filters where they
+  count without ranking) with its survivors and why it cannot compact, where it said they could not be counted.
+- *Join filters (N5-14, §13's "filters made for seams"):* a line made of parts (a composition's units joined, a
+  book's pages as one text) now says how long its parts are, and two filters judge only where one part meets the
+  next. `join-leap-v1`: where one unit ends on a note and the next begins on one, a step of at most `semitones` (7),
+  each voice on its own; an automaton (the place within a part, and at a join the pitch before), so it counts,
+  ranks and merges with the joined stack's other automata. `join-cut-v1`: a movie's unit begins within `changes`
+  pixels (2) of the frame the unit before ended on, every other frame free; ranked by the changes ranker (its parts
+  the frames, free but for each unit's first). Checked against every unit of small joined lines; on the default
+  tracks the joined units keep 10^-0.79 (three joins, 370 of 676 pitch pairs each), and on the default movies
+  10^-15.04 (three joins, 326 of 2^25 frames each), both counted and compact. Counting a joined stack together with
+  each unit's own filters is still open: the unit's ranker would have to say how its survivors begin and end.
+- *The models line's mesh (N5-15):* `mesh-edges-v1` (no edge in more than two faces: a fin no solid has),
+  `mesh-closed-v1` (every edge run once each way: a closed, consistently wound surface; at the default 8 vertices
+  and 12 faces, a triangulated sphere such as a cube's) and `mesh-area-v1` (no face whose corners are on one line,
+  exactly from the grid's integers). "No degenerate triangles" by index was already `distinct-indices-v1`. These
+  judge only: the line's rules count by how many vertices are unused and where in its face the walk is, but an
+  edge joins two faces, so a face's choices depend on every face before it through the edges they have used (the
+  states would be the 28 edges' uses at the default, 3^28), and mesh-area joins the faces to the vertices' places.
+  On the judge-only tab, so OPTIMISE FILTERS leaves them alone.
+- *The AI line's weights (N5-16):* measured on the shipped run's model (universalbibliothek, 4 bits a weight), whose
+  8,192 digits are 812 at the lowest value and 800 at the highest, about 400 to 540 at each between: trained
+  weights at 4 bits crowd the two ends (19.7% of them, where noise has 12.5%). So a filter keeping rows off the ends,
+  written first as `weight-spread`, set the trained model aside at every share below 75% and was taken out before it
+  shipped. `weight-signs-v1` keeps the rows with at least `percent` of their weights each side of zero; the trained
+  model passes at 10 (the default) and fails at 15 (some of its rows of 16 hold two weights of one sign), and at 10
+  it keeps 10^-0.10 of the line. Counted and ranked row by row, through the rows ranker weight-rows uses (a row's
+  ways to finish depend only on how many of its digits are below zero so far), checked against every row of 2 and
+  8 digits.
+- *OPTIMISE FILTERS measured again (N5-17), on every line at the setup menu's shapes (Proof/STATISTICS.md):* binary
+  10^-14.59, image 10^-18.90, pages 10^-20.38, books 10^-116.67, audio 10^-14.04, tracks 10^-95.44, video 10^-14.95,
+  movies 10^-99.08, models 10^-21.48, worlds 10^-125.21, AI 10^-9854.27, fractals 10^-59.27. The lines list N4 measured
+  are as they were: N5's filters pick a kind, judge only, sit on the joined stacks (which OPTIMISE leaves alone), or
+  lose to a stronger filter on their line.
 - *Sound that ranks at any length (N5-10):* `sound-envelope-v1` and `sound-syllables-v1` ranked block by block (a
   sample's class, its block's loudest so far and the story of the blocks before: the ways to finish depend on
   nothing else), so the default second of 8-bit sound compacts with them (10^-19.05 and 10^-466.83); their numbers

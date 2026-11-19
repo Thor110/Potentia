@@ -26,6 +26,7 @@ machine of 4 logical processors: the sizes are the same on any machine, the time
 - [A small script](#a-small-script)
 - [Files that are items of Sieve's own lines](#files-that-are-items-of-sieves-own-lines)
 - [What carried each file](#what-carried-each-file)
+- [What OPTIMISE FILTERS keeps of each line](#what-optimise-filters-keeps-of-each-line)
 
 ## At a glance
 
@@ -735,3 +736,31 @@ So where the smallest file is wanted, Sieve's own ways carried nearly every byte
 fast decoding is wanted, LZMA2 takes over what mixing carried, on purpose, and the rope keeps its
 files. `python tools/ways_tally.py FOLDER --sieve SIEVE` (or `tools\ways_tally.bat`, which asks
 for the folder) gives the same tables for any `.sieve` files.
+
+## What OPTIMISE FILTERS keeps of each line
+
+The setup menu's OPTIMISE FILTERS ticks every filter of every line that sets aside noise and can be counted together
+(the judge-only filters, those that pick a kind and those set from the FRACTALS rows left alone), each stack kept within
+the filter memory. Measured 19 November 2026 (Sieve 0.13.79, list N5, on the Linux machine) at the setup menu's
+default shapes and a filter memory of 512 MB, with `hallway --menu --filters optimise.ini --press
+"Item:optimise,Return"` and then `hallway --metrics` on that file (67 s and 38 s):
+
+| Line | Kept |
+| :--- | :--- |
+| Binary | 10^-14.59 |
+| Image | 10^-18.90 |
+| Pages | 10^-20.38 |
+| Books | 10^-116.67 |
+| Audio | 10^-14.04 |
+| Tracks | 10^-95.44 |
+| Video | 10^-14.95 |
+| Movies | 10^-99.08 |
+| Models | 10^-21.48 |
+| Worlds | 10^-125.21 |
+| AI | 10^-9854.27 |
+| Fractals | 10^-59.27 |
+
+Where the night of list N4 measured the same lines (video, movies, image, books, tracks), the shares are as they
+were: list N5's new filters either pick a kind (the degree window), judge only (the models line's mesh, a melody's
+motif), sit on the joined stacks (join-leap, join-cut), which OPTIMISE leaves alone, or lose to a stronger filter
+that counts on their line (weight-signs on the AI line, where near-model is ticked).

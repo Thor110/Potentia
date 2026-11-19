@@ -299,7 +299,7 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] N4. rows-alike-v1 (each row within `changes` pixels of the row above; row-runs' other half), an automaton,
   measured on 20 real pictures from the public-domain anchors `[01]`. A fault found on the way and fixed: merges of
   code-made automata kept under their settings alone, so two stacks could share a count (IDEAS 19.252) `[01]`.
-- [ ] N5. The rest, for the days after (Edward, 18 November 2026: "prepare a massive task list"):
+- [x] N5. The rest, for the days after (Edward, 18 November 2026: "prepare a massive task list"):
   - Degree windows
     - [x] N5-1. The degree window set in the filter itself, not from a hallway row (Edward, 19 November 2026: "I was
       thinking that should just be something you enter into the filter rather than a window. A filter
@@ -308,8 +308,11 @@ run before a release package, and after each of the three reviews. Each batch is
       to be careful not to add new windows, the main menu and pause menu is getting crowded as it is ... one can
       just go straight back to the setup menu if they wish to adjust the numbers and recalculate everything").
     - [x] N5-2. A window across 0 degrees (350 to 10): two stretches, ranked as one (the lower first).
-    - [ ] N5-3. The binary line's window (its files have lengths of their own: the bearing of a file among all
-      files to the line's length) and the fractals line's (rulesets in the line's own order).
+    - [x] N5-3. The degree-window filter (the filter, with its from/width settings, not a screen) made to work on
+      the binary line and the fractals line, where today it is offered on the digit lines only. On the binary line a
+      file's bearing is its place among every file up to the line's length (shortest first, then by bytes); on the
+      fractals line, a ruleset's place in the line's own order. Nothing added to any menu. Built: counted and ranked on
+      the binary line (BinarySieve), judged on the fractals line `[01]`.
     - [x] N5-4. `sieve window` over many simple stacks at once, its search paid for (log2 of the choices), to
       show in one table where a window ever pays; and the same for the books line.
   - Video and pictures
@@ -327,7 +330,8 @@ run before a release package, and after each of the three reviews. Each batch is
     - [x] N5-10. sound-envelope-v1 and sound-syllables-v1 ranked at any length (their counts already go block by
       block: a walk sample by sample with the block's state can rank by those counts), so a second of sound
       compacts with them.
-    - [ ] N5-11. melody-contrary-v1 counted (rules between voices: a walk over both voices' moves at once).
+    - [x] N5-11. melody-contrary-v1 counted (rules between voices: a walk over both voices' moves at once): on two
+      voices, exact against every unit of small lines; the default 16 notes a voice in 8 s `[01]`.
   - Pages
     - [x] N5-12. Quotation marks spaced as prose spaces them (an opening mark after a space, a closing one before
       a space or a mark), and a dialogue's turns (IDEAS 19.21), as automata on ascii96.
@@ -338,17 +342,20 @@ run before a release package, and after each of the three reviews. Each batch is
     - [x] N5-21. J opens a model (.obj, .gltf, .glb) on the models line, fitted to its shape `[10]`.
     - [x] N5-22. The File Locator: Choose a file... opens without sieving, Sieve a file... sieves, Go to it walks to
       the .sieve where sieved and the file where not.
-    - [ ] N5-20. Edward's idea, the same day: "we could have that as a global setting as well": the cross-dimensional
+    - [x] N5-20. Not needed (Edward, 19 November 2026: "that is fine as it is then, if optimise filters already ticks them"). His idea, the same day: "we could have that as a global setting as well": the cross-dimensional
       exclusions (not-other-line, not-a-file, not-packed, not-an-item) as one global setting, on by default, rather
       than filters each line ticks; and a plugin's header able to say it picks a kind, so X and OPTIMISE leave the
       format grammars alone on ascii96 pages.
-    - [ ] N5-14. Join filters (IDEAS §13): filters that look only at the joins between a book's pages.
+    - [x] N5-14. Join filters (IDEAS §13): filters that look only at the joins between a book's pages: join-leap-v1
+      (tracks) and join-cut-v1 (movies), counted and ranked `[01]` + `[03]`; with each unit's own filters, still open.
   - Models and the AI line
-    - [ ] N5-15. More filters for the models line (no degenerate triangles, edges shared by two faces, a mesh that
-      closes), counted with the model rules.
-    - [ ] N5-16. Filters for the AI line's weights (their spread, their signs), measured on trained runs.
+    - [x] N5-15. More filters for the models line (no degenerate triangles, edges shared by two faces, a mesh that
+      closes), counted with the model rules: mesh-edges, mesh-closed and mesh-area built, judged only (an edge joins
+      faces, so the closed forms cannot count them) `[01]` + `[04]`.
+    - [x] N5-16. Filters for the AI line's weights (their spread, their signs), measured on trained runs: weight-signs-v1
+      (the trained model passes at 10%); a spread filter set the trained model aside and was dropped `[01]` + `[04]`.
   - Throughout
-    - [ ] N5-17. OPTIMISE FILTERS measured again on every line with list N's filters, the new shares in
+    - [x] N5-17. OPTIMISE FILTERS measured again on every line with list N's filters, the new shares in
       STATISTICS.
     - [x] N5-18. An audit of every other cache kept by provenance (the plugin cache on disk, the tables), for the
       fault list N4 found in the merges.

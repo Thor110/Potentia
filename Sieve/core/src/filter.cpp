@@ -542,6 +542,7 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
         voices_ = v;
         if (whole.length % voices_ != 0) throw std::invalid_argument("a unit of " + std::to_string(voices_) + " voices has a length they divide");
         line.length = whole.length / voices_;
+        line.part_length = whole.part_length / voices_;
         if (voices_ > 1) provenance_ += " (each of " + std::to_string(voices_) + " voices)";
     }
     for (const auto& e : entries)
@@ -552,6 +553,7 @@ FilterStack::FilterStack(const FilterLine& whole, const std::vector<Entry>& entr
         whole_.push_back(e.spec->whole_unit ? 1 : 0);
         names_.push_back(e.spec->name());
         provenance_ += "; " + e.spec->name() + "{" + filters_.back()->provenance() + "}";
+        by_place_ = by_place_ || place_window_of(*filters_.back()) != nullptr;
     }
     id_ = Sha256::hex(Sha256::hash(provenance_));
 
@@ -708,9 +710,23 @@ void FilterStack::settle_now() const
     }
 }
 
+int FilterStack::first_failure_at(std::span<const uint32_t> unit, const BigUint& place, const BigUint& places) const
+{
+    if (!by_place_) return first_failure(unit);
+    if (unit.size() > length_) throw std::invalid_argument("unit is longer than this filter stack's line");
+    for (size_t i = 0; i < filters_.size(); ++i)
+        if (const PlaceWindow* w = place_window_of(*filters_[i]))
+        {
+            if (!w->contains(place, places)) return int(i);
+        }
+        else if (!filters_[i]->passes(unit)) return int(i);
+    return -1;
+}
+
 int FilterStack::first_failure(std::span<const uint32_t> unit) const
 {
     if (filters_.empty()) return -1;
+    if (by_place_) throw std::invalid_argument("a degree window on this line judges a unit by its place on the line: first_failure_at");
     if (up_to_length_)
     {
         if (unit.size() > length_) throw std::invalid_argument("unit is longer than this filter stack's line");

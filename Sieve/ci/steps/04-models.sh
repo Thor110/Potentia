@@ -472,6 +472,12 @@ $exe filters --line ai --filters ai-rows.ini | tr -d '\r' | q "keeps 10\^-145.65
 $exe ai-train data/training/universalbibliothek.sieve --address-out ub.hex --quiet > /dev/null
 $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 | tr -d '\r' | tee ub-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] FAIL"
 q "^compact      positional " ub-ai.txt
+# weight-signs-v1 (list N5-16): both signs in every row; the shipped run's model passes at its default, 10%.
+printf '[ai]\nmode = compact\nfilters = weight-signs-v1\n' > ai-signs.ini
+$exe filters --line ai --filters ai-signs.ini | tr -d '\r' | q "^share        the stack keeps 10\^-0.10 of the line"
+$exe ai --address-file ub.hex --filters ai-signs.ini --temperature 0 | tr -d '\r' | q "weight-signs-v1 \[x\] pass"
+# The models line's mesh filters (list N5-15) judge only.
+$exe filters --line models | tr -d '\r' | q "^\[ \] mesh-closed-v1   (soft, judge-only)"
 $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 --canonical --address-out ubc.hex | tr -d '\r' | tee ubc-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] pass"
 [ "$(grep '^says' ub-ai.txt)" = "$(grep '^says' ubc-ai.txt)" ]
 python reference/sieve_ref.py ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt

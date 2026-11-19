@@ -691,6 +691,7 @@ BookStacks build_book_stacks(const Line& cover, const Line& page, uint32_t pages
         FilterLine body = filter_line(page);
         const uint64_t n = uint64_t(pages) * body.length;
         if (n > 0xffffffffull) throw std::invalid_argument("the books' pages are too long to filter as one text");
+        body.part_length = body.length; // (its pages' joins: list N5-14)
         body.length = uint32_t(n);
         b.pages = build_stack(body, settings.parts[2]);
     }
@@ -704,6 +705,7 @@ FilterLine joined_filter_line(const FilterLine& unit, uint32_t n)
     if (length > 0xffffffffull) throw std::invalid_argument("the units are too long to filter joined");
     f.length = uint32_t(length);
     f.frames *= n;
+    f.part_length = unit.length; // (where the joins are: list N5-14)
     return f;
 }
 

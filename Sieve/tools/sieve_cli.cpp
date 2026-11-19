@@ -2794,11 +2794,12 @@ int cmd_filters_fractals(const Args& a)
         const std::string t = space.at(i);
         const std::vector<uint32_t> u(t.begin(), t.end());
         bool all = true;
+        // (a degree window judges a ruleset by its place: here its address in the whole space)
         for (size_t j = 0; j < list.size(); ++j)
-            if (one[j].passes(u)) ++passed[j];
+            if (one[j].first_failure_at(u, i, space.count()) < 0) ++passed[j];
             else all = false;
         all_passed += all;
-        if (!st.empty() && st.passes(u)) ++stack_passed;
+        if (!st.empty() && st.first_failure_at(u, i, space.count()) < 0) ++stack_passed;
     }
     auto pct = [n](uint64_t c) {
         std::ostringstream o;

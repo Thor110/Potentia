@@ -642,7 +642,7 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             if (!stack().empty())
                 if (const auto u = sh.unit(b.index))
                 {
-                    const int fail = stack().first_failure(*u);
+                    const int fail = stack().first_failure_at(*u, b.index, sh.size()); // (a degree window judges by place)
                     b.passes = fail < 0;
                     if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
                 }

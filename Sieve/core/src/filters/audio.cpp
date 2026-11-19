@@ -10,11 +10,14 @@
 
 #include <array>
 #include <cstdint>
+#include <algorithm>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace sieve {
@@ -172,6 +175,146 @@ private:
 // sixteenths, its pitch; rests left out); wherever two voices both begin a note at once and both have moved from
 // the note before, they have moved the same way (similar motion) or opposite ways (contrary). Every pair of voices
 // is judged: at least `moves` such joint moves, and at least `percent` of them contrary.
+//
+// Counted (list N5-11), on two voices: a walk over both voices at once, in time. Each step takes the next digit of
+// the voice that is behind (both, where they are level: the only moments both can begin a note together), and a
+// state is how far each voice has gone, how far one is ahead of the other in sixteenths, each voice's last pitch
+// (none yet: 0), and the moves made together and contrary so far (with percent 100 a similar move ends the walk, and
+// the moves are counted up to `moves` only). A note on its own sets its voice's pitch to any of the set's, whatever it
+// was, so its counts are summed over the old pitch and laid on every new one; two notes together are split three
+// ways by where the old pitches lie about the new (both up or both down: similar; one up, one down: contrary;
+// otherwise not a move made together), each a sum over a quarter of the old pitches, from their running sums.
+// The survivors are counted, not ranked: the walk goes in time, the unit's digits voice after voice. Its work is
+// the states times the pitch pairs (the set's pitches plus none, squared); past `kContraryMostWork` it counts nothing.
+constexpr double kContraryMostWork = 4e8;
+
+BigUint contrary_count(const NoteSet& set, uint32_t per, uint32_t moves, uint32_t percent, bool* fits)
+{
+    *fits = false;
+    const uint32_t P = set.pitches(), Q = (P + 1) * (P + 1);
+    std::vector<uint32_t> dur;
+    uint32_t longest = 0;
+    for (uint32_t d = 0; d < set.duration_count(); ++d)
+    {
+        dur.push_back(set.sixteenths(d));
+        longest = std::max(longest, dur.back());
+    }
+    const bool strict = percent >= 100;
+    const uint32_t jmax = strict ? moves : per;
+    const double nodes = double(per + 1) * double(per + 1) * double(2 * longest + 1) * double(jmax + 1) * (strict ? 1.0 : double(jmax + 2) / 2.0);
+    if (nodes * double(Q) * double(set.duration_count()) > kContraryMostWork) return {};
+    *fits = true;
+    using Matrix = std::vector<BigUint>; // [pa * (P + 1) + pb]
+    struct Key
+    {
+        uint32_t s, ia;
+        int32_t delta;
+        uint32_t j, c;
+        bool operator<(const Key& o) const { return std::tie(s, ia, delta, j, c) < std::tie(o.s, o.ia, o.delta, o.j, o.c); }
+    };
+    std::map<Key, Matrix> todo;
+    auto add = [&](uint32_t ia, uint32_t ib, int32_t delta, uint32_t j, uint32_t c, const Matrix& m, uint32_t times) {
+        if (ia == per || ib == per) delta = 0; // (a voice finished: no more moments together)
+        Matrix& to = todo[{ia + ib, ia, delta, j, c}];
+        if (to.empty()) to.assign(Q, BigUint());
+        for (uint32_t q = 0; q < Q; ++q)
+            if (!m[q].is_zero()) to[q].add_mul_small(m[q], times);
+    };
+    // A note of one voice on its own: summed over its old pitch, laid on every new one.
+    auto alone = [&](const Matrix& m, bool voice_a) {
+        Matrix out(Q);
+        for (uint32_t other = 0; other <= P; ++other)
+        {
+            BigUint sum;
+            for (uint32_t own = 0; own <= P; ++own) sum += voice_a ? m[own * (P + 1) + other] : m[other * (P + 1) + own];
+            if (sum.is_zero()) continue;
+            for (uint32_t own = 1; own <= P; ++own) (voice_a ? out[own * (P + 1) + other] : out[other * (P + 1) + own]) = sum;
+        }
+        return out;
+    };
+    {
+        Matrix start(Q);
+        start[0] = BigUint(1);
+        add(0, 0, 0, 0, 0, start, 1);
+    }
+    BigUint total;
+    while (!todo.empty())
+    {
+        const auto it = todo.begin();
+        const Key k = it->first;
+        const Matrix m = std::move(it->second);
+        todo.erase(it);
+        const uint32_t ia = k.ia, ib = k.s - k.ia;
+        if (ia == per && ib == per)
+        {
+            if (k.j >= moves && uint64_t(k.c) * 100 >= uint64_t(k.j) * percent)
+                for (const BigUint& x : m) total += x;
+            continue;
+        }
+        const bool a_moves = ib == per || (ia < per && k.delta < 0), b_moves = ia == per || (ib < per && k.delta > 0);
+        if (a_moves || b_moves) // one voice on its own: a rest, or a note
+        {
+            const Matrix after = alone(m, a_moves);
+            for (uint32_t d : dur)
+            {
+                const int32_t nd = a_moves ? k.delta + int32_t(d) : k.delta - int32_t(d);
+                add(ia + (a_moves ? 1 : 0), ib + (b_moves ? 1 : 0), nd, k.j, k.c, m, 1);
+                add(ia + (a_moves ? 1 : 0), ib + (b_moves ? 1 : 0), nd, k.j, k.c, after, 1);
+            }
+            continue;
+        }
+        // Level: both take their next digit. How many pairs of lengths put one voice so far ahead of the other.
+        std::map<int32_t, uint32_t> ahead;
+        for (uint32_t da : dur)
+            for (uint32_t db : dur) ++ahead[int32_t(da) - int32_t(db)];
+        const Matrix after_a = alone(m, true), after_b = alone(m, false);
+        // two notes together: the old pitches' running sums (both voices with a pitch), and each new pair's three parts
+        std::vector<BigUint> pre(size_t(P + 1) * (P + 1));
+        for (uint32_t a = 1; a <= P; ++a)
+            for (uint32_t b = 1; b <= P; ++b)
+            {
+                BigUint v = m[a * (P + 1) + b];
+                v += pre[(a - 1) * (P + 1) + b];
+                v += pre[a * (P + 1) + b - 1];
+                v -= pre[(a - 1) * (P + 1) + b - 1];
+                pre[a * (P + 1) + b] = std::move(v);
+            }
+        auto rect = [&](uint32_t a1, uint32_t a2, uint32_t b1, uint32_t b2) { // old pitches a1..a2 and b1..b2 (1-based, may be empty)
+            if (a1 > a2 || b1 > b2) return BigUint();
+            BigUint v = pre[a2 * (P + 1) + b2];
+            v += pre[(a1 - 1) * (P + 1) + b1 - 1];
+            v -= pre[(a1 - 1) * (P + 1) + b2];
+            v -= pre[a2 * (P + 1) + b1 - 1];
+            return v;
+        };
+        BigUint all;
+        for (const BigUint& x : m) all += x;
+        Matrix none(Q), similar(Q), contrary(Q);
+        for (uint32_t x = 1; x <= P; ++x)
+            for (uint32_t y = 1; y <= P; ++y)
+            {
+                BigUint sim = rect(1, x - 1, 1, y - 1), con = rect(1, x - 1, y + 1, P);
+                sim += rect(x + 1, P, y + 1, P);
+                con += rect(x + 1, P, 1, y - 1);
+                BigUint rest = all;
+                rest -= sim;
+                rest -= con;
+                const uint32_t q = x * (P + 1) + y;
+                none[q] = std::move(rest), similar[q] = std::move(sim), contrary[q] = std::move(con);
+            }
+        for (const auto& [nd, times] : ahead)
+        {
+            add(ia + 1, ib + 1, nd, k.j, k.c, m, times);       // two rests
+            add(ia + 1, ib + 1, nd, k.j, k.c, after_a, times); // a note and a rest
+            add(ia + 1, ib + 1, nd, k.j, k.c, after_b, times); // a rest and a note
+            add(ia + 1, ib + 1, nd, k.j, k.c, none, times);    // two notes, not moving together
+            if (!strict) add(ia + 1, ib + 1, nd, k.j + 1, k.c, similar, times);
+            add(ia + 1, ib + 1, nd, std::min(k.j + 1, jmax), strict ? std::min(k.c + 1, jmax) : k.c + 1, contrary, times);
+        }
+    }
+    return total;
+}
+
 class Contrary : public Filter
 {
 public:
@@ -179,6 +322,13 @@ public:
         : set_(set), per_(per_voice), moves_(moves), percent_(percent)
     {
         provenance_ = "moves=" + std::to_string(moves) + " percent=" + std::to_string(percent);
+    }
+    // Two voices: counted when first asked for (contrary_count), where its work is small enough.
+    const BigUint* survivors() const override
+    {
+        if (set_.voices != 2) return nullptr;
+        std::call_once(counted_, [this] { survivors_ = contrary_count(set_, per_, moves_, percent_, &fits_); });
+        return fits_ ? &survivors_ : nullptr;
     }
     bool passes(std::span<const uint32_t> unit) const override
     {
@@ -228,6 +378,9 @@ public:
 private:
     NoteSet set_;
     uint32_t per_, moves_, percent_;
+    mutable std::once_flag counted_;
+    mutable BigUint survivors_;
+    mutable bool fits_ = false;
 };
 
 } // namespace
@@ -277,7 +430,8 @@ void add_audio_filters(std::vector<FilterSpec>& out)
                       "at the same moment and both have moved from the note before, they move the same way (up together, down "
                       "together) or opposite ways (contrary motion, counterpoint's first rule of independence). Every pair of voices "
                       "has at least `moves` such moves, and at least `percent` of them contrary. Judges the voices together (the "
-                      "other filters judge each voice on its own). Judged.";
+                      "other filters judge each voice on its own). Judged; on two voices its survivors are counted (not ranked), "
+                      "by a walk over both voices at once in time, where that walk is small enough.";
     con.params = {{"moves", "the fewest moves made together", FilterParam::Kind::Integer, "2", 1, 64, 1, {}},
                   {"percent", "the share of them that must be contrary", FilterParam::Kind::Integer, "100", 1, 100, 5, {}}};
     con.applies = [](const FilterLine& l) { return l.kind == "audio" && is_note_symbols(l.symbols_id) && note_set_of(l.symbols_id).voices >= 2; };

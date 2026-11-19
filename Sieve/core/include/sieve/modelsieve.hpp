@@ -111,6 +111,7 @@ private:
     std::unique_ptr<NumberFiles> files_; // not-a-file-v1, when ticked
     std::unique_ptr<MeshRules> rules_;   // the line's own rules, when any is ticked
     std::unique_ptr<CanonicalMesh> canon_; // canonical-mesh-v1, when ticked: it counts the line then
+    std::vector<std::string> judged_;      // mesh-edges, mesh-closed, mesh-area (list N5-15), when ticked: they judge only
     BigUint size_, count_;
     bool can_rank_ = true;
     std::string blocker_;

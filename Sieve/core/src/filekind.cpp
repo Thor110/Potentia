@@ -614,6 +614,21 @@ BigUint Utf8Counter::rank(const std::vector<uint8_t>& file) const
     return r;
 }
 
+BigUint Utf8Counter::below(const std::vector<uint8_t>& file) const
+{
+    if (!can_rank_) throw std::logic_error("utf8-valid-v1 cannot rank at this length");
+    if (file.size() > max_bytes_) return count_;
+    // As rank() walks, but stopping where no survivor goes on as this file does.
+    BigUint r = before_[file.size()];
+    uint8_t s = 0;
+    for (size_t i = 0; i < file.size(); ++i)
+    {
+        r += below_value(s, file[i], file.size() - i - 1);
+        if ((s = step(s, file[i], text_only_)) == kDead) break;
+    }
+    return r;
+}
+
 BigUint Utf8Counter::below_value(uint8_t s, uint32_t x, uint64_t left) const
 {
     BigUint v;
@@ -901,9 +916,21 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
     provenance_ = space.shape();
     if (items) items_ = *items;
     KindSet all(file_kinds().size(), 1);
+    places_ = space.size();
     for (const auto& e : entries)
     {
         names_.push_back(e.spec->name());
+        window_filter_.push_back(-1);
+        if (const std::optional<PlaceWindow> w = place_window(*e.spec, e.values))
+        {
+            window_filter_.back() = int(windows_.size());
+            windows_.push_back(*w);
+            sets_.push_back(KindSet(file_kinds().size(), 1));
+            item_filter_.push_back(-1);
+            provenance_ += "; " + e.spec->name() + "{from=" + param_value(*e.spec, e.values, "from") + " width=" +
+                           param_value(*e.spec, e.values, "width") + " decimals=" + param_value(*e.spec, e.values, "decimals") + "}";
+            continue;
+        }
         if (e.spec->id == "not-an-item")
         {
             const std::string forms = param_value(*e.spec, e.values, "items");
@@ -961,7 +988,7 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
     {
         utf8_ = std::make_unique<Utf8Counter>(space.max_bytes(), utf8_text_only_);
         table_bytes_ = Utf8Counter::table_bytes(space.max_bytes());
-        const bool alone = names_.size() == 1;
+        const bool alone = names_.size() - windows_.size() == 1; // (a window counts over it, below)
         const uint64_t rest = space.max_bytes() > kKindHead ? space.max_bytes() - kKindHead : 0;
         if (alone && utf8_->can_rank()) count_ = utf8_->count();
         else if (can_count_ && utf8_->can_rank())
@@ -982,6 +1009,53 @@ BinarySieve::BinarySieve(const BinarySpace& space, const std::vector<FilterStack
             blocker_ = over_table_limit("utf8-valid-v1's table") + ": its survivors are estimated, and it judges only";
         }
         else count_exact_ = false;
+    }
+    // Degree windows: the part of the others' survivors whose files' places are in the window.
+    if (!windows_.empty())
+    {
+        std::optional<PlaceWindow::Places> keep;
+        bool across = false;
+        for (const PlaceWindow& w : windows_)
+        {
+            const PlaceWindow::Places p = w.places_kept(places_);
+            across = across || p.wrap;
+            if (!keep) keep = p;
+            else if (!across) // (several, none crossing 0: the places they all keep)
+            {
+                if (keep->lo < p.lo) keep->lo = p.lo;
+                if (p.hi < keep->hi) keep->hi = p.hi;
+                if (keep->hi < keep->lo) keep->hi = keep->lo;
+            }
+        }
+        if (windows_.size() > 1 && across)
+        {
+            can_rank_ = can_count_ = count_exact_ = false;
+            blocker_ = "two degree windows where one crosses 0 cannot be counted together: they judge only";
+        }
+        else if (!can_rank_) // (the others judge or only count: the window judges with them)
+        {
+            can_count_ = count_exact_ = false;
+            blocker_ += "; with a degree window it judges only";
+        }
+        else
+        {
+            window_wrap_ = keep->wrap;
+            below_lo_ = below_inner(keep->lo);
+            below_hi_ = below_inner(keep->hi);
+            if (window_wrap_)
+            {
+                BigUint n = below_hi_;
+                n += count_;
+                n -= below_lo_;
+                count_ = n;
+            }
+            else
+            {
+                BigUint n = below_hi_;
+                n -= below_lo_;
+                count_ = n;
+            }
+        }
     }
     if (can_rank_) survivors_log10_ = count_.is_zero() ? -std::numeric_limits<double>::infinity() : count_.log10_approx();
     shuffle_ = std::make_unique<Shuffle>(count_.is_zero() ? BigUint(1) : count_, space.key(), id_);
@@ -1006,6 +1080,13 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
     for (size_t f = 0; f < sets_.size(); ++f)
     {
         if (!sets_[f][i]) return names_[f];
+        if (window_filter_[f] >= 0)
+        {
+            BigUint place = BigUint::from_bytes(file);
+            place += BinarySpace::count_shorter(file.size());
+            if (!windows_[size_t(window_filter_[f])].contains(place, places_)) return names_[f];
+            continue;
+        }
         if (int(f) == utf8_filter_ && !Utf8Counter::valid(file, utf8_text_only_)) return names_[f];
         if (item_filter_[f] < 0) continue;
         for (const std::string& form : item_forms_)
@@ -1018,7 +1099,43 @@ std::string BinarySieve::first_failure_of(const std::vector<uint8_t>& file) cons
     return {};
 }
 
+BigUint BinarySieve::below_inner(const BigUint& place) const
+{
+    if (!(place < places_)) // (past the line: every survivor)
+    {
+        if (utf8_) return utf8_->count();
+        BigUint n = counter_->count();
+        if (exclude_pages_) n -= pages_in_;
+        return n;
+    }
+    const std::vector<uint8_t> file = BinarySpace::file_at_place(place);
+    if (utf8_) return utf8_->below(file);
+    BigUint r = counter_->count_before(place);
+    if (exclude_pages_ && !pages_table_.empty()) r -= counter_->pattern_below(*items_.pages, pages_table_, file);
+    return r;
+}
+
 BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
+{
+    BigUint r = rank_inner(file);
+    if (windows_.empty()) return r;
+    if (window_wrap_ && r < below_hi_) return r; // (the loop's start, then its end)
+    r -= below_lo_;
+    if (window_wrap_) r += below_hi_;
+    return r;
+}
+
+std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
+{
+    if (windows_.empty()) return unrank_inner(k);
+    if (window_wrap_ && k < below_hi_) return unrank_inner(k);
+    BigUint at = k;
+    if (window_wrap_) at -= below_hi_;
+    at += below_lo_;
+    return unrank_inner(at);
+}
+
+BigUint BinarySieve::rank_inner(const std::vector<uint8_t>& file) const
 {
     if (utf8_) return utf8_->rank(file);
     BigUint r = counter_->rank(file);
@@ -1026,7 +1143,7 @@ BigUint BinarySieve::rank(const std::vector<uint8_t>& file) const
     return r;
 }
 
-std::vector<uint8_t> BinarySieve::unrank(const BigUint& k) const
+std::vector<uint8_t> BinarySieve::unrank_inner(const BigUint& k) const
 {
     if (utf8_) return utf8_->unrank(k);
     if (!exclude_pages_ || pages_table_.empty()) return counter_->unrank(k);

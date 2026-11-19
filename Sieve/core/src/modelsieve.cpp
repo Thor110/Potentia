@@ -766,6 +766,7 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
         else if (id == "distinct-indices") di = true;
         else if (id == "every-vertex-used") au = true;
         else if (id == "canonical-mesh") cm = true;
+        else if (id == "mesh-edges" || id == "mesh-closed" || id == "mesh-area") judged_.push_back(id);
         else if (id == "fractal-modelled")
         {
             fractal_keep_ = param_value(*e.spec, e.values, "keep") == "include";
@@ -804,6 +805,15 @@ ModelSieve::ModelSieve(const ModelSpace& space, const std::vector<FilterStack::E
     {
         can_rank_ = false;
         blocker_ = over_table_limit("canonical-mesh-v1 with every-vertex-used-v1's table", canon_->table_bytes()) + ": it judges only";
+    }
+    if (!judged_.empty() && can_rank_)
+    {
+        // A model's faces together (list N5-15): an edge joins two faces, so whether a face may run from a to b
+        // depends on every face before it through the edges they have used, not on a few numbers as the line's
+        // rules do (how many vertices are unused, where in its face the walk is); the walk's states would be
+        // the edges' uses (3^28 at the default 8 vertices). mesh-area-v1 joins the faces to the vertices' places.
+        can_rank_ = false;
+        blocker_ = "mesh-edges-v1, mesh-closed-v1 and mesh-area-v1 judge a model's faces together: they judge only";
     }
     count_ = files_ && !rules_ && !canon_ ? files_->count()
            : canon_ && !files_            ? canon_->count()
@@ -854,10 +864,53 @@ std::string ModelSieve::first_failure(const BigUint& index) const
     return base_failure(index);
 }
 
+namespace {
+
+// mesh-edges-v1, mesh-closed-v1 and mesh-area-v1 (list N5-15) on a model's digits: whether it passes.
+bool mesh_judged(const std::string& id, const ModelSpace::Parts& p)
+{
+    const size_t faces = p.faces.size() / 3;
+    if (id == "mesh-area")
+        for (size_t f = 0; f < faces; ++f)
+        {
+            const uint32_t a = p.faces[3 * f], b = p.faces[3 * f + 1], c = p.faces[3 * f + 2];
+            if (3 * size_t(std::max({a, b, c})) + 2 >= p.verts.size()) return false;
+            int64_t u[3], w[3];
+            for (int k = 0; k < 3; ++k)
+            {
+                u[k] = int64_t(p.verts[3 * size_t(b) + k]) - int64_t(p.verts[3 * size_t(a) + k]);
+                w[k] = int64_t(p.verts[3 * size_t(c) + k]) - int64_t(p.verts[3 * size_t(a) + k]);
+            }
+            // the cross product, exactly: zero when the corners are on one line (or two are one point)
+            if (u[1] * w[2] - u[2] * w[1] == 0 && u[2] * w[0] - u[0] * w[2] == 0 && u[0] * w[1] - u[1] * w[0] == 0) return false;
+        }
+    if (id == "mesh-area") return true;
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> runs; // each directed edge, how many faces run it
+    for (size_t f = 0; f < faces; ++f)
+        for (int k = 0; k < 3; ++k)
+        {
+            const uint32_t a = p.faces[3 * f + size_t(k)], b = p.faces[3 * f + size_t((k + 1) % 3)];
+            if (a != b) ++runs[{a, b}];
+        }
+    for (const auto& [e, n] : runs)
+    {
+        const auto back = runs.find({e.second, e.first});
+        const uint32_t m = back == runs.end() ? 0 : back->second;
+        if (id == "mesh-edges" && n + m > 2) return false;
+        if (id == "mesh-closed" && (n != 1 || m != 1)) return false;
+    }
+    if (id == "mesh-closed") // (and no face naming a vertex twice: its edges would not close)
+        for (size_t f = 0; f < faces; ++f)
+            if (p.faces[3 * f] == p.faces[3 * f + 1] || p.faces[3 * f + 1] == p.faces[3 * f + 2] || p.faces[3 * f] == p.faces[3 * f + 2]) return false;
+    return true;
+}
+
+} // namespace
+
 std::string ModelSieve::base_failure(const BigUint& index) const
 {
     if (names_.empty()) return {};
-    const ModelSpace::Parts parts = (rules_ || canon_) ? space_->parts_at(index, AddressMode::Positional) : ModelSpace::Parts{};
+    const ModelSpace::Parts parts = (rules_ || canon_ || !judged_.empty()) ? space_->parts_at(index, AddressMode::Positional) : ModelSpace::Parts{};
     const int rule = rules_ ? rules_->first_failure(parts) : -1;
     const bool canonical = !canon_ || canon_->passes(parts);
     static const char* const kRuleIds[] = {"distinct-vertices", "distinct-indices", "every-vertex-used"};
@@ -866,6 +919,7 @@ std::string ModelSieve::base_failure(const BigUint& index) const
         if (ids_[i] == "not-a-file" && !files_->passes(index)) return names_[i];
         if (rule >= 0 && ids_[i] == kRuleIds[rule]) return names_[i];
         if (!canonical && ids_[i] == "canonical-mesh") return names_[i];
+        if (std::find(judged_.begin(), judged_.end(), ids_[i]) != judged_.end() && !mesh_judged(ids_[i], parts)) return names_[i];
     }
     return {};
 }

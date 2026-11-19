@@ -2505,6 +2505,9 @@ printf "[binary]\nmode = compact\nfilters = binary-kind-v1\n[binary.binary-kind-
 want=$(awk -F'\t' '$1 == "count" && $2 == "33" && $3 == "png" && $4 == "keep" {print $5}' tests/vectors_kinds_v1.tsv)
 build/sieve filters --line binary --length 33 --filters bk.ini | q "^survivors    $want (exact; compact mode available)"
 build/sieve filters --line binary --length 32 | q "^  TXT  *10\^-0.87"
+# A degree window on the binary line (list N5-3): the hallway compacts to the window's files.
+printf '[binary]\nmode = compact\nfilters = degree-window-v2\n[binary.degree-window-v2]\nfrom = 1\nwidth = 1\n' > bwin.ini
+$H --no-menu --line binary --binary-length 2 --filters bwin.ini --walk "0,0" --screenshot bwin.png | tr -d '\r' | sed -n 1p | q "^BINARY line, positional, filters: 1 compact (183 survivors)"
 printf 'MThd\0\0\0\6' > k.mid
 build/sieve locate k.mid | q "^kind      MID (file-kinds-v1, from its first bytes)"
 build/sieve check --line binary --file k.mid --filters bk.ini | q "stack: fails at binary-kind-v1"

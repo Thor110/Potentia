@@ -22,6 +22,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace sieve {
@@ -56,6 +58,29 @@ const WindowBounds* window_bounds(const Filter& f);
 // Both windows at once (the units both keep). Neither may cross 0 (a stack of two windows where one does
 // judges only: FilterStack says so).
 WindowBounds intersect_windows(const WindowBounds& a, const WindowBounds& b);
+
+// A window by a unit's place on its line rather than its digits (list N5-3): the lines whose units are not
+// all of one length, where a bearing is a place among every unit of the line, floor(place * 360 * 10^d /
+// places). The binary line (a file's place among every file up to the line's length, shortest first, then
+// by its bytes: BinarySieve counts and ranks the window's files) and the fractals line (a ruleset's place
+// on the line's own list: it judges only there, as the line's other filters do).
+struct PlaceWindow
+{
+    uint64_t from = 0, width = 1, whole = 360; // in units of 10^-decimals of a degree; from below whole
+    // Whether the unit at `place` (of `places`) has a bearing in the window.
+    bool contains(const BigUint& place, const BigUint& places) const;
+    // The places it keeps: [lo, hi), or with `wrap` [0, hi) and [lo, places), the two stretches as one.
+    struct Places
+    {
+        BigUint lo, hi;
+        bool wrap = false;
+    };
+    Places places_kept(const BigUint& places) const;
+};
+// A degree-window-v2's place window, from its settings (null for any other filter).
+std::optional<PlaceWindow> place_window(const FilterSpec& spec, const FilterValues& values);
+// The place window of a degree-window filter made for a line of units of any length (null for any other).
+const PlaceWindow* place_window_of(const Filter& f);
 
 // Every unit of base^length (the stack with nothing else ticked, under a window).
 std::unique_ptr<Ranker> full_ranker(uint32_t base, uint32_t length);

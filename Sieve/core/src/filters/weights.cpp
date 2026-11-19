@@ -36,9 +36,15 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace sieve {
 
@@ -70,7 +76,21 @@ struct Tally
     }
 };
 
-class RowRule
+// A rule on one row of a tensor, counted and ranked row by row (RowsRanker): weight-rows' structure, and (list
+// N5-16) how many of a row's digits are of a class (weight-signs).
+class RowCount
+{
+public:
+    virtual ~RowCount() = default;
+    virtual uint32_t length() const = 0;
+    virtual const BigUint& count() const = 0;
+    virtual bool passes(std::span<const uint32_t> row) const = 0;
+    virtual BigUint completions(std::span<const uint32_t> prefix) const = 0; // the rows that pass and begin so
+    virtual BigUint rank(std::span<const uint32_t> row) const = 0;
+    virtual std::vector<uint32_t> unrank(BigUint k) const = 0;
+};
+
+class RowRule : public RowCount
 {
 public:
     RowRule(uint32_t base, uint32_t length, uint32_t max_run, uint32_t period, bool ramps)
@@ -107,11 +127,11 @@ public:
         count_ = completions({});
     }
 
-    uint32_t length() const { return c_; }
+    uint32_t length() const override { return c_; }
     uint32_t base() const { return k_; }
-    const BigUint& count() const { return count_; }
+    const BigUint& count() const override { return count_; }
 
-    bool passes(std::span<const uint32_t> row) const
+    bool passes(std::span<const uint32_t> row) const override
     {
         uint32_t run = 0;
         for (size_t i = 0; i < row.size(); ++i)
@@ -129,7 +149,7 @@ public:
     }
 
     // The rows that pass and begin with `prefix`.
-    BigUint completions(std::span<const uint32_t> prefix) const
+    BigUint completions(std::span<const uint32_t> prefix) const override
     {
         BigUint all = runs(prefix);
         if (all.is_zero()) return all;
@@ -139,7 +159,7 @@ public:
         return all;
     }
 
-    BigUint rank(std::span<const uint32_t> row) const
+    BigUint rank(std::span<const uint32_t> row) const override
     {
         std::vector<uint32_t> p;
         BigUint r;
@@ -156,7 +176,7 @@ public:
         return r;
     }
 
-    std::vector<uint32_t> unrank(BigUint k) const
+    std::vector<uint32_t> unrank(BigUint k) const override
     {
         std::vector<uint32_t> p;
         for (uint32_t t = 0; t < c_; ++t)
@@ -363,7 +383,7 @@ class RowsRanker : public Ranker
 {
 public:
     // `rows`: each row's length, in address order; `rules`: the rule for each length.
-    RowsRanker(std::vector<uint32_t> rows, std::map<uint32_t, std::shared_ptr<const RowRule>> rules, uint32_t base)
+    RowsRanker(std::vector<uint32_t> rows, std::map<uint32_t, std::shared_ptr<const RowCount>> rules, uint32_t base)
         : rows_(std::move(rows)), rules_(std::move(rules)), base_(base)
     {
         starts_.push_back(0);
@@ -382,7 +402,7 @@ public:
         auto [row, p] = prefixes_[size_t(s)];
         if (row >= rows_.size()) return kDead;
         p.push_back(symbol);
-        const RowRule& rule = rule_of(row);
+        const RowCount& rule = rule_of(row);
         if (rule.completions(p).is_zero()) return kDead;
         if (p.size() == rule.length()) ++row, p.clear();
         std::string key = std::to_string(row) + ":";
@@ -411,7 +431,7 @@ public:
         BigUint r;
         for (size_t i = 0; i < rows_.size(); ++i)
         {
-            const RowRule& rule = rule_of(i);
+            const RowCount& rule = rule_of(i);
             const std::span<const uint32_t> row = unit.subspan(starts_[i], rows_[i]);
             if (!rule.passes(row)) throw std::invalid_argument("the unit is not a survivor");
             r = BigUint::mul(r, rule.count());
@@ -426,7 +446,7 @@ public:
         BigUint rest = k;
         for (size_t i = rows_.size(); i-- > 0;)
         {
-            const RowRule& rule = rule_of(i);
+            const RowCount& rule = rule_of(i);
             BigUint q, r;
             BigUint::divmod(rest, rule.count(), q, r);
             const std::vector<uint32_t> row = rule.unrank(r);
@@ -439,14 +459,14 @@ public:
 private:
     std::vector<uint32_t> rows_;
     std::vector<uint64_t> starts_;
-    std::map<uint32_t, std::shared_ptr<const RowRule>> rules_;
+    std::map<uint32_t, std::shared_ptr<const RowCount>> rules_;
     uint32_t base_, length_ = 0;
     mutable std::mutex mx_;
     mutable std::vector<std::pair<size_t, std::vector<uint32_t>>> prefixes_; // a state: its row, and that row's digits so far
     mutable std::map<std::string, State> ids_;
     mutable std::map<size_t, BigUint> after_; // the survivors of rows i onwards
 
-    const RowRule& rule_of(size_t row) const { return *rules_.at(rows_[row]); }
+    const RowCount& rule_of(size_t row) const { return *rules_.at(rows_[row]); }
     BigUint after(size_t row) const
     {
         {
@@ -474,7 +494,7 @@ public:
     {
         provenance_ = std::move(prov);
         const uint32_t K = 1u << space.shape().bits;
-        std::map<uint32_t, std::shared_ptr<const RowRule>> rules;
+        std::map<uint32_t, std::shared_ptr<const RowCount>> rules;
         std::vector<uint32_t> rows;
         for (const AiSpace::Tensor& t : space.tensors())
         {
@@ -499,7 +519,145 @@ public:
 
 private:
     std::vector<uint32_t> rows_;
-    std::map<uint32_t, std::shared_ptr<const RowRule>> rules_;
+    std::map<uint32_t, std::shared_ptr<const RowCount>> rules_;
+    std::unique_ptr<RowsRanker> ranker_;
+};
+
+// A row whose digits of a class (a set of digits) number from lo to hi (list N5-16). W[r][k]: the ways to finish
+// with r digits left after k of the class, W[0][k] = [lo <= k <= hi], W[r][k] = m W[r - 1][k + 1] + (K - m) W[r - 1][k],
+// m the digits of the class: so counted, ranked and unranked a digit at a time, the digits below each one taken in
+// two sums (those of the class and those not).
+class ClassCount : public RowCount
+{
+public:
+    ClassCount(std::vector<char> in_class, uint32_t length, uint32_t lo, uint32_t hi)
+        : in_(std::move(in_class)), c_(length), lo_(lo), hi_(std::min(hi, length))
+    {
+        k_ = uint32_t(in_.size());
+        for (char x : in_) m_ += x ? 1u : 0u;
+        w_.assign(c_ + 1, std::vector<BigUint>(c_ + 2));
+        for (uint32_t k = 0; k <= c_; ++k) w_[0][k] = BigUint(k >= lo_ && k <= hi_ ? 1u : 0u);
+        for (uint32_t r = 1; r <= c_; ++r)
+            for (uint32_t k = 0; k + r <= c_; ++k)
+            {
+                BigUint x;
+                if (m_) x.add_mul_small(w_[r - 1][k + 1], m_);
+                if (k_ > m_) x.add_mul_small(w_[r - 1][k], k_ - m_);
+                w_[r][k] = std::move(x);
+            }
+        below_.assign(k_ + 1, {0, 0});
+        for (uint32_t d = 0; d < k_; ++d) below_[d + 1] = {below_[d].first + (in_[d] ? 1u : 0u), below_[d].second + (in_[d] ? 0u : 1u)};
+        count_ = w_[c_][0];
+    }
+    uint32_t length() const override { return c_; }
+    const BigUint& count() const override { return count_; }
+    bool passes(std::span<const uint32_t> row) const override
+    {
+        if (row.size() != c_) return false;
+        uint32_t k = 0;
+        for (uint32_t d : row)
+        {
+            if (d >= k_) return false;
+            k += in_[d] ? 1u : 0u;
+        }
+        return k >= lo_ && k <= hi_;
+    }
+    BigUint completions(std::span<const uint32_t> prefix) const override
+    {
+        if (prefix.size() > c_) return {};
+        uint32_t k = 0;
+        for (uint32_t d : prefix)
+        {
+            if (d >= k_) return {};
+            k += in_[d] ? 1u : 0u;
+        }
+        return k > hi_ ? BigUint() : w_[c_ - prefix.size()][k];
+    }
+    BigUint rank(std::span<const uint32_t> row) const override
+    {
+        if (!passes(row)) throw std::invalid_argument("the row is not a survivor");
+        BigUint r;
+        uint32_t k = 0;
+        for (size_t i = 0; i < row.size(); ++i)
+        {
+            const size_t left = c_ - i - 1;
+            const auto [in, out] = below_[row[i]];
+            if (in && k + 1 <= hi_) r.add_mul_small(w_[left][k + 1], in);
+            if (out) r.add_mul_small(w_[left][k], out);
+            k += in_[row[i]] ? 1u : 0u;
+        }
+        return r;
+    }
+    std::vector<uint32_t> unrank(BigUint k) const override
+    {
+        if (!(k < count_)) throw std::out_of_range("rank beyond the survivors");
+        std::vector<uint32_t> row;
+        uint32_t have = 0;
+        for (uint32_t i = 0; i < c_; ++i)
+        {
+            const size_t left = c_ - i - 1;
+            for (uint32_t d = 0;; ++d)
+            {
+                if (d >= k_) throw std::logic_error("weight rows: unrank ran past the digits");
+                const uint32_t h = have + (in_[d] ? 1u : 0u);
+                const BigUint& n = h > hi_ ? zero_ : w_[left][h];
+                if (k < n)
+                {
+                    row.push_back(d);
+                    have = h;
+                    break;
+                }
+                k -= n;
+            }
+        }
+        return row;
+    }
+
+private:
+    std::vector<char> in_;
+    uint32_t c_, lo_, hi_, k_ = 0, m_ = 0;
+    std::vector<std::vector<BigUint>> w_;
+    std::vector<std::pair<uint32_t, uint32_t>> below_; // [d]: the digits below d of the class, and not
+    BigUint count_, zero_;
+};
+
+// weight-signs-v1 (list N5-16): every row of every tensor holds from lo to hi digits of a class, lo and hi worked out
+// from the row's length.
+class WeightClass : public Filter
+{
+public:
+    WeightClass(const AiSpace& space, std::vector<char> in_class, const std::function<std::pair<uint32_t, uint32_t>(uint32_t)>& bounds,
+                std::string prov)
+    {
+        provenance_ = std::move(prov);
+        std::map<uint32_t, std::shared_ptr<const RowCount>> rules;
+        for (const AiSpace::Tensor& t : space.tensors())
+        {
+            if (!rules.count(t.cols))
+            {
+                const auto [lo, hi] = bounds(t.cols);
+                rules[t.cols] = std::make_shared<ClassCount>(in_class, t.cols, lo, hi);
+            }
+            rows_.insert(rows_.end(), t.rows, t.cols);
+        }
+        rules_ = rules;
+        ranker_ = std::make_unique<RowsRanker>(rows_, std::move(rules), uint32_t(in_class.size()));
+    }
+    bool passes(std::span<const uint32_t> unit) const override
+    {
+        size_t at = 0;
+        for (uint32_t c : rows_)
+        {
+            if (at + c > unit.size() || !rules_.at(c)->passes(unit.subspan(at, c))) return false;
+            at += c;
+        }
+        return at == unit.size();
+    }
+    const Ranker* ranker() const override { return ranker_.get(); }
+
+private:
+    std::vector<uint32_t> rows_;
+    std::map<uint32_t, std::shared_ptr<const RowCount>> rules_;
     std::unique_ptr<RowsRanker> ranker_;
 };
 
@@ -791,6 +949,32 @@ void add_weight_filters(std::vector<FilterSpec>& out)
         return std::make_unique<NearModel>(std::move(anchor), l.base, uint32_t(k), prov);
     };
     out.push_back(near);
+
+    // List N5-16: what a row of trained weights holds, by the digits' values (AiSpace::value: digit d stands for
+    // (2d - (2^B - 1)) / (2^B - 1) times the tensor's scale, so its sign and size are the digit's alone).
+    FilterSpec signs;
+    signs.id = "weight-signs";
+    signs.title = "weight-signs";
+    signs.description = "Every row of every tensor holds weights of both signs: at least `percent` of a row below zero and at least "
+                        "`percent` above it. A trained layer's weights lie either side of zero; a row all of one sign is structure "
+                        "noise seldom has and training does not make. The shipped run's model passes at 10 and fails at 15 (some of its rows of 16 "
+                        "hold two weights of one sign); at 10 it keeps 10^-0.10 of the default line. Exact, row by row: counts and "
+                        "ranks (compact).";
+    signs.params = {{"percent", "the least share of a row on each side of zero", FilterParam::Kind::Integer, "10", 0, 50, 1, {}}};
+    signs.applies = is_ai;
+    signs.counts_as = "own";
+    signs.make = [own = signs.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
+        const uint32_t pc = uint32_t(param_int(*find_filter(own), v, "percent"));
+        const uint32_t K = l.base;
+        std::vector<char> negative(K, 0);
+        for (uint32_t d = 0; d < K; ++d) negative[d] = 2 * d < K - 1 ? 1 : 0; // (below zero; the rest above it: K is even)
+        auto bounds = [pc](uint32_t c) {
+            const uint32_t lo = (c * pc + 99) / 100;
+            return std::make_pair(lo, c >= lo ? c - lo : 0);
+        };
+        return std::make_unique<WeightClass>(*l.ai, std::move(negative), bounds, "percent=" + std::to_string(pc));
+    };
+    out.push_back(signs);
 }
 
 } // namespace sieve

@@ -1,39 +1,44 @@
 # Changes
 
-One commit on top of 824f089 ("sieve N").
+One commit on top of c1ebc60 ("sieve N5"). List N5 is now finished.
 
-## Filters (REVIEW-ROUND list N5; IDEAS 19.253)
-- **Typed settings:** in the filters window, digits type a whole-number setting (shown with a `_`), Backspace takes
-  the last digit off, Left/Right still step it. Nothing new on the main or pause menus.
-- **degree-window-v2:** a window wider than what is left of the loop goes on from 0 (`from` 350, `width` 20 keeps
-  350 to 10). v1, which stopped at 360, is retired (still loads). Two windows where one crosses 0 judge only and say
-  so.
-- **Sound that compacts:** `sound-envelope-v1` and `sound-syllables-v1` now count every survivor at any length. A
-  default second of 8-bit sound compacts with them (10^-19.05 and 10^-466.83 kept), and their numbers are the
-  automaton's wherever both fit (checked).
-- **quotes-v1:** quotation marks where prose puts them. 2,256 of Don Quixote's 2,318 pages of 1,000 pass; random
-  ascii96 pages kept at 10^-3.97.
-- **Video on a real film:** the Roundhay Garden Scene cut into 20 clips; at the line's default size most clips do
-  not move at all (still pictures, set aside by design); every clip that moves in black and white passes
-  video-smooth-v2.
-- The `.obj` page filter was written and removed: `not-other-line-v1` already sets such pages aside.
-- **Windows over more stacks:** under words-v2 real pages sit where survivors are 2.9 to 39 times an even spread,
-  so every window width loses (1.3 to 5.0 bits); the stronger the filters, the more a window loses.
-- Set aside with reasons (REVIEW-ROUND N5-7, N5-9): row-runs and rows-alike counted together on large palettes,
-  and smooth as an automaton.
+## Degree window on the binary and fractals lines (N5-3)
+- `degree-window-v2` can now be ticked on the binary line and the fractals line. It is the same filter with the
+  same from, width and decimals settings, and nothing was added to any menu.
+- **Binary line:** a file's bearing is its place among every file up to the line's length (shortest first, then by
+  its bytes).
+  - The window keeps the part of the other filters' survivors that falls in it: binary-kind, not-an-item's pages
+    and utf8-valid.
+  - It counts and ranks there, so the binary line compacts to the window.
+  - On the 65,793 files of up to 2 bytes, one whole degree keeps 183 files.
+- **Fractals line:** a ruleset's bearing is its place on the line's list. It judges (hide) there, as that line's
+  other filters do.
 
-## J and the File Locator
-- **J on a model:** a file that reads as a model (.obj, .gltf, .glb) opens on the models line, fitted to its shape;
-  the window says what was left out and the scale (the teapot: 1,857 vertices and 3,552 faces fitted to 8 and 12).
-- **File Locator:** Choose a file... opens a file without sieving it (its address at once); Sieve a file... reads
-  and packs it, as Choose a file... did; Go to it walks to the .sieve on the binary line where the file has been
-  sieved, and to the file as it is where it has not. The window says which.
-- For scripts: `--locate-open PATH` opens a file as Choose a file... does; `--locate PATH` still sieves it, as Sieve a
-  file... does (CI step 10 checks both walks).
-
-## Checked
-CI steps 01, 03, 04, 07 and 10 on the filters; 01 and 10 again with J and the File Locator; help and library
-checks.
+## Counting and new filters
+- **melody-contrary-v1 counted (N5-11):** on two voices its survivors are now counted (not ranked) by a walk over
+  both voices at once. The count was checked against every unit of 12 small lines.
+  - The setup menu's default 16 notes a voice takes about 8 s here.
+  - With a percent below 100 it counts up to 5 notes a voice and judges past that.
+  - The setup menu now shows a counted but unranked stack's survivors, where it used to say they could not be
+    counted.
+- **Join filters (N5-14):** on the joined filters of tracks and movies, two filters judge only where one unit meets
+  the next. Both count and rank.
+  - `join-leap-v1`: a track's step across a join is at most 7 semitones. The default tracks keep 10^-0.79.
+  - `join-cut-v1`: a movie's unit begins within 2 pixels of the frame the unit before ended on. The default movies
+    keep 10^-15.04.
+  - Counting a joined stack together with each unit's own filters is still open.
+- **Models line (N5-15):** three new filters, judged only, because an edge joins faces and the line's closed forms
+  cannot count them.
+  - `mesh-edges-v1`: no edge in more than two faces.
+  - `mesh-closed-v1`: a closed, consistently wound surface.
+  - `mesh-area-v1`: no face of zero area.
+- **AI line (N5-16):** `weight-signs-v1` keeps rows with at least 10% of their weights on each side of zero. It
+  counts and ranks.
+  - The shipped run's model passes at 10% and fails at 15%.
+  - A filter keeping weights off the ends of the scale was dropped: trained 4-bit weights crowd the ends (19.7%
+    against noise's 12.5%), so it set the trained model aside.
+- **OPTIMISE FILTERS (N5-17):** measured on every line. The figures are in Proof/STATISTICS.md, and the lines
+  measured before are unchanged.
 
 ## Files to delete by hand
 None.

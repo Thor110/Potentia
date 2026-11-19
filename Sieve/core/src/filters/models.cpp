@@ -46,6 +46,17 @@ void add_model_filters(std::vector<FilterSpec>& out)
                            "memory (16 vertices in 512 MB).",
          {"distinct-vertices-v1", "distinct-indices-v1"});
 
+    // A model's faces together (list N5-15): judged, not counted (modelsieve.cpp says why).
+    spec("mesh-edges", "No edge of the mesh is shared by more than two faces, as on any surface: a third face on an edge makes "
+                       "a fin, a shape no solid has. Judged (hide): an edge joins faces, so the count is not the line's closed forms.");
+    spec("mesh-closed", "A closed, consistently wound surface: every edge one face runs from a to b is run from b to a by exactly "
+                        "one other face, and no face runs it twice, so the mesh has no holes and an inside. At the line's default "
+                        "8 vertices and 12 faces that is a closed triangulation of the sphere (a cube's count). Judged (hide).");
+    spec("mesh-area", "No face of zero area: its three corners are not on one line of the grid (nor two of them the same "
+                      "point or vertex), worked exactly from the grid's integer coordinates. Judged (hide): the faces and "
+                      "the vertices' places together.");
+    for (size_t i = out.size() - 3; i < out.size(); ++i) out[i].judge_only = true;
+
     // The fractal dimension on the models line (list Z2): the charted fractals' models, found or culled.
     spec("fractal-modelled", "The fractal dimension in the models line: a model that is a charted fractal's lines at a "
                              "depth (an L-system's turtle, in three dimensions for v3 and in the plane for v1 and v2, or a "
