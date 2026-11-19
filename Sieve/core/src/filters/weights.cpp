@@ -922,6 +922,7 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                     "20", 0, 1000, 1, {}}};
     lang.applies = is_ai;
     lang.judge_only = true;
+    lang.picks_a_kind = true; // (it picks a run's language, not noise: ticked by hand, never by X or OPTIMISE)
     lang.make = [own = lang.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& s = *find_filter(own);
         return std::make_unique<Language>(*l.ai, model_run(param_value(s, v, "run")), uint32_t(param_int(s, v, "bytes")),
@@ -940,6 +941,7 @@ void add_weight_filters(std::vector<FilterSpec>& out)
                    {"changes", "how many digits may differ from the anchor's", FilterParam::Kind::Integer, "2", 0, 1000000, 1, {}}};
     near.applies = is_ai;
     near.counts_as = "own";
+    near.picks_a_kind = true; // (it picks a run's neighbourhood, not noise: ticked by hand, never by X or OPTIMISE)
     near.make = [own = near.name()](const FilterLine& l, const FilterValues& v, const FilterResources&) -> std::unique_ptr<Filter> {
         const FilterSpec& s = *find_filter(own);
         const auto run = model_run(param_value(s, v, "run"));

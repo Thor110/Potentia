@@ -616,6 +616,9 @@ grep -A2 "^\[image\]" optimise.ini | q "palette-size-v1"
 grep -A2 "^\[fractals\]" optimise.ini | q "fractal-canonical-v1"
 # ...and a line whose mode was off is compact after it (the filters then take effect); one set by hand keeps its mode.
 grep -A1 "^\[text\]" optimise.ini | q "mode = compact"
+# (near-model-v1 and language-v1 pick a run's neighbourhood and language, not noise: ticked by hand only)
+test "$(grep -c 'near-model\|language-v1' optimise.ini || true)" = 0
+grep -A2 "^\[ai\]" optimise.ini | q "weight-signs-v1"
 printf '[image]\nmode = mark\n' > optimise-mark.ini
 $H --menu --filters optimise-mark.ini --press "Item:optimise,Return" --screenshot optimise-mark.png > /dev/null
 grep -A1 "^\[image\]" optimise-mark.ini | q "mode = mark"

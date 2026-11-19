@@ -39,6 +39,7 @@
 #include <cmath>
 #include <memory>
 #include <functional>
+#include <future>
 #include <limits>
 #include <map>
 #include <mutex>
@@ -47,6 +48,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace hallway {
@@ -326,7 +328,7 @@ private:
     std::string counting_lines() const;
     // Still calculating the dimensions: a tally being counted, or X weighing the filters that
     // clash. ENTER THE HALLWAY waits for it, greyed, and the menu says so at its top.
-    bool calculating() const { return toggling_ || !counting_lines().empty(); }
+    bool calculating() const { return toggle_busy() || !counting_lines().empty(); }
     // A filter a toggle reaches: its stack, line and part, and, where it clashes with another in
     // reach, its share kept alone (log10) once weighed.
     struct Reach
@@ -346,6 +348,12 @@ private:
     };
     std::optional<Toggling> toggling_;
     void poll_toggle();
+    // Its last step, each stack kept within the filter memory, builds the stacks' counting tables (seconds, on
+    // the books' pages), so it is done on a worker on copies of the lines' filters, and they are put back when
+    // it is in: the window answers meanwhile.
+    std::future<std::vector<std::pair<sieve::cli::LineFilters*, sieve::cli::LineFilters>>> fitting_;
+    bool toggle_busy() const { return toggling_.has_value() || fitting_.valid(); }
+    void wait_toggle(); // (a scripted key: until the ticks are in, as a person would wait)
 
     void render_overlay(float W, float H);
     sieve::FilterLine filter_line_of(int line) const;

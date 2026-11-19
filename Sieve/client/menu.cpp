@@ -1712,16 +1712,16 @@ void Menu::press(SDL_Keycode key, SDL_Keymod mod)
     if (Keys::get().within(menu_keys::kChoose, key, mod) && row_ == kEnterRow && calculating())
     {
         finish_filter_warmup();
-        poll_toggle();
+        wait_toggle();
     }
     handle(e, done, r);
     panel_.settle(); // a picture after a scripted Tab shows where the panel went
     side_.settle();
     // A scripted key waits, as a person would, for what it started (X weighing filters that clash).
-    if (toggling_)
+    if (toggle_busy())
     {
         finish_filter_warmup();
-        poll_toggle();
+        wait_toggle();
     }
 }
 
@@ -5711,8 +5711,26 @@ void Menu::optimise_filters()
     toggle_all_filters(ToggleScope::EveryLine);
 }
 
+void Menu::wait_toggle()
+{
+    poll_toggle(); // (the weighing, as finish_filter_warmup has left it: in)
+    if (fitting_.valid())
+    {
+        fitting_.wait();
+        poll_toggle();
+    }
+}
+
 void Menu::poll_toggle()
 {
+    if (fitting_.valid())
+    {
+        // The last step, on its worker (below): its lines' filters put back when it is in.
+        if (fitting_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        for (auto& [lf, fitted] : fitting_.get()) *lf = std::move(fitted);
+        save_filters();
+        return;
+    }
     if (!toggling_) return;
     std::vector<Reach> in_reach = reach_of(toggling_->scope, toggling_->overlay, toggling_->tab);
     for (Reach& r : in_reach)
@@ -5753,22 +5771,40 @@ void Menu::poll_toggle()
     // And each stack kept within the filter memory, so that it still counts: where the ticked filters'
     // combined table would need more, the weakest of them (the last in the order above) is unticked,
     // then the next, until it fits (17 November 2026: twenty-one filters on the books' pages needed 1.4 GB).
-    std::vector<const sieve::cli::LineFilters*> seen;
+    // Building the stacks' tables takes seconds, so on a worker, each line's filters a copy, its weakest first.
+    struct Fit
+    {
+        sieve::cli::LineFilters* target;
+        sieve::cli::LineFilters copy;
+        sieve::FilterLine line;
+        std::vector<std::string> weakest_first; // its filters in reach, the weakest first
+    };
+    std::vector<Fit> fits;
     for (auto r = in_reach.begin(); r != in_reach.end(); ++r)
     {
-        if (std::find(seen.begin(), seen.end(), r->lf) != seen.end()) continue;
-        seen.push_back(r->lf);
+        if (std::any_of(fits.begin(), fits.end(), [&](const Fit& f) { return f.target == r->lf; })) continue;
         if (r->li == kModelsLine || r->li == kBinaryLine || (r->li == kWorldsLine && r->part == 2)) continue; // (their own stacks)
-        const sieve::FilterLine line = r->part >= 0 ? part_line(r->li, r->part) : filter_line_of(r->li);
+        Fit f{r->lf, *r->lf, r->part >= 0 ? part_line(r->li, r->part) : filter_line_of(r->li), {}};
         for (auto weakest = in_reach.rbegin(); weakest != in_reach.rend(); ++weakest)
-        {
-            const sieve::FilterStack st = sieve::cli::build_stack(line, *r->lf);
-            // (counting, or kept from it by something other than the memory: a clash, a judge)
-            if (st.empty() || st.ranker() || st.compact_blocker().find("memory") == std::string::npos) break;
-            if (weakest->lf == r->lf && r->lf->is_enabled(weakest->name)) (void)sieve::cli::tick_filter(*r->lf, weakest->name, false);
-        }
+            if (weakest->lf == r->lf) f.weakest_first.push_back(weakest->name);
+        fits.push_back(std::move(f));
     }
-    save_filters();
+    save_filters(); // (the ticks as they stand; the fitting's, when it is in)
+    fitting_ = std::async(std::launch::async, [fits = std::move(fits)]() mutable {
+        std::vector<std::pair<sieve::cli::LineFilters*, sieve::cli::LineFilters>> out;
+        for (Fit& f : fits)
+        {
+            for (const std::string& name : f.weakest_first)
+            {
+                const sieve::FilterStack st = sieve::cli::build_stack(f.line, f.copy);
+                // (counting, or kept from it by something other than the memory: a clash, a judge)
+                if (st.empty() || st.ranker() || st.compact_blocker().find("memory") == std::string::npos) break;
+                if (f.copy.is_enabled(name)) (void)sieve::cli::tick_filter(f.copy, name, false);
+            }
+            out.emplace_back(f.target, std::move(f.copy));
+        }
+        return out;
+    });
 }
 
 void Menu::overlay_change(int dir, bool big)
@@ -6262,7 +6298,7 @@ void Menu::render_overlay(float W, float H)
     // names a table's size and the limit it passes is longer than one), the list making room.
     const StackInfo& info = stack_info(overlay_);
     std::vector<std::string> footer;
-    for (std::string f = toggling_ ? tr("filters.weighing") : info.status; !f.empty() && footer.size() < 2;)
+    for (std::string f = toggle_busy() ? tr("filters.weighing") : info.status; !f.empty() && footer.size() < 2;)
     {
         size_t cut = f.size() <= cols ? f.size() : footer.empty() ? f.rfind(' ', cols) : cols;
         if (cut == std::string::npos || cut == 0) cut = std::min(f.size(), cols);

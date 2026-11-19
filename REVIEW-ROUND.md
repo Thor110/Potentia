@@ -361,6 +361,27 @@ run before a release package, and after each of the three reviews. Each batch is
       fault list N4 found in the merges.
     - [x] N5-19. The manual: the degree window and `sieve window` in the filters chapter.
 
+- [ ] O. Pages of a range of lengths (Edward, 19 November 2026: "realistically the line should still find a 20
+  character 'welcome to the sieve' ... perhaps we should change 'length' to have 'minimum length and maximum length'
+  instead under the pages options"; the default 1 to 32; books left as they are; MIN LENGTH and MAX LENGTH rows).
+  Every page of `min` to `max` characters, the shorter first, then in order within a length, as the binary line holds
+  its files; no padding, so a page is what was typed. With `min` = `max` the line is exactly today's (its addresses
+  unchanged).
+  - [ ] O1. The address space: a pages space of a range (count of the shorter pages, then the page's own number;
+    scrambled by shuffle-sha256-v1 over the whole range, as the binary line is; at `min` = `max` the digit Feistel as
+    today), hex, steps along the loop, the fraction; the oracle and its vectors.
+  - [ ] O2. Canonicalisation without padding on a range line (a text longer than `max` still cut into pages).
+  - [ ] O3. Filters over a range: each length counted by its own stack and the counts summed (an automaton's table
+    answers every shorter length already), a survivor's rank the survivors of the shorter lengths and its rank
+    within its own; compact over the range. Filters that need a whole page of one length judge only.
+  - [ ] O4. The hallway: the pages line, its title shelves (titles stay fixed), shelving and walking, compact, J/F,
+    the File Locator's page items, not-an-item's pages on the binary line, the greeting at its own length.
+  - [ ] O5. Guided ordering on a range: a guided order within each length, the lengths in turn.
+  - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
+    old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.
+- [x] O7. OPTIMISE FILTERS leaves near-model-v1 and language-v1 alone (they pick a run's neighbourhood and language);
+  its last step, keeping each stack within the filter memory, on a worker, so the window answers.
+
 ### Later (in ROADMAP's final tasks)
 - Face finder (19.193), modelling tools (19.194), the hypercube background (19.195), minimap line of sight (19.197), interface designer (19.206), plugin dimensions (19.217), AI explorers, the website (task 32), voice (task 119); low priority: the hash viewer (19.231, once V3).
 
