@@ -463,7 +463,7 @@ run before a release package, and after each of the three reviews. Each batch is
     two orders (guided, compact), named, on none of the 24; words-v2 first is compact mode with the rest after it.
     The keys that mean something and count under a prefix are the ones Sieve orders by already, so nothing to build,
     and O10's seeds have no uneven order to choose in.
-  - [ ] O10. Seed Search in the File Locator, after O8 has measured (Edward, 19 November 2026: a "Seed Search"
+  - [x] O10. Seed Search in the File Locator, after O8 has measured (Edward, 19 November 2026: a "Seed Search"
     option that toggles between "Every Step" and "At The End"). At The End: a few seeds tried on the finished .sieve,
     one kept only where its scrambled place plus naming it beats the plain place. Every Step: tried on each candidate
     the sieving weighs as it goes (each a different file, so fresh tries), the winner kept only where it beats the
@@ -477,7 +477,13 @@ run before a release package, and after each of the three reviews. Each batch is
       each file). So its time is worked out as the sieving goes: the time spent on seeds so far, and the candidates
       still to come times a seed's cost at their sizes, shown in the progress line; when the cap would be passed
       it stops trying seeds and the rest of the sieving goes on as without them, saying so at the end.
-- [ ] O11. When list O is done: the version to 0.13.80 (Edward, 19 November 2026: 0.13.79 was released before list O).
+  - *Closed (Edward, 20 November 2026), not built:* O8 found no seed that pays for naming it (IDEAS 19.255), and O9 no
+    uneven order for a seed to choose in beyond guided and compact (19.256), so At The End and Every Step would each
+    spend time to find nothing.
+- [x] O11. When list O is done: the version to 0.13.80 (Edward, 19 November 2026: 0.13.79 was released before list O).
+  *Done (20 November 2026):* CMakeLists.txt (so `sieve version`, the Windows programs' details and the release's
+  name), vcpkg.json, the browser extension's manifest, the bridge's hello in web/README, make_release's examples and
+  SIEVE-INSTALL-USAGE's; HANDOFF notes it. Figures measured with 0.13.79 (STATISTICS, metrics) keep that number.
 - [x] O7. OPTIMISE FILTERS leaves near-model-v1 and language-v1 alone (they pick a run's neighbourhood and language);
   its last step, keeping each stack within the filter memory, on a worker, so the window answers.
 
