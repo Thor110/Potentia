@@ -41,7 +41,9 @@ public:
     // guided order within each length (list O5). Where a degree window is ticked, which keeps a stretch of the whole
     // range rather than of each length, there is none: it throws.
     const Ranker* length_ranker(uint32_t length) const;
-    // The memory the lengths' stacks' counts need: the most any one of them does.
+    bool has_length_rankers() const { return windows_.empty(); } // (no degree window ticked)
+    // The memory the lengths' stacks' counts need: their tables added up, a table the plugins share across lengths
+    // counted once (settle refuses to count a range whose tables do not fit the filter memory together).
     double table_bytes() const;
     const std::string& filter_name(size_t i) const { return names_[i]; }
     // The first ticked filter the unit (min to max symbols) fails, as an index into the ticked filters, or -1.

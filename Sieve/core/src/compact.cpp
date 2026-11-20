@@ -112,7 +112,9 @@ CompactLine::CompactLine(const Ranker& ranker, const std::string& key, const std
     BigUint top = ranker.count();
     top -= BigUint(1);
     hex_width_ = std::max<size_t>(1, (top.bit_length() + 3) / 4);
-    if (model) guided_ = std::make_unique<GuidedLine>(std::move(model), ranker);
+    // (No guided order where a degree window keeps a stretch of a range of lengths: the positional and scrambled
+    // orders are still there.)
+    if (model && ranker.has_length_rankers()) guided_ = std::make_unique<GuidedLine>(std::move(model), ranker);
 }
 
 BigUint CompactLine::index_of(std::span<const uint32_t> unit, AddressMode m) const

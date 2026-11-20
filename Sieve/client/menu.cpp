@@ -728,7 +728,9 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
     // padding follows from both factors mod 128.
     LineSize books;
     const uint64_t parts = uint64_t(s_.book_pages) + 1;
-    books.bits = image.bits + double(parts) * page.bits;
+    // (The books' pages and title stay at the longest length on a range of lengths: hallway.cpp's BookSpace.)
+    const double page_bits = page_min(s_) < s_.length ? line_size(alphabet_size(s_.alphabet), s_.length).bits : page.bits;
+    books.bits = image.bits + double(parts) * page_bits;
     {
         const uint64_t m = tile_pow(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h) *
                            tile_pow(alphabet_size(s_.alphabet), parts * s_.length) % sieve::books_per_tile();

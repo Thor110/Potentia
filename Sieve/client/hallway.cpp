@@ -240,6 +240,12 @@ const GuidedLine& Hallway::guided() const
     return effective_mode() == FilterMode::Compact ? *compact_[li_]->guided() : *line().guided;
 }
 
+bool Hallway::guided_at(int i) const
+{
+    if (!guided_ || !line_at(i).guided) return false;
+    return effective_mode(i) != FilterMode::Compact || !compact_[size_t(i)] || compact_[size_t(i)]->guided() != nullptr;
+}
+
 void Hallway::set_line(int li)
 {
     li_ = li;
@@ -499,7 +505,7 @@ BigUint Hallway::units_of(int i) const
     if (i == kWorldsLine) return effective_mode(i) == FilterMode::Compact ? world_sieve_->count() : world_space_->size();
     if (i == kAiLine) return effective_mode(i) == FilterMode::Compact ? ai_compact_->count() : ai_space_->size();
     if (is_listed(i)) return listed_[size_t(i)] ? listed_[size_t(i)]->size() : BigUint();
-    if (guided_ && line_at(i).guided) return BigUint::pow(2, zoom_);
+    if (guided_at(i)) return BigUint::pow(2, zoom_);
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)]->size() : compact_[i]->count();
     return titled_[size_t(i)] ? titled_[size_t(i)]->size() : line_at(i).space.size();
 }
@@ -950,7 +956,7 @@ const TitledSpace* Hallway::titled_of(int i) const
 {
     if (i < 0 || i >= kLines || !titled_[size_t(i)]) return nullptr;
     if (i == kModelsLine || i == kBinaryLine) return titled_[size_t(i)].get();
-    if (guided_ && line_at(i).guided) return nullptr; // guided order: the content alone, for now
+    if (guided_at(i)) return nullptr; // guided order: the content alone, for now
     if (effective_mode(i) == FilterMode::Compact) return full_here(i) ? full_[size_t(i)].get() : nullptr; // compact: the content's survivors alone
     return titled_[size_t(i)].get();
 }

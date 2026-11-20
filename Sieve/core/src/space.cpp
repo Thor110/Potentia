@@ -72,14 +72,27 @@ Space& Space::operator=(const Space& o)
     return *this;
 }
 
-BigUint Space::count_shorter(uint32_t length) const
+BigUint units_shorter(uint32_t base, uint32_t min_length, uint32_t length)
 {
-    if (length <= min_length_) return {};
+    if (length <= min_length) return {};
     // (B^length - B^min) / (B - 1): the units of min .. length - 1 symbols.
-    BigUint n = BigUint::pow(base_, length);
-    n -= BigUint::pow(base_, min_length_);
-    if (base_ > 2) n.divmod_small(base_ - 1);
+    BigUint n = BigUint::pow(base, length);
+    n -= BigUint::pow(base, min_length);
+    if (base > 2) n.divmod_small(base - 1);
     return n;
+}
+
+uint32_t length_at_place(uint32_t base, uint32_t min_length, uint32_t max_length, const BigUint& place)
+{
+    // The units shorter than the minimum are none, so the minimum always qualifies.
+    uint32_t lo = min_length, hi = max_length;
+    while (lo < hi)
+    {
+        const uint32_t mid = lo + (hi - lo + 1) / 2;
+        if (place < units_shorter(base, min_length, mid)) hi = mid - 1;
+        else lo = mid;
+    }
+    return lo;
 }
 
 void Space::check_unit(const Digits& unit) const
@@ -100,9 +113,7 @@ BigUint Space::place_of(const Digits& unit) const
 Space::Digits Space::unit_at_place(const BigUint& place) const
 {
     if (!(place < size_)) throw std::out_of_range("place outside this space");
-    // Its length: the last whose shorter units do not pass the place.
-    uint32_t L = min_length_;
-    while (L < length_ && !(place < count_shorter(L + 1))) ++L;
+    const uint32_t L = length_at_place(base_, min_length_, length_, place);
     BigUint v = place;
     v -= count_shorter(L);
     return v.to_digits(base_, L);

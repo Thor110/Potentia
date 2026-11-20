@@ -423,7 +423,10 @@ public:
     bool sizes_vary() const { return media_sizes_vary(media()); }
     const Theme& theme() const { return theme_of(li_); }
     Camera& camera() { return cam_; }
-    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_ai() && !on_listed() && !on_binary() && guided_ && line().guided != nullptr; }
+    bool guided_on() const { return !on_books() && !on_models() && !on_worlds() && !on_ai() && !on_listed() && !on_binary() && guided_at(li_); }
+    // Guided order selected and there on line i: a model, and in compact mode a compact line with a guided order (a
+    // range of lengths with a degree window ticked has none).
+    bool guided_at(int i) const;
     const GuidedLine& guided() const;
     const CompactLine& compact() const { return *compact_[li_]; }
     std::string ordering_name() const { return tr(std::string("ordering.") + (guided_on() ? "guided" : to_string(mode_))); }

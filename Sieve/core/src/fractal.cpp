@@ -1297,13 +1297,56 @@ std::optional<std::vector<std::array<double, 3>>> fractal_path(const Fractal& f,
     return out;
 }
 
+namespace {
+
+// A life-like automaton grown from its start rows to generation `to`, a cell bigger each way a generation,
+// handing each generation from `from` on to `each` (fractal_cells' field at that generation): the
+// generations together for the price of the last (fractal-lasts looks at the last few, review 4).
+template <class Each> void life_grow(const Fractal& f, uint32_t from, uint32_t to, Each&& each)
+{
+    uint32_t w = 0;
+    for (const std::string& r : f.start_rows) w = std::max(w, uint32_t(r.size()));
+    const uint32_t h = uint32_t(f.start_rows.size());
+    uint32_t cw = w, ch = h;
+    std::vector<uint8_t> field(size_t(cw) * ch, 0);
+    for (uint32_t y = 0; y < h; ++y)
+        for (uint32_t x = 0; x < f.start_rows[y].size(); ++x) field[size_t(y) * cw + x] = uint8_t(f.start_rows[y][x] - '0');
+    uint8_t beyond = 0;
+    for (uint32_t g = 0;; ++g)
+    {
+        if (g >= from)
+        {
+            AutomatonCells c;
+            c.width = cw, c.height = ch, c.cells = g == to ? std::move(field) : field, c.beyond = beyond;
+            each(g, std::move(c));
+        }
+        if (g == to) return;
+        const uint32_t nw = cw + 2, nh = ch + 2;
+        std::vector<uint8_t> next(size_t(nw) * nh);
+        auto at = [&](int64_t x, int64_t y) { return x >= 0 && y >= 0 && x < int64_t(cw) && y < int64_t(ch) ? field[size_t(y) * cw + size_t(x)] : beyond; };
+        for (uint32_t y = 0; y < nh; ++y)
+            for (uint32_t x = 0; x < nw; ++x)
+            {
+                const int64_t ox = int64_t(x) - 1, oy = int64_t(y) - 1; // (its place in the field before)
+                uint32_t n = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if (dx || dy) n += at(ox + dx, oy + dy);
+                next[size_t(y) * nw + x] = uint8_t(at(ox, oy) ? (f.survival >> n) & 1u : (f.birth >> n) & 1u);
+            }
+        beyond = uint8_t(beyond ? (f.survival >> 8) & 1u : f.birth & 1u);
+        field = std::move(next), cw = nw, ch = nh;
+    }
+}
+
+} // namespace
+
 std::optional<AutomatonCells> fractal_cells(const Fractal& f, uint32_t generation)
 {
     if (f.family == Fractal::Family::Aggregate) return generation <= kFractalAggregateDeepest ? std::optional<AutomatonCells>(aggregate_cells(f, generation)) : std::nullopt;
     if (!f.is_automaton() || generation > kFractalGenerationsMost) return std::nullopt;
     uint32_t w = 0;
     for (const std::string& r : f.start_rows) w = std::max(w, uint32_t(r.size()));
-    const uint32_t h = uint32_t(f.start_rows.size());
     AutomatonCells out;
     if (f.family == Fractal::Family::Elementary)
     {
@@ -1333,30 +1376,25 @@ std::optional<AutomatonCells> fractal_cells(const Fractal& f, uint32_t generatio
         return out;
     }
     // A life-like field, a cell bigger each way a generation.
-    uint32_t cw = w, ch = h;
-    std::vector<uint8_t> field(size_t(cw) * ch, 0);
-    for (uint32_t y = 0; y < h; ++y)
-        for (uint32_t x = 0; x < f.start_rows[y].size(); ++x) field[size_t(y) * cw + x] = uint8_t(f.start_rows[y][x] - '0');
-    uint8_t beyond = 0;
-    for (uint32_t g = 0; g < generation; ++g)
+    life_grow(f, generation, generation, [&](uint32_t, AutomatonCells&& c) { out = std::move(c); });
+    return out;
+}
+
+std::optional<std::vector<AutomatonCells>> fractal_cells_from(const Fractal& f, uint32_t from, uint32_t to)
+{
+    std::vector<AutomatonCells> out;
+    if (from > to) return out;
+    if (f.family == Fractal::Family::Life && to <= kFractalGenerationsMost)
     {
-        const uint32_t nw = cw + 2, nh = ch + 2;
-        std::vector<uint8_t> next(size_t(nw) * nh);
-        auto at = [&](int64_t x, int64_t y) { return x >= 0 && y >= 0 && x < int64_t(cw) && y < int64_t(ch) ? field[size_t(y) * cw + size_t(x)] : beyond; };
-        for (uint32_t y = 0; y < nh; ++y)
-            for (uint32_t x = 0; x < nw; ++x)
-            {
-                const int64_t ox = int64_t(x) - 1, oy = int64_t(y) - 1; // (its place in the field before)
-                uint32_t n = 0;
-                for (int dy = -1; dy <= 1; ++dy)
-                    for (int dx = -1; dx <= 1; ++dx)
-                        if (dx || dy) n += at(ox + dx, oy + dy);
-                next[size_t(y) * nw + x] = uint8_t(at(ox, oy) ? (f.survival >> n) & 1u : (f.birth >> n) & 1u);
-            }
-        beyond = uint8_t(beyond ? (f.survival >> 8) & 1u : f.birth & 1u);
-        field = std::move(next), cw = nw, ch = nh;
+        life_grow(f, from, to, [&](uint32_t, AutomatonCells&& c) { out.push_back(std::move(c)); });
+        return out;
     }
-    out.width = cw, out.height = ch, out.cells = std::move(field), out.beyond = beyond;
+    for (uint32_t k = from; k <= to; ++k)
+    {
+        auto c = fractal_cells(f, k);
+        if (!c) return std::nullopt;
+        out.push_back(std::move(*c));
+    }
     return out;
 }
 
@@ -1525,18 +1563,20 @@ std::optional<RgbaImage> draw_fractal(const Fractal& f, uint32_t depth, uint32_t
     {
         // Each depth a row, stretched to the width; each symbol its colour.
         std::string symbols;
+        std::vector<std::string> words; // (each depth grown once, for its symbols and then its row)
         for (uint32_t d = 0; d <= depth; ++d)
         {
-            const auto w = f.grow(d);
+            auto w = f.grow(d);
             if (!w) return std::nullopt;
             for (const char c : *w)
                 if (symbols.find(c) == std::string::npos) symbols += c;
+            words.push_back(std::move(*w));
         }
         std::sort(symbols.begin(), symbols.end());
         const uint32_t rows = depth + 1, gap = rows > 1 && height / rows > 4 ? 1 : 0;
         for (uint32_t d = 0; d <= depth; ++d)
         {
-            const std::string w = *f.grow(d);
+            const std::string& w = words[d];
             const uint32_t y0 = uint32_t(uint64_t(height) * d / rows), y1 = uint32_t(uint64_t(height) * (d + 1) / rows) - gap;
             for (uint32_t x = 0; x < width; ++x)
             {

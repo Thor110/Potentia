@@ -2,7 +2,9 @@
 
 #include "sieve/rangestack.hpp"
 
+#include "sieve/plugin.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/space.hpp"
 
 #include <algorithm>
 #include <climits>
@@ -31,7 +33,7 @@ RangeStack::RangeStack(const FilterLine& line, const std::vector<FilterStack::En
     : min_(line.min_length), max_(line.length), base_(line.base)
 {
     if (min_ == 0 || min_ >= max_) throw std::invalid_argument("a range stack is for a line of a range of lengths (min below max)");
-    for (uint32_t l = min_; l <= max_; ++l) places_ += BigUint::pow(base_, l);
+    places_ = units_shorter(base_, min_, max_ + 1);
     std::vector<FilterStack::Entry> rest;
     std::vector<int> rest_index;
     std::string windows_prov;
@@ -88,19 +90,24 @@ const Ranker* RangeStack::length_ranker(uint32_t length) const
     return r;
 }
 
-double RangeStack::table_bytes() const
+// Each length's stack keeps its own table, except the plugins' combined one, which the longest length's
+// table serves for every shorter length (shared_table in filter.cpp): so the tables of the lengths up to
+// `upto` and of the longest added up, a shared one counted once.
+static double tables_held(const std::vector<FilterStack>& stacks, size_t upto)
 {
-    double most = 0;
-    for (const FilterStack& s : stacks_) most = std::max(most, s.table_bytes());
-    return most;
+    double own = 0, shared = 0;
+    for (size_t i = 0; i < stacks.size(); ++i)
+        if ((i <= upto || i + 1 == stacks.size()) && !stacks[i].empty())
+        {
+            if (stacks[i].table_shared()) shared = std::max(shared, stacks[i].table_bytes());
+            else own += stacks[i].table_bytes();
+        }
+    return own + shared;
 }
 
-BigUint RangeStack::shorter_places(uint32_t length) const
-{
-    BigUint n;
-    for (uint32_t l = min_; l < length; ++l) n += BigUint::pow(base_, l);
-    return n;
-}
+double RangeStack::table_bytes() const { return tables_held(stacks_, stacks_.size()); }
+
+BigUint RangeStack::shorter_places(uint32_t length) const { return units_shorter(base_, min_, length); }
 
 int RangeStack::first_failure(std::span<const uint32_t> unit) const
 {
@@ -128,21 +135,38 @@ void RangeStack::settle() const
             blocker_ = "no filters ticked";
             return;
         }
-        // Every length's stack must rank (a length with no filter of its own: every unit of it).
+        // Every length's stack must rank (a length with no filter of its own: every unit of it), and the tables of
+        // every length together must fit the filter memory, which each length's stack checks only for its own (until
+        // review 4 nothing added them up, and a range of hundreds of lengths ran out of memory instead of saying so).
+        // The longest length's first, so that a table it shares with the shorter ones is built once, at its longest;
+        // then from the shortest, which names the shortest length that cannot rank.
+        if (!stacks_.back().empty()) (void)stacks_.back().ranker();
+        std::vector<BigUint> counts(stacks_.size());
+        for (size_t i = 0; i < stacks_.size(); ++i)
+        {
+            const uint32_t L = min_ + uint32_t(i);
+            if (stacks_[i].empty()) counts[i] = BigUint::pow(base_, L);
+            else if (const Ranker* r = stacks_[i].ranker()) counts[i] = r->count();
+            else
+            {
+                blocker_ = "at a length of " + std::to_string(L) + ": " + stacks_[i].compact_blocker();
+                return;
+            }
+            if (const double bytes = tables_held(stacks_, i); bytes > filter_memory())
+            {
+                blocker_ = "the tables of lengths " + std::to_string(min_) + " to " + std::to_string(L + 1 >= max_ ? max_ : L) +
+                           (L + 1 < max_ ? " and " + std::to_string(max_) : std::string()) + " need " + memory_text(bytes) +
+                           " of memory together, over the filter memory (" + memory_text(filter_memory()) +
+                           "): a narrower range of lengths, or more filter memory, counts it";
+                return;
+            }
+        }
         before_.assign(stacks_.size(), BigUint());
         all_ = BigUint();
         for (size_t i = 0; i < stacks_.size(); ++i)
         {
-            BigUint n;
-            if (stacks_[i].empty()) n = BigUint::pow(base_, min_ + uint32_t(i));
-            else if (const Ranker* r = stacks_[i].ranker()) n = r->count();
-            else
-            {
-                blocker_ = "at a length of " + std::to_string(min_ + i) + ": " + stacks_[i].compact_blocker();
-                return;
-            }
             before_[i] = all_;
-            all_ += n;
+            all_ += counts[i];
         }
         count_ = all_;
         if (!windows_.empty())
@@ -199,8 +223,7 @@ const BigUint& RangeStack::count() const
 BigUint RangeStack::below_place(const BigUint& place) const
 {
     if (!(place < places_)) return all_;
-    uint32_t L = min_;
-    while (L < max_ && !(place < shorter_places(L + 1))) ++L;
+    const uint32_t L = length_at_place(base_, min_, max_, place);
     BigUint v = place;
     v -= shorter_places(L);
     const std::vector<uint32_t> unit = v.to_digits(base_, L);

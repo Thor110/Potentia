@@ -604,6 +604,7 @@ public:
     BigUint rank(std::span<const uint32_t> unit) const override { return r_.rank(unit); }
     uint32_t min_length() const override { return r_.min_length(); }
     const Ranker* at_length(uint32_t length) const override { return r_.length_ranker(length); }
+    bool has_length_rankers() const override { return r_.has_length_rankers(); }
 
 private:
     const RangeStack& r_;
@@ -834,6 +835,12 @@ double FilterStack::table_bytes() const
     double most = 0;
     for (const auto& f : filters_) most = std::max(most, f->table_bytes());
     return most;
+}
+
+bool FilterStack::table_shared() const
+{
+    settle();
+    return shared_ranker_ != nullptr;
 }
 
 const Ranker* FilterStack::ranker() const

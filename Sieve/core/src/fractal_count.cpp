@@ -56,7 +56,8 @@ struct RuleMul
             if (noself && !shorts) v -= src[j - 1]; // (the n = 1 term is a src[j-1]; one of the a is the symbol itself)
             return v;
         };
-        const BigUint both(uint64_t(context) * context), either(uint64_t(context) * 2);
+        // (context is a letter count, at most 52: its square fits a small multiplier)
+        const uint32_t both = uint32_t(context) * uint32_t(context), either = uint32_t(context) * 2;
         for (size_t k = 0; k <= top; ++k)
         {
             if (k > kRuleOverhead)
@@ -78,8 +79,8 @@ struct RuleMul
             }
             BigUint t = p[k];
             if (k > kRuleOverhead) t += h(k - kRuleOverhead);
-            if (context && k > kRuleOverhead + 2) t += BigUint::mul(h(k - kRuleOverhead - 2), either);
-            if (context && k > kRuleOverhead + 4) t += BigUint::mul(h(k - kRuleOverhead - 4), both);
+            if (context && k > kRuleOverhead + 2) t.add_mul_small(h(k - kRuleOverhead - 2), either);
+            if (context && k > kRuleOverhead + 4) t.add_mul_small(h(k - kRuleOverhead - 4), both);
             out[k] = std::move(t);
         }
         p = std::move(out);
@@ -171,9 +172,9 @@ Poly bodies(const FractalBodyKinds& kd, uint32_t top, const FractalStructureFilt
 std::vector<BigUint> fractal_bodies_passing(const FractalBodyKinds& kinds, uint32_t top, const FractalStructureFilters& f)
 {
     const Rule out = (f.no_idle || f.canonical) ? Rule::None : Rule::Any;
+    const Poly none = bodies(kinds, top, f, Rule::None, Rule::None); // (no rule at all: the reader refuses it)
     auto with_rules = [&](Rule in) {
         Poly v = bodies(kinds, top, f, in, out);
-        const Poly none = bodies(kinds, top, f, Rule::None, Rule::None); // (no rule at all: the reader refuses it)
         for (size_t k = 0; k <= top; ++k) v[k] -= none[k];
         return v;
     };

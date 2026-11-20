@@ -39,6 +39,14 @@ AddressMode address_mode_from_string(std::string_view s); // "positional" | "scr
 inline constexpr const char* kScrambleVersion = "feistel-sha256-v1";
 inline constexpr uint32_t kScrambleRounds = 8;
 
+// The units of `min_length` up to `length` - 1 symbols over `base` symbols, in closed form:
+// (B^length - B^min) / (B - 1); none when `length` is `min_length` or less.
+BigUint units_shorter(uint32_t base, uint32_t min_length, uint32_t length);
+// The length of the unit at a place in positional order of a range of lengths (the place below
+// the range's units): the longest length whose shorter units do not pass the place, found by
+// halving the range (units_shorter grows with the length).
+uint32_t length_at_place(uint32_t base, uint32_t min_length, uint32_t max_length, const BigUint& place);
+
 class Space
 {
 public:
@@ -70,7 +78,7 @@ public:
     BigUint place_of(const Digits& unit) const;
     Digits unit_at_place(const BigUint& place) const;
     // The units shorter than `length` (from min_length on): (B^length - B^min) / (B - 1).
-    BigUint count_shorter(uint32_t length) const;
+    BigUint count_shorter(uint32_t length) const { return units_shorter(base_, min_length_, length); }
     const std::string& key() const { return key_; }
 
     // |ALPHABET|^UNIT_LENGTH, exact.

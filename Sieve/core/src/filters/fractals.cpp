@@ -364,12 +364,12 @@ bool lasts_at(const Fractal& f, uint32_t generations)
         }
     }
     else
-        for (uint32_t k = g - kLastsLooked; k <= g; ++k)
-        {
-            const auto c = fractal_cells(f, k);
-            if (!c) return false;
-            parts.push_back(live_part(*c, false));
-        }
+    {
+        // (the last generations together, the field grown once)
+        const auto cs = fractal_cells_from(f, g - kLastsLooked, g);
+        if (!cs) return false;
+        for (const AutomatonCells& c : *cs) parts.push_back(live_part(c, false));
+    }
     if (parts.back().size() <= 1) return false;
     for (size_t k = 0; k + 1 < parts.size(); ++k)
         if (parts[k] == parts.back()) return false;
@@ -433,6 +433,9 @@ constexpr uint32_t kMovingStartsMost = 32;
 // The pictures as a trie, walked a pixel at a time: include, the units in the trie; exclude, every unit
 // but those (a state off the trie is free from there on). So both count and rank exactly, and the line
 // compacts to the fractals drawn, or closes up without them.
+// The memory of one node of DrawnRanker's trie: its map of children, its entry in its parent's, its count.
+constexpr double kTrieNodeBytes = 104;
+
 class DrawnRanker : public Ranker
 {
 public:
@@ -585,6 +588,17 @@ public:
     std::optional<Dfa> as_dfa(uint32_t base, uint32_t length) const
     {
         if (any_ || units_.empty()) return std::nullopt;
+        // A unit of the line's length it holds: then the automaton has a state at each depth at least (they accept
+        // suffixes of different lengths), length + 1 in all, and where so many cannot fit the states' bound or the
+        // filter memory, the automaton built would be refused (here, or by as_automaton): so it is not built. A
+        // picture of 96 by 96 had its trie take 12 GB and overflow the stack before it was refused (review 4).
+        const auto fits_line = [&](const std::vector<uint32_t>& u) {
+            return u.size() == length && std::none_of(u.begin(), u.end(), [base](uint32_t c) { return c >= base; });
+        };
+        const uint64_t most_states = (uint64_t(1) << 24) / base;
+        if (std::any_of(units_.begin(), units_.end(), fits_line) &&
+            (uint64_t(length) + 1 > most_states || DfaRanker::table_bytes(size_t(length) + 1, base, length) > filter_memory()))
+            return std::nullopt;
         struct Node
         {
             std::vector<std::pair<uint32_t, int32_t>> next; // (symbol, node), symbols increasing
@@ -592,25 +606,36 @@ public:
         };
         std::vector<Node> nodes(1);
         std::map<std::pair<bool, std::vector<std::pair<uint32_t, int32_t>>>, int32_t> registry;
-        // (a node's last child, made minimal: an equal one already registered takes its place)
-        std::function<void(int32_t)> settle = [&](int32_t s) {
-            const int32_t child = nodes[size_t(s)].next.back().second;
-            if (!nodes[size_t(child)].next.empty()) settle(child);
-            const auto key = std::make_pair(nodes[size_t(child)].final, nodes[size_t(child)].next);
-            const auto [it, added] = registry.emplace(key, child);
-            if (!added) nodes[size_t(s)].next.back().second = it->second;
+        // (a node's last child, made minimal: an equal one already registered takes its place; first that child's
+        // own last child, and so on down, the deepest first, walked as a path rather than recursed into, since a
+        // unit's path is as deep as the unit is long)
+        std::vector<int32_t> path;
+        const auto settle = [&](int32_t s) {
+            path.assign(1, s);
+            for (int32_t c = nodes[size_t(s)].next.back().second; !nodes[size_t(c)].next.empty(); c = nodes[size_t(c)].next.back().second)
+                path.push_back(c);
+            for (size_t k = path.size(); k-- > 0;)
+            {
+                Node& at = nodes[size_t(path[k])];
+                const int32_t child = at.next.back().second;
+                const auto key = std::make_pair(nodes[size_t(child)].final, nodes[size_t(child)].next);
+                const auto [it, added] = registry.emplace(key, child);
+                if (!added) at.next.back().second = it->second;
+            }
         };
         for (const auto& u : units_) // (in order: a std::set)
         {
             // Only the units the line can hold: one of another length, or with a symbol past the
             // line's, is never met, and in the automaton would leave a path of the line's length
             // unfinished (exclude would then set aside units the list does not hold).
-            if (u.size() != length || std::any_of(u.begin(), u.end(), [base](uint32_t c) { return c >= base; })) continue;
+            if (!fits_line(u)) continue;
             int32_t s = 0;
             size_t i = 0;
             while (i < u.size() && !nodes[size_t(s)].next.empty() && nodes[size_t(s)].next.back().first == u[i])
                 s = nodes[size_t(s)].next.back().second, ++i;
             if (!nodes[size_t(s)].next.empty()) settle(s);
+            // The registered states are distinct and all stay in the automaton: past the bound, it would be refused.
+            if (registry.size() > most_states) return std::nullopt;
             for (; i < u.size(); ++i)
             {
                 nodes.push_back({});
@@ -628,7 +653,7 @@ public:
             for (const auto& [c, n] : nodes[size_t(order[k])].next)
                 if (number[size_t(n)] < 0) number[size_t(n)] = int32_t(order.size()), order.push_back(n);
         const size_t states = order.size() + (keep_ ? 0 : 1);
-        if (states > (uint64_t(1) << 24) / base) return std::nullopt; // (as the other filters bound their automata)
+        if (states > most_states) return std::nullopt; // (as the other filters bound their automata)
         Dfa d;
         d.base = base;
         d.start = 0;
@@ -709,9 +734,24 @@ protected:
         }
         if (!any_)
         {
-            if (base <= kRankedColoursMost) ranker_ = std::make_unique<DrawnRanker>(units_, base, length, keep_);
+            // The ranker's trie: a node for each distinct prefix of the sorted list (one more than the symbols
+            // each unit does not share with the one before it), each about kTrieNodeBytes. Past the filter memory
+            // the list is counted and judged rather than ranked (a 96 by 96 picture line ran out of memory, review 4).
+            double nodes = 1;
+            const std::vector<uint32_t>* before = nullptr;
+            for (const auto& u : units_)
+            {
+                size_t same = 0;
+                if (before)
+                    while (same < u.size() && same < before->size() && u[same] == (*before)[same]) ++same;
+                nodes += double(u.size() - same);
+                before = &u;
+            }
+            const double bytes = nodes * kTrieNodeBytes;
+            if (base <= kRankedColoursMost && bytes <= filter_memory()) ranker_ = std::make_unique<DrawnRanker>(units_, base, length, keep_);
             else
             {
+                if (base <= kRankedColoursMost) set_table_bytes(bytes);
                 survivors_ = keep_ ? BigUint(uint64_t(units_.size())) : BigUint::pow(base, length);
                 if (!keep_) survivors_ -= BigUint(uint64_t(units_.size()));
             }

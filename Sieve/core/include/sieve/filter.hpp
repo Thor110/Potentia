@@ -128,6 +128,9 @@ public:
     // of one length's units (null: every unit of that length survives). A ranker of one length is its own.
     virtual uint32_t min_length() const { return length(); }
     virtual const Ranker* at_length(uint32_t) const { return this; }
+    // Whether at_length gives each length's ranker (on a range with a degree window it throws: the window keeps a
+    // stretch of the whole range, so there is no guided order within each length).
+    virtual bool has_length_rankers() const { return true; }
     // The generic walks below work for every ranker; a ranker may override them with a faster
     // method that gives the same answers (key-v1 ranks as a plain base-a number).
     virtual std::vector<uint32_t> unrank(const BigUint& k) const;     // k < count()
@@ -324,6 +327,9 @@ public:
     // The memory the stack's count needs for its tables (the plugins' combined automaton's, not-written
     // with them, or the one filter that ranks it): what the filter memory must hold for it to count.
     double table_bytes() const;
+    // Whether that table is the plugins' combined one, shared by every stack of the same plugins on the
+    // line's symbols (a longer length's table serving the shorter ones: shared_table in filter.cpp).
+    bool table_shared() const;
 
     // "words-v1{dictionary=scowl-en-60 sha256=...}; max-run-v1{max_run=2}" and its SHA-256.
     const std::string& provenance() const { return provenance_; }

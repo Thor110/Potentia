@@ -6943,6 +6943,27 @@ void test_range_stack()
         CHECK(ok);
         CHECK(rs.can_rank() && rs.count() == BigUint(k));
     }
+    // Review 4: the tables of every length together must fit the filter memory (each length's stack checks only its
+    // own), the longest length's table counted with the rest; and a range with a degree window gives no ranker per
+    // length, which a compact line asks before it builds a guided order (it would throw).
+    {
+        FilterLine wide = line;
+        wide.length = 150;
+        const RangeStack fits(wide, {{run, {{"max_run", "1"}}}}, none);
+        CHECK(fits.can_rank() && fits.table_bytes() > 4.0 * 1024 * 1024);
+        FilterLine top = wide;
+        top.min_length = 0;
+        CHECK(FilterStack(top, {{run, {{"max_run", "1"}}}}, none).table_bytes() < 2.0 * 1024 * 1024);
+        const double was = filter_memory();
+        set_filter_memory(2.0 * 1024 * 1024); // more than any one length's table, less than them all
+        const RangeStack over(wide, {{run, {{"max_run", "1"}}}}, none);
+        CHECK(!over.can_rank() && over.compact_blocker().find("together, over the filter memory") != std::string::npos);
+        set_filter_memory(was);
+        const FilterStack plain(line, {{run, {{"max_run", "1"}}}}, none);
+        const FilterStack windowed(line, {{run, {{"max_run", "1"}}}, {win, wv(100, 200)}}, none);
+        CHECK(plain.ranker() && plain.ranker()->has_length_rankers());
+        CHECK(windowed.ranker() && !windowed.ranker()->has_length_rankers());
+    }
     // not-a-pattern does not apply at one letter: those pass it
     const RangeStack only_pat(line, {{pat, {}}}, none);
     CHECK(only_pat.passes(std::vector<uint32_t>{5}));

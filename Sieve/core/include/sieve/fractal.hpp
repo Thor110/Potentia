@@ -270,6 +270,9 @@ struct AutomatonCells
     std::vector<uint32_t> when; // an aggregate's: the particle that filled each cell (0: none)
 };
 std::optional<AutomatonCells> fractal_cells(const Fractal& f, uint32_t depth);
+// fractal_cells at each generation from `from` to `to`, a life-like automaton grown once for them all (nothing
+// where fractal_cells gives nothing at one of them).
+std::optional<std::vector<AutomatonCells>> fractal_cells_from(const Fractal& f, uint32_t from, uint32_t to);
 // An attractor's or a flow's path at a depth: its points, as (x, y, z; z 0 for an attractor), up to the first
 // that is not a finite number. Nothing for another family or past kFractalPathDeepest.
 std::optional<std::vector<std::array<double, 3>>> fractal_path(const Fractal& f, uint32_t depth);
