@@ -43,6 +43,8 @@
 //                     every one of the manual's 206 passes, 333 of the specifications' 335 (their
 //                     longest words are 19 and 23 letters). An automaton of the word's length.
 
+#include "dfa_bound.hpp"
+
 #include "sieve/alphabet.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
@@ -66,8 +68,6 @@ namespace sieve {
 
 namespace {
 
-constexpr uint64_t kMaxDfaCells = uint64_t(1) << 24; // (as the other filters bound their automata)
-bool cells_fit(uint64_t states, uint64_t base) { return base > 0 && states <= kMaxDfaCells / base; }
 
 bool page_line(const FilterLine& l) { return l.kind == "text" && l.alphabet && !l.up_to_length && l.base >= 2 && l.length >= 1; }
 
@@ -729,7 +729,17 @@ void add_page_filters(std::vector<FilterSpec>& out)
         if (v)
             try { most = uint32_t(1) << param_int(*find_filter(own), *v, "bits"); }
             catch (const std::exception&) {} // a malformed setting: as without one
-        return few_dfa(l.base, most) ? "automaton" : "";
+        // few_dfa's states are the sets of at most `most` symbols and one more, and it gives up exactly when they do
+        // not fit: so that, worked out by counting (the setup menu asks every frame a filter's row is chosen, and
+        // building the automaton took a second; review 4).
+        uint64_t sets = 0, choose = 1; // (choose: base choose i)
+        for (uint64_t i = 0; i <= std::min<uint64_t>(most, l.base); ++i)
+        {
+            if (i > 0) choose = choose * (l.base - i + 1) / i;
+            sets += choose;
+            if (sets > kMaxDfaCells) return "";
+        }
+        return cells_fit(sets + 1, l.base) ? "automaton" : "";
     };
     out.push_back(f);
 

@@ -21,7 +21,7 @@
 #include <mutex>
 #include <span>
 #include <stdexcept>
-#include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -42,12 +42,19 @@ public:
     Ranker::State id_of(uint32_t pos, uint64_t aux, std::vector<uint32_t> tail) const
     {
         if (tail.size() > lag_) tail.erase(tail.begin(), tail.end() - std::ptrdiff_t(lag_));
+        // Each state's tail kept once, in recs_, and found again by a hash of the state (until review 4 the map
+        // held a second copy of every tail as its key, and a guided walk on video meets millions of states).
+        uint64_t h = 0x9e3779b97f4a7c15ull ^ (uint64_t(pos) * 0xff51afd7ed558ccdull) ^ (aux * 0xc4ceb9fe1a85ec53ull);
+        for (const uint32_t c : tail) h = (h ^ c) * 0x100000001b3ull;
         std::lock_guard<std::mutex> lock(mx_);
-        auto key = std::make_tuple(pos, aux, tail);
-        if (const auto it = ids_.find(key); it != ids_.end()) return it->second;
+        for (auto [it, end] = ids_.equal_range(h); it != end; ++it)
+        {
+            const Rec& r = recs_[size_t(it->second)];
+            if (r.pos == pos && r.aux == aux && r.tail == tail) return it->second;
+        }
         const Ranker::State id = recs_.size();
         recs_.push_back({pos, aux, std::move(tail)});
-        ids_.emplace(std::move(key), id);
+        ids_.emplace(h, id);
         return id;
     }
     Rec get(Ranker::State s) const
@@ -60,7 +67,7 @@ private:
     size_t lag_;
     mutable std::mutex mx_;
     mutable std::deque<Rec> recs_;
-    mutable std::map<std::tuple<uint32_t, uint64_t, std::vector<uint32_t>>, Ranker::State> ids_;
+    mutable std::unordered_multimap<uint64_t, Ranker::State> ids_; // a state's hash -> its number
 };
 
 class ChangesRanker : public Ranker

@@ -2648,7 +2648,11 @@ void test_m2_filters(const std::string& dir)
         const double was = filter_memory();
         set_filter_memory(1024);
         const FilterStack env2(l, {{find_filter("sound-envelope-v1"), ev}}, none), syl2(l, {{find_filter("sound-syllables-v1"), sv}}, none);
+        // (review 4: what they count as follows what make builds, so a conflict with an automaton shows)
+        const std::string env_low = find_filter("sound-envelope-v1")->counts_as_on(l, &ev), syl_low = find_filter("sound-syllables-v1")->counts_as_on(l, &sv);
         set_filter_memory(was);
+        CHECK(env_low == "own" && syl_low == "own");
+        CHECK(find_filter("sound-envelope-v1")->counts_as_on(l, &ev) == "automaton" && find_filter("sound-syllables-v1")->counts_as_on(l, &sv) == "automaton");
         // (since list N5-10 the counted route ranks too, block by block: past the automaton, its numbers the same)
         CHECK(env.ranker() && env2.ranker() && dynamic_cast<const DfaRanker*>(env.ranker()) && !dynamic_cast<const DfaRanker*>(env2.ranker()));
         CHECK(env.ranker() && env2.ranker() && env.ranker()->count() == env2.ranker()->count());
@@ -3000,6 +3004,19 @@ void test_z_filters()
         CHECK(!st.passes(unit_of(a27, "abababababababababababababababab")) && st.passes(unit_of(a27, "the quick brown fox jumps over t")));
         // (k = 4, sixteen values: past what an automaton holds at 27 letters, counted exactly all the same)
         CHECK(count(page, "few-values-v1", {{"bits", "4"}}).find("judged") != std::string::npos);
+        // (review 4: what it counts as, worked out by counting its states, is what make builds)
+        bool same = true;
+        for (const uint32_t base : {2u, 4u, 16u, 27u, 40u, 96u, 256u})
+            for (int bits = 1; bits <= 4; ++bits)
+            {
+                FilterLine l = page;
+                l.base = base, l.alphabet = nullptr, l.symbols_id = "test" + std::to_string(base);
+                const FilterValues v{{"bits", std::to_string(bits)}};
+                const FilterSpec& fv = *find_filter("few-values-v1");
+                const bool automaton = plugin_dfa(*fv.make(l, v, none)) != nullptr;
+                same = same && (fv.counts_as_on(l, &v) == "automaton") == automaton;
+            }
+        CHECK(same);
     }
     // two-symbol-run: English passes, padding does not.
     {
@@ -5260,6 +5277,11 @@ void test_ai_filters()
             const std::vector<uint32_t> u = r->unrank(k);
             CHECK(st.passes(u) && r->accepts(u));
             CHECK(r->rank(u) == k && r->Ranker::rank(u) == k && r->Ranker::unrank(k) == u);
+            // (review 4: the filter judges by its rows' counts alone, without the ranker's tables; a digit changed
+            // here and there, the verdict the ranker's)
+            std::vector<uint32_t> w = u;
+            for (int j = 0; j < 3; ++j) w[size_t(rng() % w.size())] = uint32_t(rng() % 4);
+            CHECK(st.passes(w) == r->accepts(w));
         }
     }
     // A trained-looking row passes at the defaults; a ramp, a repeat and a long run do not.

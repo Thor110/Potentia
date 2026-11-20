@@ -38,6 +38,7 @@
 #include "sieve/plugin.hpp"
 
 #include "changes_ranker.hpp"
+#include "dfa_bound.hpp"
 
 #include <algorithm>
 #include <map>
@@ -411,10 +412,6 @@ bool picture(const FilterLine& l)
     return (l.kind == "image" || l.kind == "video") && l.width && l.height && l.base >= 2 && l.length % l.width == 0;
 }
 
-// An automaton is built where its states times its symbols stay under this (max-run-v1's bound).
-constexpr uint64_t kMaxDfaCells = uint64_t(1) << 24;
-// Whether `states` states over `base` symbols are small enough (worked out without overflow).
-bool cells_fit(uint64_t states, uint64_t base) { return base > 0 && states <= kMaxDfaCells / base; }
 
 // row-runs' states: the row's start, then (column 1..W-1, changes 0..c, last colour), or past the
 // bound, the bound and one.
@@ -512,22 +509,6 @@ std::optional<Dfa> palette_dfa(uint32_t B, uint32_t length, uint32_t scope, uint
 
 // ---------------------------------------------------------------- border, specks, gradient (list Q)
 
-// Each built once a line's shape and kept (the filters' lists ask whether one applies often): the automaton, or
-// nothing where it does not fit, so a filter is offered only where it counts.
-template <class Make>
-std::shared_ptr<const std::optional<Dfa>> kept_dfa(const std::string& key, Make make)
-{
-    static std::mutex m;
-    static std::map<std::string, std::shared_ptr<const std::optional<Dfa>>> kept;
-    {
-        std::lock_guard<std::mutex> lock(m);
-        if (const auto it = kept.find(key); it != kept.end()) return it->second;
-    }
-    auto d = std::make_shared<const std::optional<Dfa>>(make());
-    std::lock_guard<std::mutex> lock(m);
-    return kept.emplace(key, std::move(d)).first->second;
-}
-
 bool still_picture(const FilterLine& l) { return l.kind == "image" && l.width && l.height && l.base >= 2 && l.length == l.width * l.height; }
 
 // The pictures framed in one colour: every pixel of the top and bottom rows and the left and right columns the
@@ -588,16 +569,28 @@ std::optional<Dfa> specks_dfa(uint32_t B, uint32_t W)
         for (size_t i = 0; i < w.col.size(); ++i) v = (v << (bits + 1)) | (uint64_t(w.col[i]) << 1) | w.ok[i];
         return k | (v << 16);
     };
+    // The states kept as their keys alone, a window read back from its key when it is followed (until review 4
+    // each was a Win of two vectors, and reaching the bound on black and white took gigabytes).
+    auto window = [&](uint64_t k) {
+        Win w;
+        w.x = uint32_t(k & 0xff), w.below = (k >> 8) & 1;
+        const size_t n = size_t((k >> 9) & 0x7f);
+        w.col.resize(n), w.ok.resize(n);
+        uint64_t v = k >> 16;
+        for (size_t i = n; i-- > 0; v >>= bits + 1) w.ok[i] = uint8_t(v & 1), w.col[i] = uint32_t((v >> 1) & ((uint64_t(1) << bits) - 1));
+        return w;
+    };
     std::unordered_map<uint64_t, int32_t> id;
-    std::vector<Win> states{Win{}};
-    id[key(states[0])] = 0;
+    std::vector<uint64_t> states{key(Win{})};
+    id[states[0]] = 0;
     std::vector<int32_t> next;
     for (size_t k = 0; k < states.size(); ++k)
     {
         next.resize((k + 1) * B, Dfa::kDead);
+        const Win at = window(states[k]);
         for (uint32_t c = 0; c < B; ++c)
         {
-            Win w = states[k];
+            Win w = at;
             bool me = false;
             if (w.x > 0 && w.col.back() == c) me = true, w.ok.back() = 1;
             if (w.below)
@@ -612,7 +605,7 @@ std::optional<Dfa> specks_dfa(uint32_t B, uint32_t W)
             const auto [it, added] = id.emplace(kk, int32_t(states.size()));
             if (added)
             {
-                states.push_back(std::move(w));
+                states.push_back(kk);
                 if (!cells_fit(states.size(), B)) return std::nullopt;
             }
             next[k * B + c] = it->second;
@@ -623,7 +616,10 @@ std::optional<Dfa> specks_dfa(uint32_t B, uint32_t W)
     d.start = 0;
     d.accept.assign(states.size(), 0);
     for (size_t k = 0; k < states.size(); ++k)
-        d.accept[k] = states[k].x == 0 && states[k].below && std::all_of(states[k].ok.begin(), states[k].ok.end(), [](uint8_t v) { return v != 0; });
+    {
+        const Win w = window(states[k]);
+        d.accept[k] = w.x == 0 && w.below && std::all_of(w.ok.begin(), w.ok.end(), [](uint8_t v) { return v != 0; });
+    }
     d.next = std::move(next);
     return minimise(d);
 }
@@ -699,9 +695,30 @@ std::optional<Dfa> rows_alike_dfa(uint32_t B, uint32_t W, uint32_t rows_a_frame,
         combos *= B;
         if (combos > kMaxDfaCells) return std::nullopt;
     }
-    using Key = std::tuple<uint32_t, uint32_t, uint32_t, std::vector<uint32_t>>; // (column, row, changes, window)
-    std::map<Key, int32_t> id;
-    std::vector<Key> states{{0, 0, 0, {}}};
+    // A state: the column, the row, the changes in this row, and the window, its colours packed oldest first in
+    // `win`, wb bits each (B^W fits 2^24 above, so W wb is at most 48 bits). Until review 4 the window was a vector,
+    // kept twice, and 16 pixels wide on black and white took over 3 GB.
+    uint32_t wb = 1;
+    while ((uint64_t(1) << wb) < B) ++wb;
+    const uint64_t cm = (uint64_t(1) << wb) - 1, all = W * wb >= 64 ? ~uint64_t(0) : (uint64_t(1) << (W * wb)) - 1;
+    struct Key
+    {
+        uint32_t x = 0, y = 0, ch = 0, n = 0; // (n: the pixels in the window)
+        uint64_t win = 0;
+        bool operator==(const Key& o) const { return x == o.x && y == o.y && ch == o.ch && n == o.n && win == o.win; }
+    };
+    struct KeyHash
+    {
+        size_t operator()(const Key& k) const
+        {
+            uint64_t h = k.win * 0x9e3779b97f4a7c15ull;
+            h ^= (uint64_t(k.x) | uint64_t(k.ch) << 16 | uint64_t(k.n) << 32) * 0xff51afd7ed558ccdull;
+            h ^= uint64_t(k.y) * 0xc4ceb9fe1a85ec53ull;
+            return size_t(h ^ (h >> 29));
+        }
+    };
+    std::unordered_map<Key, int32_t, KeyHash> id;
+    std::vector<Key> states{Key{}};
     id[states[0]] = 0;
     std::vector<int32_t> next;
     for (size_t at = 0; at < states.size(); ++at)
@@ -709,20 +726,20 @@ std::optional<Dfa> rows_alike_dfa(uint32_t B, uint32_t W, uint32_t rows_a_frame,
         next.resize((at + 1) * B, Dfa::kDead);
         for (uint32_t c = 0; c < B; ++c)
         {
-            auto [x, y, ch, win] = states[at];
-            if (y > 0 && win.front() != c && ++ch > k) continue; // (win.front(): the pixel above)
-            win.push_back(c);
-            if (win.size() > W) win.erase(win.begin());
-            if (++x == W)
+            Key key = states[at];
+            const uint32_t above = key.n ? uint32_t((key.win >> (wb * (key.n - 1))) & cm) : 0; // (the oldest: the pixel above)
+            if (key.y > 0 && above != c && ++key.ch > k) continue;
+            key.win = ((key.win << wb) | c) & all;
+            if (key.n < W) ++key.n;
+            if (++key.x == W)
             {
-                x = 0, ch = 0;
-                y = rows_a_frame ? (y + 1) % rows_a_frame : 1;
+                key.x = 0, key.ch = 0;
+                key.y = rows_a_frame ? (key.y + 1) % rows_a_frame : 1;
             }
-            Key key{x, y, ch, std::move(win)};
             const auto [it, added] = id.emplace(key, int32_t(states.size()));
             if (added)
             {
-                states.push_back(std::move(key));
+                states.push_back(key);
                 if (!cells_fit(states.size(), B)) return std::nullopt;
             }
             next[at * B + c] = it->second;
@@ -732,7 +749,7 @@ std::optional<Dfa> rows_alike_dfa(uint32_t B, uint32_t W, uint32_t rows_a_frame,
     d.base = B;
     d.start = 0;
     d.accept.assign(states.size(), 0);
-    for (size_t i = 0; i < states.size(); ++i) d.accept[i] = std::get<0>(states[i]) == 0; // (whole rows; the length is the line's)
+    for (size_t i = 0; i < states.size(); ++i) d.accept[i] = states[i].x == 0; // (whole rows; the length is the line's)
     d.next = std::move(next);
     return minimise(d);
 }

@@ -26,6 +26,8 @@
 // combines with every other automaton. On a large one (rgb24) it counts with its own ranker: each
 // ink step weighs B - 1, worked out arithmetically, so 2^24 colours cost what two do.
 
+#include "dfa_bound.hpp"
+
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
 #include "sieve/image.hpp"
@@ -64,9 +66,6 @@ Border border_of(const std::string& s)
     throw std::invalid_argument("figure-v1: border must be any, clear or standing");
 }
 
-// Where an automaton is built: states times symbols under this (max-run-v1's bound, as the other
-// picture filters use).
-constexpr uint64_t kMaxDfaCells = uint64_t(1) << 24;
 
 // ---------------------------------------------------------------- the frontier
 

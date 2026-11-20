@@ -29,6 +29,8 @@
 //                    pitch of 50 Hz to 1 kHz), most samples are within a share of the range of the one a
 //                    period before. A voice, an instrument, a hum pass; noise does not. Judged.
 
+#include "dfa_bound.hpp"
+
 #include "sieve/biguint.hpp"
 #include "sieve/dfa.hpp"
 #include "sieve/filter.hpp"
@@ -52,10 +54,6 @@ namespace sieve {
 
 namespace {
 
-// An automaton is built where its states times its symbols stay under this (as the picture
-// filters and max-run-v1 bound theirs).
-constexpr uint64_t kMaxDfaCells = uint64_t(1) << 24;
-bool cells_fit(uint64_t states, uint64_t base) { return base > 0 && states <= kMaxDfaCells / base; }
 
 bool sound_line(const FilterLine& l) { return l.kind == "audio" && is_pcm_symbols(l.symbols_id); }
 
@@ -1092,7 +1090,16 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         if (v)
             try { block = param_int(*find_filter(own), *v, "block"); }
             catch (const std::exception&) {} // a malformed setting: as without one
-        return cells_fit(uint64_t(kEnvStory) * 5 * uint64_t(block), l.base) ? "automaton" : "own"; // (list N5-10: ranked block by block past that)
+        // As make decides: an automaton where it is built and its table fits the filter memory at the line's length,
+        // and otherwise its own ranker, block by block (list N5-10). Until review 4 only the first was asked, so a
+        // pair the stack could not merge showed no conflict. Worked out once for each line and setting.
+        if (block <= 0 || !cells_fit(uint64_t(kEnvStory) * 5 * uint64_t(block), l.base)) return "own";
+        return kept_answer("sound-envelope/" + l.symbols_id + "/" + std::to_string(l.length) + "/" + std::to_string(block) + "/" +
+                               std::to_string(filter_memory()),
+                           [&]() -> std::string {
+                               const auto dfa = envelope_dfa(pcm_format_of(l.symbols_id), uint32_t(block));
+                               return dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory() ? "automaton" : "own";
+                           });
     };
     out.push_back(env);
 
@@ -1134,7 +1141,15 @@ void add_sound_filters(std::vector<FilterSpec>& out)
         try
         {
             const SyllableRule r = syllables_of(own, l, v ? *v : FilterValues{});
-            return cells_fit((r.most + 1) * 4 * uint64_t(r.block), l.base) ? "automaton" : "own"; // (list N5-10)
+            if (!cells_fit((r.most + 1) * 4 * uint64_t(r.block), l.base)) return "own"; // (list N5-10)
+            // (as make decides, as sound-envelope's above)
+            return kept_answer("sound-syllables/" + l.symbols_id + "/" + std::to_string(l.length) + "/" + std::to_string(r.block) + "/" +
+                                   std::to_string(r.threshold) + "/" + std::to_string(r.fewest) + "/" + std::to_string(r.most) + "/" +
+                                   std::to_string(filter_memory()),
+                               [&]() -> std::string {
+                                   const auto dfa = syllables_dfa(pcm_format_of(l.symbols_id), r);
+                                   return dfa && DfaRanker::table_bytes(dfa->states(), dfa->base, l.length) <= filter_memory() ? "automaton" : "own";
+                               });
         }
         catch (const std::exception&) { return ""; }
     };

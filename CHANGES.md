@@ -1,26 +1,26 @@
 # Changes
 
-One commit on top of c42c251 ("sieve O11"): the first two batches of review 4's fixes.
+One commit on top of 9c2d024 (review 4, batches A and B): batch C, the filters.
 
-## Ranges of lengths
-- **Memory:** a pages line of a range of lengths keeps a counting table for every length. Each length checked its own
-  against the filter memory, but nothing added them up, so 1 to a few hundred letters with max-run-v1 ran out of
-  memory. Now the tables are added up (a table the plugins share across lengths counted once) and the line says
-  "the tables of lengths 1 to N need X of memory together, over the filter memory" instead.
-- **Speed:** the units shorter than a length are worked out in closed form everywhere (a degree window on a long
-  range judged each unit with a power per length), and the length at a place is found by halving.
-- **Degree window on a range:** compact used to fail outright (it tried to build the guided order, which a window
-  on a range has none of). Now it keeps its positional and scrambled orders.
-- **BOOKS size in the setup menu:** worked out from pages of the longest length, as the hallway builds the books.
+## Memory and speed
+- **specks-v1 and rows-alike-v1** keep their automata's states packed. Measured here on black and white:
+  specks at 16 x 16 went from 2.35 GB to 0.64 GB of memory (15 s to 9 s), rows-alike at 16 x 10 from 3.26 GB to
+  1.38 GB. The automata built are the same.
+- **join-cut-v1 and weight-signs-v1** build their counting tables only where the filter memory holds them, and
+  otherwise judge, as rows-alike and video-smooth already did (a wide AI line or a large frame ran out of memory).
+- **The video and picture rankers** keep each state's recent pixels once instead of twice.
+- **few-values-v1** no longer builds its automaton every frame while its row is chosen on the filters page: whether
+  it is an automaton is worked out by counting.
 
-## Fractals
-- **Large pictures with fractal-drawn on:** a 96 x 96 picture line crashed (stack overflow) or used over 12 GB. Now
-  the automaton is not built where it cannot fit, and the list's own ranker is bounded by the filter memory: the
-  96 x 96 line counts its 97,950 pictures exactly and judges them, in about two minutes.
-- **fractal-lasts** grows a life-like automaton once for the generations it compares, not nine times.
-- **Smaller speed-ups:** the v3 rule counting, the no-rule bodies counted once, substitution drawings grown once.
+## Conflicts shown correctly
+- **sound-envelope and sound-syllables** now say they count as their own ranker where their automaton's table does
+  not fit the filter memory, as they then do. A pair with sound-step-v1 that could not be compacted together showed no
+  conflict before.
 
-Every address, count and verdict I compared against a 0.13.80 build is the same.
+## Tidying
+- One copy of the automata's size bound and cache (core/src/filters/dfa_bound.hpp), not four.
+
+Counts and verdicts I compared against 0.13.80 are the same.
 
 ## Files to delete by hand
 None.

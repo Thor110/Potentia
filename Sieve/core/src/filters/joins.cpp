@@ -70,7 +70,11 @@ public:
         per_ = l.part_length / uint32_t(n_);
         std::vector<char> free_parts(frames_, 1);
         for (uint32_t f = per_; f < frames_; f += per_) free_parts[f] = 0;
-        ranker_ = std::make_unique<ChangesRanker>(l.base, n_, std::move(free_parts), std::min<size_t>(changes, n_), false);
+        // (its table only where the filter memory holds it, as rows-alike and video-smooth build theirs: past it, judged)
+        const size_t most = std::min<size_t>(changes, n_);
+        if (const double bytes = ChangesRanker::table_bytes(l.base, n_, most); bytes <= filter_memory())
+            ranker_ = std::make_unique<ChangesRanker>(l.base, n_, std::move(free_parts), most, false);
+        else set_table_bytes(bytes);
     }
     bool passes(std::span<const uint32_t> unit) const override
     {

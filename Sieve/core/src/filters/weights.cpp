@@ -31,6 +31,7 @@
 
 #include "sieve/aispace.hpp"
 #include "sieve/filter.hpp"
+#include "sieve/plugin.hpp" // filter_memory
 #include "sieve/sha256.hpp"
 #include "sieve/training.hpp"
 
@@ -535,7 +536,9 @@ public:
     {
         k_ = uint32_t(in_.size());
         for (char x : in_) m_ += x ? 1u : 0u;
-        w_.assign(c_ + 1, std::vector<BigUint>(c_ + 2));
+        // (row r is read only at k <= c - r + 1: it holds that many and one more)
+        w_.resize(c_ + 1);
+        for (uint32_t r = 0; r <= c_; ++r) w_[r].resize(c_ - r + 2);
         for (uint32_t k = 0; k <= c_; ++k) w_[0][k] = BigUint(k >= lo_ && k <= hi_ ? 1u : 0u);
         for (uint32_t r = 1; r <= c_; ++r)
             for (uint32_t k = 0; k + r <= c_; ++k)
@@ -630,25 +633,47 @@ public:
                 std::string prov)
     {
         provenance_ = std::move(prov);
-        std::map<uint32_t, std::shared_ptr<const RowCount>> rules;
+        in_ = std::move(in_class);
+        // Each row length's table (ClassCount): about c^2 / 2 numbers of up to c log2 K bits, half that on average;
+        // built only where they fit the filter memory together (a feed-forward row of thousands of columns took
+        // gigabytes, review 4), and otherwise the rows are judged by their counts alone.
+        double bits = 1;
+        for (size_t k = in_.size(); k > 1; k >>= 1) bits += 1;
+        double bytes = 0;
         for (const AiSpace::Tensor& t : space.tensors())
         {
-            if (!rules.count(t.cols))
+            if (!bounds_.count(t.cols))
             {
-                const auto [lo, hi] = bounds(t.cols);
-                rules[t.cols] = std::make_shared<ClassCount>(in_class, t.cols, lo, hi);
+                bounds_[t.cols] = bounds(t.cols);
+                const double c = t.cols;
+                bytes += c * c / 2 * (c * bits / 16 + 32);
             }
             rows_.insert(rows_.end(), t.rows, t.cols);
         }
-        rules_ = rules;
-        ranker_ = std::make_unique<RowsRanker>(rows_, std::move(rules), uint32_t(in_class.size()));
+        if (bytes > filter_memory())
+        {
+            set_table_bytes(bytes);
+            return;
+        }
+        std::map<uint32_t, std::shared_ptr<const RowCount>> rules;
+        for (const auto& [cols, b] : bounds_) rules[cols] = std::make_shared<ClassCount>(in_, cols, b.first, b.second);
+        ranker_ = std::make_unique<RowsRanker>(rows_, std::move(rules), uint32_t(in_.size()));
     }
     bool passes(std::span<const uint32_t> unit) const override
     {
+        // (as ClassCount judges a row: its digits of the class, lo to hi of them; hi no more than the row has)
         size_t at = 0;
         for (uint32_t c : rows_)
         {
-            if (at + c > unit.size() || !rules_.at(c)->passes(unit.subspan(at, c))) return false;
+            if (at + c > unit.size()) return false;
+            const auto [lo, hi] = bounds_.at(c);
+            uint32_t k = 0;
+            for (size_t i = at; i < at + c; ++i)
+            {
+                if (unit[i] >= in_.size()) return false;
+                k += in_[unit[i]] ? 1u : 0u;
+            }
+            if (k < lo || k > std::min(hi, c)) return false;
             at += c;
         }
         return at == unit.size();
@@ -656,8 +681,9 @@ public:
     const Ranker* ranker() const override { return ranker_.get(); }
 
 private:
+    std::vector<char> in_;                                    // per digit: of the class
     std::vector<uint32_t> rows_;
-    std::map<uint32_t, std::shared_ptr<const RowCount>> rules_;
+    std::map<uint32_t, std::pair<uint32_t, uint32_t>> bounds_; // per row length: its digits of the class, lo and hi
     std::unique_ptr<RowsRanker> ranker_;
 };
 
