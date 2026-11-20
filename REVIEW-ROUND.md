@@ -451,12 +451,18 @@ run before a release package, and after each of the three reviews. Each batch is
     neighbouring seeds land a file 0.2486 of the loop apart (independent: 0.25); landings even (chi-square 10.52 on
     15). The affine family's best is log2 n for log2 n paid, and its solved b is as long as the place. So no seed
     pays, and O10 waits on O9. CI step 02 pins a small run.
-  - [ ] O9. Orders by sort key (Edward: "use a number of different sorting algorithms to sort seeds ... to guide the
+  - [x] O9. Orders by sort key (Edward: "use a number of different sorting algorithms to sort seeds ... to guide the
     scrambling"): a few named orders of a line, each its units sorted by a key that means something (a model's
     probability, as guided order is; letters' entropy; a filter's count of passes), tried for a file and the best
     named, as O8 names a seed. A random key is just another shuffle (no gain); a key that puts real content early
     can save more than naming it costs. Measured first (IDEAS), built only where it pays, and only keys that can be
     counted under a prefix, so an order of an endless line can be walked without sorting it.
+    *Measured (20 November 2026), not built:* `tools/sort_keys_study.py` (IDEAS 19.256). On 24 prose pages of 32
+    symbols: positional 150.4 bits, guided 97.0, words-v2 first 137.5, letters' entropy 137.0, distinct symbols
+    142.7; on 8 random pages every key is positional's or worse (guided 357.8). Entropy and distinct beat Sieve's own
+    two orders (guided, compact), named, on none of the 24; words-v2 first is compact mode with the rest after it.
+    The keys that mean something and count under a prefix are the ones Sieve orders by already, so nothing to build,
+    and O10's seeds have no uneven order to choose in.
   - [ ] O10. Seed Search in the File Locator, after O8 has measured (Edward, 19 November 2026: a "Seed Search"
     option that toggles between "Every Step" and "At The End"). At The End: a few seeds tried on the finished .sieve,
     one kept only where its scrambled place plus naming it beats the plain place. Every Step: tried on each candidate

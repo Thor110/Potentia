@@ -10531,3 +10531,35 @@ address's (an address written without its leading zeros); naming one of n seeds 
 - *So:* the File Locator's Seed Search (O10) has nothing to buy on its own: a seed's saving is chance, paid for in
   full by naming it, and no seed carries from one file to another. O10 stays unbuilt unless a family of orders whose
   landings are not even (O9: units sorted by a key that means something) gives a seed something to choose between.
+
+**19.256 Orders by sort key, measured (Edward, 19 November 2026; REVIEW-ROUND O9).** His words: "use a number of
+different sorting algorithms to sort seeds ... to guide the scrambling". An order of a line by a key puts the units
+with the smallest key first, ties in positional order; a unit's address is how many units stand before it, and naming
+which of K orders was used costs log2 K bits. `tools/sort_keys_study.py` measures five on pages of 32 symbols (lower27):
+positional; guided (the model's probability, highest first: Sieve's guided order); words-v2 passes first (survivors by
+their compact number, the rest after them); the letters' entropy, lowest first; and the number of different symbols,
+fewest first. The last two depend only on the page's letter counts, so the pages before one are counted exactly over
+the 8,349 partitions of 32 into at most 27 parts (a page's place within its tie is taken at the tie's middle).
+- *Measured (20 November 2026; 24 prose pages from README, VISION, MANUAL and IDEAS, and 8 pages of random symbols; 62 s):*
+
+  | mean bits | positional | guided | words-v2 first | entropy | distinct |
+  |---|---|---|---|---|---|
+  | 24 text pages | 150.4 | 97.0 | 137.5 | 137.0 | 142.7 |
+  | 8 random pages | 150.8 | 357.8 | 150.8 | 150.4 | 150.7 |
+
+  The best of the five for each page, named in 2.32 bits: 97.9 bits on the text pages (52.5 fewer than positional),
+  and 152.3 on the random ones (1.4 more). Guided or words-v2 alone, named in 1 bit: 96.6 on the text. The entropy
+  and distinct orders beat both of Sieve's own orders, named, on none of the 24 text pages.
+- *What the keys do:* a key that depends only on the letter counts sees a text's skew (common letters, many spaces)
+  and saves 8 to 13 bits on a 32-symbol page, most on short lines padded with spaces (a page that is half spaces: 92
+  bits against 150). The model's probability sees the same skew and the order of the letters too, so it saves 53;
+  guided is lower than the entropy order on 23 of the 24 pages, and the 24th ("sieve locate myfolder installe")
+  by 0.3 bits, less than naming the order. On random pages no key gains: their letters are as even
+  as chance makes them, and guided, built for text, costs more than twice positional.
+- *words-v2 first:* survivors stand at their compact number (about 88 bits, the 88.8 bits of words-v2's count), so
+  on the 5 passing pages it beats guided on 2 (86.0 against 114, 88.7 against 93) and loses on 3. That is compact
+  mode, which Sieve has; the order adds only that a page that fails is still on the line, after every survivor (one
+  bit more at most). Compact's guided view (guided among survivors) is the order that holds both gains.
+- *So:* nothing to build. The keys that mean something and can be counted under a prefix are the ones Sieve already
+  orders by: the model's probability (guided) and a filter stack's verdict (compact). A seed (19.255) has nothing to
+  choose between in them either: each is one fixed order of the line, so O10's Seed Search has no gain to find.
