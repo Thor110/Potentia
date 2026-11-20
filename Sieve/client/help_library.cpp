@@ -10,6 +10,7 @@
 #include "strings.hpp"
 
 #include "cli/dictionaries.hpp" // executable_dir
+#include "sieve/text.hpp"
 #include "sieve/paths.hpp"
 #include "sieve/utf8.hpp"
 
@@ -38,29 +39,15 @@ void txt(SDL_Renderer* r, float x, float y, const std::string& s, SDL_Color c, f
 
 bool inside(const SDL_FRect& r, float x, float y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
 
-std::string lower(std::string s)
-{
-    for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
-    return s;
-}
-
-std::string trim(const std::string& s)
-{
-    const size_t a = s.find_first_not_of(" \t\r");
-    if (a == std::string::npos) return {};
-    return s.substr(a, s.find_last_not_of(" \t\r") - a + 1);
-}
+// (sieve/text.hpp's, so this file keeps no copies of its own; review 4)
+std::string lower(std::string s) { return sieve::ascii_lower(std::move(s)); }
+using sieve::trim;
 
 // The parts of a line between `sep`, each trimmed.
 std::vector<std::string> split(const std::string& s, char sep)
 {
-    std::vector<std::string> out;
-    for (size_t at = 0; at <= s.size();)
-    {
-        const size_t c = std::min(s.find(sep, at), s.size());
-        out.push_back(trim(s.substr(at, c - at)));
-        at = c + 1;
-    }
+    std::vector<std::string> out = sieve::split_fields(s, sep);
+    for (std::string& f : out) f = sieve::trim(f);
     return out;
 }
 
@@ -339,7 +326,11 @@ void HelpLibrary::lay_out(size_t cells)
 // Up or Down on the list: the next row with a page, the headings passed over.
 void HelpLibrary::choose_row(int dir)
 {
-    if (rows_.empty()) return;
+    if (rows_.empty())
+    {
+        row_ = 0; // (Home on an empty list left it at -1, which Enter then read; review 4)
+        return;
+    }
     int r = row_;
     for (size_t n = 0; n < rows_.size(); ++n)
     {
@@ -412,7 +403,7 @@ void HelpLibrary::key(SDL_Keycode k, SDL_Keymod mod)
     else if (a == mk::kLeft) on_page_ = false;
     else if (a == mk::kRight)
     {
-        if (!on_page_ && row_ < int(rows_.size()) && rows_[size_t(row_)].page >= 0) open(rows_[size_t(row_)].page, true);
+        if (!on_page_ && row_ >= 0 && row_ < int(rows_.size()) && rows_[size_t(row_)].page >= 0) open(rows_[size_t(row_)].page, true);
         on_page_ = page_ >= 0;
     }
     else if (a == mk::kChoose)
@@ -421,7 +412,7 @@ void HelpLibrary::key(SDL_Keycode k, SDL_Keymod mod)
         {
             if (link_ >= 0 && link_ < int(link_targets_.size())) open(link_targets_[size_t(link_)], true);
         }
-        else if (row_ < int(rows_.size()) && rows_[size_t(row_)].page >= 0)
+        else if (row_ >= 0 && row_ < int(rows_.size()) && rows_[size_t(row_)].page >= 0)
         {
             open(rows_[size_t(row_)].page, true);
             on_page_ = true;
@@ -488,7 +479,7 @@ void HelpLibrary::handle(const SDL_Event& event)
                 return;
             }
         for (const auto& [box, r] : row_boxes_)
-            if (inside(box, e.button.x, e.button.y) && rows_[size_t(r)].page >= 0)
+            if (inside(box, e.button.x, e.button.y) && size_t(r) < rows_.size() && rows_[size_t(r)].page >= 0) // (boxes from the last frame drawn)
             {
                 row_ = r;
                 open(rows_[size_t(r)].page, true);

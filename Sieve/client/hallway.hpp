@@ -1616,6 +1616,11 @@ private:
         std::string said;     // and that, as said when the viewer opens
         // A sound or notes: what Space plays (one channel, -1..1, `rate` a second), and what it was.
         std::vector<float> sound;
+        // Notes: what their sound is made from, made on the first Space rather than as they open (a long MIDI file
+        // took seconds and 100 MB to make, played or not; review 4).
+        std::shared_ptr<const sieve::Notes3Set> notes_set;
+        std::vector<uint32_t> notes_unit;
+        bool has_sound() const { return !sound.empty() || notes_set != nullptr; }
         uint32_t rate = 0, channels = 0, bits = 0;
         uint64_t samples = 0;  // a channel
         uint32_t voices = 0, tempo = 0;

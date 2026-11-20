@@ -135,8 +135,8 @@ void skins_kept_for(size_t characters_in_a_frame)
 std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere>& spheres, float voxel_cell, const VoxelChoice& voxels, SkinReport* report, int drawing, size_t sharing)
 {
     const auto t0 = std::chrono::steady_clock::now();
-    const sieve::SkinCell sc = sieve::skin_cell(spheres, voxel_cell, voxels.skin_detail);
     const float blend = sieve::skin_blend(spheres, voxels.skin_blend);
+    const sieve::SkinCell sc = sieve::skin_cell(spheres, voxel_cell, voxels.skin_detail, blend);
     // The limbs, the pipeline's first stage (IDEAS 19.229): none unless asked for, so the skin is then
     // made from the spheres alone, as before.
     const std::vector<sieve::SkinLimb> limbs = voxels.skin_limbs ? sieve::skin_limbs(spheres, blend) : std::vector<sieve::SkinLimb>{};
@@ -217,10 +217,15 @@ std::shared_ptr<const sieve::SkinMesh> make_skin(const std::vector<sieve::Sphere
     const uint32_t asked = voxels.subdivision_for(drawing);
     bool subdivided_kept = true;
     const size_t most = sieve::kSkinMostSubdividedQuads / std::max<size_t>(1, sharing);
+    // (the steps a new bound allows worked out first, which only counts quads: characters coming into and going out
+    // of sight change the bound, and where the steps stay the same the subdivision kept is the same mesh; review 4)
+    const uint32_t steps = asked > 0 ? sieve::skin_subdivision_steps(*before, asked, most) : 0;
+    if (asked > 0 && k.subdivided && k.sub_most != most && k.sub_steps == steps && k.sub_asked == asked && k.sub_rounds == rounds)
+        k.sub_most = most;
     if (asked > 0 && (k.sub_asked != asked || k.sub_rounds != rounds || k.sub_most != most || !k.subdivided))
     {
         const auto s0 = std::chrono::steady_clock::now();
-        k.sub_steps = sieve::skin_subdivision_steps(*before, asked, most);
+        k.sub_steps = steps;
         k.sub_most = most;
         k.subdivided = k.sub_steps > 0 ? std::make_shared<const sieve::SkinMesh>(sieve::skin_subdivide(*before, k.sub_steps)) : before;
         k.sub_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - s0).count();
@@ -340,13 +345,21 @@ size_t add_skin_drawing(MeshBatch& batch, int drawing, const sieve::SkinMesh& sk
         }
         return given;
     }
-    // The smooth drawing's normals: averaged across the faces round each vertex, once a frame (they are
-    // a small part of the frame's time; the readout says how small).
+    // The smooth drawing's normals: averaged across the faces round each vertex, once a frame for a skin
+    // that has only the field's (they are a small part of the frame's time; the readout says how small).
     std::vector<float> smooth;
     if (drawing == kDrawSmooth)
     {
         const auto t0 = std::chrono::steady_clock::now();
-        smooth = sieve::skin_smooth_normals(skin);
+        // (a smoothed or subdivided skin has them in its vertices already, the same numbers: read, not worked out
+        // again every frame; review 4)
+        if (skin.smooth_normals)
+        {
+            smooth.resize(skin.vertices.size() * 3);
+            for (size_t v = 0; v < skin.vertices.size(); ++v)
+                for (int k = 0; k < 3; ++k) smooth[v * 3 + size_t(k)] = skin.vertices[v].n[k];
+        }
+        else smooth = sieve::skin_smooth_normals(skin);
         if (smooth_ms) *smooth_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     }
     // The skin: each triangle turned towards the eye given (which way it faces taken from its corners, its

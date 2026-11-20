@@ -208,7 +208,7 @@ std::string Hallway::view_keys() const
     const char* keys = view_kinds_.empty() ? "view.keys"
                        : listed_deeper ? "view.keys.listed"
                        : view_kinds_[view_at_] == ViewKind::Shape ? "view.keys.shape"
-                       : view_kinds_[view_at_] == ViewKind::Opened && !view_opened_.sound.empty() ? "view.keys.sound"
+                       : view_kinds_[view_at_] == ViewKind::Opened && view_opened_.has_sound() ? "view.keys.sound"
                        : view_.picture ? (view_.frames > 1 ? "view.keys.film" : "view.keys")
                        : in_hand_ && in_hand_->parts ? "view.keys.book"
                                                      : "view.keys";
@@ -788,7 +788,8 @@ bool Hallway::open_midi_file(const std::vector<uint8_t>& bytes)
         const sieve::Notes3Set set = sieve::make_notes3_set(0, 127, kTpq, kLongest, kLevels, o.voices, o.tempo, {});
         const sieve::Notes3CanonResult r = sieve::canonicalise_notes3(o.text, set, uint32_t(std::min<size_t>(most, UINT32_MAX)));
         if (r.units.empty()) throw std::invalid_argument(tr("view.opened.no_notes"));
-        o.sound = render_notes3(set, r.units[0], kSynthRate);
+        o.notes_set = std::make_shared<const sieve::Notes3Set>(set);
+        o.notes_unit = r.units[0];
         o.rate = kSynthRate;
         return true;
     }
@@ -839,7 +840,12 @@ void Hallway::view_play()
         message(tr("msg.view.stopped"));
         return;
     }
-    const OpenedFile& o = view_opened_;
+    OpenedFile& o = view_opened_;
+    if (o.sound.empty() && o.notes_set) // (notes: their sound made now, once)
+    {
+        o.sound = render_notes3(*o.notes_set, o.notes_unit, o.rate);
+        o.notes_set.reset(), o.notes_unit.clear();
+    }
     const std::string err = music() ? music()->play_samples(o.sound, o.rate) : synth_.play_samples(o.sound, o.rate);
     view_sounding_ = err.empty();
     view_sound_ends_ = SDL_GetTicks() + Uint64(double(o.sound.size()) * 1000.0 / double(std::max<uint32_t>(1, o.rate))) + 1;
@@ -1024,7 +1030,7 @@ void Hallway::viewer_event(const SDL_Event& e, bool& quit)
             break;
         }
         case SDLK_SPACE:
-            if (view_kinds_[view_at_] == ViewKind::Opened && !view_opened_.sound.empty())
+            if (view_kinds_[view_at_] == ViewKind::Opened && view_opened_.has_sound())
             {
                 view_play();
                 return;

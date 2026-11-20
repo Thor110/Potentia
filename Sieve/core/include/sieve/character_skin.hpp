@@ -38,6 +38,7 @@ struct SkinMesh
     // is triangles 2q and 2q + 1), so a drawing of quads and one of triangles are of one surface.
     std::vector<uint32_t> quads;
     uint32_t grid[3] = {0, 0, 0}; // the grid's corners along x, y and z, for a readout
+    bool smooth_normals = false;  // each vertex's n is skin_smooth_normals' (smoothed or subdivided), not the field's
     size_t triangles() const { return tris.size() / 3; }
     size_t quad_count() const { return quads.size() / 4; }
 };
@@ -49,15 +50,16 @@ float skin_blend(const std::vector<Sphere>& spheres, uint32_t percent);
 
 // The skin's cell: the voxels' cell (sieve::voxel_cell_of's, so the skin is as fine as the voxels by the
 // same rule) halved `halvings` times (Skin Detail, 0 to 3), and doubled again while the widest side of
-// the spheres' box would be more than kSkinMostCells cells, so that a fine lattice cannot ask for a grid
-// too large to make in a frame.
+// the grid (the spheres' box and, each side, the blend and two cells: skin_mesh's) would be more than
+// kSkinMostCells cells, so that a fine lattice or a wide blend cannot ask for a grid too large to make in
+// a frame.
 inline constexpr uint32_t kSkinMostCells = 160;
 struct SkinCell
 {
     float cell = 1;
     bool coarser = false; // made coarser than asked, to stay within the limit
 };
-SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_t halvings);
+SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_t halvings, float blend = 0);
 
 // A limb (IDEAS 19.229, the pipeline's first stage): one bone, a sphere and its parent, as a rounded cone
 // in the field, so the skin runs along the bone rather than being a row of balls apart where they do not

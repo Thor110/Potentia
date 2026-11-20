@@ -60,9 +60,13 @@ KeyChord parse_chord(const std::string& text)
         else if (t.rfind("Alt+", 0) == 0) c.mod |= kKeyAlt, t = t.substr(4);
         else break;
     }
-    // (the names a comma list cannot hold are written as words)
+    // (the names a comma list, or a settings file's comment, cannot hold are written as words: a comma alone or at
+    // the end of a name, as SDL's "Keypad ,"; the plus; and a semicolon alone, which the settings file would read as
+    // the start of a comment)
     if (t == "Comma") t = ",";
     else if (t == "Plus") t = "+";
+    else if (t == "Semicolon") t = ";";
+    else if (t.size() > 6 && t.compare(t.size() - 6, 6, " Comma") == 0) t = t.substr(0, t.size() - 5) + ",";
     c.key = t.empty() ? 0 : naming().code(t);
     return c;
 }
@@ -90,6 +94,8 @@ std::string chord_name(const KeyChord& c)
     std::string kn = naming().name(c.key);
     if (kn.empty()) kn = "?";
     if (kn == ",") kn = "Comma";
+    else if (kn == ";") kn = "Semicolon";
+    else if (kn.size() > 2 && kn.compare(kn.size() - 2, 2, " ,") == 0) kn = kn.substr(0, kn.size() - 1) + "Comma";
     return n + kn;
 }
 

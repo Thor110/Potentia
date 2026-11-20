@@ -680,7 +680,9 @@ void MainMenu::handle(const SDL_Event& event)
         const auto rows = hallway::Keys::get().listing();
         if (key_capture_ >= 0)
         {
-            // The key pressed becomes this action's key (Esc: leave it as it was).
+            // The key pressed becomes this action's key (Esc: leave it as it was). A key held down repeating is not a
+            // press: Enter held past the repeat delay bound the action to Return (review 4).
+            if (event.key.repeat) return;
             const SDL_Keycode k = event.key.key;
             if (k != SDLK_ESCAPE && size_t(key_capture_) < rows.size() && k != SDLK_LSHIFT && k != SDLK_RSHIFT && k != SDLK_LCTRL && k != SDLK_RCTRL && k != SDLK_LALT && k != SDLK_RALT)
             {

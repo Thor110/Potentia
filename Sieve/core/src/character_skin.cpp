@@ -32,7 +32,13 @@ static void box_of(const std::vector<Sphere>& spheres, float lo[3], float hi[3])
     }
 }
 
-SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_t halvings)
+// How far the grid reaches past the spheres' box on each side: the blend in full and two cells. The smooth minimum is
+// taken over the spheres one after another, and each can lower the field again, by up to the whole blend where
+// many spheres overlap (until review 4 the grid reached half the blend past the box, and such a skin was cut open
+// where the grid ended).
+static float skin_pad(float blend, float cell) { return std::max(0.0f, blend) + 2.0f * cell; }
+
+SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_t halvings, float blend)
 {
     SkinCell out;
     out.cell = std::max(1e-3f, voxel_cell) / float(1u << std::min<uint32_t>(halvings, 3));
@@ -40,7 +46,7 @@ SkinCell skin_cell(const std::vector<Sphere>& spheres, float voxel_cell, uint32_
     float lo[3], hi[3];
     box_of(spheres, lo, hi);
     const float widest = std::max({hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]});
-    while (widest / out.cell > float(kSkinMostCells))
+    while ((widest + 2 * skin_pad(blend, out.cell)) / out.cell > float(kSkinMostCells))
     {
         out.cell *= 2;
         out.coarser = true;
@@ -162,7 +168,7 @@ SkinMesh skin_mesh(const std::vector<Sphere>& spheres, float cell, float blend, 
     // The grid: whole cells from the character's centre (so it holds still on the character as it moves),
     // reaching past the box by enough for the blend's fullness and a cell besides, so the surface never
     // meets its edge.
-    const float pad = 0.5f * k + 2.0f * cell;
+    const float pad = skin_pad(k, cell);
     int g0[3], n[3];
     for (int a = 0; a < 3; ++a)
     {
@@ -397,20 +403,18 @@ std::vector<float> skin_smooth_normals(const SkinMesh& skin)
     return n;
 }
 
-SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float mu)
+// The faces a subdivision step starts from, and the smoothing's: the quads when every triangle is half of one (the
+// skin as surface nets makes it, and every step's output), else the triangles (the rule's general form).
+static bool skin_by_quads(const SkinMesh& skin) { return !skin.quads.empty() && skin.quad_count() * 2 == skin.triangles(); }
+
+// Each vertex's neighbours along the faces' sides, once each and sorted, laid out as one list (`next`) with where
+// each vertex's run starts (`start`, nv + 1 of them): each face's sides counted at both ends, laid out by vertex,
+// then each vertex's few made unique in place (a skin's neighbours are four or so, so this is linear in the faces,
+// with no sort of them all). skin_taubin's and skin_subdivide's (review 4: they were two copies).
+static void skin_neighbours(const std::vector<uint32_t>& faces, size_t corners, size_t nv, std::vector<uint32_t>& start,
+                            std::vector<uint32_t>& next)
 {
-    SkinMesh out = skin;
-    const size_t nv = out.vertices.size();
-    if (rounds == 0 || nv == 0) return out;
-    // Each vertex's neighbours, once each, kept as one list with where each vertex's run starts (built
-    // once, as the faces do not change between rounds). The quads' sides when every triangle is half of
-    // one (the skin as surface nets makes it), else the triangles' sides.
-    const bool by_quads = !out.quads.empty() && out.quad_count() * 2 == out.triangles();
-    const std::vector<uint32_t>& faces = by_quads ? out.quads : out.tris;
-    const size_t corners = by_quads ? 4 : 3;
-    // (each face's sides counted at both ends, laid out by vertex, then each vertex's few made unique in
-    // place: a skin's neighbours are four or so, so this is linear in the faces, with no sort of them all)
-    std::vector<uint32_t> start(nv + 1, 0);
+    start.assign(nv + 1, 0);
     auto each_side = [&](auto&& take) {
         for (size_t f = 0; f + corners <= faces.size(); f += corners)
             for (size_t k = 0; k < corners; ++k)
@@ -423,7 +427,8 @@ SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float 
     };
     each_side([&](uint32_t i, uint32_t) { ++start[size_t(i) + 1]; });
     for (size_t v = 0; v < nv; ++v) start[v + 1] += start[v];
-    std::vector<uint32_t> next(start[nv]), fill(start.begin(), start.end() - 1);
+    next.assign(start[nv], 0);
+    std::vector<uint32_t> fill(start.begin(), start.end() - 1);
     each_side([&](uint32_t i, uint32_t j) { next[fill[i]++] = j; });
     size_t kept = 0;
     for (size_t v = 0; v < nv; ++v)
@@ -436,6 +441,21 @@ SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float 
     }
     start[nv] = uint32_t(kept);
     next.resize(kept);
+}
+
+SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float mu)
+{
+    SkinMesh out = skin;
+    const size_t nv = out.vertices.size();
+    if (rounds == 0 || nv == 0) return out;
+    // Each vertex's neighbours, once each, kept as one list with where each vertex's run starts (built
+    // once, as the faces do not change between rounds). The quads' sides when every triangle is half of
+    // one (the skin as surface nets makes it), else the triangles' sides.
+    const bool by_quads = skin_by_quads(out);
+    const std::vector<uint32_t>& faces = by_quads ? out.quads : out.tris;
+    const size_t corners = by_quads ? 4 : 3;
+    std::vector<uint32_t> start, next;
+    skin_neighbours(faces, corners, nv, start, next);
     // The steps, each from where every vertex stood before it (so the order the vertices are visited in
     // does not matter), the positions kept in doubles between steps so many rounds do not gather the
     // floats' rounding.
@@ -472,6 +492,7 @@ SkinMesh skin_taubin(const SkinMesh& skin, uint32_t rounds, float lambda, float 
     const std::vector<float> n = skin_smooth_normals(out);
     for (size_t v = 0; v < nv; ++v)
         for (int k = 0; k < 3; ++k) out.vertices[v].n[k] = n[v * 3 + size_t(k)];
+    out.smooth_normals = true;
     return out;
 }
 
@@ -490,9 +511,6 @@ double skin_volume(const SkinMesh& skin)
     return six / 6.0;
 }
 
-// The faces a subdivision step starts from: the quads when every triangle is half of one (the skin as
-// surface nets makes it, and every step's output), else the triangles (the rule's general form).
-static bool skin_by_quads(const SkinMesh& skin) { return !skin.quads.empty() && skin.quad_count() * 2 == skin.triangles(); }
 
 size_t skin_subdivided_quads(const SkinMesh& skin, uint32_t steps)
 {
@@ -528,32 +546,9 @@ static SkinMesh skin_subdivide_once(const SkinMesh& skin)
     // Each vertex's neighbours, once each and sorted, laid out as one list with where each vertex's run
     // starts (as skin_taubin finds them), and each edge's number given at its lower end and copied to its
     // upper, so an edge is found from either end by a short search of that end's few neighbours.
-    std::vector<uint32_t> start(nv + 1, 0);
-    auto each_side = [&](auto&& take) {
-        for (size_t f = 0; f < nf; ++f)
-            for (size_t k = 0; k < corners; ++k)
-            {
-                const uint32_t i = faces[f * corners + k], j = faces[f * corners + (k + 1) % corners];
-                if (i == j || i >= nv || j >= nv) continue;
-                take(i, j);
-                take(j, i);
-            }
-    };
-    each_side([&](uint32_t i, uint32_t) { ++start[size_t(i) + 1]; });
-    for (size_t v = 0; v < nv; ++v) start[v + 1] += start[v];
-    std::vector<uint32_t> next(start[nv]), fill(start.begin(), start.end() - 1);
-    each_side([&](uint32_t i, uint32_t j) { next[fill[i]++] = j; });
-    size_t kept = 0;
-    for (size_t v = 0; v < nv; ++v)
-    {
-        const auto b = next.begin() + std::ptrdiff_t(start[v]), e = next.begin() + std::ptrdiff_t(start[v + 1]);
-        std::sort(b, e);
-        const auto u = std::unique(b, e);
-        start[v] = uint32_t(kept);
-        for (auto it = b; it != u; ++it) next[kept++] = *it;
-    }
-    start[nv] = uint32_t(kept);
-    next.resize(kept);
+    std::vector<uint32_t> start, next;
+    skin_neighbours(faces, corners, nv, start, next);
+    const size_t kept = next.size();
     auto slot = [&](uint32_t i, uint32_t j) {
         const auto b = next.begin() + std::ptrdiff_t(start[i]), e = next.begin() + std::ptrdiff_t(start[size_t(i) + 1]);
         return size_t(std::lower_bound(b, e, j) - next.begin());
@@ -688,6 +683,7 @@ SkinMesh skin_subdivide(const SkinMesh& skin, uint32_t steps)
     const std::vector<float> n = skin_smooth_normals(out);
     for (size_t v = 0; v < out.vertices.size(); ++v)
         for (int k = 0; k < 3; ++k) out.vertices[v].n[k] = n[v * 3 + size_t(k)];
+    out.smooth_normals = true;
     return out;
 }
 

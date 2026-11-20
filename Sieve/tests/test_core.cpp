@@ -10612,6 +10612,13 @@ void test_character_skin()
         CHECK(skin_cell({a}, 8.0f, 1).cell == 4.0f && !skin_cell({a}, 8.0f, 1).coarser);
         const SkinCell big = skin_cell({a}, 1.0f, 3); // (200 across in eighths: 1,600 cells, doubled to fit)
         CHECK(big.coarser && 200.0f / big.cell <= float(kSkinMostCells) && 200.0f / big.cell > float(kSkinMostCells) / 2);
+        // (review 4: ten spheres in one place at the default blend, the blend chained over them reaching past half of
+        // it: the skin closed, not cut open where the grid ends; and the grid, its padding counted, within the limit)
+        const std::vector<Sphere> ten(10, s);
+        const float k10 = skin_blend(ten, 50);
+        const SkinCell c10 = skin_cell(ten, 8.0f, 1, k10);
+        const SkinMesh m10 = skin_mesh(ten, c10.cell, k10);
+        CHECK(closed(m10, true) && m10.grid[0] <= kSkinMostCells + 2);
     }
     CharacterSettings t;
     t.seed = 99;
@@ -11261,6 +11268,19 @@ void test_key_registry()
     CHECK(chord_name(parse_chord("Shift+Alt+Ctrl+X")) == "Ctrl+Alt+Shift+X"); // (always written in one order)
     CHECK(parse_chord("Comma").key == ',' && chord_name(parse_chord("Comma")) == "Comma");
     CHECK(parse_chord("Plus").key == '+' && chord_name(parse_chord("Plus")) == "+");
+    // (review 4: a semicolon alone is written as a word, the settings file reading one as a comment; and a comma at the
+    // end of a longer name, as SDL's "Keypad ,", which a comma list would split)
+    CHECK(parse_chord("Semicolon").key == ';' && chord_name(parse_chord("Semicolon")) == "Semicolon");
+    CHECK(chord_name(parse_chord("Shift+;")) == "Shift+Semicolon");
+    {
+        KeyNaming kp;
+        kp.code = [](const std::string& n) -> uint32_t { return n == "Keypad ," ? 0x40000085u : (n.size() == 1 ? uint32_t(std::tolower(static_cast<unsigned char>(n[0]))) : 0u); };
+        kp.name = [](uint32_t c) -> std::string { return c == 0x40000085u ? "Keypad ," : std::string(1, char(std::toupper(int(c)))); };
+        set_key_naming(kp);
+        CHECK(chord_name(KeyChord{0x40000085u, 0}) == "Keypad Comma" && parse_chord("Keypad Comma").key == 0x40000085u);
+        CHECK(parse_chords("Keypad Comma,W").size() == 2);
+        set_key_naming(KeyNaming{});
+    }
     CHECK(parse_chord("Return").key == 0 && parse_chord("").key == 0 && parse_chord("Shift+").key == 0);
     CHECK(plain_mods(0x0001) == kKeyShift && plain_mods(0x0080) == kKeyCtrl && plain_mods(0x0200 | 0x1000) == kKeyAlt);
 

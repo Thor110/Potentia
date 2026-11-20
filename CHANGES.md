@@ -1,26 +1,28 @@
 # Changes
 
-One commit on top of 9c2d024 (review 4, batches A and B): batch C, the filters.
+One commit on top of d48fba8 (review 4, batch C): batch D, the personal dimension, characters and the hallway.
 
-## Memory and speed
-- **specks-v1 and rows-alike-v1** keep their automata's states packed. Measured here on black and white:
-  specks at 16 x 16 went from 2.35 GB to 0.64 GB of memory (15 s to 9 s), rows-alike at 16 x 10 from 3.26 GB to
-  1.38 GB. The automata built are the same.
-- **join-cut-v1 and weight-signs-v1** build their counting tables only where the filter memory holds them, and
-  otherwise judge, as rows-alike and video-smooth already did (a wide AI line or a large frame ran out of memory).
-- **The video and picture rankers** keep each state's recent pixels once instead of twice.
-- **few-values-v1** no longer builds its automaton every frame while its row is chosen on the filters page: whether
-  it is an automaton is worked out by counting.
+## Fixes you might notice
+- **A hang in the personal dimension:** an object placed very far out (by a world file, or by typing a large number on
+  the Place panel's X row) froze the program on the next frame. The line of sight now stops at the edge of the
+  ground, and the Place panel keeps X, Y and Z on the ground's square.
+- **Character skins with holes:** where many spheres overlap (joints added on the same place, or a high Skin Blend)
+  the skin could come out cut open at the edge of its grid. The grid now reaches far enough. The CI's readout for the
+  test character changes from grid 79x55x82 to 81x57x84, with the same triangles. At a high blend and detail the cell
+  is made coarser sooner, so the grid stays within the limit it promises.
+- **Keys that did not stick:** a key bound to ; was lost on restart (the settings file read it as a comment), and
+  Keypad , could not be bound at all. They are written Semicolon and Keypad Comma now. Holding Enter while capturing
+  a key no longer binds the action to Return.
+- **Documentation window:** a search with no results, then Home and Enter, read past the start of the list.
+- **Opening a MIDI file in the viewer** no longer makes its whole sound first; it is made the first time you press
+  Space.
 
-## Conflicts shown correctly
-- **sound-envelope and sound-syllables** now say they count as their own ranker where their automaton's table does
-  not fit the filter memory, as they then do. A pair with sound-step-v1 that could not be compacted together showed no
-  conflict before.
-
-## Tidying
-- One copy of the automata's size bound and cache (core/src/filters/dfa_bound.hpp), not four.
-
-Counts and verdicts I compared against 0.13.80 are the same.
+## Smaller
+- A world file's fav: and char: kinds must be SHA-256s, as model: kinds already were.
+- Characters coming into sight no longer make every subdivided skin again; the smooth drawing reads normals the skin
+  already holds.
+- Duplicated helpers (the skin's neighbour lists; the documentation window's lower, trim and split) are now single
+  copies.
 
 ## Files to delete by hand
 None.

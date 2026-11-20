@@ -25,6 +25,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
@@ -1043,8 +1044,14 @@ void PersonalWorld::render()
                 const float g = p.y + std::max(high, 0.1f);
                 bool seen = true;
                 const float dx = p.x - px_, dz = p.z - pz_, d = std::sqrt(dx * dx + dz * dz);
+                // (2 m apart, up to the edge of the ground: no hill stands past it, and an object placed far out, from a
+                // world file or the Place panel, made the steps too small to add up, so the walk never ended; review 4)
                 for (float u = 2.0f / std::max(d, 2.0f); u < 1.0f && seen; u += 2.0f / std::max(d, 2.0f))
-                    seen = ground(px_ + dx * u, pz_ + dz * u) < eye_y + (g - eye_y) * u;
+                {
+                    const float x = px_ + dx * u, z = pz_ + dz * u;
+                    if (std::fabs(x) > kHalf || std::fabs(z) > kHalf) break;
+                    seen = ground(x, z) < eye_y + (g - eye_y) * u;
+                }
                 if (!seen) continue;
                 if (is_char(p.kind))
                 {
@@ -2286,6 +2293,7 @@ void PersonalWorld::place_key(SDL_Keycode k, SDL_Keymod mod)
     {
         const float step = (place_row_ < 3 ? 0.1f : 5.0f * deg) * ((mod & SDL_KMOD_SHIFT) ? 10.0f : 1.0f);
         *vals[place_row_] += k == SDLK_RIGHT ? step : -step;
+        if (place_row_ < 3) *vals[place_row_] = std::clamp(*vals[place_row_], -kHalf, kHalf); // (on the ground's square, as physics keeps it)
         place_edit_.clear();
     }
     else if (digit && place_row_ < 6 && place_edit_.size() < 16)
@@ -2306,7 +2314,8 @@ void PersonalWorld::place_key(SDL_Keycode k, SDL_Keymod mod)
             try
             {
                 const float v = std::stof(place_edit_);
-                *vals[place_row_] = place_row_ < 3 ? v : v * deg;
+                if (!std::isfinite(v)) throw std::invalid_argument("not a number");
+                *vals[place_row_] = place_row_ < 3 ? std::clamp(v, -kHalf, kHalf) : v * deg; // (on the ground's square, as above)
             }
             catch (...)
             {
@@ -2932,8 +2941,8 @@ void PersonalWorld::load()
             p.resting = !p.physics; // (a dropped one settles from where it was written)
         }
         const bool model = version == 2 && is_model(p.kind) && is_sha(p.kind.substr(6));
-        if (ok && (std::find(cat.begin(), cat.end(), p.kind) != cat.end() || (version == 2 && p.kind.rfind("fav:", 0) == 0 && p.kind.size() == 68) ||
-                   (version == 2 && (p.kind == "char:you" || (is_char(p.kind) && p.kind.size() == 69))) || model))
+        if (ok && (std::find(cat.begin(), cat.end(), p.kind) != cat.end() || (version == 2 && p.kind.rfind("fav:", 0) == 0 && p.kind.size() == 68 && is_sha(p.kind.substr(4))) ||
+                   (version == 2 && (p.kind == "char:you" || (is_char(p.kind) && p.kind.size() == 69 && is_sha(p.kind.substr(5))))) || model))
         {
             placed_.push_back(p);
             // (a model placed with no `model` line before it: listed all the same, so it can be placed again)

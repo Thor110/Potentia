@@ -482,7 +482,7 @@ grep -c "^skin_blend = 0 " skn/b.ini | q "^1$"
 grep -c "^skin_detail = 2 " skn/b.ini | q "^1$"
 $H --menu --real-graphics --settings skn/s.ini --character c99.character --creator --screenshot skn-creator.png | tr -d '\r' > skn/creator.txt
 q "^character drawing: skin$" skn/creator.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" skn/creator.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" skn/creator.txt
 $H --menu --real-graphics --settings skn/s.ini --character c99.character --creator --screenshot skn-creator2.png > /dev/null
 cmp skn-creator.png skn-creator2.png
 $H --menu --real-graphics --settings skn/b.ini --character c99.character --creator --screenshot skn-union.png | tr -d '\r' | q "^skin: cell 20\.1 units (the voxels' halved 2 times), blend 0\.0 units (0%), "
@@ -506,12 +506,12 @@ grep -c "^drawing = 6 " sqd/m.ini | q "^1$"
 cp sqd/q.ini sqd/off.ini
 $H --menu --real-graphics --settings sqd/q.ini --character c99.character --creator --screenshot sqd-quads.png | tr -d '\r' > sqd/quads.txt
 q "^character drawing: quads$" sqd/quads.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 11590 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms" sqd/quads.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 11590 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms" sqd/quads.txt
 $H --menu --real-graphics --settings sqd/q.ini --character c99.character --creator --screenshot sqd-quads2.png > /dev/null
 cmp sqd-quads.png sqd-quads2.png
 $H --menu --real-graphics --settings sqd/m.ini --character c99.character --creator --screenshot sqd-smooth.png | tr -d '\r' > sqd/smooth.txt
 q "^character drawing: smooth$" sqd/smooth.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, normals averaged in [0-9.]* ms$" sqd/smooth.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, normals averaged in [0-9.]* ms$" sqd/smooth.txt
 $H --menu --real-graphics --settings sqd/m.ini --character c99.character --creator --screenshot sqd-smooth2.png > /dev/null
 cmp sqd-smooth.png sqd-smooth2.png
 $H --menu --settings sqd/off.ini --character c99.character --creator --screenshot sqd-off.png | tr -d '\r' | q "^character drawing: quads (the wireframe, as Wireframe is on)$"
@@ -533,11 +533,11 @@ $H --main-menu --settings slm/l.ini --press "Item:settings,Return,Item:graphics,
 grep -c "^skin_limbs = on " slm/l.ini | q "^1$"
 grep -c "^skin_limbs = off " slm/s.ini | q "^1$"
 $H --menu --real-graphics --settings slm/s.ini --character c99.character --creator --screenshot slm-off.png | tr -d '\r' > slm/off.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" slm/off.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms" slm/off.txt
 test "$(grep -c "limbs joined" slm/off.txt || true)" = 0
 cmp slm-off.png skn-creator.png
 $H --menu --real-graphics --settings slm/l.ini --character c99.character --creator --screenshot slm-on.png | tr -d '\r' > slm/on.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 22676 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, 26 limbs joined$" slm/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 22676 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, 26 limbs joined$" slm/on.txt
 $H --menu --real-graphics --settings slm/l.ini --character c99.character --creator --screenshot slm-on2.png > /dev/null
 cmp slm-on.png slm-on2.png
 $H --personal-world --real-graphics --settings slm/l.ini --pworld-look -10 --screenshot slm-pworld.png | tr -d '\r' | q "^characters: drawn as skin, [1-9][0-9]* triangles of skin, with limbs$"
@@ -559,7 +559,7 @@ $H --menu --real-graphics --settings ssm/s.ini --character c99.character --creat
 test "$(grep -c "smoothed" ssm/off.txt || true)" = 0
 cmp ssm-off.png skn-creator.png
 $H --menu --real-graphics --settings ssm/r.ini --character c99.character --creator --screenshot ssm-on.png | tr -d '\r' > ssm/on.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, smoothed 4 rounds in [0-9.]* ms.*, volume [1-9][0-9]* to [1-9][0-9]* cubic units (100\.[0-4][0-9]%)$" ssm/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 23180 triangles made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, smoothed 4 rounds in [0-9.]* ms.*, volume [1-9][0-9]* to [1-9][0-9]* cubic units (100\.[0-4][0-9]%)$" ssm/on.txt
 if cmp -s ssm-on.png skn-creator.png; then exit 1; fi
 $H --menu --real-graphics --settings ssm/r.ini --character c99.character --creator --screenshot ssm-on2.png > /dev/null
 cmp ssm-on.png ssm-on2.png
@@ -586,7 +586,7 @@ $H --menu --real-graphics --settings ssd/s.ini --character c99.character --creat
 test "$(grep -c "subdivided" ssd/off.txt || true)" = 0
 cmp ssd-off.png sqd-quads.png
 $H --menu --real-graphics --settings ssd/q.ini --character c99.character --creator --screenshot ssd-on.png | tr -d '\r' > ssd/on.txt
-q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 79x55x82, 185440 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, subdivided 2 steps in [0-9.]* ms.*, 11590 to 185440 quads$" ssd/on.txt
+q "^skin: cell 40\.2 units (the voxels' halved 1 times), blend 99\.5 units (50%), grid 81x57x84, 185440 quads made, [1-9][0-9]* drawn, made in [0-9.]* ms.*, subdivided 2 steps in [0-9.]* ms.*, 11590 to 185440 quads$" ssd/on.txt
 if cmp -s ssd-on.png sqd-quads.png; then exit 1; fi
 $H --menu --real-graphics --settings ssd/q.ini --character c99.character --creator --screenshot ssd-on2.png > /dev/null
 cmp ssd-on.png ssd-on2.png
