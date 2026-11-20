@@ -165,7 +165,8 @@ file for the run they are given in. An empty default is written empty.
 | `item_letters` | `8` | the letter size items are drawn for, in pixels; smaller letters are dashes |
 | `close_up` | `screen` | the widest close-up display: screen, 0 for none, or a power of two in pixels |
 | `limits_focus` | `all` | the line FIND MY LIMITS grows (all: every line) |
-| `length` | `32` | pages: characters a page |
+| `min_length` | `1` | pages: the shortest page: every length from it to length, the shorter first (length: one length) |
+| `length` | `32` | pages: characters a page (the longest, with min_length) |
 | `alphabet` | `lower27` | pages: the alphabet (lower27, babel29, ascii95, or one sieve alphabets lists) |
 | `canon` | `v2` | pages: the warp rules, v2 or v1 |
 | `model` | `default` | pages: the guided ordering's model, default or none |

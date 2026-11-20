@@ -660,9 +660,9 @@ grep -A1 "^\[models\]" start2.ini | q "mode = mark"
 # Items per wall: the corridor's tile size is a setting. It changes no address -- the
 # same unit, at the same percentage along the same line -- only the tile and slot that
 # name where it stands, and at 256 a tile the tile number is half what it was. Untitled
-# (title length 0), so the starting page stands well along the line, not at its start.
-a=$($H --no-menu --title-length 0 --walk "0,0" --screenshot t128.png | sed -n 1p)
-b=$($H --no-menu --title-length 0 --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
+# (title length 0) and of one length (32), so the starting page stands well along the line, not at its start.
+a=$($H --no-menu --title-length 0 --length 32 --walk "0,0" --screenshot t128.png | sed -n 1p)
+b=$($H --no-menu --title-length 0 --length 32 --items-per-wall 256 --walk "0,0" --screenshot t256.png | sed -n 1p)
 echo "$a"; echo "$b"
 echo "$a" | q "85.9326950016% along"
 echo "$b" | q "85.9326950016% along"

@@ -383,6 +383,7 @@ Settings Settings::from_args(const sieve::cli::Args& a, const Settings& base)
     s.mode = a.get("mode", s.mode);
     s.key = a.get("key", s.key);
     s.length = parse_u32(a, "length", s.length);
+    s.min_length = parse_u32(a, "min-length", a.has("length") && !a.has("min-length") ? s.length : s.min_length);
     s.alphabet = a.get("alphabet", s.alphabet);
     s.canon = a.get("canon", s.canon);
     if (a.has("model")) s.model = a.get("model") != "none";
@@ -449,6 +450,7 @@ void Settings::apply(sieve::cli::Args& a) const
     a.opts["mode"] = mode;
     a.opts["key"] = key;
     a.opts["length"] = std::to_string(length);
+    a.opts["min-length"] = std::to_string(std::clamp(min_length, 1u, std::max(1u, length)));
     a.opts["alphabet"] = alphabet;
     a.opts["canon"] = canon;
     if (model) a.opts.erase("model");
@@ -524,7 +526,8 @@ constexpr SetupKey kSetupKeys[] = {
     {"item-letters", "the letter size items are drawn for, in pixels; smaller letters are dashes"},
     {"close-up", "the widest close-up display: screen, 0 for none, or a power of two in pixels"},
     {"limits-focus", "the line FIND MY LIMITS grows (all: every line)"},
-    {"length", "pages: characters a page"},
+    {"min-length", "pages: the shortest page: every length from it to length, the shorter first (length: one length)"},
+    {"length", "pages: characters a page (the longest, with min_length)"},
     {"alphabet", "pages: the alphabet (lower27, babel29, ascii95, or one sieve alphabets lists)"},
     {"canon", "pages: the warp rules, v2 or v1"},
     {"model", "pages: the guided ordering's model, default or none"},
@@ -629,6 +632,9 @@ bool Settings::set_entry(const std::string& key, const std::string& value)
     if (key == "model" && value != "default" && value != "none") return false;
     sieve::cli::Args a;
     a.opts[found->option] = value;
+    // (One entry at a time: a length read after min_length leaves it as read. An older file with no min_length
+    // keeps its one length: AppSettings::load.)
+    if (std::string(found->option) == "length") a.opts["min-length"] = std::to_string(min_length);
     try
     {
         const Settings t = from_args(a, *this);
@@ -668,12 +674,55 @@ LineSize line_size(uint32_t base, uint64_t length)
     return z;
 }
 
+// 1 + b + b^2 + ... + b^(k-1) mod the tile, by halving k: the find-limits search asks for lengths in the millions, so no
+// big number and no loop over the lengths.
+static uint64_t tile_series(uint64_t b, uint64_t k)
+{
+    const uint64_t per = sieve::books_per_tile();
+    if (k == 0) return 0;
+    if (k % 2) return (1 + b % per * tile_series(b, k - 1)) % per;
+    // The first half, then the same again times b^(k/2).
+    const uint64_t half = tile_series(b, k / 2);
+    return half * (1 + tile_pow(b, k / 2)) % per;
+}
+
+LineSize range_size(uint32_t base, uint32_t min_length, uint32_t max_length)
+{
+    // Every unit of min to max symbols (the pages line's range, list O6): their count, b^min (b^k - 1) / (b - 1) for the
+    // k = max - min + 1 lengths, and its padding. Worked in logarithms and in the tile's remainders, as line_size is.
+    const uint64_t per = sieve::books_per_tile();
+    const uint64_t k = uint64_t(max_length) - min_length + 1;
+    const double lb = std::log2(double(base));
+    // log2 of the series: exact in a double while b^k is small, and k log2 b - log2 (b - 1) beyond, where the 1 is lost.
+    const double series = base < 2 ? std::log2(double(k)) : k * lb < 512 ? std::log2((std::pow(double(base), double(k)) - 1) / (base - 1)) : k * lb - std::log2(double(base - 1));
+    LineSize z;
+    z.bits = min_length * lb + series;
+    const double log10 = z.bits * std::log10(2.0);
+    const uint64_t m = tile_pow(base, min_length) * tile_series(base, k) % per;
+    // The count itself, written out while it is under 10^15.
+    uint64_t exact = 0;
+    const bool small = log10 < 15;
+    if (small)
+        for (uint64_t l = min_length, p = 1; l <= max_length; ++l) {
+            if (l == min_length)
+                for (uint32_t i = 0; i < min_length; ++i) p *= base;
+            else
+                p *= base;
+            exact += p;
+        }
+    z.padding = uint32_t((per - m) % per);
+    z.units = std::to_string(base) + "^" + std::to_string(min_length) + ".." + std::to_string(base) + "^" + std::to_string(max_length) +
+              (small ? " = " + std::to_string(exact) : " = ~10^" + fixed(log10, 1));
+    return z;
+}
+
 // ---------------------------------------------------------------- menu
 
 std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
 {
     const uint64_t ai_w = ai_weights_of(s_);
-    const LineSize page = line_size(alphabet_size(s_.alphabet), s_.length);
+    const LineSize page = page_min(s_) < s_.length ? range_size(alphabet_size(s_.alphabet), page_min(s_), s_.length)
+                                                   : line_size(alphabet_size(s_.alphabet), s_.length);
     const LineSize image = line_size(palette_size(s_.image_palette), uint64_t(s_.image_w) * s_.image_h);
     // Books: a cover, a title and book_pages pages, so |cover| * |page|^(pages + 1) books. The
     // padding follows from both factors mod 128.
@@ -1465,10 +1514,17 @@ void Menu::adjust(int dir, int step)
         s_.title_length = uint32_t(std::clamp<int64_t>(t, 0, int64_t(UINT32_MAX)));
         break;
     }
-    case kPagesRows: num(s_.length); break;
-    case kPagesRows + 1: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
-    case kPagesRows + 2: s_.canon = cycle(kCanons, s_.canon, dir); break;
-    case kPagesRows + 3: s_.model = !s_.model; break;
+    case kPagesRows: // (MIN LENGTH: never past MAX LENGTH)
+        num(s_.min_length);
+        s_.min_length = std::clamp(s_.min_length, 1u, s_.length);
+        break;
+    case kPagesRows + 1: // (MAX LENGTH: never below MIN LENGTH, which follows it down)
+        num(s_.length);
+        s_.min_length = std::min(s_.min_length, s_.length);
+        break;
+    case kPagesRows + 2: s_.alphabet = cycle(kAlphabets, s_.alphabet, dir); break;
+    case kPagesRows + 3: s_.canon = cycle(kCanons, s_.canon, dir); break;
+    case kPagesRows + 4: s_.model = !s_.model; break;
     case kImageRows: num(s_.image_w); break;
     case kImageRows + 1: num(s_.image_h); break;
     case kImageRows + 2: s_.image_palette = cycle(kPalettes, s_.image_palette, dir); break;
@@ -3613,7 +3669,8 @@ void Menu::render()
         switch (m)
         {
         case Media::Pages: return {
-            {text_line, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
+            {text_line, tr("setup.min_length"), trf("setup.length.value", {n(page_min(s_))})},
+            {-1, tr("setup.length"), trf("setup.length.value", {n(s_.length)})},
             {-1, tr("setup.alphabet"), trf("setup.alphabet.value", {s_.alphabet, n(alphabet_size(s_.alphabet))})},
             {-1, tr("setup.canon"), "canon-text-" + s_.canon},
             {-1, tr("setup.model"), tr(s_.model ? "setup.model.default" : "setup.model.none")},
@@ -4471,6 +4528,20 @@ void Menu::set_fractal_elsewhere(const std::string& way)
     save_filters();
 }
 
+namespace {
+// Every unit of a filter line: base^length, or on a range (min_length) every length's summed.
+sieve::BigUint units_of(const sieve::FilterLine& fl)
+{
+    if (!fl.min_length || fl.min_length >= fl.length) return sieve::BigUint::pow(fl.base, fl.length);
+    if (fl.base < 2) return sieve::BigUint(fl.length - fl.min_length + 1);
+    // (b^(max+1) - b^min) / (b - 1): two powers, where a sum of one per length is slow at long lengths.
+    sieve::BigUint n = sieve::BigUint::pow(fl.base, uint64_t(fl.length) + 1);
+    n -= sieve::BigUint::pow(fl.base, fl.min_length);
+    n.divmod_small(fl.base - 1);
+    return n;
+}
+} // namespace
+
 sieve::FilterLine Menu::filter_line_of(int i) const
 {
     sieve::FilterLine f;
@@ -4805,8 +4876,11 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                     return out;
                 }};
     }
-    const sieve::FilterLine fl = has_parts(i) ? part_line(i, std::max(0, part)) : filter_line_of(i);
-    const std::string key = (has_parts(i) ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" + std::to_string(fl.length) + "/" + settings_key(lf);
+    sieve::FilterLine fl = has_parts(i) ? part_line(i, std::max(0, part)) : filter_line_of(i);
+    // The pages line of a range of lengths (list O6): counted over every length (sieve/rangestack.hpp).
+    if (i == line_of(Media::Pages) && page_min(s_) < s_.length) fl.min_length = page_min(s_);
+    const std::string key = (has_parts(i) ? "part" + std::to_string(part) + "/" : std::string()) + fl.symbols_id + "/" +
+                            (fl.min_length ? std::to_string(fl.min_length) + "-" : std::string()) + std::to_string(fl.length) + "/" + settings_key(lf);
     if (line_sizes()[size_t(i)].bits > too_large_bits())
         return {key, [] { return StackInfo{"too large", tr("status.too_large"), -1, ""}; }};
     return {key, [fl, lf]() {
@@ -4815,10 +4889,10 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
                 const sieve::FilterStack st = sieve::cli::build_stack(fl, lf);
                 if (!st.empty()) out.table_bytes = st.table_bytes();
                 if (st.empty()) none_of(out);
-                else if (st.ranker()) survivors_of(out, st.ranker()->count(), sieve::BigUint::pow(fl.base, fl.length));
+                else if (st.ranker()) survivors_of(out, st.ranker()->count(), units_of(fl));
                 else if (const sieve::BigUint* n = st.counted()) // (counted, not ranked: the video line's motion, two voices' contrary motion)
                 {
-                    survivors_of(out, *n, sieve::BigUint::pow(fl.base, fl.length));
+                    survivors_of(out, *n, units_of(fl));
                     out.status = trf("status.survivors_no_compact", {out.status.substr(0, out.status.find(" (exact)")), st.compact_blocker()});
                 }
                 else out.status = trf("status.not_countable", {st.compact_blocker()});

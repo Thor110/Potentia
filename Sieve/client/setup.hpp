@@ -20,7 +20,9 @@ struct Settings
     std::string start_line = "text";
     std::string mode = "positional"; // positional | scrambled | guided
     std::string key = "sieve";
-    uint32_t length = 32;
+    // The pages line: pages of every length from min_length to length (list O6), the shorter first; min_length =
+    // length is one length. An older settings file with a length and no min_length keeps its one length.
+    uint32_t min_length = 1, length = 32;
     std::string alphabet = "lower27";
     std::string canon = "v2";
     bool model = true; // use the alphabet's default model (guided ordering)

@@ -362,6 +362,9 @@ AppSettings AppSettings::load(const fs::path& path)
         else if (section == "language" && key == "language" && !value.empty()) s.language = value;
     }
     if (s.edge_glow && s.real_graphics) s.real_graphics = false; // they exclude each other
+    // A settings file from before pages of a range of lengths (list O6) names a length and no min_length: its
+    // pages keep that one length.
+    if (seen.count("setup.length") && !seen.count("setup.min_length")) s.setup.min_length = s.setup.length;
     // Every entry save() writes, looked for in the file read. With no file at all nothing is
     // missing: the first start writes the file once it has chosen a resolution.
     if (in.is_open())

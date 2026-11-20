@@ -54,8 +54,9 @@ out=$($H --goto "36.25%" --pose 0,7,-90,0 --walk "-2.3,0;-0.8,0;0,8;1.5,0" --scr
 echo "$out"
 echo "$out" | sed -n 1p | q "BOOKS line.* 36.2500000000% along"
 echo "$out" | tail -2 | sed -n 1p | q "PAGES line.* 36.2500000000% along"
-# Guided order: M cycles to it and - zooms out.
-$H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 57"
+# Guided order: M cycles to it and - zooms out (pages of 1 to 32 letters, the default since list O6: the greeting's
+# 24 letters at their own length, 48 bits, guided-range-v1).
+$H --warp "$W" --press "M,M,-" --screenshot keys.png | tail -2 | sed -n 1p | q "PAGES line, guided zoom 47"
 # The address navigator: X opens the whole address, Home chooses its first digit, Up turns
 # it (carrying and wrapping), and ENTER goes there, far from where the walk started.
 # Its random buttons: R draws a place on this line, Shift+R a line too; ENTER goes there.
@@ -888,8 +889,10 @@ test "$(find degrees/fractals -name '*.png' | wc -l)" = 0
 # The same as sieve-manifest-v5 (--items): the pages, pictures, films and melodies carried as
 # their lines and places, made again on installing, every file the same; smaller than v4;
 # and sieve-install, the full installer, makes them again too. (The hallway's own sample is
-# the newest instructions since 27 October 2026, smaller than both.)
-build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1368 file(s) carried as items"
+# the newest instructions since 27 October 2026, smaller than both.) The pages the hallway saved are of their own
+# lengths since list O6 (1 to 32 letters): those shorter than 32 are no items of the line of 32 the command line
+# takes, and are carried as their bytes, exactly as they are.
+build/sieve locate degrees --installer degrees-v5.sieve --items --v5 --manifest degrees-v5.manifest | tr -d '\r' | q "^items     1350 file(s) carried as items"
 python reference/sieve_ref.py unpack degrees-v5.manifest --items-from degrees --to deg_oracle5 > /dev/null
 diff -r degrees deg_oracle5
 build/sieve locate degrees --installer degrees-v4.sieve --v4 > /dev/null
@@ -2099,7 +2102,7 @@ test "$(grep -c "jumped 1000 tiles" hk/pgup.txt || true)" = 0
 $H --no-menu --press "PageUp" --screenshot hk-default.png | tr -d '\r' > hk/default.txt
 q "| jumped 1000 tiles (128000 books)$" hk/default.txt
 test "$(grep -c "^keys footer:" hk/default.txt || true)" = 0
-$H --warp "$W" --press "M,M,Shift+-" --screenshot hk-far.png | q "PAGES line, guided zoom 50, "
+$H --warp "$W" --press "M,M,Shift+-" --screenshot hk-far.png | q "PAGES line, guided zoom 40, "
 # The other systems' keys on the registry too (IDEAS 19.199): the menus' (one shared section every list
 # reads), the setup menu's, the Media Player's and its rings', the main menu's, the Encryption Engine's and
 # the CHAIN tab's, in sections after the hallway's so no row before them moves (the menus' row up is the
@@ -2477,13 +2480,13 @@ printf '[text]\nmode = mark\nfilters = words-v1\n[text.words-v1]\ndictionary = s
 printf '[audio]\nmode = compact\nfilters = key-v1\n[audio.key-v1]\ntonic = A\nscale = minor-pentatonic\n[image]\nmode = compact\nfilters = symbol-entropy-v1\n[image.symbol-entropy-v1]\nmax_millibits = 500\n' > lines.ini
 out=$($H --filters words2.ini --warp "$W" --walk "0,0" --screenshot compact.png)
 echo "$out"
-echo "$out" | q "filters: 1 compact (543295...0598 (27 digits) survivors), tile 221221...4158 (25 digits)"
-$H --filters mixed.ini --walk "0,0" --screenshot mixed.png | q "filters: 2 hide (compact: words-v2 can rank, but not together with max-run-v1)"
+echo "$out" | q "filters: 1 compact (638918...1747 (27 digits) survivors), tile 745305...6912 (18 digits)"
+$H --filters mixed.ini --walk "0,0" --screenshot mixed.png | q "filters: 2 hide (compact: at a length of 1: words-v2 can rank, but not together with max-run-v1)"
 $H --filters mark.ini --length 3 --walk "0,0" --screenshot mark.png | q "filters: 1 mark"
 $H --menu --filters words2.ini --press "F" --screenshot overlay.png | q "saved overlay.png"
 # Compact in the scrambled and guided orderings, and on the image and audio lines.
 $H --filters words2.ini --mode scrambled --warp "$W" --walk "0,0" --screenshot cs.png | sed -n 1p | q "PAGES line, scrambled, filters: 1 compact"
-$H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | sed -n 1p | q "PAGES line, guided zoom 58, filters: 1 compact"
+$H --filters words2.ini --mode guided --warp "$W" --walk "0,0" --screenshot cg.png | sed -n 1p | q "PAGES line, guided zoom 48, filters: 1 compact"
 $H --filters lines.ini --line image --mode scrambled --walk "0,0" --screenshot ci.png | sed -n 1p | q "IMAGE line, scrambled, filters: 1 compact (322091425582872 survivors)"
 $H --filters lines.ini --line audio --walk "0,0" --screenshot ca.png | sed -n 1p | q "AUDIO line, positional, filters: 1 compact"
 # A notes2 audio line of two voices, its plugins judging each voice, in compact order.
@@ -2514,7 +2517,7 @@ build/sieve check --line binary --file k.mid --filters bk.ini | q "stack: fails 
 # In the hallway: the binary line compacted to PNGs, every file on the shelves a PNG; J
 # from a page to its file on the binary line and back; and from a picture, a PNG.
 $H --no-menu --line binary --filters bk.ini --walk "0,0" --screenshot binpng.png | sed -n 1p | q "^BINARY line, positional, filters: 1 compact .* PNG 32 bytes: 89 50 4e 47"
-$H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 32 bytes, on the binary line"
+$H --no-menu --warp "hello world" --press "J" --screenshot j1.png | q "^BINARY line.*its file: TXT, 11 bytes, on the binary line"
 $H --no-menu --warp "hello world" --press "J,J" --screenshot j2.png | q "^PAGES line.*a TXT file, opened on the PAGES line"
 $H --no-menu --line image --walk "0,0" --press "E,J,J" --screenshot j3.png | q "^IMAGE line.*a PNG file, opened on the IMAGE line"
 $H --no-menu --line audio --warp "C4q E4q G4h Re B4e C5w" --press "J,J" --screenshot j4.png | q "^AUDIO line.*a MID file, opened on the AUDIO line"

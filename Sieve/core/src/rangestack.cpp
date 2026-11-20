@@ -84,7 +84,7 @@ const Ranker* RangeStack::length_ranker(uint32_t length) const
     const FilterStack& st = stacks_[length - min_];
     if (st.empty()) return nullptr;
     const Ranker* r = st.ranker();
-    if (!r) throw std::invalid_argument("at " + std::to_string(length) + " symbols: " + st.compact_blocker());
+    if (!r) throw std::invalid_argument("at a length of " + std::to_string(length) + ": " + st.compact_blocker());
     return r;
 }
 
@@ -138,7 +138,7 @@ void RangeStack::settle() const
             else if (const Ranker* r = stacks_[i].ranker()) n = r->count();
             else
             {
-                blocker_ = "at " + std::to_string(min_ + i) + " symbols: " + stacks_[i].compact_blocker();
+                blocker_ = "at a length of " + std::to_string(min_ + i) + ": " + stacks_[i].compact_blocker();
                 return;
             }
             before_[i] = all_;

@@ -123,7 +123,7 @@ they need no path given; in the repository they find the Release build.
 ## Key terms
 
 - **Line:** a kind of content: `text` (pages), `image`, `audio`, `video`, and those built from them or beside them (`books`, `tracks`, `movies`, `models`, `worlds`, `ai`, `binary`). `sieve help lines` lists them.
-- **Unit:** one "book" on a line's shelf. Its shape is fixed: exactly `--length` characters, or a WxH picture, or N notes.
+- **Unit:** one "book" on a line's shelf. Its shape is fixed: exactly `--length` characters (with `--min-length M`, any length from M to `--length`), or a WxH picture, or N notes.
 - **Space:** every possible unit of one line with one set of options.
 - **Address:** a unit's position in the space, written in hex. Every unit has exactly one address, and every address in range holds exactly one unit.
 - **Positional ordering:** the address *is* the content, read as a number. Units with the same beginning sit side by side.
@@ -144,7 +144,7 @@ Choose a line with `--line`; the default is `text`. Each line has its own option
 
 | Line | A unit is... | Options (defaults) | Input for `warp` |
 | :--- | :--- | :--- | :--- |
-| `text` | `--length` characters | `--length L` (required), `--alphabet SPEC` (lower27; see `sieve alphabets`), `--canon v2\|v1` (v2) | text in quotes, or `--file` |
+| `text` | `--length` characters, or with `--min-length M` every length from M to L | `--length L` (required), `--min-length M` (L), `--alphabet SPEC` (lower27; see `sieve alphabets`), `--canon v2\|v1` (v2) | text in quotes, or `--file` |
 | `image` | a WxH picture | `--width` (10), `--height` (10), `--palette mono\|ega16\|rgb332\|rgb24` (mono) | `--file` PNG, JPEG, BMP, GIF, TGA |
 | `audio` | a melody of N notes (notes104, notes2, or open-ended notes3), or with `--note-set pcm` sound itself | `--length N` (16); pcm: `--rate` (8000) `--bits` (8) `--channels` (1), `--length` samples per channel | notes such as `"C4q E4q G4h Rq"`, or `--file`; pcm: `--file` with a WAV, or any sound ffmpeg reads |
 | `video` | F pictures of WxH | `--width` (5), `--height` (5), `--frames` (8), `--palette` (mono) | `--file`: an animated GIF, or any video ffmpeg reads |
@@ -462,6 +462,8 @@ A changed filter never replaces the old one. It is registered as the next versio
 | books | grey | black |
 
 The hallway and the setup menu call the text line **PAGES**, since each of its units is a page; `--line pages` works as another name for `--line text`.
+
+**Pages of a range of lengths** (list O). The setup menu's PAGES rows begin with **MIN LENGTH** and **MAX LENGTH**: the line holds every page of MIN to MAX characters, the shorter first, as the binary line holds every file up to its length. The default is 1 to 32, so a short text is a page of its own length, with no padding: the hallway starts at "welcome to the sieve", a page of 20 letters, and a file that is a page of any length in the range is found as one (the File Locator, F, not-an-item-v1). MIN LENGTH never passes MAX LENGTH, and lowering MAX LENGTH brings MIN LENGTH down with it; MIN LENGTH = MAX LENGTH is the line of one length, every address as it always was. Titles and the books' pages keep the longest length. The filters count and rank over every length (each length by its own stack), and the guided ordering takes the lengths in turn, each in its own guided order (SPECIFICATIONS §4.2.3). A settings file from before this, with a `length` and no `min_length`, keeps its one length; on the command line `--length` alone is one length too, `--min-length M` with it a range.
 
 **Doors.** The walls repeat shelf, door, shelf. A black door in the **left** wall leads to the **next** line, in the order image, pages, books, audio, tracks, video, movies, models, worlds, AI, with binary at both ends. A door in the **right** wall leads to the **previous** line. You come in through the opposite door, in the new line's colours.
 

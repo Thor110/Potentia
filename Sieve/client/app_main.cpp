@@ -519,7 +519,9 @@ Args line_args(const Args& a, LineKind k)
         {
         case LineKind::Text:
             la.opts["length"] = a.get("length", "32");
-            if (a.has("min-length")) la.opts["min-length"] = a.get("min-length"); // (pages of a range of lengths)
+            // Pages of every length from min-length to length (list O6): from 1 by default; a length given alone is one
+            // length, as on the command line of sieve.
+            la.opts["min-length"] = a.get("min-length", a.has("length") ? a.get("length", "32") : "1");
             la.opts["alphabet"] = a.get("alphabet", "lower27");
             la.opts["canon"] = a.get("canon", "v2");
             if (a.has("model")) la.opts["model"] = a.get("model");

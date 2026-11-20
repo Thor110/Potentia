@@ -62,6 +62,10 @@ struct LineSize
 };
 // For a line of `length` symbols of `base` each.
 LineSize line_size(uint32_t base, uint64_t length);
+// For a line of every unit of min_length to max_length symbols (the pages line's range).
+LineSize range_size(uint32_t base, uint32_t min_length, uint32_t max_length);
+// The pages line's shortest page, within 1 and its longest.
+inline uint32_t page_min(const Settings& s) { return s.min_length < 1 ? 1 : s.min_length > s.length ? s.length : s.min_length; }
 // The AI line's weights for a shape: 256 H (the embedding) + 16 L H^2 (each layer's matrices).
 inline uint64_t ai_weights_of(const Settings& s) { return 256ull * s.ai_width + 16ull * s.ai_layers * s.ai_width * s.ai_width; }
 // Every line's size under these settings, by door (dimensions.hpp): what the setup menu shows
@@ -147,7 +151,7 @@ constexpr int setup_rows_of(Media m)
 {
     switch (m)
     {
-    case Media::Pages: return 4;  // length, alphabet, warp rules, model
+    case Media::Pages: return 5;  // min length, max length, alphabet, warp rules, model
     case Media::Image: return 3;  // width, height, palette
     case Media::Audio: return 6;  // notes (samples), the set, and its four rows
     case Media::Video: return 4;  // width, height, frames, palette

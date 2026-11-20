@@ -423,8 +423,16 @@ run before a release package, and after each of the three reviews. Each batch is
     says so. The oracle's guided_range_code and 46 vectors (ranges 1-32, 1-3, 5-8, 19-21), agreed by the C++ `[01]` +
     `[11]`; every page of 1 to 3 letters tiles the line in order, plain and sieved two ways, each read back from its
     address `[01]`; CI step 02 pins the greeting's guided address. Lines of one length are guided-ac-v1 as before.
-  - [ ] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
+  - [x] O6. The setup menu (MIN LENGTH, MAX LENGTH; FIND MY LIMITS), the settings file (`length` read as both, for
     old settings), the CLI (`--min-length`, `--length` as the maximum), docs, CI pins moved to the new default.
+    *Built (19 November 2026):* the PAGES rows begin MIN LENGTH and MAX LENGTH (`Item:pages:1`, `:2`): MIN never past
+    MAX, lowering MAX brings MIN with it; the default is 1 to 32. `min_length` in `[setup]` (SETTINGS.md from the code);
+    a file with a `length` and no `min_length` keeps its one length, and so does `--length` given alone. The menu's
+    sizes, map and counts are over every length (range_size; a stack counted by the range's stacks). FIND MY LIMITS
+    grows the longest length, the shortest kept within it. Titles and the books' pages stay at the longest; the
+    packer's items are of one length as before (a saved page shorter than 32 is carried as its bytes, exactly).
+    CI step 10's pins moved with the default: the guided zooms (the greeting 48 bits), the compact count over the
+    range, J giving "hello world" as an 11-byte file, the v5 sample's items 1350. MANUAL.
   - [ ] O8. Seeds, studied (Edward, 19 November 2026: "a guided sweep of a small number of seeds at fractional
     intervals ... try those seeds against a variety of different file types ... sorting the seeds by efficiency ...
     analysing the way that the seeds move the file"): a `sieve` command first. n seeds evenly spaced through the
