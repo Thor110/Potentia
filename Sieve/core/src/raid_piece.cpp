@@ -8,6 +8,7 @@
 #include "sieve/hex.hpp"
 #include "sieve/raid.hpp"
 #include "sieve/sha256.hpp"
+#include "sieve/text.hpp"
 
 #include <algorithm>
 #include <array>
@@ -56,14 +57,19 @@ const Gf& gf()
 // The coefficient of data piece i in parity piece j.
 uint8_t cauchy(uint32_t k, uint32_t j, uint32_t i) { return gf().inv(uint8_t((k + j) ^ i)); }
 
-// to += c x from, byte by byte.
+// to += c x from, byte by byte: c's products with every byte worked out first, so each byte is one look-up
+// (review 4: about twice as fast as a log and an exp a byte, with the same bytes).
 void add_scaled(std::string& to, const std::string& from, uint8_t c)
 {
     if (c == 0) return;
     const Gf& g = gf();
     const int lc = g.log[c];
-    for (size_t b = 0; b < from.size(); ++b)
-        if (const uint8_t v = uint8_t(from[b])) to[b] = char(uint8_t(to[b]) ^ g.exp[size_t(g.log[v] + lc)]);
+    uint8_t times[256];
+    times[0] = 0;
+    for (int v = 1; v < 256; ++v) times[v] = g.exp[size_t(g.log[v] + lc)];
+    const unsigned char* f = reinterpret_cast<const unsigned char*>(from.data());
+    unsigned char* o = reinterpret_cast<unsigned char*>(to.data());
+    for (size_t b = 0; b < from.size(); ++b) o[b] ^= times[f[b]];
 }
 
 // A whole number as written: decimal, no sign, no leading zero, within 64 bits.
@@ -81,20 +87,12 @@ std::optional<uint64_t> whole_number(std::string_view s)
     return v;
 }
 
-std::vector<std::string> words(const std::string& line)
-{
-    std::vector<std::string> out;
-    size_t at = 0;
-    for (;;)
-    {
-        const size_t sp = line.find(' ', at);
-        out.push_back(line.substr(at, sp == std::string::npos ? std::string::npos : sp - at));
-        if (sp == std::string::npos) return out;
-        at = sp + 1;
-    }
-}
+// A line's words between single spaces, an empty one where two spaces meet (sieve/text.hpp's).
+std::vector<std::string> words(const std::string& line) { return split_fields(line, ' '); }
 
-uint64_t piece_size(uint64_t length, uint32_t k) { return (length + k - 1) / k; }
+// ceil(length / k), without the sum wrapping past 2^64 (a piece's LENGTH near it made the size 0, and such a
+// piece with no data passed, to throw elsewhere than invalid_argument; review 4).
+uint64_t piece_size(uint64_t length, uint32_t k) { return length / k + (length % k != 0 ? 1 : 0); }
 
 } // namespace
 
@@ -233,7 +231,9 @@ RaidTally read_raid_tally(const std::string& text)
     auto bad = [](const std::string& why) { return std::invalid_argument("not a " + std::string(kRaidTallyVersion) + ": " + why); };
     std::istringstream in(text);
     std::string line;
-    if (!std::getline(in, line) || line != kRaidTallyVersion) throw bad("its first line is not " + std::string(kRaidTallyVersion));
+    if (!std::getline(in, line)) throw bad("its first line is not " + std::string(kRaidTallyVersion));
+    if (line == std::string(kRaidTallyVersion) + "\r") throw bad("its lines end in CR LF (Windows line endings); a tally's lines end in LF alone");
+    if (line != kRaidTallyVersion) throw bad("its first line is not " + std::string(kRaidTallyVersion));
     RaidTally t;
     size_t n = 1;
     while (std::getline(in, line))
@@ -288,6 +288,9 @@ std::optional<std::vector<RaidMove>> raid_leave(const std::string& whole, uint32
                                                 const std::string& leaving, std::string* why)
 {
     if (homes.size() != n) throw std::invalid_argument("a home is given for each piece");
+    // (a keeper that is not in the tally: a mistyped address moved nothing and said so, as if it could go; review 4)
+    if (std::none_of(tally.keepers.begin(), tally.keepers.end(), [&](const RaidKeeper& k) { return k.address == leaving; }))
+        throw std::invalid_argument("no keeper " + leaving + " in the tally");
     RaidTally after;
     std::vector<std::string> before(n);
     for (size_t i = 0; i < n; ++i) before[i] = tally.keepers.at(homes[i]).address;

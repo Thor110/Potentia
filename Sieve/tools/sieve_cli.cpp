@@ -1114,7 +1114,7 @@ sieve::ImportLoader beside(const std::string& path)
 // "cannot read" (an invalid argument, as the file was the person's to give), and still do.
 std::string read_given_file(const std::string& path)
 {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(sieve::from_u8(path), std::ios::binary); // (UTF-8, as main gives the arguments, on any Windows)
     if (!in) throw std::invalid_argument("cannot read " + path);
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
@@ -1190,27 +1190,30 @@ int raid_pieces_cmd(const Args& a, const std::string& what)
         if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give the folder of pieces and --out FILE");
         std::vector<sieve::RaidPiece> pieces;
         std::vector<std::filesystem::path> files;
-        for (const auto& e : std::filesystem::directory_iterator(a.positional[1]))
+        // (paths as UTF-8 throughout, through sieve::from_u8 and sieve::u8: a folder named in another script than the
+        // system's code page was not found on Windows before 1903; review 4)
+        for (const auto& e : std::filesystem::directory_iterator(sieve::from_u8(a.positional[1])))
             if (e.is_regular_file()) files.push_back(e.path());
         std::sort(files.begin(), files.end());
         size_t left = 0;
         for (const auto& f : files)
         {
-            const std::string b = read_given_file(f.string());
+            const std::string b = read_given_file(sieve::u8(f));
+            const std::string named = sieve::u8(f.filename());
             try
             {
                 sieve::RaidPiece p = sieve::read_raid_piece(b);
-                if (p.name() != f.filename().string()) throw std::invalid_argument("its bytes are not its name");
+                if (sieve::Sha256::hex_hash(b) != named) throw std::invalid_argument("its bytes are not its name");
                 pieces.push_back(std::move(p));
             }
             catch (const std::invalid_argument& e)
             {
-                std::cout << "left out " << f.filename().string() << ": " << e.what() << "\n";
+                std::cout << "left out " << named << ": " << e.what() << "\n";
                 ++left;
             }
         }
         const std::string whole = sieve::raid_join(pieces);
-        std::ofstream out(a.get("out"), std::ios::binary);
+        std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
         out.write(whole.data(), std::streamsize(whole.size()));
         if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
         std::cout << "joined    " << pieces.size() << " pieces (" << pieces[0].k << " needed) into " << a.get("out") << " (" << whole.size() << " bytes, SHA-256 " << pieces[0].whole << ")\n";
@@ -1222,27 +1225,33 @@ int raid_pieces_cmd(const Args& a, const std::string& what)
     auto [k, m] = sieve::raid_piece_shape(whole.size());
     if (a.has("k")) k = a.get_u32("k", k);
     if (a.has("m")) m = a.get_u32("m", m);
-    const auto pieces = sieve::raid_pieces(whole, k, m);
     if (what == "pieces")
     {
+        const auto pieces = sieve::raid_pieces(whole, k, m);
         if (!a.has("out")) throw std::invalid_argument("give the folder to write the pieces in: --out DIR");
-        std::filesystem::create_directories(a.get("out"));
+        const std::filesystem::path dir = sieve::from_u8(a.get("out"));
+        std::filesystem::create_directories(dir);
         std::cout << "whole     " << whole.size() << " bytes, SHA-256 " << pieces[0].whole << ": " << k << " of data and " << m << " of parity, any " << k << " enough\n";
         for (const auto& p : pieces)
         {
-            const std::string b = p.bytes();
-            std::ofstream out(std::filesystem::path(a.get("out")) / p.name(), std::ios::binary);
+            const std::string b = p.bytes(), name = sieve::Sha256::hex_hash(b); // (its name: its bytes' SHA-256, made once)
+            std::ofstream out(dir / name, std::ios::binary);
             out.write(b.data(), std::streamsize(b.size()));
             if (!out) throw std::invalid_argument("cannot write in " + a.get("out"));
-            std::cout << "piece     " << p.index << " " << p.name() << " (" << b.size() << " bytes)\n";
+            std::cout << "piece     " << p.index << " " << name << " (" << b.size() << " bytes)\n";
         }
         return 0;
     }
+    // Placing and leaving need only the whole's SHA-256 and a piece's size: its head and ceil(length / K) bytes, so
+    // the pieces themselves (and the parity) are not made (review 4).
+    if (k == 0 || k > sieve::kRaidPiecesMost || m > sieve::kRaidPiecesMost - k) throw std::invalid_argument("K is 1 or more and K + M at most 256");
+    sieve::RaidPiece head;
+    head.whole = sieve::Sha256::hex_hash(whole), head.length = whole.size(), head.k = k, head.m = m, head.index = 0;
     if (!a.has("tally")) throw std::invalid_argument("give the tally of who keeps pieces: --tally FILE");
     sieve::RaidTally tally = sieve::read_raid_tally(read_given_file(a.get("tally")));
-    const uint64_t bytes = pieces[0].bytes().size();
+    const uint64_t bytes = head.bytes().size() + (whole.size() / k + (whole.size() % k != 0 ? 1 : 0));
     std::string why;
-    const auto homes = sieve::raid_place(pieces[0].whole, k + m, bytes, tally, &why);
+    const auto homes = sieve::raid_place(head.whole, k + m, bytes, tally, &why);
     if (!homes)
     {
         std::cout << "refused   " << why << "\n";
@@ -1255,7 +1264,7 @@ int raid_pieces_cmd(const Args& a, const std::string& what)
         return 0;
     }
     if (!a.has("address")) throw std::invalid_argument("give the machine that leaves: --address HOST:PORT");
-    const auto moves = sieve::raid_leave(pieces[0].whole, k + m, bytes, tally, *homes, a.get("address"), &why);
+    const auto moves = sieve::raid_leave(head.whole, k + m, bytes, tally, *homes, a.get("address"), &why);
     if (!moves)
     {
         std::cout << "refused   " << why << "\n";
@@ -1446,25 +1455,34 @@ int cmd_fractal(const Args& a)
         return 0;
     }
     if (a.positional.size() < 2) throw std::invalid_argument("give a charted fractal's id, or a .fractal file");
+    if (what == "check")
+    {
+        // Each file given, a line each, 1 if any is not a ruleset (one process for many: CI checks hundreds; until
+        // review 4 every file after the first was left unread and unsaid).
+        int rc = 0;
+        for (size_t i = 1; i < a.positional.size(); ++i)
+        {
+            const std::string t = read_given_file(a.positional[i]);
+            std::string no;
+            const auto g = sieve::read_fractal(t, &no);
+            if (!g)
+            {
+                std::cout << "not a " << sieve::kFractalVersion << ", v2, v3, v4, v5 or v6 ruleset: " << no << "\n";
+                rc = 1;
+                continue;
+            }
+            std::cout << "a " << fractal_version_name(*g) << " ruleset, " << t.size() << " characters; it grows to depth " << g->deepest() << "\n";
+        }
+        return rc;
+    }
     // A charted id, else a file.
     std::string text, name = a.positional[1];
     bool charted = false;
-    if (what != "check")
-        for (const auto& c : sieve::read_fractal_chart(folder))
+    for (const auto& c : sieve::read_fractal_chart(folder))
             if (c.id == name) text = c.text, name = c.id + ": " + c.title, charted = true;
     if (!charted) text = read_given_file(a.positional[1]);
     std::string why;
     const auto f = sieve::read_fractal(text, &why);
-    if (what == "check")
-    {
-        if (!f)
-        {
-            std::cout << "not a " << sieve::kFractalVersion << ", v2, v3, v4, v5 or v6 ruleset: " << why << "\n";
-            return 1;
-        }
-        std::cout << "a " << fractal_version_name(*f) << " ruleset, " << text.size() << " characters; it grows to depth " << f->deepest() << "\n";
-        return 0;
-    }
     if (!f) throw std::invalid_argument(name + " is not a " + sieve::kFractalVersion + ", v2, v3, v4, v5 or v6 ruleset: " + why);
     if (what == "index")
     {

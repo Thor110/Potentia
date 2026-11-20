@@ -435,7 +435,9 @@ def world2_beyond_walk(doc, why):
     """A world the round trip refuses for what a walk does not weigh: a number not a float's own, the
     ground's corners out of order or given twice, a model named twice or placed unnamed, a melody's
     digits past its set's base or not a whole number of units and voices, or a world with nothing of
-    v2's but where its places stand (which needs the seed's ground)."""
+    v2's but where its places stand (which needs the seed's ground). And a fav: or char: object whose name is not a
+    SHA-256 in small hex letters, as the specification has it (the reader holds to that since review 4; the grammar
+    takes any 64 characters there)."""
     lines = doc.split("\n")[2:-1]
     corners, models, placed_models, structural = [], [], [], False
     for line in lines:
@@ -443,6 +445,9 @@ def world2_beyond_walk(doc, why):
         if f[0] == "place" and len(f) == 9:
             if any(not is_f32_text(n) for n in f[2:8]):
                 return True
+            for pre in ("fav:", "char:"):
+                if f[1].startswith(pre) and f[1] != "char:you" and not all(c in "0123456789abcdef" for c in f[1][len(pre):]):
+                    return True
             if f[1].startswith("model:"):
                 placed_models.append(f[1][6:])
             if f[1] not in WORLD_KINDS or f[8] == "physics" or f[6] not in ("0", "-0") or f[7] not in ("0", "-0"):
@@ -792,6 +797,10 @@ def fractal_beyond_walk(doc, why):
     return "in the order of their symbols" in why
 
 
+# The formats whose reader keeps a line it does not know, written back as it is (sieve-personal-world-v2): a CR in
+# such a line is kept with it, not refused, so their documents with a CR are counted, not required to be refused.
+CR_KEPT = {"world-v2"}
+
 FORMATS = [
     # name, reader program ("sieve" or "hallway"), kind, plugin, documents, edges, beyond a walk
     ("actions", "sieve", "actions", "format-actions-v1.sfilter", actions_doc, actions_edges, None),
@@ -830,13 +839,18 @@ def escape(doc):
 
 
 def corpus(make, edges, seed):
+    """The documents for the grammar and the reader both (ascii96 and line feeds), and those with a carriage return,
+    for the reader alone (the grammar reads ascii96): until review 4 these were dropped unchecked."""
     r = random.Random(seed)
     docs = [make(r) for _ in range(150)]
     docs += edges(r)
     for d in list(docs[:60]):
         docs += mutations(d, r, 6)
-    # (the grammar reads ascii96: a document with any other character is the reader's alone)
-    return [d for d in docs if d and all(c == "\n" or " " <= c <= "~" for c in d)]
+    both = [d for d in docs if d and all(c == "\n" or " " <= c <= "~" for c in d)]
+    # (a document ending in a CR is left out: the readers' line loops take a line's last CR off, as for a file
+    # written on Windows, so its last line is not what was written)
+    cr = [d for d in docs if d and "\r" in d and not d.endswith("\r") and all(c in "\n\r" or " " <= c <= "~" for c in d)]
+    return both, cr
 
 
 def run(cmd):
@@ -857,7 +871,7 @@ def main():
         if prog == "hallway" and not hallway:
             print(f"{name}: skipped (no hallway given)")
             continue
-        docs = corpus(make, edges, 185 + seed)
+        docs, cr_docs = corpus(make, edges, 185 + seed)
         path = os.path.join(work, f"format-{name}.txt")
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             for d in docs:
@@ -883,7 +897,27 @@ def main():
             else:
                 bad += 1
                 print(f"{name}: reader {'reads' if r_ok else 'refuses'} and grammar {'passes' if j_ok else 'fails'}: {escape(d)!r} {why}")
-        print(f"{name}: {len(docs)} documents ({passes} read by the reader), {agree} verdicts the same" + (f", {beyond_n} beyond a walk (the reader alone refuses)" if beyond else ""))
+        # The documents with a CR, the reader's alone, raw in their lines (escape() leaves a CR as it is): a stray CR
+        # is refused, never read as if it were not there.
+        cr_read = 0
+        if cr_docs:
+            cr_path = os.path.join(work, f"format-{name}-cr.txt")
+            with open(cr_path, "w", encoding="utf-8", newline="\n") as f:
+                for d in cr_docs:
+                    f.write(escape(d) + "\n")
+            cr_cmd = [reader_prog, "catalogue", "--check-format", kind, "--in", cr_path] if prog == "sieve" else [reader_prog, "--check-format", kind, "--in", cr_path]
+            cr_lines = [l for l in run(cr_cmd) if l.startswith("read ")]
+            if len(cr_lines) != len(cr_docs):
+                print(f"{name}: {len(cr_docs)} documents with a CR, {len(cr_lines)} read")
+                bad += 1
+            for d, rl in zip(cr_docs, cr_lines):
+                if rl.split()[1] == "pass":
+                    cr_read += 1
+                    if name not in CR_KEPT:
+                        bad += 1
+                        print(f"{name}: the reader reads a document with a CR: {escape(d)!r}")
+        print(f"{name}: {len(docs)} documents ({passes} read by the reader), {agree} verdicts the same" + (f", {beyond_n} beyond a walk (the reader alone refuses)" if beyond else "") +
+              f"; {len(cr_docs)} with a CR, {len(cr_docs) - cr_read} refused" + (" (the rest kept in lines it keeps unread)" if name in CR_KEPT and cr_read else ""))
     return 1 if bad else 0
 
 

@@ -439,7 +439,7 @@ const std::vector<Page>& pages()
          "sieve fractal [list] [--folder DIR]\n"
          "       sieve fractal show ID|FILE [--depth N]\n"
          "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX] [--all-depths]\n"
-         "       sieve fractal check FILE\n"
+         "       sieve fractal check FILE...\n"
          "       sieve fractal count [--longest N] [--filters FILE]\n"
          "       sieve fractal at ADDRESS [--longest N]\n"
          "       sieve fractal index ID|FILE [--longest N]",
@@ -473,7 +473,7 @@ const std::vector<Page>& pages()
           {"show ID|FILE", "A ruleset at a depth: its family, its size, its word (or how many lines it draws, points it reaches, cells it has or steps it follows a point for), and an L-system's, an IFS's or an elementary automaton's box-counting dimension."},
           {"draw ID|FILE", "Draw it at a depth to --out FILE.png."},
           {"--all-depths", "With draw: every depth from 0 to --depth, a picture each, OUT-000.png and on (depth as time: its frames)."},
-          {"check FILE", "Whether a file is a sieve-fractal-v1 to v6 ruleset, and if not why; exit 1 if not."},
+          {"check FILE...", "Whether each file is a sieve-fractal-v1 to v6 ruleset, and if not why, a line each; exit 1 if any is not."},
           {"count", "How many rulesets the whole space holds, and how many of its shortest lengths."},
           {"at ADDRESS", "The ruleset at an address of the whole space (decimal, or hex after 0x)."},
           {"index ID|FILE", "A charted fractal's or a ruleset's address in the whole space."},
@@ -1216,7 +1216,7 @@ const std::vector<Page>& pages()
          "Fits the input to the line as warp does and, for each unit the ticked stack keeps, prints\n"
          "its bearing (where it stands on the line's loop: floor(address x 360 / units), the\n"
          "address in positional order) and, for each width from a whole degree down to D decimals,\n"
-         "the degree window that holds it (degree-window-v1): how many of the stack's survivors\n"
+         "the degree window that holds it (degree-window-v2): how many of the stack's survivors\n"
          "the window keeps, that share against the window's share of the loop (1.00: as many as an\n"
          "even spread would put there), the unit's route inside the window (log2 of what it keeps),\n"
          "the bits naming the window costs (log2 of 360 x 10^D), their total, and the route under\n"

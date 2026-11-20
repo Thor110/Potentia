@@ -735,8 +735,9 @@ protected:
         if (!any_)
         {
             // The ranker's trie: a node for each distinct prefix of the sorted list (one more than the symbols
-            // each unit does not share with the one before it), each about kTrieNodeBytes. Past the filter memory
-            // the list is counted and judged rather than ranked (a 96 by 96 picture line ran out of memory, review 4).
+            // each unit does not share with the one before it), each about kTrieNodeBytes. Past 2^24 nodes, the bound
+            // the filters' automata keep to, the list is counted and judged rather than ranked (a 96 by 96 picture
+            // line, some 575 million nodes, ran out of memory; review 4).
             double nodes = 1;
             const std::vector<uint32_t>* before = nullptr;
             for (const auto& u : units_)
@@ -748,7 +749,7 @@ protected:
                 before = &u;
             }
             const double bytes = nodes * kTrieNodeBytes;
-            if (base <= kRankedColoursMost && bytes <= filter_memory()) ranker_ = std::make_unique<DrawnRanker>(units_, base, length, keep_);
+            if (base <= kRankedColoursMost && nodes <= double(uint64_t(1) << 24)) ranker_ = std::make_unique<DrawnRanker>(units_, base, length, keep_);
             else
             {
                 if (base <= kRankedColoursMost) set_table_bytes(bytes);

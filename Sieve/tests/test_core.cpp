@@ -413,7 +413,7 @@ void test_space_range(const std::string& dir)
                     sp.text_of(sp.unit_at(f[5], AddressMode::Positional)) == unit && sp.text_of(sp.unit_at(f[6], AddressMode::Scrambled)) == unit;
             ++n;
         }
-        CHECK(agree && n >= 80);
+        CHECK(agree && n == 84); // (every line of the file, exactly)
     }
     // a copy is the same space (its shuffle with it)
     const Space copy = r;
@@ -7138,7 +7138,12 @@ void test_guided_range(const std::string& dir)
     const FilterSpec* pat = find_filter("not-a-pattern-v1");
     CHECK(run && pat);
     if (!run || !pat) return;
-    for (const auto& entries : std::vector<std::vector<FilterStack::Entry>>{{{run, {{"max_run", "1"}}}}, {{pat, {}}}})
+    // (review 4: and few-values-v1 at two values, which leaves no unit of one or two letters, so the lengths with no
+    // survivor have no share of the line and the rest is split between the length that has: a case no vector held)
+    const FilterSpec* few = find_filter("few-values-v1");
+    CHECK(few != nullptr);
+    if (!few) return;
+    for (const auto& entries : std::vector<std::vector<FilterStack::Entry>>{{{run, {{"max_run", "1"}}}}, {{pat, {}}}, {{few, {{"bits", "1"}}}}})
     {
         const FilterStack st(fl, entries, none);
         const Ranker* r = st.ranker();
@@ -7147,12 +7152,15 @@ void test_guided_range(const std::string& dir)
         const GuidedLine g(model, *r);
         CHECK(tiles(g, [&](const std::vector<uint32_t>& u) { return st.passes(u); }));
         const CompactLine cl(*r, "sieve", st.id(), model);
-        CHECK(cl.guided() && cl.guided()->is_range() && cl.guided()->code(digits27("ab")).hex == g.code(digits27("ab")).hex);
+        const auto probe = st.passes(digits27("ab")) ? digits27("ab") : digits27("xyz"); // (a survivor of each)
+        CHECK(st.passes(probe) && cl.guided() && cl.guided()->is_range() && cl.guided()->code(probe).hex == g.code(probe).hex);
     }
     // a degree window keeps a stretch of the whole range: no guided order within each length
     {
         const FilterStack st(fl, {{run, {{"max_run", "1"}}}, {find_filter("degree-window-v2"), {{"from", "10"}, {"width", "100"}}}}, none);
         CHECK(st.ranker() && throws([&] { (void)GuidedLine(model, *st.ranker()); }));
+        // (review 4: a compact line on it has its positional and scrambled orders, and no guided one; it threw)
+        if (st.ranker()) CHECK(CompactLine(*st.ranker(), "sieve", st.id(), model).guided() == nullptr);
     }
     // a line of one length is guided-ac-v1, as before
     CHECK(GuidedLine(model, 3).scale_bits() == 48);
@@ -8967,6 +8975,22 @@ void test_raid_pieces()
     CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper b:1 10 10 0\nkeeper a:1 10 10 0\n"); })); // out of order
     CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper a:1 10 10 11\n"); }));                  // more than it gives
     CHECK(throws([&] { (void)read_raid_tally("sieve-raid-tally-v1\nkeeper a:1 10 10 0"); }));                      // last line not ended
+    // (review 4: a tally with Windows line endings says so; a piece whose LENGTH is near 2^64, its size wrapping to 0,
+    // is refused as not a piece rather than read and then joined to a length_error)
+    try
+    {
+        (void)read_raid_tally("sieve-raid-tally-v1\r\nkeeper a:1 10 10 0\r\n");
+        CHECK(false);
+    }
+    catch (const std::invalid_argument& e)
+    {
+        CHECK(std::string(e.what()).find("CR LF") != std::string::npos);
+    }
+    {
+        RaidPiece huge;
+        huge.whole = std::string(64, 'a'), huge.length = UINT64_MAX, huge.k = 2, huge.m = 0, huge.index = 0;
+        CHECK(throws([&] { (void)read_raid_piece(huge.bytes()); }));
+    }
     const std::string sha = Sha256::hex_hash("a whole");
     RaidTally t1 = tally, t2 = tally;
     const auto h1 = raid_place(sha, 6, 100000, t1), h2 = raid_place(sha, 6, 100000, t2);
@@ -8984,6 +9008,7 @@ void test_raid_pieces()
     CHECK(!raid_place(sha, 9, 1000, t3)); // more pieces than machines
     // A machine leaving: its piece moves first, and every piece ends on a machine still there, one each.
     const std::string leaving = t1.keepers[(*h1)[2]].address;
+    CHECK(throws([&] { (void)raid_leave(sha, 6, 100000, t1, *h1, "nobody:1"); })); // (review 4: a keeper not in the tally)
     const auto moves = raid_leave(sha, 6, 100000, t1, *h1, leaving);
     CHECK(moves && !moves->empty() && (*moves)[0].from == leaving && (*moves)[0].index == 2);
     std::vector<std::string> now;

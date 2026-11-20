@@ -93,6 +93,10 @@ std::vector<PluginFile> load()
         out.push_back(pf);
         defs.push_back(nullptr);
     }
+    // (a file with the same bytes as one already read, as the build's filters folder and the repository's
+    // data/filters hold the same plugins: its definition reused, not parsed again; only the first file of a name is
+    // registered, so nothing that is used changes; review 4)
+    std::map<std::string, size_t> parsed; // SHA-256 -> its file's place in out (and defs)
     for (const fs::path& p : files)
     {
         PluginFile pf;
@@ -106,11 +110,19 @@ std::vector<PluginFile> load()
             s << in.rdbuf();
             const std::string text = s.str();
             pf.sha256 = Sha256::hex(Sha256::hash(text));
+            if (const auto same = parsed.find(pf.sha256); same != parsed.end())
+            {
+                pf.name = out[same->second].name;
+                defs.push_back(defs[same->second]);
+                out.push_back(pf);
+                continue;
+            }
             const std::u8string folder = p.parent_path().u8string();
             auto def = parse_plugin(text, pf.sha256, std::string(folder.begin(), folder.end()));
             pf.name = plugin_header(*def).name();
             for (const auto& b : filter_registry())
                 if (b.id == plugin_header(*def).id) throw std::runtime_error("its id, " + b.id + ", is a built-in filter's");
+            parsed.emplace(pf.sha256, out.size());
             defs.push_back(def);
         }
         catch (const std::exception& e)

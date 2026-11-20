@@ -43,6 +43,9 @@ q "^  trained: address 32,768; file 272,576 " metrics.txt
 q "^  random : address 32,768; file 272,576 " metrics.txt
 here=$($H --warp "$W" --walk "0,0" --screenshot a.png | book)
 next=$($H --warp "$W" --tile 1 --walk "0,0" --screenshot b.png | book)
+# (one tile along is another book: until review 4 this result was made and never looked at)
+test -n "$next"
+test "$next" != "$here"
 # Through a door and straight back: exactly where you were.
 out=$($H --warp "$W" --pose 0,7,-90,0 --walk "-2.3,0;2.5,0" --screenshot door.png)
 echo "$out"
@@ -882,7 +885,7 @@ diff -r degrees deg_inst
 # The fractal line's items are written as their rulesets, the steps that make them, every one a ruleset
 # the reader takes (the index as text); no picture of one is stored.
 test "$(find degrees/fractals -name '*.fractal' | wc -l)" = 359
-find degrees/fractals -name '*.fractal' -print0 | xargs -0 -n 1 build/sieve fractal check > fractal-checks.txt
+find degrees/fractals -name '*.fractal' -print0 | xargs -0 build/sieve fractal check > fractal-checks.txt # (many files a call, a line each)
 test "$(grep -c '^a sieve-fractal-v[123] ruleset' fractal-checks.txt)" = 359
 test -s "degrees/fractals/Index of the fractal dimension.txt"
 test "$(find degrees/fractals -name '*.png' | wc -l)" = 0
@@ -2047,9 +2050,13 @@ $H --no-menu --line fractals --walk "0,0" --warp dragon-curve --screenshot fract
 build/sieve fractal at 0 | tr -d '\r' > fractal-first.txt
 printf 'sieve-fractal-v1\nlsystem 1\naxiom +\nrule A +\n' | cmp - fractal-first.txt
 build/sieve fractal count | tr -d '\r' | q "^  44 characters: 20010504322671072$"
-for f in data/fractals/*.fractal; do
-    if [ "$(wc -c < "$f")" -gt 256 ]; then continue; fi
+# (one charted ruleset of each version through the command line, each found at its address and read back; the unit
+# test core-fractals does every charted one of 256 characters or fewer in one process, which until review 4 this
+# loop did again, two processes a file, for about eight minutes)
+for n in dragon-curve orb-web cesaro-fractint barnsley-fern rule-90 henon-attractor; do
+    f=data/fractals/$n.fractal
     a=$(build/sieve fractal index "$f" | tr -d '\r' | sed -n 's/^address   \([0-9]*\) .*/\1/p')
+    test -n "$a"
     build/sieve fractal at "$a" | tr -d '\r' | cmp - "$f"
 done
 # A bookcase in the catalogue (the corridor's own, kept in shelf-items.sieve), and things rest on what

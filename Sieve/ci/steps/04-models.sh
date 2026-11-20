@@ -216,8 +216,9 @@ $exe dimensions research | tr -d '\r' | q "^linked by .*dna"
 # The fractal dimension (list S, IDEAS 19.191, 19.235): its shelves charted by hand, a ruleset grown
 # (the Fibonacci word's lengths are Fibonacci numbers), drawn, and one not as written refused.
 $exe dimensions fractals | tr -d '\r' | q "^linked by pages$"
-$exe fractal | tr -d '\r' | q "^shelves   197 fractals, charted by hand "
-$exe fractal | tr -d '\r' | q "^  dragon-curve  L-system, 63 characters, grows to depth 19, dimension 1.73: Dragon curve (after Wikipedia, Dragon curve, Heighway dragon as an L-system)$"
+$exe fractal | tr -d '\r' > fractal-list.txt # (the chart listed once, for every check of it below: each listing measures every fractal)
+q "^shelves   197 fractals, charted by hand " fractal-list.txt
+q "^  dragon-curve  L-system, 63 characters, grows to depth 19, dimension 1.73: Dragon curve (after Wikipedia, Dragon curve, Heighway dragon as an L-system)$" fractal-list.txt
 # Widened (sieve-fractal-v2, list X2): an orb web, its step 0.985 as long at each chord, read as v2, its
 # box-counting dimension measured; and a v2 ruleset that says nothing v1 cannot is refused (each
 # ruleset written one way).
@@ -232,7 +233,7 @@ tr -d '\r' < fractal-check2.txt | q "a v2 ruleset has an angle with a tenth or a
 $exe fractal check data/fractals/barnsley-fern.fractal | tr -d '\r' | q "^a sieve-fractal-v4 ruleset, 133 characters; it grows to depth 10$"
 $exe fractal show barnsley-fern | tr -d '\r' | q "^dimension 1.279 (box-counting, measured at depth 9 on 9 grids)$"
 $exe fractal show mandelbrot-set | tr -d '\r' | q "^family    escape-time, viewed at -0.5 0 4$"
-$exe fractal | tr -d '\r' | q "^  sierpinski-triangle-ifs  IFS, 93 characters, grows to depth 12, dimension 1.60: "
+q "^  sierpinski-triangle-ifs  IFS, 93 characters, grows to depth 12, dimension 1.60: " fractal-list.txt
 $exe fractal draw mandelbrot-set --size 64 --out mandelbrot.png | tr -d '\r' | q "^drew      mandelbrot-set: Mandelbrot set at depth 6 (256 steps a point at most) to mandelbrot.png (64 x 64)$"
 printf 'sieve-fractal-v4\nescape + z\n' > awaits.fractal
 if $exe fractal check awaits.fractal > fractal-check4.txt; then exit 1; fi
@@ -603,8 +604,10 @@ grep -A1 "^\[image.fractal-drawn-v2\]" elsewhere.ini | q "keep = exclude"
 $H --menu --filters elsewhere.ini --press "Item:fractals:3,Right" --screenshot elsewhere3.png > /dev/null
 # OPTIMISE FILTERS (list W1, below FIND MY LIMITS): every filter of every line
 # ticked as X ticks them, the judge-only ones and those set from the FRACTALS rows left alone, and each
-# stack kept within the filter memory, so that every line counts (the books' pages too).
-rm -f optimise.ini
+# stack kept within the filter memory, so that every line counts (the books' pages too). One run, from a file
+# that sets the image line's mode by hand (the run takes about three minutes; until review 4 it ran twice, from
+# an empty file and from this one, and the two files differed only in that line).
+printf '[image]\nmode = mark\n' > optimise.ini
 $H --menu --filters optimise.ini --press "Item:optimise,Return" --screenshot optimise.png > /dev/null
 test "$(grep -c 'image-mirror\|fractal-drawn\|golden-word' optimise.ini || true)" = 0
 # (border-v1 and gradient-v1 pick a kind of picture, framed or shaded, so they are left for ticking by hand; specks-v1,
@@ -619,10 +622,8 @@ grep -A1 "^\[text\]" optimise.ini | q "mode = compact"
 # (near-model-v1 and language-v1 pick a run's neighbourhood and language, not noise: ticked by hand only)
 test "$(grep -c 'near-model\|language-v1' optimise.ini || true)" = 0
 grep -A2 "^\[ai\]" optimise.ini | q "weight-signs-v1"
-printf '[image]\nmode = mark\n' > optimise-mark.ini
-$H --menu --filters optimise-mark.ini --press "Item:optimise,Return" --screenshot optimise-mark.png > /dev/null
-grep -A1 "^\[image\]" optimise-mark.ini | q "mode = mark"
-grep -A1 "^\[audio\]" optimise-mark.ini | q "mode = compact"
+grep -A1 "^\[image\]" optimise.ini | q "mode = mark"
+grep -A1 "^\[audio\]" optimise.ini | q "mode = compact"
 $H --metrics optimised.txt --filters optimise.ini > /dev/null
 # (list N: rows-alike-v1 on the pictures, books' covers too, and video-smooth-v2, which ranks, on the video line: it
 # was 10^-1.12 before, its filters about time judged only; the movies 10^-43.05)

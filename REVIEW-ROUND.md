@@ -87,6 +87,13 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 49. **MIDI files in the viewer** (V1): the same with a .mid: its notes, each voice on its own lines, at the tempo the file sets first; Space plays them (square tones, as the audio line plays notes). Try one with chords or many tracks: a voice plays one note at a time and there are at most 15 voices, so a chord's other notes and the tracks past the fifteenth are left out, and the foot of the screen says how many.
 - [ ] 50. **Model files in the viewer** (V1): the same with an .obj, a .glb and a glTF whose buffer is inside it: each opens on its 3D view, turned with the arrows or WASD; Tab gives the .obj's or glTF's text. A glTF whose buffer is a file beside it says it cannot be read from its bytes and opens as its text.
 - [ ] 51. **The Documentation** (V2): Main menu > **Documentation**, before Potentia Settings. Read a few pages from CONTENTS (Up/Down, Enter); follow a link (Right to the page, Tab to a link, Enter) and come back (Backspace); look a word up in INDEX (Tab on the list); type a word to search. The 25 pages were written from the manual for the person using Sieve: say where a page is wrong, unclear or missing, and which pages you would want next. Change a key the pages name (Settings > Controls > Keys) and see the page show it as set.
+- [ ] 52. **Pages of a range of lengths** (list O): Start Sieve's setup, PAGES: the first rows are **MIN LENGTH** and **MAX LENGTH** (1 and 32). MIN never goes past MAX, and lowering MAX brings MIN down with it. The sizes and the map are over every length. In the hallway you begin at "welcome to the sieve", a page of 20 letters, with no padding after it.
+- [ ] 53. **FIND MY LIMITS** (list O): it grows the longest length and keeps the shortest within it; it should answer in seconds (it took about 50 minutes a press before list O's last fix).
+- [ ] 54. **J with a short text and guided zoom on the range** (list O): J on a page shorter than 32 gives the file of just its letters ("hello world" 11 bytes); guided ordering on the pages line zooms as before, the greeting 48 bits.
+- [ ] 55. **Your old settings file** (list O): one with `length = 32` and no `min_length` opens with its one length, 32 to 32, its addresses as before.
+- [ ] 56. **A range too large for the filter memory** (review 4): MIN LENGTH 1, MAX LENGTH a few hundred, max-run-v1 ticked, compact: the line should say the tables of its lengths need more than the filter memory, at once, rather than the program running out of memory. A degree window ticked on a range keeps compact (positional and scrambled), with no guided order.
+- [ ] 57. **Review 4 in your dimension and on the keys screen:** type a very large number (9999999999) on the Place panel's X row and Enter: the object goes to the edge of the ground and the frame goes on (it froze before). On Settings > Controls > Keys, bind something to **;** and to the keypad's comma, restart: both are kept. Hold Enter while choosing a row's key: it waits for the next key rather than taking Return.
+- [ ] 58. **Review 4, characters and the viewer:** Skin Blend at 200% with Skin Detail at 3 in the Creator: a closed skin with no flat cuts, and the grid kept within its limit, the blend now counted in it (the readout says when it was made coarser). Open a long MIDI file in the viewer: it opens at once, and the first Space waits while its sound is made.
 
 ---
 
@@ -558,6 +565,29 @@ run before a release package, and after each of the three reviews. Each batch is
   `place model:` lines kept rather than lost on saving; a replay of long typed text read back; Keep others'
   saves saying when Online is off; "Settings > Infinite RAID" in the notes; `sieve raid` naming check; the
   catalogue entries' section numbers; the draft switches' help.
+- [x] 6. Multi-agent code review 4: everything since review 3 (lists F to O: about 32,000 lines in 155 files), for
+  bugs, performance, optimisation, duplicate code and small enhancements. *Run 20 November 2026: seven areas (the
+  ranges, the fractals, the filters, the personal dimension and characters, the hallway's menus, the tools and RAID,
+  the tests and CI), each a finder and then skeptics in sixes; 60 findings, 51 kept and 9 set aside (each would
+  change an output or cost more code than it saves). Every fix keeps addresses, .sieve bytes and verdicts as they
+  were, compared against a 0.13.80 build.*
+- [x] 6a. Batches A and B, ranges and fractals (steps 01, 02, 04, 10): a range's tables added up against the filter
+  memory; the units shorter than a length in closed form, the length at a place by halving; compact on a range with
+  a degree window; the books' size in the menu; the fractal list automaton's trie walked rather than recursed,
+  refused early where it cannot fit, its own ranker bounded (a 96 x 96 drawn line now counts and judges); lasts grown
+  once; smaller speed-ups.
+- [x] 6b. Batch C, filters (steps 01, 03, 04, 10): History's tails kept once; specks and rows-alike states packed;
+  join-cut and weight-signs within the filter memory; sound-envelope and -syllables labelled as make builds them;
+  few-values' label by counting; one header for the automata's bound and cache.
+- [x] 6c. Batch D, the personal dimension, characters and the hallway (steps 01, 10): the line of sight bounded and the
+  Place panel kept on the ground; fav: and char: kinds as SHA-256s; the skin's grid padding and cell limit (CI's grid
+  81x57x84); the subdivision kept and normals read; the neighbour lists one copy; keys ; and Keypad , kept, a held
+  Enter not captured; the documentation list's rows; MIDI sound made on the first Space.
+- [x] 6d. Batch E, tools and CI (steps 01, 04, 10, 11): RAID piece sizes without wrapping, an unknown keeper and a CR LF
+  tally refused by name, place and leave without making the pieces, add_scaled by table, paths as UTF-8; plugins
+  parsed once a SHA-256; `fractal check` of many files; grammars.py's refinement over symbol classes; check_formats
+  checks the readers on documents with a CR; CI trims (one OPTIMISE run, the chart listed once, one charted ruleset a
+  version through the CLI, the degree sample checked in one call) and two checks that could not fail made real.
 
 The three reviews run one after another, each looking at a different side of the project, and only once
 step 2 is done. Each review's findings are checked before anything is changed, its fixes go through

@@ -279,11 +279,18 @@ def minimise(trans, accept):
     the start, the states that reach no accepting state left out."""
     n = len(trans)
     part = [1 if s in accept else 0 for s in range(n)]
+    # Characters whose column is the same in every state (the same move, or none) always add the same to a
+    # state's key, so one of each such class is enough: the same blocks, numbered the same way, at a fraction of
+    # the work (review 4: grammars.py --check took 146 s, most of it here).
+    classes = {}
+    for c in ALPHABET:
+        classes.setdefault(tuple(trans[s].get(c, -1) for s in range(n)), c)
+    reps = list(classes.values())
     while True:
         sig = {}
         new = []
         for s in range(n):
-            key = (part[s], tuple(part[trans[s][c]] if c in trans[s] else -1 for c in ALPHABET))
+            key = (part[s], tuple(part[trans[s][c]] if c in trans[s] else -1 for c in reps))
             new.append(sig.setdefault(key, len(sig)))
         if len(sig) == len(set(part)):
             part = new

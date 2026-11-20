@@ -1322,7 +1322,11 @@ else
     $S install ../tests/case_pair.sieve --to cp_s > /dev/null
     $SI ../tests/case_pair.sieve --to cp_si --yes > /dev/null
     $SI case_pair.zip --to cp_z --yes > /dev/null
-    for d in cp_s cp_si cp_z; do [ "$(cat $d/A.txt)" = upper ] && [ "$(cat $d/a.txt)" = lower ]; done
+    # (two tests a line, not an && list: set -e does not stop on a failure before an &&, so A.txt was never checked)
+    for d in cp_s cp_si cp_z; do
+        test "$(cat $d/A.txt)" = upper
+        test "$(cat $d/a.txt)" = lower
+    done
     $S locate cp_s --installer cp_again.sieve 2>&1 | tr -d '\r' | grep -q "^warning: A.txt and a.txt are one name where case is ignored"
     # (6 November 2026, IDEAS §19.120: letters beyond A to Z folded too, as Windows folds them: É and
     # é one name, Σ and σ one; ß and SS two, as Windows has them.)
