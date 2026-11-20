@@ -10495,3 +10495,39 @@ is:Xthat or this'".
   or the mixer's run and space contexts), and a text's place on the pages line is not how Sieve compresses a text:
   the .sieve packs it. The one place the runs cost much is a short page's padding, which list O's pages of a range
   of lengths take away. Taken up again only if a use appears where a page's own address carries the text.
+
+**19.255 Seeds, studied (Edward, 19 November 2026; REVIEW-ROUND O8).** His words: "a guided sweep of a small number of
+seeds at fractional intervals ... try those seeds against a variety of different file types ... sorting the seeds by
+efficiency ... analysing the way that the seeds move the file". `sieve seeds` does it: each file is a unit of the binary
+line of its own length, a seed is the line's key, so seed s puts the file at shuffle-sha256-v1 of its place keyed with
+s; n seeds evenly through the 64-bit seeds (seed i = floor(i 2^64 / n)). A seed saves the place's bit length less the
+address's (an address written without its leading zeros); naming one of n seeds costs log2 n bits.
+- *Measured (20 November 2026, 256 seeds, 16 files read to 16 KB: three texts, three PNGs, three JPEGs, a MIDI file,
+  three .sieve files, three Linux programs; 17 s):*
+
+  | | shuffle (SHA-256 rounds) | affine, (P + b) mod M |
+  |---|---|---|
+  | best of 256 seeds, net of its 8 bits, summed over 16 files | +14 bits (one file +18, the rest -4) | -2 bits |
+  | a seed's neighbour (s + 1) moves a file | 0.2486 of the loop (independent: 0.25) | one place, 2^-82,496 of the loop or less |
+  | landings even? | mean 0.4996, chi-square 10.52 on 15 (even: about 15) | evenly spaced by construction |
+  | leading zero bits of an address | 1.991 on average (an even landing on these lines: 1.992) | |
+
+  The +18 is one landing: filters.jpg under seed c900000000000000 lands with 26 leading zero bits, and reads back
+  exactly. Over 4,096 seeds the same file has 8 landings with 10 or more leading zeros, where chance gives 8.0, and the
+  26 bits are a chance of about 1 in 131,000 for one file's 256 seeds (1 in 8,000 over the 16). Without it the 16
+  files net -4 bits.
+- *A seed good for one file is no better for another of its kind:* the correlation of two files' landings over the
+  seeds is +0.040 (JPEG), +0.002 (PNG), -0.019 (programs), +0.084 (.sieve), +0.000 (text), each within the 0.12 that
+  chance allows at 256 seeds. With 64 seeds JPEG and PNG showed +0.21 and +0.19; at 1,024 they were +0.011 and
+  -0.001. The seed that saves most over every file (c900000000000000, 33 bits) does it almost all on one JPEG.
+- *Why no seed pays:* the shuffle sends a file to a place that is, for every purpose here, uniform on the line, so the
+  best of n lands about log2 n bits nearer the start, and naming which of n it was costs log2 n. A seed also loses
+  what the place already had: a text's place leads by about 2 bits (its first byte is below 0x80), and an address
+  leads by only what chance gives it, so seeds start behind on text.
+- *The affine family:* its landings are evenly spaced, so the best of n lands within M / n of 0, again log2 n bits
+  for log2 n paid; neighbouring seeds move a file by one place, as smooth as the shuffle is not. And the seed solved
+  for a landing at 0, b = M - P, is as long as the place (place 131,073 bits, b 131,062 bits for a JPEG; 87 and 88
+  for "hello world"): the seed carries the file, as Edward put it.
+- *So:* the File Locator's Seed Search (O10) has nothing to buy on its own: a seed's saving is chance, paid for in
+  full by naming it, and no seed carries from one file to another. O10 stays unbuilt unless a family of orders whose
+  landings are not even (O9: units sorted by a key that means something) gives a seed something to choose between.

@@ -433,7 +433,7 @@ run before a release package, and after each of the three reviews. Each batch is
     packer's items are of one length as before (a saved page shorter than 32 is carried as its bytes, exactly).
     CI step 10's pins moved with the default: the guided zooms (the greeting 48 bits), the compact count over the
     range, J giving "hello world" as an 11-byte file, the v5 sample's items 1350. MANUAL.
-  - [ ] O8. Seeds, studied (Edward, 19 November 2026: "a guided sweep of a small number of seeds at fractional
+  - [x] O8. Seeds, studied (Edward, 19 November 2026: "a guided sweep of a small number of seeds at fractional
     intervals ... try those seeds against a variety of different file types ... sorting the seeds by efficiency ...
     analysing the way that the seeds move the file"): a `sieve` command first. n seeds evenly spaced through the
     seeds (n adjustable), a spread of file types (text, PNG, JPEG, MIDI, programs, .sieve files); for each seed and
@@ -444,6 +444,13 @@ run before a release package, and after each of the three reviews. Each batch is
     log2 n, what naming it costs) and an affine one, x -> (a x + b) mod N, whose path from A to B can be solved for
     (b = t - a x) and whose seed then holds the file's bits. Results in IDEAS; in the File Locator (a few seeds, a
     setting, 0 for none) only if a seed ever pays.
+    *Built (20 November 2026):* `sieve seeds [--seeds N] [--max-bytes B] FILE...` (IDEAS 19.255). 256 seeds on 16
+    files of six kinds (16 KB each): the best seed nets +14 bits over all 16, all of it one chance landing (filters.jpg,
+    26 leading zeros, reading back exactly; its 4,096-seed count of 10-zero landings is chance's 8); without it, -4.
+    No seed carries from one file to another of its kind (correlations within chance, 1,024 seeds: +0.011, -0.001);
+    neighbouring seeds land a file 0.2486 of the loop apart (independent: 0.25); landings even (chi-square 10.52 on
+    15). The affine family's best is log2 n for log2 n paid, and its solved b is as long as the place. So no seed
+    pays, and O10 waits on O9. CI step 02 pins a small run.
   - [ ] O9. Orders by sort key (Edward: "use a number of different sorting algorithms to sort seeds ... to guide the
     scrambling"): a few named orders of a line, each its units sorted by a key that means something (a model's
     probability, as guided order is; letters' entropy; a filter's count of passes), tried for a file and the best

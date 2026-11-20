@@ -4298,7 +4298,7 @@ int cmd_alike(const Args& a)
 
 bool is_command(const std::string& name)
 {
-    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "fractal" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "compress" ||
+    return name == "info" || name == "warp" || name == "read" || name == "browse" || name == "sift" || name == "sieve" || name == "dicts" || name == "alphabets" || name == "mesh" || name == "import" || name == "dimensions" || name == "raid" || name == "fractal" || name == "catalogue" || name == "world" || name == "tensors" || name == "rope" || name == "alike" || name == "mix" || name == "chat" || name == "ai" || name == "ai-train" || name == "diffuse" || name == "cipher" || name == "seeds" || name == "compress" ||
            name == "version" || name == "models" || name == "train" || name == "measure" ||
            name == "filters" || name == "check" || name == "tailor" || name == "window" || name == "bind" || name == "unbind" || name == "site" || name == "speak";
 }
@@ -4455,6 +4455,7 @@ int main(int argc, char** argv)
         if (a.command == "ai-train") return cmd_ai_train(a);
         if (a.command == "diffuse") return cmd_diffuse(a);
         if (a.command == "cipher") return cmd_cipher(a);
+        if (a.command == "seeds") return cmd_seeds(a);
         if (a.command == "compress") return cmd_compress(a);
         if (a.command == "version") return cmd_version();
         if (a.command == "models") return cmd_models();

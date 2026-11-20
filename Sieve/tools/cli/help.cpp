@@ -814,6 +814,21 @@ const std::vector<Page>& pages()
          {{"sieve ai-train --record texts --out ub --sieve ub.sieve", "record a run from a folder, train it, pack it"},
           {"sieve ai-train ub.sieve", "train it again from the .sieve, and check"},
           {"sieve ai-train ub --model-out ub-model && sieve chat --model ub-model --raw", "and talk to what it became"}}},
+        {"seeds", "What a seed on the binary line would buy: n seeds tried on files, their landings and the bits they save.",
+         "sieve seeds [--seeds N] [--max-bytes B] FILE...",
+         "A study (REVIEW-ROUND O8; IDEAS 19.255): each file is a unit of the binary line of its own length, and a seed\n"
+         "is the line's key, so seed s puts the file at shuffle-sha256-v1 of its place, keyed with s. N seeds are\n"
+         "taken evenly through the 64-bit seeds (seed i = floor(i 2^64 / N)). For each seed and file it prints\n"
+         "the bits saved (the place's bit length less the address's), the best seed's saving net of naming it\n"
+         "(log2 N bits), the seeds sorted by the bits they save, overall and by kind (from the file's extension),\n"
+         "and how seeds move files: the correlation of two files' landings over the seeds, the distance a seed's\n"
+         "neighbour (s + 1) moves a file, and whether the landings are even (a chi-square over 16 bins). The\n"
+         "same for an affine family, (P + b) mod M with b evenly spaced, and its b solved for a landing at 0.\n"
+         "Nothing is written; no address anyone keeps changes.",
+         {{"--seeds N", "How many seeds (2 or more). Default 16."},
+          {"--max-bytes B", "Read each file to its first B bytes at most (a seed costs one shuffle of the place: about 0.2 ms a KB). Default 16384."}},
+         {{"sieve seeds --seeds 64 notes.txt picture.png photo.jpg tune.mid ls", "64 seeds over five kinds of file"}}},
+
         {"cipher", "Encrypt or decrypt bytes with a recipe of layers, try to break a weak cipher, or count the recipes (the Encryption Engine, stage 1).",
          "sieve cipher --encrypt|--decrypt (--recipe \"LAYER; LAYER\" | --recipe-file PATH) (--in FILE | --text TEXT | --in-hex HEX) [--out FILE]\n"
          "  sieve cipher --break (--in FILE | --text TEXT | --in-hex HEX) [--top N] [--max-key K]\n"
@@ -1772,7 +1787,7 @@ void print_usage()
         {"Files: places, installers, maps and the web", {"locate", "install", "map", "vault", "site", "web-host"}},
         {"Books", {"bind", "unbind"}},
         {"Other lines", {"mesh", "import", "dimensions", "fractal", "catalogue", "raid", "world", "ai", "ai-train", "diffuse"}},
-        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "compress", "speak", "version"}},
+        {"Tools", {"rope", "alike", "mix", "tensors", "chat", "cipher", "seeds", "compress", "speak", "version"}},
     };
     std::vector<std::string> shown;
     auto show = [&](const Page& p) {

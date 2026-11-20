@@ -1,25 +1,24 @@
 # Changes
 
-One commit on top of 54d09c8 ("sieve O5").
+One commit on top of 8cb572a ("sieve O6").
 
-## Pages of a range of lengths: O6, the setup menu and the new default
-- **MIN LENGTH and MAX LENGTH:** the PAGES rows in the setup menu begin with them. MIN LENGTH never passes MAX
-  LENGTH, and lowering MAX LENGTH brings MIN LENGTH down with it. MIN = MAX is the line of one length, every address
-  as it was.
-- **The default is 1 to 32:** a fresh start spawns at "welcome to the sieve" as a page of its own 20 letters, and a
-  short text is a page of its own length, with no padding.
-- **Your settings file:** a file from before this has a `length` and no `min_length`, and keeps its one length. Yours
-  will still be 32 to 32: set MIN LENGTH to 1 in the setup menu (or delete the `length` line from `[setup]`) to
-  get the new default.
-- **Command line:** `--length` alone is one length, as before; `--min-length M` with it makes a range.
-- **The menu's figures** (sizes, the map, the survivors counted) are over every length of the range.
-- **FIND MY LIMITS stays quick:** the range's size is worked out in closed form rather than one power per length. Done
-  per length, FIND MY LIMITS (which tries pages of tens of thousands of characters) took about 50 minutes here; now 6 seconds.
-- **Unchanged:** titles and the books' pages stay at the longest length, and the packer's items are of one length as
-  before. A page the hallway saves shorter than 32 is carried in a `.sieve` as its own bytes, exactly.
-- **CI:** step 10's pins moved with the default. The guided zooms are shorter (the greeting is 48 bits now), the
-  compact count is over the range, J opens "hello world" as an 11-byte file, and the v5 sample carries 1,350 items.
-- **Docs:** MANUAL, SETTINGS (from the code), REVIEW-ROUND O6.
+## Seeds, studied: O8
+- **`sieve seeds`:** a new command for the study you described. Each file is a unit of the binary line of its own
+  length, and a seed is the line's key. n seeds are spread evenly through the 64-bit seeds (`--seeds N`, 16 by
+  default), and each file is read to its first 16 KB by default (`--max-bytes B`). For each file it prints the best
+  seed's saving net of naming it, the seeds sorted by the bits they save (overall and by kind), and how seeds move
+  files: whether a seed good for one file is good for another of its kind, how far a seed's neighbour moves a file,
+  and whether the landings are even. It also runs the affine family, (P + b) mod M, and its b solved for a landing at 0.
+  Nothing is written; no address changes.
+- **The result (IDEAS 19.255):** 256 seeds on 16 files (three each of text, PNG, JPEG, .sieve and programs, and the
+  Hurrian hymn MIDI), 17 seconds here. No seed pays: the best of n lands about log2 n bits nearer the start, and naming
+  which one costs log2 n bits. One JPEG got a 26-bit landing under one seed, which reads back exactly, but it is chance
+  (about 1 in 8,000 over the run; that file's other landings match chance exactly); without it the 16 files net -4 bits.
+  No seed carries from one file to another of its kind, the landings are even, and neighbouring seeds land a file a
+  quarter of the loop apart. The affine seed solved for a landing at 0 is as long as the place itself: the seed
+  carries the file.
+- **So:** Seed Search (O10) has nothing to buy on its own, and waits on O9 (orders by a key that means something).
+- **CI:** step 02 pins a small run (two short texts, 8 seeds).
 
 ## Files to delete by hand
 None.

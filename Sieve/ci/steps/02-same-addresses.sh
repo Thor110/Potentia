@@ -83,3 +83,12 @@ $exe warp --min-length 1 --length 32 --mode positional "welcome to the sieve" | 
 # as a page of its own 20 letters takes 44 bits, read back exactly (tests/vectors_guided_range_v1.tsv).
 $exe warp --min-length 1 --length 32 --mode guided "welcome to the sieve" | tr -d '\r' | q "^  guided      9fc46a578d1$"
 test "$($exe read --min-length 1 --length 32 --mode guided 9fc46a578d1 | tr -d '\r')" = "welcome to the sieve"
+# The seed study (list O8, sieve seeds; IDEAS 19.255): seeds on the binary line measured, nothing written. The shuffle's
+# addresses are fixed, so its figures are too: two short texts, 8 seeds, none paying for its name.
+printf 'hello world' > seeds-hello.txt
+printf 'welcome to the sieve' > seeds-welcome.txt
+$exe seeds --seeds 8 seeds-hello.txt seeds-welcome.txt | tr -d '\r' > seeds.txt
+q "net over every file: shuffle -5.00 bits, affine -1.00 bits" seeds.txt
+q "^  2000000000000000  *0  *0$" seeds.txt
+q "seeds-hello.txt  *place 87 bits, b 88 bits" seeds.txt
+q "2 files, 1 pair: mean correlation -0.619" seeds.txt
