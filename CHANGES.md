@@ -1,30 +1,26 @@
 # Changes
 
-One commit on top of 86f5768 (review 4, batch D): batch E, the last of review 4. Tools, RAID, the CI, and a fix to
-a regression batch B brought in.
+One commit on top of c8eea38 (review 4, batch E): F-B, the fractals line in compact.
 
-## Fixes you might notice
-- **Fractal rulesets refused (from batch B):** the zip for batches A and B bounded the drawn and moving rankers by
-  the filter memory setting, which refused rulesets that used to count. They are bounded by their node count again,
-  as before; the CI's core-fractals counts (23830 and 91206) pass.
-- **RAID:** a piece of a very large file could be given a size of 0 and then fail to join. A tally saved with CR LF
-  line ends, and leaving with a keeper not in the tally, are now refused with a message naming the problem.
-- **RAID and file paths:** paths with characters outside ASCII are read as UTF-8 on Windows.
+## What you will notice
+- **Compact on the FRACTALS line:** tick any of draws, grows, no idle rules and canonical on FRACTALS' filters and
+  set the mode to compact. The line then holds only what they keep, numbered without gaps: the index, the v1 to v3
+  rulesets that pass, then the v4 to v6 ones (which those four judge by drawing or running each, so they are
+  hidden where they fail). The status line says "4 compact".
+- With all four, an address on the line is 196.89 bits shorter than on the whole line (of 1,345.7); the metrics
+  list says so, where it said compact was not on this line yet.
+- The survivors are in an order of their own, not the line's: by the set of symbols the axiom reaches, then the
+  order it reaches them in. Koch's curve is survivor 1,274,152,196,871. A known fractal the four set aside has no
+  place on the line in compact, and warping to it says why (the dragon curve, whose X and Y are a renaming).
+- On the command line: `sieve fractal at N --compact --filters FILE` and `sieve fractal index ID --compact
+  --filters FILE`; `sieve fractal count --filters FILE` gives the compact count.
 
-## Faster
-- `sieve raid place` and `raid leave` no longer make every piece to find one piece's size; `raid pieces` hashes each
-  piece once.
-- Plugins with the same bytes in two folders are read once.
-- `tools/grammars.py --check` took 1m48s here.
-- CI step 04 runs OPTIMISE FILTERS once and lists the fractal chart once (363 s here); step 10 checks one charted
-  ruleset of each version through `fractal index` and `at` (1,771 s here).
-
-## Smaller
-- `sieve fractal check` takes several files, a line for each.
-- `sieve help window` names degree-window-v2.
-- check_formats.py also checks the documents with a CR it used to skip.
-- A test that hid a failure behind `&&` in step 11 is two checks now.
-- REVIEW-ROUND.md: review 4 recorded in section 4 (6, 6a to 6d); items to test by hand in section 1 (52 to 58).
+## Figures (measured here)
+- A survivor of v3 at 256 characters, with all four: 2.5 s to build the numbering and find it, 151 MB at most.
+- The hallway in compact, warped to a fractal: 2.7 s a run.
+- The first frames at the very start of the line take about 25 s: the shelf there shows v6's last rulesets, which
+  the filters judge by running each. Hide was already so without compact (26.7 s, against 1.1 s with no filters);
+  item 59 in REVIEW-ROUND asks you to look at it.
 
 ## Files to delete by hand
 None.

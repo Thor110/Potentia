@@ -108,6 +108,7 @@ public:
     std::optional<BigUint> index_of(const std::string& text) const;
 
 private:
+    friend class FractalCompact;
     // One family's counting: its word symbols and rule symbols, both in order of character code, and
     // ways[j][r], the ways rules for symbols j onwards make exactly r characters (none among them too).
     struct Family
@@ -141,6 +142,36 @@ private:
     std::vector<BigUint> by_length_v2_;
     std::shared_ptr<const FractalSpaceV3> v3_, v4_, v5_, v6_; // (v4's to v6's counted by the same parts)
     BigUint total_v1_, total_v2_, total_v3_, total_v4_, total_v5_, total_v6_, total_;
+};
+
+// The line in compact (list F, F-B; IDEAS 19.250): the rulesets of v1 to v3 that pass the ticked structural
+// filters, numbered without gaps, so the k-th survivor and a survivor's number are worked out rather than searched
+// for. In this order: v1's, then v2's, then v3's; within each, the shorter first; within a length, by its header
+// lines as the space orders them (v1's substitutions, then its L-systems by angle; v2's by group and line; v3's
+// by its header's length, then its place among those); then its body, in FractalBodyNumbering's order (the
+// set its axiom reaches first). v4 to v6, which the four judge by drawing or running each ruleset, are not in it.
+inline constexpr const char* kFractalCompactVersion = "compact-fractal-v1"; // (its order; a change to it is a new version)
+
+class FractalCompact
+{
+public:
+    FractalCompact(const FractalSpace& space, const FractalStructureFilters& filters);
+    ~FractalCompact();
+    FractalCompact(const FractalCompact&) = delete;
+    FractalCompact& operator=(const FractalCompact&) = delete;
+    const FractalStructureFilters& filters() const { return filters_; }
+    const BigUint& count() const { return total_; } // v1 to v3's survivors
+    // The survivor numbered k (below count()); throws std::invalid_argument past the last.
+    std::string at(const BigUint& k) const;
+    // A survivor's number: nothing for a ruleset that fails, of v4 to v6, or not in the space.
+    std::optional<BigUint> index_of(const std::string& text) const;
+
+private:
+    const FractalSpace& space_;
+    FractalStructureFilters filters_;
+    std::unique_ptr<FractalBodyNumbering> sub_, ls_, scaled_, v3_;
+    std::vector<BigUint> v1_at_, v2_at_, v3_at_; // [length]: survivors of exactly that many characters
+    BigUint total_v1_, total_v2_, total_v3_, total_;
 };
 
 } // namespace sieve

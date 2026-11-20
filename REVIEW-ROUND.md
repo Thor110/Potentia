@@ -94,6 +94,7 @@ in the next zip (and says so in CHANGES.md), so the boxes left unticked are alwa
 - [ ] 56. **A range too large for the filter memory** (review 4): MIN LENGTH 1, MAX LENGTH a few hundred, max-run-v1 ticked, compact: the line should say the tables of its lengths need more than the filter memory, at once, rather than the program running out of memory. A degree window ticked on a range keeps compact (positional and scrambled), with no guided order.
 - [ ] 57. **Review 4 in your dimension and on the keys screen:** type a very large number (9999999999) on the Place panel's X row and Enter: the object goes to the edge of the ground and the frame goes on (it froze before). On Settings > Controls > Keys, bind something to **;** and to the keypad's comma, restart: both are kept. Hold Enter while choosing a row's key: it waits for the next key rather than taking Return.
 - [ ] 58. **Review 4, characters and the viewer:** Skin Blend at 200% with Skin Detail at 3 in the Creator: a closed skin with no flat cuts, and the grid kept within its limit, the blend now counted in it (the readout says when it was made coarser). Open a long MIDI file in the viewer: it opens at once, and the first Space waits while its sound is made.
+- [ ] 59. **The fractals line in compact** (F-B): Start Sieve, FRACTALS' magnifying glass, tick draws, grows, no idle rules and canonical, mode compact. The status line says "4 compact" and how many items the line holds; the metrics list says compact saves 196.89 bits an address. Walk it: the books after the index start with "L-system 1, F" and should all draw something that grows. Warp (T) to koch-curve: found; to dragon-curve: it says the filters set it aside and why. The first frames at the very start of the line are slow (about 25 s here) as the shelf there shows v6's last rulesets, judged by running each: hide was already so, the same without compact.
 
 ---
 
@@ -269,9 +270,9 @@ run before a release package, and after each of the three reviews. Each batch is
 - [x] F-A. fractal-draws, -grows, -no-idle and -canonical counted exactly on v1 and v2, by the set the axiom
   reaches; checked against every ruleset of the smallest lengths, judged by the filters. `[01]` + `[10]`.
 - [x] F-A3. The same on v3 (nearly all of the line): the four off the judge-only tab. `[01]` + `[04]` + `[10]`.
-- [ ] F-B. Compact on the fractals line: the k-th survivor and back. *Left for later (Edward, 18 November 2026:
-  "I think we should leave it for now, that all sounds very heavy indeed"): numbering the survivors needs the
-  walk's tables (about 0.5 GB a filter set at 229 characters) or counts made on demand, seconds a region.*
+- [x] F-B. Compact on the fractals line: the k-th survivor and back (*built 20 November 2026*: numbered by the set
+  the axiom reaches first, counted on demand from a kernel worked out once a set's size; 2.5 s and 151 MB at
+  most for a survivor at 256 characters; v4 to v6 follow whole, judged). `[01]` + `[10]`.
 
 ### List P: page filters, the next round (Edward, 18 November 2026; IDEAS 19.245)
 

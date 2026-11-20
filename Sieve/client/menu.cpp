@@ -842,7 +842,7 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
         if (is_listed(li))
         {
             static std::map<std::string, std::pair<sieve::BigUint, std::string>> shelves;
-            const ListedOptions o{s_.fractal_longest, s_.fractal_known};
+            const ListedOptions o{s_.fractal_longest, s_.fractal_known, {}}; // (the whole line, as the map shows every line)
             const std::string k = std::to_string(li) + "/" + std::to_string(o.fractal_longest) + "/" + o.fractal_known;
             if (!shelves.count(k))
                 if (const auto shelf = make_listed_shelf(kDimensions[li].media, o)) shelves[k] = {shelf->size(), shelf->units_text()};
@@ -5136,14 +5136,13 @@ std::string Menu::ordering_metrics(const std::vector<int>& order, const std::arr
         std::string row = name_of(i);
         row.resize(name_w, ' ');
         const StackInfo& s = got[size_t(i)];
-        // (The fractals line's survivors are counted, list F, but it has no compact mode yet: the k-th survivor and
-        // a survivor's number are still to be built, F-B.)
-        if (is_listed(i) && !s.filtered.empty()) row += " : compact: not on this line yet (its survivors are counted, not yet numbered)";
-        else if (!s.filtered.empty() && std::isfinite(s.kept_log10))
+        // (The fractals line in compact, list F, F-B: v1 to v3's survivors numbered without gaps, then v4 to v6, about
+        // 10^-200 of the line, kept whole and judged; its share is v1 to v3's, short of the line's by too little to show.)
+        if (!s.filtered.empty() && std::isfinite(s.kept_log10))
         {
             const double saved = std::max(0.0, -s.kept_log10 * log2_10);
             row += " : compact " + fixed(saved, saved < 0.01 ? 6 : 2) + " bits off every survivor (of " +
-                   fixed(line_sizes()[size_t(i)].bits, 1) + "), under these filters";
+                   fixed(line_sizes()[size_t(i)].bits, 1) + "), under these filters" + (is_listed(i) ? "; v4 to v6 judged, kept whole" : "");
         }
         else if (!s.filtered.empty()) row += " : compact: nothing survives these filters";
         else row += " : compact: 0 bits (no filters counted)";

@@ -117,11 +117,22 @@ Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> l
         // AI: every language model of one shape (aispace-v1), judged by its weights ([ai]); its byte
         // tokenizer is the same for every shape.
         // The listed lines (dimensions.hpp `listed`): each its shelf, and its filters judging what the
-        // shelf says they judge of an item ([fractals]: they judge only, so compact hides).
+        // shelf says they judge of an item ([fractals]: in compact, the shelf numbers the structural four's survivors
+        // itself, list F, F-B, and the line hides what the rest, and those four on v4 to v6, set aside).
         for (int li = 0; li < kLines; ++li)
             if (is_listed(li))
             {
-                listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media, shape.listed);
+                // (in compact, the fractals' shelf numbers the survivors of the structural four ticked: list F, F-B)
+                ListedOptions lo = shape.listed;
+                const FilterMode fm = filters.fractals.mode;
+                if (kDimensions[li].media == Media::Fractals && (fm == FilterMode::Compact || fm == FilterMode::Full))
+                {
+                    lo.fractal_compact.draws = filters.fractals.is_enabled("fractal-draws-v1");
+                    lo.fractal_compact.grows = filters.fractals.is_enabled("fractal-grows-v1");
+                    lo.fractal_compact.no_idle = filters.fractals.is_enabled("fractal-no-idle-v1");
+                    lo.fractal_compact.canonical = filters.fractals.is_enabled("fractal-canonical-v1");
+                }
+                listed_[size_t(li)] = make_listed_shelf(kDimensions[li].media, lo);
                 modes_[li] = FilterMode::Off;
                 if (!listed_[size_t(li)]) continue;
                 if (!listed_[size_t(li)]->trouble().empty()) std::cerr << kDimensions[li].id << ": " << listed_[size_t(li)]->trouble() << "\n";
@@ -476,6 +487,9 @@ std::string Hallway::compute_filter_status() const
     const FilterStack& st = stack();
     if (st.empty()) return tr("hud.filters.none");
     const FilterMode m = effective_mode();
+    // (the fractals' shelf in compact: its survivors numbered, those it cannot count judged and hidden; list F, F-B)
+    if (on_listed() && listed_shelf().compact())
+        return trf("hud.filters", {std::to_string(st.size()), tr("mode.compact")}) + trf("hud.filters.units", {short_big(listed_shelf().size())});
     std::string s = trf("hud.filters", {std::to_string(st.size()), tr(std::string("mode.") + to_string(full_here(li_) ? FilterMode::Full : m))});
     if (m == FilterMode::Compact) s += trf("hud.filters.units", {short_big(st.ranker()->count())});
     else if (m == FilterMode::Excluded && st.ranker())

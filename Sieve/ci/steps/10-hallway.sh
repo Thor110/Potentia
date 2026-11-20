@@ -1958,7 +1958,24 @@ q "^  v2      [0-9]* (kept 10^-62.02)$" fractal-four.txt
 q "^  v3      [0-9]* (kept 10^-59.27)$" fractal-four.txt
 $H --metrics fractals-four-metrics.txt --filters fractals-four.ini > /dev/null
 q "^Fractals : 99.999999999999...%   ( Kept : 10^-59.27 )$" fractals-four-metrics.txt
-q "^Fractals : compact: not on this line yet (its survivors are counted, not yet numbered)$" fractals-four-metrics.txt
+# F-B: the line in compact. v1 to v3's survivors numbered without gaps (FractalCompact, checked in step 01 against
+# every body of small alphabets and a sample of the space judged by the filters), v4 to v6 kept whole and judged.
+q "^Fractals : compact 196.89 bits off every survivor (of 1345.7), under these filters; v4 to v6 judged, kept whole$" fractals-four-metrics.txt
+q "^compact   [0-9]* survivors numbered, v1 to v3's (at and index with --compact)$" fractal-four.txt
+build/sieve fractal at 0 --compact --filters fractals-four.ini | tr -d '\r' > compact-first.fractal
+q "^axiom F$" compact-first.fractal
+q "^rule F ++$" compact-first.fractal
+# a survivor far along (v3, 256 characters), and its number back
+deep=4059489541137937807937121956255459668018439221167567674806230313073271884462215501229733929714567199168895717242282883021087628608897678348840316131161357082772147442672627045161736130043703628577477674358776801085862822556212440119605068375190083997720227813381870894821089378606121725888160756130199498432822050615394284808971456576543075951676
+build/sieve fractal at $deep --compact --filters fractals-four.ini > compact-deep.fractal
+test "$(wc -c < compact-deep.fractal)" = 256
+build/sieve fractal check compact-deep.fractal | tr -d '\r' | q "^a sieve-fractal-v3 ruleset"
+build/sieve fractal index compact-deep.fractal --compact --filters fractals-four.ini | tr -d '\r' | q "^survivor  $deep (0x"
+build/sieve fractal index koch-curve --compact --filters fractals-four.ini | tr -d '\r' | q "^survivor  [0-9]* (0x[0-9a-f]*) of [0-9]*, v1 to v3's in compact$"
+build/sieve fractal index dragon-curve --compact --filters fractals-four.ini | tr -d '\r' | q "^survivor  none: the ticked structural filters set it aside$"
+build/sieve fractal index mandelbrot-set --compact --filters fractals-four.ini | tr -d '\r' | q "^survivor  none: v4 to v6 are judged, not numbered$"
+$H --no-menu --line fractals --filters fractals-four.ini --walk "0,0" --warp koch-curve --take --screenshot fractals-compact.png | tr -d '\r' | q "filters: 4 compact (.* survivors).*| went to koch-curve$"
+$H --no-menu --line fractals --filters fractals-four.ini --walk "0,0" --warp dragon-curve --screenshot fractals-compact-dragon.png | tr -d '\r' | q "dragon-curve is a known fractal the structural filters ticked set aside, so the line in compact has no place for it"
 # In other lines (list X1c): the image line's pictures that are a charted fractal drawn, at each depth,
 # fitted as a picture warped in is (fractal-drawn-v1): 5,279 at 10 x 10 in black and white (782 before
 # X4's IFS and escape pictures, 1,057 before Y2's automata, an elementary one's history another picture

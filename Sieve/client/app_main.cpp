@@ -1019,7 +1019,7 @@ std::unique_ptr<Hallway> make_hallway(SDL_Window* window, SDL_Renderer* renderer
                                     a.has("ai-heads") ? a.get_positive("ai-heads", 2) : 2u,
                                     a.has("ai-bits") ? a.get_positive("ai-bits", 4) : 4u,
                                     ListedOptions{a.has("fractal-longest") ? std::clamp(a.get_u32("fractal-longest", sieve::kFractalSpaceLongestDefault), sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost) : sieve::kFractalSpaceLongestDefault,
-                                                  a.get("fractal-known", "include")}};
+                                                  a.get("fractal-known", "include"), {}}}; // (compact: from the filters, hallway.cpp)
     sieve::AiShape{shape.ai_layers, shape.ai_width, shape.ai_heads, shape.ai_bits}.check(); // a shape the AI line can have, or say why not
     auto hall = std::make_unique<Hallway>(window, renderer, std::move(lines), filters,
                                           a.has("book-pages") ? a.get_u32("book-pages", 4) : 4, shape);

@@ -6,8 +6,9 @@
 //
 // A unit is a ruleset's text (sieve-fractal-v1 or v2), a byte a symbol; a text the reader refuses fails
 // every one of them. Each judges a ruleset by the symbols its axiom reaches, rule after rule, at any
-// depth (its "reach"), without growing it, but fractal-dimension (list X2), which draws it and measures. None of them can yet count how many of the space pass, so each
-// judges only and the line has no compact mode.
+// depth (its "reach"), without growing it, but fractal-dimension (list X2), which draws it and measures. The four
+// structural ones (draws, grows, no-idle, canonical) are counted on v1 to v3 by fractal_count.cpp (list F), and
+// their survivors numbered there too, so the line has a compact mode (F-B: sieve::FractalCompact); the others judge.
 #include "sieve/alphabet.hpp"
 #include "sieve/audio.hpp"
 #include "sieve/dfa.hpp"

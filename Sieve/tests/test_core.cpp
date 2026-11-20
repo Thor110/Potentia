@@ -85,6 +85,7 @@
 #include <iostream>
 #include <iterator>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <random>
@@ -9238,6 +9239,281 @@ void test_fractal_count()
     }
 }
 
+// The fractals' survivors numbered (list F, F-B, fractal_count.hpp): on small alphabets, every body of each length
+// written out and judged by the filters' rules (filters/fractals.cpp's, written again here on a body), the k-th
+// survivor each of those that pass, each once, and every body's number back (none for one that fails); on the
+// families of the space, a sample of survivors judged by the filters themselves and numbered back.
+void test_fractal_numbering()
+{
+    using F = FractalStructureFilters;
+    auto set_of = [](unsigned c) {
+        F f;
+        f.draws = c & 1, f.grows = (c & 2) != 0, f.no_idle = (c & 4) != 0, f.canonical = (c & 8) != 0;
+        return f;
+    };
+    const auto npos = std::string::npos;
+    auto passes = [&](const FractalBodyAlphabet& a, const FractalBody& b, const F& f) {
+        if (b.rules.empty()) return false;
+        std::map<char, std::vector<std::string>> rule;
+        for (const auto& r : b.rules) rule[r.symbol].push_back(r.word);
+        std::string met;
+        std::set<char> seen;
+        auto meet = [&](const std::string& w) {
+            for (const char c : w)
+                if (seen.insert(c).second) met += c;
+        };
+        meet(b.axiom);
+        for (size_t k = 0; k < met.size(); ++k)
+            if (rule.count(met[k]))
+                for (const auto& w : rule[met[k]]) meet(w);
+        auto renamable = [&](char c) { return a.ruled.find(c) != npos && a.drawing.find(c) == npos && a.fixed.find(c) == npos; };
+        if (f.draws)
+        {
+            bool d = a.substitution ? met.size() >= 2 : false;
+            for (const char c : met)
+                if (!a.substitution && a.drawing.find(c) != npos) d = true;
+            if (!d) return false;
+        }
+        if (f.grows)
+        {
+            bool g = false;
+            for (const auto& r : b.rules)
+                if (seen.count(r.symbol) && r.word.size() >= 2) g = true;
+            if (!g) return false;
+        }
+        if (f.no_idle)
+            for (const auto& r : b.rules)
+                if (!seen.count(r.symbol) || r.word == std::string(1, r.symbol)) return false;
+        if (f.canonical)
+        {
+            std::string names;
+            for (const char c : a.ruled)
+                if (renamable(c)) names += c;
+            size_t next = 0;
+            for (const char c : met)
+                if (renamable(c) && (next >= names.size() || names[next++] != c)) return false;
+            for (const auto& r : b.rules)
+                if (!seen.count(r.symbol)) return false;
+        }
+        return true;
+    };
+    // Every body of exactly r characters of an alphabet.
+    auto all_bodies = [](const FractalBodyAlphabet& a, uint32_t r) {
+        auto words = [&](uint32_t n) {
+            std::vector<std::string> w{""};
+            for (uint32_t i = 0; i < n; ++i)
+            {
+                std::vector<std::string> nw;
+                for (const auto& x : w)
+                    for (const char c : a.symbols) nw.push_back(x + c);
+                w = std::move(nw);
+            }
+            return w;
+        };
+        std::function<std::vector<std::vector<FractalBody::Rule>>(char, uint32_t)> lists = [&](char y, uint32_t l) {
+            std::vector<std::vector<FractalBody::Rule>> res;
+            if (l == 0)
+            {
+                res.emplace_back();
+                return res;
+            }
+            std::vector<char> ctxs{0};
+            for (const char c : a.context) ctxs.push_back(c);
+            for (const char left : ctxs)
+                for (const char right : ctxs)
+                {
+                    const uint32_t o = 8 + (left ? 2 : 0) + (right ? 2 : 0);
+                    for (uint32_t n = 1; n <= a.word_most && o + n <= l; ++n)
+                        for (const auto& w : words(n))
+                        {
+                            const FractalBody::Rule rule{y, left, right, w};
+                            const uint32_t rest = l - o - n;
+                            if (!a.many_rules)
+                            {
+                                if (rest == 0) res.push_back({rule});
+                                continue;
+                            }
+                            for (auto tail : lists(y, rest))
+                            {
+                                tail.insert(tail.begin(), rule);
+                                res.push_back(std::move(tail));
+                            }
+                        }
+                }
+            return res;
+        };
+        std::vector<FractalBody> out;
+        for (uint32_t n = 1; n <= a.word_most && 7 + n <= r; ++n)
+            for (const auto& ax : words(n))
+            {
+                std::vector<FractalBody::Rule> acc;
+                std::function<void(size_t, uint32_t)> go = [&](size_t j, uint32_t left) {
+                    if (j == a.ruled.size())
+                    {
+                        if (left == 0) out.push_back(FractalBody{ax, acc});
+                        return;
+                    }
+                    for (uint32_t l = 0; l <= left; ++l)
+                        for (const auto& lst : lists(a.ruled[j], l))
+                        {
+                            const size_t mark = acc.size();
+                            acc.insert(acc.end(), lst.begin(), lst.end());
+                            go(j + 1, left - l);
+                            acc.resize(mark);
+                        }
+                };
+                go(0, r - 7 - n);
+            }
+        return out;
+    };
+    // Small alphabets, long enough for three rules: an L-system's kinds (F, f, two renamable letters; and one with an
+    // inert symbol) with one rule a symbol and words of two at most; a substitution of three symbols; v3's kind
+    // (several rules a symbol, contexts of two letters).
+    FractalBodyAlphabet ls;
+    ls.symbols = ls.ruled = "FXYf", ls.drawing = "F", ls.fixed = "f", ls.word_most = 2;
+    FractalBodyAlphabet ls2;
+    ls2.symbols = "+FXf", ls2.ruled = "FXf", ls2.drawing = "F", ls2.fixed = "f", ls2.word_most = 2;
+    FractalBodyAlphabet sub;
+    sub.symbols = sub.ruled = "012", sub.substitution = true, sub.word_most = 2;
+    FractalBodyAlphabet v3;
+    v3.symbols = "+FXf", v3.ruled = "FXf", v3.drawing = "F", v3.fixed = "f", v3.word_most = 2, v3.context = "FX", v3.many_rules = true;
+    struct Case
+    {
+        const FractalBodyAlphabet* a;
+        uint32_t top;
+    };
+    uint64_t checked = 0;
+    for (const Case& cs : {Case{&ls, 35}, Case{&ls2, 30}, Case{&sub, 36}, Case{&v3, 28}})
+    {
+        std::vector<std::vector<FractalBody>> bodies(cs.top + 1);
+        for (uint32_t r = 0; r <= cs.top; ++r) bodies[r] = all_bodies(*cs.a, r);
+        for (unsigned c = 0; c < 16; ++c)
+        {
+            const F f = set_of(c);
+            const FractalBodyNumbering num(*cs.a, cs.top, f);
+            for (uint32_t r = 0; r <= cs.top; ++r)
+            {
+                std::set<std::string> want;
+                for (const auto& b : bodies[r])
+                {
+                    const bool ok = passes(*cs.a, b, f);
+                    const auto i = num.index(b);
+                    CHECK(ok == i.has_value());
+                    if (ok) want.insert(b.text());
+                    if (i) CHECK(*i < num.count(r) && num.at(r, *i).text() == b.text());
+                }
+                CHECK(num.count(r) == BigUint(uint64_t(want.size())));
+                std::set<std::string> got;
+                for (uint64_t k = 0; k < want.size(); ++k)
+                {
+                    const FractalBody b = num.at(r, BigUint(k));
+                    CHECK(b.length() == r && passes(*cs.a, b, f));
+                    got.insert(b.text());
+                }
+                CHECK(got == want);
+                checked += want.size();
+            }
+        }
+    }
+    CHECK(checked > 100000);
+    // The space's families: survivors drawn at random from bodies of up to 120 characters, judged by the filters
+    // themselves (on the ruleset with a header) and numbered back.
+    FilterLine fl;
+    fl.kind = "fractals", fl.symbols_id = "fractals/256", fl.base = 128, fl.length = 256, fl.up_to_length = true;
+    static const TestResources none(nullptr, nullptr);
+    const char* names[] = {"fractal-draws-v1", "fractal-grows-v1", "fractal-no-idle-v1", "fractal-canonical-v1"};
+    std::vector<std::unique_ptr<Filter>> judge;
+    for (const char* n : names) judge.push_back(find_filter(n)->make(fl, {}, none));
+    struct Fam
+    {
+        FractalBodyAlphabet a;
+        std::string header;
+    };
+    const Fam fams[] = {{fractal_substitution_alphabet(), "sieve-fractal-v1\nsubstitution\n"},
+                        {fractal_lsystem_alphabet(), "sieve-fractal-v1\nlsystem 90\n"},
+                        {fractal_scaled_alphabet(), "sieve-fractal-v2\nlsystem 90 scale 0.5\n"},
+                        {fractal_v3_alphabet(), "sieve-fractal-v3\nlsystem 90\n"}};
+    std::mt19937_64 rng(53);
+    for (const Fam& fam : fams)
+        for (const unsigned c : {15u, 3u, 8u, 6u})
+        {
+            const F f = set_of(c);
+            const FractalBodyNumbering num(fam.a, 120, f);
+            CHECK(num.count(110) == fractal_bodies_passing(fam.a.kinds(), 120, f)[110]);
+            for (int t = 0; t < 6; ++t)
+            {
+                const uint32_t r = 40 + uint32_t(rng() % 81);
+                if (num.count(r).is_zero()) continue;
+                BigUint x;
+                for (int w = 0; w < 8; ++w)
+                {
+                    x <<= 64;
+                    x += BigUint(rng());
+                }
+                const BigUint k = BigUint::mod(x, num.count(r));
+                const FractalBody b = num.at(r, k);
+                CHECK(b.length() == r);
+                const std::string text = fam.header + b.text();
+                CHECK(read_fractal(text).has_value());
+                const std::vector<uint32_t> unit(text.begin(), text.end());
+                for (unsigned j = 0; j < 4; ++j)
+                    if (c >> j & 1) CHECK(judge[j]->passes(unit));
+                const auto back = num.index(b);
+                CHECK(back && *back == k);
+            }
+        }
+    // The whole line in compact (FractalCompact): as many as the space's counts say pass; survivors drawn at random
+    // judged by the filters and numbered back; rulesets drawn from the positional line numbered when they pass
+    // (and the survivor at that number the same text), refused when they do not.
+    for (const uint32_t longest : {64u, 128u})
+        for (const unsigned c : {15u, 5u, 10u})
+        {
+            const F f = set_of(c);
+            const FractalSpace space(longest);
+            const FractalCompact compact(space, f);
+            BigUint want = space.count_v1_passing(f);
+            want += space.count_v2_passing(f);
+            want += space.count_v3_passing(f);
+            CHECK(compact.count() == want);
+            BigUint v1v3 = space.count_v1();
+            v1v3 += space.count_v2();
+            v1v3 += space.count_v3();
+            for (int t = 0; t < 12; ++t)
+            {
+                BigUint x;
+                for (int w = 0; w < 8; ++w)
+                {
+                    x <<= 64;
+                    x += BigUint(rng());
+                }
+                // (a third from v1 and v2's part, the rest anywhere)
+                BigUint k = BigUint::mod(x, t % 3 == 0 ? std::max(BigUint(1), space.count_v1_passing(f)) : compact.count());
+                if (k >= compact.count()) k = BigUint();
+                const std::string text = compact.at(k);
+                const std::vector<uint32_t> unit(text.begin(), text.end());
+                CHECK(space.index_of(text).has_value());
+                for (unsigned j = 0; j < 4; ++j)
+                    if (c >> j & 1) CHECK(judge[j]->passes(unit));
+                const auto back = compact.index_of(text);
+                CHECK(back && *back == k);
+                // and one from the positional line
+                const std::string p = space.at(BigUint::mod(x, v1v3));
+                const std::vector<uint32_t> pu(p.begin(), p.end());
+                bool ok = true;
+                for (unsigned j = 0; j < 4; ++j)
+                    if (c >> j & 1 && !judge[j]->passes(pu)) ok = false;
+                const auto pi = compact.index_of(p);
+                CHECK(ok == pi.has_value());
+                if (pi) CHECK(compact.at(*pi) == p);
+            }
+            // the first and the last
+            CHECK(compact.index_of(compact.at(BigUint())) == BigUint());
+            BigUint last = compact.count();
+            last -= BigUint(1);
+            CHECK(compact.index_of(compact.at(last)) == last);
+        }
+}
+
 void test_fractals()
 {
     const std::string fib = "sieve-fractal-v1\nsubstitution\naxiom 0\nrule 0 01\nrule 1 0\n";
@@ -11495,6 +11771,7 @@ void run_all(int argc, char** argv)
     PART("fractals");
     RUN(test_fractals());
     RUN(test_fractal_count());
+    RUN(test_fractal_numbering());
     PART("hallway");
     RUN(test_format_stats());
     RUN(test_catalogue());

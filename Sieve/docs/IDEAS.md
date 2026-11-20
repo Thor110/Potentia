@@ -10277,6 +10277,19 @@ do A then B?".
   0.5 GB a filter set at 229 characters), counts made on demand from the counting by sets (no tables, seconds
   to open each region), or the line's own order (counts with part of a ruleset fixed, which the counting by
   sets cannot give). The line hides what fails meanwhile.*
+- *Built (B, 20 November 2026; Edward: "go ahead with F-B, compact on the fractals line"):* none of the three
+  ways weighed, in the end. The survivors are numbered in an order of their own rather than the line's: by the set
+  S the axiom reaches first, then the order it reaches the rest, so that what can follow a choice is what the
+  counting by sets already counts, with the symbols met and those waiting as its roots. That count's recursion
+  (inner(t) = all(t) less its smaller reaches, each over an alphabet of its own size) has a kernel that does not
+  depend on the roots, worked out once for a set's size: about (s + 1)(s + 2) / 2 rows of the body's length (a
+  closed form by inclusion and exclusion was tried on paper first and is wrong, as the alphabet grows with the
+  set). Measured at 256 characters with all four: `sieve fractal at N --compact` (building it and one survivor
+  of v3 at 256 characters) 2.5 s and 151 MB at most; an address on the line in compact 196.89 bits shorter, of
+  1,345.7; the Koch curve at survivor 1,274,152,196,871. v4 to v6, which the four judge by drawing or running each,
+  follow the survivors whole and are hidden where they fail. Checked against every body of four small alphabets
+  to three rules (each of the sixteen combinations: each survivor at one number and back, each failing body at
+  none), the space's counts, and samples judged by the filters themselves (`compact-fractal-v1`, SPECIFICATIONS).
 
 **19.251 A filter for one degree (Edward, 18 November 2026).** His words: "imagine an automaton could just
 filter out any whole degrees worth it wants ... I would imagine a single filter that has the ability to exclude

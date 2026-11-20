@@ -63,6 +63,8 @@ public:
     virtual std::string trouble() const = 0;
     // What the line's figures in the setup menu's map say of it: its units in words.
     virtual std::string units_text() const = 0;
+    // Whether its items are the survivors of its filters, numbered without gaps (the fractals' in compact, list F).
+    virtual bool compact() const { return false; }
 };
 
 // The settings a listed line is shaped by (the setup menu's FRACTALS rows; --fractal-longest and
@@ -71,6 +73,10 @@ struct ListedOptions
 {
     uint32_t fractal_longest = sieve::kFractalSpaceLongestDefault; // the whole space's longest ruleset, in characters
     std::string fractal_known = "include"; // the known fractals: include (marked), exclude, or only
+    // The line in compact (list F, F-B): the structural four ticked in [fractals] with its mode compact or full. With
+    // one or more, the shelf holds v1 to v3's survivors numbered without gaps (sieve::FractalCompact), then v4 to v6
+    // as the space numbers them (the four judge those, by drawing or running each); with none, the space's own order.
+    sieve::FractalStructureFilters fractal_compact;
 };
 // The words fractal_known takes, in the order the setup menu steps through them.
 inline const std::vector<std::string>& fractal_known_settings()

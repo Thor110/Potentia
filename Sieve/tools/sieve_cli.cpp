@@ -1384,6 +1384,18 @@ const char* fractal_version_name(const sieve::Fractal& f)
 
 // The fractal dimension (IDEAS 19.191, 19.235; list S, step 1): its shelves, charted by hand, and any
 // ruleset grown, drawn and checked.
+// The structural four ticked in the [fractals] stack of --filters (list F): what compact numbers the survivors of.
+sieve::FractalStructureFilters structural_filters(const Args& a)
+{
+    const FilterConfig cfg = load_filter_config(a);
+    sieve::FractalStructureFilters f;
+    f.draws = cfg.fractals.is_enabled("fractal-draws-v1");
+    f.grows = cfg.fractals.is_enabled("fractal-grows-v1");
+    f.no_idle = cfg.fractals.is_enabled("fractal-no-idle-v1");
+    f.canonical = cfg.fractals.is_enabled("fractal-canonical-v1");
+    return f;
+}
+
 int cmd_fractal(const Args& a)
 {
     const std::string what = a.positional.empty() ? "list" : a.positional[0];
@@ -1443,6 +1455,12 @@ int cmd_fractal(const Args& a)
                       << "  v2      " << v2.to_decimal() << " (" << kept(v2, space.count_v2()) << ")\n"
                       << "  v3      " << v3.to_decimal() << " (" << kept(v3, space.count_v3()) << ")\n"
                       << "  v4 to v6 judged only (not yet counted)\n";
+            // The line in compact (list F, F-B): those of v1 to v3 numbered without gaps (at and index with --compact).
+            if (f.any())
+            {
+                const sieve::FractalCompact compact(space, f);
+                std::cout << "compact   " << compact.count().to_decimal() << " survivors numbered, v1 to v3's (at and index with --compact)\n";
+            }
         }
         return 0;
     }
@@ -1451,7 +1469,16 @@ int cmd_fractal(const Args& a)
         if (a.positional.size() < 2) throw std::invalid_argument("give an address: decimal, or hex after 0x");
         const std::string s = a.positional[1];
         const sieve::BigUint i = s.rfind("0x", 0) == 0 ? sieve::BigUint::from_hex(s.substr(2)) : sieve::BigUint::from_decimal(s);
-        std::cout << sieve::FractalSpace(longest).at(i);
+        const sieve::FractalSpace space(longest);
+        // With --compact, a survivor's number among v1 to v3's under the [fractals] structural filters (list F, F-B).
+        if (a.has("compact"))
+        {
+            const sieve::FractalStructureFilters f = structural_filters(a);
+            if (!f.any()) throw std::invalid_argument("--compact numbers the survivors of the structural filters: tick one or more of fractal-draws-v1, -grows-v1, -no-idle-v1 and -canonical-v1 in [fractals] (--filters)");
+            std::cout << sieve::FractalCompact(space, f).at(i);
+            return 0;
+        }
+        std::cout << space.at(i);
         return 0;
     }
     if (a.positional.size() < 2) throw std::invalid_argument("give a charted fractal's id, or a .fractal file");
@@ -1489,6 +1516,17 @@ int cmd_fractal(const Args& a)
         const sieve::FractalSpace space(longest);
         const auto i = space.index_of(text);
         if (!i) throw std::invalid_argument(name + " is longer than " + std::to_string(longest) + " characters (--longest)");
+        if (a.has("compact"))
+        {
+            const sieve::FractalStructureFilters sf = structural_filters(a);
+            if (!sf.any()) throw std::invalid_argument("--compact numbers the survivors of the structural filters: tick one or more of fractal-draws-v1, -grows-v1, -no-idle-v1 and -canonical-v1 in [fractals] (--filters)");
+            const sieve::FractalCompact compact(space, sf);
+            const auto k = compact.index_of(text);
+            std::cout << "fractal   " << name << "\n";
+            if (!k) std::cout << "survivor  none: " << (f->version > 3 ? "v4 to v6 are judged, not numbered" : "the ticked structural filters set it aside") << "\n";
+            else std::cout << "survivor  " << k->to_decimal() << " (0x" << k->to_hex() << ") of " << compact.count().to_decimal() << ", v1 to v3's in compact\n";
+            return 0;
+        }
         std::cout << "fractal   " << name << "\n"
                   << "address   " << i->to_decimal() << " (0x" << i->to_hex() << ") of " << space.count().to_decimal() << ", in " << sieve::kFractalSpaceVersion << " to "
                   << longest << " characters\n";

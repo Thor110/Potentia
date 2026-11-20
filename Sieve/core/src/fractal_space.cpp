@@ -1198,4 +1198,220 @@ std::optional<BigUint> FractalSpace::index_of(const std::string& text) const
     return index;
 }
 
+
+// ---- The line in compact (fractal_space.hpp; list F, F-B) ----
+
+namespace {
+
+// A ruleset's axiom and rules as the numbering takes them.
+FractalBody body_of(const Fractal& f)
+{
+    FractalBody b;
+    b.axiom = f.axiom;
+    for (size_t k = 0; k < f.rules.size(); ++k)
+    {
+        FractalBody::Rule r;
+        r.symbol = f.rules[k].first, r.word = f.rules[k].second;
+        if (k < f.contexts.size()) r.left = f.contexts[k].first, r.right = f.contexts[k].second;
+        b.rules.push_back(std::move(r));
+    }
+    return b;
+}
+
+uint64_t small_value(const BigUint& v) { return v.is_zero() ? 0 : v.limbs()[0]; } // (one known to fit a limb)
+
+} // namespace
+
+FractalCompact::FractalCompact(const FractalSpace& space, const FractalStructureFilters& filters) : space_(space), filters_(filters)
+{
+    const uint32_t L = space.longest();
+    const auto& head = space.v3_->header->n;
+    uint32_t h0 = 0; // (v3's shortest header)
+    while (h0 < L && head[h0].is_zero()) ++h0;
+    sub_ = std::make_unique<FractalBodyNumbering>(fractal_substitution_alphabet(), L - kSubHeader, filters);
+    ls_ = std::make_unique<FractalBodyNumbering>(fractal_lsystem_alphabet(), L - ls_header(1), filters);
+    scaled_ = std::make_unique<FractalBodyNumbering>(fractal_scaled_alphabet(), L - 35, filters); // (v2's shortest scaled line: 33 + 1 + 1)
+    v3_ = std::make_unique<FractalBodyNumbering>(fractal_v3_alphabet(), L - h0, filters);
+    v1_at_.assign(L + 1, BigUint()), v2_at_.assign(L + 1, BigUint()), v3_at_.assign(L + 1, BigUint());
+    for (uint32_t l = kFractalSpaceShortest; l <= L; ++l)
+    {
+        if (l >= kSubHeader) v1_at_[l] += sub_->count(l - kSubHeader);
+        for (uint32_t d = 1; d <= 3; ++d)
+            if (l >= ls_header(d)) v1_at_[l] += BigUint::mul(ls_->count(l - ls_header(d)), BigUint(angles_with(d)));
+        for (const auto& g : space.groups_)
+            if (l >= g.header) v2_at_[l] += BigUint::mul((g.family == &space.scaled_ ? *scaled_ : *ls_).count(l - g.header), BigUint(g.lines()));
+        for (uint32_t h = h0; h < l; ++h)
+            if (!head[h].is_zero() && !v3_->count(l - h).is_zero()) v3_at_[l] += BigUint::mul(head[h], v3_->count(l - h));
+        total_v1_ += v1_at_[l], total_v2_ += v2_at_[l], total_v3_ += v3_at_[l];
+    }
+    total_ = total_v1_;
+    total_ += total_v2_;
+    total_ += total_v3_;
+}
+
+FractalCompact::~FractalCompact() = default;
+
+std::string FractalCompact::at(const BigUint& k) const
+{
+    if (k >= total_) throw std::invalid_argument("past the last survivor of " + std::to_string(space_.longest()) + " characters or fewer");
+    BigUint i = k;
+    auto length = [&](const std::vector<BigUint>& at) {
+        uint32_t l = kFractalSpaceShortest;
+        while (i >= at[l]) i -= at[l++];
+        return l;
+    };
+    if (i < total_v1_)
+    {
+        const uint32_t l = length(v1_at_);
+        const std::string text = std::string(kFractalVersion) + "\n";
+        if (l >= kSubHeader)
+        {
+            const BigUint& c = sub_->count(l - kSubHeader);
+            if (i < c) return text + "substitution\n" + sub_->at(l - kSubHeader, i).text();
+            i -= c;
+        }
+        for (uint32_t d = 1; d <= 3; ++d)
+        {
+            if (l < ls_header(d)) continue;
+            const BigUint& per = ls_->count(l - ls_header(d));
+            if (per.is_zero()) continue;
+            const BigUint block = BigUint::mul(per, BigUint(angles_with(d)));
+            if (i >= block)
+            {
+                i -= block;
+                continue;
+            }
+            BigUint q, rem;
+            BigUint::divmod(i, per, q, rem);
+            return text + "lsystem " + std::to_string(first_angle(d) + small_value(q)) + "\n" + ls_->at(l - ls_header(d), rem).text();
+        }
+        throw std::logic_error("fractal compact: a v1 place past its angles");
+    }
+    i -= total_v1_;
+    if (i < total_v2_)
+    {
+        const uint32_t l = length(v2_at_);
+        for (const auto& g : space_.groups_)
+        {
+            if (l < g.header) continue;
+            const FractalBodyNumbering& fam = g.family == &space_.scaled_ ? *scaled_ : *ls_;
+            const BigUint& per = fam.count(l - g.header);
+            if (per.is_zero()) continue;
+            const BigUint block = BigUint::mul(per, BigUint(g.lines()));
+            if (i >= block)
+            {
+                i -= block;
+                continue;
+            }
+            BigUint q, rem;
+            BigUint::divmod(i, per, q, rem);
+            const uint64_t line = small_value(q);
+            const size_t each = g.scales ? g.scales->size() : 1;
+            std::string text = std::string(kFractalVersion2) + "\nlsystem " + fractal_angle_text((*g.angles)[size_t(line / each)]);
+            if (g.scales) text += " scale " + fractal_scale_text((*g.scales)[size_t(line % each)]);
+            return text + "\n" + fam.at(l - g.header, rem).text();
+        }
+        throw std::logic_error("fractal compact: a v2 place past its groups");
+    }
+    i -= total_v2_;
+    const uint32_t l = length(v3_at_);
+    const auto& head = *space_.v3_->header;
+    for (uint32_t h = 0; h < l; ++h)
+    {
+        if (head.n[h].is_zero()) continue;
+        const BigUint& per = v3_->count(l - h);
+        if (per.is_zero()) continue;
+        const BigUint block = BigUint::mul(head.n[h], per);
+        if (i >= block)
+        {
+            i -= block;
+            continue;
+        }
+        BigUint q, rem;
+        BigUint::divmod(i, per, q, rem);
+        std::string text;
+        head.write(h, q, text);
+        return text + v3_->at(l - h, rem).text();
+    }
+    throw std::logic_error("fractal compact: a v3 place past its headers");
+}
+
+std::optional<BigUint> FractalCompact::index_of(const std::string& text) const
+{
+    const auto f = read_fractal(text);
+    if (!f || f->version > 3 || text.size() > space_.longest() || text.size() < kFractalSpaceShortest) return std::nullopt;
+    const FractalBody b = body_of(*f);
+    const std::string bt = b.text();
+    // (as the space writes it: its header, then the body as the numbering writes it)
+    if (text.size() <= bt.size() || text.compare(text.size() - bt.size(), bt.size(), bt) != 0) return std::nullopt;
+    const std::string header = text.substr(0, text.size() - bt.size());
+    const uint32_t l = uint32_t(text.size()), r = uint32_t(bt.size());
+    BigUint index;
+    if (f->version == 1)
+    {
+        for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += v1_at_[k];
+        if (f->family == Fractal::Family::Substitution)
+        {
+            if (header != std::string(kFractalVersion) + "\nsubstitution\n") return std::nullopt;
+            const auto bi = sub_->index(b);
+            if (!bi) return std::nullopt;
+            index += *bi;
+            return index;
+        }
+        if (l >= kSubHeader) index += sub_->count(l - kSubHeader);
+        const uint32_t angle = f->angle_tenths / 10, d = digits_of(angle);
+        if (header != std::string(kFractalVersion) + "\nlsystem " + std::to_string(angle) + "\n" || r != l - ls_header(d)) return std::nullopt;
+        for (uint32_t e = 1; e < d; ++e)
+            if (l >= ls_header(e)) index += BigUint::mul(ls_->count(l - ls_header(e)), BigUint(angles_with(e)));
+        const auto bi = ls_->index(b);
+        if (!bi) return std::nullopt;
+        index += BigUint::mul(ls_->count(r), BigUint(angle - first_angle(d)));
+        index += *bi;
+        return index;
+    }
+    if (f->version == 2)
+    {
+        index = total_v1_;
+        for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += v2_at_[k];
+        const uint32_t aw = uint32_t(fractal_angle_text(f->angle_tenths).size()), sw = f->scale ? uint32_t(fractal_scale_text(f->scale).size()) : 0;
+        for (const auto& g : space_.groups_)
+        {
+            if (l < g.header) continue;
+            const FractalBodyNumbering& fam = g.family == &space_.scaled_ ? *scaled_ : *ls_;
+            const BigUint& per = fam.count(l - g.header);
+            const bool mine = (g.scales != nullptr) == (f->scale != 0) && fractal_angle_text(g.angles->front()).size() == aw &&
+                              (!g.scales || fractal_scale_text(g.scales->front()).size() == sw);
+            if (!mine)
+            {
+                index += BigUint::mul(per, BigUint(g.lines()));
+                continue;
+            }
+            if (r != l - g.header) return std::nullopt;
+            const auto a = std::lower_bound(g.angles->begin(), g.angles->end(), f->angle_tenths);
+            uint64_t line = uint64_t(a - g.angles->begin());
+            if (g.scales) line = line * g.scales->size() + uint64_t(std::lower_bound(g.scales->begin(), g.scales->end(), f->scale) - g.scales->begin());
+            const auto bi = fam.index(b);
+            if (!bi) return std::nullopt;
+            index += BigUint::mul(per, BigUint(line));
+            index += *bi;
+            return index;
+        }
+        return std::nullopt;
+    }
+    index = total_v1_;
+    index += total_v2_;
+    for (uint32_t k = kFractalSpaceShortest; k < l; ++k) index += v3_at_[k];
+    const auto& head = *space_.v3_->header;
+    const auto took = head.take(header);
+    if (!took || *took != header.size()) return std::nullopt;
+    const uint32_t h = uint32_t(header.size());
+    for (uint32_t k = 0; k < h; ++k)
+        if (!head.n[k].is_zero()) index += BigUint::mul(head.n[k], v3_->count(l - k));
+    const auto bi = v3_->index(b);
+    if (!bi) return std::nullopt;
+    index += BigUint::mul(head.rank(header), v3_->count(r));
+    index += *bi;
+    return index;
+}
+
 } // namespace sieve

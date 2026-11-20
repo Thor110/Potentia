@@ -59,6 +59,20 @@ public:
     {
         if (known_ != "exclude" && known_ != "only") known_ = "include";
         index_ = known_ != "exclude";
+        // In compact: the survivors first, numbered (list F, F-B), then v4 to v6 from where the space has them.
+        if (o.fractal_compact.any() && known_ != "only")
+        {
+            compact_ = std::make_unique<sieve::FractalCompact>(space_, o.fractal_compact);
+            v4_at_ = space_.count_v1();
+            v4_at_ += space_.count_v2();
+            v4_at_ += space_.count_v3();
+            line_size_ = space_.count();
+            line_size_ -= v4_at_;
+            line_size_ += compact_->count();
+            const auto& f = o.fractal_compact;
+            compact_bits_ = std::string(f.draws ? "1" : "0") + (f.grows ? "1" : "0") + (f.no_idle ? "1" : "0") + (f.canonical ? "1" : "0");
+        }
+        else line_size_ = space_.count();
         try
         {
             chart_ = sieve::read_fractal_chart(sieve::cli::find_data_folder("fractals", "chart.txt"));
@@ -73,7 +87,7 @@ public:
             const auto& c = chart_[k];
             all += c.id + "\n" + c.text;
             chart_deepest_.push_back(drawn_deepest(c.fractal));
-            if (const auto i = space_.index_of(c.text))
+            if (const auto i = line_index(c.text))
             {
                 charted_at_.emplace(*i, k);
                 chart_index_.push_back(*i);
@@ -84,16 +98,16 @@ public:
         // favourites stay apart; excluded, "exclude-no-index" since its items moved down one place when
         // the index left it, 16 November 2026)
         id_ = "fractals/" + sieve::Sha256::hex_hash(all).substr(0, 16) + "/" + (index_ ? known_ : "exclude-no-index") + "/" + sieve::kFractalSpaceVersion + "-" +
-              std::to_string(space_.longest());
+              std::to_string(space_.longest()) + (compact_ ? "/" + std::string(sieve::kFractalCompactVersion) + "-" + compact_bits_ : std::string()); // (a line in compact numbers its items its own way)
         if (known_ == "only") size_ = BigUint(uint64_t(chart_.size()) + 1);
         else if (known_ == "include")
         {
-            size_ = space_.count();
+            size_ = line_size_;
             size_.add_small(1);
         }
         else
         {
-            size_ = space_.count();
+            size_ = line_size_;
             size_ -= BigUint(uint64_t(charted_at_.size()));
         }
     }
@@ -192,7 +206,8 @@ public:
                     p.add_small(1);
                     where = trf("fractals.at", {p.to_hex()});
                 }
-                else where = trf("fractals.too_long", {std::to_string(chart_[k].text.size()), std::to_string(space_.longest())});
+                else if (chart_[k].text.size() > space_.longest()) where = trf("fractals.too_long", {std::to_string(chart_[k].text.size()), std::to_string(space_.longest())});
+                else where = tr("fractals.not_in_compact");
                 out.push_back(std::to_string(k + 1) + ". " + chart_[k].title + " (" + chart_[k].id + "), " + where);
             }
             if (!trouble_.empty()) out.push_back(trf("fractals.unreadable", {trouble_}));
@@ -247,6 +262,7 @@ public:
             {
                 if (known_ == "exclude") return trf("fractals.why.set_aside", {name, where});
                 if (c.text.size() > space_.longest()) return trf("fractals.why.too_long", {name, std::to_string(c.text.size()), std::to_string(space_.longest()), where});
+                if (compact_ && !line_index(c.text)) return trf("fractals.why.compact", {name});
             }
         return "";
     }
@@ -259,6 +275,7 @@ public:
         return std::vector<uint32_t>(t.begin(), t.end());
     }
     sieve::FilterLine filter_line() const override { return sieve::cli::fractal_filter_line(space_.longest()); }
+    bool compact() const override { return compact_ != nullptr; }
     std::string trouble() const override { return trouble_; }
     std::string units_text() const override
     {
@@ -277,14 +294,36 @@ private:
             std::lock_guard<std::mutex> lock(mx_);
             if (const auto it = texts_.find(j); it != texts_.end()) return it->second;
         }
-        std::string t = j < space_.count() ? space_.at(j) : std::string();
+        std::string t = j < line_size_ ? line_at(j) : std::string();
         std::lock_guard<std::mutex> lock(mx_);
         if (texts_.size() >= kKept) texts_.clear();
         texts_.emplace(j, t);
         return t;
     }
-    // An item's address in the whole space (included: one less, after the index; excluded: past every
-    // charted one at or before it, the charted ones' addresses in order).
+    // A ruleset's place on the line: its address in the whole space, or in compact its survivor's number (v4 to v6
+    // after the survivors, in the space's order); nothing where it is not on the line.
+    std::optional<BigUint> line_index(const std::string& text) const
+    {
+        if (!compact_) return space_.index_of(text);
+        if (auto k = compact_->index_of(text)) return k;
+        auto p = space_.index_of(text);
+        if (!p || *p < v4_at_) return std::nullopt; // (of v1 to v3, and set aside by the filters)
+        *p -= v4_at_;
+        *p += compact_->count();
+        return p;
+    }
+    // The ruleset at a place on the line.
+    std::string line_at(const BigUint& j) const
+    {
+        if (!compact_) return space_.at(j);
+        if (j < compact_->count()) return compact_->at(j);
+        BigUint p = j;
+        p -= compact_->count();
+        p += v4_at_;
+        return space_.at(p);
+    }
+    // An item's place on the line (included: one less, after the index; excluded: past every charted one at or
+    // before it, the charted ones' places in order).
     BigUint space_index(const BigUint& i) const
     {
         BigUint j = i;
@@ -312,6 +351,9 @@ private:
     std::string known_;
     bool index_ = true; // whether item 0 is the index (not when the known fractals are excluded)
     sieve::FractalSpace space_;
+    std::unique_ptr<sieve::FractalCompact> compact_; // (in compact: the survivors numbered)
+    BigUint v4_at_, line_size_;                      // where v4 starts in the space; how many the line holds
+    std::string compact_bits_;
     std::vector<sieve::ChartedFractal> chart_;
     std::vector<uint32_t> chart_deepest_;
     std::vector<std::optional<BigUint>> chart_index_; // each charted one's address in the space (none: longer than the longest)

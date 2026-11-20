@@ -28,6 +28,9 @@
 #include "sieve/biguint.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace sieve {
@@ -63,5 +66,82 @@ FractalBodyKinds fractal_substitution_kinds();
 FractalBodyKinds fractal_lsystem_kinds();
 FractalBodyKinds fractal_scaled_kinds();
 FractalBodyKinds fractal_v3_kinds();
+
+// ---- The survivors numbered (list F, F-B; IDEAS 19.250) ----
+//
+// Compact needs more than how many pass: the k-th of them, and a survivor's number. The counting above does
+// not give them (a difference of counts has no order), and the line's own order (the text, left to right)
+// cannot be counted with part of a ruleset fixed, as a symbol's reach waits on rules written after it. So
+// the survivors are numbered in an order of their own, in which counting with part of a body fixed is what
+// the counting by sets already does:
+//   - by the set S the axiom reaches: its size s, then how many of it are F or G and f, then which symbols
+//     (under canonical, its renamable symbols are the first names: one set for each size);
+//   - then the characters the reached symbols' lines take (the axiom's and S's rules), the rest being the
+//     rules of the symbols never reached;
+//   - then the reached part, in the order the axiom reaches it: the axiom's symbols left to right, then each
+//     reached symbol's rules in the order met (as filters/fractals.cpp's reach walks them), each choice in
+//     turn (a word ended first, then each symbol in order of code; a rule's contexts, none first, then each
+//     letter; no further rule first);
+//   - then the rules of the symbols never reached, symbol by symbol in order of code, the fewer characters
+//     first, each rule by its contexts, then its word's length and its word.
+// The count of what can follow a choice in the reached part is, as in the counting by sets, a sum over
+// which of S's symbols not yet met the rest reaches (by inclusion and exclusion, the met ones and the
+// queue's alike): from a table of the rules' counts for that S (about (s + 1)(s + 2) / 2 rows of the
+// body's length, for each regime: tens of MB at s = 52 and 230 characters), worked out once for a set's
+// size and kept while it is in use.
+
+// The symbols of a family's bodies.
+struct FractalBodyAlphabet
+{
+    std::string symbols;           // every symbol a word holds, in order of code
+    std::string ruled;             // those with rules, in order of code (the rest have none)
+    std::string drawing, fixed;    // an L-system's F and G, and f (empty for a substitution)
+    bool substitution = false;
+    uint32_t word_most = 64;
+    std::string context;           // v3: the letters a context names (empty: no contexts)
+    bool many_rules = false;       // v3: any number of rules a symbol
+    FractalBodyKinds kinds() const;
+};
+FractalBodyAlphabet fractal_substitution_alphabet();
+FractalBodyAlphabet fractal_lsystem_alphabet();
+FractalBodyAlphabet fractal_scaled_alphabet();
+FractalBodyAlphabet fractal_v3_alphabet();
+
+// A body: its axiom and its rules in the order written (by symbol, a symbol's rules in their order).
+struct FractalBody
+{
+    struct Rule
+    {
+        char symbol = 0, left = 0, right = 0; // (left and right: v3's contexts, 0 for none)
+        std::string word;
+    };
+    std::string axiom;
+    std::vector<Rule> rules;
+    uint32_t length() const; // its characters, as the space writes them
+    std::string text() const; // "axiom ...\n" and "rule ...\n" lines
+};
+
+class FractalBodyNumbering
+{
+public:
+    // The bodies of 0 to `top` characters that pass the ticked filters (at least one), numbered.
+    FractalBodyNumbering(FractalBodyAlphabet alphabet, uint32_t top, const FractalStructureFilters& filters);
+    ~FractalBodyNumbering();
+    FractalBodyNumbering(const FractalBodyNumbering&) = delete;
+    FractalBodyNumbering& operator=(const FractalBodyNumbering&) = delete;
+    uint32_t top() const;
+    const FractalBodyAlphabet& alphabet() const;
+    // How many of exactly r characters pass (fractal_bodies_passing's figure).
+    const BigUint& count(uint32_t r) const;
+    // The k-th of those of r characters (k below count(r); throws std::invalid_argument past it).
+    FractalBody at(uint32_t r, BigUint k) const;
+    // A body's number among those of its length: nothing if it does not pass, or is not of this alphabet.
+    std::optional<BigUint> index(const FractalBody& body) const;
+
+    struct Impl; // (named here so that fractal_count.cpp's walk can name it; defined there)
+
+private:
+    std::unique_ptr<Impl> impl_;
+};
 
 } // namespace sieve

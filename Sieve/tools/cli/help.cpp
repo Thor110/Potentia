@@ -441,8 +441,8 @@ const std::vector<Page>& pages()
          "       sieve fractal draw ID|FILE --out FILE.png [--depth N] [--size PX] [--all-depths]\n"
          "       sieve fractal check FILE...\n"
          "       sieve fractal count [--longest N] [--filters FILE]\n"
-         "       sieve fractal at ADDRESS [--longest N]\n"
-         "       sieve fractal index ID|FILE [--longest N]",
+         "       sieve fractal at ADDRESS [--longest N] [--compact --filters FILE]\n"
+         "       sieve fractal index ID|FILE [--longest N] [--compact --filters FILE]",
          "The fractal dimension (IDEAS 19.191, 19.235) is a line like the others: every ruleset of its\n"
          "grammar (sieve-fractal-v1 to v6, docs SPECIFICATIONS 12.0t) is a unit of the text line over ascii96\n"
          "that the format-fractal-v6 filter passes, so its survivor number is its address. Its shelves show the\n"
@@ -477,6 +477,9 @@ const std::vector<Page>& pages()
           {"count", "How many rulesets the whole space holds, and how many of its shortest lengths."},
           {"at ADDRESS", "The ruleset at an address of the whole space (decimal, or hex after 0x)."},
           {"index ID|FILE", "A charted fractal's or a ruleset's address in the whole space."},
+          {"--compact", "With at and index: the line in compact, v1 to v3's rulesets that pass the structural filters ticked in\n"
+                        "the [fractals] stack of --filters (fractal-draws-v1, -grows-v1, -no-idle-v1, -canonical-v1), numbered\n"
+                        "without gaps: at gives the survivor at a number, index a survivor's number (list F, F-B)."},
           {"--longest N", "The whole space's longest ruleset, 44 to 1024 characters (default 256)."},
           {"--depth N", "How many steps to grow it (default: 6, or as deep as it goes under its limit)."},
           {"--size PX", "The picture's width and height (default 512)."},
@@ -485,7 +488,8 @@ const std::vector<Page>& pages()
           {"sieve fractal show fibonacci-word --depth 8", "the golden ratio's word, 55 symbols"},
           {"sieve fractal draw dragon-curve --depth 12 --out dragon.png", "a picture of it"},
           {"sieve fractal index dragon-curve", "where the dragon curve is in the whole space"},
-          {"sieve fractal at 0", "the first ruleset of all"}}},
+          {"sieve fractal at 0", "the first ruleset of all"},
+          {"sieve fractal index koch-curve --compact --filters filters.ini", "its number among the survivors of the ticked structural filters"}}},
 
         {"dimensions", "Every dimension, built or planned: what an address is, its roof, its links.",
          "sieve dimensions [ID]",
