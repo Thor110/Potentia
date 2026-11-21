@@ -12,6 +12,21 @@ trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' E
 # integer, and one built from 32-bit halves for compilers that have no such type.
 # The second is the one nothing would otherwise exercise, so it is built and run here
 # against the same vectors.
-cmake -S . -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DSIEVE_BIGUINT_PORTABLE"
+# Only sieve_tests is built, so not the hallway (whose SDL would otherwise be fetched again), and each
+# dependency's source is taken from the main build's fetched copy where there is one (its folder is
+# read from build/CMakeCache.txt, so this works under the workflow and under ci/run.sh alike). Only
+# the sources are shared: the main build's base folder is not given, as the two trees would then
+# build their dependencies into the same folders.
+fetched=()
+base="$(sed -n 's/^FETCHCONTENT_BASE_DIR:[A-Z]*=//p' build/CMakeCache.txt 2> /dev/null | tr -d '\r' || true)"
+if [ -n "$base" ] && [ -d "$base" ]; then
+    for src in "$base"/*-src; do
+        [ -d "$src" ] || continue
+        name="$(basename "$src" -src | tr '[:lower:]' '[:upper:]')"
+        [ "$name" = SDL3 ] && continue # (the hallway's alone: given, CMake would warn it went unused)
+        fetched+=("-DFETCHCONTENT_SOURCE_DIR_$name=$src")
+    done
+fi
+cmake -S . -B build-portable -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DSIEVE_BIGUINT_PORTABLE" -DSIEVE_BUILD_CLIENT=OFF "${fetched[@]}"
 cmake --build build-portable --target sieve_tests --parallel
 ./build-portable/sieve_tests tests | tail -1 | grep -q ", 0 failures"

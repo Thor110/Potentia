@@ -37,16 +37,6 @@ int base64_value(uint8_t c, bool url)
     return -1;
 }
 
-void put_varint(std::vector<uint8_t>& o, uint64_t v)
-{
-    while (v >= 0x80)
-    {
-        o.push_back(uint8_t(v | 0x80));
-        v >>= 7;
-    }
-    o.push_back(uint8_t(v));
-}
-
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
@@ -275,41 +265,33 @@ std::optional<Span> list_at(std::span<const uint8_t> f, size_t p, int form, std:
     if (!e) return std::nullopt;
     Span s;
     s.bytes.push_back(v);
-    std::vector<std::pair<size_t, size_t>> gaps; // each between: where, how long
     std::vector<size_t> ends{e};
-    for (;;)
+    // The pattern, followed as the values are read: the separator, and the line break every `per`
+    // values. The list ends at the first between that breaks it, so the values after it are never
+    // read (review 5: reading them all first, and cutting the list back afterwards, made a list whose
+    // pattern breaks early cost the rest of the list again at every word after its start).
+    std::string_view separator, line;
+    size_t per = 0;
+    for (size_t k = 0;; ++k) // (k: the between's number, after the (k + 1)th value)
     {
         const size_t g = between(e);
         if (g - e > kLongestString || (g == e && prefix.empty())) break;
         const size_t ve = value(g, v);
         if (!ve) break;
-        gaps.emplace_back(e, g - e);
+        const std::string_view gap(reinterpret_cast<const char*>(f.data()) + e, g - e);
+        if (k == 0) separator = gap;
+        else if (per == 0)
+        {
+            if (gap != separator) per = k + 1, line = gap;
+        }
+        else if (gap != ((k + 1) % per == 0 ? line : separator))
+            break;
         s.bytes.push_back(v);
         ends.push_back(ve);
         e = ve;
     }
-    // The pattern: the separator, and the line break every `per` values.
-    auto gap = [&](size_t k) { return std::string_view(reinterpret_cast<const char*>(f.data()) + gaps[k].first, gaps[k].second); };
-    size_t count = s.bytes.size();
-    std::string_view separator = gaps.empty() ? std::string_view() : gap(0), line;
-    size_t per = 0;
-    for (size_t k = 1; k < gaps.size(); ++k)
-    {
-        const std::string_view g = gap(k);
-        if (per == 0)
-        {
-            if (g == separator) continue;
-            per = k + 1, line = g; // (after the (k + 1)th value)
-            continue;
-        }
-        if (g != ((k + 1) % per == 0 ? line : separator))
-        {
-            count = k + 1;
-            break;
-        }
-    }
+    const size_t count = s.bytes.size();
     if (count < smallest) return std::nullopt;
-    s.bytes.resize(count);
     s.at = p;
     s.length = ends[count - 1] - p;
     s.form.how = uint8_t(kList | form);
@@ -469,17 +451,17 @@ std::vector<Span> spans_of(std::span<const uint8_t> file, size_t smallest)
 std::vector<uint8_t> skeleton_of(std::span<const uint8_t> file, const std::vector<Span>& spans)
 {
     std::vector<uint8_t> out;
-    put_varint(out, spans.size());
+    write_varint(out, spans.size());
     auto put_string = [&](const std::string& t) {
-        put_varint(out, t.size());
+        write_varint(out, t.size());
         out.insert(out.end(), t.begin(), t.end());
     };
     size_t at = 0;
     for (const Span& s : spans)
     {
-        put_varint(out, s.at - at);
+        write_varint(out, s.at - at);
         out.push_back(s.form.how);
-        put_varint(out, s.form.width);
+        write_varint(out, s.form.width);
         if ((s.form.how & kKind) == kList)
         {
             put_string(s.form.prefix);

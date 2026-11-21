@@ -3,8 +3,11 @@
 #include <sstream>
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
 
 namespace sieve {
 
@@ -338,18 +341,26 @@ ModelSpace::AnyMesh ModelSpace::read_any_obj(std::string_view text)
             {
                 const std::string first = tok.substr(0, tok.find('/'));
                 if (first.empty()) continue;
-                long n = 0;
+                // Read as 64 bits on every system (long is 32 on Windows), and an index past the
+                // last a face can name made the last, so fit() clamps it and counts it the same
+                // everywhere rather than it wrapping round to a real vertex.
+                long long n = 0;
                 try
                 {
-                    n = std::stol(first);
+                    n = std::stoll(first);
+                }
+                catch (const std::out_of_range&)
+                {
+                    if (first[0] == '-') continue; // before the first vertex, as any other
+                    n = LLONG_MAX;
                 }
                 catch (...)
                 {
                     continue;
                 }
-                if (n < 0) n = long(m.verts.size()) + n; // -1 is the newest vertex
-                else --n;                                 // .obj counts from 1
-                if (n >= 0) idx.push_back(uint32_t(n));
+                if (n < 0) n = (long long)(m.verts.size()) + n; // -1 is the newest vertex
+                else --n;                                       // .obj counts from 1
+                if (n >= 0) idx.push_back(uint32_t(std::min<long long>(n, UINT32_MAX)));
             }
             for (size_t i = 2; i < idx.size(); ++i) m.faces.push_back({idx[0], idx[i - 1], idx[i]});
         }

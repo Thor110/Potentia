@@ -46,9 +46,9 @@ AiSpace::AiSpace(AiShape shape, std::string key) : shape_(shape), key_(std::move
         weights_ += uint64_t(rows) * cols;
     }
     size_ = BigUint::pow(2, bits());
-    BigUint top = size_;
-    top -= BigUint(1);
-    hex_width_ = std::max<size_t>(1, top.to_hex().size());
+    // The width of the last index, 2^bits - 1, in hex: a digit for each four bits (counted, not
+    // written out, since writing it would take two bytes a weight).
+    hex_width_ = std::max<size_t>(1, size_t((bits() + 3) / 4));
     shuffle_ = Shuffle(size_, key_, id());
     // Each layer's tensors, for the canonical form.
     layers_.assign(shape_.layers, Layer{});

@@ -12,6 +12,8 @@ python tools/fetch_corpus.py
 pinned=$(awk -F'\t' '$1 == "gutenberg-lower27-o5" {print $5}' data/models/models.tsv)
 build/sieve train --out rebuilt.model
 test "$(sha256sum rebuilt.model | cut -d' ' -f1)" = "$pinned"
-(cd reference && python sieve_ref.py model-build --out ../oracle.model)
+# (The oracle runs as a module from the Sieve folder, its corpus and texts named from here, as
+# reference/ is where its defaults are reckoned from.)
+python -m reference.sieve_ref model-build --corpus data/models/corpus/gutenberg-nltk.tsv --texts corpus/gutenberg --out oracle.model
 test "$(sha256sum oracle.model | cut -d' ' -f1)" = "$pinned"
 build/sieve measure

@@ -2,12 +2,15 @@
 #include "sieve/weights.hpp"
 
 #include "sieve/safetensors.hpp"
+#include "sieve/varint.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <map>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace sieve::weights {
 
@@ -20,14 +23,10 @@ const std::string kMagic = std::string(kVersion) + "\n";
 
 void put_varint(std::ostream& out, uint64_t v, uint64_t& written)
 {
-    do
-    {
-        uint8_t b = uint8_t(v & 0x7F);
-        v >>= 7;
-        if (v) b |= 0x80;
-        out.put(char(b));
-        ++written;
-    } while (v);
+    std::vector<uint8_t> b;
+    write_varint(b, v);
+    out.write(reinterpret_cast<const char*>(b.data()), std::streamsize(b.size()));
+    written += b.size();
 }
 
 uint64_t get_varint(std::istream& in)
@@ -260,14 +259,20 @@ UnpackReport unpack(std::istream& in, std::ostream& out)
                                     uint32_t(uint8_t(raw[4 * i + 2])) << 16 | uint32_t(uint8_t(raw[4 * i + 3])) << 24);
                 left -= n;
             }
-            const std::vector<uint16_t> values = decode(words, tables.at(group_of(*t)), t->elements());
-            std::vector<char> bytes(values.size() * 2);
-            for (size_t i = 0; i < values.size(); ++i)
-            {
-                bytes[2 * i] = char(values[i] & 0xFF);
-                bytes[2 * i + 1] = char(values[i] >> 8);
-            }
-            emit(bytes.data(), bytes.size());
+            // (Decoded and put out a piece at a time: the count of values is the file's, and a stream of
+            // two words under a table of one value can claim any number, so they are never held whole,
+            // nor held a second time as bytes. A stream that does not end where its values do is
+            // refused after its pieces, and the SHA-256 is not reached.)
+            std::vector<char> bytes;
+            decode_pieces(words, tables.at(group_of(*t)), t->elements(), [&](std::span<const uint16_t> values) {
+                bytes.resize(values.size() * 2);
+                for (size_t i = 0; i < values.size(); ++i)
+                {
+                    bytes[2 * i] = char(values[i] & 0xFF);
+                    bytes[2 * i + 1] = char(values[i] >> 8);
+                }
+                emit(bytes.data(), bytes.size());
+            });
         }
         else
         {

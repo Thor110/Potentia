@@ -399,9 +399,7 @@ BigUint count_filter(uint32_t L, SieveFilter f, const Dictionary& d)
         {
             const uint32_t w = W(k);
             if (!w || F[p + k + 1].is_zero()) continue;
-            BigUint term = F[p + k + 1];
-            term.mul_small(w);
-            t += term;
+            t.add_mul_small(F[p + k + 1], w);
         }
         const uint32_t k = L - p;
         t += BigUint(window ? d.prefixes_of_length(k) : W(k));
@@ -418,9 +416,7 @@ BigUint count_filter(uint32_t L, SieveFilter f, const Dictionary& d)
         }
         const uint32_t m = window ? d.suffixes_of_length(k) : W(k);
         if (!m || F[k + 1].is_zero()) continue;
-        BigUint term = F[k + 1];
-        term.mul_small(m);
-        total += term;
+        total.add_mul_small(F[k + 1], m);
     }
     return total;
 }

@@ -1095,34 +1095,24 @@ std::span<const uint8_t> v32_carried(const PackedStream& s, std::span<const uint
 // size gives and lc 3, lp 0, pb 2; 3 the same with the chunk's settings' byte after.
 void put_stream_v32(std::vector<uint8_t>& o, const PackedStream& s, std::span<const uint8_t> carried, bool last);
 
-void put_varint_to(std::vector<uint8_t>& out, uint64_t v)
-{
-    while (v >= 0x80)
-    {
-        out.push_back(uint8_t(v | 0x80));
-        v >>= 7;
-    }
-    out.push_back(uint8_t(v));
-}
-
 void put_stream_v32(std::vector<uint8_t>& o, const PackedStream& s, std::span<const uint8_t> carried, bool last)
 {
     if (s.bytes >= (uint64_t(1) << 62)) throw std::logic_error("a stream too large for v32's head");
     const auto chunk = v32_chunk(s, carried);
-    if (!last) put_varint_to(o, chunk ? chunk->size : s.packed);
+    if (!last) sieve::write_varint(o, chunk ? chunk->size : s.packed);
     if (chunk)
     {
         const bool settings = chunk->props != kLzma2DefaultProps;
-        put_varint_to(o, s.bytes * 4 + (settings ? 3 : 2));
+        sieve::write_varint(o, s.bytes * 4 + (settings ? 3 : 2));
         if (settings) o.push_back(chunk->props);
         return;
     }
-    if (implied_dictionary(s)) return put_varint_to(o, s.bytes * 4);
-    put_varint_to(o, s.bytes * 4 + 1);
+    if (implied_dictionary(s)) return sieve::write_varint(o, s.bytes * 4);
+    sieve::write_varint(o, s.bytes * 4 + 1);
     if (!s.mixed.empty())
     {
         o.push_back(0xFE);
-        put_varint_to(o, s.mixed.size());
+        sieve::write_varint(o, s.mixed.size());
         o.insert(o.end(), s.mixed.begin(), s.mixed.end());
         return;
     }
@@ -1156,16 +1146,6 @@ std::vector<uint8_t> code_bytes(std::string_view hex, const std::string& path)
     };
     for (size_t i = 0; i < hex.size(); i += 2) out.push_back(uint8_t(digit(hex[i]) * 16 + digit(hex[i + 1])));
     return out;
-}
-
-void put_varint(std::vector<uint8_t>& out, uint64_t v)
-{
-    while (v >= 0x80)
-    {
-        out.push_back(uint8_t(v | 0x80));
-        v >>= 7;
-    }
-    out.push_back(uint8_t(v));
 }
 
 } // namespace
@@ -1303,7 +1283,7 @@ std::vector<uint8_t> Manifest::items_stream() const
             // v7: a coded place, its length first.
             if (e.way.size() < sp + 2 || e.way[sp + 1] != 'h') throw std::runtime_error("manifest: " + e.path + " has no code for its line");
             const std::vector<uint8_t> b = code_bytes(std::string_view(e.way).substr(sp + 2), e.path);
-            put_varint(out, b.size());
+            sieve::write_varint(out, b.size());
             out.insert(out.end(), b.begin(), b.end());
             continue;
         }
@@ -1382,7 +1362,7 @@ static int recipe_words(std::string_view way)
 
 static void put_text(std::vector<uint8_t>& o, std::string_view t)
 {
-    put_varint_to(o, t.size());
+    sieve::write_varint(o, t.size());
     o.insert(o.end(), t.begin(), t.end());
 }
 
@@ -1408,7 +1388,7 @@ static void put_way(std::vector<uint8_t>& o, std::string_view way, bool v32)
         if (at != std::string_view::npos && archive_format_number(kind) > 0)
         {
             o.push_back(2);
-            put_varint_to(o, uint64_t(archive_format_number(kind)));
+            sieve::write_varint(o, uint64_t(archive_format_number(kind)));
             const std::string_view rest = way.substr(kind.size() + 1, at - kind.size() - 1);
             if (!v32) put_text(o, rest);
             else
@@ -1416,10 +1396,10 @@ static void put_way(std::vector<uint8_t>& o, std::string_view way, bool v32)
                 {
                     const size_t sp = std::min(rest.find(' ', p), rest.size());
                     const std::string_view word = rest.substr(p, sp - p);
-                    if (plain_number(word)) put_varint_to(o, std::stoull(std::string(word)) * 2);
+                    if (plain_number(word)) sieve::write_varint(o, std::stoull(std::string(word)) * 2);
                     else
                     {
-                        put_varint_to(o, uint64_t(word.size()) * 2 + 1);
+                        sieve::write_varint(o, uint64_t(word.size()) * 2 + 1);
                         o.insert(o.end(), word.begin(), word.end());
                     }
                     p = sp + 1;
@@ -1445,7 +1425,7 @@ std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32)
     auto put_path = [&](std::string_view p) {
         size_t same = 0;
         while (same < p.size() && same < last.size() && p[same] == last[same]) ++same;
-        put_varint_to(o, same);
+        sieve::write_varint(o, same);
         put_text(o, p.substr(same));
         last.assign(p);
     };
@@ -1471,7 +1451,7 @@ std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32)
         else if (f.size() == 4 && f[0] == "f" && decimal(f[1]))
         {
             o.push_back(2);
-            put_varint_to(o, std::stoull(std::string(f[1])));
+            sieve::write_varint(o, std::stoull(std::string(f[1])));
             put_way(o, f[2], v32);
             put_path(f[3]);
         }
@@ -1479,9 +1459,9 @@ std::vector<uint8_t> listing_to_bytes(const std::string& body, bool v32)
         {
             o.push_back(4);
             const int n = archive_format_number(std::string(f[1]));
-            put_varint_to(o, uint64_t(n));
+            sieve::write_varint(o, uint64_t(n));
             if (!n) put_text(o, f[1]);
-            put_varint_to(o, std::stoull(std::string(f[2])));
+            sieve::write_varint(o, std::stoull(std::string(f[2])));
             put_text(o, f[3]);
             put_text(o, f[4]);
         }
@@ -1621,17 +1601,17 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
                         (body_packed ? 32 : 0) | (m.graph.empty() ? 0 : 64) | (m.v20 && m.body_text ? 128 : 0))); // v18: 64, a graph part; v20: 128, the body as text
     if (root)
     {
-        put_varint_to(o, m.root.size());
+        sieve::write_varint(o, m.root.size());
         o.insert(o.end(), m.root.begin(), m.root.end());
     }
     auto stream = [&](const PackedStream& s) {
-        put_varint_to(o, s.packed);
-        put_varint_to(o, s.bytes);
+        sieve::write_varint(o, s.packed);
+        sieve::write_varint(o, s.bytes);
         if (!s.mixed.empty())
         {
             // v29: mixed, its parameters after.
             o.push_back(0xFE);
-            put_varint_to(o, s.mixed.size());
+            sieve::write_varint(o, s.mixed.size());
             o.insert(o.end(), s.mixed.begin(), s.mixed.end());
             return;
         }
@@ -1647,14 +1627,14 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
         if (m.x86.packed) put_stream_v32(o, m.x86, all.subspan(0, size_t(m.x86.packed)), last == 2);
         if (m.lzma2.packed) put_stream_v32(o, m.lzma2, all.subspan(size_t(m.x86.packed), size_t(m.lzma2.packed)), last == 4);
         if (items) put_stream_v32(o, m.item_stream, m.items_carried, last == 8);
-        if (m.roped && last != 16) put_varint_to(o, m.rope_stream.packed);
+        if (m.roped && last != 16) sieve::write_varint(o, m.rope_stream.packed);
     }
     else
     {
         if (m.x86.packed) stream(m.x86);
         if (m.lzma2.packed) stream(m.lzma2);
         if (items) stream(m.item_stream);
-        if (m.roped) put_varint_to(o, m.rope_stream.packed);
+        if (m.roped) sieve::write_varint(o, m.rope_stream.packed);
     }
     if (m.tree.size() != 64) throw std::logic_error("a tree's SHA-256 that is not 64 hex digits");
     for (size_t i = 0; i < 64; i += 2) o.push_back(uint8_t(std::stoul(m.tree.substr(i, 2), nullptr, 16)));
@@ -1678,7 +1658,7 @@ static std::vector<uint8_t> binary_head(const Manifest& m)
         // (v20: the body in bytes; before it, as text.)
         const std::string text = listing_body(m);
         const std::vector<uint8_t> body = m.v20 && !m.body_text ? listing_to_bytes(text, m.v32) : std::vector<uint8_t>(text.begin(), text.end());
-        put_varint_to(o, body.size());
+        sieve::write_varint(o, body.size());
         o.insert(o.end(), body.begin(), body.end());
     }
     return o;

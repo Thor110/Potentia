@@ -161,12 +161,7 @@ GuidedLine::Interval GuidedLine::interval(const Digits& unit) const
         if (cum[s + 1] == cum[s]) throw std::invalid_argument("the unit does not pass the sieve");
         state = sieve ? sieve->next(state, s) : 0;
         iv.low <<= kModelTotalBits;
-        if (cum[s])
-        {
-            BigUint t = iv.width;
-            t.mul_small(cum[s]);
-            iv.low += t;
-        }
+        if (cum[s]) iv.low.add_mul_small(iv.width, cum[s]); // (in place: no copy of the width)
         iv.width.mul_small(cum[s + 1] - cum[s]);
     }
     if (L < length_) // (a shorter unit of a range: its arc scaled out to the line's S bits)

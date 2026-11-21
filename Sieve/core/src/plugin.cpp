@@ -433,6 +433,26 @@ struct PluginDef
 
 const PluginHeader& plugin_header(const PluginDef& p) { return p.header; }
 
+// The files a token-form set takes its words from: list:FILE's one, or each of tags:FILE+FILE:TAGS's
+// (joined with +); none for a dictionary, which is pinned by its own hash.
+static std::vector<std::string> set_files(const PluginDef::WordSet& s)
+{
+    std::vector<std::string> out;
+    if (s.kind == "list") out.push_back(s.source);
+    else if (s.kind == "tags")
+    {
+        const std::string files = s.source.substr(0, s.source.rfind(':'));
+        for (size_t at = 0;;)
+        {
+            const size_t plus = files.find('+', at);
+            out.push_back(files.substr(at, plus == std::string::npos ? std::string::npos : plus - at));
+            if (plus == std::string::npos) break;
+            at = plus + 1;
+        }
+    }
+    return out;
+}
+
 std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std::string& sha256, const std::string& folder)
 {
     auto def = std::make_shared<PluginDef>();
@@ -667,6 +687,21 @@ std::shared_ptr<const PluginDef> parse_plugin(const std::string& text, const std
                 if (last <= colon + 1 || last + 1 >= src.size()) fail(line, "a tagged set is tags:FILE:TAGS (the tags a word must carry one of)");
             }
             def->sets.push_back({toks[1].text, kind, src.substr(colon + 1), line});
+            // A list or tags file lies in the plugin's folder or a folder under it: a shared plugin
+            // may not read files elsewhere on the machine.
+            for (const std::string& f : set_files(def->sets.back()))
+            {
+                bool up = false;
+                for (size_t at = 0; at <= f.size();)
+                {
+                    const size_t cut = f.find_first_of("/\\", at);
+                    if (f.substr(at, cut == std::string::npos ? std::string::npos : cut - at) == "..") up = true;
+                    if (cut == std::string::npos) break;
+                    at = cut + 1;
+                }
+                if (f.empty() || f.front() == '/' || f.front() == '\\' || f.find(':') != std::string::npos || up)
+                    fail(line, "the word file '" + f + "' must be a name in the plugin's folder or a folder under it (no drive, no leading / or \\, no ..)");
+            }
         }
         else if (k == "follow")
         {
@@ -845,68 +880,79 @@ bool plugin_applies(const PluginDef& p, const FilterLine& line)
 
 namespace {
 
+// The values an expression sees: on a v2 plugin the line's constants (when there is a line), and
+// the parameters at these values: an integer checked to be a whole number within its range, and
+// (v2) a choice as its place in the list. The table form compiles with it, and `within` is worked
+// out with it, so both refuse the same values with the same words.
+Env plugin_env(const PluginDef& p, const FilterLine* line, const FilterValues& values)
+{
+    Env env;
+    if (p.v2 && line)
+    {
+        // The line's constants (v2).
+        env["BASE"] = int64_t(line->base);
+        if (is_note_symbols(line->symbols_id))
+        {
+            // notes104 (25, 4, 60) or a notes2 set: one voice's events (the stack gives a
+            // plugin one voice at a time).
+            const NoteSet set = note_set_of(line->symbols_id);
+            env["PITCHES"] = int64_t(set.pitches());
+            env["DURATIONS"] = int64_t(set.duration_count());
+            env["LOW"] = int64_t(set.low);
+            // LENGTH(i): each of the set's durations in sixteenths (s e E q Q h H w).
+            static const int64_t sixteenths[] = {1, 2, 3, 4, 6, 8, 12, 16};
+            for (size_t i = 0; i < set.durations.size(); ++i)
+                env["#len" + std::to_string(i)] = sixteenths[std::string(kNoteDurationCodes).find(set.durations[i])];
+        }
+        else if (is_notes3_symbols(line->symbols_id))
+        {
+            // A notes3 set (one voice's events, as above): its pitches from LOW, its loudness
+            // levels, its longest length and its ticks a quarter note; NOTE() and REST() write
+            // its symbols.
+            const Notes3Set set = notes3_set_of(line->symbols_id);
+            env["PITCHES"] = int64_t(set.pitches());
+            env["LOW"] = int64_t(set.low);
+            env["LEVELS"] = int64_t(set.levels);
+            env["LONGEST"] = int64_t(set.longest);
+            env["TPQ"] = int64_t(set.tpq);
+        }
+    }
+    for (const auto& par : p.header.params)
+    {
+        if (par.kind == FilterParam::Kind::Text && !par.choices.empty() && p.v2)
+        {
+            // A choice: its place in the list.
+            const auto it = values.find(par.key);
+            const std::string v = it == values.end() ? par.default_value : it->second;
+            const auto c = std::find(par.choices.begin(), par.choices.end(), v);
+            if (c == par.choices.end()) throw std::invalid_argument(p.header.name() + ": " + par.key + " must be one of its choices, got '" + v + "'");
+            env[par.key] = int64_t(c - par.choices.begin());
+            continue;
+        }
+        if (par.kind != FilterParam::Kind::Integer) continue;
+        const auto it = values.find(par.key);
+        int64_t v = 0;
+        if (it == values.end()) v = std::stoll(par.default_value);
+        else
+        {
+            size_t used = 0;
+            try { v = std::stoll(it->second, &used); } catch (const std::exception&) { used = 0; }
+            if (it->second.empty() || used != it->second.size())
+                throw std::invalid_argument(p.header.name() + ": " + par.key + " must be a whole number, got '" + it->second + "'");
+        }
+        if (v < par.min || v > par.max)
+            throw std::invalid_argument(p.header.name() + ": " + par.key + " must be " + std::to_string(par.min) + ".." + std::to_string(par.max));
+        env[par.key] = v;
+    }
+    return env;
+}
+
 class Compiler
 {
 public:
     Compiler(const PluginDef& p, const FilterLine& line, const FilterValues& values) : p_(p), line_(line)
     {
-        if (p.v2)
-        {
-            // The line's constants (v2).
-            env_["BASE"] = int64_t(line.base);
-            if (is_note_symbols(line.symbols_id))
-            {
-                // notes104 (25, 4, 60) or a notes2 set: one voice's events (the stack gives a
-                // plugin one voice at a time).
-                const NoteSet set = note_set_of(line.symbols_id);
-                env_["PITCHES"] = int64_t(set.pitches());
-                env_["DURATIONS"] = int64_t(set.duration_count());
-                env_["LOW"] = int64_t(set.low);
-                // LENGTH(i): each of the set's durations in sixteenths (s e E q Q h H w).
-                static const int64_t sixteenths[] = {1, 2, 3, 4, 6, 8, 12, 16};
-                for (size_t i = 0; i < set.durations.size(); ++i)
-                    env_["#len" + std::to_string(i)] = sixteenths[std::string(kNoteDurationCodes).find(set.durations[i])];
-            }
-            else if (is_notes3_symbols(line.symbols_id))
-            {
-                // A notes3 set (one voice's events, as above): its pitches from LOW, its loudness
-                // levels, its longest length and its ticks a quarter note; NOTE() and REST() write
-                // its symbols.
-                const Notes3Set set = notes3_set_of(line.symbols_id);
-                env_["PITCHES"] = int64_t(set.pitches());
-                env_["LOW"] = int64_t(set.low);
-                env_["LEVELS"] = int64_t(set.levels);
-                env_["LONGEST"] = int64_t(set.longest);
-                env_["TPQ"] = int64_t(set.tpq);
-            }
-        }
-        for (const auto& par : p.header.params)
-        {
-            if (par.kind == FilterParam::Kind::Text && !par.choices.empty() && p.v2)
-            {
-                // A choice: its place in the list.
-                const auto it = values.find(par.key);
-                const std::string v = it == values.end() ? par.default_value : it->second;
-                const auto c = std::find(par.choices.begin(), par.choices.end(), v);
-                if (c == par.choices.end()) throw std::invalid_argument(p.header.name() + ": " + par.key + " must be one of its choices, got '" + v + "'");
-                env_[par.key] = int64_t(c - par.choices.begin());
-                continue;
-            }
-            if (par.kind != FilterParam::Kind::Integer) continue;
-            const auto it = values.find(par.key);
-            int64_t v = 0;
-            if (it == values.end()) v = std::stoll(par.default_value);
-            else
-            {
-                size_t used = 0;
-                try { v = std::stoll(it->second, &used); } catch (const std::exception&) { used = 0; }
-                if (it->second.empty() || used != it->second.size())
-                    throw std::invalid_argument(p.header.name() + ": " + par.key + " must be a whole number, got '" + it->second + "'");
-            }
-            if (v < par.min || v > par.max)
-                throw std::invalid_argument(p.header.name() + ": " + par.key + " must be " + std::to_string(par.min) + ".." + std::to_string(par.max));
-            env_[par.key] = v;
-        }
+        env_ = plugin_env(p, &line, values);
     }
 
     Dfa run(size_t* declared)
@@ -1192,6 +1238,32 @@ Dfa pad_trailing(const Dfa& d, const std::vector<uint8_t>& sep)
     return out;
 }
 
+// Every list and tags file the plugin names, read once, by name: its bytes, or nothing when it
+// cannot be read. The compiled-automaton cache is keyed by their hashes, and the compile takes its
+// words from these same bytes, so what is kept, what is built and the hashes in the provenance
+// always agree, even when a list beside the plugin is edited or the same plugin sits in two folders.
+using SetFiles = std::map<std::string, std::optional<std::string>>;
+SetFiles read_set_files(const PluginDef& p)
+{
+    SetFiles out;
+    for (const auto& s : p.sets)
+        for (const std::string& f : set_files(s))
+        {
+            if (out.count(f)) continue;
+            const std::string path = (p.folder.empty() ? std::string() : p.folder + "/") + f;
+            std::ifstream in(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
+            if (!in)
+            {
+                out[f] = std::nullopt;
+                continue;
+            }
+            std::ostringstream o;
+            o << in.rdbuf();
+            out[f] = o.str();
+        }
+    return out;
+}
+
 // Words as the line's symbols, in one trie; each node knows which sets it ends a word of. The DFA
 // is made directly (a subset construction folded in): between tokens the state is the set of
 // readings the last token can have; inside a token it is the trie node and the readings the
@@ -1202,8 +1274,8 @@ class TokenCompiler
 {
 public:
     TokenCompiler(const PluginDef& p, const FilterLine& line, const FilterValues& values, const FilterResources& res,
-                  const std::function<void(const std::string&)>& step)
-        : p_(p), line_(line), values_(values), res_(res), B_(line.base), step_(step)
+                  const std::function<void(const std::string&)>& step, const SetFiles* files = nullptr)
+        : p_(p), line_(line), values_(values), res_(res), B_(line.base), step_(step), files_(files)
     {
     }
 
@@ -1269,11 +1341,22 @@ private:
         all_words_.push_back(w);
     }
 
-    std::string read_list(const std::string& file, int line) const
+    // A list or tags file's bytes: those read for the cache key when there are some (so the words
+    // are the ones hashed), or read here.
+    std::string read_list(const std::string& file, int line, const std::string& what) const
     {
+        if (files_)
+        {
+            const auto it = files_->find(file);
+            if (it != files_->end())
+            {
+                if (!it->second) fail(line, "cannot read " + what + file);
+                return *it->second;
+            }
+        }
         const std::string path = (p_.folder.empty() ? std::string() : p_.folder + "/") + file;
         std::ifstream in(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
-        if (!in) fail(line, "cannot read " + file);
+        if (!in) fail(line, "cannot read " + what + file);
         std::ostringstream o;
         o << in.rdbuf();
         return o.str();
@@ -1404,7 +1487,7 @@ private:
                 {
                     const size_t plus = files.find('+', at);
                     const std::string one = files.substr(at, plus == std::string::npos ? std::string::npos : plus - at);
-                    const std::string t = read_list(one, s.line);
+                    const std::string t = read_list(one, s.line, "");
                     hashes += (hashes.empty() ? "" : "+") + Sha256::hex(Sha256::hash(t));
                     text += t;
                     if (!text.empty() && text.back() != '\n') text += '\n';
@@ -1441,12 +1524,7 @@ private:
             }
             else
             {
-                const std::string path = (p_.folder.empty() ? std::string() : p_.folder + "/") + s.source;
-                std::ifstream in(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
-                if (!in) fail(s.line, "cannot read the word list " + s.source);
-                std::ostringstream o;
-                o << in.rdbuf();
-                const std::string text = o.str();
+                const std::string text = read_list(s.source, s.line, "the word list ");
                 hash = "list:" + s.source + "=" + Sha256::hex(Sha256::hash(text));
                 std::istringstream lines(text);
                 std::string w;
@@ -1672,6 +1750,7 @@ private:
     uint64_t first_ = 0, last_ = 0, all_ = 0;
     std::vector<Sam> sam_;
     const std::function<void(const std::string&)>& step_;
+    const SetFiles* files_ = nullptr;
     size_t distinct_words_ = 0;
     void say(const std::string& s) const
     {
@@ -1802,9 +1881,32 @@ void set_plugin_cache_dir(const std::filesystem::path& dir)
     g_cache_dir = dir;
 }
 
-bool plugin_compiled(const std::string& sha256, const FilterLine& line, const std::vector<FilterParam>& params, const FilterValues& values)
+namespace {
+
+// The key a compiled automaton is kept under: the plugin's, line's and settings' key, then, for a
+// token plugin, each list and tags file it reads (each once, in name order, however many sets read
+// it) by its hash. The plugin's hash does not cover those files, and an edited list, or the same
+// plugin in another folder with other lists, must not take an automaton built from other words. A
+// file that cannot be read gives a key nothing was ever kept under; a plugin with no such files
+// keeps the key it always had.
+std::string kept_key(const PluginDef& p, const FilterLine& line, const FilterValues& values, const SetFiles& files)
 {
-    const std::string key = compiled_key(sha256, line, params, values);
+    std::string key = compiled_key(p.header.sha256, line, p.header.params, values);
+    for (const auto& [f, bytes] : files)
+        key += "|" + f + "=" + (bytes ? Sha256::hex(Sha256::hash(*bytes)) : std::string("unreadable"));
+    return key;
+}
+
+} // namespace
+
+// It reads and hashes a token plugin's list and tags files, as the compile does, and asks under
+// the very key the compile keeps the automaton under; so an automaton kept on disk under an older
+// key (before those files were in it) is not counted, as the compile would not take it either.
+// Without a SHA-256 the compile keeps nothing, and the answer is false.
+bool plugin_compiled(const PluginDef& p, const FilterLine& line, const FilterValues& values)
+{
+    if (p.header.sha256.empty()) return false;
+    const std::string key = kept_key(p, line, values, p.header.form == "tokens" ? read_set_files(p) : SetFiles());
     std::lock_guard<std::mutex> lock(g_compiled_mx);
     if (g_compiled.count(key)) return true;
     std::error_code ec;
@@ -1828,8 +1930,11 @@ std::shared_ptr<const Dfa> compile_plugin_shared(const PluginDef& p, const Filte
     // Compiled automata are kept for the process, and on disk when the application names a folder
     // (set_plugin_cache_dir): the same file, symbols and settings always compile to the same
     // automaton (a dictionary is pinned by its hash, so its id is enough), and a large one takes
-    // seconds, where the menu and the hallway rebuild stacks often.
-    const std::string key = compiled_key(p.header.sha256, line, p.header.params, values);
+    // seconds, where the menu and the hallway rebuild stacks often. A list or tags file is pinned
+    // by its own hash in the key (kept_key; a file that cannot be read gives a key nothing was ever
+    // kept under, and the compile then says what is wrong).
+    const SetFiles files = p.header.form == "tokens" ? read_set_files(p) : SetFiles();
+    const std::string key = kept_key(p, line, values, files);
     // The automaton inside the kept compile (an aliasing pointer: it keeps the compile alive).
     auto give = [&](const std::shared_ptr<const Compiled>& c) {
         if (declared_states) *declared_states = c->declared;
@@ -1871,7 +1976,7 @@ std::shared_ptr<const Dfa> compile_plugin_shared(const PluginDef& p, const Filte
     {
         auto c = std::make_shared<Compiled>();
         Dfa made;
-        if (p.header.form == "tokens") made = TokenCompiler(p, line, values, resources, step).run(&c->declared, &c->data);
+        if (p.header.form == "tokens") made = TokenCompiler(p, line, values, resources, step, &files).run(&c->declared, &c->data);
         else
         {
             say("running the table");
@@ -2050,28 +2155,20 @@ private:
     mutable std::unique_ptr<Ranker> ranker_;
 };
 
-// The plugin's integer parameters (and choices, by place) at these values, for `within`.
-Env plugin_env(const PluginDef& p, const FilterValues& values)
+// The token form's `within N` with the parameters checked as the table form checks them, and, on a
+// v2 plugin given its line, the line's constants (BASE and the rest) as well.
+uint32_t within_at(const PluginDef& p, const FilterLine* line, const FilterValues& values)
 {
-    Env env;
-    for (const auto& par : p.header.params)
-    {
-        if (par.kind != FilterParam::Kind::Integer) continue;
-        const auto it = values.find(par.key);
-        env[par.key] = std::stoll(it == values.end() ? par.default_value : it->second);
-    }
-    return env;
+    if (!p.within) return 0;
+    const int64_t n = eval(*p.within, plugin_env(p, line, values), p.within_line, p.v2);
+    if (n < 1) throw std::invalid_argument(p.header.name() + ": within must be at least 1");
+    return uint32_t(std::min<int64_t>(n, UINT32_MAX));
 }
 
 } // namespace
 
-uint32_t plugin_within(const PluginDef& p, const FilterValues& values)
-{
-    if (!p.within) return 0;
-    const int64_t n = eval(*p.within, plugin_env(p, values), p.within_line, p.v2);
-    if (n < 1) throw std::invalid_argument(p.header.name() + ": within must be at least 1");
-    return uint32_t(std::min<int64_t>(n, UINT32_MAX));
-}
+uint32_t plugin_within(const PluginDef& p, const FilterValues& values) { return within_at(p, nullptr, values); }
+uint32_t plugin_within(const PluginDef& p, const FilterLine& line, const FilterValues& values) { return within_at(p, &line, values); }
 
 std::vector<uint32_t> plugin_separators(const PluginDef& p, const FilterLine& line)
 {
@@ -2094,7 +2191,7 @@ std::unique_ptr<Filter> make_plugin_filter(std::shared_ptr<const PluginDef> p, c
     std::string data;
     std::shared_ptr<const Dfa> d = compile_plugin_shared(*p, l, v, r, nullptr, &data);
     if (!data.empty()) prov += " " + data;
-    if (const uint32_t n = plugin_within(*p, v))
+    if (const uint32_t n = within_at(*p, &l, v))
         return std::make_unique<WithinFilter>(std::move(d), l.length, n, separator_mask(*p, l), prov);
     // A plain dictionary (one dict set, no grammar, SPACE between tokens, on lower27): counted by its
     // words' lengths where its automaton's table would not fit, as words-v1 and window-v1 count.
@@ -2125,9 +2222,17 @@ const Dfa* plugin_dfa(const Filter& f)
     return p ? &p->dfa() : nullptr;
 }
 
+// The same over an automaton kept elsewhere (the process-kept automata of picture.cpp and
+// written.cpp, passed as an aliasing pointer that keeps their holder alive): shared, not copied,
+// so a stack built again does not copy tens of megabytes each time.
+std::unique_ptr<Filter> make_dfa_filter(std::shared_ptr<const Dfa> dfa, uint32_t length, std::string provenance)
+{
+    return std::make_unique<PluginFilter>(std::move(dfa), length, std::move(provenance));
+}
+
 std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance)
 {
-    return std::make_unique<PluginFilter>(std::make_shared<const Dfa>(std::move(dfa)), length, std::move(provenance));
+    return make_dfa_filter(std::make_shared<const Dfa>(std::move(dfa)), length, std::move(provenance));
 }
 
 namespace {

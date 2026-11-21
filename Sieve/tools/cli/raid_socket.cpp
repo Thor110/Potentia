@@ -10,6 +10,7 @@
 #include <cstring>
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -49,6 +50,10 @@ namespace sieve_cli {
 namespace {
 
 constexpr size_t kAtOnce = 32; // connections answered at once; more wait to be accepted
+// Connections answered at once from one address. The timeout limits each read on its own, so a peer
+// that sends a byte every few seconds keeps its connection for as long as it likes; without this cap,
+// one machine could open kAtOnce such connections and keep every other peer out (review 5).
+constexpr int kPerAddress = 4;
 
 void close_socket(socket_t s)
 {
@@ -233,6 +238,7 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
     std::mutex mx;
     std::condition_variable cv;
     size_t running = 0;
+    std::map<std::string, int> from_address; // connections being answered, by the peer's address
     auto reap = [&] {
         for (auto i = workers.begin(); i != workers.end();)
             if (i->done->load())
@@ -242,7 +248,7 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
             }
             else ++i;
     };
-    for (size_t n = 0; connections == 0 || n < connections; ++n)
+    for (size_t n = 0; connections == 0 || n < connections;)
     {
         {
             std::unique_lock<std::mutex> lock(mx);
@@ -267,16 +273,29 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
         sockaddr_storage from{};
         socklen_t from_len = sizeof from;
         const socket_t c = accept(l, reinterpret_cast<sockaddr*>(&from), &from_len);
-        if (c == kNoSocket) continue;
+        if (c == kNoSocket)
+        {
+            ++n;
+            continue;
+        }
         char ip[NI_MAXHOST] = {};
         if (getnameinfo(reinterpret_cast<sockaddr*>(&from), from_len, ip, sizeof ip, nullptr, 0, NI_NUMERICHOST) != 0) ip[0] = '\0';
-        set_timeouts(c, timeout_s);
         {
+            // An address already at its cap is closed at once; it is not counted as a connection.
             std::lock_guard<std::mutex> lock(mx);
+            int& live = from_address[ip];
+            if (live >= kPerAddress)
+            {
+                close_socket(c);
+                continue;
+            }
+            ++live;
             ++running;
         }
+        ++n;
+        set_timeouts(c, timeout_s);
         auto done = std::make_shared<std::atomic<bool>>(false);
-        workers.push_back({std::thread([&on, &mx, &cv, &running, c, done, address = std::string(ip)] {
+        workers.push_back({std::thread([&on, &mx, &cv, &running, &from_address, c, done, address = std::string(ip)] {
                                {
                                    SocketStream s(c);
                                    try
@@ -291,6 +310,7 @@ void raid_listen(const std::string& address, size_t connections, int timeout_s, 
                                {
                                    std::lock_guard<std::mutex> lock(mx);
                                    --running;
+                                   if (--from_address[address] == 0) from_address.erase(address);
                                }
                                done->store(true);
                                cv.notify_all();

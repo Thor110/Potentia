@@ -26,7 +26,10 @@ ci/reach.txt            none
 ci/README.md            none
 ci/*                    all
 
-# The unit tests.
+# The unit tests. Step 11 also reads fixtures under tests/plugins/ and tests/archives/ by names its
+# script builds from a variable, so it never names their paths in full; their rules say so.
+tests/plugins/*         01 11
+tests/archives/*        01 11
 tests/*                 01
 
 # The hallway (client/) and what only it reads: every step that runs it.
@@ -37,8 +40,8 @@ data/icons/*            03 04 10 11
 data/meshes/*           03 04 10 11
 data/objects/*          03 04 10 11
 
-# The reference oracle (Python): the steps that run it.
-reference/*             02 03 04 10 11
+# The reference oracle (Python): the steps that run it (12 too, which runs it from reference/ by its bare name).
+reference/*             02 03 04 10 11 12
 
 # Everything else (core/, tools/, engine/, cmake/, CMakeLists.txt, data/ that the library reads, the
 # third-party sources): every step, by the fall-through.

@@ -14,6 +14,7 @@
 #include <iterator>
 #include <mutex>
 #include <stdexcept>
+#include <vector>
 
 namespace sieve::cli {
 
@@ -64,10 +65,17 @@ std::vector<RgbaImage> decode_image_frames(const uint8_t* bytes_in, size_t size,
         int w = 0, h = 0, n = 0, comp = 0;
         stbi_uc* pixels = stbi_load_gif_from_memory(data, len, &delays, &w, &h, &n, &comp, 4);
         if (!pixels) throw std::runtime_error("cannot decode '" + path + "': " + stbi_failure_reason());
+        // stb makes every frame in one block, which cannot be handed to a vector: each frame is copied
+        // out from the last, and the block cut back past it as it goes, so the frames are held about
+        // once at a time rather than twice (a vault check decodes every frame of a GIF).
         const size_t frame_bytes = size_t(w) * h * 4;
-        for (int i = 0; i < n; ++i)
-            frames.push_back({uint32_t(w), uint32_t(h),
-                              std::vector<uint8_t>(pixels + i * frame_bytes, pixels + (i + 1) * frame_bytes)});
+        frames.resize(size_t(n > 0 ? n : 0));
+        for (int i = n - 1; i >= 0; --i)
+        {
+            frames[size_t(i)] = {uint32_t(w), uint32_t(h), std::vector<uint8_t>(pixels + size_t(i) * frame_bytes, pixels + size_t(i + 1) * frame_bytes)};
+            if (i > 0 && frame_bytes)
+                if (auto* less = static_cast<stbi_uc*>(STBI_REALLOC(pixels, size_t(i) * frame_bytes))) pixels = less; // (kept whole where it cannot)
+        }
         if (delays_ms && delays && n > 1) delays_ms->assign(delays, delays + n);
         stbi_image_free(pixels);
         STBI_FREE(delays);

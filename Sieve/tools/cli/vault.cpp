@@ -25,8 +25,10 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <new>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <system_error>
 #include <string_view>
 #include <thread>
@@ -58,6 +60,69 @@ const char* const kBuiltinPdq[] = {
 // The most pixels a picture found in bytes is decoded at, for PDQ (a frame of 8192 x 8192): past
 // that, reading it would take more memory than a check should. Its exact hash is still checked.
 constexpr uint64_t kMaxPicturePixels = uint64_t(8192) * 8192;
+
+// The most bytes a GIF's frames may decode to, all together, for PDQ. The decoder makes every frame
+// at the whole canvas's size (and each frame is then copied once more), however small the frame is
+// in the file: a GIF of a few KB with a big canvas and many one-pixel frames would otherwise ask for
+// any amount of memory. A picture that reaches this cannot be checked, and is withheld (review 5).
+// The decoder counts the frames' bytes in an int, so 2^31 itself is refused too.
+constexpr uint64_t kMaxGifDecodedBytes = uint64_t(2) << 30;
+
+// How many frames a GIF's blocks hold, walked without decoding any (an upper bound on what the
+// decoder makes: it stops where the blocks stop making sense, and so does this).
+uint64_t gif_frame_count(std::span<const uint8_t> b)
+{
+    const size_t n = b.size();
+    if (n < 13 || b[0] != 'G' || b[1] != 'I' || b[2] != 'F') return 0;
+    size_t at = 13;
+    if (b[10] & 0x80) at += size_t(3) << ((b[10] & 7) + 1);
+    // Data sub-blocks, each a length byte and that many bytes, ended by a zero length.
+    auto skip_sub_blocks = [&] {
+        while (at < n && b[at] != 0) at += 1 + size_t(b[at]);
+        ++at;
+    };
+    uint64_t frames = 0;
+    while (at < n)
+    {
+        const uint8_t t = b[at];
+        if (t == 0x21)
+        {
+            at += 2;
+            skip_sub_blocks();
+        }
+        else if (t == 0x2C)
+        {
+            ++frames; // (a descriptor the bytes cut short is a frame too: the decoder still makes it)
+            if (n - at < 11) break;
+            const uint8_t f = b[at + 9];
+            at += 10;
+            if (f & 0x80) at += size_t(3) << ((f & 7) + 1);
+            ++at; // the LZW code size
+            skip_sub_blocks();
+        }
+        else break; // the trailer, or a block GIFs do not have
+    }
+    return frames;
+}
+
+// Whether decoding the bytes, a picture of width x height, would need more memory than a check
+// should take: only a GIF can, by holding many frames.
+bool too_large_to_decode(std::span<const uint8_t> bytes, uint32_t width, uint32_t height)
+{
+    // (frames x frame >= the most, asked without the product, which a file of a gigabyte of
+    // frames could take past 64 bits)
+    const uint64_t frame = uint64_t(width) * height * 4;
+    return frame && gif_frame_count(bytes) >= (kMaxGifDecodedBytes + frame - 1) / frame;
+}
+
+// Whether a decode failed for lack of memory (the bytes may be a picture that could not be checked),
+// rather than because the bytes are not the picture their header says.
+bool out_of_memory(const std::exception& e)
+{
+    if (dynamic_cast<const std::bad_alloc*>(&e)) return true;
+    const std::string_view what = e.what();
+    return what.find("outofmem") != std::string_view::npos || what.find("Out of memory") != std::string_view::npos;
+}
 
 // The program's folder, as the dictionaries find it (the same function: a thumbnail handler sets it
 // to its own once, for both).
@@ -268,6 +333,9 @@ bool withheld_as_picture(std::span<const uint8_t> bytes)
     if (v.st.failed_closed) return true;
     uint32_t w = 0, h = 0;
     if (v.pdq.empty() || !image_info(bytes.data(), bytes.size(), w, h) || uint64_t(w) * h > kMaxPicturePixels) return false;
+    // A picture that cannot be decoded within the memory a check may take fails closed, as a vault
+    // that cannot be read does: otherwise a listed picture followed by enough frames would pass.
+    if (too_large_to_decode(bytes, w, h)) return true;
     std::vector<RgbaImage> frames;
     std::vector<int> delays;
     bool keep = false;
@@ -279,8 +347,9 @@ bool withheld_as_picture(std::span<const uint8_t> bytes)
     {
         frames = decode_image_frames(bytes.data(), bytes.size(), "the picture", keep ? &delays : nullptr);
     }
-    catch (const std::exception&)
+    catch (const std::exception& e)
     {
+        if (out_of_memory(e)) return true; // a picture too large to check: withheld, as above
         return false; // a header without a picture behind it: nothing to see
     }
     // Every frame checked; an animated GIF's on the cores at once, and a frame with the same pixels
@@ -502,6 +571,9 @@ std::vector<PictureHash> picture_hashes(const std::vector<uint8_t>& bytes)
     std::vector<PictureHash> out;
     uint32_t w = 0, h = 0;
     if (!image_info(bytes.data(), bytes.size(), w, h)) return out;
+    if (too_large_to_decode(bytes, w, h))
+        throw std::runtime_error("the picture's frames would take " + std::to_string(kMaxGifDecodedBytes >> 30) +
+                                 " GB or more to decode, more than the vault reads");
     for (const RgbaImage& f : decode_image_frames(bytes.data(), bytes.size(), "the picture"))
         if (const auto ph = pdq::hash_rgba(f.rgba.data(), f.width, f.height)) out.push_back({pdq::to_hex(ph->orientations[0]), ph->quality});
     return out;

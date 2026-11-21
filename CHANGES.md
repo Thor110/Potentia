@@ -1,26 +1,28 @@
 # Changes
 
-One commit on top of c8eea38 (review 4, batch E): F-B, the fractals line in compact.
+One commit on top of 9229ab4 (review 5's findings and ideas): review 5's fixes. docs/REVIEW-5.md says what was fixed
+and the few parts left, with why.
 
-## What you will notice
-- **Compact on the FRACTALS line:** tick any of draws, grows, no idle rules and canonical on FRACTALS' filters and
-  set the mode to compact. The line then holds only what they keep, numbered without gaps: the index, the v1 to v3
-  rulesets that pass, then the v4 to v6 ones (which those four judge by drawing or running each, so they are
-  hidden where they fail). The status line says "4 compact".
-- With all four, an address on the line is 196.89 bits shorter than on the whole line (of 1,345.7); the metrics
-  list says so, where it said compact was not on this line yet.
-- The survivors are in an order of their own, not the line's: by the set of symbols the axiom reaches, then the
-  order it reaches them in. Koch's curve is survivor 1,274,152,196,871. A known fractal the four set aside has no
-  place on the line in compact, and warping to it says why (the dragon curve, whose X and Y are a renaming).
-- On the command line: `sieve fractal at N --compact --filters FILE` and `sieve fractal index ID --compact
-  --filters FILE`; `sieve fractal count --filters FILE` gives the compact count.
+## Nothing you have changes
+Every .sieve byte and every address is as before: folders packed with this build and with 0.13.80 came out byte for
+byte the same, and all twelve CI steps pass.
 
-## Figures (measured here)
-- A survivor of v3 at 256 characters, with all four: 2.5 s to build the numbering and find it, 151 MB at most.
-- The hallway in compact, warped to a fractal: 2.7 s a run.
-- The first frames at the very start of the line take about 25 s: the shelf there shows v6's last rulesets, which
-  the filters judge by running each. Hide was already so without compact (26.7 s, against 1.1 s with no filters);
-  item 59 in REVIEW-ROUND asks you to look at it.
+## Files that could hurt Sieve no longer can
+- A glTF file can no longer make the importer write past its buffer, and long clip libraries have a roof.
+- A tiny MIDI file, a few bytes of notes3 notation, or a WAV that declares a 1 Hz rate can no longer ask for gigabytes:
+  each is refused with a message saying why.
+- A small GIF can no longer make the vault ask for many gigabytes; one too large to decode is withheld.
+- A JPEG of a few hundred bytes no longer takes 15 seconds.
+- Your own models stop being read past their triangle limit (a 60 MB .obj took 2 GB before being refused).
+- raid serve: one address can hold four connections at most, so it cannot keep everyone else out.
+- Filter plugins: a word file must be in the plugin's folder; a value out of range is refused by name; an edited word
+  list is read again (before, the old one stayed in the cache).
+
+## Faster
+- CI: step 01 126 s (631 s before), step 05 496 s (996 s), step 11 2,084 s (2,668 s), here.
+- Guided codes 2 to 3 times faster; lists of numbers in a file 36 s to 0.018 s for 200 KB.
+- The setup menu no longer reads faces.ini hundreds of times a frame; the fractals line judges what you see on several
+  threads.
 
 ## Files to delete by hand
 None.

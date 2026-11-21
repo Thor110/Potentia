@@ -20,7 +20,8 @@
 //      first C; to more than there are, the last repeated;
 //   2. rate: exact area-averaging, as pictures are stretched: target sample t spans [t/R, (t+1)/R)
 //      seconds, and is the mean of the source samples over that span, each weighted by how much
-//      of it they cover, rounded half up (the same rule up and down; upward it holds each sample);
+//      of it they cover, rounded half up (the same rule up and down; upward it holds each sample,
+//      and a sound whose rate is below 1/64 of the set's is refused);
 //   3. depth: rounded half up to the set's bits, and clamped (reported as clipped);
 //   4. units: each channel cut into runs of L samples, and every channel padded with silence to the
 //      same number of runs; unit k holds run k of every channel.
@@ -37,6 +38,9 @@ namespace sieve {
 inline constexpr const char* kPcmCanonVersion = "canon-pcm-v1";
 inline constexpr uint32_t kPcmMaxBits = 31;
 inline constexpr uint32_t kPcmMaxChannels = 65535;
+// canon-pcm-v1 makes at most this many samples from each of the source's (PcmCanoniser refuses a
+// sound whose rate is lower than the line's divided by this).
+inline constexpr uint64_t kPcmMostUpsampling = 64;
 
 struct PcmFormat
 {

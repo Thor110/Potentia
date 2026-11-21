@@ -72,7 +72,11 @@ std::shared_ptr<const Mesh> load_obj(const fs::path& path)
     });
 }
 
-std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text)
+// Reading stops once the mesh has more than `max_tris` triangles, and what was read so far is
+// returned: the caller, finding more than its limit, refuses it as it would the whole. A long face
+// line fans into a triangle for every two bytes or so, so a file under an import's 64 MiB would
+// otherwise make tens of millions of triangles (2 GB) before it was refused (review 5).
+std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text, size_t max_tris)
 {
     auto mesh = std::make_shared<Mesh>();
     mesh->source = source;
@@ -152,12 +156,19 @@ std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source
                 t.n = n;
                 t.kd = kd;
                 mesh->tris.push_back(t);
+                if (mesh->tris.size() > max_tris) break;
             }
+            if (mesh->tris.size() > max_tris) break;
         }
     }
     if (mesh->tris.empty()) return nullptr;
     fit_bounds(*mesh);
     return mesh;
+}
+
+std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text)
+{
+    return read_obj(in, source, mtl_text, SIZE_MAX);
 }
 
 void fit_bounds(Mesh& mesh)

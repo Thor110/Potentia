@@ -1,5 +1,5 @@
 #pragma once
-// The one reader of the numbers Sieve writes in its own codes and streams: seven bits a byte, the
+// The one reader (and writer) of the numbers Sieve writes in its own codes and streams: seven bits a byte, the
 // lowest first, the top bit set on every byte but the last (LEB128, unsigned). Every writer writes
 // a number in as few bytes as it fits, so only that form is read: a tenth byte with more than the
 // one bit left for it, or a last byte of 0 after others (a number written longer than it is), is
@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <vector>
 
 namespace sieve {
 
@@ -34,6 +35,17 @@ inline VarintFault read_varint(std::span<const uint8_t> in, size_t& at, uint64_t
         if (!(b & 0x80)) return b == 0 && k > 0 ? VarintFault::not_canonical : VarintFault::none;
     }
     return VarintFault::too_long;
+}
+
+// The one writer: `v` appended in the shortest form, the only form read_varint reads.
+inline void write_varint(std::vector<uint8_t>& out, uint64_t v)
+{
+    while (v >= 0x80)
+    {
+        out.push_back(uint8_t(v | 0x80));
+        v >>= 7;
+    }
+    out.push_back(uint8_t(v));
 }
 
 inline const char* varint_fault_text(VarintFault f)

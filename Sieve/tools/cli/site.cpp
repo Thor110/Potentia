@@ -19,6 +19,8 @@
 #include <set>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace sieve::cli {
 
@@ -333,30 +335,46 @@ bool names(std::string_view text, const std::string& name)
 }
 
 // A loop among the pages, each needing the next: the pages in it, the first again at the end.
+// The walk keeps its own stack (a page and how far through what it needs), not the program's, so a
+// long chain of pages each linking onward cannot overflow it (review 5). It visits the pages in the
+// same order as the recursive walk it replaced, so it finds the same loop.
 std::vector<std::string> loop_of(const std::vector<std::string>& pages, const std::map<std::string, std::set<std::string>>& needs)
 {
+    static const std::set<std::string> none;
     std::map<std::string, int> state; // 0 not seen, 1 on the path, 2 done
     std::vector<std::string> path, found;
-    std::function<bool(const std::string&)> walk = [&](const std::string& p) {
+    std::vector<std::pair<const std::set<std::string>*, std::set<std::string>::const_iterator>> next; // one per page on the path
+    auto enter = [&](const std::string& p) {
         state[p] = 1;
         path.push_back(p);
-        if (const auto it = needs.find(p); it != needs.end())
-            for (const std::string& n : it->second)
-            {
-                if (state[n] == 1)
-                {
-                    found.assign(std::find(path.begin(), path.end(), n), path.end());
-                    found.push_back(n);
-                    return true;
-                }
-                if (state[n] == 0 && walk(n)) return true;
-            }
-        path.pop_back();
-        state[p] = 2;
-        return false;
+        const auto it = needs.find(p);
+        const std::set<std::string>& ns = it != needs.end() ? it->second : none;
+        next.emplace_back(&ns, ns.begin());
     };
-    for (const std::string& p : pages)
-        if (state[p] == 0 && walk(p)) return found;
+    for (const std::string& start : pages)
+    {
+        if (state[start] != 0) continue;
+        enter(start);
+        while (!next.empty())
+        {
+            auto& [ns, at] = next.back();
+            if (at == ns->end())
+            {
+                state[path.back()] = 2;
+                path.pop_back();
+                next.pop_back();
+                continue;
+            }
+            const std::string& n = *at++;
+            if (state[n] == 1)
+            {
+                found.assign(std::find(path.begin(), path.end(), n), path.end());
+                found.push_back(n);
+                return found;
+            }
+            if (state[n] == 0) enter(n);
+        }
+    }
     return {};
 }
 
@@ -551,6 +569,13 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
         if (it == integrity.end()) it = integrity.emplace(sieve_path, integrity_of(read_file_bytes(out / path_of(sieve_path)))).first;
         return it->second;
     };
+    // A local script or stylesheet -> its integrity, worked out once however many pages load it.
+    std::map<std::string, std::string> resource_integrity;
+    auto resource = [&](const std::string& target) {
+        auto it = resource_integrity.find(target);
+        if (it == resource_integrity.end()) it = resource_integrity.emplace(target, integrity_of(read_file_bytes(src / path_of(target)))).first;
+        return it->second;
+    };
     // A page with each link to a .sieve (made, or the site's own) given that file's hash.
     auto rewrite = [&](const std::string& page, const std::string& text) {
         struct Edit
@@ -566,7 +591,7 @@ SiteReport build_site(const fs::path& src_in, const fs::path& out_in, const Site
                 const auto target = target_of(page, text.substr(res->value_begin, res->value_end - res->value_begin), served);
                 if (target && present.count(*target) && !made.count(*target))
                 {
-                    const std::string with = integrity_of(read_file_bytes(src / path_of(*target)));
+                    const std::string with = resource(*target);
                     if (const Attr* old = tag.attr("integrity"); old && old->has_value)
                         edits.push_back({old->value_begin, old->value_end - old->value_begin, with});
                     else edits.push_back({tag.close, 0, " integrity=\"" + with + "\""});

@@ -44,6 +44,19 @@ constexpr size_t kKept = 4096;
 
 uint32_t drawn_deepest(const sieve::Fractal& f) { return sieve::fractal_deepest_within(f, kDrawnMost); }
 
+// The whole space up to a longest, shared by every shelf made for that longest. Building it takes
+// over half a second at the default, and the setup menu's map and the hallway each make a shelf (the
+// hallway again each time it is entered), so the last one built is kept and handed out again. It is
+// only read once built, so shelves on different threads may share it.
+std::shared_ptr<const sieve::FractalSpace> shared_space(uint32_t longest)
+{
+    static std::mutex mx;
+    static std::shared_ptr<const sieve::FractalSpace> last;
+    std::lock_guard<std::mutex> lock(mx);
+    if (!last || last->longest() != longest) last = std::make_shared<const sieve::FractalSpace>(longest);
+    return last;
+}
+
 // The fractal dimension (list X1): with the known fractals included (the default), its first book the
 // index of every fractal charted and after it every ruleset of the whole space (fractal-space-v1) up to
 // the longest set, the charted ones named where they stand; only, the index and then the charted ones
@@ -55,7 +68,8 @@ uint32_t drawn_deepest(const sieve::Fractal& f) { return sieve::fractal_deepest_
 class FractalShelf : public ListedShelf
 {
 public:
-    explicit FractalShelf(const ListedOptions& o) : known_(o.fractal_known), space_(std::clamp(o.fractal_longest, sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost))
+    explicit FractalShelf(const ListedOptions& o)
+        : known_(o.fractal_known), held_(shared_space(std::clamp(o.fractal_longest, sieve::kFractalSpaceShortest, sieve::kFractalSpaceLongestMost))), space_(*held_)
     {
         if (known_ != "exclude" && known_ != "only") known_ = "include";
         index_ = known_ != "exclude";
@@ -350,7 +364,8 @@ private:
 
     std::string known_;
     bool index_ = true; // whether item 0 is the index (not when the known fractals are excluded)
-    sieve::FractalSpace space_;
+    std::shared_ptr<const sieve::FractalSpace> held_; // (shared_space: the same for every shelf of this longest)
+    const sieve::FractalSpace& space_;
     std::unique_ptr<sieve::FractalCompact> compact_; // (in compact: the survivors numbered)
     BigUint v4_at_, line_size_;                      // where v4 starts in the space; how many the line holds
     std::string compact_bits_;

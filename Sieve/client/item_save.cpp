@@ -304,30 +304,13 @@ void Hallway::item_save_poll()
             const auto& bytes = file_of(bk);
             write_all(path, bytes.data(), bytes.size());
         }
-        else if (bk.model && model_space_)
+        else if ((bk.model && model_space_) || (bk.world && world_space_) || (bk.ai && ai_space_) || bk.parts)
         {
-            const std::string obj = model_space_->to_obj(*bk.model);
-            write_all(path, obj.data(), obj.size());
-        }
-        else if (bk.world && world_space_)
-        {
-            const std::string obj = world_space_->to_obj(*bk.world);
-            write_all(path, obj.data(), obj.size());
-        }
-        else if (bk.ai && ai_space_)
-        {
-            const std::string file = ai_space_->safetensors_of(*bk.ai);
-            write_all(path, file.data(), file.size());
-        }
-        else if (bk.parts)
-        {
-            // Its title, then each page, a blank line between.
-            std::string text = utf8_encode(line().space.text_of(bk.parts->title));
-            while (!text.empty() && text.back() == ' ') text.pop_back();
-            text += "\n\n";
-            for (size_t i = 0; i < bk.parts->pages.size(); ++i)
-                text += utf8_encode(line().space.text_of(bk.parts->pages[i])) + "\n\n";
-            write_all(path, text.data(), text.size());
+            // A model or world (.obj), an AI model (safetensors), or a book (its title, then each
+            // page, a blank line between): the same bytes as item_file makes for them.
+            std::string unused_name;
+            const std::vector<uint8_t> bytes = item_file(bk, unused_name);
+            write_all(path, bytes.data(), bytes.size());
         }
         else if (on_composition() && lower_ext(path) == record_ext())
         {

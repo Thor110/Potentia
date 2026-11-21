@@ -453,6 +453,10 @@ private:
     SDL_Renderer* r_;
     int texture_px_ = 1024; // the renderer's widest texture (gpu::max_texture_px)
     Settings s_;
+    // line_sizes(), kept with the settings it was worked out for (Menu::line_sizes).
+    mutable std::optional<Settings> sizes_for_;
+    mutable std::array<LineSize, kLines> sizes_{};
+    mutable uint32_t sizes_tile_ = 0;
     int row_ = 0;
     sieve::cli::FilterConfig cfg_;
     sieve::cli::LineFilters listed_filters_; // a listed line's that has none: never ticked (dimensions.hpp `listed`)

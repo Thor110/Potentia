@@ -75,7 +75,8 @@ fs::path decoded_sieve(const fs::path& sieve_file, const std::string& kind, uint
     }
     // Decoded now, into a folder beside it, then put in its place whole.
     const auto members = members_of(raw, most);
-    const fs::path part = dir.string() + ".part";
+    fs::path part = dir;
+    part += ".part"; // (joined as a path, not through a narrow string)
     fs::remove_all(part, ec);
     fs::create_directories(part, ec);
     std::string index;
@@ -109,7 +110,8 @@ void pack_folder_sieve(const fs::path& folder, const fs::path& out, uint64_t mos
     // Read back and checked before it is kept: nothing is saved that will not load.
     const auto back = members_of(raw, most);
     if (back.empty()) throw std::runtime_error("the folder holds no files");
-    const fs::path part = out.string() + ".part";
+    fs::path part = out;
+    part += ".part";
     {
         std::ofstream o(part, std::ios::binary);
         o.write(reinterpret_cast<const char*>(raw.data()), std::streamsize(raw.size()));

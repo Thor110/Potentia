@@ -453,7 +453,7 @@ std::string notes_to_midi(const NoteSet& set, const std::vector<uint32_t>& digit
 
 // ---------------------------------------------------------------- MIDI read back
 
-std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, std::vector<std::string>* report)
+MidiRead read_midi(const std::vector<uint8_t>& m)
 {
     size_t at = 0;
     auto need = [&](size_t n) {
@@ -481,13 +481,8 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
     if (division & 0x8000) throw std::invalid_argument("MIDI timed in SMPTE frames is not read");
     if (division == 0) throw std::invalid_argument("the MIDI file has no ticks per quarter note");
     at = 8 + header;
-    struct Note
-    {
-        uint64_t start, end;
-        uint32_t pitch;
-    };
-    std::vector<std::vector<Note>> voices;
-    std::vector<uint64_t> ends;
+    MidiRead r;
+    r.division = division;
     for (uint32_t t = 0; t < tracks && at < m.size(); ++t)
     {
         need(8);
@@ -501,8 +496,8 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
             at = stop;
             continue;
         }
-        std::vector<Note> notes;
-        std::map<uint32_t, uint64_t> open; // channel << 8 | pitch -> start
+        std::vector<MidiNote> notes;
+        std::map<uint32_t, std::pair<uint64_t, uint32_t>> open; // channel << 8 | pitch -> start, velocity
         uint64_t now = 0;
         uint8_t status = 0;
         auto vlq = [&] {
@@ -519,6 +514,8 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
         while (at < stop)
         {
             now += vlq();
+            // Far longer than any line can hold; refused here so that the callers' sums cannot wrap.
+            if (now > kMidiMostTicks) throw std::invalid_argument("a MIDI track is too long (more than 2^44 ticks)");
             if (at >= stop) break;
             const uint8_t b = m[at];
             if (b == 0xFF)
@@ -551,25 +548,34 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
             const uint32_t key = ch << 8 | d1;
             if (kind == 0x90 && d2 > 0)
             {
-                if (auto it = open.find(key); it != open.end()) notes.push_back({it->second, now, d1});
-                open[key] = now;
+                if (auto it = open.find(key); it != open.end()) notes.push_back({it->second.first, now, d1, it->second.second});
+                open[key] = {now, d2};
             }
             else if (kind == 0x80 || kind == 0x90)
             {
                 if (auto it = open.find(key); it != open.end())
                 {
-                    notes.push_back({it->second, now, d1});
+                    notes.push_back({it->second.first, now, d1, it->second.second});
                     open.erase(it);
                 }
             }
         }
-        for (const auto& [key, start] : open) notes.push_back({start, now, key & 0xFF});
+        for (const auto& [key, sv] : open) notes.push_back({sv.first, now, key & 0xFF, sv.second});
         at = stop;
         if (notes.empty() && now == 0) continue; // no notes and no length: a tempo track, say
-        std::stable_sort(notes.begin(), notes.end(), [](const Note& a, const Note& b) { return a.start < b.start; });
-        voices.push_back(std::move(notes));
-        ends.push_back(now);
+        std::stable_sort(notes.begin(), notes.end(), [](const MidiNote& a, const MidiNote& b) { return a.start < b.start; });
+        r.voices.push_back(std::move(notes));
+        r.ends.push_back(now);
     }
+    return r;
+}
+
+std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, std::vector<std::string>* report)
+{
+    const MidiRead read = read_midi(m);
+    const uint32_t division = read.division;
+    const std::vector<std::vector<MidiNote>>& voices = read.voices;
+    const std::vector<uint64_t>& ends = read.ends;
     if (voices.empty()) throw std::invalid_argument("the MIDI file has no notes, and no length");
     // Lengths in the set's durations; the shortest is the grid times are rounded to.
     std::vector<std::pair<uint32_t, std::string>> codes; // sixteenths, notation code; longest first
@@ -602,13 +608,21 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
             }
         }
     };
+    // A voice longer than 2^24 of the set's longest durations is refused before it is written out,
+    // rather than filling memory with rests (canonicalise_notes2 makes a digit of each).
+    const uint64_t most_steps = kMidiMostDurations * (codes.front().first / grid);
+    auto too_long = [&](size_t vi, uint64_t ticks) {
+        return std::invalid_argument("voice " + std::to_string(vi + 1) + " of the MIDI file is " + std::to_string(ticks / division) +
+                                     " quarter notes long: more than " + std::to_string(kMidiMostDurations) + " of the line's longest duration");
+    };
     const size_t used = std::min<size_t>(voices.size(), set.voices);
     dropped = voices.size() - used;
     for (size_t vi = 0; vi < used; ++vi)
     {
+        if (steps(ends[vi]) > most_steps) throw too_long(vi, ends[vi]);
         std::string v;
         uint64_t cur = 0; // grid steps written so far
-        for (const Note& n : voices[vi])
+        for (const MidiNote& n : voices[vi])
         {
             uint64_t s = steps(n.start), e = steps(n.end);
             if (s < cur)
@@ -617,6 +631,7 @@ std::string midi_to_notation(const std::vector<uint8_t>& m, const NoteSet& set, 
                 continue;
             }
             if (e <= s) e = s + 1;
+            if (e > most_steps) throw too_long(vi, n.end);
             write(v, s - cur, "");
             write(v, e - s, note_name(n.pitch));
             cur = e;

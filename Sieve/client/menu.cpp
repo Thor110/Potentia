@@ -251,12 +251,17 @@ void text(SDL_Renderer* r, float x, float y, const std::string& s, float scale, 
 
 // The tallest picture, height over width, of any line's items (faces.ini): what the picture
 // cache has to be sized for, since a picture is the chosen size wide and this much taller.
+// It is read once: faces.ini does not change while the program runs, and the menu asks for this
+// figure many times on every frame (as the hallway keeps its face_rects_).
 double tallest_face()
 {
-    double a = 1.0;
-    for (const Dimension& d : kDimensions)
-        if (d.media != Media::Binary) a = std::max(a, double(load_face_rect(d.id).aspect())); // binary's files draw no picture
-    return a;
+    static const double tallest = [] {
+        double a = 1.0;
+        for (const Dimension& d : kDimensions)
+            if (d.media != Media::Binary) a = std::max(a, double(load_face_rect(d.id).aspect())); // binary's files draw no picture
+        return a;
+    }();
+    return tallest;
 }
 
 // Installed memory in words ("16.0 GB"), or "?" when SDL cannot tell.
@@ -868,7 +873,19 @@ std::array<LineSize, kLines> line_sizes_of(const Settings& s_)
     return out;
 }
 
-std::array<LineSize, kLines> Menu::line_sizes() const { return line_sizes_of(s_); }
+// Worked out again only when the settings differ from those it was last worked out for: the menu
+// asks for it dozens of times on every frame, and it depends on the settings alone (and on the
+// items to a wall, which --items-per-wall sets before any menu opens).
+std::array<LineSize, kLines> Menu::line_sizes() const
+{
+    if (!sizes_for_ || !(*sizes_for_ == s_) || sizes_tile_ != sieve::books_per_tile())
+    {
+        sizes_ = line_sizes_of(s_);
+        sizes_for_ = s_;
+        sizes_tile_ = sieve::books_per_tile();
+    }
+    return sizes_;
+}
 
 std::string walk_time_text(double log10_units)
 {
@@ -4568,7 +4585,19 @@ sieve::FilterLine Menu::filter_line_of(int i) const
     case Media::Models:
     case Media::Worlds: f = sieve::cli::models_filter_line(s_.model_vertices, s_.model_faces, s_.model_coords); break; // (a world's: its models' part)
     case Media::Binary: f = sieve::cli::binary_filter_line(s_.binary_bytes); break;
-    case Media::Ai: f = sieve::cli::ai_filter_line(ai_space()); break;
+    case Media::Ai:
+        // Past too_large_bits() the space itself is not built (its size alone, 2^bits, would not fit
+        // in memory): the line is given without it, so the AI filters, which need it, do not apply.
+        if (line_sizes()[size_t(i)].bits > too_large_bits())
+        {
+            f.kind = "ai";
+            f.symbols_id = "ai/L" + std::to_string(s_.ai_layers) + "/H" + std::to_string(s_.ai_width) + "/A" + std::to_string(s_.ai_heads) +
+                           "/B" + std::to_string(s_.ai_bits) + "/too-large";
+            f.base = 1u << s_.ai_bits;
+            f.length = uint32_t(std::min<uint64_t>(ai_weights(), UINT32_MAX));
+        }
+        else f = sieve::cli::ai_filter_line(ai_space());
+        break;
     case Media::Fractals: f = sieve::cli::fractal_filter_line(s_.fractal_longest); break; // (a ruleset's text)
     case Media::Tracks:
     case Media::Movies: f = filter_line_of(line_of(*kDimensions[i].composes)); break; // a unit (their parts: part_line)
@@ -4812,6 +4841,12 @@ std::pair<std::string, std::function<Menu::StackInfo()>> Menu::stack_job(int i, 
     if (i == kAiLine)
     {
         const sieve::AiShape shape{s_.ai_layers, s_.ai_width, s_.ai_heads, s_.ai_bits};
+        // Past too_large_bits(), as the other lines: said, and the space not built (its size alone
+        // would not fit in memory).
+        if (line_sizes()[size_t(i)].bits > too_large_bits())
+            return {"ai/too large/L" + std::to_string(shape.layers) + "/H" + std::to_string(shape.width) + "/A" + std::to_string(shape.heads) + "/B" +
+                        std::to_string(shape.bits) + "/" + settings_key(lf),
+                    [] { return StackInfo{"too large", tr("status.too_large"), -1, ""}; }};
         const std::string key = ai_space().id() + "/" + settings_key(lf);
         return {key, [lf, shape]() {
                     StackInfo out;
@@ -4948,6 +4983,12 @@ const Menu::StackInfo& Menu::stack_info(int i)
     }
     if (i == kAiLine)
     {
+        // Past too_large_bits(), as below: said before the space is built (stack_job would build it).
+        if (line_sizes()[size_t(i)].bits > too_large_bits())
+        {
+            info_[i] = StackInfo{"too large", tr("status.too_large"), -1, ""};
+            return info_[i];
+        }
         auto [key, work] = stack_job(i, cfg_.ai);
         return resolve(i, key, std::move(work));
     }

@@ -10,6 +10,10 @@
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace sieve {
 
@@ -70,6 +74,15 @@ CharModel CharModel::train(std::span<const uint32_t> stream, const ModelParams& 
 {
     if (p.base < 2 || p.base > 256) throw std::invalid_argument("model base must be 2..256");
     if (p.order > 12) throw std::invalid_argument("model order must be at most 12");
+    // finish()'s own check, made before anything is counted: keys must fit, N^order * 16 < 2^64.
+    // (Past it the context values below would wrap, and the counting would run to its end first.)
+    {
+        long double room = std::ldexp(1.0L, 60);
+        for (uint32_t i = 0; i < p.order; ++i) room /= p.base;
+        if (room < 1)
+            throw std::invalid_argument("model base^order is too large: " + std::to_string(p.base) + " symbols to the power " +
+                                        std::to_string(p.order) + " does not fit in a 64-bit context key (use a lower order)");
+    }
     for (uint32_t s : stream)
         if (s >= p.base) throw std::invalid_argument("training symbol out of range");
 
@@ -80,9 +93,13 @@ CharModel CharModel::train(std::span<const uint32_t> stream, const ModelParams& 
     std::vector<uint64_t> pw(p.order + 1, 1);
     for (size_t i = 1; i <= p.order; ++i) pw[i] = pw[i - 1] * N;
 
-    // Count every (context, next symbol) pair. A context of length k is keyed by (k, value).
+    // Count every (context, next symbol) pair. A context of length k is keyed by (k, value). The
+    // pairs are counted sparsely, by slot * N + symbol: most long contexts are followed by only a
+    // few symbols, and a dense row of N counters for each (2 KB at base 256) took gigabytes for
+    // contexts that min_count then threw away.
     std::unordered_map<uint64_t, uint32_t> slot;
-    std::vector<uint64_t> counts; // N per slot
+    std::unordered_map<uint64_t, uint64_t> counts; // slot * N + symbol -> count
+    std::vector<uint64_t> totals;                  // per slot
     std::vector<std::pair<uint32_t, uint64_t>> keys; // (k, value) per slot
     for (size_t t = 0; t < stream.size(); ++t)
     {
@@ -95,9 +112,10 @@ CharModel CharModel::train(std::span<const uint32_t> stream, const ModelParams& 
             if (fresh)
             {
                 keys.emplace_back(uint32_t(k), v);
-                counts.resize(counts.size() + N, 0);
+                totals.push_back(0);
             }
-            ++counts[size_t(it->second) * N + stream[t]];
+            ++counts[uint64_t(it->second) * N + stream[t]];
+            ++totals[it->second];
         }
     }
 
@@ -109,8 +127,7 @@ CharModel CharModel::train(std::span<const uint32_t> stream, const ModelParams& 
     for (uint32_t id : order)
     {
         const auto [k, v] = keys[id];
-        uint64_t n = 0;
-        for (uint32_t s = 0; s < N; ++s) n += counts[size_t(id) * N + s];
+        const uint64_t n = totals[id];
         bool keep = k == 0 || n >= p.min_count;
         if (keep && k > 0) keep = kept.count((v % pw[k - 1]) * 16 + (k - 1)) != 0; // parent drops the oldest
         if (!keep) continue;
@@ -120,7 +137,7 @@ CharModel CharModel::train(std::span<const uint32_t> stream, const ModelParams& 
         uint64_t x = v;
         for (size_t i = k; i-- > 0;) { c.symbols[i] = uint32_t(x % N); x /= N; }
         for (uint32_t s = 0; s < N; ++s)
-            if (const uint64_t n_s = counts[size_t(id) * N + s]) c.counts.emplace_back(s, n_s);
+            if (const auto f = counts.find(uint64_t(id) * N + s); f != counts.end()) c.counts.emplace_back(s, f->second);
         m.contexts_.push_back(std::move(c));
     }
     if (m.contexts_.empty()) // empty stream: still a valid (uniform-ish) model

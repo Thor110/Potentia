@@ -4,7 +4,11 @@
 #include "sieve/weights.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace sieve::weights {
 
@@ -76,7 +80,8 @@ std::vector<uint32_t> encode(const std::vector<uint16_t>& values, const std::vec
     return stream;
 }
 
-std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vector<uint32_t>& freq, uint64_t n)
+void decode_pieces(const std::vector<uint32_t>& words, const std::vector<uint32_t>& freq, uint64_t n,
+                   const std::function<void(std::span<const uint16_t>)>& sink)
 {
     const std::vector<uint32_t> cum = cumulative(freq);
     if (cum.back() != kM) bad("a table that does not sum to 2^24");
@@ -104,8 +109,8 @@ std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vect
     if (words.size() < 2) bad("a stream shorter than its state");
     uint64_t x = uint64_t(words[0]) | (uint64_t(words[1]) << 32);
     size_t next = 2;
-    std::vector<uint16_t> out;
-    out.reserve(size_t(std::min<uint64_t>(n, uint64_t(1) << 24))); // (n is from the file: grown past this as values come)
+    std::vector<uint16_t> piece;
+    piece.reserve(size_t(std::min<uint64_t>(n, kDecodePiece)));
     for (uint64_t i = 0; i < n; ++i)
     {
         const uint32_t slot = uint32_t(x & (kM - 1));
@@ -123,9 +128,22 @@ std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vect
             if (next >= words.size()) bad("a stream that ends too soon");
             x = (x << 32) | words[next++];
         }
-        out.push_back(s);
+        piece.push_back(s);
+        if (piece.size() == kDecodePiece)
+        {
+            sink(piece);
+            piece.clear();
+        }
     }
+    if (!piece.empty()) sink(piece);
     if (x != kL || next != words.size()) bad("a stream that does not end where its values do");
+}
+
+std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vector<uint32_t>& freq, uint64_t n)
+{
+    std::vector<uint16_t> out;
+    out.reserve(size_t(std::min<uint64_t>(n, uint64_t(1) << 24))); // (n is from the file: grown past this as values come)
+    decode_pieces(words, freq, n, [&](std::span<const uint16_t> piece) { out.insert(out.end(), piece.begin(), piece.end()); });
     return out;
 }
 

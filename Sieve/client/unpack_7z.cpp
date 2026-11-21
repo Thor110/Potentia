@@ -16,6 +16,7 @@
 #include "7z.h"
 #include "7zCrc.h"
 #include "sieve/paths.hpp"
+#include "sieve/sha256.hpp"
 
 #include <filesystem>
 #include <set>
@@ -24,6 +25,7 @@
 #include <cstring>
 #include <fstream>
 #include <mutex>
+#include <span>
 #include <stdexcept>
 #include <string>
 
@@ -369,8 +371,15 @@ bool unpack_7z(const std::vector<uint8_t>& archive, const fs::path& dest, bool f
             size_t offset = 0, got = 0;
             const SRes r = SzArEx_Extract(&a.db, &a.look.vt, index[k], &block, &out, &out_size, &offset, &got, &kAlloc, &kAlloc);
             if (r != SZ_OK) throw std::runtime_error("cannot unpack " + u.path + ": " + sz_error(r));
-            // The vault: nothing it withholds is written, whatever archive it arrives in.
-            sieve::cli::vault::check_bytes(std::vector<uint8_t>(out + offset, out + offset + got), u.path);
+            // The vault: nothing it withholds is written, whatever archive it arrives in. The file is
+            // checked where it lies in the decoded block, not copied out first: a copy of the largest
+            // file beside its block would need more memory than check_7z_sizes allowed for. The checks
+            // are those of check_bytes (its SHA-256, failing closed with the vault, then its chunks and
+            // the file as a picture).
+            const std::span<const uint8_t> file(out + offset, got);
+            sieve::Sha256 sha;
+            sha.update(file);
+            sieve::cli::vault::check_known(file, sieve::Sha256::hex(sha.finish()), u.path);
             // (A file written over, Replace ticked, is not removed by a cancel or a failure: only
             // what this made, as installing does. Removing it would lose the file outright.)
             const bool existed = fs::exists(to);

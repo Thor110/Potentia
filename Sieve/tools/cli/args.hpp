@@ -1,7 +1,9 @@
 // Sieve CLI — command-line argument parsing.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -23,6 +25,24 @@ inline uint64_t parse_whole(const std::string& v, const std::string& what, uint6
         n = n * 10 + uint64_t(c - '0');
     }
     return n;
+}
+
+// A number of seconds, 0 or more (0: no limit), the whole of `v` read; `what` names the option
+// ("--search-per-file").
+inline double parse_seconds(const std::string& v, const std::string& what)
+{
+    size_t used = 0;
+    double s = 0;
+    try
+    {
+        s = std::stod(v, &used);
+    }
+    catch (const std::exception&)
+    {
+        used = 0;
+    }
+    if (v.empty() || used != v.size() || !(s >= 0)) throw std::invalid_argument(what + " is a number of seconds, 0 or more (0: no limit), got '" + v + "'");
+    return s;
 }
 
 // Options that are switches (take no value).

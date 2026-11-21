@@ -48,6 +48,10 @@ std::shared_ptr<const Mesh> load_obj(const std::filesystem::path& path);
 // The same from text already in memory (a member of a .sieve, say): `mtl_text` gives the text of a
 // material library it names, empty if there is none. `source` is what the mesh says it came from.
 std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text);
+// The same, reading no further once the mesh has more than `max_tris` triangles: what was read is
+// returned, more than `max_tris` of them, for the caller to refuse as it would the whole file.
+std::shared_ptr<const Mesh> read_obj(std::istream& in, const std::string& source, const std::function<std::string(const std::string&)>& mtl_text,
+                                     size_t max_tris);
 
 // The model for a line: <model>-<medium>.obj, else the template, else null (stays wireframe).
 std::shared_ptr<const Mesh> load_model(const std::string& model, const std::string& medium);

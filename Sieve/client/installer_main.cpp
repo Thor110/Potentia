@@ -38,6 +38,7 @@
 #include "unpack_7z.hpp"
 #include "window_icon.hpp"
 #include "win_console.hpp"
+#include "sieve/mix.hpp" // DecodeCancelScope: a read stopped when the window closes
 #include "sieve/paths.hpp"
 
 #include <SDL3/SDL.h>
@@ -214,7 +215,12 @@ struct Installer
         std::mutex mx;
         std::optional<Opened> done;
     };
-    std::shared_ptr<Reading> reading; // (shared with the reader, which may outlive a window closed meanwhile)
+    std::shared_ptr<Reading> reading; // (shared with the reader, which is joined before the installer goes: stop_reader)
+    // The reader itself, joined before the installer goes (stop_reader): a reader left running past
+    // the end of main would still be decoding while the vault, the dictionaries and the temporary
+    // folder of carried dictionaries were taken down. stop_reading cuts short a mixing decode.
+    std::thread reader;
+    std::atomic<bool> stop_reading{false};
     bool keep_dest = false;           // the destination given (--to): reading leaves it as it is
     std::optional<fs::path> offered;  // the folder an installer program offers (0.13.78), where it names one
 
@@ -272,12 +278,29 @@ struct Installer
         error.clear();
         screen = Screen::Reading;
         reading = std::make_shared<Reading>();
-        std::thread([r = reading, file] {
+        if (reader.joinable()) reader.join(); // (the last reader, already done: poll_open took its result)
+        reader = std::thread([r = reading, file, stop = &stop_reading] {
+            // A mixing decode stops when the window closes (a cancelled read is reported as an
+            // error, which nobody then sees).
+            const sieve::DecodeCancelScope cancellable(stop);
             Opened o = read_installer(file);
             std::lock_guard<std::mutex> lock(r->mx);
             r->done = std::move(o);
-        }).detach();
+        });
     }
+
+    // Waits for a reader still running, stopping any mixing decode it is in first. Other decoding
+    // (an archive of another kind, LZMA) is not cut short, so this can take as long as that read.
+    void stop_reader()
+    {
+        if (!reader.joinable()) return;
+        stop_reading = true;
+        reader.join();
+    }
+    Installer() = default;
+    Installer(const Installer&) = delete;
+    Installer& operator=(const Installer&) = delete;
+    ~Installer() { stop_reader(); }
 
     // What the reader found, taken in once it is done; true then.
     bool poll_open()
@@ -801,7 +824,9 @@ int main(int argc, char** argv)
         while (SDL_PollEvent(&e))
         {
             if (e.type == SDL_EVENT_QUIT && in.screen != Screen::Installing) quit = true;
-            if (e.type == SDL_EVENT_DROP_FILE && in.screen != Screen::Installing && e.drop.data)
+            // A file dropped while one is being read is left alone, as open leaves it: its folder and
+            // its dictionaries are not taken up either, or they would be applied to the file being read.
+            if (e.type == SDL_EVENT_DROP_FILE && in.screen != Screen::Installing && !in.reading && e.drop.data)
             {
                 const fs::path dropped = from_u8(e.drop.data);
                 std::error_code ec;
@@ -1169,5 +1194,6 @@ int main(int argc, char** argv)
     SDL_DestroyRenderer(r);
     SDL_DestroyWindow(window);
     SDL_Quit();
+    in.stop_reader(); // (after the window has gone, so a long read does not leave it hanging on the screen)
     return code;
 }

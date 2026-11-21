@@ -145,7 +145,7 @@ void add_other_line_filters(std::vector<FilterSpec>& out)
         const std::string prov = "not-other-line-v1 forms=" + forms;
         const Alphabet& a = *l.alphabet;
         const auto dfa = kept_dfa("other/" + a.id() + "/" + forms, [&] { return other_line_dfa(a, mask); });
-        if (*dfa) return make_dfa_filter(**dfa, l.length, prov);
+        if (*dfa) return make_dfa_filter(std::shared_ptr<const Dfa>(dfa, &**dfa), l.length, prov);
         return std::make_unique<JudgeOther>(a, mask, prov);
     };
     out.push_back(o);
@@ -161,7 +161,7 @@ void add_other_line_filters(std::vector<FilterSpec>& out)
     p.make = [](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         const uint32_t base = l.base;
         const auto dfa = kept_dfa("packed/" + std::to_string(base), [&] { return std::optional<Dfa>(packed_dfa(base, bits_of(base))); });
-        return make_dfa_filter(**dfa, l.length, "not-packed-v1 bits=" + std::to_string(bits_of(base)) + " kinds=file-kinds-v1");
+        return make_dfa_filter(std::shared_ptr<const Dfa>(dfa, &**dfa), l.length, "not-packed-v1 bits=" + std::to_string(bits_of(base)) + " kinds=file-kinds-v1");
     };
     out.push_back(p);
 }

@@ -280,12 +280,7 @@ static std::optional<PngResaved> png_resave_unguarded(const std::vector<uint8_t>
         const uint8_t* prior = y ? row - n : zero.data();
         const int f = in[0];
         if (f > 4) return std::nullopt;
-        for (size_t i = 0; i < n; ++i)
-        {
-            const int a = i >= bpp ? row[i - bpp] : 0, bb = prior[i], c = i >= bpp ? prior[i - bpp] : 0;
-            const int pred = f == 0 ? 0 : f == 1 ? a : f == 2 ? bb : f == 3 ? (a + bb) / 2 : paeth(a, bb, c);
-            row[i] = uint8_t(in[1 + i] + pred);
-        }
+        unfilter_row(f, in + 1, prior, n, bpp, row);
     }
     // Every filter (each alone, or each row its own) at both of zlib's strategies; the smallest kept,
     // the first of equals in the order strategy 0's six, then strategy 1's. Each filter's rows made

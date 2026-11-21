@@ -55,16 +55,6 @@ uint64_t print_of(const uint8_t* p, size_t n)
     return mix64(h ^ w ^ (uint64_t(n - i) << 56));
 }
 
-void put_varint(std::vector<uint8_t>& o, uint64_t v)
-{
-    while (v >= 0x80)
-    {
-        o.push_back(uint8_t(v | 0x80));
-        v >>= 7;
-    }
-    o.push_back(uint8_t(v));
-}
-
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
@@ -145,7 +135,7 @@ Script make(std::span<const uint8_t> base, std::span<const uint8_t> target)
     size_t fresh_from = 0; // the new bytes not yet written start here
     auto write_fresh = [&](size_t to) {
         if (to <= fresh_from) return;
-        put_varint(s.bytes, uint64_t(to - fresh_from) << 1);
+        sieve::write_varint(s.bytes, uint64_t(to - fresh_from) << 1);
         s.bytes.insert(s.bytes.end(), target.begin() + std::ptrdiff_t(fresh_from), target.begin() + std::ptrdiff_t(to));
         s.fresh += to - fresh_from;
     };
@@ -163,9 +153,9 @@ Script make(std::span<const uint8_t> base, std::span<const uint8_t> target)
             while (eb < target.size() && ea < base.size() && base[ea] == target[eb]) ++ea, ++eb;
             write_fresh(b);
             const uint64_t n = eb - b;
-            put_varint(s.bytes, (n << 1) | 1);
+            sieve::write_varint(s.bytes, (n << 1) | 1);
             const int64_t move = int64_t(a) - int64_t(last_end);
-            put_varint(s.bytes, move >= 0 ? uint64_t(move) << 1 : (uint64_t(-move) << 1) - 1);
+            sieve::write_varint(s.bytes, move >= 0 ? uint64_t(move) << 1 : (uint64_t(-move) << 1) - 1);
             last_end = a + n;
             ++s.copies;
             s.copied += n;

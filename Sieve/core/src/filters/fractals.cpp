@@ -174,15 +174,23 @@ bool start_trimmed(const Fractal& f)
 }
 
 // A path's (an attractor's or a flow's) distinct points among its first depth's last 256, rounded to a
-// millionth: one that settles on a point or a short cycle has few.
+// millionth: one that settles on a point or a short cycle has few. draws and grows both ask it of the same
+// ruleset, one after the other, so the last answer is kept on each thread, under the ruleset's text (which
+// says all its path is made from, so it cannot answer for another), and the path is followed once.
 size_t path_distinct(const Fractal& f)
 {
+    thread_local std::string last_text;
+    thread_local size_t last_distinct = 0;
+    std::string text = f.text();
+    if (!last_text.empty() && text == last_text) return last_distinct;
     const auto p = fractal_path(f, 0);
-    if (!p) return 0;
     std::set<std::array<long long, 3>> seen;
-    for (size_t k = p->size() > 256 ? p->size() - 256 : 0; k < p->size(); ++k)
-        seen.insert({std::llround((*p)[k][0] * 1e6), std::llround((*p)[k][1] * 1e6), std::llround((*p)[k][2] * 1e6)});
-    return seen.size();
+    if (p)
+        for (size_t k = p->size() > 256 ? p->size() - 256 : 0; k < p->size(); ++k)
+            seen.insert({std::llround((*p)[k][0] * 1e6), std::llround((*p)[k][1] * 1e6), std::llround((*p)[k][2] * 1e6)});
+    last_text = std::move(text);
+    last_distinct = seen.size();
+    return last_distinct;
 }
 
 bool draws(const Fractal& f)

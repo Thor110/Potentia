@@ -161,6 +161,9 @@ WordCounting word_counting(std::shared_ptr<const Dictionary> dict, bool cut, boo
 // The token form's `within N` at these values (0 when the plugin has none): every symbol past the
 // first N must be a separator, and the automaton judges the first N.
 uint32_t plugin_within(const PluginDef& p, const FilterValues& values);
+// The same on a line, so a v2 plugin's `within` may name its constants (BASE, LENGTH ...), as
+// make_plugin_filter reads it (review 5).
+uint32_t plugin_within(const PluginDef& p, const FilterLine& line, const FilterValues& values);
 // The token form's separators on this line, in symbol order (none for a table).
 std::vector<uint32_t> plugin_separators(const PluginDef& p, const FilterLine& line);
 // The plugin's filter on this line: its automaton, or with `within`, its automaton on the first N
@@ -209,15 +212,20 @@ FilterSpec plugin_spec(std::shared_ptr<const PluginDef> p);
 // rather than at every start. An unreadable or mismatched file is ignored and rewritten. No folder
 // (the default, and the tests): memory only.
 void set_plugin_cache_dir(const std::filesystem::path& dir);
-// Whether a plugin (by its SHA-256 and parameters) is compiled for the line with these values
-// already, in memory or on disk: building a stack with it will then be quick.
-bool plugin_compiled(const std::string& sha256, const FilterLine& line, const std::vector<FilterParam>& params, const FilterValues& values);
+// Whether a plugin is compiled for the line with these values already, in memory or on disk:
+// building a stack with it will then be quick. It asks under the same key the compile keeps it
+// under (with a token plugin's list and tags files read and hashed), so it says so only where the
+// compile will indeed find it.
+bool plugin_compiled(const PluginDef& p, const FilterLine& line, const FilterValues& values);
 
 // A plugin filter's automaton (for combining a stack of plugins into one ranker), or nullptr.
 const Dfa* plugin_dfa(const Filter& f);
 // A filter whose rule is an automaton made in code rather than read from a file (not-written-v1,
 // sieve/written.hpp): judged, counted and combined with plugins exactly as a plugin's is.
 std::unique_ptr<Filter> make_dfa_filter(Dfa dfa, uint32_t length, std::string provenance);
+// The same over an automaton kept elsewhere (an aliasing pointer into the holder that keeps it): shared,
+// not copied, so building a stack again does not copy the automaton.
+std::unique_ptr<Filter> make_dfa_filter(std::shared_ptr<const Dfa> dfa, uint32_t length, std::string provenance);
 
 // The plugins in use, registered once at start-up (the application finds and loads the files;
 // tools/cli/plugins.hpp). find_filter and filters_for look here after the built-in filters.

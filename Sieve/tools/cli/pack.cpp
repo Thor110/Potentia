@@ -14,6 +14,7 @@
 #include "cli/mp3_glue.hpp"
 #include "cli/png_resave.hpp"
 #include "cli/timings.hpp"
+#include "cli/crc32.hpp"
 
 #include "sieve/filekind.hpp"
 #include "sieve/hex.hpp"
@@ -813,19 +814,6 @@ size_t gzip_header_size(const std::vector<uint8_t>& b, size_t start = 0)
 }
 
 // Raw deflate undone (zlib), all of it, with how much input it took; nothing if it is not whole.
-// A CRC-32 of any length: zlib's counts are 32 bits, so a gigabyte at a time.
-uint32_t crc32_of(const uint8_t* p, size_t n)
-{
-    uLong c = crc32(0, nullptr, 0);
-    for (size_t at = 0; at < n;)
-    {
-        const size_t k = std::min<size_t>(n - at, size_t(1) << 30);
-        c = crc32(c, p + at, uInt(k));
-        at += k;
-    }
-    return uint32_t(c);
-}
-
 std::optional<std::vector<uint8_t>> inflate_raw(const uint8_t* in, size_t n, size_t* used, uint64_t expect = UINT64_MAX)
 {
     z_stream z{};
@@ -907,6 +895,48 @@ std::vector<uint8_t> deflate_raw(const std::vector<uint8_t>& in, int level, int 
     if (r != Z_STREAM_END) throw std::runtime_error("zlib could not pack");
     out.resize(n);
     return out;
+}
+
+// Whether deflate_raw(in, level, mem) would give `want`, found without making all of it: the input
+// is given whole, as deflate_raw gives it, and the output taken 64 KiB at a time and compared as it
+// comes, stopping at the first byte that differs. At levels 1 to 9 zlib's output does not depend on
+// how much room it is given for it (level 0's stored blocks do, so it is not taken here). (Review 5:
+// a gzip that zlib did not make cost 18 whole deflates before any was compared.)
+bool deflate_raw_gives(const std::vector<uint8_t>& in, int level, int mem, std::span<const uint8_t> want)
+{
+    if (level < 1 || level > 9) return deflate_raw(in, level, mem) == std::vector<uint8_t>(want.begin(), want.end());
+    z_stream z{};
+    if (deflateInit2(&z, level, Z_DEFLATED, -15, mem, Z_DEFAULT_STRATEGY) != Z_OK) throw std::runtime_error("zlib could not start");
+    std::vector<uint8_t> out(size_t(64) << 10);
+    z.next_in = const_cast<Bytef*>(in.data());
+    z.avail_in = uInt(in.size());
+    size_t got = 0;
+    bool same = true;
+    for (;;)
+    {
+        z.next_out = out.data();
+        z.avail_out = uInt(out.size());
+        const int r = deflate(&z, Z_FINISH);
+        if (r != Z_OK && r != Z_STREAM_END)
+        {
+            deflateEnd(&z);
+            throw std::runtime_error("zlib could not pack");
+        }
+        const size_t n = out.size() - z.avail_out;
+        if (n > want.size() - got || !std::equal(out.begin(), out.begin() + std::ptrdiff_t(n), want.begin() + std::ptrdiff_t(got)))
+        {
+            same = false;
+            break;
+        }
+        got += n;
+        if (r == Z_STREAM_END)
+        {
+            same = got == want.size();
+            break;
+        }
+    }
+    deflateEnd(&z);
+    return same;
 }
 
 // A zip's entries, read into memory: stored and deflated ones, each checked against its CRC; the
@@ -1221,12 +1251,6 @@ std::vector<uint8_t> sdk_stream(std::vector<uint8_t> in, bool lzma2, const uint8
     return out;
 }
 
-void sk_put_varint(std::vector<uint8_t>& out, uint64_t v)
-{
-    for (; v >= 0x80; v >>= 7) out.push_back(uint8_t(v | 0x80));
-    out.push_back(uint8_t(v));
-}
-
 uint64_t sk_get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
@@ -1244,14 +1268,14 @@ struct DeflateSkeleton
     {
         if (!n) return;
         head.push_back(0);
-        sk_put_varint(head, n);
+        write_varint(head, n);
         head.insert(head.end(), p, p + n);
         ++segments;
     }
     void stored(const uint8_t* p, size_t n)
     {
         head.push_back(1);
-        sk_put_varint(head, n);
+        write_varint(head, n);
         data.insert(data.end(), p, p + n);
         ++segments;
     }
@@ -1261,8 +1285,8 @@ struct DeflateSkeleton
         std::vector<uint8_t> un, diff;
         if (!preflate_split(raw, un, diff)) return false;
         head.push_back(2);
-        sk_put_varint(head, un.size());
-        sk_put_varint(head, diff.size());
+        write_varint(head, un.size());
+        write_varint(head, diff.size());
         head.insert(head.end(), diff.begin(), diff.end());
         data.insert(data.end(), un.begin(), un.end());
         ++segments;
@@ -1289,7 +1313,7 @@ struct DeflateSkeleton
                 const std::vector<uint8_t> f = sdk_stream(un, lzma2, props, level, bs, x86);
                 if (f.size() != n || !std::equal(f.begin(), f.end(), p)) continue;
                 head.push_back(lzma2 ? 3 : 4);
-                sk_put_varint(head, un.size());
+                write_varint(head, un.size());
                 head.insert(head.end(), props, props + (lzma2 ? 1 : 5));
                 head.push_back(uint8_t(level));
                 head.push_back(uint8_t((block ? 1 : 0) | (x86 ? 2 : 0)));
@@ -1305,9 +1329,9 @@ struct DeflateSkeleton
     void chunked(const std::vector<uint32_t>& lengths, const DeflateSkeleton& sub)
     {
         head.push_back(5);
-        sk_put_varint(head, lengths.size());
-        for (const uint32_t l : lengths) sk_put_varint(head, l);
-        sk_put_varint(head, sub.segments);
+        write_varint(head, lengths.size());
+        for (const uint32_t l : lengths) write_varint(head, l);
+        write_varint(head, sub.segments);
         head.insert(head.end(), sub.head.begin(), sub.head.end());
         data.insert(data.end(), sub.data.begin(), sub.data.end());
         ++segments;
@@ -1320,7 +1344,7 @@ struct DeflateSkeleton
     {
         if (tiff_lzw_encode(un.data(), un.size()) != std::vector<uint8_t>(p, p + n)) return false;
         head.push_back(6);
-        sk_put_varint(head, un.size());
+        write_varint(head, un.size());
         data.insert(data.end(), un.begin(), un.end());
         ++segments;
         return true;
@@ -1329,8 +1353,8 @@ struct DeflateSkeleton
     {
         if (row == 0 || tiff_packbits_encode(un.data(), un.size(), row) != std::vector<uint8_t>(p, p + n)) return false;
         head.push_back(7);
-        sk_put_varint(head, un.size());
-        sk_put_varint(head, row);
+        write_varint(head, un.size());
+        write_varint(head, row);
         data.insert(data.end(), un.begin(), un.end());
         ++segments;
         return true;
@@ -1344,12 +1368,12 @@ struct DeflateSkeleton
         std::vector<uint8_t> px = un;
         if (!tiff_unpredict(px, row, stride, form == 1 ? 1 : 2, form == 3)) return false;
         head.push_back(8);
-        sk_put_varint(head, px.size());
-        sk_put_varint(head, row);
-        sk_put_varint(head, stride);
+        write_varint(head, px.size());
+        write_varint(head, row);
+        write_varint(head, stride);
         head.push_back(uint8_t(form));
         head.push_back(uint8_t(kind));
-        sk_put_varint(head, px.size());
+        write_varint(head, px.size());
         head.insert(head.end(), params.begin(), params.end());
         data.insert(data.end(), px.begin(), px.end());
         ++segments;
@@ -1359,7 +1383,7 @@ struct DeflateSkeleton
     std::vector<uint8_t> inner(size_t& skeleton) const
     {
         std::vector<uint8_t> out;
-        sk_put_varint(out, segments);
+        write_varint(out, segments);
         out.insert(out.end(), head.begin(), head.end());
         skeleton = out.size();
         out.insert(out.end(), data.begin(), data.end());
@@ -1391,6 +1415,9 @@ std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, 
             {
                 // v25: a run of chunks: n chunks' lengths, then the segments of their data joined.
                 if (depth > 0 || n == 0 || n > (uint64_t(1) << 24)) throw std::runtime_error("a skeleton's run of chunks that is not one");
+                // (Each length takes a byte at least: a run claiming more than the skeleton has left is
+                // refused before its lengths are made room for.)
+                if (n > sk.size() - at) throw std::runtime_error("a deflate skeleton ends early");
                 std::vector<uint64_t> lengths = std::vector<uint64_t>(size_t(n));
                 uint64_t total = 0;
                 for (auto& l : lengths)
@@ -1410,7 +1437,7 @@ std::vector<uint8_t> deflate_skeleton_remake(const std::vector<uint8_t>& inner, 
                     for (const char c : {'I', 'D', 'A', 'T'}) out.push_back(uint8_t(c));
                     out.insert(out.end(), joined.begin() + std::ptrdiff_t(from), joined.begin() + std::ptrdiff_t(from + l));
                     from += size_t(l);
-                    const uint32_t crc = uint32_t(crc32(0, out.data() + name_at, uInt(out.size() - name_at)));
+                    const uint32_t crc = crc32_of(out.data() + name_at, out.size() - name_at);
                     for (int b = 3; b >= 0; --b) out.push_back(uint8_t(crc >> (8 * b)));
                 }
                 continue;
@@ -1956,7 +1983,7 @@ std::optional<TiffSkeleton> tiff_skeleton(const std::vector<uint8_t>& b)
             if (auto un = tiff_packbits_decode(p, len, expect))
             {
                 std::vector<uint8_t> params;
-                sk_put_varint(params, size_t(u.row));
+                write_varint(params, size_t(u.row));
                 if (tiff_packbits_encode(un->data(), un->size(), size_t(u.row)) == std::vector<uint8_t>(p, p + len))
                 {
                     t.sk.literal(b.data() + kept, size_t(u.at) - kept);
@@ -1978,7 +2005,7 @@ std::optional<TiffSkeleton> tiff_skeleton(const std::vector<uint8_t>& b)
                 if (differenced && preflate_split(raw, un, diff))
                 {
                     std::vector<uint8_t> params;
-                    sk_put_varint(params, diff.size());
+                    write_varint(params, diff.size());
                     params.insert(params.end(), diff.begin(), diff.end());
                     done = predicted(2, un, params);
                     if (done) t.held += un.size();
@@ -2145,7 +2172,7 @@ std::optional<DeflateSkeleton> png_skeleton(const std::vector<uint8_t>& b)
         if (b.size() - at < 12) return std::nullopt;
         const uint32_t n = u32(at);
         if (n > 0x7FFFFFFFu || n > b.size() - at - 12) return std::nullopt;
-        if (uint32_t(crc32(0, b.data() + at + 4, uInt(n + 4))) != u32(at + 8 + n)) return std::nullopt;
+        if (crc32_of(b.data() + at + 4, size_t(n) + 4) != u32(at + 8 + n)) return std::nullopt;
         const bool idat = std::memcmp(b.data() + at + 4, "IDAT", 4) == 0;
         if (idat)
         {
@@ -2826,11 +2853,11 @@ std::string gzip_recipe(const std::vector<uint8_t>& b, const std::vector<uint8_t
 {
     const timings::Scope t("pack.archives.recipe");
     const size_t h = gzip_header_size(b);
-    if (!h) return "";
-    const std::vector<uint8_t> stream(b.begin() + std::ptrdiff_t(h), b.end() - 8);
+    if (!h || b.size() - h < 8) return "";
+    const std::span<const uint8_t> stream(b.data() + h, b.size() - h - 8);
     for (const int level : {6, 9, 1, 2, 3, 4, 5, 7, 8})
         for (const int mem : {8, 9})
-            if (deflate_raw(inner, level, mem) == stream)
+            if (deflate_raw_gives(inner, level, mem, stream))
                 return "gz " + std::to_string(level) + " " + std::to_string(mem) + " " + hex_of(std::span<const uint8_t>(b.data(), h)) + " " + std::to_string(inner.size());
     return "";
 }

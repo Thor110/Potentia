@@ -8,60 +8,64 @@ cd "$(dirname "$0")/../.."
 
 trap 'echo "::error::the step stopped at its line $LINENO: $BASH_COMMAND" >&2' ERR # names the failing line
 cd reference
-python sieve_ref.py vectors       | diff - ../tests/vectors_v1.tsv
-python sieve_ref.py range-vectors | diff - ../tests/vectors_range_v1.tsv
-python sieve_ref.py biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
-python sieve_ref.py biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
-python sieve_ref.py digit-vectors | diff - ../tests/vectors_digits_v1.tsv
-python sieve_ref.py canon-vectors | diff - ../tests/vectors_canon.tsv
-python sieve_ref.py canon-range-vectors | diff - ../tests/vectors_canon_range_v1.tsv
-python sieve_ref.py bytes-vectors | diff - ../tests/vectors_bytes_v1.tsv
-python sieve_ref.py alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
-python sieve_ref.py model-vectors | diff - ../tests/vectors_models_v1.tsv
-python sieve_ref.py image-vectors | diff - ../tests/vectors_image_v1.tsv
-python sieve_ref.py image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
-python sieve_ref.py cipher-vectors | diff - ../tests/vectors_cipher_v1.tsv
-python sieve_ref.py guided-vectors | diff - ../tests/vectors_guided_v1.tsv
-python sieve_ref.py guided-range-vectors | diff - ../tests/vectors_guided_range_v1.tsv
-python sieve_ref.py filter-vectors | diff - ../tests/vectors_filters_v1.tsv
-python sieve_ref.py compact-vectors | diff - ../tests/vectors_compact_v1.tsv
-python sieve_ref.py book-vectors | diff - ../tests/vectors_books_v1.tsv
-python sieve_ref.py composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
-python sieve_ref.py world-vectors | diff - ../tests/vectors_worlds_v1.tsv
-python sieve_ref.py ai-vectors | diff - ../tests/vectors_ai_v1.tsv
-python sieve_ref.py ai-filter-vectors | diff - ../tests/vectors_ai_filters_v1.tsv
-python sieve_ref.py ai-run-filter-vectors | diff - ../tests/vectors_ai_run_filters_v1.tsv
-python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
-python sieve_ref.py train-vectors --corpus ../tests/training_corpus.txt --v2 | diff - ../tests/vectors_training_v2.tsv
-python sieve_ref.py titled-vectors | diff - ../tests/vectors_titled_v1.tsv
-python sieve_ref.py binary-vectors | diff - ../tests/vectors_binary_v1.tsv
-python sieve_ref.py chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
-python sieve_ref.py notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
-python sieve_ref.py pcm-vectors | diff - ../tests/vectors_pcm_v1.tsv
-python sieve_ref.py sound-vectors | diff - ../tests/vectors_sound_v1.tsv
-python sieve_ref.py notes3-vectors | diff - ../tests/vectors_notes3_v1.tsv
+# (The oracle runs as a module, python -m sieve_ref, so Python reads its compiled copy from
+# __pycache__ after the first call; run as a script, its 12,000 lines were compiled afresh on
+# every one of the step's several hundred calls, about 0.2 s each.)
+python -m sieve_ref vectors       | diff - ../tests/vectors_v1.tsv
+python -m sieve_ref range-vectors | diff - ../tests/vectors_range_v1.tsv
+python -m sieve_ref biguint-vectors | diff - ../tests/vectors_biguint_v1.tsv
+python -m sieve_ref biguint-large-vectors | diff - ../tests/vectors_biguint_large_v1.tsv
+python -m sieve_ref digit-vectors | diff - ../tests/vectors_digits_v1.tsv
+python -m sieve_ref canon-vectors | diff - ../tests/vectors_canon.tsv
+python -m sieve_ref canon-range-vectors | diff - ../tests/vectors_canon_range_v1.tsv
+python -m sieve_ref bytes-vectors | diff - ../tests/vectors_bytes_v1.tsv
+python -m sieve_ref alphabet-vectors | diff - ../tests/vectors_alphabets_v1.tsv
+python -m sieve_ref model-vectors | diff - ../tests/vectors_models_v1.tsv
+python -m sieve_ref image-vectors | diff - ../tests/vectors_image_v1.tsv
+python -m sieve_ref image-v2-vectors | diff - ../tests/vectors_image_v2.tsv
+python -m sieve_ref cipher-vectors | diff - ../tests/vectors_cipher_v1.tsv
+python -m sieve_ref guided-vectors | diff - ../tests/vectors_guided_v1.tsv
+python -m sieve_ref guided-range-vectors | diff - ../tests/vectors_guided_range_v1.tsv
+python -m sieve_ref filter-vectors | diff - ../tests/vectors_filters_v1.tsv
+python -m sieve_ref compact-vectors | diff - ../tests/vectors_compact_v1.tsv
+python -m sieve_ref book-vectors | diff - ../tests/vectors_books_v1.tsv
+python -m sieve_ref composition-vectors | diff - ../tests/vectors_compositions_v1.tsv
+python -m sieve_ref world-vectors | diff - ../tests/vectors_worlds_v1.tsv
+python -m sieve_ref ai-vectors | diff - ../tests/vectors_ai_v1.tsv
+python -m sieve_ref ai-filter-vectors | diff - ../tests/vectors_ai_filters_v1.tsv
+python -m sieve_ref ai-run-filter-vectors | diff - ../tests/vectors_ai_run_filters_v1.tsv
+python -m sieve_ref train-vectors --corpus ../tests/training_corpus.txt | diff - ../tests/vectors_training_v1.tsv
+python -m sieve_ref train-vectors --corpus ../tests/training_corpus.txt --v2 | diff - ../tests/vectors_training_v2.tsv
+python -m sieve_ref train-vectors --corpus ../tests/training_corpus.txt --v3 | diff - ../tests/vectors_training_v3.tsv
+python -m sieve_ref titled-vectors | diff - ../tests/vectors_titled_v1.tsv
+python -m sieve_ref binary-vectors | diff - ../tests/vectors_binary_v1.tsv
+python -m sieve_ref chunk-vectors | diff - ../tests/vectors_chunks_v1.tsv
+python -m sieve_ref notes2-vectors | diff - ../tests/vectors_notes2_v1.tsv
+python -m sieve_ref pcm-vectors | diff - ../tests/vectors_pcm_v1.tsv
+python -m sieve_ref sound-vectors | diff - ../tests/vectors_sound_v1.tsv
+python -m sieve_ref notes3-vectors | diff - ../tests/vectors_notes3_v1.tsv
 # One line filtered by another (FILTER-PLUGINS.md section 15): file kinds and the binary
 # line's filter by them, and not-written-v1, counted by the oracle's own machines, its
 # closed form for the binary reading and the overlap walked pair by pair (about 3 minutes).
-python sieve_ref.py kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
-python sieve_ref.py written-vectors | diff - ../tests/vectors_written_v1.tsv
+python -m sieve_ref kind-vectors | diff - ../tests/vectors_kinds_v1.tsv
+python -m sieve_ref written-vectors | diff - ../tests/vectors_written_v1.tsv
 # Every line filtered by every other (section 16): not-a-file, the notation and .obj
 # machines, the packed closed form and the pages among the binary kinds; and the models
 # line's rules with canonical-mesh-v1 (about 45 s).
-python sieve_ref.py cross-vectors | diff - ../tests/vectors_cross_v1.tsv
+python -m sieve_ref cross-vectors | diff - ../tests/vectors_cross_v1.tsv
 # palette-size-v1 and row-runs-v1 (closed forms, brute force on small lines), and
 # utf8-valid-v1 on the binary line (code points by encoded length, Python's decoder).
-python sieve_ref.py picture-vectors | diff - ../tests/vectors_picture_v1.tsv
+python -m sieve_ref picture-vectors | diff - ../tests/vectors_picture_v1.tsv
 # figure-v1: shapes found by a flood fill on small lines, and at 10 by 10 counted by a
 # frontier walk that knows each pixel's row (the engine's automaton does not).
-python sieve_ref.py figure-vectors | diff - ../tests/vectors_figure_v1.tsv
+python -m sieve_ref figure-vectors | diff - ../tests/vectors_figure_v1.tsv
 # diffusion-v1: training steps that attend everywhere, scored on every clean cell, and a picture made.
-python sieve_ref.py diffusion-vectors | diff - ../tests/vectors_diffusion_v1.tsv
-python sieve_ref.py utf8-vectors | diff - ../tests/vectors_utf8_v1.tsv
+python -m sieve_ref diffusion-vectors | diff - ../tests/vectors_diffusion_v1.tsv
+python -m sieve_ref utf8-vectors | diff - ../tests/vectors_utf8_v1.tsv
 # The generated text plugins are what tools/build_text_plugins.py makes from the pinned lists.
 python ../tools/build_text_plugins.py --check
-python sieve_ref.py book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
-python sieve_ref.py book-read ../tests/example_book_v1.book > book.out
+python -m sieve_ref book-filter-vectors | diff - ../tests/vectors_book_filters_v1.tsv
+python -m sieve_ref book-read ../tests/example_book_v1.book > book.out
 test "$(head -1 book.out)" = "$(awk '$1 == "id" {print $2}' ../tests/example_book_v1.book)"
 tail -n +3 book.out | cmp - ../tests/example_book_v1.pages.txt
 # The file locator and the manifest creator: the tool's manifest of the fixture folder is
@@ -74,7 +78,7 @@ S=../build/sieve
 for L in 1 2 5 17 40; do
   for spec in "clean-data-v1:" "clean-data-v2:" "max-run-data-v1:max=1" "max-run-data-v1:max=3" "max-run-data-v1:max=5" "key-data-v1:tonic=0" "key-data-v1:tonic=5" "key-data-v1:tonic=11" "tidy-data-v1:" "tidy-data-v1:longest=3" "tidy-data-v2:" "tidy-data-v2:longest=3"; do
     f=${spec%%:*}; p=${spec#*:}
-    python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -84,11 +88,11 @@ done
 # of records and of records changed by a character the reader's own (read_format_stat), but for
 # keys out of order, which a walk cannot see and the reader alone refuses.
 for L in 61 62 63 70 90; do
-  python sieve_ref.py plugin ../data/filters/format-stat-record-v1.sfilter --length $L > plugin.oracle
+  python -m sieve_ref plugin ../data/filters/format-stat-record-v1.sfilter --length $L > plugin.oracle
   $S filters --plugin ../data/filters/format-stat-record-v1.sfilter --length $L | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
 done
-python sieve_ref.py plugin ../data/filters/format-stat-record-v1.sfilter --length 62 | grep -c "^survivors  5931900000000$" > /dev/null
+python -m sieve_ref plugin ../data/filters/format-stat-record-v1.sfilter --length 62 | grep -c "^survivors  5931900000000$" > /dev/null
 python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for their keys' order alone$" > /dev/null
 # Sieve's own formats as grammars (list F1, IDEAS 19.185): the tables are what tools/grammars.py
 # writes; their counts the oracle's, at each format's shortest document and beyond (an action map of
@@ -100,7 +104,7 @@ python ../tools/check_stat_plugin.py "$S" . | grep -c "refused by the reader for
 # reader alone refuses. A v2 world of 33 characters is one kept line of one character: 10 seeds x 94.
 python ../tools/grammars.py --check
 for f in format-actions-v1:135 format-actions-v1:195 format-save-v1:89 format-save-v1:120 format-replay-v1:60 format-replay-v1:80 format-world-v1:31 format-world-v1:60 format-world-v2:33 format-world-v2:60 format-fractal-v1:44 format-fractal-v1:60 format-fractal-v2:46 format-fractal-v2:60 format-fractal-v3:44 format-fractal-v3:60 format-fractal-v4:30 format-fractal-v4:60 format-fractal-v5:30 format-fractal-v5:60 format-fractal-v6:29 format-fractal-v6:60; do
-  python sieve_ref.py plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
+  python -m sieve_ref plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} > plugin.oracle
   $S filters --plugin ../data/filters/${f%%:*}.sfilter --length ${f##*:} | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
 done
@@ -142,19 +146,19 @@ done
 # by the oracle: an NFA and the subset construction, then Hopcroft), and a toy grammar
 # (word lists, follow, first and last, a word in two sets; whole and cut edges).
 for f in words-data-v1 window-data-v1 words-data-v2 window-data-v2 title-data-v1; do
-  python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 > plugin.oracle
+  python -m sieve_ref plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 > plugin.oracle
   $S filters --plugin ../data/filters/$f.sfilter --length 6 --params dictionary=scowl-en-35 | tr -d '\r' > plugin.engine
   diff plugin.oracle plugin.engine
 done
 # title-data-v1 with its words held to fewer symbols than the unit has (`within`).
-python sieve_ref.py plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 > plugin.oracle
+python -m sieve_ref plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 > plugin.oracle
 $S filters --plugin ../data/filters/title-data-v1.sfilter --length 9 --params dictionary=scowl-en-35,max_length=4 | tr -d '\r' > plugin.engine
 diff plugin.oracle plugin.engine
 # toy-tags: tagged lists (two files as one, an excluded tag, capitals folded, lines skipped).
 # toy-padding: trailing padding and `within` with two separators, cut and whole edges.
 for f in toy-grammar-v1 toy-grammar-cut-v1 toy-tags-v1 toy-tags-cut-v1 toy-padding-v1 toy-padding-whole-v1; do
   for L in 1 3 11 25; do
-    python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
+    python -m sieve_ref plugin ../tests/plugins/$f.sfilter --length $L > plugin.oracle
     $S filters --plugin ../tests/plugins/$f.sfilter --length $L | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -165,7 +169,7 @@ done
 for spec in "key-data-v2:" "key-data-v2:tonic=A,scale=minor" "key-data-v2:tonic=F#,scale=blues" "melody-leap-v1:" "melody-leap-v1:leap=2,rest_resets=yes" "melody-lengths-v1:" "melody-lengths-v1:shortest=q,longest=h,eighths=0" "melody-rests-v1:" "melody-rests-v1:run=1,total=3,leading=yes" "melody-ending-v1:tonic=A,hold=h" "melody-range-v1:low=64,high=72"; do
   f=${spec%%:*}; p=${spec#*:}
   for L in 1 2 5 17; do
-    python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -173,7 +177,7 @@ done
 for spec in "melody-metre-v1:" "melody-metre-v1:time=3-4,complete=yes" "melody-metre-v1:time=5-4" "melody-ambitus-v1:" "melody-ambitus-v1:span=4" "melody-gapfill-v1:" "melody-gapfill-v1:leap=2,step=5,resolve=yes" "melody-cadence-v1:" "melody-cadence-v1:tonic=G,approach=half"; do
   f=${spec%%:*}; p=${spec#*:}
   for L in 1 2 5 17; do
-    python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -182,27 +186,27 @@ done
 for spec in "letter-pairs-v1:" "letter-pairs-v1:min_words=5" "letter-triples-v1:" "letter-triples-v1:min_words=3" "word-cost-v1:" "word-cost-v1:rate=12,slack=8" "sentence-shape-v1:" "sentence-shape-v1:capitals=no,others=yes" "babel-punctuation-v1:"; do
   f=${spec%%:*}; p=${spec#*:}
   for L in 1 2 5 17 40; do
-    python sieve_ref.py plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../data/filters/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
 done
-python sieve_ref.py plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt > plugin.oracle
+python -m sieve_ref plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt > plugin.oracle
 $S filters --plugin ../data/filters/sentence-shape-v1.sfilter --length 6 --judge ../tests/plugins/sentence-shape-cases.txt | tr -d '\r' > plugin.engine
 diff plugin.oracle plugin.engine
 # function-words-v1 reads every word of scowl-en-60-names: the oracle's lazy mode, as for Moby.
-python sieve_ref.py plugin ../data/filters/function-words-v1.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+python -m sieve_ref plugin ../data/filters/function-words-v1.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
 $S filters --plugin ../data/filters/function-words-v1.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
 diff plugin.oracle plugin.engine
 # function-words-v2: the same from scowl-en-60-names-v2 (IDEAS §2.3).
-python sieve_ref.py plugin ../data/filters/function-words-v2.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+python -m sieve_ref plugin ../data/filters/function-words-v2.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
 $S filters --plugin ../data/filters/function-words-v2.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
 diff plugin.oracle plugin.engine
 # Anchor plugins (tools/build_anchor_plugins.py): near one anchor, near several, and fragments.
 for spec in "near-example-v1:" "near-example-v1:distance=0" "near-example-v1:distance=7" "near-many-example-v1:" "contains-example-v1:"; do
   f=${spec%%:*}; p=${spec#*:}
   for L in 1 8 20 32; do
-    python sieve_ref.py plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../tests/plugins/$f.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -211,7 +215,7 @@ done
 $S filters --plugin ../tests/plugins/near-example-v1.sfilter --length 32 --params distance=3 | grep -qx "survivors  87513089"
 for p in "" "gap=0" "mode=far" "mode=any,gap=5"; do
   for L in 1 2 5 12; do
-    python sieve_ref.py plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
+    python -m sieve_ref plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} > plugin.oracle
     $S filters --plugin ../tests/plugins/toy-v2-v1.sfilter --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
     diff plugin.oracle plugin.engine
   done
@@ -222,7 +226,7 @@ for spec in "pcm-quiet-ends-v1:" "pcm-quiet-ends-v1:quiet=0" "pcm-quiet-ends-v1:
   f=${spec%%:*}; p=${spec#*:}
   for opt in "--bits 8" "--bits 3 --channels 3" "--bits 1 --channels 2"; do
     for L in 1 2 5; do
-      python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set pcm $opt --length $L ${p:+--params $p} > plugin.oracle
+      python -m sieve_ref plugin ../data/filters/$f.sfilter --line audio --note-set pcm $opt --length $L ${p:+--params $p} > plugin.oracle
       $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set pcm $opt --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
       diff plugin.oracle plugin.engine
     done
@@ -235,7 +239,7 @@ for set in "--low C3 --high C6 --durations seEqQhHw" "--low F#3 --high G5 --dura
     for spec in "key-data-v2:tonic=D,scale=blues" "melody-leap-v1:leap=3" "melody-rests-v1:run=1,total=2,leading=yes" "melody-range-v1:low=62,high=70" "melody-lengths-v2:shortest=e,longest=h,eighths=1" "melody-ending-v2:tonic=G,hold=Q" "melody-cadence-v1:tonic=A,approach=half"; do
       f=${spec%%:*}; p=${spec#*:}
       for L in 1 2 5; do
-        python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
+        python -m sieve_ref plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p > plugin.oracle
         $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes2 $set --voices $V --length $L --params $p | tr -d '\r' > plugin.engine
         diff plugin.oracle plugin.engine
       done
@@ -249,7 +253,7 @@ for set in "--low C4 --high C5 --tpq 2 --longest 4 --levels 2" "--low A3 --high 
     for spec in "key-notes3-v1:" "key-notes3-v1:tonic=A,scale=minor" "melody-leap-notes3-v1:leap=2,rest_resets=yes" "melody-range-notes3-v1:low=62,high=70" "melody-ambitus-notes3-v1:span=4" "melody-rests-notes3-v1:run=1,total=2,leading=yes" "melody-gapfill-notes3-v1:leap=2,step=3,resolve=yes" "melody-metre-notes3-v1:" "melody-metre-notes3-v1:time=6-8,complete=yes" "melody-ending-notes3-v1:tonic=G,hold=q" "melody-lengths-notes3-v1:shortest=e,longest=h,eighths=1" "melody-loudness-notes3-v1:softest=2,loudest=3,step=1"; do
       f=${spec%%:*}; p=${spec#*:}
       for L in 1 2 4; do
-        python sieve_ref.py plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} > plugin.oracle
+        python -m sieve_ref plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} > plugin.oracle
         $S filters --plugin ../data/filters/$f.sfilter --line audio --note-set notes3 $set --voices $V --length $L ${p:+--params $p} | tr -d '\r' > plugin.engine
         diff plugin.oracle plugin.engine
       done
@@ -261,7 +265,7 @@ done
 # subsets only as they are reached: counts, ranks and verdicts on real and shuffled
 # sentences must match the engine's; the minimal size is the engine's alone.
 for f in moby-grammar-v1 moby-grammar-strict-v1; do
-  python sieve_ref.py plugin ../data/filters/$f.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
+  python -m sieve_ref plugin ../data/filters/$f.sfilter --length 6 --lazy --judge ../tests/plugins/moby-sentences.txt | grep -v "^states" > plugin.oracle
   $S filters --plugin ../data/filters/$f.sfilter --length 6 --judge ../tests/plugins/moby-sentences.txt | tr -d '\r' | grep -v "^states" > plugin.engine
   diff plugin.oracle plugin.engine
 done
@@ -271,16 +275,16 @@ test "$($S filters --plugins | grep -c "^loaded")" = "$(ls ../data/filters/*.sfi
 $S filters --plugin ../data/filters/words-data-v1.sfilter --length 6 --relations | grep -q "stricter than (implies) window-data-v1"
 rm -rf addr
 $S locate ../tests/manifest_fixture --manifest fixture.manifest --addresses addr --compare > locate.out
-python sieve_ref.py manifest ../tests/manifest_fixture | cmp - fixture.manifest
-python sieve_ref.py manifest ../tests/manifest_fixture --addresses addr
+python -m sieve_ref manifest ../tests/manifest_fixture | cmp - fixture.manifest
+python -m sieve_ref manifest ../tests/manifest_fixture --addresses addr
 grep -q "7z (LZMA2" locate.out
 # A map is Sieve instructions (sieve-manifest-v18 at the least): its text, the graph part, is the
 # oracle's to the byte, read back by both; it is written for other programs as DOT and as
 # well-formed GraphML. Nothing writes the older map files (sieve-map-v1, v2) any more.
 $S map ../tests/manifest_fixture --out fixture.sieve --dot fixture.dot --graphml fixture.graphml > /dev/null
-python sieve_ref.py map ../tests/manifest_fixture > fixture.txt
+python -m sieve_ref map ../tests/manifest_fixture > fixture.txt
 $S map fixture.sieve | cmp - fixture.txt
-python sieve_ref.py graph fixture.sieve | cmp - fixture.txt
+python -m sieve_ref graph fixture.sieve | cmp - fixture.txt
 grep -q '^digraph "manifest_fixture"' fixture.dot
 python -c "import xml.dom.minidom as m; m.parse('fixture.graphml')"
 if $S map ../tests/manifest_fixture --out fixture.map > /dev/null 2>&1; then exit 1; fi
@@ -290,18 +294,18 @@ if $S map ../tests/manifest_fixture --out fixture.map > /dev/null 2>&1; then exi
 # sealed map refuses to change.
 F=../tests/manifest_fixture
 $S map $F/a.txt $F/Zebra.txt --name release --seal --out rel.sieve 2> /dev/null
-python sieve_ref.py map $F/a.txt $F/Zebra.txt --name release --seal > rel.txt
+python -m sieve_ref map $F/a.txt $F/Zebra.txt --name release --seal > rel.txt
 $S map rel.sieve | cmp - rel.txt
 if $S map rel.sieve --add $F/a.txt --out rel2.sieve 2> /dev/null; then exit 1; fi
 $S map --new default --out empty.sieve 2> /dev/null
 $S map empty.sieve --add "$F/sub dir/b.bin" --out held.sieve 2> /dev/null
 $S map held.sieve --add $F/a.txt --out held.sieve 2> /dev/null
-python sieve_ref.py map "$F/sub dir/b.bin" $F/a.txt --held --name default --text > held.txt
+python -m sieve_ref map "$F/sub dir/b.bin" $F/a.txt --held --name default --text > held.txt
 $S map held.sieve | cmp - held.txt
-python sieve_ref.py graph held.sieve | cmp - held.txt
+python -m sieve_ref graph held.sieve | cmp - held.txt
 rm -rf held_in held_oracle
 $S install held.sieve --to held_in > /dev/null
-python sieve_ref.py unpack held.sieve --to held_oracle > /dev/null
+python -m sieve_ref unpack held.sieve --to held_oracle > /dev/null
 cmp held_in/b.bin "$F/sub dir/b.bin"
 cmp held_in/a.txt $F/a.txt
 cmp held_oracle/b.bin "$F/sub dir/b.bin"
@@ -312,12 +316,12 @@ $S map held.sieve --search-per-file 0 --out held0.sieve 2> /dev/null
 cmp held.sieve held0.sieve
 if $S map held.sieve --search-per-file soon --out held0.sieve 2> /dev/null; then exit 1; fi
 $S map held.sieve --remove 1 --out held1.sieve 2> /dev/null
-python sieve_ref.py map $F/a.txt --held --name default --text > held1.txt
+python -m sieve_ref map $F/a.txt --held --name default --text > held1.txt
 $S map held1.sieve | cmp - held1.txt
 # Metadata on a node, set and read back as the oracle writes it.
 $S map held1.sieve --meta "1:source=the fixture folder" --out meta.sieve 2> /dev/null
 $S map meta.sieve --meta "1:found=2026-09-27" --out meta.sieve 2> /dev/null
-python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" --text > meta.txt
+python -m sieve_ref map $F/a.txt --held --name default --meta "1:source=the fixture folder" --meta "1:found=2026-09-27" --text > meta.txt
 $S map meta.sieve | cmp - meta.txt
 $S map --new sealed --seal --out sealed.sieve 2> /dev/null
 $S map sealed.sieve 2>&1 | grep -c "sealed (sealed)" > /dev/null
@@ -327,8 +331,8 @@ $S locate $F --installer tree.sieve --v4 > /dev/null
 $S map tree.sieve | grep -c "^root manifest_fixture$" > /dev/null
 # An older map file (the oracle writes sieve-map-v2, held bytes and all) is still read, and
 # becomes Sieve instructions with the same text.
-python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" > old.map
-python sieve_ref.py map $F/a.txt --held --name default --meta "1:source=the fixture folder" --text > old.txt
+python -m sieve_ref map $F/a.txt --held --name default --meta "1:source=the fixture folder" > old.map
+python -m sieve_ref map $F/a.txt --held --name default --meta "1:source=the fixture folder" --text > old.txt
 $S map old.map | cmp - old.txt
 $S map old.map --out old.sieve 2> /dev/null
 $S map old.sieve | cmp - old.txt
@@ -349,7 +353,7 @@ rm -rf mt_in mt_oracle
 $S install mt.sieve --to mt_in > /dev/null
 cmp mt_in/mt1.md mt1.md
 cmp mt_in/mt2.md mt2.md
-python sieve_ref.py unpack mt.sieve --to mt_oracle | grep -c "^mixt " > /dev/null
+python -m sieve_ref unpack mt.sieve --to mt_oracle | grep -c "^mixt " > /dev/null
 cmp mt_oracle/mt2.md mt2.md
 # A site's page of 9,000 bytes made into a .sieve is mixed (mix-v4, with the word list: at the
 # newest, v32's, counted by use), with or without the match model's ways after it (4 November 2026:
@@ -359,7 +363,7 @@ mkdir mts
 printf '<html><body><a href="long.html">long</a></body></html>\n' > mts/index.html
 (printf '<html><body><pre>\n'; head -c 9000 ../README.md; printf '</pre></body></html>\n') > mts/long.html
 $S site build mts --out mts_out --sieve-pages > /dev/null 2>&1
-python sieve_ref.py unpack mts_out/long.sieve --to mts_oracle | grep -c -E "^mix4 B[0-9]+ F80( [A-Z][0-9]+)*	" > /dev/null
+python -m sieve_ref unpack mts_out/long.sieve --to mts_oracle | grep -c -E "^mix4 B[0-9]+ F80( [A-Z][0-9]+)*	" > /dev/null
 cmp mts_oracle/long.html mts/long.html
 # The web plugin's host (web/README.md), talked to as Chrome does (native messaging: a
 # length, then JSON): a single file's .sieve decoded to the same bytes, its hash stated as
@@ -479,26 +483,26 @@ cmp thr1.sieve thr4.sieve
 SIEVE_PACK_THREADS=1 $S locate ../web/test-site/src --installer thrf1.sieve --search-per-file 0 > /dev/null
 SIEVE_PACK_THREADS=4 $S locate ../web/test-site/src --installer thrf4.sieve --search-per-file 0 > /dev/null
 cmp thrf1.sieve thrf4.sieve
-python sieve_ref.py unpack thrf4.sieve > /dev/null
+python -m sieve_ref unpack thrf4.sieve > /dev/null
 # A v2 manifest (every file's address listed) is the oracle's to the byte.
 $S locate ../tests/manifest_fixture --manifest fixture2.manifest --with-addresses > /dev/null
-python sieve_ref.py manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
+python -m sieve_ref manifest ../tests/manifest_fixture --with-addresses | cmp - fixture2.manifest
 # The older installer, --v3: a v3 manifest (the listing, then every file's bytes; the
 # oracle's, to the byte), its address, and the folder put back from that one address,
 # identical.
 $S locate ../tests/manifest_fixture --manifest fixture3.manifest --installer fixture.sieve --v3 > /dev/null
-python sieve_ref.py manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
+python -m sieve_ref manifest ../tests/manifest_fixture --with-contents | cmp - fixture3.manifest
 # The installer is the manifest's address as raw bytes: exactly the manifest's size here,
 # which is the files' bytes and the listing, no more.
 test "$(wc -c < fixture.sieve)" -eq "$(wc -c < fixture3.manifest)"
-test "$(wc -c < fixture3.manifest)" -eq "$(( $(python sieve_ref.py manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
+test "$(wc -c < fixture3.manifest)" -eq "$(( $(python -m sieve_ref manifest ../tests/manifest_fixture | wc -c) + $(awk '$1 == "bytes" {print $2}' fixture.manifest) ))"
 rm -rf installed
 $S install fixture.sieve --to installed > /dev/null
 diff -r ../tests/manifest_fixture installed
 # A single file's Sieve instructions: as a folder holding just it, the oracle's v3 manifest
 # to the byte (seen through its address), installed back as the file under its name.
 $S locate ../tests/manifest_fixture/a.txt --installer a.sieve --v3 > /dev/null
-python sieve_ref.py manifest ../tests/manifest_fixture/a.txt --with-contents > a3.manifest
+python -m sieve_ref manifest ../tests/manifest_fixture/a.txt --with-contents > a3.manifest
 python -c "
 import sys
 o = open('a3.manifest', 'rb').read(); s = open('a.sieve', 'rb').read()
@@ -540,7 +544,7 @@ echo "$out" | grep -c "1 program(s) in the x86 stream" > /dev/null
 echo "$out" | grep -c "third.txt: lines of all.txt" > /dev/null
 head -1 fixture4.manifest | grep -c "^sieve-manifest-v4" > /dev/null
 rm -rf unpacked4 installed4
-python sieve_ref.py unpack fixture4.manifest --to unpacked4 > /dev/null
+python -m sieve_ref unpack fixture4.manifest --to unpacked4 > /dev/null
 diff -r v4fx unpacked4
 $S install fixture4.sieve --to installed4 > /dev/null
 diff -r v4fx installed4
@@ -571,7 +575,7 @@ python -c "d = open('a20.manifest', 'rb').read(); assert d[:6] == b'sieve\x14', 
 $S install a20.sieve --to a20_inst > /dev/null
 for f in r.py.lz4 r.py.br r.py.lzma; do cmp a20/$f a20_inst/$f; done
 cmp sieve_ref.py a20_inst/two
-python sieve_ref.py unpack a20.manifest --to a20_oracle > /dev/null
+python -m sieve_ref unpack a20.manifest --to a20_oracle > /dev/null
 diff -r a20_inst a20_oracle
 sieve_ci_no_display # (sieve-install opens SDL; with no screen, its offscreen driver)
 SI=../build/sieve-install
@@ -602,7 +606,7 @@ import hashlib, sys
 for kv in sys.argv[1].split(','):
     p, h = kv.split('=')
     assert hashlib.sha256(open('la_inst/' + p, 'rb').read()).hexdigest() == h, p" "$3"
-  python sieve_ref.py unpack la.sieve --to la_oracle > /dev/null
+  python -m sieve_ref unpack la.sieve --to la_oracle > /dev/null
   diff -r la_inst la_oracle
 done
 # v21 (25 October 2026): a gzip and a zip made again exactly, whoever made them, from a skeleton and
@@ -631,7 +635,7 @@ $S install a21.sieve --to a21_inst > /dev/null
 for f in huff.gz py.zip stored.zip sieve-7zip-lzma2.7z sieve-7zip-lzma.7z sieve-7zip-deflate.zip; do cmp a21/$f a21_inst/$f; done
 # The oracle reads every skeleton whole and makes the stored zip again; the others, made by preflate
 # or the LZMA SDK (which it has not), it names as not made again, and so leaves the tree unchecked.
-python sieve_ref.py unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
+python -m sieve_ref unpack a21.manifest --to a21_oracle | tr -d '\r' > a21_oracle.txt
 cmp a21/stored.zip a21_oracle/stored.zip
 [ "$(grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): " a21_oracle.txt)" -eq 5 ]
 $SI a21.sieve --to a21_si --yes > /dev/null
@@ -668,7 +672,7 @@ if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
   # With no rar: its contents, and a warning saying why.
   SIEVE_RAR=/nowhere/rar $S install r22.sieve --to r22_none | tr -d '\r' | grep -c "^warning   made.rar was not made again as a RAR: rar was not found" > /dev/null
   diff -r r22/src r22_none
-  python sieve_ref.py unpack r22.sieve --to r22_oracle | tr -d '\r' | grep -c "^rar	made.rar: made again by RAR 0.01 sieve-stand-in where it is found" > /dev/null
+  python -m sieve_ref unpack r22.sieve --to r22_oracle | tr -d '\r' | grep -c "^rar	made.rar: made again by RAR 0.01 sieve-stand-in where it is found" > /dev/null
   diff -r r22_none r22_oracle
   SIEVE_RAR="$RAR" $SI r22.sieve --to r22_si --yes > /dev/null
   cmp r22/made.rar r22_si/made.rar
@@ -697,7 +701,7 @@ test -s tri.sieve
 rm -rf tri_inst tri_oracle
 $S install tri.sieve --to tri_inst > /dev/null
 cmp tri.raw tri_inst/tri.raw
-python sieve_ref.py unpack tri.sieve --to tri_oracle > /dev/null
+python -m sieve_ref unpack tri.sieve --to tri_oracle > /dev/null
 cmp tri.raw tri_oracle/tri.raw
 $S locate tri.raw --installer tri22.sieve --items --v22 | tr -d '\r' > tri22.txt
 grep -c "^rope .*rope-wave-v1\( to v[2-5]\)\? (" tri22.txt > /dev/null
@@ -705,7 +709,7 @@ if grep -q "sieve-manifest-v23\|not an option" tri22.txt; then exit 1; fi
 # The oracle's own rope-wave-v6 against Sieve's codes: every value length, steps, keep or not.
 for pr in "L8 W256 S1 P4 K0" "L8 W256 S1 P4 K1 T1" "L8 W256 S2 P3 K0 T1" "L16 W128 S1 P4 K0 T1" "L32 W64 S1 P4 K1 T1"; do
   $S rope tri.raw --params "$pr" --out tri.rope > /dev/null
-  python sieve_ref.py rope-unpack tri.rope --params "$pr" --size 65536 --out tri.back > /dev/null
+  python -m sieve_ref rope-unpack tri.rope --params "$pr" --size 65536 --out tri.back > /dev/null
   cmp tri.raw tri.back
 done
 # v24 (26 October 2026): mixing (mix-v1): every bit predicted by the bytes before it (0 to 6) and
@@ -717,7 +721,7 @@ head -c 40000 ../data/anchors/public-domain/pg996.txt > dq.txt
 $S mix dq.txt --v1 --out dq.mix | tr -d '\r' > dqmix.txt
 grep -c "^mix       B17 (mix-v1)" dqmix.txt > /dev/null
 grep -c "read back and checked" dqmix.txt > /dev/null
-python sieve_ref.py mix-unpack dq.mix --params B17 --size 40000 --out dq.back > /dev/null
+python -m sieve_ref mix-unpack dq.mix --params B17 --size 40000 --out dq.back > /dev/null
 cmp dq.txt dq.back
 $S locate dq.txt --installer dq.sieve --items --v25 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v1 (40000 bytes, carried in [0-9]*; sieve-manifest-v24)" > /dev/null
 $S locate dq.txt --installer dq23.sieve --items --v23 | tr -d '\r' > dq23.txt
@@ -726,7 +730,7 @@ if grep -q "^mix \|sieve-manifest-v24\|not an option" dq23.txt; then exit 1; fi
 rm -rf dq_inst dq_oracle
 $S install dq.sieve --to dq_inst > /dev/null
 cmp dq.txt dq_inst/dq.txt
-python sieve_ref.py unpack dq.sieve --to dq_oracle > /dev/null
+python -m sieve_ref unpack dq.sieve --to dq_oracle > /dev/null
 cmp dq.txt dq_oracle/dq.txt
 # v25 (26 October 2026): PNGs made again exactly (Optimise Compressed Formats). A hallway screenshot
 # (docs/images: stb_image_write's own, at its default level 8) as its pixels, made again by
@@ -744,7 +748,7 @@ $S locate png25 --installer png25.sieve --items --optimise-archives --compressed
 rm -rf png25_inst png25_oracle
 $S install png25.sieve --to png25_inst > /dev/null
 diff -r png25 png25_inst
-python sieve_ref.py unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): " | grep -q "^2$"
+python -m sieve_ref unpack png25.sieve --to png25_oracle | tr -d '\r' | grep -c "^not made again by the oracle (preflate, the LZMA SDK, stb_image_write, brunsli or packMP3): " | grep -q "^2$"
 $S locate png25 --installer png24.sieve --items --optimise-archives --compressed-temporary --compressed-permanent --v24 2>&1 | tr -d '\r' > png24.txt
 if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 # v26 (27 October 2026): mix-v2: mix-v1 grown (a match model, the column and field, sparse
@@ -757,18 +761,18 @@ if grep -q "sieve-manifest-v25\|not an option" png24.txt; then exit 1; fi
 $S mix dq.txt --v2 --out dq2.mix | tr -d '\r' > dqmix2.txt
 grep -c "^mix       B17 (mix-v2)" dqmix2.txt > /dev/null
 [ "$(wc -c < dq2.mix)" -lt "$(wc -c < dq.mix)" ]
-python sieve_ref.py mix-unpack dq2.mix --v2 --params B17 --size 40000 --out dq2.back > /dev/null
+python -m sieve_ref mix-unpack dq2.mix --v2 --params B17 --size 40000 --out dq2.back > /dev/null
 cmp dq.txt dq2.back
 $S locate dq.txt --installer dq26.sieve --items --v26 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v2 (40000 bytes, carried in [0-9]*; sieve-manifest-v26)" > /dev/null
 [ "$(wc -c < dq26.sieve)" -lt "$(wc -c < dq.sieve)" ]
 rm -rf dq26_inst dq26_oracle
 $S install dq26.sieve --to dq26_inst > /dev/null
 cmp dq.txt dq26_inst/dq.txt
-python sieve_ref.py unpack dq26.sieve --to dq26_oracle > /dev/null
+python -m sieve_ref unpack dq26.sieve --to dq26_oracle > /dev/null
 cmp dq.txt dq26_oracle/dq.txt
 head -c 16384 tri.raw > top.raw
 $S mix top.raw --v2 --picture 256x1 --out top.mix | tr -d '\r' | grep -c "^mix       B16 I256x1 (mix-v2)" > /dev/null
-python sieve_ref.py mix-unpack top.mix --v2 --params "B16 I256x1" --size 16384 --out top.back > /dev/null
+python -m sieve_ref mix-unpack top.mix --v2 --params "B16 I256x1" --size 16384 --out top.back > /dev/null
 cmp top.raw top.back
 $S locate top.raw --installer top26.sieve --items --v26 | tr -d '\r' > top26.txt
 grep -c "^mix       1 file(s) carried by mixing, mix-v2, 1 as picture(s) (16384 bytes, carried in [0-9]*; sieve-manifest-v26)" top26.txt > /dev/null
@@ -778,7 +782,7 @@ if grep -q "mix-v2\|sieve-manifest-v26\|not an option" top25.txt; then exit 1; f
 rm -rf top26_inst top26_oracle
 $S install top26.sieve --to top26_inst > /dev/null
 cmp top.raw top26_inst/top.raw
-python sieve_ref.py unpack top26.sieve --to top26_oracle | tr -d '\r' | grep -c "^mix2 B16 I256x1	16384	top.raw" > /dev/null
+python -m sieve_ref unpack top26.sieve --to top26_oracle | tr -d '\r' | grep -c "^mix2 B16 I256x1	16384	top.raw" > /dev/null
 cmp top.raw top26_oracle/top.raw
 # v27 (27 October 2026): mix-v3, mix-v2 for text with a word list's model (the registered
 # scowl-en-60, its SHA-256 checked). The same 40,000 bytes: smaller than mix-v2's code, the
@@ -787,7 +791,7 @@ cmp top.raw top26_oracle/top.raw
 $S mix dq.txt --v2 --words 60 --out dq3.mix | tr -d '\r' > dqmix3.txt
 grep -c "^mix       B17 D60 (mix-v3)" dqmix3.txt > /dev/null
 [ "$(wc -c < dq3.mix)" -lt "$(wc -c < dq2.mix)" ]
-python sieve_ref.py mix-unpack dq3.mix --words 60 --params "B17 D60" --size 40000 --out dq3.back > /dev/null
+python -m sieve_ref mix-unpack dq3.mix --words 60 --params "B17 D60" --size 40000 --out dq3.back > /dev/null
 cmp dq.txt dq3.back
 $S locate dq.txt --installer dq27.sieve --items --v27 | tr -d '\r' | grep -c "^mix       1 file(s) carried by mixing, mix-v3 (with a word list) (40000 bytes, carried in [0-9]*; sieve-manifest-v27)" > /dev/null
 [ "$(wc -c < dq27.sieve)" -lt "$(wc -c < dq26.sieve)" ]
@@ -796,7 +800,7 @@ if grep -q "mix-v3\|sieve-manifest-v27\|not an option" dq26b.txt; then exit 1; f
 rm -rf dq27_inst dq27_oracle dq27_si
 $S install dq27.sieve --to dq27_inst > /dev/null
 cmp dq.txt dq27_inst/dq.txt
-python sieve_ref.py unpack dq27.sieve --to dq27_oracle > /dev/null
+python -m sieve_ref unpack dq27.sieve --to dq27_oracle > /dev/null
 cmp dq.txt dq27_oracle/dq.txt
 $SI dq27.sieve --to dq27_si --yes > /dev/null
 cmp dq.txt dq27_si/dq.txt
@@ -807,10 +811,10 @@ cmp dq.txt dq27_si/dq.txt
 # makes no mix-v4. (A little larger than v27, by design: quicker to decode.) (--v28: v29 mixes the
 # text with the stream the files carried as they are share otherwise.)
 $S mix dq.txt --words 60 --out dq4.mix | tr -d '\r' | grep -c "^mix       B17 D60 (mix-v4)" > /dev/null
-python sieve_ref.py mix-unpack dq4.mix --v4 --params "B17 D60" --size 40000 --out dq4.back > /dev/null
+python -m sieve_ref mix-unpack dq4.mix --v4 --params "B17 D60" --size 40000 --out dq4.back > /dev/null
 cmp dq.txt dq4.back
 $S mix top.raw --picture 256x1 --out top4.mix | tr -d '\r' | grep -c "^mix       B16 I256x1 (mix-v4)" > /dev/null
-python sieve_ref.py mix-unpack top4.mix --v4 --params "B16 I256x1" --size 16384 --out top4.back > /dev/null
+python -m sieve_ref mix-unpack top4.mix --v4 --params "B16 I256x1" --size 16384 --out top4.back > /dev/null
 cmp top.raw top4.back
 rm -rf m28
 mkdir m28
@@ -822,7 +826,7 @@ if grep -q "mix-v4\|sieve-manifest-v28\|not an option" m27.txt; then exit 1; fi
 rm -rf m28_inst m28_oracle m28_si
 $S install m28.sieve --to m28_inst > /dev/null
 diff -r m28 m28_inst
-python sieve_ref.py unpack m28.sieve --to m28_oracle > /dev/null
+python -m sieve_ref unpack m28.sieve --to m28_oracle > /dev/null
 diff -r m28 m28_oracle
 $SI m28.sieve --to m28_si --yes > /dev/null
 diff -r m28 m28_si
@@ -845,7 +849,7 @@ if grep -q "sieve-manifest-v29\|^stream    " t29fast.txt; then exit 1; fi
 rm -rf t29_inst t29_oracle t29_si
 $S install t29.sieve --to t29_inst > /dev/null
 diff -r t29 t29_inst
-python sieve_ref.py unpack t29.sieve --to t29_oracle > /dev/null
+python -m sieve_ref unpack t29.sieve --to t29_oracle > /dev/null
 diff -r t29 t29_oracle
 $SI t29.sieve --to t29_si --yes > /dev/null
 diff -r t29 t29_si
@@ -863,7 +867,7 @@ if grep -q "sieve-manifest-v30\|^groups    " t30fast.txt; then exit 1; fi
 rm -rf t30_inst t30_oracle t30_si
 $S install t30.sieve --to t30_inst > /dev/null
 diff -r t29 t30_inst
-python sieve_ref.py unpack t30.sieve --to t30_oracle > /dev/null
+python -m sieve_ref unpack t30.sieve --to t30_oracle > /dev/null
 diff -r t29 t30_oracle
 $SI t30.sieve --to t30_si --yes > /dev/null
 diff -r t29 t30_si
@@ -883,7 +887,7 @@ rm -rf z31_inst z31_oracle z31_si z31p_inst
 $S install z31.sieve --to z31_inst > /dev/null
 cmp z31/three.zip z31_inst/three.zip
 [ "$(ls z31_inst | wc -l)" -eq 1 ]
-python sieve_ref.py unpack z31.sieve --to z31_oracle | grep -c "^skm 3 " > /dev/null
+python -m sieve_ref unpack z31.sieve --to z31_oracle | grep -c "^skm 3 " > /dev/null
 cmp z31/three.zip z31_oracle/three.zip
 [ "$(ls z31_oracle | wc -l)" -eq 1 ]
 $SI z31.sieve --to z31_si --yes > /dev/null
@@ -917,7 +921,7 @@ $S install tar32t.sieve --to tar32t_inst > /dev/null
 diff -r tar32 tar32t_inst
 $SI tar32t.sieve --to tar32t_si --yes > /dev/null
 diff -r tar32 tar32t_si
-python sieve_ref.py unpack tar32t.sieve --to tar32t_oracle > /dev/null
+python -m sieve_ref unpack tar32t.sieve --to tar32t_oracle > /dev/null
 diff -r tar32 tar32t_oracle
 SIEVE_ARCHIVES_ALWAYS=1 $S locate tar32 --installer tar32p.sieve --items --compressed-permanent 2>&1 | tr -d '\r' | grep -q "^unpacked  1 archive(s) carried as their contents"
 rm -rf tar32p_inst
@@ -941,7 +945,7 @@ SIEVE_ARCHIVES_ALWAYS=1 $S locate tar32o --installer tar32o.sieve --items --comp
 rm -rf tar32o_inst tar32o_oracle
 $S install tar32o.sieve --to tar32o_inst > /dev/null
 diff -r tar32o tar32o_inst
-python sieve_ref.py unpack tar32o.sieve --to tar32o_oracle > /dev/null
+python -m sieve_ref unpack tar32o.sieve --to tar32o_oracle > /dev/null
 diff -r tar32o tar32o_oracle
 # Files mixed weighed again against the stream they would share (1 November 2026, no new format):
 # two texts holding much of the same, too large together for one group (groups made small here by
@@ -964,7 +968,7 @@ $S install ws32.sieve --to ws32_inst > /dev/null
 diff -r ws32 ws32_inst
 $SI ws32.sieve --to ws32_si --yes > /dev/null
 diff -r ws32 ws32_si
-python sieve_ref.py unpack ws32.sieve --to ws32_oracle > /dev/null
+python -m sieve_ref unpack ws32.sieve --to ws32_oracle > /dev/null
 diff -r ws32 ws32_oracle
 # v33 (2 November 2026; the draft's first piece, frozen 3 November 2026): mix-v4's match model with its
 # ways (R1: a match goes on past one wrong byte; M4: taken after 4 bytes; C2: two places a context
@@ -974,9 +978,9 @@ diff -r ws32 ws32_oracle
 # blocks below were the v33 draft's too: each now makes v33 by default and v32 with --v32.)
 head -c 24576 ../data/anchors/public-domain/pg996.txt > m33.txt
 $S mix m33.txt --params "B16 R1 M4 C2" --out m33.mix | tr -d '\r' | grep -q "read back and checked"
-python sieve_ref.py mix-unpack m33.mix --v4 --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null
+python -m sieve_ref mix-unpack m33.mix --v4 --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null
 cmp m33.txt m33.back
-if python sieve_ref.py mix-unpack m33.mix --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null 2>&1; then exit 1; fi
+if python -m sieve_ref mix-unpack m33.mix --params "B16 R1 M4 C2" --size 24576 --out m33.back > /dev/null 2>&1; then exit 1; fi
 rm -rf m33
 mkdir m33
 head -c 1114112 "$S" | tail -c 65536 > m33/code.bin
@@ -991,7 +995,7 @@ $S install m33-33.sieve --to m33_inst > /dev/null
 diff -r m33 m33_inst
 $SI m33-33.sieve --to m33_si --yes > /dev/null
 diff -r m33 m33_si
-python sieve_ref.py unpack m33-33.sieve --to m33_oracle > /dev/null
+python -m sieve_ref unpack m33-33.sieve --to m33_oracle > /dev/null
 diff -r m33 m33_oracle
 # The v33 draft's second piece (2 November 2026): a program mixed through the x86 filter (mix-v4's
 # X). A made-up ELF of 48,000 bytes, a third of its instructions calls to 40 places: with the draft,
@@ -1027,7 +1031,7 @@ $S install x33-33.sieve --to x33_inst > /dev/null
 diff -r x33 x33_inst
 $SI x33-33.sieve --to x33_si --yes > /dev/null
 diff -r x33 x33_si
-python sieve_ref.py unpack x33-33.sieve --to x33_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 X	48000	prog$"
+python -m sieve_ref unpack x33-33.sieve --to x33_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 X	48000	prog$"
 diff -r x33 x33_oracle
 # The v34 draft's x86 instruction model (E1, 7 November 2026): the same program mixed with contexts
 # from where each byte falls in its instruction, smaller than v33 made it; given back by Sieve,
@@ -1040,7 +1044,7 @@ $S install x34.sieve --to x34_inst > /dev/null
 diff -r x33 x34_inst
 $SI x34.sieve --to x34_si --yes > /dev/null
 diff -r x33 x34_si
-python sieve_ref.py unpack x34.sieve --to x34_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 E1 X	48000	prog$"
+python -m sieve_ref unpack x34.sieve --to x34_oracle | grep -q "^mix4 B[0-9]* R1 M4 C2 E1 X	48000	prog$"
 diff -r x33 x34_oracle
 # v30's groups with a file of another way between their files (SPECIFICATIONS v30, as decided 31
 # October 2026): two texts mixed as one group, random bytes carried as they are between them, read
@@ -1057,7 +1061,7 @@ grep -q "	6000	mixn	c.txt$" g30.txt
 rm -rf g30_inst g30_oracle
 $S install g30.sieve --to g30_inst > /dev/null
 diff -r g30 g30_inst
-python sieve_ref.py unpack g30.sieve --to g30_oracle > /dev/null
+python -m sieve_ref unpack g30.sieve --to g30_oracle > /dev/null
 diff -r g30 g30_oracle
 # v32 (30 October 2026, frozen 31 October; --v31 for the version before: docs/NEXT-VERSION.md): a
 # file carried as its differences from another of the folder ("delta K L", delta-v1). Two files of
@@ -1085,7 +1089,7 @@ grep -c "^manifest  sieve-manifest-v32" d32.txt > /dev/null
 rm -rf d32_inst d32_oracle d32_si
 $S install d32.sieve --to d32_inst > /dev/null
 diff -r d32 d32_inst
-python sieve_ref.py unpack d32.sieve --to d32_oracle | grep -c "^delta [0-9]* [0-9]*	" > /dev/null
+python -m sieve_ref unpack d32.sieve --to d32_oracle | grep -c "^delta [0-9]* [0-9]*	" > /dev/null
 diff -r d32 d32_oracle
 $SI d32.sieve --to d32_si --yes > /dev/null
 diff -r d32 d32_si
@@ -1115,7 +1119,7 @@ $S install runs33.sieve --to runs_inst > /dev/null
 diff -r runs runs_inst
 $SI runs33.sieve --to runs_si --yes > /dev/null
 diff -r runs runs_si
-python sieve_ref.py unpack runs33.sieve --to runs_oracle | grep -c "^runs	" | grep -q "^3$"
+python -m sieve_ref unpack runs33.sieve --to runs_oracle | grep -c "^runs	" | grep -q "^3$"
 diff -r runs runs_oracle
 # The rope not searched on a file it cannot win (any version, 2 November 2026): a file over 512 KiB
 # that is not text has the rope's search made on its first 256 KiB first, and where that comes to
@@ -1164,7 +1168,7 @@ $S install pal-33.sieve --to pal_inst > /dev/null
 diff -r pal pal_inst
 $SI pal-33.sieve --to pal_si --yes > /dev/null
 diff -r pal pal_si
-python sieve_ref.py unpack pal-33.sieve --to pal_oracle > /dev/null
+python -m sieve_ref unpack pal-33.sieve --to pal_oracle > /dev/null
 cmp pal/picture.rgb pal_oracle/picture.rgb
 # Web text primed (v33, reopened 3 November 2026: mix-v4's W1): mixing's model reads MDN's examples
 # (data/dictionaries/web-mdn-2026-11-03-64k.bin, its SHA-256 checked) before the file. The test
@@ -1185,7 +1189,7 @@ for d in w33a w33b; do
     diff -r $d ${d}_inst
     $SI $d.sieve --to ${d}_si --yes > /dev/null
     diff -r $d ${d}_si
-    python sieve_ref.py unpack $d.sieve --to ${d}_oracle > /dev/null
+    python -m sieve_ref unpack $d.sieve --to ${d}_oracle > /dev/null
     diff -r $d ${d}_oracle
 done
 grep -q "	mix4 B16 F80 W1	about.html" w33a.txt
@@ -1214,7 +1218,7 @@ $SI cp33-33.sieve --to cp33_si --yes > /dev/null
 diff -r cp33 cp33_si
 # (The listing's order puts sub/t.txt before t.txt, so t.txt is the copy; the JPEG's copy is not
 # listed by the oracle, which leaves both unmade.)
-python sieve_ref.py unpack cp33-33.sieve --to cp33_oracle | tr -d '\r' | grep -c "^copy [0-9]*	" | grep -q "^2$"
+python -m sieve_ref unpack cp33-33.sieve --to cp33_oracle | tr -d '\r' | grep -c "^copy [0-9]*	" | grep -q "^2$"
 cmp cp33/t.txt cp33_oracle/t.txt
 cmp cp33/noise.bin cp33_oracle/sub/noise.bin
 # Binary written as text carried decoded (the v33 draft, spans-v1, IDEAS §19.114): a page holding a
@@ -1242,7 +1246,7 @@ $S install b64-33.sieve --to b64_inst > /dev/null
 diff -r b64 b64_inst
 $SI b64-33.sieve --to b64_si --yes > /dev/null
 diff -r b64 b64_si
-python sieve_ref.py unpack b64-33.sieve --to b64_oracle | tr -d '\r' > b64-oracle.txt
+python -m sieve_ref unpack b64-33.sieve --to b64_oracle | tr -d '\r' > b64-oracle.txt
 grep -c "^spn [0-9]* " b64-oracle.txt | grep -q "^3$"
 cmp b64/mail.txt b64_oracle/mail.txt
 cmp b64/methods.h b64_oracle/methods.h
@@ -1397,7 +1401,7 @@ $S install j32.sieve --to j32_inst > /dev/null
 diff -r j32 j32_inst
 $SI j32.sieve --to j32_si --yes > /dev/null
 diff -r j32 j32_si
-python sieve_ref.py unpack j32.sieve --to j32_oracle > j32o.txt
+python -m sieve_ref unpack j32.sieve --to j32_oracle > j32o.txt
 [ "$(grep -c "^not made again by the oracle (.*brunsli or packMP3): .*\.jpg; " j32o.txt)" -eq 7 ]
 cmp j32/VAULT.md j32_oracle/VAULT.md
 $S locate j32 --v31 --installer j32v31.sieve --items 2>&1 | tr -d '\r' > j32v31.txt
@@ -1413,7 +1417,7 @@ $SI j32p.sieve --to j32p_si --yes > /dev/null
 diff -r j32p_inst j32p_si
 [ "$(wc -c < j32p_inst/vitruvian-man.jpg)" -lt "$(wc -c < j32/vitruvian-man.jpg)" ]
 for f in audio book door filters picture-in-hand vitruvian; do cmp j32/$f.jpg j32p_inst/$f.jpg; done
-python sieve_ref.py unpack j32p.sieve --to j32p_oracle > j32po.txt
+python -m sieve_ref unpack j32p.sieve --to j32p_oracle > j32po.txt
 [ "$(grep -c "^not made again by the oracle (.*brunsli or packMP3): .*\.jpg; " j32po.txt)" -eq 7 ]
 # v32, too: with permanent, a PNG installed as the same picture re-saved at its
 # smallest ("pngr <filter> <strategy> <split> <head size> <inner size>"), never as its rows alone.
@@ -1430,7 +1434,7 @@ rm -rf p32_inst p32_si p32_oracle
 $S install p32.sieve --to p32_inst > /dev/null
 $SI p32.sieve --to p32_si --yes > /dev/null
 diff -r p32_inst p32_si
-python sieve_ref.py unpack p32.sieve --to p32_oracle > /dev/null
+python -m sieve_ref unpack p32.sieve --to p32_oracle > /dev/null
 diff -r p32_inst p32_oracle
 python - p32 p32_inst <<'PY'
 import os, struct, sys, zlib
@@ -1482,7 +1486,7 @@ $S install r32.sieve --to r32_inst > /dev/null
 diff -r r32 r32_inst
 $SI r32.sieve --to r32_si --yes > /dev/null
 diff -r r32 r32_si
-python sieve_ref.py unpack r32.sieve --to r32_oracle > r32o.txt
+python -m sieve_ref unpack r32.sieve --to r32_oracle > r32o.txt
 [ "$(grep -c "^not made again by the oracle (.*): icon[0-9]*.png; " r32o.txt)" -eq 4 ]
 $S locate r32 --v31 --installer r32v31.sieve --items --compressed-temporary 2>&1 | tr -d '\r' > r32v31.txt
 if grep -q "sieve-manifest-v32\|	skr " r32v31.txt; then exit 1; fi
@@ -1522,7 +1526,7 @@ $S install h32.sieve --to h32_inst > /dev/null
 diff -r h32 h32_inst
 $SI h32.sieve --to h32_si --yes > /dev/null
 diff -r h32 h32_si
-python sieve_ref.py unpack h32.sieve --to h32_oracle > /dev/null
+python -m sieve_ref unpack h32.sieve --to h32_oracle > /dev/null
 diff -r h32 h32_oracle
 # v32, too: mixing's word list scowl-en-80 counted by use ("F80": 4,096 a word of
 # scowl-en-35, 64 one of scowl-en-60 only, 1 the rest), in scowl-en-60's place at v32. The
@@ -1530,7 +1534,7 @@ diff -r h32 h32_oracle
 # two texts mixed together as a group: v32, given back by Sieve, sieve-install and
 # the oracle; with --v31, scowl-en-60 as before.
 $S mix dq.txt --words 80 --by-use --out dqf.mix | tr -d '\r' | grep -c "^mix       B17 F80 (mix-v4)" > /dev/null
-python sieve_ref.py mix-unpack dqf.mix --v4 --params "B17 F80" --size 40000 --out dqf.back > /dev/null
+python -m sieve_ref mix-unpack dqf.mix --v4 --params "B17 F80" --size 40000 --out dqf.back > /dev/null
 cmp dq.txt dqf.back
 [ "$(wc -c < dqf.mix)" -lt "$(wc -c < dq4.mix)" ]
 rm -rf f32 f32g f33g
@@ -1556,7 +1560,7 @@ for d in f32 f32g f33g; do
     diff -r $d ${d}_inst
     $SI $d.sieve --to ${d}_si --yes > /dev/null
     diff -r $d ${d}_si
-    python sieve_ref.py unpack $d.sieve --to ${d}_oracle > /dev/null
+    python -m sieve_ref unpack $d.sieve --to ${d}_oracle > /dev/null
     diff -r $d ${d}_oracle
 done
 $S locate f32 --v31 --installer f32v31.sieve --items 2>&1 | tr -d '\r' > f32v31.txt
@@ -1571,7 +1575,7 @@ if grep -q "^mix " dqfast.txt; then exit 1; fi
 rm -rf dqfast_inst dqfast_oracle
 $S install dqfast.sieve --to dqfast_inst > /dev/null
 cmp dq.txt dqfast_inst/dq.txt
-python sieve_ref.py unpack dqfast.sieve --to dqfast_oracle > /dev/null
+python -m sieve_ref unpack dqfast.sieve --to dqfast_oracle > /dev/null
 cmp dq.txt dqfast_oracle/dq.txt
 # The v34 draft's first piece (6 November 2026, Edward: "build the gif route for gifenc first"): a
 # GIF carried as its skeleton and its frames' colour indices, its LZW coded again on installing as
@@ -1619,7 +1623,7 @@ $S install g34.sieve --to g34_inst > /dev/null
 diff -r g34 g34_inst
 $SI g34.sieve --to g34_si --yes > /dev/null
 diff -r g34 g34_si
-python sieve_ref.py unpack g34.sieve --to g34_oracle > /dev/null
+python -m sieve_ref unpack g34.sieve --to g34_oracle > /dev/null
 diff -r g34 g34_oracle
 $S locate g34 --installer g34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > g34v33.txt
 if grep -q "sieve-manifest-v34\|^gifs \|	gif " g34v33.txt; then exit 1; fi
@@ -1670,7 +1674,7 @@ $SI p34.sieve --to p34_si --yes > /dev/null
 diff -r p34 p34_si
 # (the oracle has no preflate: it reads the listing and every member, and says the PDF is not made
 # again by it, as it says of a zip's deflate)
-python sieve_ref.py unpack p34.sieve --to p34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*pages.pdf"
+python -m sieve_ref unpack p34.sieve --to p34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*pages.pdf"
 $S locate p34 --installer p34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > p34v33.txt
 if grep -q "^pdfs " p34v33.txt; then exit 1; fi
 # Compressed TIFFs (v34 draft, 8 November 2026, Edward: "work through all of the things on that
@@ -1718,7 +1722,7 @@ $S install t34.sieve --to t34_inst > /dev/null
 diff -r t34 t34_inst
 $SI t34.sieve --to t34_si --yes > /dev/null
 diff -r t34 t34_si
-python sieve_ref.py unpack t34.sieve --to t34_oracle 2>&1 | tr -d '\r' > t34_oracle.txt
+python -m sieve_ref unpack t34.sieve --to t34_oracle 2>&1 | tr -d '\r' > t34_oracle.txt
 grep -q "^not made again by the oracle (preflate.*deflate-pred.tif" t34_oracle.txt
 for f in lzw.tif lzw-pred.tif packbits.tif grey16-lzw-pred.tif pages.tif plain.tif overlap.tif; do cmp t34/$f t34_oracle/$f; done
 SIEVE_ARCHIVES_ALWAYS=1 $S locate t34 --installer t34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > t34v33.txt
@@ -1751,7 +1755,7 @@ $S install z34.sieve --to z34_inst > /dev/null
 diff -r z34 z34_inst
 $SI z34.sieve --to z34_si --yes > /dev/null
 diff -r z34 z34_si
-python sieve_ref.py unpack z34.sieve --to z34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*records.bin"
+python -m sieve_ref unpack z34.sieve --to z34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (preflate.*records.bin"
 $S locate z34 --installer z34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > z34v33.txt
 if grep -q "^zlib " z34v33.txt; then exit 1; fi
 # MP3 (v34 draft, 8 November 2026, Edward: "lets focus on making the decoder safe for MP3"):
@@ -1770,7 +1774,7 @@ $S install m34.sieve --to m34_inst > /dev/null
 diff -r m34 m34_inst
 $SI m34.sieve --to m34_si --yes > /dev/null
 diff -r m34 m34_si
-python sieve_ref.py unpack m34.sieve --to m34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (.*packMP3): tone.mp3"
+python -m sieve_ref unpack m34.sieve --to m34_oracle 2>&1 | tr -d '\r' | grep -q "^not made again by the oracle (.*packMP3): tone.mp3"
 $S locate m34 --installer m34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > m34v33.txt
 if grep -q "^mp3 \|	pmp " m34v33.txt; then exit 1; fi
 # (packMP3's decoder given 2,000 damaged forms of the MP3, where the build has the test program)
@@ -1814,7 +1818,7 @@ $S install x34.sieve --to x34_inst > /dev/null
 diff -r x34 x34_inst
 $SI x34.sieve --to x34_si --yes > /dev/null
 diff -r x34 x34_si
-python sieve_ref.py unpack x34.sieve --to x34_oracle > /dev/null
+python -m sieve_ref unpack x34.sieve --to x34_oracle > /dev/null
 diff -r x34 x34_oracle
 SIEVE_ARCHIVES_ALWAYS=1 $S locate x34 --installer x34v33.sieve --v33 --items --compressed-temporary 2>&1 | tr -d '\r' > x34v33.txt
 if grep -q "^pcx \|	pcx " x34v33.txt; then exit 1; fi
@@ -1928,7 +1932,7 @@ $S install w34.sieve --to w34_inst > /dev/null
 diff -r w34 w34_inst
 $SI w34.sieve --to w34_si --yes > /dev/null
 diff -r w34 w34_si
-python sieve_ref.py unpack w34.sieve --to w34_oracle > /dev/null
+python -m sieve_ref unpack w34.sieve --to w34_oracle > /dev/null
 diff -r w34 w34_oracle
 $S locate w34 --installer w34s.sieve --items --compressed-temporary --v34-draft --priority speed 2>&1 | tr -d '\r' > w34s.txt
 grep -q "^sound     14 file(s) of sound " w34s.txt
@@ -2080,7 +2084,7 @@ $S install fl34.sieve --to fl34_inst > /dev/null
 diff -r fl34 fl34_inst
 $SI fl34.sieve --to fl34_si --yes > /dev/null
 diff -r fl34 fl34_si
-python sieve_ref.py unpack fl34.sieve --to fl34_oracle > /dev/null
+python -m sieve_ref unpack fl34.sieve --to fl34_oracle > /dev/null
 diff -r fl34 fl34_oracle
 $S locate fl34 --installer fl34f.sieve --items --v34-draft --sound-to-flac 2>&1 | tr -d '\r' > fl34f.txt
 grep -q "^as flac   6 file(s) of sound installed as .flac files of the same samples" fl34f.txt
@@ -2158,7 +2162,7 @@ $SI sm34z.sieve --to sm34z_si --yes > /dev/null
 diff -r sm34z sm34z_si
 $S locate sm34w --installer sm34w.sieve --items --v34-draft --compressed-temporary 2>&1 | tr -d '\r' > sm34w.txt
 grep -q "	flac [0-9]* [0-9]* .*	waves.tar/1$" sm34w.txt
-python sieve_ref.py unpack sm34w.sieve --to sm34w_oracle > /dev/null
+python -m sieve_ref unpack sm34w.sieve --to sm34w_oracle > /dev/null
 diff -r sm34w sm34w_oracle
 $S locate sm34z --installer sm34p.sieve --items --v34-draft --compressed-permanent --sound-permanent 2>&1 | tr -d '\r' > sm34p.txt
 $S install sm34p.sieve --to sm34p_inst > /dev/null
@@ -2176,7 +2180,7 @@ grep -q "	tone.flac$" ord34.txt
 $S install ord34.sieve --to ord34_inst > /dev/null
 test -f ord34_inst/tone.flac
 cmp ord34/tone.mp3 ord34_inst/tone.mp3
-python sieve_ref.py unpack ord34.sieve --to ord34_oracle > /dev/null
+python -m sieve_ref unpack ord34.sieve --to ord34_oracle > /dev/null
 cmp ord34_inst/tone.flac ord34_oracle/tone.flac
 # sieve compress (6 November 2026; the right-click menu's "Compress to"): a folder with an accented
 # name inside, an empty file and an empty folder, in every format, each read back by Python's own
@@ -2304,7 +2308,7 @@ printf 'sieve-manifest-v12\nroot r\nstream lzma2 2 2 0\ntree b56042fb32681582a3e
 rm -rf order12_out order12_ref
 if $S install order12.manifest --to order12_out > order12.txt 2>&1; then exit 1; fi
 grep -q "entries out of order" order12.txt
-if python sieve_ref.py unpack order12.manifest --to order12_ref > order12_ref.txt 2>&1; then exit 1; fi
+if python -m sieve_ref unpack order12.manifest --to order12_ref > order12_ref.txt 2>&1; then exit 1; fi
 grep -q "entries out of order" order12_ref.txt
 # The x86 filter restarted at each program (v34 draft, 11 November 2026): a program and a copy of it
 # with ten bytes changed, much smaller than as v33, and installed the same by Sieve and the oracle.
@@ -2318,5 +2322,5 @@ grep -q "sieve-manifest-v34" x86pair34.txt
 rm -rf x86pair_i x86pair_o
 $S install x86pair34.sieve --to x86pair_i > /dev/null
 diff -r x86pair x86pair_i
-python sieve_ref.py unpack x86pair34.sieve --to x86pair_o > /dev/null
+python -m sieve_ref unpack x86pair34.sieve --to x86pair_o > /dev/null
 diff -r x86pair x86pair_o

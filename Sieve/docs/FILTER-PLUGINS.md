@@ -191,6 +191,12 @@ by its words' lengths, keeping one row of counts (`word_counting`, plugin.hpp). 
 automaton and merges with the others as before. That is what let `words-v1`, `window-v1`,
 `words-v2` and `window-v2` retire for their `-data` twins (FILTERS-CONFLICTS.md).
 
+**Word files' names** (in `list:` and `tags:`) name a file in the plugin's folder or a folder under it: one
+that is empty, starts with / or \\, holds a drive's colon or has a `..` part is refused (review 5, 21
+November 2026; the oracle the same), and a compiled plugin is cached under the files' SHA-256s too, so an
+edited list is read again. A `within` parameter out of its range, or a choice not among its words, is
+refused by name.
+
 **Tagged lists** (`tags:FILES:TAGS`) are files of `word<TAB>tags`, each tag one character, beside
 the plugin; several are read as one when joined with `+`, and each file's SHA-256 is in the
 provenance. `TAGS` is the tags a word must carry at least one of, and `TAGS-EXCLUDED` adds the tags

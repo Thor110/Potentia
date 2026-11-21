@@ -13,6 +13,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -230,6 +231,18 @@ Mat trs_matrix(const double t[3], const double qin[4], const double s[3])
 }
 
 constexpr size_t kMaxTriangles = size_t(1) << 26; // 67 million: a roof against a file that asks for more than memory
+// The most vertices a held model takes: three for each of its most triangles (a mesh of separate
+// triangles), however many nodes place its meshes.
+constexpr size_t kMaxVertices = 3 * kMaxTriangles;
+// The most numbers the accessors with no buffer view may ask for in all (their values are zeros,
+// or a few given sparsely): as many as the most vertices hold, so a few bytes of JSON cannot ask for
+// more memory than a model could use.
+constexpr uint64_t kMaxUnviewedFloats = 3 * uint64_t(kMaxVertices);
+// The most work sampling the animations may take in all: frames times the nodes and channels
+// worked out for each frame. A file that asks for more has its animations past this not carried.
+constexpr uint64_t kMaxAnimationWork = uint64_t(1) << 24;
+// The most turns and places the sampled animations may hold in all: frames times joints kept.
+constexpr uint64_t kMaxAnimationSamples = uint64_t(1) << 22;
 
 class Gltf
 {
@@ -290,6 +303,19 @@ public:
         if (components(a) != comps) refuse("accessor " + std::to_string(index) + " has " + std::to_string(components(a)) + " numbers per element, not " + std::to_string(comps));
         const uint32_t type = uint32_t(uint_of(a, "componentType", 0));
         const bool normalized = a.find("normalized") && a.at("normalized").is_bool() && a.at("normalized").boolean();
+        // (The count is the file's: checked before anything is made from it, with or without a
+        // buffer view, so that count times comps cannot wrap round to a small vector.)
+        if (count > (uint64_t(1) << 32) || count > std::numeric_limits<size_t>::max() / sizeof(float) / comps)
+            refuse("accessor " + std::to_string(index) + " has too many elements");
+        const char* base = nullptr;
+        size_t stride = 0;
+        if (a.find("bufferView")) std::tie(base, stride) = view_of(a, index, count, comps * csize(type)); // (its bytes are in the file)
+        else
+        {
+            unviewed_floats_ += count * comps;
+            if (unviewed_floats_ > kMaxUnviewedFloats)
+                refuse("its accessors with no buffer view ask for more than " + std::to_string(kMaxUnviewedFloats) + " numbers in all");
+        }
         std::vector<float> out(size_t(count) * comps, 0.0f);
         auto read_into = [&](const char* p, uint32_t t, float* dst, size_t n) {
             for (size_t c = 0; c < n; ++c)
@@ -308,11 +334,8 @@ public:
                 dst[c] = float(v);
             }
         };
-        if (a.find("bufferView"))
-        {
-            const auto [base, stride] = view_of(a, index, count, comps * csize(type));
+        if (base)
             for (size_t i = 0; i < count; ++i) read_into(base + i * stride, type, out.data() + i * comps, comps);
-        }
         if (const json::Value* sparse = a.find("sparse"))
         {
             const uint64_t n = uint_of(*sparse, "count", 0);
@@ -328,7 +351,7 @@ public:
                 if (it == 5121) at = uint8_t(ip[k]);
                 else if (it == 5123) { uint16_t x; std::memcpy(&x, ip + 2 * k, 2); at = x; }
                 else std::memcpy(&at, ip + 4 * k, 4);
-                if (at >= count) refuse("accessor " + std::to_string(index) + " has a sparse index past its end");
+                if (at >= count || at >= out.size() / comps) refuse("accessor " + std::to_string(index) + " has a sparse index past its end");
                 read_into(vp + k * comps * csize(type), type, out.data() + size_t(at) * comps, comps);
             }
         }
@@ -343,9 +366,12 @@ public:
         if (type != 5121 && type != 5123 && type != 5125) refuse("accessor " + std::to_string(index) + " (indices) is not unsigned integers");
         if (a.find("sparse")) refuse("accessor " + std::to_string(index) + " (indices) is sparse, which is not read yet");
         const uint64_t count = uint_of(a, "count", 0);
-        std::vector<uint32_t> out(size_t(count), 0);
-        if (!a.find("bufferView")) return out;
+        // (Three indices a triangle, and a strip or fan of n indices makes n - 2: more than this
+        // would pass the roof on triangles, so it is refused before the memory is asked for.)
+        if (count > 3 * uint64_t(kMaxTriangles) + 2) refuse("more than " + std::to_string(kMaxTriangles) + " triangles");
+        if (!a.find("bufferView")) return std::vector<uint32_t>(size_t(count), 0);
         const auto [base, stride] = view_of(a, index, count, csize(type));
+        std::vector<uint32_t> out(size_t(count), 0);
         for (size_t i = 0; i < count; ++i)
         {
             const char* p = base + i * stride;
@@ -379,6 +405,9 @@ public:
                 ++skipped_no_position_;
                 continue;
             }
+            // (The roof on vertices checked before they are read: many nodes may place one mesh.)
+            if (out_.mesh.verts.size() + count_of(uint_of(*attrs, "POSITION", 0)) > kMaxVertices)
+                refuse("more than " + std::to_string(kMaxVertices) + " vertices");
             const std::vector<float> pos = floats(uint_of(*attrs, "POSITION", 0), 3);
             const size_t n = pos.size() / 3;
             std::vector<uint32_t> idx;
@@ -491,6 +520,7 @@ private:
     ImportedModel& out_;
     std::vector<std::string> buffers_;
     std::vector<bool> seen_;
+    uint64_t unviewed_floats_ = 0; // (the numbers the accessors with no buffer view have asked for so far)
 };
 
 // Every node's matrix in the world, from each node's local one and its parent (-1: none).
@@ -632,9 +662,31 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
     // The animations, each sampled at kAnimationRate a second.
     std::vector<std::array<double, 9>> rest_turn(kept);
     for (size_t i = 0; i < kept; ++i) rest_turn[i] = turn_of(world0[joints[order[i]]]);
-    size_t translations = 0, scales = 0, weights = 0, cubic = 0, frames_cut = 0;
+    // The nodes a kept joint's turn depends on: those joints and every node above them. Only these
+    // are worked out for each frame; each one's world matrix is made from its parent's as before,
+    // so the turns are the same as when every node was worked out.
+    std::vector<int64_t> sub_of(nodes.size(), -1);
+    std::vector<size_t> needed;
+    for (size_t i = 0; i < kept; ++i)
+        for (int64_t at = int64_t(joints[order[i]]); at >= 0 && sub_of[size_t(at)] < 0; at = parent[size_t(at)])
+        {
+            sub_of[size_t(at)] = int64_t(needed.size());
+            needed.push_back(size_t(at));
+        }
+    std::vector<int64_t> sub_parent(needed.size(), -1);
+    for (size_t k = 0; k < needed.size(); ++k)
+        if (parent[needed[k]] >= 0) sub_parent[k] = sub_of[size_t(parent[needed[k]])];
+    std::vector<Rest> sub_rest;
+    for (const size_t n : needed) sub_rest.push_back(rest[n]);
+    size_t translations = 0, scales = 0, weights = 0, cubic = 0, frames_cut = 0, over_roof = 0;
+    uint64_t work = 0, samples = 0;
     for (const auto& a : array_of(root, "animations"))
     {
+        if (over_roof)
+        {
+            ++over_roof;
+            continue;
+        }
         struct Channel
         {
             size_t node;
@@ -684,12 +736,22 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
         double want = std::floor(end * kAnimationRate + 1e-9) + 1;
         if (want > kAnimationMaxFrames) ++frames_cut;
         sm.frames = uint32_t(std::min<double>(want, kAnimationMaxFrames));
+        // (The number of animations is the file's: the work and memory they take in all is held to
+        // a roof, and those past it are not carried.)
+        work += uint64_t(sm.frames) * (needed.size() + chans.size());
+        samples += uint64_t(sm.frames) * kept;
+        if (work > kMaxAnimationWork || samples > kMaxAnimationSamples)
+        {
+            over_roof = 1;
+            continue;
+        }
         for (uint32_t f = 0; f < sm.frames; ++f)
         {
             const double t = double(f) / kAnimationRate;
-            std::vector<Rest> now = rest;
+            std::vector<Rest> now = sub_rest;
             for (const Channel& ch : chans)
             {
+                if (sub_of[ch.node] < 0) continue; // (a node no kept joint hangs from)
                 const size_t comps = ch.path == 1 ? 4 : 3, stride = comps * (ch.interp == 2 ? 3 : 1), off = ch.interp == 2 ? comps : 0;
                 size_t k = size_t(std::upper_bound(ch.times.begin(), ch.times.end(), float(t)) - ch.times.begin());
                 double v[4];
@@ -723,18 +785,19 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
                     else
                         for (size_t c = 0; c < comps; ++c) v[c] = (1 - u) * value(k - 1, c) + u * value(k, c);
                 }
-                Rest& r = now[ch.node];
+                Rest& r = now[size_t(sub_of[ch.node])];
                 if (ch.path == 0) std::copy(v, v + 3, r.t);
                 else if (ch.path == 1) std::copy(v, v + 4, r.r);
                 else std::copy(v, v + 3, r.s);
             }
-            std::vector<Mat> loc(nodes.size());
-            for (size_t i = 0; i < nodes.size(); ++i) loc[i] = now[i].matrix();
-            const std::vector<Mat> w = world_matrices(loc, parent);
+            std::vector<Mat> loc(needed.size());
+            for (size_t i = 0; i < needed.size(); ++i) loc[i] = now[i].matrix();
+            const std::vector<Mat> w = world_matrices(loc, sub_parent);
             for (size_t i = 0; i < kept; ++i)
             {
                 // The turn from rest: now times rest's inverse (its transpose).
-                const auto r1 = turn_of(w[joints[order[i]]]);
+                const size_t ji = size_t(sub_of[joints[order[i]]]);
+                const auto r1 = turn_of(w[ji]);
                 const auto& r0 = rest_turn[i];
                 std::array<double, 9> d{};
                 for (int row = 0; row < 3; ++row)
@@ -745,7 +808,7 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
                         d[size_t(row * 3 + col)] = sum;
                     }
                 sm.turns.push_back(quaternion_of(d));
-                const Mat& wj = w[joints[order[i]]];
+                const Mat& wj = w[ji];
                 sm.places.push_back({wj[12], wj[13], wj[14]});
             }
         }
@@ -755,6 +818,8 @@ void read_skeleton(const json::Value& root, Gltf& g, ImportedModel& out)
     if (weights) out.left_out.push_back(plural(weights, "morph-weight channel", "morph-weight channels") + ", not carried");
     if (cubic) out.left_out.push_back(plural(cubic, "cubic-spline channel", "cubic-spline channels") + " played as straight lines between their keys");
     if (frames_cut) out.left_out.push_back(plural(frames_cut, "animation", "animations") + " cut at the roof of " + std::to_string(kAnimationMaxFrames) + " frames");
+    if (over_roof)
+        out.left_out.push_back(plural(over_roof, "animation", "animations") + " not carried: together with those before, they ask for more frames than one model's animations may hold");
 }
 
 ImportedModel read_gltf_json(std::string_view json_text, std::optional<std::string> bin, const ImportLoader& load, const char* format)

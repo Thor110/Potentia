@@ -8,12 +8,28 @@
 #include <algorithm>
 #include <array>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace sieve::cipher {
 
 namespace {
 
 [[noreturn]] void bad(const std::string& what) { throw std::invalid_argument("cipher-v1: " + what); }
+
+// A key of whole bytes written in hex, either case, for the layer named `word`.
+std::vector<uint8_t> hex_key(const std::string& word, const std::string& arg)
+{
+    if (arg.empty() || arg.size() % 2) bad(word + " needs a key of whole bytes in hex, not \"" + arg + "\"");
+    std::vector<uint8_t> key;
+    for (size_t i = 0; i < arg.size(); i += 2)
+    {
+        const int hi = hex_digit_value(arg[i]), lo = hex_digit_value(arg[i + 1]);
+        if (hi < 0 || lo < 0) bad(word + " needs a key in hex, not \"" + arg + "\"");
+        key.push_back(uint8_t(hi * 16 + lo));
+    }
+    return key;
+}
 
 Layer parse_layer(const std::string& line)
 {
@@ -32,27 +48,10 @@ Layer parse_layer(const std::string& line)
         l.kind = Layer::Kind::Caesar;
         l.key = {uint8_t(std::stoi(arg))};
     }
-    else if (word == "xor")
+    else if (word == "xor" || word == "vigenere-hex" || word == "feistel-hex")
     {
-        if (arg.empty() || arg.size() % 2) bad("xor needs a key of whole bytes in hex, not \"" + arg + "\"");
-        l.kind = Layer::Kind::Xor;
-        for (size_t i = 0; i < arg.size(); i += 2)
-        {
-            const int hi = hex_digit_value(arg[i]), lo = hex_digit_value(arg[i + 1]);
-            if (hi < 0 || lo < 0) bad("xor needs a key in hex, not \"" + arg + "\"");
-            l.key.push_back(uint8_t(hi * 16 + lo));
-        }
-    }
-    else if (word == "vigenere-hex" || word == "feistel-hex")
-    {
-        if (arg.empty() || arg.size() % 2) bad(word + " needs a key of whole bytes in hex, not \"" + arg + "\"");
-        l.kind = word == "vigenere-hex" ? Layer::Kind::Vigenere : Layer::Kind::Feistel;
-        for (size_t i = 0; i < arg.size(); i += 2)
-        {
-            const int hi = hex_digit_value(arg[i]), lo = hex_digit_value(arg[i + 1]);
-            if (hi < 0 || lo < 0) bad(word + " needs a key in hex, not \"" + arg + "\"");
-            l.key.push_back(uint8_t(hi * 16 + lo));
-        }
+        l.key = hex_key(word, arg);
+        l.kind = word == "xor" ? Layer::Kind::Xor : word == "vigenere-hex" ? Layer::Kind::Vigenere : Layer::Kind::Feistel;
     }
     else if (word == "vigenere" || word == "feistel")
     {
@@ -114,9 +113,7 @@ int64_t weight(uint8_t c)
 
 std::string Layer::text() const
 {
-    static const char kHex[] = "0123456789abcdef";
-    std::string h;
-    for (const uint8_t c : key) h += {kHex[c >> 4], kHex[c & 15]};
+    const std::string h = hex_of(key);
     // A text key is written as text when it reads back the same: printable ASCII, no ';' or '#',
     // and no space at either end (which a recipe line would lose).
     bool plain = !key.empty() && key.front() != ' ' && key.back() != ' ';

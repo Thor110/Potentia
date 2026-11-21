@@ -1136,10 +1136,9 @@ public:
     // (for pictures and tests) what the readout says of it: empty for shaded (as before the choice came).
     std::string drawing_report() const;
     // The keys along the foot of the hallway, as drawn: read from the key registry (IDEAS 19.199), so
-    // they name the keys as set. keys_changed(): whether any of the hallway's own keys differs from its
-    // default (the readout says the footer only then, so a default run reads as it did).
+    // they name the keys as set. The readout says the footer only when one of the hallway's own keys
+    // differs from its default (Keys::changed_in("hallway")), so a default run reads as it did.
     std::string keys_footer() const;
-    static bool keys_changed();
     // Your character (IDEAS 19.148), walking beside you: a little ahead and to the right, on the
     // floor, about 1.4 m tall, facing the way you face; none: not drawn.
     void set_character(std::optional<sieve::Character> c);
@@ -1347,6 +1346,13 @@ private:
     std::unordered_map<uint32_t, FoundFile> found_; // slot -> its file, for found_gen_
     uint64_t found_gen_ = ~uint64_t(0);
     void find_room_files();
+    // A listed line's items in view, judged by its filters side by side before a frame draws them
+    // (a fractal's filters can take tens of milliseconds an item, too long to judge a screenful one
+    // after another): by book()'s key, the item's place and the first filter it fails (-1: none),
+    // for listed_ahead_gen_. book() takes its verdict from here when one is waiting.
+    std::unordered_map<int64_t, std::pair<BigUint, int>> listed_ahead_;
+    uint64_t listed_ahead_gen_ = ~uint64_t(0);
+    void judge_listed_ahead();
     // The first unit of the tile you stand in, and the binary line's first file there (the left
     // wall's first slot), kept for the room: every item of the room is one of these plus its slot,
     // which on a line of files of megabytes saves a few shifts of numbers that size per item.

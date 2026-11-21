@@ -41,6 +41,8 @@ namespace {
 using sieve::u8;
 using sieve::from_u8;
 
+// The CRC-32 of zip and RAR (the one cli/crc32.hpp takes from zlib, the same for every input): kept
+// here as a table of its own, as sieve_locate, which the installer program links too, links no zlib.
 uint32_t crc32_of(const uint8_t* p, size_t n)
 {
     static const std::array<uint32_t, 256> table = [] {

@@ -14,6 +14,7 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace sieve {
 
@@ -113,10 +114,33 @@ public:
                 u = u.first(n);
             }
         }
-        std::map<uint32_t, uint64_t> counts;
-        for (uint32_t s : u) ++counts[s];
+        // Only the multiset of counts matters (the sum in passes_counts does not depend on their
+        // order). On a small alphabet, or one not much larger than the unit, the counts go into a
+        // table indexed by symbol; on a huge one (the whole of Unicode, say) a sorted copy of the
+        // unit is counted run by run instead, so no table of a million entries is cleared per unit.
+        // A symbol outside the line's alphabet never comes in a proper unit; if one does, the
+        // sorted count handles it exactly as the old map did.
         std::vector<uint64_t> c;
-        for (const auto& [s, n] : counts) c.push_back(n);
+        const bool small = base_ <= 4096 || uint64_t(base_) <= uint64_t(u.size()) * 4;
+        if (small && std::all_of(u.begin(), u.end(), [&](uint32_t s) { return s < base_; }))
+        {
+            std::vector<uint32_t> table(base_, 0);
+            for (uint32_t s : u) ++table[s];
+            for (uint32_t n : table)
+                if (n) c.push_back(n);
+        }
+        else
+        {
+            std::vector<uint32_t> sorted(u.begin(), u.end());
+            std::sort(sorted.begin(), sorted.end());
+            for (size_t i = 0; i < sorted.size();)
+            {
+                size_t j = i;
+                while (j < sorted.size() && sorted[j] == sorted[i]) ++j;
+                c.push_back(j - i);
+                i = j;
+            }
+        }
         return passes_counts(c, u.size());
     }
     const Ranker* ranker() const override { return ranker_.get(); }

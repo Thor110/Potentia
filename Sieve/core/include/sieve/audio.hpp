@@ -111,6 +111,28 @@ std::string notes_to_midi(const NoteSet& set, const std::vector<uint32_t>& digit
 // gap written with the set's durations, longest first (a note too long for one is the note, then
 // rests). Files the hallway saves come back as the same music. Throws std::invalid_argument on a
 // file that is not MIDI; `report` receives what was changed, in words.
+// A voice longer than kMidiMostDurations of the set's longest duration is refused, as is a track
+// longer than kMidiMostTicks.
 std::string midi_to_notation(const std::vector<uint8_t>& midi, const NoteSet& set, std::vector<std::string>* report = nullptr);
+
+// The Standard MIDI File reader that midi_to_notation and midi_to_notes3 share. Each track with
+// notes, or with a length and no notes, is a voice: its notes sorted by start (stably), each with
+// the velocity it was started with, and its end in the file's ticks. A note started again before it
+// ends is ended there; notes left open end with the track. Throws std::invalid_argument on a file
+// that is not MIDI, one timed in SMPTE frames, and a track longer than kMidiMostTicks.
+inline constexpr uint64_t kMidiMostTicks = uint64_t(1) << 44;
+inline constexpr uint64_t kMidiMostDurations = uint64_t(1) << 24;
+struct MidiNote
+{
+    uint64_t start, end; // in the file's ticks
+    uint32_t pitch, velocity;
+};
+struct MidiRead
+{
+    uint32_t division = 0; // ticks a quarter note
+    std::vector<std::vector<MidiNote>> voices;
+    std::vector<uint64_t> ends;
+};
+MidiRead read_midi(const std::vector<uint8_t>& midi);
 
 } // namespace sieve

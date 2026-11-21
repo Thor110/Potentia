@@ -548,7 +548,7 @@ float Hallway::draw_listed(const Book& bk, float x, float y, float pw, float bot
     const std::string key = i.to_hex() + "/" + std::to_string(depth) + "/" + std::to_string(side);
     if (key != listed_tex_key_)
     {
-        if (listed_tex_) SDL_DestroyTexture(listed_tex_), listed_tex_ = nullptr;
+        if (listed_tex_) gpu::destroy(listed_tex_), listed_tex_ = nullptr;
         if (const auto img = sh.picture(i, depth, uint32_t(side), uint32_t(side)))
         {
             listed_tex_ = gpu::create(r_, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, int(img->width), int(img->height));
@@ -1247,13 +1247,6 @@ std::string Hallway::keys_footer() const
 {
     return trk("hud.keys1") + (guided_on() ? trk("hud.keys.zoom") : std::string()) + trk("hud.keys2") +
            trk(in_hand_ && in_hand_->parts ? "hud.keys.page" : "hud.keys.trail") + trk("hud.keys3");
-}
-
-bool Hallway::keys_changed()
-{
-    for (const auto& row : Keys::get().listing())
-        if (row.changed && row.section.rfind("hallway.", 0) == 0) return true;
-    return false;
 }
 
 } // namespace hallway::hall

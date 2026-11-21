@@ -107,10 +107,6 @@ def windows(b, k):
     return v
 
 
-def gamma_bits(r):
-    return 2 * np.floor(np.log2(r)) + 1
-
-
 def costs(train, test, k):
     """Bits a byte of the held-out arrangements: as they are, by rank in the counted order, by the
     counts' own share."""

@@ -332,6 +332,19 @@ std::optional<EighthJpeg> jpeg_eighth(std::span<const uint8_t> d)
             if (f.progressive && se != 0) return std::nullopt; // (a DC scan has Ss = Se = 0)
             for (size_t k = 0; k < ns; ++k)
                 if ((!(f.progressive && ah != 0) && !dc_tables[size_t(td[k])].defined) || (!f.progressive && !ac_tables[size_t(ta[k])].defined)) return std::nullopt;
+            // Every block takes at least one bit of the scan's data (a refinement's bit, or a DC code),
+            // and in a baseline scan two (its DC code and an end-of-block code at the least). A scan
+            // with fewer bytes than that would be decoded from the zeros put after its data, and as
+            // the number of scans is not limited, a file of a few hundred bytes could make this walk
+            // millions of blocks again and again: such a scan is refused.
+            {
+                uint64_t blocks = 0;
+                if (ns > 1)
+                    for (size_t k = 0; k < ns; ++k) blocks += uint64_t(f.mcux) * f.mcuy * uint64_t(in[k]->h) * uint64_t(in[k]->v);
+                else blocks = uint64_t(in[0]->own_bw) * in[0]->own_bh;
+                const uint64_t bits_each = f.progressive ? 1 : 2;
+                if (uint64_t(data_end - data_start) < blocks * bits_each / 8) return std::nullopt;
+            }
             Bits b{d.subspan(0, data_end), data_start};
             std::vector<int32_t> pred(ns, 0);
             // The blocks in the scan's order: an MCU of each component's H by V blocks where it holds

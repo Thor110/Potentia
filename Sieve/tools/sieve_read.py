@@ -29,14 +29,20 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "reference"))
 import sieve_ref as ref  # noqa: E402
 
-OWN_CODE = ("rope ", "pieces ", "mix ", "mix2 ", "mix3 ", "mix4 ", "mixt ")
+# The inner ways whose code is the file's own, next in the rope stream after its length (mixt: the
+# group's code, with its first file).
+OWN_CODE = {"rope", "pieces", "mix4", "mixt", "mix3", "mix2", "mix", "runs"}
+# The words a recipe starts with (what a file is made again from on installing, around its inner
+# way): the oracle's list, and lz, which ways_tally.py has named too.
+RECIPES = set(ref.RECIPE_WORDS) | {"lz"}
 WAY_NAMES = OrderedDict([
     ("raw", "LZMA2 (xz/7-Zip's), in the lzma2 stream"), ("x86", "LZMA2 with the x86 filter (xz/7-Zip's)"),
     ("mixt", "mixing (Sieve's mix-v4), a group's first file"), ("mixn", "mixing, in that group"),
     ("mix4", "mixing (Sieve's mix-v4), alone"), ("mix3", "mixing (mix-v3)"), ("mix2", "mixing (mix-v2)"), ("mix", "mixing (mix-v1)"),
     ("rope", "the rope (Sieve's)"), ("pieces", "pieces (LZMA2 and the rope by turns)"),
     ("lines", "the lines of another file (Sieve's)"), ("delta", "its differences from another (Sieve's delta-v1)"),
-    ("item", "an item of Sieve's lines"),
+    ("item", "an item of Sieve's lines"), ("runs", "runs, patterns and ramps (Sieve's)"),
+    ("copy", "a copy of another file (Sieve's)"),
 ])
 
 
@@ -72,23 +78,44 @@ def read(path):
     return {"version": lines[0], "lines": lines, "streams": streams, "files": files, "folders": folders, "remade": remade, "payload": payload, "size": len(raw)}
 
 
+def split_way(way):
+    """A way taken apart: its recipe (or None), the members it counts (skm, spn), and the inner way's
+    words. The inner way is the first word after the recipe that names a way."""
+    t = way.split()
+    if not t:
+        return None, 0, ["?"]
+    if t[0] in RECIPES:
+        for j in range(1, len(t)):
+            if t[j] in WAY_NAMES and t[j] != "item":
+                members = int(t[1]) if t[0] in ("skm", "spn") and t[1].isdigit() else 0
+                return t[0], members, t[j:]
+        return t[0], 0, ["?"]
+    return None, 0, t
+
+
 def own_codes(info):
-    """Each file's own code's length, read from the rope stream by the lengths before each code."""
+    """Each file's own code's length, read from the rope stream by the lengths before each code; and
+    whether those lengths and codes make the stream exactly (the check that they were read right)."""
     at, out = 0, {}
     for s in info["streams"]:
         if s["name"] == "rope":
             blob = info["payload"][at:at + s["packed"]]
             if s["packed"] != s["bytes"]:
-                return out  # (a rope stream carried packed: not read here)
+                return out, True  # (a rope stream carried packed: not read here)
             pos = 0
             for f in info["files"]:
-                if f["way"].startswith(OWN_CODE):
-                    n, pos = varint(blob, pos)
+                if split_way(f["way"])[2][0] in OWN_CODE:
+                    if pos >= len(blob):
+                        return out, False
+                    try:
+                        n, pos = varint(blob, pos)
+                    except IndexError:
+                        return out, False
                     out[f["path"]] = n
                     pos += n
-            return out
+            return out, pos == len(blob)
         at += s["packed"]
-    return out
+    return out, not any(split_way(f["way"])[2][0] in OWN_CODE for f in info["files"])
 
 
 def way_kind(way):
@@ -101,8 +128,10 @@ def main():
     ap.add_argument("--full", metavar="SIEVE", help="install it with this sieve and measure each file")
     a = ap.parse_args()
     info = read(a.sieve_file)
-    codes = own_codes(info)
+    codes, whole = own_codes(info)
     print(f"{a.sieve_file}: {info['size']:,} bytes, {info['version']}; {len(info['files'])} file(s), {info['folders']} folder(s)")
+    if not whole:
+        print("warning: the own codes read do not make the rope stream exactly, so their lengths below are not to be trusted")
     print("\nStreams (packed, holding, how):")
     for s in info["streams"]:
         print(f"  {s['name']:6} {s['packed']:>12,} {s['bytes']:>12,}  {s['how']}")

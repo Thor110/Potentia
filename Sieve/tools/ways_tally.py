@@ -56,32 +56,24 @@ WAYS = OrderedDict([
     ("delta", ("its differences from another file", "Sieve's")),
     ("item", ("an item of one of Sieve's lines, by its place", "Sieve's")),
 ])
-OWN_CODE = {"rope", "pieces", "mix4", "mixt", "mix3", "mix2", "mix", "runs"}  # (mixt: the group's code, with its first file)
-# What a file can be made again from on installing, around its inner way.
-RECIPES = OrderedDict([
+# What a file can be made again from on installing, around its inner way: each recipe's name here
+# (which words are recipes, how a way is taken apart and which inner ways have codes of their own
+# are sieve_read.py's, so the two scripts read a listing alike).
+RECIPE_NAMES = OrderedDict([
     ("jbr", "a JPEG from its brunsli form (Google's brunsli)"),
     ("pngr", "a PNG re-saved from its rows (zlib)"), ("skr", "a PNG from its rows and skeleton"),
     ("sk", "a PNG from its skeleton"), ("stb", "a PNG stb_image_write made"),
     ("skm", "an archive (gzip, zip, 7z) from its skeleton and members"),
     ("spn", "a text with binary written in it (base64, hex), decoded"),
     ("gif", "a GIF from its frames' colour indices (v34 draft)"),
+    ("flac", "a sound (WAV, AIFF, RF64, Wave64, .au, CAF) from its samples as FLAC codes them (libFLAC)"),
+    ("tiff", "a TIFF from its skeleton, its strips coded again (LZW, PackBits, deflate)"),
+    ("pcx", "a PCX from its pixels, its planes' runs coded again"), ("pmp", "an MP3 from its packMP3 form (packMP3)"),
     ("xz", "an xz file remade"), ("gz", "a gzip file remade"), ("bz2", "a bzip2 file remade"), ("zst", "a zstd file remade"),
     ("lz4", "an lz4 file remade"), ("br", "a brotli file remade"), ("lzma", "an lzma file remade"), ("lz", "an lzip file remade"),
 ])
-
-
-def split_way(way):
-    """(recipe or None, its members (skm, spn), the inner way's words)."""
-    t = way.split()
-    if not t:
-        return None, 0, ["?"]
-    if t[0] in RECIPES:
-        for j in range(1, len(t)):
-            if (t[j] in WAYS or t[j] == "mixn") and t[j] != "item":
-                members = int(t[1]) if t[0] in ("skm", "spn") and t[1].isdigit() else 0
-                return t[0], members, t[j:]
-        return t[0], 0, ["?"]
-    return None, 0, t
+OWN_CODE = sieve_read.OWN_CODE
+split_way = sieve_read.split_way
 
 
 def entries(info):
@@ -114,7 +106,10 @@ def own_codes(info, es):
             pos, got = 0, {}
             for i, e in enumerate(es):
                 if e["inner"][0] in OWN_CODE:
-                    n, pos = sieve_read.varint(blob, pos)
+                    try:
+                        n, pos = sieve_read.varint(blob, pos)
+                    except IndexError:  # (the stream ends before this code's length: not read right)
+                        return got, False
                     got[i] = n
                     pos += n
             return got, pos == len(blob)
@@ -253,7 +248,7 @@ def main():
         out.append("| Recipe | Files | Their bytes |")
         out.append("| :--- | ---: | ---: |")
         for k, (n, b) in recipes.items():
-            out.append(f"| {RECIPES.get(k, k)} (`{k}`) | {n:,} | {b:,} |")
+            out.append(f"| {RECIPE_NAMES.get(k, k)} (`{k}`) | {n:,} | {b:,} |")
     if members[0]:
         out.append(f"\nMembers (taken out of an archive or a text, carried their own ways, counted above by their way only): {members[0]:,}, {members[1]:,} bytes.")
     out.append("\nStreams (shared by their files: one file's share of a solid stream is not recorded):\n")

@@ -4,6 +4,24 @@ Ten reviewers, one an area each, read the whole of Sieve on 21 November 2026, ea
 
 Ideas from the same review are in [CLAUDE-IDEAS.md](CLAUDE-IDEAS.md).
 
+## Where it stands (21 November 2026)
+
+Every kept finding is fixed (two rounds of fixers, each change read by a second agent; the whole tree built, the
+unit suite and the CI run on it), except these parts, left for the reasons given:
+- **cli-windows-narrow-paths:** `sieve_cache.cpp`'s `catalogue_folder` still hands core a narrow path, as core's
+  `read_format_folder` takes one; and `Dictionary::inspect_file` takes a narrow name. Both need a core overload taking
+  a path; nothing changes on Linux or for names in the system's code page.
+- **R5-D2:** `rar_remake.cpp` keeps its own CRC-32 table, as the library it is built into links no zlib; `pack.cpp`
+  and `compress.cpp` share `tools/cli/crc32.hpp`.
+- **Tests:** the fixes in the CLI and the client (site, raid serve, read_obj's limit, the vault's span check) have no
+  unit test, as `sieve_tests` links the core alone; CI's steps cover them.
+
+What changes for an input: an edited word list is read again (the plugin cache key holds the files' SHA-256s); a
+`within` value out of range, or a word file outside the plugin's folder, is refused; a GIF whose frames would take
+2 GiB or more is withheld by the vault rather than decoded; an `.obj` index past 2^32 is clamped rather than wrapped;
+and absurd sounds and melodies (a voice past 2^24 of the longest length, a WAV under 1/64 of the line's rate) are
+refused rather than taking gigabytes. Every `.sieve` byte and every address is as before (checked against 0.13.80).
+
 ## Kept
 
 ### Core arithmetic, automata and addressing

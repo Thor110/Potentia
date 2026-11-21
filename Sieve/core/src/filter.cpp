@@ -480,18 +480,33 @@ std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, cons
 {
     if (merge_key.empty()) return std::make_shared<const DfaRanker>(d, length);
     // The shortest table at this length or longer, as a ranker at this length (g_merged_mx held).
+    // Tables are judged by the rows they hold (table_length), not the length they were asked at: a
+    // shorter view of a longer table holds all of its rows, and serves while the longer one is gone.
+    // One stored at this very length, still live, is taken first: the slot it holds is never
+    // overwritten while a stack uses what is in it.
     auto find = [&]() -> std::shared_ptr<const DfaRanker> {
+        if (const auto it = g_tables_kept.find(merge_key); it != g_tables_kept.end())
+            if (const auto at = it->second.find(length); at != it->second.end() && at->second && at->second->length() == length)
+                return at->second;
+        if (const auto it = g_tables_used.find(merge_key); it != g_tables_used.end())
+            if (const auto at = it->second.find(length); at != it->second.end())
+                if (auto t = at->second.lock(); t && t->length() == length) return t;
         std::shared_ptr<const DfaRanker> best;
-        auto consider = [&](uint32_t len, std::shared_ptr<const DfaRanker> t) {
-            if (t && len >= length && (!best || len < best->length())) best = std::move(t);
+        // Of two holding the same rows, one already at this length is taken (nothing to make).
+        auto consider = [&](std::shared_ptr<const DfaRanker> t) {
+            if (!t || t->table_length() < length) return;
+            if (!best || t->table_length() < best->table_length() ||
+                (t->table_length() == best->table_length() && t->length() == length && best->length() != length))
+                best = std::move(t);
         };
         if (const auto it = g_tables_kept.find(merge_key); it != g_tables_kept.end())
-            for (const auto& [len, t] : it->second) consider(len, t);
+            for (const auto& entry : it->second) consider(entry.second);
         if (const auto it = g_tables_used.find(merge_key); it != g_tables_used.end())
-            for (const auto& [len, t] : it->second) consider(len, t.lock());
+            for (const auto& entry : it->second) consider(entry.second.lock());
         if (!best || best->length() == length) return best;
         auto view = std::make_shared<const DfaRanker>(*best, length); // the longer table's first rows
-        g_tables_used[merge_key][length] = view;
+        auto& slot = g_tables_used[merge_key][length];
+        if (slot.expired()) slot = view; // (a live one there, at another length, is left to its stacks)
         return view;
     };
     std::shared_ptr<std::mutex> own;
@@ -509,10 +524,15 @@ std::shared_ptr<const DfaRanker> shared_table(const std::string& merge_key, cons
     }
     auto t = std::make_shared<const DfaRanker>(d, length);
     std::lock_guard<std::mutex> lock(g_merged_mx);
-    for (auto& [k, by_length] : g_tables_used) // (those no stack uses any more)
+    for (auto used = g_tables_used.begin(); used != g_tables_used.end();) // (those no stack uses any more)
+    {
+        auto& by_length = used->second;
         for (auto it = by_length.begin(); it != by_length.end();)
             it = it->second.expired() ? by_length.erase(it) : std::next(it);
-    g_tables_used[merge_key][length] = t;
+        used = by_length.empty() ? g_tables_used.erase(used) : std::next(used);
+    }
+    if (auto& slot = g_tables_used[merge_key][length]; slot.expired()) slot = t; // (never over one still live)
+    g_tabling.erase(merge_key); // (as g_merging's: a thread still waiting holds its own copy of the mutex)
     const double bytes = DfaRanker::table_bytes(d->states(), d->base, length);
     const double room = filter_memory() * merge_cache_share();
     if (g_merged_bytes + bytes > room)

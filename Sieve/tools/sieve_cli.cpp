@@ -164,12 +164,12 @@ void print_header(const Line& line)
 FilterConfig load_filter_config(const Args& a)
 {
     // A file named with --filters must exist (a typo would otherwise mean "nothing ticked").
-    if (a.has("filters") && !fs::exists(fs::path(a.get("filters"))))
+    if (a.has("filters") && !fs::exists(sieve::from_u8(a.get("filters"))))
         throw std::invalid_argument("no filter settings file at " + a.get("filters"));
-    return FilterConfig::load(a.has("filters") ? fs::path(a.get("filters")) : FilterConfig::default_path());
+    return FilterConfig::load(a.has("filters") ? sieve::from_u8(a.get("filters")) : FilterConfig::default_path());
 }
 
-std::string filters_path(const Args& a) { return a.has("filters") ? a.get("filters") : FilterConfig::default_path().string(); }
+std::string filters_path(const Args& a) { return a.has("filters") ? a.get("filters") : sieve::u8(FilterConfig::default_path()); }
 
 // ---------------------------------------------------------------- info
 
@@ -1059,12 +1059,13 @@ int cmd_dicts(const Args& a)
 {
     if (a.has("hash"))
     {
-        const DictionaryFileInfo d = Dictionary::inspect_file(a.get("hash"));
+        // (the core opens a narrow path: the UTF-8 argument as this system spells it, the same bytes on Linux)
+        const DictionaryFileInfo d = Dictionary::inspect_file(sieve::from_u8(a.get("hash")).string());
         std::cout << "file      " << a.get("hash") << "\n"
                   << "words     " << d.word_count << " (" << d.skipped_lines << " lines skipped: not a-z only)\n"
                   << "sha256    " << d.sha256 << "\n"
                   << "\nRegistry line (edit id, language and description; tab-separated):\n"
-                  << "my-dictionary\t" << fs::path(a.get("hash")).filename().string() << "\ten\tno\t" << d.sha256
+                  << "my-dictionary\t" << sieve::u8(sieve::from_u8(a.get("hash")).filename()) << "\ten\tno\t" << d.sha256
                   << "\tDescription of this word list\n";
         return 0;
     }
@@ -1280,13 +1281,13 @@ int raid_between_machines(const Args& a, const std::string& what)
     if (what == "key")
     {
         if (!a.has("out")) throw std::invalid_argument("give where to write the key: --out FILE");
-        if (std::filesystem::exists(a.get("out"))) throw std::invalid_argument(a.get("out") + " is there already; a key is never written over (what it sealed would be lost)");
-        std::ofstream out(a.get("out"), std::ios::binary);
+        if (std::filesystem::exists(sieve::from_u8(a.get("out")))) throw std::invalid_argument(a.get("out") + " is there already; a key is never written over (what it sealed would be lost)");
+        std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
         out << sieve::seal_key_text(sieve::new_seal_key());
         out.close();
         if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
         std::error_code ec; // readable by its owner alone, where the file system says who may read
-        std::filesystem::permissions(a.get("out"), std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, ec);
+        std::filesystem::permissions(sieve::from_u8(a.get("out")), std::filesystem::perms::owner_read | std::filesystem::perms::owner_write, ec);
         std::cout << "key       " << a.get("out") << "\n"
                   << "keep it safe and keep a copy: without it, what others keep for you cannot be read by anyone\n";
         return 0;
@@ -1339,7 +1340,7 @@ int raid_between_machines(const Args& a, const std::string& what)
         const auto key = raid_key(a);
         const auto connected = raid_peers(a); // (held to the end, as the connections always were)
         const auto f = sieve::raid_fetch(a.positional[1], key, connected.peers);
-        std::ofstream out(a.get("out"), std::ios::binary);
+        std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
         out.write(f.bytes.data(), std::streamsize(f.bytes.size()));
         if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
         std::cout << "wrote     " << a.get("out") << " (" << f.bytes.size() << " bytes: " << f.manifest.name << ", version " << f.manifest.id() << ")\n";
@@ -1646,7 +1647,7 @@ int cmd_raid(const Args& a)
         if (a.positional.size() < 2 || !a.has("out")) throw std::invalid_argument("give a version id (or a name, for its latest) and --out FILE");
         const std::string v = version_of(raid, a.positional[1]);
         const std::string bytes = raid.get(v);
-        std::ofstream out(a.get("out"), std::ios::binary);
+        std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
         out.write(bytes.data(), std::streamsize(bytes.size()));
         if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
         std::cout << "wrote     " << a.get("out") << " (" << bytes.size() << " bytes, version " << v << ")\n";
@@ -2047,7 +2048,7 @@ int cmd_import(const Args& a)
         std::cout << "skeleton  " << m.skeleton.size() << (m.skeleton.size() == 1 ? " joint" : " joints") << ", as " << sieve::kCharacterVersion3 << " " << c.id() << "\n";
         if (a.has("character-out"))
         {
-            std::ofstream out(a.get("character-out"), std::ios::binary);
+            std::ofstream out(sieve::from_u8(a.get("character-out")), std::ios::binary);
             out << c.text();
             if (!out) throw std::invalid_argument("cannot write " + a.get("character-out"));
             std::cout << "wrote     " << a.get("character-out") << "\n";
@@ -2062,7 +2063,7 @@ int cmd_import(const Args& a)
     if (a.has("animation-out"))
     {
         const sieve::Animation an = sieve::imported_animation(m, a.get_u32("which", 0));
-        std::ofstream out(a.get("animation-out"), std::ios::binary);
+        std::ofstream out(sieve::from_u8(a.get("animation-out")), std::ios::binary);
         out << an.text();
         if (!out) throw std::invalid_argument("cannot write " + a.get("animation-out"));
         std::cout << "wrote     " << a.get("animation-out") << "\n";
@@ -2133,7 +2134,7 @@ int cmd_mesh(const Args& a)
         vault::check_bytes(std::vector<uint8_t>(obj.begin(), obj.end()), "the model"); // the vault
         if (a.has("out"))
         {
-            std::ofstream out(a.get("out"), std::ios::binary);
+            std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
             out << obj;
             if (!out) throw std::invalid_argument("cannot write " + a.get("out"));
             std::cerr << "wrote " << a.get("out") << " (" << obj.size() << " bytes)\n";
@@ -2325,7 +2326,7 @@ int cmd_world(const Args& a)
             std::stringstream ps(slot.substr(colon + 1));
             std::string v;
             std::vector<uint32_t> place;
-            while (std::getline(ps, v, '.')) place.push_back(uint32_t(std::stoul(v)));
+            while (std::getline(ps, v, '.')) place.push_back(uint32_t(parse_whole(v, "a slot's place")));
             if (place.size() != 4) throw std::invalid_argument("a slot's place is x.y.z.turn");
             s.x = place[0];
             s.y = place[1];
@@ -2498,7 +2499,7 @@ int cmd_train(const Args& a)
 {
     if (!a.has("out")) throw std::invalid_argument("missing --out FILE (the model to write)");
     const Corpus corpus = load_corpus(default_corpus(a));
-    const fs::path dir = a.get("texts", "corpus/gutenberg");
+    const fs::path dir = sieve::from_u8(a.get("texts", "corpus/gutenberg"));
     const Alphabet& alpha = alphabet_of(a.get("alphabet", "lower27"));
     ModelParams p;
     p.symbols_id = alpha.id();
@@ -2513,7 +2514,7 @@ int cmd_train(const Args& a)
     const CharModel m = CharModel::train(stream, p);
     const auto t2 = std::chrono::steady_clock::now();
     const std::string text = m.serialise();
-    std::ofstream out(a.get("out"), std::ios::binary);
+    std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
     out.write(text.data(), static_cast<std::streamsize>(text.size()));
     if (!out) throw std::runtime_error("cannot write " + a.get("out"));
 
@@ -2525,7 +2526,7 @@ int cmd_train(const Args& a)
               << "wrote     " << a.get("out") << " (" << text.size() << " bytes)\n"
               << "sha256    " << m.sha256() << "\n"
               << "\nRegistry line for data/models/models.tsv (edit id and description; tab-separated):\n"
-              << "my-model\t" << fs::path(a.get("out")).filename().string() << "\t" << alpha.id() << "\tno\t" << m.sha256()
+              << "my-model\t" << sieve::u8(sieve::from_u8(a.get("out")).filename()) << "\t" << alpha.id() << "\tno\t" << m.sha256()
               << "\tDescription of this model\n";
     return 0;
 }
@@ -2553,7 +2554,7 @@ int cmd_measure(const Args& a)
     {
         // The corpus's held-out files: text the model has never seen.
         const Corpus corpus = load_corpus(default_corpus(a));
-        const fs::path dir = a.get("texts", "corpus/gutenberg");
+        const fs::path dir = sieve::from_u8(a.get("texts", "corpus/gutenberg"));
         const std::string role = a.get("role", "test");
         for (const auto& f : corpus.files)
             if (role == "all" || f.role == role) inputs.emplace_back(f.file, read_corpus_file(dir, f));
@@ -2718,7 +2719,7 @@ int cmd_filters_plugin(const Args& a)
               << "states     " << (h.form == "tokens" ? std::to_string(declared) + " words, " : std::to_string(declared) + " declared, ") << d.states()
               << " minimal\n";
     // `within N` (the token form): the automaton judges the first N, and only separators follow.
-    const uint32_t within = plugin_within(*def, values);
+    const uint32_t within = plugin_within(*def, one, values);
     const std::unique_ptr<Filter> within_filter = within ? make_plugin_filter(def, one, values, resources) : nullptr;
     if (within) std::cout << "within     " << within << "\n";
     std::cout << "length     " << fl.length << "\n";
@@ -2911,7 +2912,7 @@ int cmd_filters_models(const Args& a)
 
 int cmd_filters_binary(const Args& a)
 {
-    const uint64_t n = a.has("length") ? std::stoull(a.get("length")) : 32;
+    const uint64_t n = a.has("length") ? parse_whole(a.get("length"), "--length", UINT64_MAX) : 32;
     const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
     const FilterConfig cfg = load_filter_config(a);
     const LineFilters& lf = cfg.binary;
@@ -2975,7 +2976,7 @@ int cmd_check_binary(const Args& a)
     const std::string file = a.get("file");
     const auto bytes = read_file_bytes(std::filesystem::path(std::u8string(file.begin(), file.end())));
     vault::check_bytes(bytes, file); // the vault: a withheld file is never placed
-    const uint64_t n = a.has("length") ? std::stoull(a.get("length")) : std::max<uint64_t>(32, bytes.size());
+    const uint64_t n = a.has("length") ? parse_whole(a.get("length"), "--length", UINT64_MAX) : std::max<uint64_t>(32, bytes.size());
     if (bytes.size() > n) throw std::invalid_argument("the file is " + std::to_string(bytes.size()) + " bytes, longer than the line's " + std::to_string(n));
     const BinarySpace space(std::max<uint64_t>(1, n), a.get("key", "sieve"));
     const FilterConfig cfg = load_filter_config(a);
@@ -3330,7 +3331,7 @@ int cmd_tailor(const Args& a)
     if (a.has("out"))
     {
         if (!r.filters.enabled.empty()) lf = r.filters;
-        cfg.save(std::filesystem::path(a.get("out")));
+        cfg.save(sieve::from_u8(a.get("out")));
         std::cout << "saved        " << a.get("out") << (r.filters.enabled.empty() ? " (the filters as they were)" : "") << "\n";
     }
     return 0;
@@ -3408,7 +3409,7 @@ int cmd_bind(const Args& a)
     const std::string record = serialise_book(b);
     // And read back the very text that will be written (a key with a line break, say, would not).
     if (book_id(decode_book(parse_book(record))) != b.id) throw std::runtime_error("the record does not read back as the same book");
-    std::ofstream out(std::filesystem::path(a.get("out")), std::ios::binary);
+    std::ofstream out(sieve::from_u8(a.get("out")), std::ios::binary);
     out << record;
     if (!out) throw std::runtime_error("cannot write " + a.get("out"));
     std::cout << "book         " << b.id << "\n";
@@ -3562,21 +3563,7 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
     // The search's time (--search-per-file, --search-total, seconds): either gives the other, the
     // files counted; both given, each bounds it.
     WeighBudget budget;
-    auto seconds = [&](const char* key) {
-        const std::string v = a.get(key);
-        size_t used = 0;
-        double s = 0;
-        try
-        {
-            s = std::stod(v, &used);
-        }
-        catch (const std::exception&)
-        {
-            used = 0;
-        }
-        if (used != v.size() || !(s >= 0)) throw std::invalid_argument(std::string("--") + key + " is a number of seconds, 0 or more (0: no limit)");
-        return s;
-    };
+    auto seconds = [&](const char* key) { return parse_seconds(a.get(key), std::string("--") + key); };
     if (a.has("search-per-file")) budget.per_file = seconds("search-per-file");
     if (a.has("search-total")) budget.total = seconds("search-total");
     if (a.has("search-per-file") && !a.has("search-total")) budget.total = budget_total(budget.per_file, files.size());
@@ -3592,7 +3579,7 @@ void print_weighing(const Args& a, const std::filesystem::path& root, const std:
                 const LineKind k = l.name == "pages" ? LineKind::Text : line_from_string(l.name);
                 cfg.of(k) = l.tailored->filters;
             }
-        cfg.save(std::filesystem::path(a.get("out-filters")));
+        cfg.save(sieve::from_u8(a.get("out-filters")));
         out << "  filters tailored to these files written to " << a.get("out-filters") << "\n";
     }
 }
@@ -3610,21 +3597,7 @@ void pack_with_items(const Args& a, Manifest& m, const fs::path& root, PackRepor
         add_packed(m, root, &rep);
         return;
     }
-    double rope_seconds = 0;
-    if (a.has("search-per-file"))
-    {
-        const std::string v = a.get("search-per-file");
-        size_t used = 0;
-        try
-        {
-            rope_seconds = std::stod(v, &used);
-        }
-        catch (const std::exception&)
-        {
-            used = 0;
-        }
-        if (used != v.size() || !(rope_seconds >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
-    }
+    const double rope_seconds = a.has("search-per-file") ? parse_seconds(a.get("search-per-file"), "--search-per-file") : 0;
     // v31: --compressed-temporary (made again exactly, else left as it is) or --compressed-permanent
     // (carried as what it holds); either alone asks Optimise Compressed Formats; both, made again where
     // Sieve can, else carried as what it holds. --optimise-compressed alone is temporary: permanent,
@@ -3969,7 +3942,7 @@ int cmd_site(const Args& a)
                 o.sieve_kinds.push_back(e);
             }
         }
-        if (a.has("search-per-file")) o.search_per_file = std::stod(a.get("search-per-file"));
+        if (a.has("search-per-file")) o.search_per_file = parse_seconds(a.get("search-per-file"), "--search-per-file");
         o.keep_originals = a.has("keep-originals");
         if (a.has("served-at")) o.served_at = a.get("served-at");
         o.progress = [](size_t k, size_t n, const std::string& f) { std::cerr << "making    " << k << " of " << n << ": " << f << "\n"; };
@@ -4007,7 +3980,7 @@ int cmd_map(const Args& a)
         Map empty = Map::empty(name);
         empty.sealed = a.has("seal");
         const std::string to = a.has("out") ? a.get("out") : name + ".sieve";
-        if (fs::path(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
+        if (sieve::from_u8(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
         write_map_instructions(empty, fs::path(std::u8string(to.begin(), to.end())));
         std::cerr << "map       " << name << (empty.sealed ? " (sealed)" : "") << ": empty, written to " << to << "\n";
         return 0;
@@ -4037,7 +4010,7 @@ int cmd_map(const Args& a)
     }
     if (a.has("remove"))
     {
-        const uint32_t id = uint32_t(std::stoul(a.get("remove")));
+        const uint32_t id = uint32_t(parse_whole(a.get("remove"), "--remove"));
         const std::string gone = id < m.nodes.size() ? m.label(id) : "";
         m.remove(id);
         std::cerr << "removed   node " << id << " (" << gone << ")\n";
@@ -4055,7 +4028,7 @@ int cmd_map(const Args& a)
         const std::string spec = a.get("meta");
         const size_t colon = spec.find(':'), eq = spec.find('=');
         if (colon == std::string::npos || eq == std::string::npos || eq < colon) throw std::invalid_argument("--meta takes NODE:key=value");
-        m.set_meta(uint32_t(std::stoul(spec.substr(0, colon))), spec.substr(colon + 1, eq - colon - 1), spec.substr(eq + 1));
+        m.set_meta(uint32_t(parse_whole(spec.substr(0, colon), "--meta's NODE")), spec.substr(colon + 1, eq - colon - 1), spec.substr(eq + 1));
         std::cerr << "metadata  node " << spec.substr(0, colon) << ": " << spec.substr(colon + 1) << "\n";
     }
     if (a.has("seal")) m.sealed = true;
@@ -4077,21 +4050,7 @@ int cmd_map(const Args& a)
         // Written as Sieve instructions (v18): its held files packed, its text their graph part.
         const std::string to = a.get("out");
         if (path_of(to).extension() == ".map") throw std::invalid_argument("maps are written as Sieve instructions now: name it .sieve (IDEAS 19.93)");
-        double search = kMapSearchSeconds;
-        if (a.has("search-per-file"))
-        {
-            const std::string v = a.get("search-per-file");
-            size_t used = 0;
-            try
-            {
-                search = std::stod(v, &used);
-            }
-            catch (const std::exception&)
-            {
-                used = 0;
-            }
-            if (used != v.size() || !(search >= 0)) throw std::invalid_argument("--search-per-file: seconds, 0 or more (0: no limit): " + v);
-        }
+        const double search = a.has("search-per-file") ? parse_seconds(a.get("search-per-file"), "--search-per-file") : kMapSearchSeconds;
         write_map_instructions(m, path_of(to), search);
         written = read_file_bytes(path_of(to));
     }
@@ -4185,7 +4144,7 @@ int cmd_unbind(const Args& a)
             const std::string text = section_text(d);
             if (role == "pages" && a.has("pages"))
             {
-                std::ofstream out(std::filesystem::path(a.get("pages")), std::ios::binary);
+                std::ofstream out(sieve::from_u8(a.get("pages")), std::ios::binary);
                 out << text << "\n";
                 if (!out) throw std::runtime_error("cannot write " + a.get("pages"));
                 std::cerr << "  saved " << a.get("pages") << "\n";
@@ -4430,6 +4389,12 @@ int main(int argc, char** argv)
         }
         const Args a = parse_args(argc, argv);
         if (a.help && print_help(a.command == "sieve" ? "sift" : a.command)) return 0;
+        // The options applied above whatever the command (the block below), so never reported as
+        // not the command's own: each of them takes effect (review 5).
+        const auto is_global_option = [](const std::string& key) {
+            static const char* const global[] = {"timings", "search-every-wave", "prioritise-decoding", "priority", "optimise-search", "filter-memory", "merge-cache", "unit-time", "ffmpeg"};
+            return key == draft_flag() || std::find(std::begin(global), std::end(global), key) != std::end(global);
+        };
         // --timings, on any command: how long each phase took, to standard error at exit.
         if (a.has("timings")) timings::enable();
         if (a.has("search-every-wave")) set_rope_search_every_wave(true); // the rope's search through every wave
@@ -4475,7 +4440,7 @@ int main(int argc, char** argv)
             const auto known = documented_options(a.command == "sieve" ? "sift" : a.command);
             if (!known.empty())
                 for (const auto& [key, value] : a.opts)
-                    if (key != "timings" && key != "filter-memory" && key != "merge-cache" && key != "unit-time" && key != "ffmpeg" && std::find(known.begin(), known.end(), key) == known.end())
+                    if (!is_global_option(key) && std::find(known.begin(), known.end(), key) == known.end())
                         std::cerr << "warning: --" << key << " is not an option of 'sieve " << a.command << "' (see: sieve help " << a.command
                                   << "); ignored\n";
         }

@@ -36,9 +36,12 @@
 
 #include "sieve/sha256.hpp"
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <istream>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -54,6 +57,13 @@ std::vector<uint32_t> quantise(const std::vector<uint64_t>& counts);
 // One tensor's values coded under a table, and back (n values).
 std::vector<uint32_t> encode(const std::vector<uint16_t>& values, const std::vector<uint32_t>& freq);
 std::vector<uint16_t> decode(const std::vector<uint32_t>& words, const std::vector<uint32_t>& freq, uint64_t n);
+// The same handed to `sink` a piece at a time, kDecodePiece values each (the last fewer), so the
+// values are never held whole: n comes from the file, and a stream of two words under a table of
+// one value can claim any number of them. The stream is checked to end where its values do (and
+// a fault thrown) after the last piece is handed over; decode is this with the pieces gathered.
+inline constexpr size_t kDecodePiece = size_t(1) << 20;
+void decode_pieces(const std::vector<uint32_t>& words, const std::vector<uint32_t>& freq, uint64_t n,
+                   const std::function<void(std::span<const uint16_t>)>& sink);
 
 // A kind's name: the tensor's name with its layer number taken out.
 std::string kind_of(const std::string& name);

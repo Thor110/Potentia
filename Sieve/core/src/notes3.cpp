@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <map>
 #include <stdexcept>
 
 namespace sieve {
@@ -180,7 +179,7 @@ Notes3CanonResult canonicalise_notes3(std::string_view text, const Notes3Set& se
     std::vector<std::vector<uint32_t>> voices(set.voices);
     const uint32_t default_level = set.default_level();
     // An event longer than the longest becomes the event and rests (below); one asking for more
-    // than this many of them is refused rather than filling memory.
+    // than this many of them is refused rather than filling memory, and so is a voice.
     constexpr uint64_t kMostSplits = uint64_t(1) << 24;
     for (size_t v = 0; v < parts.size(); ++v)
     {
@@ -267,6 +266,9 @@ Notes3CanonResult canonicalise_notes3(std::string_view text, const Notes3Set& se
             if ((left + set.longest - 1) / set.longest > kMostSplits)
                 throw std::invalid_argument("the event '" + tok + "' is " + std::to_string(left) + " ticks: more than " + std::to_string(kMostSplits) +
                                             " of the longest length (" + std::to_string(set.longest) + " ticks)");
+            if ((left + set.longest - 1) / set.longest > kMostSplits - voices[v].size())
+                throw std::invalid_argument("voice " + std::to_string(v + 1) + " is more than " + std::to_string(kMostSplits) +
+                                            " of the longest length (" + std::to_string(set.longest) + " ticks) long, at the event '" + tok + "'");
             while (left > 0)
             {
                 const uint32_t t = uint32_t(std::min<uint64_t>(left, set.longest));
@@ -387,121 +389,10 @@ std::string notes3_to_midi(const Notes3Set& set, const std::vector<uint32_t>& di
 
 std::string midi_to_notes3(const std::vector<uint8_t>& m, const Notes3Set& set, std::vector<std::string>* report)
 {
-    size_t at = 0;
-    auto need = [&](size_t n) {
-        if (at + n > m.size()) throw std::invalid_argument("the MIDI file ends too soon");
-    };
-    auto u32 = [&] {
-        need(4);
-        const uint32_t v = uint32_t(m[at]) << 24 | uint32_t(m[at + 1]) << 16 | uint32_t(m[at + 2]) << 8 | m[at + 3];
-        at += 4;
-        return v;
-    };
-    auto u16 = [&] {
-        need(2);
-        const uint32_t v = uint32_t(m[at]) << 8 | m[at + 1];
-        at += 2;
-        return v;
-    };
-    need(4);
-    if (!(m[0] == 'M' && m[1] == 'T' && m[2] == 'h' && m[3] == 'd')) throw std::invalid_argument("not a MIDI file (no MThd)");
-    at = 4;
-    const uint32_t header = u32();
-    if (header < 6) throw std::invalid_argument("the MIDI header is too short");
-    (void)u16();
-    const uint32_t tracks = u16(), division = u16();
-    if (division & 0x8000) throw std::invalid_argument("MIDI timed in SMPTE frames is not read");
-    if (division == 0) throw std::invalid_argument("the MIDI file has no ticks per quarter note");
-    at = 8 + header;
-    struct Note
-    {
-        uint64_t start, end;
-        uint32_t pitch, velocity;
-    };
-    std::vector<std::vector<Note>> voices;
-    std::vector<uint64_t> ends;
-    for (uint32_t t = 0; t < tracks && at < m.size(); ++t)
-    {
-        need(8);
-        const bool track = m[at] == 'M' && m[at + 1] == 'T' && m[at + 2] == 'r' && m[at + 3] == 'k';
-        at += 4;
-        const uint32_t len = u32();
-        need(len);
-        const size_t stop = at + len;
-        if (!track)
-        {
-            at = stop;
-            continue;
-        }
-        std::vector<Note> notes;
-        std::map<uint32_t, std::pair<uint64_t, uint32_t>> open; // channel << 8 | pitch -> start, velocity
-        uint64_t now = 0;
-        uint8_t status = 0;
-        auto vlq = [&] {
-            uint64_t v = 0;
-            for (int i = 0; i < 4; ++i)
-            {
-                if (at >= stop) throw std::invalid_argument("a MIDI track ends inside an event");
-                const uint8_t b = m[at++];
-                v = v << 7 | (b & 0x7F);
-                if (!(b & 0x80)) return v;
-            }
-            throw std::invalid_argument("a MIDI delta time is too long");
-        };
-        while (at < stop)
-        {
-            now += vlq();
-            if (at >= stop) break;
-            const uint8_t b = m[at];
-            if (b == 0xFF)
-            {
-                at += 2;
-                if (at > stop) throw std::invalid_argument("a MIDI track ends inside an event");
-                const uint8_t type = m[at - 1];
-                const uint64_t n = vlq();
-                at += size_t(n);
-                if (type == 0x2F) break;
-                continue;
-            }
-            if (b == 0xF0 || b == 0xF7)
-            {
-                ++at;
-                at += size_t(vlq());
-                continue;
-            }
-            if (b & 0x80)
-            {
-                status = b;
-                ++at;
-            }
-            else if (!status) throw std::invalid_argument("a MIDI event with no status");
-            const uint32_t kind = status & 0xF0u, ch = status & 0x0Fu;
-            const size_t data = kind == 0xC0 || kind == 0xD0 ? 1 : 2;
-            if (at + data > stop) throw std::invalid_argument("a MIDI track ends inside an event");
-            const uint32_t d1 = m[at], d2 = data == 2 ? uint32_t(m[at + 1]) : 0u;
-            at += data;
-            const uint32_t key = ch << 8 | d1;
-            if (kind == 0x90 && d2 > 0)
-            {
-                if (auto it = open.find(key); it != open.end()) notes.push_back({it->second.first, now, d1, it->second.second});
-                open[key] = {now, d2};
-            }
-            else if (kind == 0x80 || kind == 0x90)
-            {
-                if (auto it = open.find(key); it != open.end())
-                {
-                    notes.push_back({it->second.first, now, d1, it->second.second});
-                    open.erase(it);
-                }
-            }
-        }
-        for (const auto& [key, sv] : open) notes.push_back({sv.first, now, key & 0xFF, sv.second});
-        at = stop;
-        if (notes.empty() && now == 0) continue;
-        std::stable_sort(notes.begin(), notes.end(), [](const Note& a, const Note& b) { return a.start < b.start; });
-        voices.push_back(std::move(notes));
-        ends.push_back(now);
-    }
+    const MidiRead read = read_midi(m);
+    const uint32_t division = read.division;
+    const std::vector<std::vector<MidiNote>>& voices = read.voices;
+    const std::vector<uint64_t>& ends = read.ends;
     if (voices.empty()) throw std::invalid_argument("the MIDI file has no notes, and no length");
     // The file's ticks as the set's: round(ticks x TPQ / division), half up.
     auto grid = [&](uint64_t ticks) { return (ticks * set.tpq * 2 + division) / (2 * uint64_t(division)); };
@@ -529,7 +420,7 @@ std::string midi_to_notes3(const std::vector<uint8_t>& m, const Notes3Set& set, 
             v += token;
         };
         uint64_t cur = 0;
-        for (const Note& n : voices[vi])
+        for (const MidiNote& n : voices[vi])
         {
             uint64_t s = grid(n.start), e = grid(n.end);
             if (s < cur)

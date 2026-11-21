@@ -120,6 +120,12 @@ PcmCanoniser::PcmCanoniser(const PcmFormat& target, uint32_t length, uint32_t so
 {
     if (length == 0) throw std::invalid_argument("a unit must hold at least one sample");
     if (source_rate == 0 || source_channels == 0) throw std::invalid_argument("the sound has no rate or no channels");
+    // Each source sample makes rate / source rate samples, all held until finish(): a ratio past this
+    // (8 kHz to 192 kHz is 24) is refused, so a small file claiming a rate of 1 Hz cannot fill memory.
+    if (uint64_t(f_.rate) > kPcmMostUpsampling * uint64_t(source_rate))
+        throw std::invalid_argument("the sound's rate (" + std::to_string(source_rate) + " a second) is too low for this line (" +
+                                    std::to_string(f_.rate) + " a second): a line's rate may be at most " + std::to_string(kPcmMostUpsampling) +
+                                    " times the sound's");
     // A target sample spans R_src units of 1/(R_src x R) seconds, a source sample R of them; both
     // divided by their greatest common divisor.
     const uint64_t g = std::gcd(uint64_t(source_rate), uint64_t(f_.rate));

@@ -1781,7 +1781,7 @@ const PersonalWorld::OwnModel& PersonalWorld::own_model(const std::string& sha) 
                 const auto mesh = read_obj(in, "objects/" + sha + ".sieve: " + obj->first, [&](const std::string& lib) {
                     const auto l = text.find(sieve::u8(sieve::from_u8(lib).filename()));
                     return l == text.end() ? std::string() : l->second;
-                });
+                }, kOwnModelTriangles); // (read no further than one past the limit: refused all the same)
                 if (!mesh) m.why = "no faces";
                 else if (mesh->tris.size() > kOwnModelTriangles) m.why = "more than " + std::to_string(kOwnModelTriangles) + " triangles";
                 else m.mesh = stood(*mesh), m.name = obj->first;
@@ -1856,7 +1856,9 @@ bool PersonalWorld::import_model(const std::string& path)
     {
         // Read as it will be drawn before it is kept: a file with no faces, or too many, is refused here.
         std::istringstream in(obj);
-        const auto mesh = read_obj(in, obj_name, [&](const std::string& lib) { return sieve::from_u8(lib).filename() == sieve::from_u8(mtl_name).filename() ? mtl : std::string(); });
+        const auto mesh = read_obj(
+            in, obj_name, [&](const std::string& lib) { return sieve::from_u8(lib).filename() == sieve::from_u8(mtl_name).filename() ? mtl : std::string(); },
+            kOwnModelTriangles); // (read no further than one past the limit: refused all the same)
         const std::string why = !mesh ? "no faces" : mesh->tris.size() > kOwnModelTriangles ? "more than " + std::to_string(kOwnModelTriangles) + " triangles" : "";
         if (!why.empty())
         {

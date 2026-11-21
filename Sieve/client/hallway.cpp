@@ -16,14 +16,40 @@
 #include "cli/timings.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <future>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace hallway::hall {
+
+namespace {
+
+// `work` on `n` threads, this one among them, every one joined before it returns. Should a thread
+// fail to start, those already started are joined before the failure is passed on (a std::thread
+// destroyed while it can still be joined ends the program).
+template <class Work> void work_on_threads(unsigned n, const Work& work)
+{
+    std::vector<std::thread> threads;
+    try
+    {
+        threads.reserve(n);
+        for (unsigned t = 1; t < n; ++t) threads.emplace_back(work);
+    }
+    catch (...)
+    {
+        for (auto& t : threads) t.join();
+        throw;
+    }
+    work();
+    for (auto& t : threads) t.join();
+}
+
+} // namespace
 
 Hallway::Hallway(SDL_Window* window, SDL_Renderer* renderer, std::vector<Line> lines, const FilterConfig& filters, uint32_t book_pages,
         ModelShape shape)
@@ -660,12 +686,19 @@ const Hallway::Book& Hallway::book(int64_t dt, uint32_t slot)
             at >>= shift, all >>= shift;
             b.fraction = all.is_zero() ? 0.0 : std::stod(at.to_decimal()) / std::stod(all.to_decimal());
             if (!stack().empty())
-                if (const auto u = sh.unit(b.index))
+            {
+                std::optional<int> fail;
+                // Judged ahead with the rest of the view (judge_listed_ahead), or now.
+                const auto ahead = listed_ahead_gen_ == room_gen_ ? listed_ahead_.find(key) : listed_ahead_.end();
+                if (ahead != listed_ahead_.end() && ahead->second.first == b.index) fail = ahead->second.second;
+                else if (const auto u = sh.unit(b.index)) fail = stack().first_failure_at(*u, b.index, sh.size()); // (a degree window judges by place)
+                if (ahead != listed_ahead_.end()) listed_ahead_.erase(ahead);
+                if (fail)
                 {
-                    const int fail = stack().first_failure_at(*u, b.index, sh.size()); // (a degree window judges by place)
-                    b.passes = fail < 0;
-                    if (!b.passes) b.failed_by = stack().filter_name(size_t(fail));
+                    b.passes = *fail < 0;
+                    if (!b.passes) b.failed_by = stack().filter_name(size_t(*fail));
                 }
+            }
         }
         else if (on_books())
         {
@@ -2280,6 +2313,8 @@ void Hallway::render()
         return;
     }
 
+    // A listed line under its filters: the items in view judged side by side before any is drawn.
+    judge_listed_ahead();
     // Nothing stands on the binary line's shelves, so there is nothing to look at or take.
     {
         const FaceRect& rect = face_rect(); // the item's front as its model has it
@@ -2854,7 +2889,6 @@ void Hallway::draw_face_image(SDL_Texture* tex, const Vec3 quad[4], std::vector<
 
 Hallway::~Hallway()
 {
-    if (listed_tex_) SDL_DestroyTexture(listed_tex_);
     stop_tailoring(); // stopped at its next setting tried
     if (vla_thread_.joinable()) vla_thread_.join(); // a unit's shortest route: seconds at most
     stop_vault_ahead();
@@ -2872,6 +2906,12 @@ void Hallway::release_textures()
     models_batch_.release();
     clear_faces();
     release_signs();
+    if (listed_tex_)
+    {
+        gpu::destroy(listed_tex_);
+        listed_tex_ = nullptr;
+    }
+    listed_tex_key_.clear(); // so the held item's picture is made again on the next frame
     if (view_tex_)
     {
         gpu::destroy(view_tex_);
@@ -3431,13 +3471,64 @@ void Hallway::find_room_files()
             }
             catch (...) {} // left to book(), which says why
     };
-    const unsigned n = std::max(1u, std::min<unsigned>(std::thread::hardware_concurrency(), unsigned(todo.size())));
-    std::vector<std::thread> threads;
-    for (unsigned t = 1; t < n; ++t) threads.emplace_back(work);
-    work();
-    for (auto& t : threads) t.join();
+    work_on_threads(std::max(1u, std::min<unsigned>(std::thread::hardware_concurrency(), unsigned(todo.size()))), work);
     for (size_t i = 0; i < todo.size(); ++i)
         if (ok[i]) found_.emplace(todo[i].first, std::move(out[i]));
+}
+
+void Hallway::judge_listed_ahead()
+{
+    if (listed_ahead_gen_ != room_gen_) listed_ahead_.clear();
+    listed_ahead_gen_ = room_gen_;
+    if (!on_listed() || stack().empty()) return;
+    // Only where a frame asks each item in view whether it passes (render's edge and model loops).
+    const FilterMode fm = effective_mode();
+    if (fm != FilterMode::Mark && fm != FilterMode::Hide && fm != FilterMode::Excluded) return;
+    sieve::cli::timings::Scope timed("hallway.walk.judge"); // the items in view, side by side
+    // The items in view that book() has not worked out yet, each with its place on the line: no
+    // more than the cache has room for (with those already judged and waiting), since book() clears
+    // a cache that overflows and the verdicts with it. Your own room first, then outwards.
+    const size_t kept = cache_.size() + listed_ahead_.size(), room = kept < cached_units() ? cached_units() - kept : 0;
+    std::vector<std::pair<int64_t, BigUint>> todo;
+    const int back = view_rooms();
+    for (int d = 0; d <= back && todo.size() < room; ++d)
+        for (int side = 0; side < (d == 0 ? 1 : 2); ++side) // (the room you stand in once, the others either side)
+        {
+            const int t = side == 0 ? d : -d;
+            if (thin() && t != 0) continue; // (book() leaves them bare)
+            const Vec3 shift{0, 0, t * kTile};
+            if (!cam_.box_visible(tile_lo_ + shift, tile_hi_ + shift)) continue;
+            const uint32_t books = books_in_tile(t);
+            for (uint32_t slot = 0; slot < books && todo.size() < room; ++slot)
+            {
+                const int64_t key = int64_t(t) * int64_t(sieve::books_per_tile()) + slot;
+                if (cache_.count(key) || listed_ahead_.count(key)) continue;
+                if (const auto idx = t == 0 ? room_unit(slot) : loop_.unit_index(offset_loop_tile(t), slot)) todo.emplace_back(key, *idx);
+            }
+        }
+    if (todo.size() < 2) return; // (one is judged as quickly by book())
+    const ListedShelf& sh = listed_shelf();
+    const FilterStack& st = stack();
+    const BigUint places = sh.size();
+    std::vector<int> fail(todo.size(), 0);
+    std::vector<char> ok(todo.size(), 0);
+    std::atomic<size_t> next{0};
+    auto work = [&] {
+        for (size_t i; (i = next++) < todo.size();)
+            try
+            {
+                // (an item its filters never judge, the index or a known fractal, is left to book())
+                if (const auto u = sh.unit(todo[i].second))
+                {
+                    fail[i] = st.first_failure_at(*u, todo[i].second, places);
+                    ok[i] = 1;
+                }
+            }
+            catch (...) {} // left to book(), which says why
+    };
+    work_on_threads(std::max(1u, std::min<unsigned>(std::thread::hardware_concurrency(), unsigned(todo.size()))), work);
+    for (size_t i = 0; i < todo.size(); ++i)
+        if (ok[i]) listed_ahead_.emplace(todo[i].first, std::make_pair(std::move(todo[i].second), fail[i]));
 }
 
 void Hallway::warm_room()

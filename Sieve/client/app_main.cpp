@@ -2374,7 +2374,7 @@ int run(const Args& a)
         std::cout << "saved " << a.get("screenshot") << "\n";
         // The keys along its foot, said once one of the hallway's keys is changed (IDEAS 19.199), so a check
         // can see the footer name the key as set; with the defaults the readout is as it was.
-        if (Hallway::keys_changed()) std::cout << "keys footer: " << hall->keys_footer() << "\n";
+        if (hallway::Keys::get().changed_in("hallway")) std::cout << "keys footer: " << hall->keys_footer() << "\n";
         // How the characters standing in the hallway were drawn (IDEAS 19.214), said only where not shaded.
         if (const std::string t = hall->drawing_report(); !t.empty()) std::cout << "characters: " << t << "\n";
         if (a.has("rings") || hall->rings_open()) std::cout << "rings: " << hall->rings_report() << "\n";
@@ -2987,6 +2987,7 @@ int run(const Args& a)
                     hall->set_model_files(app.text_model, app.picture_model); // the AI rows' model files
                     hall->set_model_cache(app.model_cache_mb);
                     hall->set_graphics_memory(app.graphics_memory_gb);
+                    hall->set_angle_decimals(app.angle_decimals); // the ANGLE PRECISION row, for the compass and bearings
                     SDL_SetWindowRelativeMouseMode(window, !hall->back_from_menu());
                     continue;
                 }

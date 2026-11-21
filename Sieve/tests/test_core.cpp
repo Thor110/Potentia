@@ -141,6 +141,56 @@ void test_sha256()
     CHECK(Sha256::hex(Sha256::hash(std::string(119, 'x'))) == "000b48d4edf0fa7bee3c6236ecd2785baa5db4eeb8bb54341b029e0d9fa5fb0c");
     CHECK(Sha256::hex(Sha256::hash(std::string(120, 'x'))) == "13f05a0b594787f5ecd315edc96141bd3243203d1b7d4f0836f37308b276ba98");
     CHECK(Sha256::hex(Sha256::hash(std::string(128, 'x'))) == "24da1b81d0b16df6428eee73c69fcb2a93c76bc6df706f0c6670fe6bfe800464");
+// Review 5, T1: append to the end of test_sha256() in tests/test_core.cpp (it needs <random>,
+// which the file already includes). main() now runs the suite once, on the default path, so this
+// block is what keeps the two SHA-256 paths checked against each other. Merge it together with the
+// main() change, never the main() change alone.
+
+    // The portable and hardware paths agree: random lengths from 0 to 4,000 bytes, a few MB, and
+    // random split points between updates (each digest made on both paths and compared). Where
+    // the CPU has no SHA instructions both sides take the portable path, and the block still runs.
+    {
+        const bool was = Sha256::using_hardware();
+        std::mt19937_64 rng(256);
+        auto digest = [](bool hardware, const std::string& data, const std::vector<size_t>& cuts) {
+            Sha256::use_hardware(hardware);
+            Sha256 s;
+            size_t at = 0;
+            for (size_t cut : cuts)
+            {
+                s.update(std::string_view(data).substr(at, cut - at));
+                at = cut;
+            }
+            s.update(std::string_view(data).substr(at));
+            return s.finish();
+        };
+        bool same = true;
+        for (int t = 0; t < 600; ++t)
+        {
+            const size_t n = t < 200 ? size_t(t) : size_t(rng() % 4001);
+            std::string data(n, '\0');
+            for (char& c : data) c = char(rng());
+            std::vector<size_t> cuts;
+            if (n > 0)
+            {
+                const size_t k = rng() % 6;
+                for (size_t i = 0; i < k; ++i) cuts.push_back(rng() % (n + 1));
+                std::sort(cuts.begin(), cuts.end());
+            }
+            same = same && digest(false, data, cuts) == digest(true, data, cuts);
+        }
+        std::string big(3 * 1024 * 1024 + 17, '\0');
+        for (char& c : big) c = char(rng());
+        same = same && digest(false, big, {}) == digest(true, big, {});
+        same = same && digest(false, big, {1, 63, 64, 1000001}) == digest(true, big, {1, 63, 64, 1000001});
+        CHECK(same);
+        // The fixed vectors above ran on the default path; the million 'a's on the other path too.
+        Sha256::use_hardware(!was);
+        CHECK(Sha256::hex(Sha256::hash(million)) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+        CHECK(Sha256::hex(Sha256::hash(std::string(119, 'x'))) == "000b48d4edf0fa7bee3c6236ecd2785baa5db4eeb8bb54341b029e0d9fa5fb0c");
+        Sha256::use_hardware(was);
+        CHECK(Sha256::using_hardware() == was);
+    }
 }
 
 void test_utf8()
@@ -7519,9 +7569,9 @@ void test_filter_memory(const std::string& dir)
         set_merge_cache_share(kDefaultMergeCacheShare);
     }
     // not-written-v1's automaton walks as many states as the filter memory holds: refused in 1 MB,
-    // made again (not the refusal kept) once there is more. Rules are kept for the process and the
-    // suite runs twice (portable and hardware SHA-256), so each run asks for readings not asked
-    // for before; a rule that was made is kept whatever the memory later is.
+    // made again (not the refusal kept) once there is more. Rules are kept for the process, so
+    // should this part run more than once in a process, each run asks for readings not asked for
+    // before; a rule that was made is kept whatever the memory later is.
     {
         static int run = 0;
         const Alphabet& a = alphabet_of("ascii96");
@@ -10611,6 +10661,700 @@ std::string g_part;
 std::vector<std::string> g_only;
 bool g_list = false;
 
+
+// ---- Review 5 (21 November 2026): tests for its fixes ----
+
+// Review 5, group core-math: tests to merge into tests/test_core.cpp (uses small_model(), throws(),
+// CHECK and alphabet_by_id as that file has them; place after small_model()).
+
+// R5-ARITH-1: CharModel::train refuses a base^order too large for its keys before counting
+// anything, and its sparse counting keeps the very models the dense counting made. The pinned
+// hashes were taken from the build before the change.
+void test_model_train_sparse()
+{
+    auto train = [](uint32_t base, uint32_t order, size_t n) {
+        std::vector<uint32_t> s(n);
+        for (size_t i = 0; i < n; ++i) s[i] = uint32_t((i * 7 + i / 3) % base);
+        ModelParams p{"x", base, order, 1, std::nullopt, "test"};
+        return CharModel::train(s, p);
+    };
+    // The key room: finish()'s rule is N^order <= 2^60, so that every key (a value below N^order,
+    // times 16, plus the length) stays below 2^64. 32^12 = 2^60 is the last that fits at order 12.
+    CHECK(!throws([&] { (void)train(256, 7, 1000); }));
+    CHECK(throws([&] { (void)train(256, 8, 1000); }));
+    CHECK(throws([&] { (void)train(256, 9, 1000); }));
+    CHECK(throws([&] { (void)train(95, 12, 1000); }));
+    CHECK(!throws([&] { (void)train(32, 12, 1000); }));
+    CHECK(throws([&] { (void)train(33, 12, 1000); }));
+    // Refused at once, not after counting: a long stream at base 256, order 9 would take
+    // gigabytes before finish() saw the settings (this test would then run for many seconds).
+    CHECK(throws([&] { (void)train(256, 9, 2000000); }));
+    {
+        bool invalid = false;
+        try { (void)train(256, 9, 10); } catch (const std::invalid_argument&) { invalid = true; } catch (...) {}
+        CHECK(invalid);
+    }
+
+    // The same models as before the counting was made sparse (hashes from the dense version).
+    CHECK(small_model()->sha256() == "b8babdfe22380639aea915c8957c42f76ca2be378cdfe6017c998eb7c31bea28");
+    CHECK(small_model()->context_count() == 87);
+    CHECK(small_model(5, 1)->sha256() == "7f12b62e6b1374c659d702986cdddc62b33388421ea6de30696beeb4934849ae");
+    CHECK(small_model(5, 1)->context_count() == 398);
+    {
+        std::vector<uint32_t> s;
+        uint32_t x = 12345;
+        for (int i = 0; i < 5000; ++i)
+        {
+            x = x * 1103515245u + 12345u;
+            s.push_back((x >> 16) % ((i % 3) ? 16u : 256u));
+        }
+        const ModelParams p{"bytes", 256, 3, 2, std::nullopt, "lcg"};
+        const CharModel m = CharModel::train(s, p);
+        CHECK(m.sha256() == "efc55e73c02e6d03cb3a9d2b571d87ab3129918217f12d4b34eae7cf4b3215a2");
+        CHECK(m.context_count() == 1092);
+        // And it reads back as the same model.
+        CHECK(CharModel::parse(m.serialise()).sha256() == m.sha256());
+    }
+}
+
+// R5-ARITH-3: GuidedLine::interval adds width * cum[s] in place (add_mul_small) rather than through
+// a copy; the codes must not move. Pinned from the build before the change.
+void test_guided_code_pinned()
+{
+    const auto m = small_model();
+    const Alphabet& a = alphabet_by_id("lower27");
+    const GuidedLine g(m, 40);
+    std::vector<uint32_t> d;
+    for (char c : std::string("it was the best of times it was the wors")) d.push_back(*a.digit_of(char32_t(c)));
+    const auto c = g.code(d);
+    CHECK(c.hex == "8ceded1c");
+    CHECK(c.bits == 30);
+    CHECK(g.unit_at(c.point) == d);
+}
+
+
+// Review 5, group core-misc: tests for the fixes in importers.cpp, jpeg_dc.cpp, weights.cpp and
+// cipher.cpp. Each block is a function body in the style of tests/test_core.cpp (CHECK, throws).
+// Needs: <chrono>, <cstring>, <random>, <sstream>, <string>, <vector>; sieve/importers.hpp,
+// sieve/jpeg_dc.hpp, sieve/weights.hpp, sieve/safetensors.hpp, sieve/cipher.hpp, sieve/json.hpp.
+
+// ---- gltf-sparse-overflow and gltf-amplification (put in the glTF tests, or a function of its own) ----
+void test_gltf_roofs()
+{
+    // A data: buffer of 64 bytes whose first word is 100,000: the sparse index of the accessors below.
+    const std::string buffer = "{\"byteLength\":64,\"uri\":\"data:application/octet-stream;base64,"
+                               "oIYBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"}";
+    const std::string sparse = "\"sparse\":{\"count\":1,\"indices\":{\"bufferView\":0,\"componentType\":5125},\"values\":{\"bufferView\":0,\"byteOffset\":4}}";
+    // A count that wraps round when multiplied by 3 (to a vector of two floats), with no buffer view
+    // and a sparse index past the two: it wrote past the end of the heap. Now refused.
+    const std::string wrap = "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[" + buffer + "],\"bufferViews\":[{\"buffer\":0,\"byteLength\":64}],"
+                             "\"accessors\":[{\"type\":\"VEC3\",\"componentType\":5126,\"count\":6148914691236517206," + sparse + "}],"
+                             "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    CHECK(throws([&] { (void)read_model(wrap); }));
+    // The same accessor as an animation's key times (not a mesh's positions, so the roof on vertices
+    // does not stand in front of it): the roof on an accessor's count refuses it.
+    const std::string anim = "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[" + buffer + "],\"bufferViews\":[{\"buffer\":0,\"byteLength\":64}],"
+                             "\"accessors\":[{\"type\":\"SCALAR\",\"componentType\":5126,\"count\":6148914691236517206," + sparse + "},"
+                             "{\"type\":\"VEC4\",\"componentType\":5126,\"count\":1,\"bufferView\":0}],"
+                             "\"nodes\":[{}],\"skins\":[{\"joints\":[0]}],"
+                             "\"animations\":[{\"samplers\":[{\"input\":0,\"output\":1}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":0,\"path\":\"rotation\"}}]}]}";
+    bool said = false;
+    try { (void)read_model(anim); } catch (const std::exception& e) { said = std::string(e.what()).find("too many elements") != std::string::npos; }
+    CHECK(said);
+    // Zeros with no buffer view are held to a roof in all: a count just under 2^32 of VEC4s (64 GiB
+    // of floats) is refused before the memory is asked for.
+    const std::string zeros = "{\"asset\":{\"version\":\"2.0\"},\"accessors\":[{\"type\":\"VEC4\",\"componentType\":5126,\"count\":4294967295},"
+                              "{\"type\":\"VEC4\",\"componentType\":5126,\"count\":1}],"
+                              "\"nodes\":[{}],\"skins\":[{\"joints\":[0]}],"
+                              "\"animations\":[{\"samplers\":[{\"input\":1,\"output\":0}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":0,\"path\":\"rotation\"}}]}]}";
+    CHECK(throws([&] { (void)read_model(zeros); }));
+    // A mesh's positions past the roof on vertices are refused before they are read.
+    const std::string many = "{\"asset\":{\"version\":\"2.0\"},\"accessors\":[{\"type\":\"VEC3\",\"componentType\":5126,\"count\":201326593}],"
+                             "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    said = false;
+    try { (void)read_model(many); } catch (const std::exception& e) { said = std::string(e.what()).find("vertices") != std::string::npos; }
+    CHECK(said);
+    // An index list longer than the roof on triangles allows is refused before it is made.
+    const std::string idx = "{\"asset\":{\"version\":\"2.0\"},\"accessors\":[{\"type\":\"VEC3\",\"componentType\":5126,\"count\":3},"
+                            "{\"type\":\"SCALAR\",\"componentType\":5125,\"count\":4000000000}],"
+                            "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1}]}]}";
+    said = false;
+    try { (void)read_model(idx); } catch (const std::exception& e) { said = std::string(e.what()).find("triangles") != std::string::npos; }
+    CHECK(said);
+
+    // Many animations of a skeleton of 64 joints: sampling is held to a roof (here the one on turns
+    // held, 2^22: 218 animations of 300 frames), the animations past it are named as not carried,
+    // and it ends in moments however many animations the file names.
+    {
+        // One key time (10 s) and one turn, in a buffer of 20 bytes.
+        std::string bin(20, '\0');
+        const float ten = 10.0f, q[4] = {0, 0, 0.70710678f, 0.70710678f};
+        std::memcpy(bin.data(), &ten, 4);
+        std::memcpy(bin.data() + 4, q, 16);
+        static const char kB64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string b64;
+        for (size_t i = 0; i < bin.size(); i += 3)
+        {
+            const uint32_t v = uint32_t(uint8_t(bin[i])) << 16 | (i + 1 < bin.size() ? uint32_t(uint8_t(bin[i + 1])) << 8 : 0) |
+                               (i + 2 < bin.size() ? uint32_t(uint8_t(bin[i + 2])) : 0);
+            b64 += kB64[v >> 18 & 63];
+            b64 += kB64[v >> 12 & 63];
+            b64 += i + 1 < bin.size() ? kB64[v >> 6 & 63] : '=';
+            b64 += i + 2 < bin.size() ? kB64[v & 63] : '=';
+        }
+        const size_t joints = 64, animations = 300;
+        std::string doc = "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"byteLength\":20,\"uri\":\"data:application/octet-stream;base64," + b64 +
+                          "\"}],\"bufferViews\":[{\"buffer\":0,\"byteLength\":20}],"
+                          "\"accessors\":[{\"type\":\"SCALAR\",\"componentType\":5126,\"count\":1,\"bufferView\":0},"
+                          "{\"type\":\"VEC4\",\"componentType\":5126,\"count\":1,\"bufferView\":0,\"byteOffset\":4}],\"nodes\":[";
+        std::string kids, list;
+        for (size_t i = 1; i < joints; ++i) kids += (i > 1 ? "," : "") + std::to_string(i);
+        for (size_t i = 0; i < joints; ++i) list += (i ? "," : "") + std::to_string(i);
+        doc += "{\"children\":[" + kids + "]}";
+        for (size_t i = 1; i < joints; ++i) doc += ",{}";
+        doc += "],\"skins\":[{\"joints\":[" + list + "]}],\"animations\":[";
+        for (size_t i = 0; i < animations; ++i)
+            doc += std::string(i ? "," : "") + "{\"samplers\":[{\"input\":0,\"output\":1}],\"channels\":[{\"sampler\":0,\"target\":{\"node\":0,\"path\":\"rotation\"}}]}";
+        doc += "]}";
+        const auto t0 = std::chrono::steady_clock::now();
+        const ImportedModel m = read_model(doc);
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(m.skeleton.size() == joints && m.sampled.size() == 218 && m.sampled[0].frames == 300);
+        bool named = false;
+        for (const std::string& l : m.left_out) named = named || l.find("not carried: together with those before") != std::string::npos;
+        CHECK(named);
+        CHECK(seconds < 10); // (about 1 s in a release build; generous for sanitiser builds)
+        // Every joint hangs from the root, so the last joint's turn is the root's quarter turn about z.
+        const auto& t = m.sampled[0].turns.back();
+        CHECK(std::abs(t[2] - 0.70710678) < 1e-6 && std::abs(t[3] - 0.70710678) < 1e-6);
+    }
+}
+
+// ---- jpeg-eighth-scan-bomb (add to test_jpeg_eighth) ----
+void test_jpeg_eighth_scan_bound()
+{
+    // A 65,535 by 65,535 frame whose three scans have no data at all, with a 1-bit DC code and a
+    // 1-bit end of block: every block decoded from the zeros after the data, 67 million blocks a scan.
+    // It took seconds and half a gigabyte; it is refused at once.
+    const std::vector<uint8_t> bomb = {
+        0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x26, 0x00, 0x01, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0xFF,
+        0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0xFF, 0xD9};
+    const auto t0 = std::chrono::steady_clock::now();
+    CHECK(!jpeg_eighth(bomb));
+    CHECK(std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() < 0.5);
+    // The same frame made small (8 by 8, one block) with one scan of one byte decodes as before:
+    // two bits are enough for a block, so one byte is not refused.
+    std::vector<uint8_t> small(bomb.begin(), bomb.begin() + 65);
+    small[7] = 0x00, small[8] = 0x08, small[9] = 0x00, small[10] = 0x08; // (height 8, width 8)
+    small.insert(small.end(), {0x00, 0xFF, 0xD9});                        // (one byte of data: DC 0, end of block)
+    const auto e = jpeg_eighth(small);
+    CHECK(e && e->eighth_w == 1 && e->eighth_h == 1 && e->rgba[0] == 128);
+}
+
+// ---- weights-unpack-memory (add to test_weights, beside "A whole file") ----
+void test_weights_unpack_pieces()
+{
+    // A tensor of more than 2^20 values (an embedding of 70,000 by 16) comes back the same across
+    // the pieces it is now put out in.
+    namespace sw = sieve::weights;
+    namespace st = sieve::safetensors;
+    auto tensors = st::llama_tensors(sieve::json::parse(R"({"model_type":"llama","hidden_size":16,"intermediate_size":32,"num_attention_heads":2,
+        "num_hidden_layers":1,"num_key_value_heads":1,"tie_word_embeddings":true,"torch_dtype":"bfloat16","vocab_size":70000})"));
+    std::vector<st::Tensor> laid;
+    std::string file = st::layout_start(std::vector<std::pair<std::string, std::string>>{{"format", "pt"}}, tensors, &laid);
+    std::mt19937 rng(12);
+    for (const st::Tensor& t : laid)
+        for (uint64_t i = 0; i < t.bytes(); i += 2)
+        {
+            const float x = float(std::normal_distribution<double>(0, 0.1)(rng));
+            uint32_t u;
+            std::memcpy(&u, &x, 4);
+            file.push_back(char((u >> 16) & 0xFF));
+            file.push_back(char(u >> 24));
+        }
+    CHECK(laid[0].elements() > (uint64_t(1) << 20));
+    std::istringstream in(file);
+    std::ostringstream packed;
+    (void)sw::pack(in, packed);
+    std::istringstream back(packed.str());
+    std::ostringstream rebuilt;
+    const sw::UnpackReport u = sw::unpack(back, rebuilt);
+    CHECK(rebuilt.str() == file && u.bytes == file.size() && Sha256::hex(u.sha256) == Sha256::hex(Sha256::hash(file)));
+}
+
+// ---- cipher-hex-key-dup (add to test_cipher_vectors, after the bad recipes) ----
+void test_cipher_hex_keys()
+{
+    using namespace sieve::cipher;
+    // The three hex-keyed layers share one reader: either case is read, the messages are as before,
+    // and the recipe text writes the key in lower case.
+    const Recipe h = Recipe::parse("xor 0A0b;vigenere-hex FF00;feistel-hex 01");
+    CHECK(h.text() == "sieve-cipher-v1\nxor 0a0b\nvigenere-hex ff00\nfeistel-hex 01\n");
+    auto message = [](const std::string& recipe) {
+        try { (void)Recipe::parse(recipe); } catch (const std::invalid_argument& e) { return std::string(e.what()); }
+        return std::string();
+    };
+    CHECK(message("xor 5") == "cipher-v1: xor needs a key of whole bytes in hex, not \"5\"");
+    CHECK(message("xor zz") == "cipher-v1: xor needs a key in hex, not \"zz\"");
+    CHECK(message("vigenere-hex") == "cipher-v1: vigenere-hex needs a key of whole bytes in hex, not \"\"");
+    CHECK(message("feistel-hex 0g") == "cipher-v1: feistel-hex needs a key in hex, not \"0g\"");
+}
+
+
+// Review 5, group "filters" (F1, F2, F3, F6, F7): tests in the style of tests/test_core.cpp.
+// Uses text_line, digits27 and TestResources from test_core.cpp; needs <filesystem>, <fstream>,
+// <random> and sieve/plugin.hpp, sieve/filter.hpp, sieve/dfa.hpp (all included there already).
+// test_review5_filters() is meant to be called from main() next to test_plugins(dir).
+
+void test_review5_filters()
+{
+    namespace fs = std::filesystem;
+    const TestResources none(nullptr, nullptr);
+    const fs::path root = fs::temp_directory_path() / ("sieve-review5-filters-" + std::to_string(std::random_device{}()));
+    fs::create_directories(root / "A");
+    fs::create_directories(root / "B");
+    auto write = [](const fs::path& p, const std::string& text) {
+        std::ofstream out(p, std::ios::binary | std::ios::trunc);
+        out << text;
+    };
+    auto folder = [](const fs::path& p) {
+        const std::u8string s = p.u8string();
+        return std::string(s.begin(), s.end());
+    };
+    const std::string head = "sieve-filter-v1\nid r5-list\nversion 1\nauthor x\norigin human\nlines text\nsymbols lower27\n";
+
+    // F1: the compiled-plugin cache is keyed by the hashes of the plugin's list files, so the same
+    // plugin in two folders takes each folder's own words, and an edited list is read again.
+    {
+        const std::string text = head + "tokens separator \" \"\nedges whole\nset w list:w.txt\nend\n";
+        const std::string sha = Sha256::hex(Sha256::hash(text));
+        write(root / "A" / "w.txt", "cat\n");
+        write(root / "B" / "w.txt", "dog\n");
+        const FilterLine l = text_line(3);
+        const auto a = make_plugin_filter(parse_plugin(text, sha, folder(root / "A")), l, {}, none);
+        const auto b = make_plugin_filter(parse_plugin(text, sha, folder(root / "B")), l, {}, none);
+        CHECK(a->passes(digits27("cat")) && !a->passes(digits27("dog")));
+        CHECK(b->passes(digits27("dog")) && !b->passes(digits27("cat")));
+        CHECK(a->provenance() != b->provenance()); // each names its own list's hash
+        // The list in A edited: the next build takes the new words, and says so in its provenance.
+        write(root / "A" / "w.txt", "dog\n");
+        const auto a2 = make_plugin_filter(parse_plugin(text, sha, folder(root / "A")), l, {}, none);
+        CHECK(a2->passes(digits27("dog")) && !a2->passes(digits27("cat")));
+        CHECK(a2->provenance() == b->provenance());
+        // A list that has gone: refused with the old message, never a kept automaton.
+        fs::remove(root / "A" / "w.txt");
+        bool refused = false;
+        try { (void)make_plugin_filter(parse_plugin(text, sha, folder(root / "A")), l, {}, none); }
+        catch (const std::invalid_argument& e) { refused = std::string(e.what()).find("cannot read the word list w.txt") != std::string::npos; }
+        CHECK(refused);
+    }
+
+    // F2: `within` sees the parameters as the table form does: range-checked, whole numbers only,
+    // choices by their place (v2), and the line's constants when built for a line.
+    {
+        write(root / "B" / "w.txt", "ab\n");
+        const std::string v1 = head + "param n int 2 1 3\ntokens separator \" \"\nedges whole\nset w list:w.txt\nwithin {n}\nend\n";
+        const auto p = parse_plugin(v1, "r5-within", folder(root / "B"));
+        CHECK(plugin_within(*p, {}) == 2);
+        CHECK(plugin_within(*p, {{"n", "3"}}) == 3);
+        auto refuses = [&](const FilterValues& v, const std::string& expect) {
+            try { (void)plugin_within(*p, v); }
+            catch (const std::invalid_argument& e) { return std::string(e.what()).find(expect) != std::string::npos; }
+            return false;
+        };
+        CHECK(refuses({{"n", "99"}}, "n must be 1..3"));
+        CHECK(refuses({{"n", "x"}}, "n must be a whole number, got 'x'"));
+        CHECK(refuses({{"n", ""}}, "n must be a whole number"));
+        const std::string v2head = "sieve-filter-v2\nid r5-within2\nversion 1\nauthor x\norigin human\nlines text\nsymbols lower27\n";
+        const auto c = parse_plugin(v2head + "param mode choice a a,b\ntokens separator \" \"\nedges whole\nset w list:w.txt\nwithin {mode + 2}\nend\n",
+                                    "r5-choice", folder(root / "B"));
+        CHECK(plugin_within(*c, {}) == 2);
+        CHECK(plugin_within(*c, {{"mode", "b"}}) == 3);
+        bool bad_choice = false;
+        try { (void)plugin_within(*c, {{"mode", "z"}}); }
+        catch (const std::invalid_argument& e) { bad_choice = std::string(e.what()).find("mode must be one of its choices") != std::string::npos; }
+        CHECK(bad_choice);
+        // BASE (27 on lower27) in `within`, on a filter made for the line.
+        const auto bp = parse_plugin(v2head + "tokens separator \" \"\nedges whole\nset w list:w.txt\nwithin {BASE - 25}\nend\n", "r5-base", folder(root / "B"));
+        const auto f = make_plugin_filter(bp, text_line(4), {}, none);
+        CHECK(f->passes(digits27("ab  ")));
+        CHECK(!f->passes(digits27("abab"))); // past the first 2 symbols, only SPACEs
+    }
+
+    // F3: a list or tags file must lie in the plugin's folder or under it.
+    {
+        auto parse_fails = [&](const std::string& src) {
+            try { (void)parse_plugin(head + "tokens separator \" \"\nedges whole\nset w " + src + "\nend\n", "r5-path", folder(root / "A")); }
+            catch (const std::invalid_argument& e) { return std::string(e.what()).find("must be a name in the plugin's folder") != std::string::npos; }
+            return false;
+        };
+        CHECK(parse_fails("list:../secret.txt"));
+        CHECK(parse_fails("list:sub/../../secret.txt"));
+        CHECK(parse_fails("list:sub\\..\\x.txt"));
+        CHECK(parse_fails("list:/etc/passwd"));
+        CHECK(parse_fails("list:\\x.txt"));
+        CHECK(parse_fails("list:C:/x.txt"));
+        CHECK(parse_fails("tags:a.tsv+../b.tsv:N"));
+        CHECK(parse_fails("tags:a.tsv++b.tsv:N")); // an empty name between the +s
+        // A subfolder, and names with dots that are not "..", are fine.
+        fs::create_directories(root / "A" / "sub");
+        write(root / "A" / "sub" / "w.txt", "cat\n");
+        const auto ok = parse_plugin(head + "tokens separator \" \"\nedges whole\nset w list:sub/w.txt\nend\n", "r5-sub", folder(root / "A"));
+        CHECK(make_plugin_filter(ok, text_line(3), {}, none)->passes(digits27("cat")));
+        CHECK(!parse_fails("list:w..txt"));
+        CHECK(!parse_fails("list:.hidden.txt"));
+    }
+
+    // F6: make_dfa_filter over a shared automaton keeps that automaton, not a copy.
+    {
+        Dfa d;
+        d.base = 2;
+        d.start = 0;
+        d.next = {0, 0};
+        d.accept = {1};
+        const auto kept = std::make_shared<const std::optional<Dfa>>(d);
+        const std::shared_ptr<const Dfa> alias(kept, &**kept);
+        const auto f = make_dfa_filter(alias, 8, "");
+        CHECK(plugin_dfa(*f) == &**kept);
+        CHECK(kept.use_count() >= 2); // the filter keeps the holder alive
+    }
+
+    // F7: symbol-entropy judges by the counts alone, the same whether it counts by a table (a small
+    // alphabet) or by sorting (a huge one): the same pattern of symbols on lower27 and on a line of
+    // the whole of Unicode gets the same verdict, at every setting tried (v2 sees min(base, L) = L
+    // on both, and no SPACE is used, so padding never comes in).
+    {
+        std::mt19937_64 rng(20261121);
+        const uint32_t L = 12;
+        const FilterLine small = text_line(L);
+        const FilterLine huge{"text", "r5-huge", 1114112, L, nullptr, 0, 0, 0};
+        bool same = true;
+        for (int setting = 0; setting < 20; ++setting)
+        {
+            const int64_t lo = int64_t(rng() % 1000), hi = lo + int64_t(rng() % 1500);
+            const FilterValues v1{{"min_millibits", std::to_string(lo * 4)}, {"max_millibits", std::to_string(hi * 4)}};
+            const FilterValues v2{{"min_permille", std::to_string(lo)}, {"max_permille", std::to_string(std::min<int64_t>(hi, 1000))}};
+            const auto a1 = find_filter("symbol-entropy-v1")->make(small, v1, none), b1 = find_filter("symbol-entropy-v1")->make(huge, v1, none);
+            const auto a2 = find_filter("symbol-entropy-v2")->make(small, v2, none), b2 = find_filter("symbol-entropy-v2")->make(huge, v2, none);
+            for (int i = 0; i < 200; ++i)
+            {
+                const uint32_t kinds = 1 + uint32_t(rng() % 12);
+                std::vector<uint32_t> u(L), w(L);
+                for (uint32_t k = 0; k < L; ++k)
+                {
+                    const uint32_t x = uint32_t(rng() % kinds);
+                    u[k] = 1 + x;              // letters a..l on lower27
+                    w[k] = 1000003 + x * 9973; // far apart, past any table on the huge line
+                }
+                same = same && a1->passes(u) == b1->passes(w) && a2->passes(u) == b2->passes(w);
+            }
+        }
+        CHECK(same);
+    }
+
+    std::error_code ec;
+    fs::remove_all(root, ec);
+}
+
+
+// Review 5, group "spaces": tests for S1, S2, S3, S4, S6 and S7. Each is a function body in the
+// style of tests/test_core.cpp (CHECK, throws); they need sieve/audio.hpp, sieve/notes3.hpp,
+// sieve/sound.hpp, sieve/aispace.hpp and sieve/modelspace.hpp, and <climits>, <cstdint>, <string>,
+// <vector>.
+
+// S1: canonicalise_notes3 refuses a voice longer than 2^24 of the longest length, not only an event.
+void test_notes3_voice_bound()
+{
+    const Notes3Set set = make_notes3_set(48, 72, 4, 4, 8, 1, 120, {0});
+    // Each "R:33554432" is 2^23 rests of the longest (4 ticks), allowed alone; two make 2^24,
+    // still allowed; one rest more is refused (before its digits are made).
+    CHECK(throws([&] { (void)canonicalise_notes3("R:33554432 R:33554432 R:4", set, 16); }));
+    CHECK(throws([&] { (void)canonicalise_notes3("R:33554432 R:33554432 R:33554432", set, 16); }));
+    // The refusal names the voice.
+    try
+    {
+        (void)canonicalise_notes3("C4q // R:33554432 R:33554432 R:4", make_notes3_set(48, 72, 4, 4, 8, 2, 120, {0}), 16);
+        CHECK(false);
+    }
+    catch (const std::invalid_argument& e)
+    {
+        CHECK(std::string(e.what()).find("voice 2") != std::string::npos);
+    }
+    // Ordinary notation is unchanged.
+    const Notes3CanonResult r = canonicalise_notes3("C4:3!5 R:9 E4q", set, 8);
+    CHECK(r.units.size() == 1 && r.events == 3 && r.lengths_split == 1);
+}
+
+// S2 and S7: a tiny MIDI file whose delta times run to 2^28 ticks is refused by midi_to_notation,
+// rather than written out as hundreds of megabytes of rests; the shared reader keeps velocities.
+void test_midi_read_bounds()
+{
+    // MThd (format 0, one track, 1 tick a quarter), then a track: a 2^28 - 1 tick delta, note on
+    // C4, note off, twice, and the end of the track.
+    std::vector<uint8_t> m = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, 0, 1};
+    const std::vector<uint8_t> body = {0xFF, 0xFF, 0xFF, 0x7F, 0x90, 60, 64, 0, 0x80, 60, 0,
+                                       0xFF, 0xFF, 0xFF, 0x7F, 0x90, 60, 64, 0, 0x80, 60, 0, 0, 0xFF, 0x2F, 0};
+    for (uint8_t b : {uint8_t('M'), uint8_t('T'), uint8_t('r'), uint8_t('k'), uint8_t(0), uint8_t(0), uint8_t(0), uint8_t(body.size())}) m.push_back(b);
+    m.insert(m.end(), body.begin(), body.end());
+    CHECK(throws([&] { (void)midi_to_notation(m, note_set_of("notes2/C3-C6/seEqQhHw/V1")); }));
+    CHECK(throws([&] { (void)midi_to_notation(m, note_set_of("notes104")); }));
+    // The reader itself takes it: two notes, at 2^28 - 1 and 2 x (2^28 - 1) ticks, velocity 64.
+    const MidiRead read = read_midi(m);
+    CHECK(read.division == 1 && read.voices.size() == 1 && read.voices[0].size() == 2);
+    CHECK(read.voices[0][0].start == 0x0FFFFFFFu && read.voices[0][0].velocity == 64 && read.voices[0][0].pitch == 60);
+    CHECK(read.ends[0] == 2 * uint64_t(0x0FFFFFFF));
+    // A file the line writes still reads back as the same music.
+    const NoteSet set = note_set_of("notes2/C3-C6/seEqQhHw/V1");
+    const NotesCanonResult r = canonicalise_notes2("C4q D4e. Rs E4h", set, 4);
+    const std::string file = notes_to_midi(set, r.units.front());
+    const std::string back = midi_to_notation(std::vector<uint8_t>(file.begin(), file.end()), set);
+    CHECK(canonicalise_notes2(back, set, 4).units.front() == r.units.front());
+    // And notes3 reads its velocities through the same reader.
+    const Notes3Set set3 = make_notes3_set(48, 72, 4, 16, 8, 1, 120, {0});
+    const Notes3CanonResult r3 = canonicalise_notes3("C4:3!5 R:2 E4:4!8", set3, 4);
+    const std::string file3 = notes3_to_midi(set3, r3.units.front());
+    const std::string back3 = midi_to_notes3(std::vector<uint8_t>(file3.begin(), file3.end()), set3);
+    CHECK(canonicalise_notes3(back3, set3, 4).units.front() == r3.units.front());
+}
+
+// S3: PcmCanoniser refuses a sound more than 64 times slower than the line, so a 2 KB WAV that
+// claims 1 Hz cannot become 96 million samples.
+void test_pcm_upsampling_bound()
+{
+    const PcmFormat f = make_pcm_format(48000, 16, 1);
+    CHECK(throws([&] { PcmCanoniser c(f, 4096, 1, 1); }));
+    CHECK(throws([&] { PcmCanoniser c(f, 4096, 749, 1); }));
+    CHECK(!throws([&] { PcmCanoniser c(f, 4096, 750, 1); })); // exactly 64 times
+    CHECK(!throws([&] { PcmCanoniser c(make_pcm_format(192000, 16, 2), 4096, 8000, 1); }));
+    // Downsampling has no bound (the vectors take 8000 Hz to 3 Hz).
+    CHECK(!throws([&] { PcmCanoniser c(make_pcm_format(1, 8, 1), 16, 48000, 2); }));
+}
+
+// S4: the AI line's address width is counted from its bits, and is the width 2^bits - 1 has in hex.
+void test_ai_hex_width()
+{
+    for (const AiShape shape : {AiShape{}, AiShape{1, 8, 2, 4}, AiShape{1, 8, 2, 1}, AiShape{1, 8, 2, 3}, AiShape{2, 16, 4, 7}})
+    {
+        const AiSpace space(shape, "sieve");
+        BigUint top = BigUint::pow(2, space.bits());
+        top -= BigUint(1);
+        CHECK(space.hex_width() == top.to_hex().size());
+        CHECK(space.hex_width() == size_t((space.bits() + 3) / 4));
+    }
+}
+
+// S6: an .obj face index past what 32 bits hold is the last index, so fit() clamps and counts it,
+// on every system; one before the first vertex is still left out.
+void test_obj_big_indices()
+{
+    const std::string head = "v 0 0 0\nv 1 0 0\nv 0 1 0\n";
+    auto face = [&](const std::string& f) { return ModelSpace::read_any_obj(head + "f " + f + "\n").faces; };
+    {
+        const auto faces = face("4294967297 2 3"); // once read as vertex 0 on Linux
+        CHECK(faces.size() == 1 && faces[0].a == UINT32_MAX && faces[0].b == 1 && faces[0].c == 2);
+    }
+    {
+        const auto faces = face("99999999999 3 1"); // once 1215752190 on Linux
+        CHECK(faces.size() == 1 && faces[0].a == UINT32_MAX);
+    }
+    {
+        const auto faces = face("99999999999999999999999 2 3"); // past 64 bits as well
+        CHECK(faces.size() == 1 && faces[0].a == UINT32_MAX);
+    }
+    {
+        const auto faces = face("2147483649 2 3"); // once left out on Windows (past a 32-bit long)
+        CHECK(faces.size() == 1 && faces[0].a == 2147483648u);
+    }
+    {
+        const auto faces = face("4294967296 2 3"); // the last index itself, as before
+        CHECK(faces.size() == 1 && faces[0].a == UINT32_MAX);
+    }
+    CHECK(face("-99999999999999999999999 2 3").empty()); // before the first vertex: left out, so no face
+    CHECK(face("-99999999999 2 3").empty());
+    CHECK(face("-1 1 +2").size() == 1 && face("-1 1 +2")[0].a == 2 && face("-1 1 +2")[0].c == 1); // as before
+    const ModelSpace space(3, 1, 2);
+    const ModelSpace::AnyMesh mesh = ModelSpace::read_any_obj(head + "f 4294967297 2 3\n");
+    CHECK(space.fit(mesh.verts, mesh.faces).indices_clamped == 1);
+}
+
+
+// Review 5, group "hallway". Tests only, for tests/test_core.cpp (needs <atomic> and <thread>).
+//
+// H5-1 (b) and T2: the hallway now judges a listed line's items in view on several threads at once
+// (Hallway::judge_listed_ahead), and every fractal shelf of one longest shares one FractalSpace,
+// read from the shelves' worker threads. Both rest on FractalSpace::at and FilterStack::first_failure_at
+// being safe to call side by side and giving the same answers as when called one after another.
+// This checks that on the start of the default space (v1) and on its end (v6's flows, the slow ones),
+// with the four fractal filters the hallway's FRACTALS line ticks.
+void test_fractal_judged_side_by_side()
+{
+    const FractalSpace space(kFractalSpaceLongestDefault);
+    FilterLine fl;
+    fl.kind = "fractals", fl.symbols_id = "fractals/" + std::to_string(space.longest()), fl.base = 128, fl.length = space.longest(),
+    fl.up_to_length = true;
+    static const TestResources none(nullptr, nullptr);
+    const FilterStack st(fl,
+                         {{find_filter("fractal-draws-v1"), {}},
+                          {find_filter("fractal-grows-v1"), {}},
+                          {find_filter("fractal-no-idle-v1"), {}},
+                          {find_filter("fractal-canonical-v1"), {}}},
+                         none);
+    // Forty places from the start and twelve from the end (v6 is last).
+    std::vector<BigUint> places;
+    for (uint64_t k = 0; k < 40; ++k) places.push_back(BigUint(k * 7919));
+    for (uint64_t k = 1; k <= 12; ++k)
+    {
+        BigUint p = space.count();
+        p -= BigUint(k * 13);
+        places.push_back(p);
+    }
+    // One after another.
+    std::vector<std::string> texts;
+    std::vector<int> serial;
+    for (const BigUint& p : places)
+    {
+        texts.push_back(space.at(p));
+        const std::vector<uint32_t> u(texts.back().begin(), texts.back().end());
+        serial.push_back(st.first_failure_at(u, p, space.count()));
+    }
+    // Side by side, as judge_listed_ahead does: each thread reads the ruleset from the shared space and judges it.
+    std::vector<std::string> got_text(places.size());
+    std::vector<int> got(places.size(), -2);
+    std::atomic<size_t> next{0};
+    auto work = [&] {
+        for (size_t i; (i = next++) < places.size();)
+        {
+            got_text[i] = space.at(places[i]);
+            const std::vector<uint32_t> u(got_text[i].begin(), got_text[i].end());
+            got[i] = st.first_failure_at(u, places[i], space.count());
+        }
+    };
+    std::vector<std::thread> threads;
+    for (int t = 0; t < 4; ++t) threads.emplace_back(work);
+    for (auto& t : threads) t.join();
+    CHECK(got_text == texts);
+    CHECK(got == serial);
+    // (the end of the space is v6's flows, which the slow filters judge by drawing them)
+    CHECK(texts.back().rfind("sieve-fractal-v6", 0) == 0);
+}
+
+
+// Review 5, group "packer": tests for tests/test_core.cpp.
+// Only R5-D1 can be checked from sieve_tests, which links sieve_core alone; the other fixes are in
+// tools/cli (vault.cpp, text_spans.cpp, pack.cpp, png_resave.cpp), which no test program links.
+
+// R5-D1: the one writer of Sieve's numbers (sieve/varint.hpp) writes the shortest form, which the
+// one reader reads back. Suggested place: test_rope_wave(), after the read_varint block.
+void test_varint_writer()
+{
+    auto written = [](uint64_t v) {
+        std::vector<uint8_t> b;
+        sieve::write_varint(b, v);
+        return b;
+    };
+    CHECK(written(0) == std::vector<uint8_t>{0x00});
+    CHECK(written(127) == std::vector<uint8_t>{0x7F});
+    CHECK((written(128) == std::vector<uint8_t>{0x80, 0x01}));
+    CHECK((written(624485) == std::vector<uint8_t>{0xE5, 0x8E, 0x26}));
+    CHECK((written(UINT64_MAX) == std::vector<uint8_t>{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01}));
+    // Every number written is read back as itself, in as many bytes as were written.
+    std::mt19937_64 rng(5);
+    for (int k = 0; k < 2000; ++k)
+    {
+        const uint64_t v = rng() >> (rng() % 64);
+        std::vector<uint8_t> b = {0xAA}; // (appended to what is there)
+        sieve::write_varint(b, v);
+        size_t at = 1;
+        uint64_t back = 0;
+        CHECK(sieve::read_varint(std::span<const uint8_t>(b.data(), b.size()), at, back) == sieve::VarintFault::none);
+        CHECK(back == v && at == b.size() && b[0] == 0xAA);
+    }
+}
+
+
+// Review 5, round 2, group core2: tests to merge into tests/test_core.cpp (uses CHECK and throws() as that
+// file has them, and sieve/weights.hpp, sieve/varint.hpp, already included there).
+
+// weights-unpack-memory: decode_pieces hands the values over in pieces of kDecodePiece, the same
+// values decode gives, and a stream of two words under a table of one value, claiming far more
+// values than any file holds, is never gathered whole (the sink here stops it after a few pieces).
+void test_weights_decode_pieces()
+{
+    using namespace sieve::weights;
+    // A table of three values, and 2.5 pieces of values coded under it.
+    std::vector<uint64_t> counts(65536, 0);
+    counts[0] = 5;
+    counts[7] = 3;
+    counts[65535] = 1;
+    const std::vector<uint32_t> freq = quantise(counts);
+    std::vector<uint16_t> values(kDecodePiece * 2 + kDecodePiece / 2);
+    uint64_t r = 20261121;
+    for (auto& v : values)
+    {
+        r = r * 6364136223846793005ull + 1442695040888963407ull;
+        const uint32_t k = uint32_t(r >> 33) % 9;
+        v = k < 5 ? 0 : k < 8 ? 7 : 65535;
+    }
+    const std::vector<uint32_t> words = encode(values, freq);
+    CHECK(decode(words, freq, values.size()) == values);
+    std::vector<size_t> sizes;
+    std::vector<uint16_t> gathered;
+    decode_pieces(words, freq, values.size(), [&](std::span<const uint16_t> p) {
+        sizes.push_back(p.size());
+        gathered.insert(gathered.end(), p.begin(), p.end());
+    });
+    CHECK(gathered == values);
+    CHECK(sizes == std::vector<size_t>({kDecodePiece, kDecodePiece, kDecodePiece / 2}));
+    // The end check holds as before: one value too many or too few is refused.
+    CHECK(throws([&] { (void)decode(words, freq, values.size() + 1); }));
+    CHECK(throws([&] { (void)decode(words, freq, values.size() - 1); }));
+    CHECK(throws([&] { decode_pieces(words, freq, values.size() - 1, [](std::span<const uint16_t>) {}); }));
+
+    // A table of one value: its frequency is all of 2^24, so decoding reads no words, and two words
+    // (the state, L) decode any number of values. 2^36 claimed: the sink sees pieces of 2^20, never
+    // the whole, and stops it at the third.
+    std::vector<uint32_t> one(65536, 0);
+    one[42] = uint32_t(1) << kScaleBits;
+    const std::vector<uint32_t> state = {uint32_t(1) << 31, 0};
+    size_t pieces = 0;
+    bool stopped = false;
+    try
+    {
+        decode_pieces(state, one, uint64_t(1) << 36, [&](std::span<const uint16_t> p) {
+            CHECK(p.size() == kDecodePiece);
+            CHECK(p[0] == 42 && p[p.size() - 1] == 42);
+            if (++pieces == 3) throw std::runtime_error("enough");
+        });
+    }
+    catch (const std::runtime_error&)
+    {
+        stopped = true;
+    }
+    CHECK(stopped && pieces == 3);
+    // And a short such claim decodes, ending where its values do.
+    CHECK(decode(state, one, 5) == std::vector<uint16_t>(5, 42));
+}
+
+// R5-D1: the rope's and the weights' numbers are now written by sieve::write_varint; its bytes are
+// LEB128's shortest form, as their own writers wrote (pinned here).
+void test_write_varint_bytes()
+{
+    auto bytes = [](uint64_t v) {
+        std::vector<uint8_t> out;
+        sieve::write_varint(out, v);
+        return out;
+    };
+    CHECK(bytes(0) == std::vector<uint8_t>({0x00}));
+    CHECK(bytes(127) == std::vector<uint8_t>({0x7F}));
+    CHECK(bytes(128) == std::vector<uint8_t>({0x80, 0x01}));
+    CHECK(bytes(300) == std::vector<uint8_t>({0xAC, 0x02}));
+    CHECK(bytes(uint64_t(1) << 24) == std::vector<uint8_t>({0x80, 0x80, 0x80, 0x08}));
+    CHECK(bytes(~uint64_t(0)) == std::vector<uint8_t>({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01}));
+}
+
+
 bool wanted(const char* call)
 {
     if (g_list)
@@ -11772,6 +12516,7 @@ void run_all(int argc, char** argv)
     RUN(test_fractals());
     RUN(test_fractal_count());
     RUN(test_fractal_numbering());
+    RUN(test_fractal_judged_side_by_side());
     PART("hallway");
     RUN(test_format_stats());
     RUN(test_catalogue());
@@ -11882,6 +12627,25 @@ void run_all(int argc, char** argv)
         RUN(test_mix3());
         RUN(test_mix4());
         RUN(test_mix4_run());
+        // Review 5's fixes (21 November 2026), in the parts their code belongs to.
+        PART("text-sound");
+        RUN(test_model_train_sparse());
+        RUN(test_guided_code_pinned());
+        RUN(test_notes3_voice_bound());
+        RUN(test_midi_read_bounds());
+        RUN(test_pcm_upsampling_bound());
+        PART("models");
+        RUN(test_gltf_roofs());
+        RUN(test_obj_big_indices());
+        RUN(test_ai_hex_width());
+        RUN(test_jpeg_eighth_scan_bound());
+        RUN(test_weights_unpack_pieces());
+        RUN(test_cipher_hex_keys());
+        RUN(test_varint_writer());
+        RUN(test_weights_decode_pieces());
+        RUN(test_write_varint_bytes());
+        PART("filters");
+        RUN(test_review5_filters());
     }
 }
 
@@ -11931,18 +12695,12 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    // Everything runs on the portable SHA-256 path, then again on SHA-NI where the CPU has it.
-    Sha256::use_hardware(false);
+    // Everything runs once, on the SHA-256 path the program itself would use (SHA-NI where the CPU
+    // has it). test_sha256 compares the two paths directly on many inputs, which checks the
+    // hardware path more closely than running the whole suite a second time did (review 5, T1).
     run_all(argc, argv);
-    std::cout << "portable SHA-256: " << g_checks << " checks, " << g_failures << " failures\n";
-    if (Sha256::hardware_available())
-    {
-        const int before = g_checks;
-        Sha256::use_hardware(true);
-        run_all(argc, argv);
-        std::cout << "hardware SHA-256: " << g_checks - before << " checks, " << g_failures << " failures\n";
-    }
-    else std::cout << "hardware SHA-256: not available on this CPU\n";
+    std::cout << (Sha256::using_hardware() ? "hardware" : "portable") << " SHA-256"
+              << (Sha256::hardware_available() ? "" : " (hardware not available on this CPU)") << "\n";
 
     std::cout << g_checks << " checks, " << g_failures << " failures\n";
     return g_failures ? 1 : 0;

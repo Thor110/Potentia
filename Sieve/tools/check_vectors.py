@@ -21,10 +21,12 @@ TESTS = os.path.normpath(os.path.join(HERE, "..", "tests"))
 # (the oracle's command and its arguments, the vector file it must reproduce), as CI checks them.
 CHECKS = [
     (["vectors"], "vectors_v1.tsv"),
+    (["range-vectors"], "vectors_range_v1.tsv"),
     (["biguint-vectors"], "vectors_biguint_v1.tsv"),
     (["biguint-large-vectors"], "vectors_biguint_large_v1.tsv"),
     (["digit-vectors"], "vectors_digits_v1.tsv"),
     (["canon-vectors"], "vectors_canon.tsv"),
+    (["canon-range-vectors"], "vectors_canon_range_v1.tsv"),
     (["bytes-vectors"], "vectors_bytes_v1.tsv"),
     (["alphabet-vectors"], "vectors_alphabets_v1.tsv"),
     (["model-vectors"], "vectors_models_v1.tsv"),
@@ -32,6 +34,7 @@ CHECKS = [
     (["image-v2-vectors"], "vectors_image_v2.tsv"),
     (["cipher-vectors"], "vectors_cipher_v1.tsv"),
     (["guided-vectors"], "vectors_guided_v1.tsv"),
+    (["guided-range-vectors"], "vectors_guided_range_v1.tsv"),
     (["filter-vectors"], "vectors_filters_v1.tsv"),
     (["compact-vectors"], "vectors_compact_v1.tsv"),
     (["cross-vectors"], "vectors_cross_v1.tsv"),
@@ -56,6 +59,7 @@ CHECKS = [
     (["ai-run-filter-vectors"], "vectors_ai_run_filters_v1.tsv"),
     (["train-vectors", "--corpus", "../tests/training_corpus.txt"], "vectors_training_v1.tsv"),
     (["train-vectors", "--corpus", "../tests/training_corpus.txt", "--v2"], "vectors_training_v2.tsv"),
+    (["train-vectors", "--corpus", "../tests/training_corpus.txt", "--v3"], "vectors_training_v3.tsv"),
     (["diffusion-vectors"], "vectors_diffusion_v1.tsv"),
 ]
 

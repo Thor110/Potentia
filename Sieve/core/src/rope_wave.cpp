@@ -161,16 +161,7 @@ std::vector<E> residuals(const X& x, const RopeParams& p, std::vector<uint64_t>&
     return e;
 }
 
-void put_varint(std::vector<uint8_t>& out, uint64_t v)
-{
-    while (v >= 0x80)
-    {
-        out.push_back(uint8_t(v | 0x80));
-        v >>= 7;
-    }
-    out.push_back(uint8_t(v));
-}
-
+// (Numbers are written by sieve::write_varint, sieve/varint.hpp.)
 uint64_t get_varint(std::span<const uint8_t> in, size_t& at)
 {
     uint64_t v = 0;
@@ -209,7 +200,7 @@ void put_segment(std::vector<uint8_t>& out, const std::vector<uint16_t>& sym, bo
 {
     if (sym.empty())
     {
-        put_varint(out, 0);
+        write_varint(out, 0);
         return;
     }
     // A table of the byte values only where every value is a byte, as a rope's are: the same table and
@@ -220,20 +211,20 @@ void put_segment(std::vector<uint8_t>& out, const std::vector<uint16_t>& sym, bo
     const std::vector<uint32_t> freq = weights::quantise(counts);
     uint64_t k = 0;
     for (const uint32_t f : freq) k += f != 0;
-    put_varint(out, k);
+    write_varint(out, k);
     uint32_t last = 0;
     bool first = true;
     for (uint32_t b = 0; b < freq.size(); ++b)
         if (freq[b])
         {
-            put_varint(out, first ? b : b - last);
-            put_varint(out, freq[b]);
+            write_varint(out, first ? b : b - last);
+            write_varint(out, freq[b]);
             last = b;
             first = false;
         }
     if (v2 && k == 1) return;
     const std::vector<uint32_t> words = weights::encode(sym, freq);
-    put_varint(out, words.size());
+    write_varint(out, words.size());
     for (const uint32_t w : words)
         for (int b = 0; b < 4; ++b) out.push_back(uint8_t(w >> (8 * b)));
 }
@@ -471,7 +462,7 @@ double above_cost(const std::vector<uint32_t>& group)
 // The groups' numbers, written and read: one varint for each column.
 void put_groups(std::vector<uint8_t>& out, const std::vector<uint32_t>& group)
 {
-    for (const uint32_t g : group) put_varint(out, g);
+    for (const uint32_t g : group) write_varint(out, g);
 }
 
 std::vector<uint32_t> get_groups(std::span<const uint8_t> code, size_t& at, uint32_t width, uint32_t& count)
@@ -561,7 +552,7 @@ std::vector<uint8_t> code_values(std::span<const uint8_t> file, const RopeParams
                 std::vector<uint16_t> sym;
                 for (size_t j = 0; j < e.size(); ++j)
                     if (bucket[j] == k) sym.push_back(uint16_t((uint64_t(e[j]) >> (8 * plane)) & 0xFF));
-                put_varint(out, sym.size());
+                write_varint(out, sym.size());
                 put_segment(out, sym, true);
             }
         for (const uint64_t i : pts)
@@ -636,14 +627,14 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
         double cost = 0;
         const std::vector<uint32_t> group = pairs ? group_columns(counts, n, 3, cost, false) : std::vector<uint32_t>{};
         std::vector<uint8_t> out;
-        put_varint(out, pairs);
+        write_varint(out, pairs);
         put_segment(out, std::vector<uint16_t>(group.begin(), group.end()), true);
         const size_t groups = group.empty() ? 0 : size_t(*std::max_element(group.begin(), group.end())) + 1;
         std::vector<std::vector<uint16_t>> seg(groups);
         for (size_t i = 0; i < file.size(); ++i) seg[group[pair[i]]].push_back(file[i]);
         for (const auto& one : seg)
         {
-            put_varint(out, one.size());
+            write_varint(out, one.size());
             put_segment(out, one, true);
         }
         return out;
@@ -675,7 +666,7 @@ std::vector<uint8_t> rope_code(std::span<const uint8_t> file, const RopeParams& 
         for (size_t i = 0; i < file.size(); ++i) seg[group[col[i]]].push_back(file[i]);
         for (const auto& one : seg)
         {
-            put_varint(out, one.size());
+            write_varint(out, one.size());
             put_segment(out, one, true);
         }
         return out;

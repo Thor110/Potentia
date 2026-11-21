@@ -870,7 +870,7 @@ void add_picture_filters(std::vector<FilterSpec>& out)
     sp.make = [specks_of](const FilterLine& l, const FilterValues&, const FilterResources&) -> std::unique_ptr<Filter> {
         const auto d = specks_of(l);
         if (!d->has_value()) throw std::invalid_argument("specks-v1: past what its automaton holds at this width and palette");
-        return make_dfa_filter(**d, l.length, "");
+        return make_dfa_filter(std::shared_ptr<const Dfa>(d, &**d), l.length, "");
     };
     out.push_back(sp);
 
@@ -892,7 +892,7 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         const bool down = param_value(*find_filter(own), v, "way") == "down";
         const auto d = gradient_of(l, down);
         if (!d->has_value()) throw std::invalid_argument("gradient-v1: down remembers a row, past what its automaton holds here");
-        return make_dfa_filter(**d, l.length, std::string("way=") + (down ? "down" : "across"));
+        return make_dfa_filter(std::shared_ptr<const Dfa>(d, &**d), l.length, std::string("way=") + (down ? "down" : "across"));
     };
     out.push_back(gr);
 
@@ -925,7 +925,7 @@ void add_picture_filters(std::vector<FilterSpec>& out)
         const int64_t k = param_int(*find_filter(own), v, "changes");
         const auto d = rows_of(l, uint32_t(std::min<int64_t>(k, l.width)));
         if (!d->has_value()) return std::make_unique<RowsAlike>(l, uint32_t(std::min<int64_t>(k, l.width))); // (counted and ranked by its changes)
-        return make_dfa_filter(**d, l.length, "changes=" + std::to_string(k));
+        return make_dfa_filter(std::shared_ptr<const Dfa>(d, &**d), l.length, "changes=" + std::to_string(k));
     };
     out.push_back(ra);
 }

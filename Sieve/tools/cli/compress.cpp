@@ -3,6 +3,7 @@
 
 #include "cli/compress.hpp"
 
+#include "cli/crc32.hpp"
 #include "cli/gather.hpp"
 #include "unpack_7z.hpp"
 
@@ -475,19 +476,6 @@ namespace {
 // 7z's format describes it (7-Zip's DOC/7zFormat.txt): the streams' sizes and CRCs, then the names
 // (UTF-16), which are empty (folders and empty files), the times and the attributes.
 
-// CRC-32 of any length (zlib's takes 32 bits of length at a time).
-uint32_t crc_of(std::span<const uint8_t> d)
-{
-    uLong c = crc32(0, nullptr, 0);
-    for (size_t at = 0; at < d.size();)
-    {
-        const size_t n = std::min(d.size() - at, size_t(1) << 30);
-        c = crc32(c, d.data() + at, uInt(n));
-        at += n;
-    }
-    return uint32_t(c);
-}
-
 void put_number(Bytes& b, uint64_t v)
 {
     uint8_t first = 0, mask = 0x80;
@@ -556,7 +544,7 @@ Bytes seven_zip_of(const std::vector<CompressEntry>& entries)
         {
             all.insert(all.end(), e.bytes.begin(), e.bytes.end());
             sizes.push_back(e.bytes.size());
-            crcs.push_back(crc_of(e.bytes));
+            crcs.push_back(crc32_of(e.bytes));
         }
     Bytes packed;
     uint8_t dict_prop = 0;
@@ -675,8 +663,8 @@ Bytes seven_zip_of(const std::vector<CompressEntry>& entries)
     Bytes start;
     put_le(start, packed.size(), 8); // where the header is, after the packed stream
     put_le(start, h.size(), 8);
-    put_le(start, uint32_t(crc32(0, h.data(), uInt(h.size()))), 4);
-    put_le(out, uint32_t(crc32(0, start.data(), uInt(start.size()))), 4);
+    put_le(start, crc32_of(h), 4);
+    put_le(out, crc32_of(start), 4);
     out.insert(out.end(), start.begin(), start.end());
     out.insert(out.end(), packed.begin(), packed.end());
     out.insert(out.end(), h.begin(), h.end());

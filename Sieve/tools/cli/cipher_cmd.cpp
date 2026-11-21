@@ -5,9 +5,11 @@
 #include "cli/locate.hpp"
 #include "sieve/cipher.hpp"
 #include "sieve/hex.hpp"
+#include "sieve/paths.hpp"
 #include "sieve/sha256.hpp"
 
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -40,7 +42,7 @@ std::vector<uint8_t> from_hex(const std::string& h)
 // What to work on: --in FILE, --text TEXT (its UTF-8 bytes) or --in-hex HEX.
 std::vector<uint8_t> input(const Args& a)
 {
-    if (a.has("in")) return read_file_bytes(a.get("in"));
+    if (a.has("in")) return read_file_bytes(sieve::from_u8(a.get("in")));
     if (a.has("text"))
     {
         const std::string t = a.get("text");
@@ -71,7 +73,7 @@ cipher::Recipe recipe_of(const Args& a)
 {
     if (a.has("recipe-file"))
     {
-        std::ifstream in(a.get("recipe-file"), std::ios::binary);
+        std::ifstream in(sieve::from_u8(a.get("recipe-file")), std::ios::binary);
         if (!in) throw std::invalid_argument("cannot read " + a.get("recipe-file"));
         std::ostringstream all;
         all << in.rdbuf();
@@ -129,7 +131,7 @@ int cmd_cipher(const Args& a)
               << "\n";
     if (a.has("out"))
     {
-        std::ofstream f(a.get("out"), std::ios::binary);
+        std::ofstream f(sieve::from_u8(a.get("out")), std::ios::binary);
         if (!f || !f.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size())))
             throw std::runtime_error("cannot write " + a.get("out"));
         std::cout << "written      " << a.get("out") << "\n";

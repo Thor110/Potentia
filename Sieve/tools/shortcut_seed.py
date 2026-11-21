@@ -232,22 +232,6 @@ def backward(t, y, w, numbers=None):
 
 # ---- the search -------------------------------------------------------------------------------
 
-def same_from(ya, d):
-    """For each place i, how many bytes from i on equal those d before (0 where i < d)."""
-    n = len(ya)
-    m = np.zeros(n + 1, dtype=np.int64)
-    if d >= n:
-        return m
-    eq = ya[d:] == ya[:-d]                  # eq[k]: byte d + k equals byte k
-    breaks = np.flatnonzero(~eq)             # where a run of equal bytes stops
-    k = np.arange(len(eq))
-    nxt = np.searchsorted(breaks, k)         # the first break at or after k
-    breaks = np.append(breaks, len(eq))      # (and the end, past which nothing is equal)
-    stop = breaks[nxt]
-    m[d:n] = stop - k
-    return m
-
-
 def candidates(y, w):
     """For each place, the shortcuts that hold there: (kind, numbers, length)."""
     n = len(y)

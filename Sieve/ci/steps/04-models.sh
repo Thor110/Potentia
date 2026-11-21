@@ -293,14 +293,17 @@ $exe world | tr -d '\r' | q "^line         worlds  (worlds/image/mono/10x10/L100
 $exe world --world-models 2 --compose "0:0.0.0.0|1:7.7.7.5" --title "two models" | tr -d '\r' > wc.txt
 w=$(awk '$1 == "positional" {print $2}' wc.txt)
 $exe world --world-models 2 --read "$w" --out world.obj | tr -d '\r' | q "^slots        0*:0.0.0.0|0*1:7.7.7.5$"
-python reference/sieve_ref.py world-obj --world-models 2 --slots "0:0.0.0.0|1:7.7.7.5" > world-ref.obj
+# (The oracle runs as a module, python -m reference.sieve_ref, so Python reads its compiled copy
+# from __pycache__ after the first call; run as a script, its 12,000 lines were compiled afresh
+# on every call, about 0.2 s each.)
+python -m reference.sieve_ref world-obj --world-models 2 --slots "0:0.0.0.0|1:7.7.7.5" > world-ref.obj
 cmp world.obj world-ref.obj
 ws=$(awk '$1 == "scrambled" {print $2}' wc.txt)
 $exe world --world-models 2 --read "$ws" --mode scrambled --out world2.obj > /dev/null
 cmp world.obj world2.obj
 # A model file taken apart (sieve tensors; IDEAS §15): a small stand-in Llama model made by the
 # oracle, its start rebuilt by the tool from the config alone, and its statistics the oracle's.
-python reference/sieve_ref.py tensors-fixture --config tests/llama_tiny_config.json --seed 7 --out tiny.safetensors
+python -m reference.sieve_ref tensors-fixture --config tests/llama_tiny_config.json --seed 7 --out tiny.safetensors
 $exe tensors tiny.safetensors --config tests/llama_tiny_config.json | tr -d '\r' > tens.txt
 cat tens.txt
 q "^layout       safetensors-layout-v1: the start is rebuilt" tens.txt
@@ -309,14 +312,14 @@ q "^weights      211072 bytes: 105536 values (BF16 20)$" tens.txt
 $exe tensors --config tests/llama_tiny_config.json --start-out tiny-start.bin > /dev/null
 head -c "$(wc -c < tiny-start.bin)" tiny.safetensors | cmp - tiny-start.bin
 $exe tensors tiny.safetensors --tsv | tr -d '\r' > tens-cpp.tsv
-python reference/sieve_ref.py tensors tiny.safetensors --tsv | tr -d '\r' | diff tens-cpp.tsv -
+python -m reference.sieve_ref tensors tiny.safetensors --tsv | tr -d '\r' | diff tens-cpp.tsv -
 $exe tensors tiny.safetensors --stats | tr -d '\r' | q "^coded by frequency  "
 # The same model coded under the prior (sieve-weights-v1): the tool's file and the oracle's are
 # one file, and each rebuilds the model, byte for byte.
 $exe tensors tiny.safetensors --pack tiny.sieve-weights | tr -d '\r' | q "read back: it rebuilds the file"
-python reference/sieve_ref.py weights-pack tiny.safetensors --out tiny-ref.sieve-weights
+python -m reference.sieve_ref weights-pack tiny.safetensors --out tiny-ref.sieve-weights
 cmp tiny.sieve-weights tiny-ref.sieve-weights
-python reference/sieve_ref.py weights-unpack tiny.sieve-weights --out tiny-ref.safetensors
+python -m reference.sieve_ref weights-unpack tiny.sieve-weights --out tiny-ref.safetensors
 cmp tiny.safetensors tiny-ref.safetensors
 $exe tensors --unpack tiny-ref.sieve-weights --out tiny-back.safetensors > /dev/null
 cmp tiny.safetensors tiny-back.safetensors
@@ -327,13 +330,13 @@ mkdir -p tinymodel
 cp tests/llama_tiny_config.json tinymodel/config.json
 cp tests/llama_tiny_tokenizer.json tinymodel/tokenizer.json
 cp tiny.safetensors tinymodel/model.safetensors
-python reference/sieve_ref.py llm-tokenizer-fixture --out tok-again.json
+python -m reference.sieve_ref llm-tokenizer-fixture --out tok-again.json
 python -c "import json,sys; sys.exit(json.load(open('tok-again.json',encoding='utf-8')) != json.load(open('tests/llama_tiny_tokenizer.json',encoding='utf-8')))"
-python reference/sieve_ref.py llm-corpus --out corpus.jsonl
+python -m reference.sieve_ref llm-corpus --out corpus.jsonl
 $exe chat --model tinymodel --encode-lines corpus.jsonl | tr -d '\r' > tok-cpp.txt
-python reference/sieve_ref.py llm-encode-lines corpus.jsonl --model tinymodel | tr -d '\r' | diff tok-cpp.txt -
+python -m reference.sieve_ref llm-encode-lines corpus.jsonl --model tinymodel | tr -d '\r' | diff tok-cpp.txt -
 $exe chat --model tinymodel --logits "The library holds every book. It's 2026." --logits-out tiny-logits.f32 > /dev/null
-python reference/sieve_ref.py llm-logits "The library holds every book. It's 2026." --model tinymodel --compare tiny-logits.f32
+python -m reference.sieve_ref llm-logits "The library holds every book. It's 2026." --model tinymodel --compare tiny-logits.f32
 $exe chat --model tinymodel --prompt "hello" --temperature 0 --max-tokens 8 > /dev/null
 # The AI line (sieve ai): every model of one shape, its weights its address. The model at a
 # bearing is the oracle's, file for file, in both orderings; its logits are the oracle's; its
@@ -341,12 +344,12 @@ $exe chat --model tinymodel --prompt "hello" --temperature 0 --max-tokens 8 > /d
 $exe ai | tr -d '\r' | q "^models       2^32768 "
 for m in positional scrambled; do
   $exe ai --bearing 246 --mode $m --out ai246-$m > /dev/null
-  python reference/sieve_ref.py ai-read --bearing 246 --mode $m --out ai246-$m-ref.safetensors > /dev/null
+  python -m reference.sieve_ref ai-read --bearing 246 --mode $m --out ai246-$m-ref.safetensors > /dev/null
   cmp ai246-$m/model.safetensors ai246-$m-ref.safetensors
 done
 $exe ai --warp ai246-positional | tr -d '\r' | q "^positional   aeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\.\.\."
 $exe chat --model ai246-scrambled --logits "Hello, shelf." --logits-out ai-logits.f32 > /dev/null
-python reference/sieve_ref.py llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
+python -m reference.sieve_ref llm-logits "Hello, shelf." --model ai246-scrambled --compare ai-logits.f32
 $exe chat --model ai246-positional --raw --prompt "Hello" --max-tokens 16 > /dev/null
 # Training (sieve ai-train, training-v1): runs recorded and trained, the order made from
 # training.ini (order-v1) in each of its three readings, the files in a chosen order; the
@@ -362,7 +365,7 @@ head -c 150 tests/training_corpus.txt | tr 'a-z' 'b-za' > corp/b.txt
 printf 'b.txt\n' > file-order.txt
 for rd in in-order shuffled-within-files shuffled; do
   $exe ai-train --record corp --out run-$rd --reading $rd --file-order file-order.txt --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --quiet > /dev/null
-  python reference/sieve_ref.py train-replay --run run-$rd | tr -d '\r' | cmp - run-$rd/result.txt
+  python -m reference.sieve_ref train-replay --run run-$rd | tr -d '\r' | cmp - run-$rd/result.txt
 done
 q "^file = corpus/b.txt" run-in-order/training.ini
 # A corpus is a folder: a single file is refused.
@@ -370,7 +373,7 @@ if $exe ai-train --record tests/training_corpus.txt --out not-a-run > /dev/null 
 mkdir -p tiny-corp
 cp tests/training_corpus.txt tiny-corp/
 $exe ai-train --record tiny-corp --out tiny-run --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --learning-rate 0.01 --write-order --checkpoint-addresses --sieve tiny-run.sieve --quiet > /dev/null
-python reference/sieve_ref.py train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
+python -m reference.sieve_ref train-replay --run tiny-run | tr -d '\r' | cmp - tiny-run/result.txt
 $exe ai-train tiny-run.sieve --threads 1 --quiet | tr -d '\r' | q "^reproduced exactly"
 python -c "import sys; p='tiny-run/order.txt'; l=open(p).read().split('\n'); l[1],l[5]=l[5],l[1]; open(p,'w').write('\n'.join(l))"
 # (It exits with an error, as it should; the step's shell fails a pipe on any error.)
@@ -381,7 +384,7 @@ $exe ai-train tests/training_run_v1 --quiet --limits | tr -d '\r' > limits.txt
 q "^reproduced exactly" limits.txt
 q "^limits met: 0 of [0-9]* activations held at +-128 (0.000000%), 0 of [0-9]* gradients flowing back" limits.txt
 q "^probabilities (in 65,536ths): of [0-9]* predictions, the right byte given 0 in " limits.txt
-python reference/sieve_ref.py train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
+python -m reference.sieve_ref train-replay --run tests/training_run_v1 | tr -d '\r' | cmp - tests/training_run_v1/result.txt
 $exe ai-train data/training/universalbibliothek.sieve --quiet | tr -d '\r' | q "^reproduced exactly"
 # The same run on 2 to 8 threads, each giving the result again, byte for byte (ODDITIES: a run once
 # said NOT REPRODUCED on Edward's machine and never again; a race between threads would show here).
@@ -391,13 +394,13 @@ done
 # training-v2: a loss scale of 2^5, the oracle training it again to the same result.
 $exe ai-train --record tiny-corp --out run-v2 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --training-v2 --quiet > /dev/null
 q "^version = training-v2" run-v2/training.ini
-python reference/sieve_ref.py train-replay --run run-v2 | tr -d '\r' | cmp - run-v2/result.txt
+python -m reference.sieve_ref train-replay --run run-v2 | tr -d '\r' | cmp - run-v2/result.txt
 # training-v3 (9 November 2026), the default: every byte's probability held between 1/65,536 and
 # 65,281/65,536 ("quantised waffle"); the oracle trains it again to the same result, and --limits
 # finds no byte given 0 and none given all of it.
 $exe ai-train --record tiny-corp --out run-v3 --ai-width 8 --ai-heads 2 --ai-bits 3 --window 17 --epochs 2 --checkpoint-every 3 --loss-scale-bits 5 --learning-rate 0.0005 --quiet > /dev/null
 q "^version = training-v3" run-v3/training.ini
-python reference/sieve_ref.py train-replay --run run-v3 | tr -d '\r' | cmp - run-v3/result.txt
+python -m reference.sieve_ref train-replay --run run-v3 | tr -d '\r' | cmp - run-v3/result.txt
 $exe ai-train run-v3 --quiet --limits | tr -d '\r' > limits3.txt
 q "^reproduced exactly" limits3.txt
 q "the right byte given 0 in 0 (0.000000%), one byte given all of it in 0 (0.000000%); 0 of [0-9]* bytes' probabilities were 0" limits3.txt
@@ -407,7 +410,7 @@ $exe ai-train --record tiny-corp --out run-stop --ai-width 8 --ai-heads 2 --ai-b
 $exe ai-train run-stop --resume --stop-after 13 --quiet | tr -d '\r' | q "^stopped at step 13"
 $exe ai-train run-stop --resume --quiet | tr -d '\r' | q "^result written"
 [ ! -f run-stop.resume ]
-python reference/sieve_ref.py train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
+python -m reference.sieve_ref train-replay --run run-stop | tr -d '\r' | cmp - run-stop/result.txt
 # Documents read as their text (--as-text, 12 November 2026): an HTML page, a Word document and an
 # RTF file each put in the run as its text; a file that is not a document, and a broken one, as
 # they are; the run trains again exactly, and the oracle replays it.
@@ -428,13 +431,13 @@ cmp doc-corp/broken.docx doc-run/corpus/broken.docx
 cmp doc-corp/plain.txt doc-run/corpus/plain.txt
 [ ! -f doc-run/corpus/page.html ]
 $exe ai-train doc-run --quiet | tr -d '\r' | q "^reproduced exactly"
-python reference/sieve_ref.py train-replay --run doc-run | tr -d '\r' | cmp - doc-run/result.txt
+python -m reference.sieve_ref train-replay --run doc-run | tr -d '\r' | cmp - doc-run/result.txt
 # diffusion-v1 (sieve diffuse): a run whose pictures are drawn from the image line's stack, trained,
 # checked again by the tool, and trained again by the oracle to the same result.txt; then pictures made.
 printf '[image]\nmode = compact\nfilters = figure-v1\n[image.figure-v1]\nconnect = four\nborder = any\n' > figs.ini
 $exe diffuse --record diff-run --filters figs.ini --width 4 --height 3 --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
 $exe diffuse diff-run --quiet | tr -d '\r' | q "^reproduced exactly"
-python reference/sieve_ref.py diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
+python -m reference.sieve_ref diffuse-replay --run diff-run | tr -d '\r' | cmp - diff-run/result.txt
 $exe diffuse --make diff-run --count 2 | tr -d '\r' | q "^picture "
 # The same on the audio line: a melody run (notes104, 6 events), its melodies drawn from the audio
 # line's stack, trained, trained again, and trained by the oracle to the same result.txt. The
@@ -443,7 +446,7 @@ printf '[audio]\nmode = compact\nfilters = key-data-v2, melody-ending-v2\n' > me
 $exe diffuse --record mel-run --line audio --length 6 --filters mels.ini --figures 40 --ai-width 8 --ai-heads 2 --ai-bits 3 --steps 8 --checkpoint-every 3 --levels 5 --batch 3 --learning-rate 0.01 --quiet
 q "^line = audio" mel-run/diffusion.ini
 $exe diffuse mel-run --quiet | tr -d '\r' | q "^reproduced exactly"
-python reference/sieve_ref.py diffuse-replay --run mel-run | tr -d '\r' | cmp - mel-run/result.txt
+python -m reference.sieve_ref diffuse-replay --run mel-run | tr -d '\r' | cmp - mel-run/result.txt
 $exe diffuse --make mel-run --count 2 | tr -d '\r' | q "^melody "
 # --judge counts what a model makes, and the noise it started from, against a stack.
 $exe diffuse --make mel-run --count 20 --judge mels.ini | tr -d '\r' | q "^  the stack  *made [0-9]* of 20, noise [0-9]* of 20"
@@ -481,7 +484,7 @@ $exe ai --address-file ub.hex --filters ai-signs.ini --temperature 0 | tr -d '\r
 $exe filters --line models | tr -d '\r' | q "^\[ \] mesh-closed-v1   (soft, judge-only)"
 $exe ai --address-file ub.hex --filters ai-rows.ini --temperature 0 --canonical --address-out ubc.hex | tr -d '\r' | tee ubc-ai.txt | q "weight-rows-v1 \[x\] pass, canonical-model-v1 \[ \] pass"
 [ "$(grep '^says' ub-ai.txt)" = "$(grep '^says' ubc-ai.txt)" ]
-python reference/sieve_ref.py ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt
+python -m reference.sieve_ref ai-canonical --address-file ub.hex --rows | tr -d '\r' > ubc-ref.txt
 head -1 ubc-ref.txt | cmp - ubc.hex
 q "^weight-rows-v1 pass" ubc-ref.txt
 # Runs named by the AI line's filters (the shipped run, from data/training): near-model-v1 keeps
@@ -512,8 +515,13 @@ rm -f mc.ini
 $H --menu --settings mc.ini --press "Item:display_cache,Right,Right" --screenshot mc.png > /dev/null
 grep -q "^model_cache_mb = 80" mc.ini
 # The settings panel slides out with Tab (the map takes the width), and back with a move.
-$H --menu --press "Tab" --screenshot panel-out.png | q "saved panel-out.png"
-$H --menu --press "Tab,Down" --screenshot panel-back.png | q "saved panel-back.png"
+# (Each run's readout is kept, so both its panel line and its saved picture are checked.)
+$H --menu --press "Tab" --screenshot panel-out.png | tr -d '\r' > po.txt
+q "^settings panel: out$" po.txt
+q "saved panel-out.png" po.txt
+$H --menu --press "Tab,Down" --screenshot panel-back.png | tr -d '\r' > pb.txt
+q "^settings panel: in$" pb.txt
+q "saved panel-back.png" pb.txt
 # The filter memory (GLOBAL row 11): what one count's tables may take, in steps of 256 MB
 # from 512, saved with the application's settings.
 rm -f fm.ini

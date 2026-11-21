@@ -89,6 +89,38 @@ BLOCKS = {
 }
 
 
+def read_varint(buf, at, what, most=10):
+    """One of the numbers Sieve writes in its own codes and streams (seven bits a byte, the lowest
+    first, the top bit set on every byte but the last), read at `at` in at most `most` bytes; it
+    returns the number and where it ends. Only the form Sieve writes is read, by the rules the C++
+    reader keeps (sieve/varint.hpp), written here apart from it: the bytes ending inside the number, a
+    tenth byte with more than the one bit left for it, more bytes than `most`, or a last byte of 0
+    after others (a number written longer than it is) are each refused, naming what holds it (`what`)."""
+    v = 0
+    for k in range(min(most, 10)):
+        if at >= len(buf):
+            sys.exit(f"{what} ends inside a number")
+        b = buf[at]
+        at += 1
+        if k == 9 and b > 1:
+            sys.exit(f"{what} has a number too long")
+        v |= (b & 0x7F) << (7 * k)
+        if not b & 0x80:
+            if b == 0 and k > 0:
+                sys.exit(f"{what} has a number not written as Sieve writes it")
+            return v, at
+    sys.exit(f"{what} has a number too long")
+
+
+def rope_length(ropes, ra, path):
+    """The length before a file's code in the rope stream, at `ra` (at most nine bytes, as Sieve's
+    reader takes it), and where the code starts; refused where the stream ends before the code does."""
+    n, ra = read_varint(ropes, ra, f"the installer's rope stream at {path}", 9)
+    if n > len(ropes) - ra:
+        sys.exit(f"the installer's rope stream ends before {path}")
+    return n, ra
+
+
 def alphabet(spec):
     """A built-in id, or blocks and u+XXXX[-u+YYYY] ranges stacked with '+': the union of their
     code points, ascending. Mirrors sieve::alphabet_of."""
@@ -2594,16 +2626,8 @@ def rope_wave_file(code, params, size):
         return sw_decode(words, freq, count)
 
     def varint():
-        v, shift = 0, 0
-        while True:
-            if at[0] >= len(code):
-                sys.exit("rope-wave-v1: the code ends inside a number")
-            b = code[at[0]]
-            at[0] += 1
-            v |= (b & 0x7F) << shift
-            shift += 7
-            if not b & 0x80:
-                return v
+        v, at[0] = read_varint(code, at[0], "rope-wave-v1: the code")
+        return v
 
     def groups():
         """rope-wave-v4: each column's group, numbered as the groups start (at most 256)."""
@@ -6200,6 +6224,12 @@ def parse_plugin(text):
         elif k == "set":
             kind, _, src = toks[2][0].partition(":")
             head.setdefault("sets", []).append((toks[1][0], kind, src))
+            # A list or tags file lies in the plugin's folder or a folder under it, as the core
+            # has it: no drive or other colon, no leading / or \, and no .. as a part.
+            files = [src] if kind == "list" else src.rpartition(":")[0].split("+") if kind == "tags" else []
+            for f in files:
+                if not f or f[0] in "/\\" or ":" in f or ".." in re.split(r"[/\\]", f):
+                    raise PluginError(f"line {n}: the word file '{f}' must be a name in the plugin's folder or a folder under it (no drive, no leading / or \\, no ..)")
         elif k == "follow":
             head.setdefault("follow", []).append((toks[1][0], toks[2][0]))
         elif k in ("first", "last"):
@@ -7185,13 +7215,8 @@ def listing_from_bytes(b, v32=False):
         return b[at[0] - 1]
 
     def varint():
-        v, shift = 0, 0
-        while True:
-            c = byte()
-            v |= (c & 0x7F) << shift
-            shift += 7
-            if not c & 0x80:
-                return v
+        v, at[0] = read_varint(b, at[0], "v20: its listing")
+        return v
 
     def text(tabs=False):  # (a line kept as it is may hold tabs; anything else, neither)
         n = varint()
@@ -7329,14 +7354,8 @@ def v16_text(data):
     at = [6]
 
     def varint():
-        v, shift = 0, 0
-        while True:
-            b = data[at[0]]
-            at[0] += 1
-            v |= (b & 0x7F) << shift
-            shift += 7
-            if not b & 0x80:
-                return v
+        v, at[0] = read_varint(data, at[0], "v16: its head")
+        return v
 
     def take(n):
         if n > len(data) - at[0]:
@@ -7581,16 +7600,7 @@ def delta_apply(base, script, size, path):
     follow; t odd, t/2 bytes copied from the base, from where the last copy ended moved by a second
     varint, zigzag-signed (0, 1, 2, 3 ... as 0, -1, 1, -2 ...). What it makes must be the file's size."""
     def varint(at):
-        v, shift = 0, 0
-        while True:
-            if at >= len(script):
-                sys.exit(f"{path}: its delta's script ends inside a number")
-            b = script[at]
-            at += 1
-            v |= (b & 0x7F) << shift
-            shift += 7
-            if not b & 0x80:
-                return v, at
+        return read_varint(script, at, f"{path}: its delta's script")
     out, at, last = bytearray(), 0, 0
     while at < len(script):
         t, at = varint(at)
@@ -7776,12 +7786,28 @@ def cmd_unpack_v7(args, data):
     # v31: each archive made again from its skeleton and its members, the files listed under its own
     # path ("<archive>/<n>"), as many as its recipe says: not files of the tree.
     members = {}
+
+    def ancestors(p):
+        """Each path the given one is under (every prefix before a "/"), found by walking back."""
+        j = p.rfind("/")
+        while j >= 0:
+            p = p[:j]
+            yield p
+            j = p.rfind("/")
+    # Each archive's files under its path, found once by walking each file's ancestors rather than by
+    # scanning the whole listing for each archive (which took archives times files); in listing order.
+    archives = {f[0] for f in files if (v31 and f[3].startswith("skm ")) or (v33 and f[3].startswith("spn "))}
+    under = {}
+    for k, f in enumerate(files):
+        for a in ancestors(f[0]):
+            if a in archives:
+                under.setdefault(a, []).append(k)
     for i, (path, size, sha, way) in enumerate(files):
         if v31 and way.startswith("skm "):
             n = way.split(" ")[1]
             if not n.isdigit():
                 sys.exit(f"{path}: an archive's members not counted as Sieve counts them")
-            mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
+            mine = under.get(path, [])
             if len(mine) != int(n) or any(k in members for k in mine) or any(files[k][3].startswith("skm ") for k in mine) or \
                     any(files[k][3].split(" ")[0] in RECIPE_WORDS and not (v34 and files[k][3].split(" ")[0] in ("jbr", "flac", "pmp")) for k in mine):
                 # (v34 draft: a member may be a JPEG as its brunsli form; 9 November 2026, sound by a way that
@@ -7795,7 +7821,7 @@ def cmd_unpack_v7(args, data):
             n = way.split(" ")[1]
             if not n.isdigit():
                 sys.exit(f"{path}: a text's spans not counted as Sieve counts them")
-            mine = [k for k, f in enumerate(files) if f[0].startswith(path + "/")]
+            mine = under.get(path, [])
             if len(mine) != int(n) or any(k in members for k in mine) or \
                     any(files[k][3].split(" ")[0] in RECIPE_WORDS and not files[k][3].startswith("jbr ") for k in mine):
                 sys.exit(f"{path} does not list the members its recipe counts")
@@ -7806,10 +7832,11 @@ def cmd_unpack_v7(args, data):
     # carried as its contents (a `u` line: the entries under its folder; where the archive was the
     # whole of what was read, its contents are the whole listing, and nothing is left to check).
     member_paths = {files[k][0] for k in members}
-    held = [u[3] + "/" for u in unpacked]
-    whole = any(not any(e[0].startswith(h) for e in entries) for h in held)
+    held = {u[3] for u in unpacked}
+    within = {a for e in entries for a in ancestors(e[0])}  # (every folder an entry is under, as a prefix)
+    whole = any(h not in within for h in held)
     order = [] if whole else [e[0].encode("utf-8", "surrogateescape") for e in entries
-                              if e[0] not in member_paths and not any(e[0].startswith(h) for h in held)]
+                              if e[0] not in member_paths and not any(a in held for a in ancestors(e[0]))]
     for x, y in zip(order, order[1:]):
         if x > y:
             sys.exit(f"entries out of order: {y.decode('utf-8', 'replace')!r} after {x.decode('utf-8', 'replace')!r}")
@@ -8026,14 +8053,7 @@ def cmd_unpack_v7(args, data):
             if zsum + rsum != size:
                 sys.exit(f"{path}: pieces that are not its size")
             z, pa = plain[pa:pa + zsum], pa + zsum
-            n, shift = 0, 0
-            while True:
-                b = ropes[ra]
-                ra += 1
-                n |= (b & 0x7F) << shift
-                shift += 7
-                if not b & 0x80:
-                    break
+            n, ra = rope_length(ropes, ra, path)
             if params.endswith(" A1") and not v15:
                 sys.exit(f"{path}: a rope-wave-v5 way before sieve-manifest-v15")
             if (params.endswith(" T1") or " P4 " in params) and not v23:
@@ -8050,14 +8070,7 @@ def cmd_unpack_v7(args, data):
                     rb += k
             got[i] = bytes(out)
         elif v8 and way.startswith("rope "):
-            n, shift = 0, 0
-            while True:
-                b = ropes[ra]
-                ra += 1
-                n |= (b & 0x7F) << shift
-                shift += 7
-                if not b & 0x80:
-                    break
+            n, ra = rope_length(ropes, ra, path)
             if " C1" in way and not v9:
                 sys.exit(f"{path}: a rope-wave-v2 way in sieve-manifest-v8")
             if way.endswith(" A1") and not v15:
@@ -8077,14 +8090,7 @@ def cmd_unpack_v7(args, data):
             m30 = re.fullmatch(r"(B[0-9]+(?: D(?:35|60|80)| F80)?(?: W1)?(?: R1)?(?: M4)?(?: C2)?) T([1-9][0-9]*)", way[5:])
             if not m30:
                 sys.exit(f"{path}: a group not written as Sieve writes it")
-            n, shift = 0, 0
-            while True:
-                b = ropes[ra]
-                ra += 1
-                n |= (b & 0x7F) << shift
-                shift += 7
-                if not b & 0x80:
-                    break
+            n, ra = rope_length(ropes, ra, path)
             group = [mix4_file(ropes[ra:ra + n], m30.group(1), int(m30.group(2)), v32, v33, v34), 0, path]
             ra += n
             if size > len(group[0]):
@@ -8097,14 +8103,7 @@ def cmd_unpack_v7(args, data):
         elif (v24 and way.startswith("mix ")) or (v26 and way.startswith("mix2 ")) or (v27 and way.startswith("mix3 ")) or (v28 and way.startswith("mix4 ")):
             # v24: made again by mixing, from its code, next in the rope stream (its length first);
             # v26: by mix-v2 ("mix2 B22", a picture's "mix2 B22 I949x1"), the same way.
-            n, shift = 0, 0
-            while True:
-                b = ropes[ra]
-                ra += 1
-                n |= (b & 0x7F) << shift
-                shift += 7
-                if not b & 0x80:
-                    break
+            n, ra = rope_length(ropes, ra, path)
             if way.startswith("mix4 "):  # v28: without the SSE stages
                 got[i], ra = mix4_file(ropes[ra:ra + n], way[5:], size, v32, v33, v34), ra + n
             elif way.startswith("mix3 "):  # v27: with its word list
@@ -8117,29 +8116,11 @@ def cmd_unpack_v7(args, data):
             # v33 draft: a repeating byte or pattern, its code next in the rope stream (its length
             # first): each segment its count (a varint, 1 or more), its pattern's length (a varint, 1
             # or more) and its pattern's bytes, repeated count times; the segments making the size.
-            n, shift = 0, 0
-            while True:
-                b = ropes[ra]
-                ra += 1
-                n |= (b & 0x7F) << shift
-                shift += 7
-                if not b & 0x80:
-                    break
+            n, ra = rope_length(ropes, ra, path)
             code, ra = ropes[ra:ra + n], ra + n
-            if len(code) != n:
-                sys.exit(f"{path}: the rope stream ends before its segments")
 
             def varint(at):
-                v, shift = 0, 0
-                while True:
-                    if at >= len(code):
-                        sys.exit(f"{path}: its segments end part way")
-                    b = code[at]
-                    at += 1
-                    v |= (b & 0x7F) << shift
-                    shift += 7
-                    if not b & 0x80:
-                        return v, at
+                return read_varint(code, at, f"{path}: its segments")
             out, at = bytearray(), 0
             while at < len(code):
                 count, at = varint(at)
@@ -8175,14 +8156,9 @@ def cmd_unpack_v7(args, data):
         elif way.startswith("item "):
             k = int(way.split(" ")[1])
             if coded[k]:
-                n, shift = 0, 0
-                while True:
-                    b = places[ia]
-                    ia += 1
-                    n |= (b & 0x7F) << shift
-                    shift += 7
-                    if not b & 0x80:
-                        break
+                n, ia = read_varint(places, ia, f"the items stream at {path}", 9)
+                if n > len(places) - ia:
+                    sys.exit(f"the items stream ends before {path}")
                 code, ia = places[ia:ia + n], ia + n
                 got[i] = v7_item(item_lines[k], None, code, path, args.items_from)
             else:
@@ -9156,16 +9132,8 @@ def skeleton_remake(inner, skel, path, tiff=False):
     sk = inner[:skel]
 
     def varint():
-        v, shift = 0, 0
-        while True:
-            if at[0] >= len(sk):
-                sys.exit(f"{path}: its skeleton ends early")
-            c = sk[at[0]]
-            at[0] += 1
-            v |= (c & 0x7F) << shift
-            shift += 7
-            if not c & 0x80:
-                return v
+        v, at[0] = read_varint(sk, at[0], f"{path}: its skeleton")
+        return v
 
     def take_data(n):
         if n > len(inner) - data[0]:
@@ -11207,19 +11175,6 @@ def runs_unrank(B, W, L, c, n):
         t += d != last
         out.append(d)
     return out
-
-
-def rank_by_unrank(unrank, count, u):
-    """The rank of u, by halving over the survivors (the oracle has unrank; this gives rank too)."""
-    lo, hi = 0, count - 1
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if unrank(mid) <= u:
-            lo = mid
-        else:
-            hi = mid - 1
-    assert unrank(lo) == u
-    return lo
 
 
 def cmd_picture_vectors(_args):
